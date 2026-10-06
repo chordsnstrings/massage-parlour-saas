@@ -1,17 +1,22 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { PlaceholderSite } from '@/components/site/placeholder-site'
-import { resolveSiteTenant, siteData } from '@/server/sites'
+import { PublicSite, publicSiteMetadata } from '@/components/site/public'
+import { resolveSiteTenant } from '@/server/sites'
 
-type Props = { params: Promise<{ hostname: string }> }
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const tenant = await resolveSiteTenant({ hostname: decodeURIComponent((await params).hostname) })
-  return tenant ? { title: { absolute: tenant.name } } : {}
+type Props = {
+  params: Promise<{ hostname: string; path?: string[] }>
+  searchParams: Promise<{ lang?: string | string[] }>
 }
 
-export default async function CustomDomainSite({ params }: Props) {
-  const tenant = await resolveSiteTenant({ hostname: decodeURIComponent((await params).hostname) })
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const { hostname, path } = await params
+  const tenant = await resolveSiteTenant({ hostname: decodeURIComponent(hostname) })
+  return publicSiteMetadata(tenant, path, (await searchParams).lang)
+}
+
+export default async function CustomDomainSite({ params, searchParams }: Props) {
+  const { hostname, path } = await params
+  const tenant = await resolveSiteTenant({ hostname: decodeURIComponent(hostname) })
   if (!tenant) notFound()
-  return <PlaceholderSite data={await siteData(tenant)} />
+  return <PublicSite tenant={tenant} path={path} lang={(await searchParams).lang} base="" />
 }
