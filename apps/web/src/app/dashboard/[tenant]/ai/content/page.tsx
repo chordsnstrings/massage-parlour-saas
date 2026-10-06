@@ -1,9 +1,11 @@
 import { socialPosts, withTenant } from '@spa/db'
+import { gbpConnectionView, getGbpAccount } from '@spa/services'
 import { desc } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { GbpPostButton } from '@/components/integrations/gbp-post-button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -30,9 +32,10 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve')) notFound()
   const slug = ctx.tenant.slug
-  const posts = await withTenant(ctx.tenant.id, (tx) =>
-    tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30),
-  )
+  const { posts, gbp } = await withTenant(ctx.tenant.id, async (tx) => ({
+    posts: await tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30),
+    gbp: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
+  }))
   return (
     <>
       <Link
@@ -104,7 +107,10 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                   )}
                   <div className="flex flex-1 flex-col gap-3 p-5">
                     <div className="flex items-center justify-between">
-                      <Badge tone={tone[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</Badge>
+                      <span className="flex items-center gap-1.5">
+                        <Badge tone={tone[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</Badge>
+                        {p.platform === 'gbp' && <Badge>Google</Badge>}
+                      </span>
                       <span className="text-xs text-muted">
                         {p.scheduledAt
                           ? `Scheduled ${formatDateTime(p.scheduledAt)}`
@@ -118,6 +124,11 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       {p.caption}
                     </p>
                     <PostActions slug={slug} postId={p.id} status={p.status} caption={p.caption} />
+                    {gbp?.status === 'connected' &&
+                      p.platform !== 'gbp' &&
+                      (p.status === 'scheduled' || p.status === 'published') && (
+                        <GbpPostButton slug={slug} postId={p.id} />
+                      )}
                   </div>
                 </Card>
               </StaggerItem>

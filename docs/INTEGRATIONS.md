@@ -70,8 +70,12 @@ How it behaves:
 | `GOOGLE_CLIENT_SECRET` | OAuth client secret |
 
 The spa owner (or a Manager on the profile) connects from *Settings → Instagram & Google* and picks the location.
-- Reviews sync every 2 hours.
+- Reviews sync every 2 hours (worker job `gbp-reviews-sync`) and on *Sync now*; new reviews get an AI draft when the
+  review agent is on, autopilot posts 4–5★ replies.
 - Replies to 1–3★ reviews always wait for approval.
+- Approved AI-studio posts get *Post to Google* (STANDARD local post, Book button → `{site}/book?src=gbp`; photo only
+  when it has a public https URL).
+- Without the env vars the card shows "Not configured yet" and reviews are pasted in by hand (manual fallback).
 
 ## 3. Custom domains (Cloudflare for SaaS)
 
