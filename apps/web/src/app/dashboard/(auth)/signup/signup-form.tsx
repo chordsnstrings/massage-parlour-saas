@@ -5,9 +5,16 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { appPath } from '@/lib/paths'
 import { checkSlugAction, signupAction } from './actions'
 
-export function SignupForm({ rootDomain, signedIn }: { rootDomain: string; signedIn: boolean }) {
+export function SignupForm({
+  address,
+  signedIn,
+}: {
+  address: { prefix: string; suffix: string }
+  signedIn: boolean
+}) {
   const [business, setBusiness] = useState('')
   const [slug, setSlug] = useState('')
   const [touched, setTouched] = useState(false)
@@ -59,6 +66,11 @@ export function SignupForm({ rootDomain, signedIn }: { rootDomain: string; signe
       </Field>
       <Field label="Web address" name="slug">
         <div className="flex items-stretch overflow-hidden rounded-lg border bg-surface transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
+          {address.prefix && (
+            <span className="flex items-center border-e bg-subtle px-3 text-sm text-muted">
+              {address.prefix}
+            </span>
+          )}
           <input
             id="slug"
             name="slug"
@@ -72,7 +84,11 @@ export function SignupForm({ rootDomain, signedIn }: { rootDomain: string; signe
             autoCapitalize="none"
             spellCheck={false}
           />
-          <span className="flex items-center border-s bg-subtle px-3 text-sm text-muted">.{rootDomain}</span>
+          {address.suffix && (
+            <span className="flex items-center border-s bg-subtle px-3 text-sm text-muted">
+              {address.suffix}
+            </span>
+          )}
         </div>
         <div className="h-5 text-[13px]">
           <AnimatePresence mode="wait" initial={false}>
@@ -95,7 +111,7 @@ export function SignupForm({ rootDomain, signedIn }: { rootDomain: string; signe
                 exit={{ opacity: 0 }}
               >
                 {status.ok ? <Check className="size-3.5" /> : <X className="size-3.5" />}
-                {status.ok ? `${slug}.${rootDomain} is available` : status.reason}
+                {status.ok ? `${address.prefix}${slug}${address.suffix} is available` : status.reason}
               </motion.span>
             ) : null}
           </AnimatePresence>
@@ -107,7 +123,7 @@ export function SignupForm({ rootDomain, signedIn }: { rootDomain: string; signe
       {!signedIn && (
         <p className="text-center text-sm text-muted">
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-fg underline-offset-4 hover:underline">
+          <Link href={appPath('/login')} className="font-medium text-fg underline-offset-4 hover:underline">
             Sign in
           </Link>
         </p>

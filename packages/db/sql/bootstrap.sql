@@ -13,6 +13,10 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spa_platform') \gexec
 SELECT format('CREATE ROLE spa_app LOGIN PASSWORD %L', :'app_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'spa_app') \gexec
 
+-- Managed Postgres: the admin user is not a superuser; it must be a member of spa_owner to create its database
+-- and set default privileges. Harmless for a real superuser.
+GRANT spa_owner TO CURRENT_USER;
+
 SELECT format('CREATE DATABASE %I OWNER spa_owner ENCODING ''UTF8''', :'db_name')
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name') \gexec
 

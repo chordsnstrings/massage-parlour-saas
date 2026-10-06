@@ -5,7 +5,18 @@ import { log } from './log'
 const url = process.env.DATABASE_URL_OWNER
 if (!url) throw new Error('DATABASE_URL_OWNER is not set')
 
-const boss = new PgBoss({ connectionString: url, max: 4 })
+const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n')
+const bossUrl = (() => {
+  if (!ca) return url
+  const u = new URL(url)
+  u.searchParams.delete('sslmode') // TLS is configured explicitly below
+  return u.toString()
+})()
+const boss = new PgBoss({
+  connectionString: bossUrl,
+  max: 3,
+  ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
+})
 boss.on('error', (error) => log('error', 'pg-boss error', { error: String(error) }))
 await boss.start()
 

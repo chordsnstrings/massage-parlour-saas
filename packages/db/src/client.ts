@@ -12,10 +12,24 @@ if (!g.__spaDb) g.__spaDb = new Map()
 const cache = g.__spaDb
 
 /** One pooled client per connection string (survives dev hot reloads). */
-export function createDb(url: string, max = 10): Db {
+/**
+ * Managed Postgres (DigitalOcean) needs TLS: set DATABASE_CA_CERT to the cluster CA (PEM) to verify it.
+ * The sslmode query param is dropped then, because node-postgres would otherwise override the CA config.
+ */
+function poolConfig(url: string, max: number): pg.PoolConfig {
+  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n')
+  if (!ca) return { connectionString: url, max }
+  const u = new URL(url)
+  u.searchParams.delete('sslmode')
+  return { connectionString: u.toString(), max, ssl: { ca, rejectUnauthorized: true } }
+}
+
+const defaultMax = () => Number(process.env.DB_POOL_MAX ?? 10)
+
+export function createDb(url: string, max = defaultMax()): Db {
   let entry = cache.get(url)
   if (!entry) {
-    const pool = new pg.Pool({ connectionString: url, max })
+    const pool = new pg.Pool(poolConfig(url, max))
     entry = { db: drizzle(pool, { schema }), pool }
     cache.set(url, entry)
   }

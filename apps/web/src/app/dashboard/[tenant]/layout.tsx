@@ -1,5 +1,6 @@
 import { AppShell, Banner } from '@/components/shell/app-shell'
 import type { NavItem } from '@/components/shell/nav'
+import { appPath } from '@/lib/paths'
 import { can, isWritable, requireMember } from '@/server/access'
 
 export default async function TenantLayout({
@@ -11,7 +12,7 @@ export default async function TenantLayout({
 }) {
   const { tenant: slug } = await params
   const ctx = await requireMember(slug)
-  const base = `/${ctx.tenant.slug}`
+  const base = appPath(`/${ctx.tenant.slug}`)
   const nav: NavItem[] = [
     { href: base, label: 'Home', icon: 'home', exact: true },
     ...(can(ctx, 'team.manage') ? [{ href: `${base}/team`, label: 'Team', icon: 'team' } as const] : []),
@@ -21,7 +22,7 @@ export default async function TenantLayout({
     ...(can(ctx, 'billing.view')
       ? [{ href: `${base}/billing`, label: 'Subscription', icon: 'billing' } as const]
       : []),
-    { href: '/account', label: 'Account', icon: 'account' },
+    { href: appPath('/account'), label: 'Account', icon: 'account' },
   ]
   const banner = ctx.impersonating ? (
     <Banner tone="accent">Viewing as super-admin — every change is recorded in the audit log.</Banner>
@@ -36,7 +37,7 @@ export default async function TenantLayout({
       nav={nav}
       user={ctx.user}
       banner={banner}
-      switchHref="/"
+      switchHref={appPath()}
     >
       {children}
     </AppShell>

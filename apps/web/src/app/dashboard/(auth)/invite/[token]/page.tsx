@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AuthLayout } from '@/components/auth/auth-layout'
+import { appPath } from '@/lib/paths'
 import { findInvitation } from '@/server/invitations'
 import { getSession } from '@/server/session'
 import { AcceptButton, SignupAndAcceptForm } from './invite-forms'
@@ -13,7 +14,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   if (!invite) {
     return (
       <AuthLayout title="Invitation expired" subtitle="Ask your manager to send a new invitation link.">
-        <Link href="/login" className="text-sm font-medium underline underline-offset-4">
+        <Link href={appPath('/login')} className="text-sm font-medium underline underline-offset-4">
           Go to sign in
         </Link>
       </AuthLayout>
@@ -45,7 +46,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       <p className="mt-6 text-center text-sm text-muted">
         Already have an account?{' '}
         <Link
-          href={`/login?next=/invite/${token}`}
+          href={appPath(`/login?next=${appPath(`/invite/${token}`)}`)}
           className="font-medium text-fg underline-offset-4 hover:underline"
         >
           Sign in to accept

@@ -14,6 +14,7 @@ import type { Metadata } from 'next'
 import { Logo } from '@/components/brand'
 import { Button } from '@/components/ui/button'
 import { Reveal, Stagger, StaggerItem } from '@/components/ui/motion'
+import { appUrl } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
 
 export const metadata: Metadata = { title: { absolute: 'Spa Management — software for spas in the UAE' } }
@@ -61,7 +62,6 @@ async function activePlans() {
 }
 
 export default async function MarketingPage() {
-  const app = process.env.APP_URL ?? 'http://app.localhost:3000'
   const planRows = await activePlans()
   return (
     <div className="overflow-x-hidden">
@@ -69,10 +69,10 @@ export default async function MarketingPage() {
         <Logo />
         <div className="flex items-center gap-2">
           <Button variant="ghost" asChild>
-            <a href={`${app}/login`}>Sign in</a>
+            <a href={appUrl('/login')}>Sign in</a>
           </Button>
           <Button asChild className="hidden sm:inline-flex">
-            <a href={`${app}/signup`}>Start free trial</a>
+            <a href={appUrl('/signup')}>Start free trial</a>
           </Button>
         </div>
       </header>
@@ -91,7 +91,7 @@ export default async function MarketingPage() {
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
             <Button size="lg" asChild>
-              <a href={`${app}/signup`}>
+              <a href={appUrl('/signup')}>
                 Start your free trial <ArrowRight />
               </a>
             </Button>
@@ -133,7 +133,7 @@ export default async function MarketingPage() {
                 ))}
               </ul>
               <Button className="mt-8 w-full" asChild>
-                <a href={`${app}/signup`}>Start free trial</a>
+                <a href={appUrl('/signup')}>Start free trial</a>
               </Button>
             </div>
           ))}

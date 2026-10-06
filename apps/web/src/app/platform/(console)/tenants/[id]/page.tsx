@@ -1,4 +1,3 @@
-import { siteUrl } from '@spa/core'
 import {
   auditLog,
   members,
@@ -22,6 +21,7 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
+import { adminPath, appUrl, tenantSiteUrl } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
 import {
   createInvoiceAction,
@@ -66,13 +66,13 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
     db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
   ])
   const today = todayDubai()
-  const site = siteUrl(tenant.slug, process.env.ROOT_DOMAIN ?? 'localhost:3000')
+  const site = tenantSiteUrl(tenant.slug)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
 
   return (
     <>
       <Link
-        href="/tenants"
+        href={adminPath('/tenants')}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
       >
         <ArrowLeft className="size-4" strokeWidth={1.5} /> Spas
@@ -89,7 +89,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
               </a>
             </Button>
             <Button variant="secondary" asChild>
-              <a href={`${process.env.APP_URL ?? ''}/${tenant.slug}`} target="_blank" rel="noreferrer">
+              <a href={appUrl(`/${tenant.slug}`)} target="_blank" rel="noreferrer">
                 Open dashboard <ArrowUpRight />
               </a>
             </Button>

@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox, Input, Label } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { appPath } from '@/lib/paths'
 
 const go = (next: string) => {
   window.location.href = next
@@ -50,7 +51,10 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">Password</Label>
-          <Link href="/forgot-password" className="text-[13px] text-muted transition-colors hover:text-fg">
+          <Link
+            href={appPath('/forgot-password')}
+            className="text-[13px] text-muted transition-colors hover:text-fg"
+          >
             Forgot password?
           </Link>
         </div>
@@ -136,7 +140,7 @@ export function ForgotPasswordForm() {
         e.preventDefault()
         const email = String(new FormData(e.currentTarget).get('email'))
         run(
-          () => authClient.requestPasswordReset({ email, redirectTo: '/reset-password' }),
+          () => authClient.requestPasswordReset({ email, redirectTo: appPath('/reset-password') }),
           () => setSent(true),
         )
       }}
@@ -164,7 +168,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           () => authClient.resetPassword({ newPassword, token }),
           () => {
             toast.success('Password updated. Please sign in.')
-            go('/login')
+            go(appPath('/login'))
           },
         )
       }}

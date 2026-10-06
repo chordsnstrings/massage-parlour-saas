@@ -6,6 +6,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod } from '@/lib/action'
+import { appPath } from '@/lib/paths'
 import { audit } from '@/server/audit'
 import { isSlugAvailable, provisionTenant } from '@/server/provision'
 import { getSession } from '@/server/session'
@@ -84,5 +85,5 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     entityId: tenantId,
     data: { slug },
   })
-  redirect(`/${slug}`)
+  redirect(appPath(`/${slug}`))
 }

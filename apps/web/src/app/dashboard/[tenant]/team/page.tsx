@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
+import { appPath } from '@/lib/paths'
 import { formatDate, initials } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { EditMemberSheet, InviteSheet, RevokeButton } from './team-client'
@@ -80,7 +81,7 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
         actions={
           <>
             <Button variant="secondary" asChild>
-              <Link href={`/${slug}/team/roles`}>
+              <Link href={appPath(`/${slug}/team/roles`)}>
                 <ShieldCheck /> Roles
               </Link>
             </Button>

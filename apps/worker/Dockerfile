@@ -23,5 +23,6 @@ WORKDIR /app
 ENV NODE_ENV=production MIGRATIONS_DIR=/app/drizzle
 COPY --from=build /repo/apps/worker/dist ./dist
 COPY --from=build /repo/packages/db/drizzle ./drizzle
+COPY --from=build /repo/packages/db/sql ./sql
 USER app
 CMD ["node", "dist/index.js"]

@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
+import { adminPath } from '@/lib/paths'
 import { formatDate } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Spas' }
@@ -54,7 +55,7 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
                 header: 'Spa',
                 primary: true,
                 cell: (r) => (
-                  <Link href={`/tenants/${r.id}`} className="group">
+                  <Link href={adminPath(`/tenants/${r.id}`)} className="group">
                     <span className="block font-medium group-hover:text-accent">{r.name}</span>
                     <span className="block text-xs text-muted">{r.slug}</span>
                   </Link>

@@ -1,4 +1,3 @@
-import { siteUrl } from '@spa/core'
 import { branches, members, subscriptions, withTenant } from '@spa/db'
 import { count, eq } from 'drizzle-orm'
 import { ArrowUpRight, Check, Circle } from 'lucide-react'
@@ -8,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { appPath, tenantSiteUrl } from '@/lib/paths'
 import { formatDate } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 
@@ -27,18 +27,18 @@ export default async function TenantHome({ params }: { params: Promise<{ tenant:
     const [sub] = await tx.select().from(subscriptions).limit(1)
     return { branch, teamSize: team?.n ?? 0, sub }
   })
-  const site = siteUrl(tenant.slug, process.env.ROOT_DOMAIN ?? 'localhost:3000')
+  const site = tenantSiteUrl(tenant.slug)
   const steps = [
     {
       done: Boolean(data.branch?.whatsappE164 && data.branch.address),
       label: 'Add your address and WhatsApp number',
-      href: `/${tenant.slug}/settings`,
+      href: appPath(`/${tenant.slug}/settings`),
       show: can(ctx, 'settings.manage'),
     },
     {
       done: data.teamSize > 1,
       label: 'Invite your team',
-      href: `/${tenant.slug}/team`,
+      href: appPath(`/${tenant.slug}/team`),
       show: can(ctx, 'team.manage'),
     },
     { done: false, label: 'Add services, rooms and therapists', note: 'Coming in the next update' },

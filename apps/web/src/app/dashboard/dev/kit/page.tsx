@@ -8,6 +8,7 @@ import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader, Skeleton } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
+import { appPath } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
 import { isPlatformAdmin } from '@/server/access'
 import { getSession } from '@/server/session'
@@ -41,12 +42,12 @@ export default async function KitPage() {
     <AppShell
       title="Design system"
       subtitle="Component kit"
-      homeHref="/dev/kit"
+      homeHref={appPath('/dev/kit')}
       user={session?.user ?? { name: 'Preview User', email: 'preview@spamanagement.ae' }}
       nav={[
-        { href: '/dev/kit', label: 'Kit', icon: 'home' },
-        { href: '/dev/kit#forms', label: 'Forms', icon: 'settings' },
-        { href: '/dev/kit#data', label: 'Data', icon: 'billing' },
+        { href: appPath('/dev/kit'), label: 'Kit', icon: 'home' },
+        { href: appPath('/dev/kit#forms'), label: 'Forms', icon: 'settings' },
+        { href: appPath('/dev/kit#data'), label: 'Data', icon: 'billing' },
       ]}
     >
       <PageHeader

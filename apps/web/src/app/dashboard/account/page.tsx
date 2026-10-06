@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { AppShell } from '@/components/shell/app-shell'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { appPath } from '@/lib/paths'
 import { requireUser } from '@/server/session'
 import { PasswordCard, ProfileCard, TwoFactorCard } from './account-client'
 
@@ -11,11 +12,11 @@ export default async function AccountPage() {
   return (
     <AppShell
       title="Your account"
-      homeHref="/"
+      homeHref={appPath()}
       user={user}
       nav={[
-        { href: '/', label: 'My spas', icon: 'home', exact: true },
-        { href: '/account', label: 'Account', icon: 'account' },
+        { href: appPath(), label: 'My spas', icon: 'home', exact: true },
+        { href: appPath('/account'), label: 'Account', icon: 'account' },
       ]}
     >
       <PageHeader title="Account & security" description={user.email} />

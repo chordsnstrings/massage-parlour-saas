@@ -1,9 +1,12 @@
 import { expect, type Page, test } from '@playwright/test'
 
 const PORT = 3100
-const app = `http://app.localhost:${PORT}`
-const admin = `http://admin.localhost:${PORT}`
-const site = (s: string) => `http://${s}.localhost:${PORT}`
+// E2E_ROUTING=path exercises single-hostname mode (/app, /admin, /s/{slug}) used on *.ondigitalocean.app.
+const PATH = process.env.E2E_ROUTING === 'path'
+const base = `http://localhost:${PORT}`
+const app = PATH ? `${base}/app` : `http://app.localhost:${PORT}`
+const admin = PATH ? `${base}/admin` : `http://admin.localhost:${PORT}`
+const site = (s: string) => (PATH ? `${base}/s/${s}` : `http://${s}.localhost:${PORT}`)
 const slug = `serenity-${Date.now().toString(36)}`
 const shots = (name: string) => `test-results/screens/${name}.png`
 
@@ -20,7 +23,7 @@ let inviteLink = ''
 
 test('owner signs up, gets a live site, configures and invites', async ({ page }) => {
   await test.step('marketing shows the live price', async () => {
-    await page.goto(`http://localhost:${PORT}`)
+    await page.goto(base)
     await expect(page.getByRole('heading', { name: 'Run a calmer, fuller spa.' })).toBeVisible()
     await expect(page.getByText(/AED\s?24,000/).first()).toBeVisible()
   })
@@ -32,7 +35,7 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
     await page.getByLabel('Password').fill('correct-horse-battery')
     await page.getByLabel('Spa name').fill('Serenity Spa')
     await page.getByLabel('Web address').fill(slug)
-    await expect(page.getByText(`${slug}.localhost:${PORT} is available`)).toBeVisible()
+    await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
     await page.getByRole('button', { name: 'Create account' }).click()
     await page.waitForURL(`${app}/${slug}`)
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Aisha')
@@ -103,9 +106,12 @@ test('super-admin changes the plan price and the marketing page follows', async 
   await page.waitForURL(`${app}/admin-${slug}`)
 
   await page.goto(`${admin}/login`)
-  await page.getByLabel('Email').fill('admin@e2e.test')
-  await page.getByLabel('Password').fill('platform-admin-pass')
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  if (!PATH) {
+    // Separate host → separate session; on a single host the sign-up session already applies.
+    await page.getByLabel('Email').fill('admin@e2e.test')
+    await page.getByLabel('Password').fill('platform-admin-pass')
+    await page.getByRole('button', { name: 'Sign in' }).click()
+  }
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
   await screenshotAt(page, 'platform-overview')
 
@@ -115,6 +121,6 @@ test('super-admin changes the plan price and the marketing page follows', async 
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Plan saved')).toBeVisible()
 
-  await page.goto(`http://localhost:${PORT}`)
+  await page.goto(base)
   await expect(page.getByText(/AED\s?26,000/).first()).toBeVisible()
 })

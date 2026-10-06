@@ -25,9 +25,18 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
     env: {
-      ROOT_DOMAIN: `localhost:${PORT}`,
-      APP_URL: `http://app.localhost:${PORT}`,
-      ADMIN_URL: `http://admin.localhost:${PORT}`,
+      ...(process.env.E2E_ROUTING === 'path'
+        ? {
+            NEXT_PUBLIC_ROUTING: 'path',
+            ROOT_DOMAIN: `localhost:${PORT}`,
+            APP_URL: `http://localhost:${PORT}`,
+            ADMIN_URL: `http://localhost:${PORT}/admin`,
+          }
+        : {
+            ROOT_DOMAIN: `localhost:${PORT}`,
+            APP_URL: `http://app.localhost:${PORT}`,
+            ADMIN_URL: `http://admin.localhost:${PORT}`,
+          }),
       DATABASE_URL_OWNER: process.env.TEST_DATABASE_URL_OWNER ?? local('spa_owner'),
       DATABASE_URL_PLATFORM: process.env.TEST_DATABASE_URL_PLATFORM ?? local('spa_platform'),
       DATABASE_URL_APP: process.env.TEST_DATABASE_URL_APP ?? local('spa_app'),

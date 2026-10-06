@@ -8,6 +8,7 @@ import { UserMenu } from '@/components/shell/user-menu'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
+import { appPath } from '@/lib/paths'
 import { isPlatformAdmin } from '@/server/access'
 import { requireUser } from '@/server/session'
 
@@ -21,8 +22,8 @@ export default async function DashboardIndex() {
     .where(and(eq(members.userId, session.user.id), eq(members.status, 'active')))
     .orderBy(asc(tenants.name))
   const admin = await isPlatformAdmin(session.user.id)
-  if (spas.length === 1 && !admin) redirect(`/${spas[0]!.slug}`)
-  if (spas.length === 0 && !admin) redirect('/signup')
+  if (spas.length === 1 && !admin) redirect(appPath(`/${spas[0]!.slug}`))
+  if (spas.length === 0 && !admin) redirect(appPath('/signup'))
   return (
     <div className="mx-auto min-h-dvh max-w-3xl px-5 py-8 sm:px-8 sm:py-14">
       <div className="mb-14 flex items-center justify-between">
@@ -36,7 +37,7 @@ export default async function DashboardIndex() {
       <Stagger className="mt-8 grid gap-3">
         {spas.map((s) => (
           <StaggerItem key={s.slug}>
-            <Link href={`/${s.slug}`} className="group block">
+            <Link href={appPath(`/${s.slug}`)} className="group block">
               <Card className="flex items-center justify-between px-5 py-4 transition-[transform,box-shadow,border-color] duration-200 group-hover:-translate-y-0.5 group-hover:shadow-soft">
                 <span>
                   <span className="block font-medium">{s.name}</span>
@@ -52,7 +53,7 @@ export default async function DashboardIndex() {
         ))}
       </Stagger>
       <Button variant="secondary" className="mt-6" asChild>
-        <Link href="/signup">
+        <Link href={appPath('/signup')}>
           <Plus /> Add a spa
         </Link>
       </Button>

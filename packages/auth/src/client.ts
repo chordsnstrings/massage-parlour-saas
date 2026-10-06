@@ -7,7 +7,14 @@ export const authClient = createAuthClient({
   plugins: [
     twoFactorClient({
       onTwoFactorRedirect() {
-        window.location.href = `/two-factor${window.location.search}`
+        // Path routing (single host) prefixes surfaces with /app or /admin; see apps/web/src/lib/paths.ts.
+        const base =
+          process.env.NEXT_PUBLIC_ROUTING === 'path'
+            ? window.location.pathname.startsWith('/admin')
+              ? '/admin'
+              : '/app'
+            : ''
+        window.location.href = `${base}/two-factor${window.location.search}`
       },
     }),
   ],

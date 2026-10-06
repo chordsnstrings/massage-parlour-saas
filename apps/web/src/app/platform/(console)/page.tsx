@@ -7,6 +7,7 @@ import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
+import { adminPath } from '@/lib/paths'
 import { formatDate, todayDubai } from '@/lib/utils'
 
 export default async function PlatformOverview() {
@@ -58,7 +59,7 @@ export default async function PlatformOverview() {
           <CardHeader
             title="Newest spas"
             action={
-              <Link href="/tenants" className="text-sm text-muted hover:text-fg">
+              <Link href={adminPath('/tenants')} className="text-sm text-muted hover:text-fg">
                 View all
               </Link>
             }
@@ -73,7 +74,7 @@ export default async function PlatformOverview() {
                   header: 'Spa',
                   primary: true,
                   cell: (r) => (
-                    <Link href={`/tenants/${r.id}`} className="font-medium hover:text-accent">
+                    <Link href={adminPath(`/tenants/${r.id}`)} className="font-medium hover:text-accent">
                       {r.name}
                     </Link>
                   ),

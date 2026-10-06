@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { RoleSheet } from './role-editor'
 
@@ -40,7 +41,7 @@ export default async function RolesPage({ params }: { params: Promise<{ tenant: 
   return (
     <>
       <Link
-        href={`/${slug}/team`}
+        href={appPath(`/${slug}/team`)}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
       >
         <ArrowLeft className="size-4" strokeWidth={1.5} /> Team

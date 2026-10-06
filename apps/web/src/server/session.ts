@@ -2,6 +2,7 @@ import { getAuth } from '@spa/auth'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
+import { surfaceBaseOf } from '@/lib/paths'
 
 export const getSession = cache(async () => {
   const h = await headers() // read first so pages are marked dynamic before any DB/env access
@@ -15,7 +16,10 @@ export async function originalPath() {
 
 export async function requireUser() {
   const session = await getSession()
-  if (!session) redirect(`/login?next=${encodeURIComponent(await originalPath())}`)
+  if (!session) {
+    const path = await originalPath()
+    redirect(`${surfaceBaseOf(path)}/login?next=${encodeURIComponent(path)}`)
+  }
   return session
 }
 

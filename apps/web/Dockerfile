@@ -14,6 +14,9 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm install
 COPY --from=prune /repo/out/full/ .
 COPY --from=prune /repo/tsconfig.base.json ./
 ENV NEXT_TELEMETRY_DISABLED=1
+# 'path' for single-hostname deployments (e.g. *.ondigitalocean.app); inlined into the client bundle.
+ARG NEXT_PUBLIC_ROUTING=host
+ENV NEXT_PUBLIC_ROUTING=$NEXT_PUBLIC_ROUTING
 RUN pnpm --filter @spa/web build
 
 FROM node:22-alpine AS run

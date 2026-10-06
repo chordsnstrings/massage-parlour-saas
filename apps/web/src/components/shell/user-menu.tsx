@@ -3,6 +3,7 @@ import { authClient } from '@spa/auth/client'
 import { ArrowLeftRight, LogOut, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import { DropdownMenu } from 'radix-ui'
+import { surfaceBaseOf } from '@/lib/paths'
 import { cn, initials } from '@/lib/utils'
 
 const item =
@@ -65,7 +66,7 @@ export function UserMenu({
             className={item}
             onSelect={async () => {
               await authClient.signOut()
-              window.location.href = '/login'
+              window.location.href = `${surfaceBaseOf(window.location.pathname)}/login`
             }}
           >
             <LogOut /> Sign out

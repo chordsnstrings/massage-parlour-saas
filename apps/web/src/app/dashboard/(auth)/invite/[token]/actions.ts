@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod } from '@/lib/action'
+import { appPath } from '@/lib/paths'
 import { audit } from '@/server/audit'
 import { acceptInvitation, findInvitation } from '@/server/invitations'
 import { getSession } from '@/server/session'
@@ -23,7 +24,7 @@ export async function acceptInviteAction(token: string): Promise<ActionResult> {
     entity: 'invitation',
     entityId: invite.id,
   })
-  redirect(`/${invite.tenantSlug}`)
+  redirect(appPath(`/${invite.tenantSlug}`))
 }
 
 const schema = z.object({
@@ -58,5 +59,5 @@ export async function signupAndAcceptAction(
       return fail(/exist/i.test(e.message) ? 'You already have an account — sign in to accept.' : e.message)
     throw e
   }
-  redirect(`/${invite.tenantSlug}`)
+  redirect(appPath(`/${invite.tenantSlug}`))
 }
