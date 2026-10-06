@@ -1,0 +1,566 @@
+# spamanagement.ae — Product & Technical Plan
+
+B2B SaaS for massage parlours in the UAE: booking, rooms & therapists, clients, POS (cash), basic accounting,
+site builder with block-level analytics, and AI agents (Instagram, Google Business Profile, SEO).
+
+Status: **planning — no app code until approved.** Last updated 2026-10-06.
+External facts (Meta, Google, DigitalOcean, Cloudflare, ModelArk, library versions) were checked against
+official docs on 2026-10-06; re-check anything marked *(verify)* when its phase starts.
+
+---
+
+## 0. Locked decisions
+
+| Topic | Decision |
+|---|---|
+| Market | UAE only. Currency AED, timezone Asia/Dubai (UTC+4, no DST; store UTC). |
+| Customer | B2B — massage parlours / spas. One pilot spa. |
+| Team | Owner + Claude. |
+| Domain | `spamanagement.ae` (tenant sites at `{slug}.spamanagement.ae`, optional custom domain). |
+| Customer payments | Recorded only (cash, card on the parlour's own terminal, bank transfer). Platform processes nothing. Stripe later. |
+| SaaS billing | One-time setup fee + recurring subscription, paid by cash or bank transfer, recorded manually by super-admin. |
+| Customer comms | **WhatsApp only**, receptionist click-to-send (no SMS, no email to customers, no unofficial automation). |
+| AI provider | BytePlus ModelArk, **Seed 2.0 family by default**; model per agent chosen by super-admin (GLM selectable, not default). |
+| Analytics | Block-level click/visibility analytics + funnels (no session replay in v1). |
+| Infra budget | ≤ USD 50/month now; scale later. DigitalOcean. |
+| Legal | Out of scope for the software; the parlour/company owns it. Client waiver/contract is captured as a signed intake form. |
+
+---
+
+## 1. Modules & scope
+
+Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see §12).
+
+### 1.1 Tenancy, onboarding, domains
+- Self-serve signup → pick subdomain (`{slug}.spamanagement.ae`) → business info → theme → services/rooms/staff wizard → publish. **MVP**
+- Reserved slugs: `www app admin api mail customers status cdn assets help docs blog`. Rename = old slug 301-redirects. **MVP**
+- **AI onboarding:** paste Instagram handle / Google Maps link → AI drafts services, copy, photos, hours, colours → site ready to tweak. **P3**
+- CSV import: clients, services, products (Fresha-style exports). **P2**
+- Custom domain (`www.theirspa.ae`) via Cloudflare for SaaS (§3.3). **P2**
+- Multi-location (branches) per tenant — schema from day 1, UI **MVP** for 1 branch, multi-branch **P2**.
+- Tenant data export (zip of CSV/JSON). **P2**
+
+### 1.2 ULM — users, roles, permissions
+- Roles: Owner, Manager, Receptionist, Therapist, Accountant + **custom roles** (permission matrix: resource × action). **MVP**
+- Branch scoping (user sees only assigned branches). **MVP**
+- Sensitive-data gates: revenue visibility; **therapists never see client phone numbers** (anti-poaching). **MVP**
+- Email + password, TOTP 2FA (mandatory for owners), invites, session list/revoke, audit log of every write. **MVP**
+- Therapist PWA view: own schedule, check-in/out, own commission/tips. **MVP**
+
+### 1.3 Services, rooms, resources
+- Services: categories, EN/AR names & descriptions, duration/price variants (60/90/120 min), VAT-inclusive price,
+  buffer before/after (cleanup), allowed room types, required equipment, therapists required (1, or 2 for couples/4-hands),
+  online-bookable flag. **MVP**
+- Rooms: type (single/couple/VIP/foot/Thai mat…), capacity, branch, active. **MVP**
+- Equipment/resources with quantity (hot-stone set, steam). **P2**
+
+### 1.4 Booking engine (the core)
+- Availability = therapist on shift ∩ has skill ∩ free room of allowed type ∩ equipment ∩ buffers ∩ no overlap. **MVP**
+- **Double-booking impossible at DB level**: a `reservations` table with a Postgres `EXCLUDE USING gist` constraint
+  over (resource, time range) for staff, rooms and equipment. **MVP**
+- Couples / 4-hands: one booking reserves 2 therapists + 1 room atomically. **MVP**
+- **Business day with cutoff** (e.g. day closes 05:00) — late-night shops; shifts and reports cross midnight correctly. **MVP**
+- Walk-ins + **therapist rotation ("turn") list** per branch per business day; "any therapist" assigns by rotation. **MVP**
+- Client preferences as filters (preferred therapist, therapist gender, pressure) — preferences, not rules. **MVP**
+- Calendar: day view by therapist columns and by room, drag to reschedule/reassign, colour by status. **MVP**
+- Statuses: pending → confirmed → checked-in → in-service → completed / no-show / cancelled. **MVP**
+- Online booking: customer picks service → time → (therapist) → name + UAE mobile → booking **pending** →
+  confirmation screen with **"Confirm on WhatsApp"** (prefilled message with booking ref) → receptionist confirms. **MVP**
+- Per-tenant setting: auto-confirm returning clients; new clients stay pending until confirmed. No-show counter, blocklist. **MVP**
+- Waitlist per day/service. **P2**
+- Home / hotel visits (address, travel buffer, driver). **P4, only if pilot needs it**
+
+### 1.5 Clients (CRM)
+- Profile: name, UAE phone (E.164, unique per tenant), language, birthday, nationality (optional), source, tags,
+  preferences (pressure, oils, allergies, focus areas, preferred therapist/gender), notes, blocklist + reason. **MVP**
+- Visit history, spend, last visit, no-shows, packages/gift-card balances. **MVP**
+- **Intake form + waiver/contract e-sign** (EN/AR, signature pad on reception tablet, stored as PDF, re-sign on template change). **MVP**
+- Treatment notes per visit (therapist-written). **MVP**
+- Duplicate merge by phone. **P2**
+
+### 1.6 POS & payments (recorded, not processed)
+- Checkout from booking or walk-in: services, retail products, packages, gift cards, discounts/promo codes. **MVP**
+- Payment methods: Cash, Card (own terminal), Bank transfer, Gift card, Package credit, Other — split payments. **MVP**
+- Tips (per therapist, cash or card). **MVP**
+- Refunds/voids with reason + permission. **MVP**
+- **Daily close / Z-report** per branch: opening float, expected vs counted cash, variance, card/bank totals. **MVP**
+- Receipts/tax invoices: printable + shareable via WhatsApp link (public signed URL). **MVP**
+
+### 1.7 Packages, gift cards, memberships (owner-defined)
+- Packages: owner builds bundles (e.g. 10 × 60-min), price, validity; balances per client; redeem at checkout. **P2**
+- Gift cards: code + QR, value, expiry, balance history; printable / WhatsApp-able voucher. **P2**
+- Memberships: monthly fee + benefits (included sessions, % off); renewals recorded manually (cash). **P2**
+- All create **liabilities** in the ledger until redeemed (§10).
+
+### 1.8 Staff / HR
+- Profiles, gender, photo, skills (services), branches, employment details. **MVP**
+- Shifts (templates + exceptions, can cross midnight), leave, time clock (PIN on reception tablet / PWA). **MVP**
+- Commission rules: %, fixed per service, tiered by monthly sales, per-service overrides. **P2**
+- **Salary advances & deductions** tracking. **P2**
+- Monthly payroll summary: base + commission + tips − advances/deductions → export (CSV; WPS SIF file **P4**). **P2**
+- **Document expiry tracker**: configurable types (passport, visa, Emirates ID, labour card, health card…) with
+  30/60/90-day reminders to owner. **P2**
+
+### 1.9 Inventory
+- Products (retail + consumables), stock per branch, purchases, adjustments, stock counts. **P2**
+- Consumables auto-deducted per service (e.g. 30 ml oil per 60-min massage). **P2**
+- Low-stock alerts; cost of goods posted to ledger. **P2**
+
+### 1.10 WhatsApp outbox (click-to-send) — the comms backbone
+- System **generates** messages; receptionist **clicks to send**. Kinds: booking confirmation, reminder (day before / 2 h before),
+  thank-you + review request, rebook nudge, package expiring, birthday, win-back, slot-filler offers, campaigns. **MVP** (confirm/remind) · rest **P2**
+- Templates per kind, EN/AR, variables (`{first_name}`, `{time}`, `{therapist}`, `{link}`). **MVP**
+- Send modes (per-user setting): **WhatsApp Desktop** (`whatsapp://send?phone=…&text=…`, instant),
+  **WhatsApp Web** (`https://web.whatsapp.com/send?phone=…&text=…`, reuses one tab), **mobile** (`https://wa.me/971…?text=…`).
+  Number format `9715XXXXXXXX` (no `+`, no leading 0). Keep URL < ~2000 chars. *(verify desktop protocol UX in P0 spike)*
+- Outbox UI: queue by due time, keyboard flow (open → send in WhatsApp → mark sent → next), assign to receptionist. **MVP**
+- Guardrails: no unofficial WhatsApp Web automation libraries (number bans); marketing only to clients with visits and not opted out;
+  per-day pacing counter. **MVP**
+- WhatsApp Cloud API (coexistence with the Business app) for automated reminders — optional paid tier. **P4**
+
+### 1.11 Reviews & marketing
+- Review request after completed visit via outbox (direct Google review link). **P2**
+- Segments: lapsed N days, birthday this week, package expiring, top spenders, by service/therapist/branch. **P2**
+- Click-to-send campaigns: segment + template → outbox batch; stats: sent → booked within 14 days. **P2**
+- Promo codes. **P2**
+
+### 1.12 Site builder (§11) — **MVP** (core blocks, 3 themes, EN/AR) · rest P2
+### 1.13 Analytics (§9) — business KPIs **MVP**, web/block analytics **P2**
+### 1.14 Accounting (§10) — **P2** (daily close is MVP)
+### 1.15 AI agents (§7) — **P3** (gateway + metering in P0)
+
+### 1.16 "Book" button everywhere
+- Site booking widget + standalone page `{slug}.spamanagement.ae/book`. **MVP**
+- Embeddable script for parlours keeping an old site. **P2**
+- Instagram bio link (`?src=ig`), GBP "Book" button set via Place Actions API (`?src=gbp`). **P3**
+- QR poster for reception / hotel concierge partners. **P2**
+
+### 1.17 Platform super-admin (`admin.spamanagement.ae`)
+- Tenants (status, plan, usage, last activity), impersonation (audited, banner shown). **MVP**
+- Plans: setup fee + monthly/annual price (AED), limits (branches, staff, AI budget, custom domain). **MVP**
+- Platform invoices, **manual payment recording** (cash/bank transfer, reference, proof upload), due/overdue list,
+  WhatsApp reminder links to tenant owners, grace period → dashboard read-only (public site stays live). **MVP**
+- AI: model per agent (Seed 2.0 defaults), price table, usage & cost per tenant, budgets, global + per-tenant kill switch. **P0/P3**
+- Feature flags, announcements, audit log viewer, backup status. **MVP**
+
+### 1.18 Notifications to staff/owners
+- In-app notification centre + **web push (PWA)**: new online booking, pending confirmations, low stock, document expiry,
+  AI drafts awaiting approval. Email only for owner/staff account matters (invites, password reset). **MVP**
+
+### 1.19 Languages
+- Tenant sites: EN + AR (RTL) from day 1. RU/ZH later.
+- Dashboard: EN first; AR **P4**.
+
+---
+
+## 2. Key flows
+
+**Online booking → confirmation**
+1. Visitor on `{slug}.spamanagement.ae` opens booking widget (event `booking_start`, block id recorded).
+2. Picks service/duration → slots computed server-side → picks slot → enters name + mobile.
+3. Server creates booking `pending` inside a transaction that inserts `reservations` (EXCLUDE constraint guarantees no clash).
+4. Confirmation screen: "Confirm on WhatsApp" → opens chat with parlour, prefilled `Hi, confirming booking #K7Q2 …`.
+5. Dashboard shows pending; outbox has the confirmation message ready; receptionist clicks → sends → marks confirmed.
+6. Reminder appears in outbox at the configured time.
+
+**Walk-in**
+Reception → "Walk-in" → service → "next in rotation" therapist + free room suggested → start → checkout → daily close.
+
+**Custom domain**
+Tenant enters `www.theirspa.ae` → API creates Cloudflare custom hostname → UI shows `CNAME www → customers.spamanagement.ae`
++ ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
+(many .ae registrars lack CNAME flattening).
+
+**Publish site**
+Editor saves draft JSON → Publish creates immutable `page_version` → cache tag revalidated + Cloudflare purge for the host.
+
+**Instagram DM → booking (P3)**
+Webhook → `conversations` (store `last_customer_msg_at`) → DM agent (Seed 2.0 lite, tools: `get_services`, `check_availability`,
+`create_pending_booking`, `handoff_to_human`) → reply within 24 h window (≤ 1000 bytes) → pending booking + outbox confirmation.
+Inappropriate messages: brief, neutral reply, no engagement, flagged in inbox.
+
+---
+
+## 3. Architecture & infrastructure (≤ USD 50/month)
+
+### 3.1 Topology
+```
+Visitors (tenant subdomains + custom domains)        Staff / owners (app.spamanagement.ae)
+                    │                                           │
+         Cloudflare (Free): DNS, proxy, Universal SSL (*.spamanagement.ae),
+         Cloudflare for SaaS (custom hostnames), edge cache (Dubai PoP), WAF basics
+                    │  Cloudflare Tunnel (no open inbound ports)
+         ┌──────────┴────────── DO Droplet (Premium AMD 4 GB / 2 vCPU) ───────────┐
+         │ docker compose:                                                       │
+         │  cloudflared · web (Next.js 16 standalone: marketing, dashboard,      │
+         │  admin, tenant sites by host) · worker (pg-boss jobs, AI agents,      │
+         │  social posting, cron) · postgres 16                                  │
+         └───────────────────────────────────────────────────────────────────────┘
+                    │                                   │
+         Cloudflare R2 (media, AI assets,        BytePlus ModelArk ap-southeast (Johor):
+         nightly pg_dump; free ≤10 GB)           Seed 2.0 chat, Seedream images
+```
+- **One Next.js process** serves everything (route groups + host-based rewrite) to save RAM.
+- **No Redis**: pg-boss (Postgres-backed queue + cron) and in-process LRU caches.
+- Fallback if Tunnel + Cloudflare for SaaS origin doesn't work as expected: Caddy with Cloudflare Origin CA cert, firewall
+  allowing only Cloudflare IPs. *(verify in P0 spike)*
+
+### 3.2 Region
+- DO has no Middle-East region. Published data: Dubai→Frankfurt ≈ 92 ms, Dubai→London ≈ 93 ms, Dubai→Bangalore ≈ 154 ms.
+- **Default FRA1**; confirm with a 5-minute ping from the pilot spa's connection to
+  `speedtest-{fra1,lon1,ams3,blr1}.digitalocean.com`. Cloudflare caches tenant sites in Dubai anyway.
+- AI calls go to Johor regardless; they're async/background so the extra latency is irrelevant.
+
+### 3.3 Domains & TLS
+- `spamanagement.ae` (marketing), `app.` (dashboard), `admin.` (super-admin), `{slug}.` (tenant sites),
+  `customers.` (CNAME target for custom domains). Nameservers delegated to Cloudflare.
+- Universal SSL covers apex + first-level wildcard → no wildcard cert work on the server.
+- Custom domains: Cloudflare for SaaS — **100 hostnames free**, then USD 0.10/hostname/month. No Let's Encrypt rate-limit concerns.
+
+### 3.4 Monthly cost
+
+| Item | USD/mo |
+|---|---|
+| DO Premium AMD droplet 4 GB / 2 vCPU / 80 GB (FRA1) | 28.00 |
+| DO daily backups (30%) | 8.40 |
+| Cloudflare Free (DNS, proxy, SSL, Tunnel, for SaaS ≤100 hostnames) | 0 |
+| Cloudflare R2 (≤10 GB free, zero egress) | 0 |
+| Resend free (staff/owner email only) | 0 |
+| Sentry free, uptime monitor free | 0 |
+| GitHub Actions + GHCR (watch 500 MB private-package quota; prune old tags) | 0 |
+| **Total** | **≈ 36.40** (+ domain renewal) |
+
+AI usage (ModelArk) is metered per tenant and priced into plans — not part of the infra budget.
+
+**Scaling steps (in order):** move Postgres to DO Managed PostgreSQL (USD 15, PITR) → bigger droplet or 2nd app droplet →
+R2 paid tier → ClickHouse for analytics only if Postgres rollups get slow.
+
+### 3.5 Ops
+- Postgres tuned for 4 GB (shared_buffers ≈ 1 GB); container memory limits so the worker can't starve web.
+- Images built in CI, never on the droplet. Deploy = pull image tag → `docker compose up -d` with healthcheck; rollback = previous tag.
+- Backups: nightly `pg_dump` → R2 (30 daily, 12 monthly) + DO daily disk backups; **monthly restore drill** script.
+- No always-on staging (budget): CI runs e2e against an ephemeral docker compose stack at phase milestones.
+- Monitoring: Sentry (errors), uptime checks on `app.` and a sample tenant host, `pg_stat_statements`, structured JSON logs.
+
+---
+
+## 4. Tech stack (pinned majors)
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Language / repo | TypeScript, pnpm workspaces + Turborepo | |
+| Web | **Next.js 16** (App Router, `output: 'standalone'`) | `middleware.ts` is now **`proxy.ts`** (Node runtime). Matcher must exclude `_next/static`, `_next/image`, assets. Re-check tenant inside Server Functions/route handlers too. |
+| UI | Tailwind CSS 4, shadcn/ui | Use logical utilities (`ms-/me-/ps-/pe-/start-/end-`) for RTL. |
+| Site editor | **`@puckeditor/core` ^0.23** (MIT) | Old `@measured/puck` is frozen at 0.20 — ignore tutorials using it. Nesting via `slot` field. RTL not documented → spike. |
+| Animation | `motion` 14 + CSS scroll-driven animations | `@supports (animation-timeline: view())` fallback; honour `prefers-reduced-motion`. |
+| DB | PostgreSQL 16 | |
+| ORM | **Drizzle 0.45.x (pinned)** | 1.0 is still beta — don't mix docs. RLS via `pgPolicy`/`pgRole`, `pgTable.withRLS()`. |
+| Auth | **Better Auth 1.7** | organization plugin (org = tenant), twoFactor (TOTP), email+password. No phone OTP (would need SMS/WA API). |
+| Jobs | **pg-boss 12** | Node ≥ 22.12, cron schedules, no Redis. |
+| Validation | zod | Also validates AI JSON output. |
+| Images | sharp → AVIF/WebP, stored in R2 | |
+| AI | OpenAI-compatible client → ModelArk | §7 |
+| Tests | Vitest (unit/integration with real Postgres), Playwright (e2e) | |
+
+Repo layout:
+```
+apps/web          Next.js: (marketing) (dashboard) (admin) (site) route groups + proxy.ts
+apps/worker       pg-boss workers + cron (AI agents, publishing, polling, rollups, backups)
+packages/db       Drizzle schema, migrations, RLS policies, withTenant(), seeds
+packages/core     domain logic: availability, reservations, pricing/VAT, ledger posting, commissions
+packages/auth     Better Auth config, permission matrix
+packages/blocks   Puck config: blocks, themes, tokens, tracker attributes
+packages/ai       ModelArk gateway, agents, tools, metering, prompts (EN/AR)
+packages/ui       shared components
+packages/config   tsconfig, eslint, prettier
+```
+
+---
+
+## 5. Multi-tenancy & security
+
+- **Shared schema, `tenant_id` on every tenant table, Postgres Row-Level Security on all of them.**
+- `withTenant(tenantId, fn)` opens a transaction and runs `select set_config('app.tenant_id', $1, true)` (transaction-local;
+  session-level `SET` leaks across pooled connections).
+- App connects as a role that is **not the table owner and has no BYPASSRLS**; migrations run as owner.
+- CI test: app role cannot read/write another tenant's rows (every table, generated).
+- Host → tenant resolution in `proxy.ts` (LRU cache, 60 s) → rewrite to `(site)` routes; unknown host → branded 404.
+- Super-admin uses a separate role/connection with explicit audit logging.
+- RBAC checked server-side on every action (never trust UI hiding). Branch scoping in queries.
+- Rate limiting (per IP + per tenant) on booking + auth endpoints; Cloudflare Turnstile on public booking form.
+- Secrets (Meta/Google tokens, ARK key) encrypted at rest (AES-GCM with key from env); Meta long-lived tokens refreshed
+  by job before 60-day expiry.
+- Custom HTML block (if ever added) rendered in sandboxed iframe; tenant site CSP.
+
+---
+
+## 6. Data model (Postgres; all tenant tables carry `tenant_id` + RLS)
+
+**Platform (no RLS, super-admin only)**
+- `tenants` (slug, name, legal_name, trn, status: trial|active|past_due|read_only|suspended, default_locale, created_at)
+- `plans` (name, setup_fee_aed, monthly_aed, annual_aed, limits jsonb)
+- `subscriptions` (tenant, plan, cycle, period_start/end, next_due, grace_until)
+- `platform_invoices`, `platform_payments` (method cash|bank_transfer, reference, proof_file, received_by)
+- `domains` (tenant, hostname, kind subdomain|custom, status pending|verifying|active|failed, cf_hostname_id, is_primary)
+- `ai_model_config` (agent_key, model_id, params, price_in/out, enabled) · `ai_usage` (tenant, agent, model, tokens_in/out, images, video_tokens, cost_usd, at)
+- `feature_flags`, `announcements`, `audit_log` (tenant?, actor, action, entity, diff, ip, at)
+
+**Identity & ULM**
+- Better Auth tables (`users`, `sessions`, `accounts`, `organizations`=tenants link, `members`, `invitations`, `two_factors`)
+- `roles` (tenant, name, is_system) · `role_permissions` (role, resource, action) · `member_branches` (member, branch)
+
+**Setup**
+- `branches` (name, address, geo, phone, whatsapp_e164, opening_hours jsonb, business_day_cutoff, active)
+- `rooms` (branch, name, type, capacity, active) · `resources` (branch, name, quantity)
+- `service_categories` · `services` (category, name/desc en+ar, buffer_before/after, room_types[], resources[], therapists_required, online_bookable, active)
+- `service_variants` (service, duration_min, price_aed_incl_vat)
+
+**Staff / HR**
+- `staff` (user?, display_name, gender, photo, branches[], employment jsonb, base_salary, commission_rule, active)
+- `staff_skills` (staff, service) · `shift_templates`, `shifts` (staff, branch, tstzrange) · `leave` · `time_clock`
+- `rotation_queue` (branch, business_date, staff, position, status)
+- `staff_documents` (staff, type, number, expiry, file) · `salary_advances` · `payroll_runs` / `payroll_lines`
+- `commission_rules` · `commission_entries` (staff, sale_line, amount, period)
+
+**Clients**
+- `clients` (name, phone_e164 unique/tenant, language, birthday, gender, nationality, source, tags[], preferences jsonb,
+  blocklisted, no_show_count, marketing_opt_out_at, first_visit_at, last_visit_at)
+- `intake_templates` (fields jsonb, waiver_text en/ar, version) · `intake_submissions` (client, booking?, answers, signature, pdf_file, signed_at)
+- `treatment_notes` (booking_item, staff, text)
+
+**Booking**
+- `bookings` (branch, client, source walk_in|online|whatsapp|instagram|phone|ai_agent|gbp, status, business_date, ref_code, notes, created_by)
+- `booking_items` (booking, service_variant, staff[], room, period tstzrange, price)
+- `reservations` (resource_kind staff|room|resource, resource_id, period tstzrange, booking_item)
+  `EXCLUDE USING gist (tenant_id WITH =, resource_kind WITH =, resource_id WITH =, period WITH &&)`
+  (multi-capacity resources: one row per unit)
+- `waitlist`
+
+**POS & money**
+- `sales` (branch, client?, booking?, number (sequential per tenant/year), invoice_kind simplified|full, subtotal, vat, total, status, business_date)
+- `sale_lines` (kind service|product|package|gift_card|membership, ref_id, qty, unit_price, vat_rate, discount, staff)
+- `payments` (sale, method cash|card_terminal|bank_transfer|gift_card|package_credit|other, amount, reference)
+- `tips` (staff, sale, amount, method) · `refunds` · `promo_codes`
+- `packages` (definition) · `client_packages` (balances, expires_at) · `package_redemptions`
+- `gift_cards` (code, value, balance, expires_at) · `gift_card_txns`
+- `membership_plans` · `client_memberships`
+- `day_closes` (branch, business_date, opening_float, expected_cash, counted_cash, variance, totals jsonb, closed_by)
+- `expenses` (branch, category, vendor, amount, vat, paid_via, receipt_file, ocr jsonb, date)
+
+**Inventory**
+- `products` (kind retail|consumable, sku, unit, cost, price) · `stock_levels` (branch, product, qty)
+- `stock_movements` (type purchase|sale|consumption|adjustment|transfer) · `service_consumables` (service_variant, product, qty)
+
+**Ledger**
+- `ledger_accounts` (seeded chart of accounts, editable) · `journal_entries` (date, source_type, source_id, memo, locked)
+- `journal_lines` (entry, account, debit, credit) — immutable; corrections by reversal · `period_locks`
+
+**Comms & marketing**
+- `message_templates` (kind, lang, body) · `outbox` (client, kind, text, link, status queued|opened|sent|skipped, due_at, assigned_to, campaign?)
+- `segments` (definition jsonb) · `campaigns` (segment, template, stats)
+- `reviews` (source google, external_id, rating, text, reply_text, reply_status draft|approved|posted|failed)
+
+**Social & AI**
+- `social_accounts` (platform instagram|gbp, external_id, token_enc, expires_at, scopes, status)
+- `social_posts` (platform, type feed|carousel|reel|story|gbp_post, caption, media[], status draft|pending_approval|scheduled|published|failed, scheduled_at, external_id, ai_run?)
+- `conversations` (channel ig_dm|ig_comment, external_thread_id, client?, mode bot|human|closed, last_customer_msg_at, assigned_to)
+- `conversation_messages` (direction, sender customer|bot|staff, text, external_id, at)
+- `ai_agent_settings` (agent_key, enabled, mode approve|autopilot, tone, rules, monthly_budget_aed)
+- `ai_runs` (agent_key, trigger, input_ref, output, tool_calls jsonb, status, tokens, cost, approved_by)
+- `brand_profile` (voice, do/don't phrases, en/ar samples) · `media_assets` (r2_key, kind, w/h, alt_en/ar, source upload|ai)
+
+**Site & SEO**
+- `sites` (theme jsonb, locales[], default_locale, settings) · `pages` (site, slug, kind, title en/ar) · `page_versions` (page, puck_data, status, created_by)
+- `redirects` · `seo_meta` (page, locale, title, description, og_image, schema jsonb) · `seo_audits`
+
+**Analytics**
+- `web_events` — **partitioned by month**, raw kept 90 days: (site, session_hash, type pageview|block_view|click|booking_start|booking_complete|wa_click|ig_click,
+  path, block_id, block_type, element, referrer, utm jsonb, device, country, ts)
+- Rollups: `web_daily_pages`, `web_daily_blocks`, `web_daily_funnel`, `web_daily_sources`
+- Business KPIs from materialised views refreshed by worker.
+
+---
+
+## 7. AI layer (BytePlus ModelArk)
+
+**Gateway** (`packages/ai`)
+- OpenAI-compatible Chat Completions: `POST https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions`, `Authorization: Bearer $ARK_API_KEY`.
+  Keys are region-bound; GLM/Seed-pro/Seedream need **ap-southeast** (EU region only serves seed-2-0-lite).
+- **Model IDs live in `ai_model_config`, never in code** — IDs carry date suffixes and get retired within months.
+- Never use the `/api/coding/v3` base URL (bills a different plan).
+- Every call: budget check → queue (pg-boss, per-model rate limit) → call → zod-validate → meter (`ai_usage`) → audit (`ai_runs`).
+- Prompt caching for the stable tenant context (services, prices, hours, FAQs, brand voice); cache hits ≈ 20% of input price.
+- **Flex tier** (≈ 50% off) for non-urgent batch jobs (SEO, blog drafts, weekly insights).
+
+**Default models (super-admin can change per agent)**
+
+| Use | Model ID (2026-10) | Why | USD / 1M in·out |
+|---|---|---|---|
+| DM / comment / review replies, DM-to-booking, classification | `seed-2-0-lite-260428` | tool calling **+ json_schema structured output**, 30K RPM | 0.25 · 2.00 |
+| Content: captions, SEO pages, blog drafts, site generation, weekly insights | `seed-2-0-pro-260328` | strongest Seed; tool calling (no structured output → zod + 1 retry) | 0.50 · 3.00 |
+| Cheap tasks: translation EN↔AR, alt text, tagging | `seed-2-0-mini-260428` | structured output, cheapest | 0.10 · 0.40 |
+| Images (posts, stories) | `dola-seedream-5-0-flash-260915` (default), `dola-seedream-5-0-pro-260628` (hero) | | 0.018 / 0.045 per image |
+| Video (reels) — opt-in, quota | `seedance-1-0-pro-fast-251015` or `dreamina-seedance-2-0-mini-260615` @720p | async task API | ≈ 0.02–0.08 per second |
+| Optional alternative | `glm-5-2-260617` | selectable, not default (no structured output, 500 RPM shared) | 1.40 · 4.40 |
+
+- Generated image/video URLs **expire after 7 days** → copy to R2 immediately. Instagram needs JPEG.
+- Vision input (receipt OCR, photo understanding) — confirm which Seed 2.0 variant accepts images *(verify in P3)*.
+
+**Agents** (all: approve-first by default → autopilot toggle, brand voice EN/AR, neutral tone, tool allowlist, audit, budget, kill switch)
+
+| Agent | Does | Phase |
+|---|---|---|
+| Site generator | IG/GBP data → services, copy, theme, page JSON | P3 |
+| SEO | meta/OG/schema.org (DaySpa/LocalBusiness/Service/Review) per locale on publish, sitemap, internal links, alt text, weekly audit, blog drafts, Search Console submit | P3 |
+| IG content | content calendar, captions EN/AR, hashtags, Seedream images or tenant photos, scheduled publishing | P3 |
+| IG DM | answers prices/hours/location/services, **DM-to-booking**, hand-off to human inbox, neutral replies to inappropriate messages | P3 |
+| IG comments | public reply + one private reply per comment (≤ 7 days) | P3 (needs Advanced Access) |
+| GBP | review replies, offer/event posts, "Book" link | P3 |
+| Slot-filler | morning/midday: finds idle capacity today/tomorrow → drafts IG story + builds outbox list of best-match opted-in clients | P3 |
+| Insights | weekly plain-language business digest (revenue, utilisation, best/worst services, block analytics suggestions) EN/AR | P3 |
+| Receipt OCR | expense photo → vendor, date, amount, VAT, category | P3 |
+
+---
+
+## 8. Integration constraints (checked 2026-10-06)
+
+**Instagram (Instagram API with Instagram Login — no Facebook Page needed)**
+- Permissions: `instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_comments`, `instagram_business_manage_messages`.
+- Other businesses' accounts need **Advanced Access via App Review**, and **Business Verification** of the platform company (trade licence).
+  Pilot can start as an app **tester** (Standard Access) for publishing + DMs.
+- Webhooks need the app in **Live mode**; comment/mention webhooks need Advanced Access and a **public** professional account.
+- Bot DMs only within **24 h** of the customer's last message; `HUMAN_AGENT` tag (separate review) lets humans reply up to 7 days.
+  DM text ≤ 1000 bytes; customer must message first.
+- Private reply to a comment: one per comment, within 7 days.
+- Publishing: 100 posts / 24 h per account; images JPEG; carousel ≤ 10 items; reels and stories supported.
+- Long-lived tokens expire in 60 days → refresh job.
+- **Start Business Verification + App Review in Phase 0** (weeks of lead time; needs privacy policy, data-deletion URL, screencast per permission).
+
+**Google Business Profile**
+- API access requires an application from someone who is owner/manager of a GBP **verified and active ≥ 60 days with a website** →
+  use the pilot spa's profile (add yourself as manager). Quota is 0 until approved (then 300 QPM); no published turnaround.
+- Reviews: v4 `reviews.list` / `reviews.updateReply`. Posts: v4 `localPosts` (standard, CTA, event, offer).
+- "Book" button: Place Actions API (`placeActionLinks`, type `APPOINTMENT`).
+- **Gone:** GBP chat (shut down July 2024), Q&A API (discontinued Nov 2025) → out of scope.
+- Until approved: AI drafts the review reply, receptionist copies it into GBP (manual fallback).
+- Search Console API: verify `spamanagement.ae` once as a Domain property (covers all subdomains); custom domains need a per-tenant DNS TXT.
+- Reserve with Google: UAE supported for Appointments Redirect, but it's a partner integration → P4.
+
+**WhatsApp**
+- Click-to-send only (see §1.10). Unofficial automation (whatsapp-web.js, Baileys) and bulk messaging get numbers banned.
+- Cloud API + Business-app coexistence exists (via Tech Provider onboarding; disables broadcast lists in the app); per-message pricing → P4 option only.
+
+---
+
+## 9. Analytics
+
+**Business (from operational data) — MVP**
+Revenue (day/week/month, by branch/service/therapist/payment method), bookings & sources, **utilisation** (therapist hours booked ÷ on shift;
+room hours), **revenue per available treatment hour**, average ticket, new vs returning, rebooking rate (≤ 30 days), retention cohorts,
+no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue, rebook %, tips), package/gift-card liability outstanding.
+
+**Website (block-level) — P2**
+- First-party, **cookieless** tracker (~2 KB): session = hash(IP + UA + site + daily salt). No third-party scripts.
+- Every Puck block renders `data-block-id` + `data-block-type`; tracker records block impressions (IntersectionObserver),
+  clicks per block/element, scroll depth, booking funnel steps, **WhatsApp clicks** and Instagram clicks (treated as conversions).
+- Ingest `POST /api/collect` (sendBeacon) → batched insert into partitioned `web_events` → hourly/daily rollups.
+- In the editor: **heat overlay per block** (impressions, CTR, conversion contribution), page funnels, sources/UTM, devices.
+- **Attribution:** `?src=ig|gbp|qr|campaign` + UTMs → session → booking `source`. WhatsApp bookings: the prefilled message carries a short ref
+  tied to the web session; receptionist links it when creating the booking.
+- Insights agent turns this into suggestions ("move Packages above Testimonials; its CTR is 3× on mobile").
+
+---
+
+## 10. Accounting (simple screens, correct core) — P2
+
+- **Double-entry ledger**, immutable, auto-posted by `packages/core` from operational events; owners never need to see debits/credits.
+- Seeded chart of accounts: Cash (per branch), Bank, Card clearing, Service revenue, Retail revenue, VAT payable, Gift-card liability,
+  Package/membership liability (deferred revenue), Tips payable, Commission payable, Salaries, Commissions expense, Rent, Utilities,
+  Supplies/consumables, COGS, Marketing, Staff accommodation & transport, Visa/licensing fees, Bank charges, Other.
+- Postings: sale (revenue + VAT), payment (cash/bank/card clearing), gift card/package sale → liability, redemption → revenue,
+  tips → payable, commission accrual, expense, stock purchase/consumption (COGS), refunds by reversal.
+- VAT: 5% default, prices VAT-inclusive, tenant TRN on invoices, sequential numbering, simplified vs full tax invoice template,
+  quarterly VAT summary, rolling 12-month turnover indicator.
+- Screens: Daily close (MVP), Expenses (receipt photo; OCR in P3), P&L by month/branch, cash flow, balance snapshot (cash, bank,
+  liabilities), therapist payouts, VAT summary, period lock, export CSV/Excel for the accountant.
+
+---
+
+## 11. Site builder — "beautiful by default"
+
+- **Section-based** drag & drop with Puck (`slot` fields for nesting); no free-form pixel placement → can't break on mobile.
+- **Blocks (~25, each 2–4 layout variants):** Header/nav, Hero (image/video/split), Services menu (tabs by category, prices),
+  Service detail, Booking widget, Therapists, Packages, Gift cards (enquire via WhatsApp), Memberships, Offers/promo banner,
+  Testimonials, Google reviews (synced), Gallery/lightbox, Instagram feed, About/story, Amenities, FAQ, Opening hours,
+  Map & directions, Contact + WhatsApp CTA, floating WhatsApp button, Blog list/post, CTA band, Footer.
+- **Themes = design tokens:** palette, font pairing (Latin + Arabic pairs from Google Fonts), radius, spacing scale,
+  **motion intensity (none / subtle / expressive)**. 6 starter themes (Zen minimal, Dark luxury gold, Thai teak, Clean clinic,
+  Tropical, Desert sand).
+- **Micro-animations:** `motion` for interactions (hover lift, button press, stagger reveals, image parallax), CSS scroll-driven
+  reveals as progressive enhancement, View Transitions between pages; all disabled under `prefers-reduced-motion`.
+- **EN/AR with RTL:** per-locale content fields, `dir`/`lang` per page, logical CSS only; spike Puck canvas RTL in P0.
+- Editor: inline text edit, image upload/crop, undo/redo, autosave, desktop/tablet/mobile preview, draft/publish, version history + rollback,
+  scheduled publish, global header/footer, per-page SEO panel.
+- Rendering: published JSON → server components → cached by tag; publish = revalidate tag + Cloudflare purge.
+  Performance budget: LCP < 2.5 s on 4G, CLS < 0.1, JS < 100 KB per page outside the booking widget.
+
+---
+
+## 12. Roadmap
+
+| Phase | Scope | Exit criteria |
+|---|---|---|
+| **P0 Foundations** | Repo, CI/CD, infra, tenancy + RLS, auth + ULM, host routing, signup → subdomain, super-admin skeleton, AI gateway stub, spikes. **Start Meta + Google applications.** | Pilot owner signs up, gets `pilot.spamanagement.ae`, invites a receptionist with a role. |
+| **P1 MVP** | Branch/rooms/services/staff/shifts, booking engine + calendar + walk-ins + rotation, online booking + WhatsApp confirm, clients + intake/waiver e-sign + notes, POS (recorded payments, tips, refunds), daily close, WhatsApp outbox (confirm/remind), business KPIs, site builder (15 blocks, 3 themes, EN/AR), super-admin billing (manual payments), PWA + push. | Pilot runs every booking, walk-in and cash close on the platform for 2 weeks. |
+| **P2 Money & growth** | Ledger + accounting screens + VAT, packages/gift cards/memberships, commissions/advances/payroll summary, inventory, document expiry tracker, custom domains, block analytics + funnels + attribution, reviews, segments + campaigns, CSV import, remaining blocks/themes, data export. | Owner reads monthly P&L and block analytics without help. |
+| **P3 AI** | Site generator onboarding, SEO agent, IG content + publishing (Seedream), IG DM agent + DM-to-booking + human inbox, IG comments, GBP reviews/posts/Book link, slot-filler, insights digest, receipt OCR. | Bookings attributed to AI/IG/GBP sources appear in reports. |
+| **P4 Scale** | Stripe (SaaS billing first), WPS SIF export, WhatsApp Cloud API option, Reserve with Google, RU/ZH, dashboard AR, home/hotel service, managed Postgres, second droplet. | — |
+
+Meta/Google approvals run in parallel from P0; the pilot uses tester access during P2–P3.
+
+---
+
+## 13. Phase 0 task list
+
+**You (accounts & approvals — start now, they have lead time)**
+1. `spamanagement.ae` registered via an accredited .ae registrar; nameservers → Cloudflare.
+2. DigitalOcean account; run the region ping test from the pilot spa (command provided in P0).
+3. Cloudflare account (Free); later enable Cloudflare for SaaS on the zone.
+4. Meta: business portfolio for the platform company → **Business Verification** (trade licence) → developer app with Instagram API (Instagram Login); add the pilot's IG (professional, public) as tester.
+5. Google: Cloud project; get **Manager** on the pilot's GBP; submit the GBP API Basic Access form.
+6. BytePlus ModelArk (ap-southeast): enable Seed 2.0 lite/pro/mini + Seedream; create `ARK_API_KEY`.
+7. Resend account (verify `spamanagement.ae` for staff email).
+8. Pilot data: services & prices, rooms, staff list & shifts, hours, logo/photos, client list if any.
+
+**Claude (code; each item = one PR with targeted checks)**
+1. Monorepo scaffold (pnpm, Turborepo, TS strict, ESLint, Prettier, Vitest, Playwright) + `CLAUDE.md` commands + SessionStart hook.
+2. `packages/db`: Drizzle 0.45 + Postgres 16, owner/app roles, RLS policies, `withTenant()`, seeds, generated cross-tenant isolation test.
+3. Auth & ULM: Better Auth (email+password, TOTP, organizations, invites), permission matrix, branch scoping, audit log.
+4. Host routing: `proxy.ts`, `domains` table, LRU cache, reserved slugs, tenant placeholder site, unknown-host page.
+5. Signup → tenant + subdomain + owner; dashboard shell; therapist PWA shell.
+6. Super-admin skeleton: tenants, plans, impersonation (audited), manual payment entry.
+7. Worker: pg-boss, cron registry, job logs, backup job (pg_dump → R2).
+8. AI gateway stub: ModelArk client, `ai_model_config`, metering, budget check; smoke test with `seed-2-0-lite` json_schema.
+9. Infra: Dockerfiles (web standalone, worker), `docker-compose.prod.yml` (web, worker, postgres, cloudflared), Postgres tuning,
+   GitHub Actions (lint/typecheck/test/build → GHCR; deploy via SSH with healthcheck + rollback), Sentry, uptime check.
+10. Spikes (timeboxed, written up in `docs/spikes/`): Puck 0.23 RTL canvas · Cloudflare for SaaS → Tunnel origin ·
+    WhatsApp Desktop/Web/wa.me send UX on the pilot's reception PC.
+
+---
+
+## 14. Working agreement (token-efficient, still thorough)
+
+- One vertical slice per PR, with a 5–10 line spec in the PR description.
+- **After each edit:** typecheck + lint + unit/integration tests for the touched packages only, plus the one e2e spec covering the touched flow.
+- **At each phase end only:** full Playwright suite against the ephemeral compose stack + manual walkthrough with the pilot.
+- No repeated whole-app re-verification; reviews are per-PR diff.
+- `CLAUDE.md` holds decisions/commands so sessions don't rediscover context; `docs/PLAN.md` is the source of truth — update it when a decision changes.
+
+---
+
+## 15. Open items
+
+1. **Pricing (AED):** setup fee, monthly/annual price per plan, and how much AI usage each plan includes.
+2. **Platform company details** for Meta Business Verification and the .ae registrant (name must match company/trademark).
+3. **Pilot specifics:** emirate, number of branches, walk-in vs booked ratio, reception device (PC with WhatsApp Desktop/Web, tablet?), do they do home/hotel visits.
+4. **GitHub default branch:** the remote has no branches yet — confirm creating `main` so PRs have a base.
