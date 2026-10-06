@@ -89,13 +89,13 @@ test('campaigns: win-back segment with live preview → queued WhatsApp messages
 
   // Messages wait on /messages for a human to press send — in each client's language.
   await page.goto(`${app}/${slug}/messages`)
-  const layla = page.getByRole('article', { name: 'Custom for Layla Hassan' })
+  const layla = page.getByRole('article', { name: 'Campaign for Layla Hassan' })
   await expect(layla).toBeVisible()
   await expect(layla.getByText(/Show code BACK20/)).toBeVisible()
   await expect(
-    page.getByRole('article', { name: 'Custom for Noura Al Ali' }).getByText(/مرحباً Noura/),
+    page.getByRole('article', { name: 'Campaign for Noura Al Ali' }).getByText(/مرحباً Noura/),
   ).toBeVisible()
-  await expect(page.getByRole('article', { name: 'Custom for Rita Gomez' })).toHaveCount(0)
+  await expect(page.getByRole('article', { name: 'Campaign for Rita Gomez' })).toHaveCount(0)
 
   // Duplicate: the copy is a draft, and the 7-day cap leaves nobody to message yet.
   await page.goto(`${app}/${slug}/campaigns`)
