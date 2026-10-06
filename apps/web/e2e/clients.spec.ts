@@ -21,7 +21,10 @@ test('client profile: preferences, treatment note, intake template and a signed 
   })
 
   await test.step('open Fatima: the booking is in her visit history', async () => {
-    await page.getByRole('link', { name: /Fatima Al Mansoori/ }).first().click()
+    await page
+      .getByRole('link', { name: /Fatima Al Mansoori/ })
+      .first()
+      .click()
     await expect(page.getByRole('heading', { name: /Fatima Al Mansoori/, level: 1 })).toBeVisible()
     await expect(page.getByTestId('visit-history')).toContainText('Swedish massage · 60 min')
     await expect(page.getByTestId('visit-history')).toContainText('Confirmed')
@@ -70,14 +73,22 @@ test('client profile: preferences, treatment note, intake template and a signed 
     for (const q of [/pregnant/, /surgery or an injury/, /high blood pressure/, /skin conditions/]) {
       await page.getByRole('group', { name: q }).getByText('No', { exact: true }).click()
     }
-    await page.getByRole('group', { name: /Preferred pressure/ }).getByText('Firm').click()
-    await page.getByRole('group', { name: /Allergies/ }).getByRole('textbox').fill('Nut oils')
+    await page
+      .getByRole('group', { name: /Preferred pressure/ })
+      .getByText('Firm')
+      .click()
+    await page
+      .getByRole('group', { name: /Allergies/ })
+      .getByRole('textbox')
+      .fill('Nut oils')
     await page.getByLabel('I have read and accept the above').check()
 
     // Submitting unsigned keeps the answers and asks for a signature.
     await page.getByRole('button', { name: 'Sign and submit' }).click()
     await expect(page.getByText('Please sign in the box')).toBeVisible()
-    await expect(page.getByRole('group', { name: /pregnant/ }).getByRole('radio', { name: 'No' })).toBeChecked()
+    await expect(
+      page.getByRole('group', { name: /pregnant/ }).getByRole('radio', { name: 'No' }),
+    ).toBeChecked()
 
     const box = (await page.getByTestId('signature-pad').boundingBox())!
     await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.6)
