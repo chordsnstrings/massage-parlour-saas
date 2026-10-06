@@ -51,6 +51,19 @@ describe('namecheap', () => {
     expect(body).toContain('ClientIp=1.2.3.4')
   })
 
+  it('keeps good results when one TLD is unsupported (.ae)', async () => {
+    const f = reply(
+      '<ApiResponse Status="ERROR"><Errors><Error Number="2030280">Tld for \'spamanagement.ae\' is not found</Error></Errors>' +
+        '<CommandResponse><DomainCheckResult Domain="spamanagement.co" Available="true" ErrorNo="0" IsPremiumName="false"/></CommandResponse></ApiResponse>',
+    )
+    const r = await checkDomains(cfg, ['spamanagement.ae', 'spamanagement.co'], f)
+    expect(r.find((x) => x.domain === 'spamanagement.co')?.available).toBe(true)
+    expect(r.find((x) => x.domain === 'spamanagement.ae')).toMatchObject({
+      available: false,
+      error: "Tld for 'spamanagement.ae' is not found",
+    })
+  })
+
   it('surfaces API errors (e.g. IP not whitelisted)', async () => {
     const f = reply(
       '<ApiResponse Status="ERROR"><Errors><Error Number="1011150">Parameter RequestIP is invalid</Error></Errors></ApiResponse>',

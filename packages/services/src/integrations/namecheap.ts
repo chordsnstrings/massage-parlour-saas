@@ -61,9 +61,10 @@ export function tags(xml: string, name: string): Record<string, string>[] {
   return [...xml.matchAll(new RegExp(`<${name}\\b([^>]*?)\\/?>`, 'g'))].map((m) => attrs(m[1] ?? ''))
 }
 
-export function parseResponse(xml: string) {
+export function parseResponse(xml: string, partialTag?: string) {
   const status = /<ApiResponse\b[^>]*Status="(\w+)"/.exec(xml)?.[1]
-  if (status !== 'OK') {
+  // Some commands (domains.check) report per-item errors as a failed response that still carries the good items.
+  if (status !== 'OK' && !(partialTag && xml.includes(`<${partialTag}`))) {
     const err = /<Error\b[^>]*Number="(\d+)"[^>]*>([\s\S]*?)<\/Error>/.exec(xml)
     throw new NamecheapError(err ? decode(err[2]!.trim()) : 'Namecheap request failed', err?.[1])
   }
@@ -75,6 +76,7 @@ export async function call(
   command: string,
   params: Record<string, string | number> = {},
   fetchImpl: typeof fetch = fetch,
+  partialTag?: string,
 ) {
   const url = cfg.sandbox
     ? 'https://api.sandbox.namecheap.com/xml.response'
@@ -89,7 +91,7 @@ export async function call(
   })
   const res = await fetchImpl(url, { method: 'POST', body, signal: AbortSignal.timeout(30_000) })
   if (!res.ok) throw new NamecheapError(`Namecheap HTTP ${res.status}`)
-  return parseResponse(await res.text())
+  return parseResponse(await res.text(), partialTag)
 }
 
 // --- domain helpers -------------------------------------------------------------------------------------
@@ -113,14 +115,33 @@ export type Availability = {
 }
 
 export async function checkDomains(cfg: NamecheapConfig, domains: string[], fetchImpl?: typeof fetch) {
-  const xml = await call(cfg, 'namecheap.domains.check', { DomainList: domains.join(',') }, fetchImpl)
-  return tags(xml, 'DomainCheckResult').map<Availability>((a) => ({
+  const xml = await call(
+    cfg,
+    'namecheap.domains.check',
+    { DomainList: domains.join(',') },
+    fetchImpl,
+    'DomainCheckResult',
+  )
+  const errors = [...xml.matchAll(/<Error\b[^>]*>([\s\S]*?)<\/Error>/g)].map((m) => decode(m[1]!.trim()))
+  const found = tags(xml, 'DomainCheckResult').map<Availability>((a) => ({
     domain: (a.Domain ?? '').toLowerCase(),
     available: a.Available === 'true',
     premium: a.IsPremiumName === 'true',
     premiumPriceUsd: a.IsPremiumName === 'true' ? Number(a.PremiumRegistrationPrice) || null : null,
     error: a.ErrorNo && a.ErrorNo !== '0' ? a.Description || `Error ${a.ErrorNo}` : null,
   }))
+  // Domains Namecheap rejected outright (e.g. unsupported TLDs such as .ae) come back as errors, not results.
+  const missing = domains
+    .map((d) => d.toLowerCase())
+    .filter((d) => !found.some((f) => f.domain === d))
+    .map<Availability>((d) => ({
+      domain: d,
+      available: false,
+      premium: false,
+      premiumPriceUsd: null,
+      error: errors.find((e) => e.toLowerCase().includes(d)) ?? 'Not available through Namecheap',
+    }))
+  return [...found, ...missing]
 }
 
 /** One-year registration price (your price) per TLD in USD. */
