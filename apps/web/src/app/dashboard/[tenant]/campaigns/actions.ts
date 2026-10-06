@@ -1,5 +1,5 @@
 'use server'
-import { dubaiInstant } from '@spa/core'
+import { dubaiInstant, dubaiParts } from '@spa/core'
 import { campaigns, promoCodes, type SegmentRule, segments, withTenant } from '@spa/db'
 import {
   archiveCampaign,
@@ -36,6 +36,19 @@ function parseRules(raw: unknown) {
     }
   }
   return segmentRulesSchema.safeParse(value)
+}
+
+/** Ids arrive through `.bind()` from the client; anything but a UUID is treated as "not found". */
+const badId = (id: string | null) => id !== null && !z.uuid().safeParse(id).success
+
+/** A domain error tied to one form field. */
+class FieldError extends DomainError {
+  constructor(
+    readonly field: string,
+    message: string,
+  ) {
+    super(message)
+  }
 }
 
 /** Dubai wall-clock "YYYY-MM-DDTHH:MM" → instant. */
@@ -76,6 +89,7 @@ export async function saveSegmentAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
+  if (badId(id)) return fail('Segment not found')
   const raw = formObject(fd)
   const parsed = z
     .object({
@@ -124,6 +138,7 @@ export async function deleteSegmentAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
+  if (badId(id)) return fail('Segment not found')
   const gone = await withTenant(ctx.tenant.id, (tx) =>
     tx.delete(segments).where(eq(segments.id, id)).returning({ id: segments.id, name: segments.name }),
   )
@@ -209,6 +224,7 @@ export async function saveCampaignAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
+  if (badId(id)) return fail('Campaign not found')
   const parsed = campaignInput.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
@@ -250,7 +266,15 @@ export async function saveCampaignAction(
           .select()
           .from(promoCodes)
           .where(and(eq(promoCodes.id, d.promoCodeId), eq(promoCodes.active, true)))
-        if (!promo) throw new DomainError('That promo code is paused or no longer exists')
+        if (!promo) throw new FieldError('promoCodeId', 'That promo code is paused or no longer exists')
+        // The code must still work on the day clients receive it.
+        const sendDay = dubaiParts(sendAt ?? now).date
+        if (promo.validTo && promo.validTo < sendDay)
+          throw new FieldError('promoCodeId', `This code expires before the send date (${promo.validTo})`)
+        if (promo.validFrom && promo.validFrom > sendDay)
+          throw new FieldError('promoCodeId', `This code only starts on ${promo.validFrom}`)
+        if (promo.maxUses !== null && promo.uses >= promo.maxUses)
+          throw new FieldError('promoCodeId', 'This code has been used up')
       }
       let campaignId = id
       if (id) {
@@ -280,6 +304,7 @@ export async function saveCampaignAction(
       return { id: campaignId!, queued }
     })
   } catch (e) {
+    if (e instanceof FieldError) return fail('Please check the highlighted fields.', { [e.field]: e.message })
     if (e instanceof DomainError) return fail(e.message)
     throw e
   }
@@ -308,6 +333,7 @@ export async function duplicateCampaignAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
+  if (badId(id)) return fail('Campaign not found')
   let copyId: string
   try {
     copyId = (await withTenant(ctx.tenant.id, (tx) => duplicateCampaign(tx, id, ctx.user.id))).id
@@ -330,12 +356,14 @@ export async function duplicateCampaignAction(
 export async function archiveCampaignAction(
   slug: string,
   id: string,
-  archived: boolean,
+  archivedInput: boolean,
   _p: ActionResult,
   _fd: FormData,
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
+  if (badId(id)) return fail('Campaign not found')
+  const archived = archivedInput === true
   let withdrawn: number
   try {
     withdrawn = await withTenant(ctx.tenant.id, (tx) => archiveCampaign(tx, id, archived))

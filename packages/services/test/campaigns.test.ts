@@ -18,7 +18,7 @@ import {
   withTenant,
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   archiveCampaign,
@@ -31,6 +31,7 @@ import {
   queueCampaign,
   renderCampaignMessage,
   resolveSegment,
+  withdrawCampaignMessagesWithoutConsent,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -260,6 +261,53 @@ describe('resolveSegment rules', () => {
     expect(await sorted([{ kind: 'birthday_within', days: 7 }])).toEqual([])
   })
 
+  it('29 February birthdays fall on 28 February in non-leap years', async () => {
+    const [leapling] = await tx((db) =>
+      db
+        .insert(clients)
+        .values({
+          tenantId: ids.tenant!,
+          name: 'Leap Day',
+          phoneE164: '971500000009',
+          birthday: '2000-02-29',
+        })
+        .returning(),
+    )
+    const match = async (date: string, days: number) =>
+      (
+        await tx((db) =>
+          resolveSegment(db, ids.tenant!, [{ kind: 'birthday_within', days }], dubaiInstant(date, 600), {
+            requireVisit: false,
+          }),
+        )
+      ).some((c) => c.id === leapling!.id)
+    expect(await match('2027-02-20', 10)).toBe(true) // 2027: celebrated on 28 Feb
+    expect(await match('2027-02-20', 7)).toBe(false)
+    expect(await match('2027-03-01', 5)).toBe(false)
+    expect(await match('2028-02-25', 5)).toBe(true) // leap year: 29 Feb itself
+    await tx((db) => db.delete(clients).where(eq(clients.id, leapling!.id)))
+  })
+
+  it('scheduled campaigns evaluate the rules at the send time, not when queued', async () => {
+    const plan = (rules: SegmentRule[], sendAt: Date) =>
+      tx(async (db) =>
+        (await planAudience(db, ids.tenant!, rules, { sendAt, now: NOW })).recipients.map((c) => c.name),
+      )
+    // Queued on 6 Oct for 1 Nov: November birthdays, not October ones.
+    expect(await plan([{ kind: 'birthday_month' }], dubaiInstant('2026-11-01', 600))).toEqual(['Carla Diaz'])
+    // Bilal's package expires on 16 Oct — before a 26 Oct send, so it no longer "expires within 14 days".
+    expect(await plan([{ kind: 'package_expiring', days: 14 }], new Date(NOW.getTime() + 20 * DAY))).toEqual(
+      [],
+    )
+    expect(await plan([{ kind: 'package_expiring', days: 14 }], new Date(NOW.getTime() + 90 * DAY))).toEqual([
+      'Carla Diaz',
+    ])
+    expect(await plan([{ kind: 'lapsed', days: 60 }], new Date(NOW.getTime() + 35 * DAY))).toEqual([
+      'Carla Diaz',
+      'Amira Haddad',
+    ])
+  })
+
   it('gender, language and tags', async () => {
     expect(await sorted([{ kind: 'gender', gender: 'male' }])).toEqual(['Bilal Saeed'])
     expect(await sorted([{ kind: 'gender', gender: 'female' }])).toEqual(['Amira Haddad', 'Carla Diaz'])
@@ -379,11 +427,20 @@ describe('queueing, frequency cap and results', () => {
     const [saved] = await tx((db) => db.select().from(campaigns).where(eq(campaigns.id, soon.id)))
     expect(saved!.stats).toMatchObject({ matched: 2, skippedRecent: 2 })
 
-    // Far enough apart (2 Oct + 7 days < 17 Oct): not capped.
-    const later = await tx((db) =>
-      planAudience(db, ids.tenant!, [], { sendAt: new Date(NOW.getTime() + 10 * DAY), now: NOW }),
-    )
-    expect(later).toMatchObject({ matched: 3, skippedRecent: 0 })
+    // A message still waiting in the queue can be sent any day from its due date (8 Oct), so it blocks
+    // a 16 Oct campaign until it is sent or skipped.
+    const in10 = new Date(NOW.getTime() + 10 * DAY)
+    const waiting = await tx((db) => planAudience(db, ids.tenant!, [], { sendAt: in10, now: NOW }))
+    expect(waiting).toMatchObject({ matched: 3, skippedRecent: 3 })
+
+    // Sent on time (8 Oct): far enough from 16 Oct. Sent late (11 Oct): the cap counts from the actual send.
+    const sent = (name: string, at: Date) =>
+      tx((db) => db.update(outbox).set({ status: 'sent', sentAt: at }).where(eq(outbox.clientId, ids[name]!)))
+    await sent('Amira Haddad', new Date(NOW.getTime() + 2 * DAY))
+    await sent('Bilal Saeed', new Date(NOW.getTime() + 5 * DAY))
+    const later = await tx((db) => planAudience(db, ids.tenant!, [], { sendAt: in10, now: NOW }))
+    expect(later.recipients.map((r) => r.name)).toEqual(['Amira Haddad'])
+    expect(later.skippedRecent).toBe(2)
 
     // Skipped messages don't count as "messaged".
     await tx((db) =>
@@ -420,6 +477,7 @@ describe('queueing, frequency cap and results', () => {
       pending: 0,
       sent: 2,
       skipped: 1,
+      reached: 2,
       bookedClients: 1,
       bookings: 1,
     })
@@ -429,7 +487,7 @@ describe('queueing, frequency cap and results', () => {
     expect(saved!.status).toBe('done')
   })
 
-  it('duplicates into a draft and archiving withdraws unsent messages', async () => {
+  it('duplicates into a draft and archiving withdraws messages still waiting', async () => {
     const copy = await tx((db) => duplicateCampaign(db, ids.first!))
     expect(copy).toMatchObject({ name: 'October (copy)', status: 'draft', recipients: 0 })
     expect(copy.promoCodeId).not.toBeNull()
@@ -437,12 +495,47 @@ describe('queueing, frequency cap and results', () => {
       queueCampaign(db, copy.id, undefined, { sendAt: new Date(NOW.getTime() + 40 * DAY), now: NOW }),
     )
     expect(n).toBe(3)
-    expect(await tx((db) => archiveCampaign(db, copy.id))).toBe(3)
-    const [saved] = await tx((db) => db.select().from(campaigns).where(eq(campaigns.id, copy.id)))
-    expect(saved!.archivedAt).not.toBeNull()
-    expect(saved!.status).toBe('done')
-    const rows = await tx((db) => db.select().from(outbox).where(eq(outbox.campaignId, copy.id)))
-    expect(rows.every((r) => r.status === 'skipped')).toBe(true)
+    // Opened in WhatsApp = probably sent: archiving leaves it for staff to confirm.
+    await tx((db) =>
+      db
+        .update(outbox)
+        .set({ status: 'opened' })
+        .where(and(eq(outbox.campaignId, copy.id), eq(outbox.clientId, ids['Amira Haddad']!))),
+    )
+    expect(await tx((db) => archiveCampaign(db, copy.id))).toBe(2)
+    const status = async () =>
+      (await tx((db) => db.select().from(campaigns).where(eq(campaigns.id, copy.id))))[0]!
+    expect((await status()).archivedAt).not.toBeNull()
+    expect((await status()).status).toBe('queued')
+    const rows = await tx((db) =>
+      db.select().from(outbox).where(eq(outbox.campaignId, copy.id)).orderBy(asc(outbox.phoneE164)),
+    )
+    expect(rows.map((r) => r.status)).toEqual(['opened', 'skipped', 'skipped'])
+    await tx((db) => db.update(outbox).set({ status: 'sent', sentAt: NOW }).where(eq(outbox.id, rows[0]!.id)))
+    expect(await tx((db) => finishCampaigns(db))).toBe(1)
+    expect((await status()).status).toBe('done')
     await expect(tx((db) => queueCampaign(db, copy.id))).rejects.toThrow()
+  })
+
+  it('withdraws waiting campaign messages when the client opts out after queueing', async () => {
+    const c = await newCampaign('Later', { rules: [{ kind: 'visits_at_least', count: 1 }] })
+    expect(
+      await tx((db) =>
+        queueCampaign(db, c.id, undefined, { sendAt: new Date(NOW.getTime() + 60 * DAY), now: NOW }),
+      ),
+    ).toBe(3)
+    await tx((db) =>
+      db
+        .update(clients)
+        .set({ tags: ['no-marketing'] })
+        .where(eq(clients.id, ids['Carla Diaz']!)),
+    )
+    await tx((db) => db.update(clients).set({ blocklisted: true }).where(eq(clients.id, ids['Bilal Saeed']!)))
+    expect(await tx((db) => withdrawCampaignMessagesWithoutConsent(db))).toBe(2)
+    const rows = await tx((db) =>
+      db.select().from(outbox).where(eq(outbox.campaignId, c.id)).orderBy(asc(outbox.phoneE164)),
+    )
+    expect(rows.map((r) => r.status)).toEqual(['queued', 'skipped', 'skipped'])
+    expect(await tx((db) => withdrawCampaignMessagesWithoutConsent(db))).toBe(0)
   })
 })
