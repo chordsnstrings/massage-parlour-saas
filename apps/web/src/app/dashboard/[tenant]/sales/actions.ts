@@ -1,15 +1,16 @@
 'use server'
-import { clients, withTenant } from '@spa/db'
+import { clientPackages, clients, withTenant } from '@spa/db'
 import {
   closeDay,
   createSale,
   DomainError,
   findOrCreateClient,
+  PAY_METHODS,
   POS_METHODS,
   refundSale,
   voidSale,
 } from '@spa/services'
-import { asc, ilike, or } from 'drizzle-orm'
+import { and, asc, eq, gt, ilike, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone } from '@/components/calendar/time'
@@ -23,6 +24,7 @@ const money = z.coerce
   .min(0, 'Cannot be negative')
   .max(1_000_000, 'Too large')
 const method = z.enum(POS_METHODS)
+const payMethod = z.enum(PAY_METHODS)
 const optionalUuid = z
   .string()
   .nullish()
@@ -83,8 +85,9 @@ const saleSchema = z.object({
   lines: z
     .array(
       z.object({
-        kind: z.enum(['service', 'other']),
+        kind: z.enum(['service', 'product', 'package', 'gift_card', 'other']),
         refId: optionalUuid,
+        clientPackageId: optionalUuid,
         description: z.string().trim().min(1, 'Describe the item').max(200),
         qty: z.coerce.number().int().min(1).max(99),
         unitPriceAed: money,
@@ -95,7 +98,7 @@ const saleSchema = z.object({
     .min(1, 'Add at least one item'),
   discountAed: money.default(0),
   payments: z
-    .array(z.object({ method, amountAed: money, reference: z.string().trim().max(60).nullish() }))
+    .array(z.object({ method: payMethod, amountAed: money, reference: z.string().trim().max(60).nullish() }))
     .max(8),
   tips: z.array(z.object({ staffId: z.uuid('Choose a therapist'), amountAed: money, method })).max(12),
 })
@@ -248,4 +251,25 @@ export async function closeDayAction(
   } catch (e) {
     return handle(e)
   }
+}
+
+/** Active packages of a client (for "use a package session" at checkout). */
+export async function clientPackagesAction(slug: string, clientId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.use')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(clientId).success) return ok(undefined, { packages: [] })
+  const rows = await withTenant(ctx.tenant.id, (tx) =>
+    tx
+      .select({ id: clientPackages.id, name: clientPackages.name, balances: clientPackages.balances })
+      .from(clientPackages)
+      .where(
+        and(
+          eq(clientPackages.clientId, clientId),
+          eq(clientPackages.status, 'active'),
+          gt(clientPackages.expiresAt, new Date()),
+        ),
+      )
+      .orderBy(asc(clientPackages.expiresAt)),
+  )
+  return ok(undefined, { packages: rows })
 }

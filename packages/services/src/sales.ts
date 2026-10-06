@@ -4,13 +4,17 @@ import { businessDateOf, includedVat } from '@spa/core'
 import {
   bookings,
   branches,
+  clientPackages,
   commissionEntries,
   counters,
   dayCloses,
+  packageRedemptions,
   payments,
+  products,
   refunds,
   saleLines,
   sales,
+  serviceVariants,
   staff,
   type Tx,
   tips,
@@ -18,13 +22,26 @@ import {
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { setBookingStatus } from './bookings'
 import { DomainError, pgCode } from './errors'
-import { postRefund, postSale, reverseSource } from './ledger'
+import { returnSoldStock, sellStock } from './inventory'
+import { post, postRefund, postSale, reverseSource } from './ledger'
+import {
+  giftCardForPayment,
+  issueGiftCard,
+  issuePackage,
+  redeemGiftCard,
+  redeemPackageSession,
+} from './loyalty'
 import { enqueueBookingMessage } from './outbox'
 import { accrueCommissions } from './payroll'
 
 export const VAT_RATE_PCT = 5
 export const POS_METHODS = ['cash', 'card_terminal', 'bank_transfer', 'other'] as const
 export type PosMethod = (typeof POS_METHODS)[number]
+/** Payments can also draw on a gift card (reference = card code); tips can't. */
+export const PAY_METHODS = [...POS_METHODS, 'gift_card'] as const
+export type PayMethod = (typeof PAY_METHODS)[number]
+/** Prepaid items carry no VAT at sale — VAT is due when the session or card is used. */
+const PREPAID = new Set(['package', 'gift_card'])
 export const METHOD_LABEL: Record<string, string> = {
   cash: 'Cash',
   card_terminal: 'Card terminal',
@@ -47,6 +64,8 @@ export type NewSaleLine = {
   unitPriceAed: number
   discountAed?: number
   staffId?: string | null
+  /** Service line covered by a session from this client package (price must be 0). */
+  clientPackageId?: string | null
 }
 
 export type NewSale = {
@@ -57,7 +76,7 @@ export type NewSale = {
   lines: NewSaleLine[]
   /** Whole-sale discount on top of line discounts. */
   discountAed?: number
-  payments: { method: PosMethod; amountAed: number; reference?: string | null }[]
+  payments: { method: PayMethod; amountAed: number; reference?: string | null }[]
   tips?: { staffId: string; amountAed: number; method: PosMethod }[]
   createdBy?: string | null
   now?: Date
@@ -128,11 +147,18 @@ export async function createSale(tx: Tx, input: NewSale) {
     return l.net - share
   })
   if (lineTotals.some((t) => t < 0)) throw new DomainError('Discount is more than the subtotal')
-  const vat = lineTotals.reduce((s, t) => s + fils(includedVat(t / 100, VAT_RATE_PCT)), 0)
+  const vat = lineTotals.reduce(
+    (s, t, i) => (PREPAID.has(priced[i]!.kind) ? s : s + fils(includedVat(t / 100, VAT_RATE_PCT))),
+    0,
+  )
 
   for (const p of input.payments) {
-    if (!(POS_METHODS as readonly string[]).includes(p.method))
+    if (!(PAY_METHODS as readonly string[]).includes(p.method))
       throw new DomainError('Unknown payment method')
+    if (p.method === 'gift_card') {
+      if (!p.reference?.trim()) throw new DomainError('Enter the gift card code')
+      await giftCardForPayment(tx, input.tenantId, p.reference, fils(p.amountAed) / 100)
+    }
     if (fils(p.amountAed) <= 0) throw new DomainError('Payment amounts must be more than zero')
   }
   const paid = input.payments.reduce((s, p) => s + fils(p.amountAed), 0)
@@ -175,6 +201,22 @@ export async function createSale(tx: Tx, input: NewSale) {
     clientId = clientId ?? booking.clientId
   }
 
+  for (const l of priced) {
+    if (l.kind === 'package' && !clientId) throw new DomainError('Choose the client to sell a package to')
+    if (l.clientPackageId) {
+      if (l.kind !== 'service' || !clientId)
+        throw new DomainError('Package sessions need a client and a treatment')
+      if (l.net !== 0)
+        throw new DomainError(`“${l.description}” is covered by a package — its price must be 0`)
+      const [pkg] = await tx.select().from(clientPackages).where(eq(clientPackages.id, l.clientPackageId))
+      if (pkg?.clientId !== clientId) throw new DomainError('That package belongs to another client')
+    }
+    if (l.kind === 'product') {
+      const [prod] = l.refId ? await tx.select().from(products).where(eq(products.id, l.refId)) : []
+      if (!prod) throw new DomainError(`Product for “${l.description}” not found`, 'not_found')
+    }
+  }
+
   const number = await nextCounter(tx, input.tenantId, 'sale')
   const [sale] = await tx
     .insert(sales)
@@ -202,7 +244,7 @@ export async function createSale(tx: Tx, input: NewSale) {
         saleId: sale!.id,
         kind: l.kind,
         refId: l.refId ?? null,
-        description: l.description.trim(),
+        description: l.clientPackageId ? `${l.description.trim()} · package session` : l.description.trim(),
         qty: l.qty,
         unitPriceAed: aed(fils(l.unitPriceAed)),
         discountAed: aed(l.discount),
@@ -253,6 +295,94 @@ export async function createSale(tx: Tx, input: NewSale) {
   })
   await accrueCommissions(tx, sale!.id, VAT_RATE_PCT)
 
+  // Side effects of what was sold / how it was paid.
+  for (const [i, l] of priced.entries()) {
+    const line = lines[i]!
+    if (l.kind === 'product' && l.refId)
+      await sellStock(tx, {
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        productId: l.refId,
+        qty: l.qty,
+        saleId: sale!.id,
+        date: businessDate,
+      })
+    if (l.kind === 'package' && l.refId && clientId)
+      for (let n = 0; n < l.qty; n++)
+        await issuePackage(tx, {
+          tenantId: input.tenantId,
+          clientId,
+          definitionId: l.refId,
+          saleId: sale!.id,
+        })
+    if (l.kind === 'gift_card')
+      for (let n = 0; n < l.qty; n++)
+        await issueGiftCard(tx, {
+          tenantId: input.tenantId,
+          amountAed: num(line.lineTotalAed) / l.qty,
+          saleId: sale!.id,
+          purchaserClientId: clientId,
+          recipientName: l.description.replace(/^Gift card\s*[—-]?\s*/i, '') || undefined,
+          createdBy: input.createdBy,
+        })
+    if (l.clientPackageId && l.refId) {
+      const [variant] = await tx
+        .select({ serviceId: serviceVariants.serviceId })
+        .from(serviceVariants)
+        .where(eq(serviceVariants.id, l.refId))
+      if (!variant) throw new DomainError('Treatment not found', 'not_found')
+      const { valueAed } = await redeemPackageSession(tx, {
+        clientPackageId: l.clientPackageId,
+        serviceId: variant.serviceId,
+        bookingId: booking?.id ?? null,
+        saleId: sale!.id,
+        branchId: input.branchId,
+        createdBy: input.createdBy,
+      })
+      // The line is priced at 0, so commission is earned on the session's redeemed value instead.
+      if (l.staffId) {
+        const [person] = await tx
+          .select({ rate: staff.commissionPct })
+          .from(staff)
+          .where(eq(staff.id, l.staffId))
+        const baseAed = valueAed - includedVat(valueAed, VAT_RATE_PCT)
+        const amount = Math.round(baseAed * num(person?.rate)) / 100
+        if (amount > 0) {
+          await tx.insert(commissionEntries).values({
+            tenantId: input.tenantId,
+            staffId: l.staffId,
+            saleLineId: line.id,
+            businessDate,
+            baseAed: baseAed.toFixed(2),
+            ratePct: num(person?.rate).toFixed(2),
+            amountAed: amount.toFixed(2),
+          })
+          await post(tx, {
+            tenantId: input.tenantId,
+            branchId: input.branchId,
+            date: businessDate,
+            sourceType: 'commission',
+            sourceId: sale!.id,
+            memo: 'Therapist commission (package session)',
+            lines: [
+              { code: '6010', debit: amount },
+              { code: '2300', credit: amount },
+            ],
+          })
+        }
+      }
+    }
+  }
+  for (const p of input.payments)
+    if (p.method === 'gift_card' && p.reference)
+      await redeemGiftCard(tx, {
+        tenantId: input.tenantId,
+        code: p.reference,
+        amountAed: fils(p.amountAed) / 100,
+        saleId: sale!.id,
+        createdBy: input.createdBy,
+      })
+
   let message: Awaited<ReturnType<typeof enqueueBookingMessage>> = null
   if (booking) {
     if (booking.status === 'confirmed') await setBookingStatus(tx, booking.id, 'checked_in')
@@ -297,6 +427,17 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string; 
     throw new DomainError('This sale has refunds — refund the rest instead')
   if (await isClosed(tx, sale.branchId, sale.businessDate))
     throw new DomainError('That day is closed — record a refund instead')
+  const soldLines = await tx.select().from(saleLines).where(eq(saleLines.saleId, sale.id))
+  const giftPaid = await tx
+    .select({ id: payments.id })
+    .from(payments)
+    .where(and(eq(payments.saleId, sale.id), eq(payments.method, 'gift_card')))
+  const usedPackage = await tx
+    .select({ id: packageRedemptions.id })
+    .from(packageRedemptions)
+    .where(eq(packageRedemptions.saleId, sale.id))
+  if (soldLines.some((l) => PREPAID.has(l.kind)) || giftPaid.length || usedPackage.length)
+    throw new DomainError('Sales with packages or gift cards can’t be voided — record a refund instead')
   const [updated] = await tx
     .update(sales)
     .set({ status: 'void', voidReason: reason })
@@ -304,6 +445,18 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string; 
     .returning()
   await reverseSource(tx, sale.tenantId, 'sale', sale.id, sale.businessDate, input.userId)
   await reverseSource(tx, sale.tenantId, 'commission', sale.id, sale.businessDate, input.userId)
+  await reverseSource(tx, sale.tenantId, 'cogs', sale.id, sale.businessDate, input.userId)
+  for (const l of soldLines)
+    if (l.kind === 'product' && l.refId)
+      await returnSoldStock(tx, {
+        tenantId: sale.tenantId,
+        branchId: sale.branchId,
+        productId: l.refId,
+        qty: l.qty,
+        saleId: sale.id,
+        date: sale.businessDate,
+        createdBy: input.userId,
+      })
   // Commission accruals are append-only too: offset each one with a negative entry.
   const lineIds = (
     await tx.select({ id: saleLines.id }).from(saleLines).where(eq(saleLines.saleId, sale.id))

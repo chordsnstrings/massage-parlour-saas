@@ -80,6 +80,32 @@ export async function receiveStock(
   })
 }
 
+/** A voided retail sale: goods go back on the shelf and the cost-of-sales entry is reversed. */
+export async function returnSoldStock(
+  tx: Tx,
+  r: {
+    tenantId: string
+    branchId: string
+    productId: string
+    qty: number
+    saleId: string
+    date: string
+    createdBy?: string | null
+  },
+) {
+  await move(tx, {
+    tenantId: r.tenantId,
+    branchId: r.branchId,
+    productId: r.productId,
+    kind: 'adjustment',
+    qty: r.qty,
+    refType: 'sale_void',
+    refId: r.saleId,
+    note: 'Sale voided',
+    createdBy: r.createdBy,
+  })
+}
+
 /** Stock count correction (positive or negative), valued at cost. */
 export async function adjustStock(
   tx: Tx,

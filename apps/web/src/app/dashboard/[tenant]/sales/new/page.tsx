@@ -1,4 +1,15 @@
-import { bookingItems, bookings, clients, services, serviceVariants, staff, withTenant } from '@spa/db'
+import {
+  bookingItems,
+  bookings,
+  clients,
+  packageDefinitions,
+  products,
+  services,
+  serviceVariants,
+  staff,
+  stockLevels,
+  withTenant,
+} from '@spa/db'
 import { and, asc, eq } from 'drizzle-orm'
 import { ArrowLeft, Store } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -43,6 +54,7 @@ export default async function NewSalePage({
     const menuRows = await tx
       .select({
         variantId: serviceVariants.id,
+        serviceId: services.id,
         name: services.name,
         durationMin: serviceVariants.durationMin,
         price: serviceVariants.priceAed,
@@ -56,6 +68,30 @@ export default async function NewSalePage({
         asc(serviceVariants.sort),
         asc(serviceVariants.durationMin),
       )
+    const productRows = await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        price: products.priceAed,
+        qty: stockLevels.qty,
+        unit: products.unit,
+      })
+      .from(products)
+      .leftJoin(
+        stockLevels,
+        and(eq(stockLevels.productId, products.id), eq(stockLevels.branchId, picked.branch.id)),
+      )
+      .where(and(eq(products.kind, 'retail'), eq(products.active, true)))
+      .orderBy(asc(products.createdAt))
+    const packageRows = await tx
+      .select({
+        id: packageDefinitions.id,
+        name: packageDefinitions.name,
+        price: packageDefinitions.priceAed,
+      })
+      .from(packageDefinitions)
+      .where(eq(packageDefinitions.active, true))
+      .orderBy(asc(packageDefinitions.createdAt))
     const staffRows = await tx
       .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds })
       .from(staff)
@@ -111,8 +147,16 @@ export default async function NewSalePage({
     }
     return {
       branch: picked.branch,
+      products: productRows.map((p) => ({
+        id: p.id,
+        label: p.name.en,
+        priceAed: Number(p.price ?? 0),
+        stock: `${Number(p.qty ?? 0)} ${p.unit}`,
+      })),
+      packages: packageRows.map((p) => ({ id: p.id, label: p.name.en, priceAed: Number(p.price) })),
       menu: menuRows.map((m) => ({
         variantId: m.variantId,
+        serviceId: m.serviceId,
         label: `${m.name.en ?? Object.values(m.name)[0] ?? 'Service'} · ${m.durationMin} min`,
         priceAed: Number(m.price),
       })),
@@ -175,6 +219,8 @@ export default async function NewSalePage({
             client={prefill?.client ?? null}
             initialLines={prefill?.lines ?? []}
             menu={data.menu}
+            products={data.products}
+            packages={data.packages}
             staff={data.staff}
             receiptBase={appPath(`/${slug}/sales`)}
           />

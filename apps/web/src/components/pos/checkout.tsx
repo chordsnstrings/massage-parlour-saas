@@ -1,27 +1,37 @@
 'use client'
-import { Check, Heart, Loader2, Plus, Search, Trash2, UserPlus, UserRound, X } from 'lucide-react'
+import { Check, Gift, Heart, Loader2, Plus, Search, Trash2, UserPlus, UserRound, X } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useMemo, useState, useTransition } from 'react'
-import { createSaleAction, searchPosClientsAction } from '@/app/dashboard/[tenant]/sales/actions'
+import {
+  clientPackagesAction,
+  createSaleAction,
+  searchPosClientsAction,
+} from '@/app/dashboard/[tenant]/sales/actions'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
-import { Input, Label, Select } from '@/components/ui/input'
+import { Checkbox, Input, Label, Select } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { cn, formatAed } from '@/lib/utils'
 
 export type CheckoutLine = {
   key: string
-  kind: 'service' | 'other'
+  kind: 'service' | 'product' | 'package' | 'gift_card' | 'other'
   refId: string | null
   description: string
   qty: number
   unitPriceAed: number | string
   discountAed: number | string
   staffId: string | null
+  /** Service covered by a session from this client package (price goes to 0). */
+  clientPackageId?: string | null
+  listPriceAed?: number | string
 }
 type Method = 'cash' | 'card_terminal' | 'bank_transfer' | 'other'
-type Payment = { key: string; method: Method; amount: string; reference: string }
+type PayMethod = Method | 'gift_card'
+type Payment = { key: string; method: PayMethod; amount: string; reference: string }
+type ClientPkg = { id: string; name: string; balances: Record<string, number> }
+const PREPAID = new Set(['package', 'gift_card'])
 type Tip = { key: string; staffId: string; amount: string; method: Method }
 type ClientHit = { id: string; name: string; phone: string | null }
 
@@ -30,6 +40,10 @@ const METHODS: { value: Method; label: string }[] = [
   { value: 'card_terminal', label: 'Card terminal' },
   { value: 'bank_transfer', label: 'Bank transfer' },
   { value: 'other', label: 'Other' },
+]
+const PAY_METHODS: { value: PayMethod; label: string }[] = [
+  ...METHODS,
+  { value: 'gift_card', label: 'Gift card' },
 ]
 
 const f = (v: string | number) => {
@@ -48,6 +62,8 @@ export function Checkout({
   client: initialClient,
   initialLines,
   menu,
+  products = [],
+  packages = [],
   staff,
   receiptBase,
 }: {
@@ -56,7 +72,9 @@ export function Checkout({
   bookingId: string | null
   client: ClientHit | null
   initialLines: CheckoutLine[]
-  menu: { variantId: string; label: string; priceAed: number }[]
+  menu: { variantId: string; serviceId?: string; label: string; priceAed: number }[]
+  products?: { id: string; label: string; priceAed: number; stock: string }[]
+  packages?: { id: string; label: string; priceAed: number }[]
   staff: { id: string; name: string }[]
   receiptBase: string
 }) {
@@ -72,11 +90,45 @@ export function Checkout({
   const [tips, setTips] = useState<Tip[]>([])
   const [pending, start] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [clientPkgs, setClientPkgs] = useState<ClientPkg[]>([])
+  const clientId = client?.id ?? null
+  useEffect(() => {
+    if (!clientId) {
+      setClientPkgs([])
+      return
+    }
+    let live = true
+    clientPackagesAction(slug, clientId).then((r) => {
+      if (live && r?.ok) setClientPkgs((r.data?.packages as ClientPkg[]) ?? [])
+    })
+    return () => {
+      live = false
+    }
+  }, [slug, clientId])
+  const serviceOf = useMemo(() => new Map(menu.map((m) => [m.variantId, m.serviceId])), [menu])
+  const pkgFor = (l: CheckoutLine) => {
+    const serviceId = l.refId ? serviceOf.get(l.refId) : undefined
+    if (l.kind !== 'service' || !serviceId) return null
+    const pkg =
+      clientPkgs.find((p) => p.id === l.clientPackageId) ??
+      clientPkgs.find((p) => (p.balances[serviceId] ?? 0) > 0)
+    return pkg ? { pkg, left: pkg.balances[serviceId] ?? 0 } : null
+  }
+  const togglePackage = (l: CheckoutLine, pkgId: string | null) =>
+    patchLine(
+      l.key,
+      pkgId
+        ? { clientPackageId: pkgId, listPriceAed: l.unitPriceAed, unitPriceAed: 0, discountAed: 0 }
+        : { clientPackageId: null, unitPriceAed: l.listPriceAed ?? l.unitPriceAed },
+    )
 
   const subtotal = lines.reduce((s, l) => s + Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed)), 0)
   const discount = Math.min(f(saleDiscount), subtotal)
   const total = subtotal - discount
-  const vat = Math.round((total * 5) / 105)
+  const lineNet = (l: CheckoutLine) => Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed))
+  // Packages and gift cards carry no VAT at sale; the sale discount is spread pro rata.
+  const taxable = lines.filter((l) => !PREPAID.has(l.kind)).reduce((s, l) => s + lineNet(l), 0)
+  const vat = subtotal ? Math.round(((taxable * total) / subtotal) * (5 / 105)) : 0
   const paid = payments.reduce((s, p) => s + f(p.amount), 0)
   const remaining = total - paid
   const tipTotal = tips.reduce((s, t) => s + f(t.amount), 0)
@@ -106,6 +158,37 @@ export function Checkout({
       },
     ])
   }
+  const addItem = (kind: 'product' | 'package', id: string) => {
+    const item = (kind === 'product' ? products : packages).find((x) => x.id === id)
+    if (!item) return
+    setLines((ls) => [
+      ...ls,
+      {
+        key: newKey(),
+        kind,
+        refId: item.id,
+        description: item.label,
+        qty: 1,
+        unitPriceAed: item.priceAed,
+        discountAed: 0,
+        staffId: null,
+      },
+    ])
+  }
+  const addGiftCard = () =>
+    setLines((ls) => [
+      ...ls,
+      {
+        key: newKey(),
+        kind: 'gift_card',
+        refId: null,
+        description: 'Gift card',
+        qty: 1,
+        unitPriceAed: 500,
+        discountAed: 0,
+        staffId: null,
+      },
+    ])
   const addCustom = () =>
     setLines((ls) => [
       ...ls,
@@ -146,6 +229,7 @@ export function Checkout({
         lines: lines.map((l) => ({
           kind: l.kind,
           refId: l.refId,
+          clientPackageId: l.clientPackageId ?? null,
           description: l.description,
           qty: l.qty,
           unitPriceAed: f(l.unitPriceAed) / 100,
@@ -274,7 +358,7 @@ export function Checkout({
                 <motion.li key={l.key} {...rowAnim} className="overflow-hidden">
                   <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-12 sm:items-end sm:px-6">
                     <div className="col-span-2 space-y-1.5 sm:col-span-12">
-                      {l.kind === 'service' ? (
+                      {l.kind === 'service' || l.kind === 'product' || l.kind === 'package' ? (
                         <p className="flex items-center justify-between gap-3 text-sm font-medium">
                           <span className="truncate">{l.description}</span>
                           <span className="shrink-0 tabular">
@@ -283,17 +367,34 @@ export function Checkout({
                         </p>
                       ) : (
                         <>
-                          <Label htmlFor={`desc-${l.key}`}>Item {i + 1}</Label>
+                          <Label htmlFor={`desc-${l.key}`}>
+                            {l.kind === 'gift_card' ? 'Gift card' : `Item ${i + 1}`}
+                          </Label>
                           <Input
                             id={`desc-${l.key}`}
                             value={l.description}
-                            placeholder="e.g. Aromatherapy oil"
+                            placeholder={
+                              l.kind === 'gift_card' ? 'Gift card — for whom?' : 'e.g. Aromatherapy oil'
+                            }
                             onChange={(e) => patchLine(l.key, { description: e.target.value })}
                             className="h-11"
                           />
                         </>
                       )}
                     </div>
+                    {(() => {
+                      const match = pkgFor(l)
+                      if (!match) return null
+                      return (
+                        <Label className="col-span-2 flex items-center gap-2.5 rounded-lg bg-accent-soft/60 px-3 py-2.5 text-[13px] font-normal sm:col-span-12">
+                          <Checkbox
+                            checked={Boolean(l.clientPackageId)}
+                            onChange={(e) => togglePackage(l, e.target.checked ? match.pkg.id : null)}
+                          />
+                          Use a session from “{match.pkg.name}” · {match.left} left
+                        </Label>
+                      )
+                    })()}
                     <div className="col-span-2 space-y-1.5 sm:col-span-5">
                       <Label htmlFor={`staff-${l.key}`}>Therapist</Label>
                       <Select
@@ -317,6 +418,7 @@ export function Checkout({
                         id={`price-${l.key}`}
                         inputMode="decimal"
                         value={String(l.unitPriceAed)}
+                        disabled={Boolean(l.clientPackageId)}
                         onChange={(e) => patchLine(l.key, { unitPriceAed: e.target.value })}
                         className="h-11 tabular"
                       />
@@ -362,6 +464,39 @@ export function Checkout({
                 </option>
               ))}
             </Select>
+            {products.length > 0 && (
+              <Select
+                aria-label="Add a product"
+                value=""
+                onChange={(e) => addItem('product', e.target.value)}
+                className="h-11 sm:max-w-xs"
+              >
+                <option value="">Add a product…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} — {formatAed(p.priceAed)} ({p.stock})
+                  </option>
+                ))}
+              </Select>
+            )}
+            {packages.length > 0 && (
+              <Select
+                aria-label="Sell a package"
+                value=""
+                onChange={(e) => addItem('package', e.target.value)}
+                className="h-11 sm:max-w-xs"
+              >
+                <option value="">Sell a package…</option>
+                {packages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label} — {formatAed(p.priceAed)}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Button type="button" variant="ghost" size="lg" onClick={addGiftCard}>
+              <Gift /> Gift card
+            </Button>
             <Button type="button" variant="ghost" size="lg" onClick={addCustom}>
               <Plus /> Custom item
             </Button>
@@ -493,10 +628,10 @@ export function Checkout({
                     <Select
                       aria-label={`Payment ${i + 1} method`}
                       value={p.method}
-                      onChange={(e) => patchPayment(p.key, { method: e.target.value as Method })}
+                      onChange={(e) => patchPayment(p.key, { method: e.target.value as PayMethod })}
                       className="h-11"
                     >
-                      {METHODS.map((m) => (
+                      {PAY_METHODS.map((m) => (
                         <option key={m.value} value={m.value}>
                           {m.label}
                         </option>
@@ -519,13 +654,17 @@ export function Checkout({
                     >
                       <X className="size-4" strokeWidth={1.5} />
                     </button>
-                    {(p.method === 'card_terminal' || p.method === 'bank_transfer') && (
+                    {(p.method === 'card_terminal' ||
+                      p.method === 'bank_transfer' ||
+                      p.method === 'gift_card') && (
                       <Input
                         aria-label={`Payment ${i + 1} reference`}
                         placeholder={
-                          p.method === 'card_terminal'
-                            ? 'Terminal slip no. (optional)'
-                            : 'Transfer ref (optional)'
+                          p.method === 'gift_card'
+                            ? 'Gift card code, e.g. ABCD-EFGH'
+                            : p.method === 'card_terminal'
+                              ? 'Terminal slip no. (optional)'
+                              : 'Transfer ref (optional)'
                         }
                         value={p.reference}
                         onChange={(e) => patchPayment(p.key, { reference: e.target.value })}
@@ -560,7 +699,7 @@ export function Checkout({
                     }}
                     className="min-h-9 rounded-full border bg-surface px-3 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
                   >
-                    Fill {METHODS.find((m) => m.value === payments.at(-1)!.method)?.label.toLowerCase()}
+                    Fill {PAY_METHODS.find((m) => m.value === payments.at(-1)!.method)?.label.toLowerCase()}
                   </button>
                 )}
               </span>

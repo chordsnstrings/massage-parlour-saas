@@ -2,16 +2,21 @@ import { businessDateOf, dubaiInstant } from '@spa/core'
 import {
   bookings,
   branches,
+  clientPackages,
   clients,
   closeAllDbs,
   commissionEntries,
   counters,
+  giftCards,
   journalLines,
   outbox,
+  packageDefinitions,
+  products,
   rooms,
   services,
   serviceVariants,
   staff,
+  stockLevels,
   tenants,
   withTenant,
 } from '@spa/db'
@@ -25,6 +30,8 @@ import {
   DomainError,
   daySummary,
   nextCounter,
+  profitAndLoss,
+  receiveStock,
   refundSale,
   voidSale,
 } from '../src'
@@ -261,5 +268,147 @@ describe('sales', () => {
     const s = await tx((db) => daySummary(db, ids.branch!, next))
     expect(s.salesCount).toBe(0)
     expect(s.expectedCashAed).toBe(0)
+  })
+})
+
+describe('sales of products, packages and gift cards', () => {
+  const D2 = '2026-10-20'
+  const at = dubaiInstant(D2, 12 * 60)
+
+  it('sells retail stock at cost of goods and puts it back on void', async () => {
+    const productId = await tx(async (db) => {
+      const [p] = await db
+        .insert(products)
+        .values({ tenantId: ids.tenant!, kind: 'retail', name: { en: 'Body oil' }, priceAed: '105' })
+        .returning()
+      await receiveStock(db, {
+        ...base(),
+        productId: p!.id,
+        qty: 10,
+        unitCostAed: 40,
+        paidVia: 'cash',
+        date: D2,
+      })
+      return p!.id
+    })
+    const { sale } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ kind: 'product', refId: productId, description: 'Body oil', qty: 2, unitPriceAed: 105 }],
+        payments: [{ method: 'cash', amountAed: 210 }],
+        now: at,
+      }),
+    )
+    const qty = async () =>
+      Number(
+        (await tx((db) => db.select().from(stockLevels).where(eq(stockLevels.productId, productId))))[0]!.qty,
+      )
+    expect(await qty()).toBe(8)
+    const pl = await tx((db) => profitAndLoss(db, ids.tenant!, D2, D2))
+    expect(pl.revenue.find((a) => a.code === '4100')?.balance).toBe(200)
+    expect(pl.expenses.find((a) => a.code === '5000')?.balance).toBe(80)
+    await tx((db) => voidSale(db, { saleId: sale.id, reason: 'Wrong item' }))
+    expect(await qty()).toBe(10)
+  })
+
+  it('sells a package (no VAT until used), then redeems a session at zero price', async () => {
+    const defId = await tx(async (db) => {
+      const [svc] = await db.select().from(serviceVariants).where(eq(serviceVariants.id, ids.variant!))
+      const [d] = await db
+        .insert(packageDefinitions)
+        .values({
+          tenantId: ids.tenant!,
+          name: { en: '5 × Swedish' },
+          priceAed: '1500',
+          items: [{ serviceId: svc!.serviceId, quantity: 5 }],
+        })
+        .returning()
+      return d!.id
+    })
+    await expect(
+      tx((db) =>
+        createSale(db, {
+          ...base(),
+          lines: [{ kind: 'package', refId: defId, description: '5 × Swedish', qty: 1, unitPriceAed: 1500 }],
+          payments: [{ method: 'cash', amountAed: 1500 }],
+          now: at,
+        }),
+      ),
+    ).rejects.toThrow(/client/)
+    const { sale } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        clientId: ids.client,
+        lines: [{ kind: 'package', refId: defId, description: '5 × Swedish', qty: 1, unitPriceAed: 1500 }],
+        payments: [{ method: 'bank_transfer', amountAed: 1500 }],
+        now: at,
+      }),
+    )
+    expect(Number(sale.vatAed)).toBe(0)
+    const [pkg] = await tx((db) => db.select().from(clientPackages).where(eq(clientPackages.saleId, sale.id)))
+    expect(Object.values(pkg!.balances)).toEqual([5])
+
+    await expect(
+      tx((db) =>
+        createSale(db, {
+          ...base(),
+          clientId: ids.client,
+          lines: [{ ...swedish(ids.maya), refId: ids.variant, clientPackageId: pkg!.id }],
+          payments: [{ method: 'cash', amountAed: 350 }],
+          now: at,
+        }),
+      ),
+    ).rejects.toThrow(/price must be 0/)
+    const { sale: used } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        clientId: ids.client,
+        lines: [{ ...swedish(ids.maya), refId: ids.variant, unitPriceAed: 0, clientPackageId: pkg!.id }],
+        payments: [],
+        now: at,
+      }),
+    )
+    const [after] = await tx((db) => db.select().from(clientPackages).where(eq(clientPackages.id, pkg!.id)))
+    expect(Object.values(after!.balances)).toEqual([4])
+    expect(Number(after!.remainingValueAed)).toBe(1200)
+    // Maya earns 10% of the session value net of VAT (300 / 1.05 = 285.71 → 28.57).
+    const earned = await tx((db) =>
+      db.select().from(commissionEntries).where(eq(commissionEntries.staffId, ids.maya!)),
+    )
+    expect(earned.some((c) => c.amountAed === '28.57')).toBe(true)
+    await expect(tx((db) => voidSale(db, { saleId: used.id, reason: 'Mistake' }))).rejects.toThrow(/refund/)
+  })
+
+  it('sells a gift card and takes it as payment until the balance runs out', async () => {
+    const { sale } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ kind: 'gift_card', description: 'Gift card — Sara', qty: 1, unitPriceAed: 500 }],
+        payments: [{ method: 'card_terminal', amountAed: 500 }],
+        now: at,
+      }),
+    )
+    const [card] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.saleId, sale.id)))
+    expect(card).toMatchObject({ initialAed: '500.00', recipientName: 'Sara' })
+    await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [swedish(ids.maya)],
+        payments: [{ method: 'gift_card', amountAed: 350, reference: card!.code.toLowerCase() }],
+        now: at,
+      }),
+    )
+    await expect(
+      tx((db) =>
+        createSale(db, {
+          ...base(),
+          lines: [swedish(ids.maya)],
+          payments: [{ method: 'gift_card', amountAed: 350, reference: card!.code }],
+          now: at,
+        }),
+      ),
+    ).rejects.toThrow(/Only AED 150.00 left/)
+    const [left] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.id, card!.id)))
+    expect(left!.balanceAed).toBe('150.00')
   })
 })

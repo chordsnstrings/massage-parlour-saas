@@ -30,6 +30,7 @@ import {
 } from '@spa/db'
 import { and, asc, eq, gt, inArray, lt, sql } from 'drizzle-orm'
 import { DomainError, pgCode } from './errors'
+import { consumeForBooking } from './inventory'
 
 const DAY = 24 * 3600_000
 
@@ -423,6 +424,14 @@ export async function setBookingStatus(
       })
       .where(eq(clients.id, b.clientId))
   }
+  // Oils, towels etc. linked to the treatments are drawn from stock once (idempotent per booking).
+  if (to === 'completed')
+    await consumeForBooking(tx, {
+      tenantId: b.tenantId,
+      branchId: b.branchId,
+      bookingId,
+      date: b.businessDate,
+    })
   const [updated] = await tx
     .update(bookings)
     .set({ status: to, cancelReason: to === 'cancelled' ? (reason ?? null) : b.cancelReason })
