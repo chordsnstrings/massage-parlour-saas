@@ -23,6 +23,7 @@ export default async function TenantLayout({
     ...item('pos.use', '/sales', 'Sales', 'sales'),
     ...item('marketing.send', '/messages', 'WhatsApp', 'messages'),
     ...item('services.manage', '/services', 'Services & rooms', 'services'),
+    ...item('services.manage', '/packages', 'Packages & gifts', 'packages'),
     ...item('staff.view', '/staff', 'Staff', 'staff'),
     ...item('site.content', '/website', 'Website', 'website'),
     ...item('accounting.view', '/accounts', 'Accounts', 'accounts'),

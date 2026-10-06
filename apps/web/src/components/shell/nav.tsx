@@ -6,6 +6,7 @@ import {
   ChartColumn,
   Contact,
   Ellipsis,
+  Gift,
   Globe,
   HandHeart,
   House,
@@ -51,6 +52,7 @@ const icons = {
   website: Globe,
   analytics: ChartColumn,
   accounts: Calculator,
+  packages: Gift,
 } as const
 
 export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }

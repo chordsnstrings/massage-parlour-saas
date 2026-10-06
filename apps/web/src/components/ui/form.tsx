@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useActionState, useContext, useEffect, useRef } from 'react'
+import { createContext, startTransition, useActionState, useContext, useEffect, useRef } from 'react'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
@@ -42,7 +42,17 @@ export function ActionForm({
   }, [state, successMessage, resetOnSuccess])
   return (
     <FormCtx.Provider value={{ state, pending }}>
-      <form ref={ref} action={formAction} className={className} noValidate>
+      {/* Submitted via a transition instead of `action=` so React doesn't reset the fields when validation fails. */}
+      <form
+        ref={ref}
+        onSubmit={(e) => {
+          e.preventDefault()
+          const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter)
+          startTransition(() => formAction(fd))
+        }}
+        className={className}
+        noValidate
+      >
         {children}
       </form>
     </FormCtx.Provider>
