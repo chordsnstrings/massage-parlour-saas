@@ -17,7 +17,7 @@ import { Reveal, Stagger, StaggerItem } from '@/components/ui/motion'
 import { formatAed } from '@/lib/utils'
 
 export const metadata: Metadata = { title: { absolute: 'Spa Management — software for spas in the UAE' } }
-export const revalidate = 300
+export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
 const features = [
   {

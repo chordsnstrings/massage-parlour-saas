@@ -1,0 +1,98 @@
+# Production stack for one 4 GB droplet (docs/PLAN.md §3). Lives in /opt/spa on the server.
+# Secrets come from /opt/spa/.env (see .env.example). Public traffic arrives only via Cloudflare Tunnel.
+name: spa
+
+x-app-env: &app-env
+  ROOT_DOMAIN: ${ROOT_DOMAIN}
+  APP_URL: https://app.${ROOT_DOMAIN}
+  ADMIN_URL: https://admin.${ROOT_DOMAIN}
+  PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
+  ARK_API_KEY: ${ARK_API_KEY:-}
+  ARK_BASE_URL: ${ARK_BASE_URL:-https://ark.ap-southeast.bytepluses.com/api/v3}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      SPA_OWNER_PASSWORD: ${SPA_OWNER_PASSWORD}
+      SPA_PLATFORM_PASSWORD: ${SPA_PLATFORM_PASSWORD}
+      SPA_APP_PASSWORD: ${SPA_APP_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=60
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=500
+    shm_size: 256mb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./bootstrap.sql:/bootstrap/bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d spa"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 1600m
+
+  migrate:
+    image: ghcr.io/${GHCR_OWNER}/spa-worker:${TAG}
+    command: ["sh", "-c", "node dist/migrate.js && node dist/seed.js"]
+    environment:
+      DATABASE_URL_OWNER: postgres://spa_owner:${SPA_OWNER_PASSWORD}@postgres:5432/spa
+      DATABASE_URL_PLATFORM: postgres://spa_platform:${SPA_PLATFORM_PASSWORD}@postgres:5432/spa
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  web:
+    image: ghcr.io/${GHCR_OWNER}/spa-web:${TAG}
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL_PLATFORM: postgres://spa_platform:${SPA_PLATFORM_PASSWORD}@postgres:5432/spa
+      DATABASE_URL_APP: postgres://spa_app:${SPA_APP_PASSWORD}@postgres:5432/spa
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 1200m
+
+  worker:
+    image: ghcr.io/${GHCR_OWNER}/spa-worker:${TAG}
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL_OWNER: postgres://spa_owner:${SPA_OWNER_PASSWORD}@postgres:5432/spa
+      DATABASE_URL_PLATFORM: postgres://spa_platform:${SPA_PLATFORM_PASSWORD}@postgres:5432/spa
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    mem_limit: 512m
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest # pin a dated tag after the first deploy
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN}"]
+    depends_on: [web]
+    mem_limit: 128m
+
+volumes:
+  pgdata:

@@ -80,7 +80,7 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
   const db = opts.db ?? platformDb()
   const client = opts.client ?? createModelArkClient()
   const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
-  if (!cfg || !cfg.enabled || cfg.kind !== 'chat')
+  if (!cfg?.enabled || cfg.kind !== 'chat')
     throw new AiDisabledError(`AI agent "${opts.agentKey}" is disabled`)
   const tenant = await db.query.tenants.findFirst({
     where: eq(tenants.id, opts.tenantId),

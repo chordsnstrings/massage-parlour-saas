@@ -675,23 +675,28 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 7. Resend account (verify `spamanagement.ae` for staff email).
 8. Pilot data: services & prices, rooms, staff list & shifts, hours, logo/photos, client list if any.
 
-**Claude (code; each item = one PR with targeted checks)**
-1. Monorepo scaffold (pnpm, Turborepo, TS strict, ESLint, Prettier, Vitest, Playwright) + `CLAUDE.md` commands + SessionStart hook.
-2. `packages/db`: Drizzle 0.45 + Postgres 16, owner/app roles, RLS policies, `withTenant()`, seeds, generated cross-tenant isolation test.
-3. Auth & ULM: Better Auth (email+password, TOTP, organizations, invites), permission matrix, branch scoping, audit log.
-4. Host routing: `proxy.ts`, `domains` table, LRU cache, reserved slugs, tenant placeholder site, unknown-host page.
-5. Signup → tenant + subdomain + owner; dashboard shell; therapist PWA shell.
-6. Super-admin skeleton: tenants, plans, impersonation (audited), manual payment entry.
-7. Worker: pg-boss, cron registry, job logs, backup job (pg_dump → R2).
-8. AI gateway stub: ModelArk client, `ai_model_config`, metering, budget check; smoke test with `seed-2-0-lite` json_schema.
-9. Infra: Dockerfiles (web standalone, worker), `docker-compose.prod.yml` (web, worker, postgres, cloudflared), Postgres tuning,
-   GitHub Actions (lint/typecheck/test/build → GHCR; deploy via SSH with healthcheck + rollback), Sentry, uptime check.
-10. Spikes (timeboxed, written up in `docs/spikes/`): Puck 0.23 RTL canvas · Cloudflare for SaaS → Tunnel origin ·
-    WhatsApp Desktop/Web/wa.me send UX on the pilot's reception PC · Puck responsive style fields + UI overrides (custom editor chrome).
-11. Admin design system foundation: tokens (light/dark), motion presets, responsive app shells per role (sidebar ↔ bottom nav),
-    `/dev/kit` component page.
+**Claude (code)** — status 2026-10-06
+1. ✅ Monorepo (pnpm, Turborepo, TS strict, **Biome**, Vitest, Playwright), `CLAUDE.md` commands, SessionStart hook.
+2. ✅ `packages/db`: Drizzle 0.45 + Postgres 16, owner/platform/app roles, per-role RLS policies, `withTenant()`, seed, isolation tests.
+3. ✅ Auth & ULM: Better Auth (email+password, TOTP), own RLS-scoped members/roles/invitations, permission matrix, audit log
+   (branch scoping data model in place; branch-filtered screens arrive with P1 calendar).
+4. ✅ Host routing: `proxy.ts`, reserved slugs, LRU host cache, placeholder tenant site (subdomain + custom domain), 404.
+5. ✅ Signup → tenant + subdomain + owner; dashboard shell; installable PWA manifest (push notifications in P1).
+6. ✅ Super-admin: overview, spas, subscription editing, manual payments, VAT invoices, **editable plans/prices**,
+   **editable company details**, AI model config, audit log, super-admin access to tenant dashboards (audited).
+7. ✅ Worker: pg-boss, Dubai-time cron registry, structured logs, nightly `pg_dump` → R2.
+8. ✅ AI gateway: ModelArk client, `ai_model_config`, budget check, metering, structured output + retry, smoke script.
+9. ✅ Infra: Dockerfiles (validated), production compose (validated end-to-end locally), CI + deploy workflows, `deploy/README.md`.
+10. ⏭ Spikes moved to the start of P1 (they need the builder work / pilot PC / Cloudflare zone): Puck 0.23 RTL + responsive style
+    fields · Cloudflare for SaaS → Tunnel origin · WhatsApp Desktop/Web/wa.me UX.
+11. ✅ Admin design system: tokens (light/dark), motion presets, responsive shells (sidebar 248 / rail 72 / bottom tabs), `/dev/kit`.
 
----
+**P0 implementation notes (deviations from the original plan)**
+- Biome replaces ESLint + Prettier (one fast tool).
+- Tenant memberships, roles and invitations are our own RLS-scoped tables instead of Better Auth's organization plugin.
+- RLS uses per-role policies (`spa_app` tenant-scoped, `spa_platform` all rows) — no BYPASSRLS, portable to managed Postgres.
+- The worker and pg-boss use the owner role (pg-boss manages its own schema); web never does.
+- Backups go to Cloudflare R2 (free tier); Sentry is deferred to P1, before the pilot goes live.
 
 ## 15. Working agreement (token-efficient, still thorough)
 

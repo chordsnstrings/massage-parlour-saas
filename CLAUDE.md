@@ -1,7 +1,7 @@
 # spamanagement.ae — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: planning; no app code until the plan is approved.
+Status: Phase 0 (foundations) built; next is P1 MVP (docs/PLAN.md §13).
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
@@ -35,4 +35,19 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Record new decisions here or in `docs/PLAN.md` instead of re-deriving them later. Concise replies.
 
 ## Commands
-_To be filled in by P0 task 1 (scaffold)._
+- `bash scripts/local-db.sh` — local Postgres 16 + roles + `spa` (dev) / `spa_test` DBs (SessionStart hook runs it, then migrate + seed).
+- `pnpm db:generate` (after schema edits in `packages/db/src/schema`) · `pnpm db:migrate` · `pnpm db:seed`
+- `pnpm dev` — web on http://localhost:3000 (marketing), http://app.localhost:3000, http://admin.localhost:3000, http://{slug}.localhost:3000
+- `pnpm lint` (Biome) · `pnpm format` · `pnpm typecheck` · `pnpm test` (Vitest; DB tests use `spa_test`)
+- `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`
+- Targeted: `pnpm --filter @spa/<pkg> test` · `cd <pkg> && npx tsc --noEmit`
+- Super-admin locally: sign up with an email in `PLATFORM_ADMIN_EMAILS`, then use admin.localhost:3000.
+
+## Gotchas
+- Biome reformats on `pnpm format`; patch the formatted code (prefer the Edit tool over string-replace scripts).
+- The web app loads the root `.env` through `apps/web/scripts/next.mjs` (Next's render workers don't see env set in next.config).
+- Server components: read `headers()` (e.g. `getSession()`) before touching DB/auth so pages stay dynamic at build time.
+- `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
+- `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
+  tenant data always via `withTenant()`. Never import client-module helpers into server components.
+- Sandbox-only: Docker builds need the proxy CA (`--build-context ca=/root/.ccr` on a temp Dockerfile copy); committed Dockerfiles stay clean.

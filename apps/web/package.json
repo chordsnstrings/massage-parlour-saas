@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "node scripts/next.mjs start",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run",
     "e2e": "playwright test"
   },
   "dependencies": {
