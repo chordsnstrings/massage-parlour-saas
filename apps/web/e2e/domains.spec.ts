@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 import { domainOrders, domains, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
-import { admin, app, PATH, PORT, screenshotAt, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
+import { admin, app, PORT, screenshotAt, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
 
 const HOST = 'www.serenity-test.ae'
 /** Requests the dev server as if the browser had come in on the custom domain (served in both routing modes). */
