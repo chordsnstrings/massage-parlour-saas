@@ -1,5 +1,5 @@
 'use client'
-import { createContext, startTransition, useActionState, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useRef, useState, useTransition } from 'react'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
@@ -25,21 +25,24 @@ export function ActionForm({
   resetOnSuccess?: boolean
   onSuccess?: (result: Extract<ActionResult, { ok: true }>) => void
 }) {
-  const [state, formAction, pending] = useActionState(action, null)
+  const [state, setState] = useState<ActionResult>(null)
+  const [pending, start] = useTransition()
   const ref = useRef<HTMLFormElement>(null)
-  const onSuccessRef = useRef(onSuccess)
-  onSuccessRef.current = onSuccess
-  useEffect(() => {
-    if (!state) return
-    if (state.ok) {
-      const msg = state.message ?? successMessage
-      if (msg) toast.success(msg)
-      if (resetOnSuccess) ref.current?.reset()
-      onSuccessRef.current?.(state)
-    } else {
-      toast.error(state.error)
-    }
-  }, [state, successMessage, resetOnSuccess])
+  const submit = (fd: FormData) =>
+    start(async () => {
+      const result = await action(state, fd)
+      setState(result)
+      // Feedback is fired here rather than in an effect so it survives the form unmounting after revalidation.
+      if (!result) return
+      if (result.ok) {
+        const msg = result.message ?? successMessage
+        if (msg) toast.success(msg)
+        if (resetOnSuccess) ref.current?.reset()
+        onSuccess?.(result)
+      } else {
+        toast.error(result.error)
+      }
+    })
   return (
     <FormCtx.Provider value={{ state, pending }}>
       {/* Submitted via a transition instead of `action=` so React doesn't reset the fields when validation fails. */}
@@ -48,7 +51,7 @@ export function ActionForm({
         onSubmit={(e) => {
           e.preventDefault()
           const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter)
-          startTransition(() => formAction(fd))
+          submit(fd)
         }}
         className={className}
         noValidate

@@ -99,6 +99,10 @@ export const plans = pgTable(
   () => platformPolicies(),
 )
 
+export type TenantSettings = {
+  wps?: { employerId?: string; routingCode?: string; bank?: string }
+}
+
 export const tenants = pgTable(
   'tenants',
   {
@@ -112,6 +116,8 @@ export const tenants = pgTable(
     defaultLocale: text('default_locale').notNull().default('en'),
     timezone: text('timezone').notNull().default('Asia/Dubai'),
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
+    /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
+    settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
