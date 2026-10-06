@@ -26,7 +26,10 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
   const end = useRef<HTMLDivElement>(null)
   const id = useRef(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to the newest message whenever the thread changes
-  useEffect(() => end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [items, pending])
+  useEffect(() => {
+    // Block body: newer Chromium returns a value from scrollIntoView, which React would treat as a cleanup.
+    end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [items, pending])
 
   const send = (message: string) => {
     const msg = message.trim()

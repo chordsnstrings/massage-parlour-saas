@@ -94,7 +94,9 @@ export function ResponsiveField<T extends string>({
 }: FieldRenderProps<Responsive<T> | undefined> & { options: { value: T; label: string }[]; fallback: T }) {
   const ctx = useEditorContext()
   const [device, setDevice] = useState<Device>(ctx.device)
-  useEffect(() => setDevice(ctx.device), [ctx.device])
+  useEffect(() => {
+    setDevice(ctx.device)
+  }, [ctx.device])
   const v: Responsive<T> = value ?? { base: fallback }
   const own = (d: Device) => (d === 'base' ? true : v[d] !== undefined)
   const effective = (d: Device): T =>

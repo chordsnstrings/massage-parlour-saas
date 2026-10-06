@@ -33,7 +33,9 @@ export function CalendarView({ data }: { data: CalendarData }) {
   const [openBooking, setOpenBooking] = useState<string | null>(null)
   const [walkInOpen, setWalkInOpen] = useState(false)
 
-  useEffect(() => setItems(data.items), [data.items])
+  useEffect(() => {
+    setItems(data.items)
+  }, [data.items])
 
   const href = useCallback(
     (patch: { date?: string; branch?: string } = {}) => {

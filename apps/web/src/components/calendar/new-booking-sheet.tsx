@@ -39,7 +39,9 @@ export function NewBookingSheet({
   const [client, setClient] = useState<ClientHit | null>(null)
   const [startMin] = useState(() => draft?.startMin ?? defaultStart(data))
   const [coarse, setCoarse] = useState(false)
-  useEffect(() => setCoarse(window.matchMedia('(pointer: coarse)').matches), [])
+  useEffect(() => {
+    setCoarse(window.matchMedia('(pointer: coarse)').matches)
+  }, [])
   const staffName = draft?.staffId ? data.staffNames[draft.staffId]?.name : undefined
 
   return (
