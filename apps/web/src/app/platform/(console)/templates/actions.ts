@@ -13,9 +13,11 @@ import {
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { templateProblem, templateSamples } from './data'
 
 const revalidate = () => revalidatePath('/platform/templates', 'layout')
 const optionalText = (max: number) =>
@@ -55,15 +57,26 @@ export async function saveSiteAsTemplateAction(_p: ActionResult, fd: FormData): 
     .where(eq(tenants.id, d.tenantId))
   if (!tenant) return fail('Choose a spa', { tenantId: 'Choose a spa' })
   const key = d.key ?? templateKeyFrom(d.name)
+  if (isTemplateKey(key))
+    return fail(`"${key}" is the built-in ${TEMPLATES[key].name}. Choose another key.`, {
+      key: 'Choose another key',
+    })
   try {
     // The spa's pages are tenant data: read them inside its own tenant transaction.
     const snap = await withTenant(tenant.id, (tx) => snapshotSite(tx, tenant.id))
+    const pages = sanitizeTemplatePages(snap.pages, {
+      key,
+      tenantName: tenant.name,
+      samples: templateSamples(),
+    })
+    const problem = templateProblem(pages, { requireProps: false })
+    if (problem) return fail(`This site can't be used as a template yet. ${problem}`)
     await saveStudioTemplate(platformDb(), {
       key,
       name: d.name,
       description: d.description,
       theme: snap.theme,
-      pages: sanitizeTemplatePages(snap.pages, { key, tenantName: tenant.name }),
+      pages,
       active: d.active,
       createdBy: user.id,
     })
@@ -78,7 +91,7 @@ export async function saveSiteAsTemplateAction(_p: ActionResult, fd: FormData): 
     entityId: key,
   })
   revalidate()
-  return ok(`${d.name} saved`)
+  return ok(d.active ? `${d.name} saved` : `${d.name} saved — hidden from spas until you switch it on`)
 }
 
 export async function updateTemplateAction(
@@ -122,6 +135,15 @@ export async function importTemplateAction(_p: ActionResult, fd: FormData): Prom
   const result = parseTemplateJson(await file.text())
   if (!result.ok) return fail(result.error, { file: result.error })
   const t = result.template
+  const problem = templateProblem(t.pages, { requireProps: true })
+  if (problem) return fail(problem, { file: problem })
+  const replace = fd.get('replace') === 'on'
+  // A studio row with a built-in key replaces that built-in for every spa: only when explicitly asked.
+  if (isTemplateKey(t.key) && !replace) {
+    const error = `"${t.key}" is the built-in ${TEMPLATES[t.key].name}. Tick "Replace a template with the same key" to override it, or change the key in the file.`
+    return fail(error, { file: error })
+  }
+  const active = fd.get('active') === 'on'
   try {
     await saveStudioTemplate(
       platformDb(),
@@ -131,9 +153,10 @@ export async function importTemplateAction(_p: ActionResult, fd: FormData): Prom
         description: t.description,
         theme: t.theme,
         pages: t.pages,
+        active,
         createdBy: user.id,
       },
-      { replace: fd.get('replace') === 'on' },
+      { replace },
     )
   } catch (e) {
     return domainFail(e)
@@ -145,5 +168,5 @@ export async function importTemplateAction(_p: ActionResult, fd: FormData): Prom
     entityId: t.key,
   })
   revalidate()
-  return ok(`${t.name} imported`)
+  return ok(active ? `${t.name} imported` : `${t.name} imported — hidden from spas until you switch it on`)
 }

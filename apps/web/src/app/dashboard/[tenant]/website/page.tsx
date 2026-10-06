@@ -1,5 +1,5 @@
 import { withTenant } from '@spa/db'
-import { getSite, listPages } from '@spa/services'
+import { getSite, listPages, templateUndoChanges } from '@spa/services'
 import { ExternalLink, FileText, Globe, PencilLine } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -36,10 +36,15 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'site.content') && !can(ctx, 'site.design') && !can(ctx, 'site.publish')) notFound()
   const slug = ctx.tenant.slug
-  const { site, pages } = await withTenant(ctx.tenant.id, async (tx) => ({
-    site: await getSite(tx, ctx.tenant.id),
-    pages: await listPages(tx, ctx.tenant.id),
-  }))
+  const { site, pages, undoBlocked } = await withTenant(ctx.tenant.id, async (tx) => {
+    const site = await getSite(tx, ctx.tenant.id)
+    return {
+      site,
+      pages: await listPages(tx, ctx.tenant.id),
+      // Undo is only offered while nothing the switch wrote has been edited or published since.
+      undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
+    }
+  })
   const catalog = await templateCatalog()
   const canDesign = can(ctx, 'site.design')
   const canPublish = can(ctx, 'site.publish')
@@ -51,7 +56,9 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const current = site ? catalog.find((t) => t.key === site.templateKey) : null
   // The undo offer stays for a week after a switch (the snapshot itself lives until the next switch).
   const undo =
-    site?.templateUndo && Date.now() - new Date(site.templateUndo.at).getTime() < 7 * 86_400_000
+    site?.templateUndo &&
+    !undoBlocked &&
+    Date.now() - new Date(site.templateUndo.at).getTime() < 7 * 86_400_000
       ? site.templateUndo
       : null
   const nameOf = (key: string) => catalog.find((t) => t.key === key)?.name ?? key

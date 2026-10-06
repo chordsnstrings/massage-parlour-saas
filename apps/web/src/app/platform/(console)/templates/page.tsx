@@ -118,13 +118,18 @@ export default async function TemplatesStudioPage() {
                 <Checkbox name="replace" className="mt-0.5" />
                 <span className="space-y-1">
                   <span className="block font-medium">Replace a template with the same key</span>
-                  <span className="block text-muted">Spas already using it keep their own pages.</span>
+                  <span className="block text-muted">
+                    Needed to override a built-in. Spas already using it keep their own pages.
+                  </span>
                 </span>
+              </label>
+              <label className="flex min-h-11 items-center gap-2.5 text-sm">
+                <Checkbox name="active" /> Spas can pick it right away (otherwise check the preview first)
               </label>
             </FormSheet>
             <FormSheet
               title="Save a spa's site as a template"
-              description="Copies the spa's theme and live pages. Its name, photos and outside links are removed; prices, team and hours stay live for each spa."
+              description="Copies the spa's theme and live pages. Its name, photos, links, phone numbers and emails are removed and client reviews become sample quotes; prices, team and hours stay live for each spa. Check the preview for anything else spa-specific before switching it on."
               trigger={
                 <Button>
                   <LayoutTemplate /> Save a spa's site
@@ -157,7 +162,7 @@ export default async function TemplatesStudioPage() {
                 <Textarea id="description" name="description" placeholder="Shown to spas under the name" />
               </Field>
               <label className="flex min-h-11 items-center gap-2.5 text-sm">
-                <Checkbox name="active" defaultChecked /> Spas can pick it right away
+                <Checkbox name="active" /> Spas can pick it right away (otherwise check the preview first)
               </label>
             </FormSheet>
           </>

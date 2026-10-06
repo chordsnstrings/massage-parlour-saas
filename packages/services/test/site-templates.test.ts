@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   addPage,
   applySiteCopy,
+  applySiteCopyToPages,
   type BlockSpec,
   checkNodes,
   DomainError,
@@ -13,6 +14,7 @@ import {
   extractSiteCopy,
   getEditablePage,
   getSite,
+  hasCopySlots,
   listPages,
   listStudioTemplates,
   parseTemplateJson,
@@ -27,8 +29,10 @@ import {
   studioToSiteTemplate,
   switchTemplate,
   templateKeyFrom,
+  templateUndoChanges,
   undoTemplateSwitch,
   updateStudioTemplate,
+  updateTheme,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -152,6 +156,45 @@ describe('sanitising a site into a template', () => {
     expect(buttons.map((b) => b.target)).toEqual(['', 'services'])
   })
 
+  it('replaces client reviews, strips contact details and only rewrites whole words of copy', () => {
+    const data = {
+      root: { props: { title: { en: 'Hero' } } },
+      content: [
+        node('Hero', 'h-1--hero', {
+          title: { en: 'Hero Spa — Thai massage by hero', ar: 'سبا Hero' },
+          subtitle: { en: 'Call +971 4 123 4567 or mail hi@hero.ae, see https://hero.ae/book today' },
+          image: '',
+        }),
+        node('Testimonials', 't-2', {
+          title: { en: 'Kind words' },
+          items: [{ quote: { en: 'Loved it' }, author: 'Fatima Real', detail: { en: '' } }],
+          layout: 'grid',
+        }),
+        node('RichText', 'r-3', { text: { en: 'Heroes and Heroic rituals since 2019 – 2024, AED 350' } }),
+      ],
+    }
+    const sample = [{ quote: { en: 'Sample quote' }, author: 'Guest', detail: { en: '' } }]
+    const [home] = sanitizeTemplatePages([{ slug: '', title: { en: 'Hero home' }, data }], {
+      key: 'k',
+      tenantName: 'Hero',
+      samples: { Testimonials: { items: sample } },
+    })
+    const out = home!.data as typeof data
+    expect(home!.title).toEqual({ en: '{name} home' })
+    expect(out.content.map((n) => n.type)).toEqual(['Hero', 'Testimonials', 'RichText'])
+    expect(out.content[0]!.props.title).toEqual({
+      en: '{name} Spa — Thai massage by {name}',
+      ar: 'سبا {name}',
+    })
+    expect(out.content[0]!.props.subtitle).toEqual({ en: 'Call or mail , see today' })
+    expect(out.content[1]!.props.items).toEqual(sample)
+    expect(JSON.stringify(out)).not.toContain('Fatima')
+    expect(out.content[2]!.props.text).toEqual({ en: 'Heroes and Heroic rituals since 2019 – 2024, AED 350' })
+    // Without samples, customer quotes are dropped rather than copied.
+    const [bare] = sanitizeTemplatePages([{ slug: '', title: { en: 'Home' }, data }], { key: 'k' })
+    expect((bare!.data as typeof data).content[1]!.props.items).toEqual([])
+  })
+
   it('derives keys from names', () => {
     expect(templateKeyFrom('  Birch Signature ✦ 2026 ')).toBe('birch-signature-2026')
     expect(templateKeyFrom('سبا')).toBe('template')
@@ -273,6 +316,48 @@ describe('template switching with undo', () => {
       page('My about draft'),
     )
   })
+
+  it('undo is refused once anything the switch wrote was edited, and the edits survive', async () => {
+    const switched = await tx((db) =>
+      switchTemplate(db, ids.tenant!, template('nordic', 'Nordic'), { replaceContent: true }),
+    )
+    expect(switched.templateUndo?.pages).toHaveLength(2)
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual([])
+    const edited = page('Edited after the switch')
+    await tx((db) => saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: edited }))
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual(['Home'])
+    await expect(tx((db) => undoTemplateSwitch(db, ids.tenant!))).rejects.toThrow(/Home changed/)
+    expect((await tx((db) => getEditablePage(db, ids.tenant!, ids.home!)))?.data).toEqual(edited)
+    expect((await tx((db) => getSite(db, ids.tenant!)))?.templateKey).toBe('nordic')
+
+    // A theme change after a (theme-only) switch blocks undo too.
+    await tx((db) => switchTemplate(db, ids.tenant!, template('zen', 'Zen')))
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual([])
+    await tx((db) => updateTheme(db, ids.tenant!, { accent: '#111111' }))
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual(['Theme'])
+    await expect(tx((db) => undoTemplateSwitch(db, ids.tenant!))).rejects.toBeInstanceOf(DomainError)
+    await tx((db) => updateTheme(db, ids.tenant!, { accent: '#8a7560' }))
+
+    // Keeping the theme (AI copy for the current template) leaves the spa's look alone.
+    const kept = await tx((db) =>
+      switchTemplate(db, ids.tenant!, template('zen', 'Zen'), { keepTheme: true }),
+    )
+    expect(kept.theme).toEqual({ accent: '#8a7560' })
+  })
+
+  it("AI copy for the current template is written into the spa's own pages, keeping their layout", async () => {
+    const before = await tx((db) => getEditablePage(db, ids.tenant!, ids.home!))
+    expect(hasCopySlots([{ data: before!.data }])).toBe(true)
+    expect(hasCopySlots([{ data: { root: {}, content: [node('Hero', 'legacy-hero')] } }])).toBe(false)
+    const written = await tx((db) => applySiteCopyToPages(db, ids.tenant!, copy))
+    expect(written).toEqual({ filled: 12, pages: 2 })
+    const home = (await tx((db) => getEditablePage(db, ids.tenant!, ids.home!)))!.data as ReturnType<
+      typeof page
+    >
+    expect(home.content[0]!.props).toMatchObject({ title: copy.hero.headline, image: 'https://cdn/x.jpg' })
+    // Everything outside the copy slots (here: the buttons) is untouched.
+    expect(home.content[4]).toEqual((before!.data as ReturnType<typeof page>).content[4])
+  })
 })
 
 describe('pages from page templates', () => {
@@ -314,6 +399,8 @@ describe('template studio', () => {
       pages: sanitizeTemplatePages(snap.pages, { key, tenantName: 'Calm Spa' }),
     })
     expect(JSON.stringify(row.pages)).not.toContain('Calm Spa')
+    // Saved from a spa's site: hidden from spas until a platform admin switches it on.
+    expect(row.active).toBe(false)
     await expect(
       saveStudioTemplate(platform, { key, name: 'Again', theme: {}, pages: snap.pages }),
     ).rejects.toBeInstanceOf(DomainError)

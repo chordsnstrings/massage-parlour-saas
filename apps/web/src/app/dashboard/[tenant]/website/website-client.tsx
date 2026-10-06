@@ -149,13 +149,13 @@ export function UndoTemplateBar({
         </span>
         <div className="min-w-0 space-y-0.5">
           <p className="text-[15px] font-medium">
-            Switched from {from} to {to}
+            {from === to ? `New ${to} starter drafts` : `Switched from ${from} to ${to}`}
           </p>
           <p className="text-sm text-muted">
             {at} ·{' '}
             {pages
-              ? `${pages} ${pages === 1 ? 'page' : 'pages'} got new drafts`
-              : 'Colours, fonts and shapes only'}
+              ? `${pages} ${pages === 1 ? 'page' : 'pages'} got new drafts · undo is available until you edit or publish them`
+              : 'Colours, fonts and shapes only · undo is available until you change the theme'}
           </p>
         </div>
       </div>
@@ -231,6 +231,18 @@ function CopyRow({ label, before, after, lang }: { label: string; before?: Bi; a
       </div>
     </div>
   )
+}
+
+/** What "Apply as drafts" will do, in plain words (see `SiteCopyMode`). */
+const APPLY_NOTE: Record<SiteCopyPreview['mode'], (name: string) => string> = {
+  new: (name) =>
+    `Applying creates your site from ${name} with this copy as drafts. Nothing goes live until you publish.`,
+  'in-place': () =>
+    'Applying writes this copy into your pages as drafts. Your layout, images and colours stay as they are, and nothing goes live until you publish.',
+  starter: (name) =>
+    `Your pages don't have matching text areas yet, so applying replaces each page's draft with the ${name} starter layout filled with this copy — sections, images and order you changed are replaced. Your colours stay; nothing goes live until you publish, and you can undo it.`,
+  switch: (name) =>
+    `Applying switches your site to ${name}: its colours, fonts and shapes change on your live site right away, and each page's draft is replaced with the ${name} starter layout filled with this copy. Pages go live only when you publish, and you can undo the switch.`,
 }
 
 /**
@@ -326,8 +338,10 @@ export function AiWriterSheet({
         <div className="anim-fade-in space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted">
-              For <span className="font-medium text-fg">{preview.templateName}</span> · crossed-out text is
-              what your pages say now.
+              For <span className="font-medium text-fg">{preview.templateName}</span> ·{' '}
+              {preview.current
+                ? 'crossed-out text is what your pages say now.'
+                : "your pages don't have matching text areas yet, so there is nothing to compare."}
             </p>
             <div className="inline-flex rounded-lg border p-0.5" role="radiogroup" aria-label="Language">
               {(['en', 'ar'] as const).map((l) => (
@@ -354,19 +368,19 @@ export function AiWriterSheet({
           <div className="rounded-xl border px-4 sm:px-5">
             <CopyRow
               label="Headline"
-              before={preview.current.hero.headline}
+              before={preview.current?.hero.headline}
               after={preview.proposed.hero.headline}
               lang={lang}
             />
             <CopyRow
               label="Subheading"
-              before={preview.current.hero.sub}
+              before={preview.current?.hero.sub}
               after={preview.proposed.hero.sub}
               lang={lang}
             />
             <CopyRow
               label="About"
-              before={preview.current.about}
+              before={preview.current?.about}
               after={preview.proposed.about}
               lang={lang}
             />
@@ -375,7 +389,7 @@ export function AiWriterSheet({
                 // biome-ignore lint/suspicious/noArrayIndexKey: fixed three positions
                 key={i}
                 label={`Reason ${i + 1}`}
-                before={preview.current.usps[i]?.title}
+                before={preview.current?.usps[i]?.title}
                 after={{ en: `${u.title.en} — ${u.text.en}`, ar: `${u.title.ar} — ${u.text.ar}` }}
                 lang={lang}
               />
@@ -385,14 +399,14 @@ export function AiWriterSheet({
                 // biome-ignore lint/suspicious/noArrayIndexKey: fixed four positions
                 key={i}
                 label={`FAQ ${i + 1}`}
-                before={preview.current.faqs[i]?.q}
+                before={preview.current?.faqs[i]?.q}
                 after={{ en: `${f.q.en}\n${f.a.en}`, ar: `${f.q.ar}\n${f.a.ar}` }}
                 lang={lang}
               />
             ))}
             <CopyRow
               label="Booking prompt"
-              before={preview.current.cta.title}
+              before={preview.current?.cta.title}
               after={{
                 en: `${preview.proposed.cta.title.en} — ${preview.proposed.cta.text.en}`,
                 ar: `${preview.proposed.cta.title.ar} — ${preview.proposed.cta.text.ar}`,
@@ -400,9 +414,8 @@ export function AiWriterSheet({
               lang={lang}
             />
           </div>
-          <p className="text-[13px] text-muted">
-            Applying saves the {preview.templateName} pages as drafts with this copy. Nothing goes live until
-            you publish, and you can undo the switch.
+          <p className="text-[13px] text-muted" data-testid="ai-apply-note">
+            {APPLY_NOTE[preview.mode](preview.templateName)}
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => setPreview(null)} disabled={pending} className="h-11">

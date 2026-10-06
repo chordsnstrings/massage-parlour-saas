@@ -170,6 +170,8 @@ test('templates: gallery of 8, side-by-side switch with undo, Desert Sand in EN 
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Spa', { exact: true }).selectOption({ label: `Dune Spa (${slug})` })
     await dialog.getByLabel('Template name').fill('Dune Signature')
+    // Saved hidden from spas unless switched on (the admin reviews the copy first).
+    await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
     await dialog.getByRole('button', { name: 'Save template' }).click()
     await expect(page.getByText('Dune Signature saved')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('dune-signature').first()).toBeVisible()
