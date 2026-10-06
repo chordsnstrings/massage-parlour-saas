@@ -171,7 +171,14 @@ export function ExpenseSheet({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className={cn('text-[13px]', scan.status === 'read' ? 'text-success' : 'text-muted')}
+                className={cn(
+                  'text-[13px]',
+                  scan.status === 'read'
+                    ? 'text-success'
+                    : scan.status === 'currency'
+                      ? 'text-warning'
+                      : 'text-muted',
+                )}
               >
                 <span className="block pt-3">
                   {scan.message}

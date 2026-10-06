@@ -1,5 +1,6 @@
 import { pruneAnalytics, rollupAnalytics } from './analytics'
 import { backupDatabase } from './backup'
+import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
 import { expireAllPackages, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
@@ -16,4 +17,7 @@ export const jobs: JobDef[] = [
   { name: 'analytics-prune', cron: '20 4 * * *', handler: () => pruneAnalytics() },
   { name: 'packages-expire', cron: '10 4 * * *', handler: () => expireAllPackages() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
+  { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
+  { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
+  { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },
 ]

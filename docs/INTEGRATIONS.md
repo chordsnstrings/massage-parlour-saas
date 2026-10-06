@@ -107,7 +107,8 @@ npx web-push generate-vapid-keys
 
 Staff enable notifications per device on their *Account* page. Who gets what: new online bookings → members with
 `calendar.manage`; document expiry (60/30/7/0 days, daily 09:00) → `staff.manage`; weekly insights (Mon 08:00) →
-`reports.view`. Push payload links are dashboard paths without the routing prefix; `/sw.js?base=/app` adds it in
+`reports.view`; daily digest (09:30, today's bookings and unconfirmed requests) → `calendar.manage`. Only endpoints on
+browsers' push services (FCM, Mozilla, WNS, Apple) are accepted or contacted. Push payload links are dashboard paths without the routing prefix; `/sw.js?base=/app` adds it in
 path routing. Endpoints the push service reports gone (404/410) are deleted automatically.
 
 ## 5. File storage (optional)

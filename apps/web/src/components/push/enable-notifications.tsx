@@ -3,6 +3,7 @@ import { BellOff, BellRing, Smartphone } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import {
+  pushStatusAction,
   subscribePushAction,
   testPushAction,
   unsubscribePushAction,
@@ -64,9 +65,12 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
       setState('denied')
       return
     }
+    // "On" only when the server has this device for the signed-in user: on a shared front-desk computer the
+    // browser subscription may still belong to whoever enabled it before (Enable moves it to this user).
     currentSubscription()
-      .then((sub) => {
-        setState(sub && Notification.permission === 'granted' ? 'on' : 'off')
+      .then(async (sub) => {
+        const on = sub && Notification.permission === 'granted' && (await pushStatusAction(sub.endpoint)).on
+        setState(on ? 'on' : 'off')
       })
       .catch(() => {
         setState('off')

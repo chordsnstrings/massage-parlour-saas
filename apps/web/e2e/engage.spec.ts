@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { addDays, businessDateOf } from '@spa/core'
-import { expenses, staffDocuments, tenants } from '@spa/db'
+import { expenses, staffDocuments, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { app, screenshotAt, seedCatalog, signUpOwner, testDb } from './helpers'
 
@@ -71,6 +71,21 @@ test('engage: document expiry tracker, notifications card, insights card, receip
   const [visa] = await db.select().from(staffDocuments).where(eq(staffDocuments.tenantId, tenant!.id))
   expect(visa).toMatchObject({ type: 'visa', number: '201/2026/1234567' })
   expect(visa!.fileUrl).toMatch(/^\/files\/[0-9a-f-]{36}$/)
+
+  // Removing the scan (wrong passport attached) clears the link and deletes the stored file.
+  const scanId = visa!.fileUrl!.split('/').pop()!
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'Visa / residence permit' })
+    .getByRole('button', { name: 'Edit document' })
+    .click()
+  await sheet.getByRole('button', { name: 'Remove', exact: true }).click()
+  await expect(sheet.getByText('The file will be deleted when you save.')).toBeVisible()
+  await sheet.getByRole('button', { name: 'Save changes' }).click()
+  await expect(page.getByText('Document updated')).toBeVisible()
+  const [visaAfter] = await db.select().from(staffDocuments).where(eq(staffDocuments.id, visa!.id))
+  expect(visaAfter!.fileUrl).toBeNull()
+  expect(await db.select().from(storedFiles).where(eq(storedFiles.id, scanId))).toHaveLength(0)
 
   // Account page: notifications card in its not-configured state (no VAPID keys in tests).
   await page.goto(`${app}/account`)

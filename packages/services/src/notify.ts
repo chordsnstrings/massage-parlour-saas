@@ -43,6 +43,28 @@ function webPushSender(): PushSender | null {
     })
 }
 
+// Browsers' push services. Endpoints are only ever POSTed to on these hosts, so a stored or submitted URL can't
+// point the server at an internal address or an arbitrary site (blind SSRF via "Send a test").
+const PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/, // Chrome, Opera, Samsung Internet, Brave
+  /^android\.googleapis\.com$/, // legacy Chrome endpoints
+  /^([a-z0-9-]+\.)*push\.services\.mozilla\.com$/, // Firefox
+  /^([a-z0-9-]+\.)*notify\.windows\.com$/, // Edge
+  /^([a-z0-9-]+\.)*push\.apple\.com$/, // Safari (web.push.apple.com)
+]
+
+/** True for an https URL on a known push service's default port. */
+export function isPushEndpoint(endpoint: string) {
+  let url: URL
+  try {
+    url = new URL(endpoint)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return false
+  return PUSH_HOSTS.some((re) => re.test(url.hostname))
+}
+
 /** The push service says the subscription is gone (unsubscribed, expired or uninstalled). */
 const isGone = (e: unknown) => {
   const status = (e as { statusCode?: number })?.statusCode
@@ -62,6 +84,10 @@ export async function sendPush(
   const gone: string[] = []
   await Promise.all(
     targets.map(async (t) => {
+      if (!isPushEndpoint(t.endpoint)) {
+        result.failed++
+        return
+      }
       try {
         await send(t, body)
         result.sent++
@@ -159,6 +185,16 @@ export async function savePushSubscription(
     .insert(pushSubscriptions)
     .values({ userId, endpoint: sub.endpoint, keys: sub.keys })
     .onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { userId, keys: sub.keys } })
+}
+
+/** Whether this browser endpoint is registered to this user (a shared device may still belong to someone else). */
+export async function hasPushSubscription(userId: string, endpoint: string, db: Db = platformDb()) {
+  const [row] = await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint)))
+    .limit(1)
+  return Boolean(row)
 }
 
 export async function deletePushSubscription(userId: string, endpoint: string, db: Db = platformDb()) {

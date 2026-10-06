@@ -3,7 +3,6 @@
 import { businessDateOf } from '@spa/core'
 import { businessDocuments, staff, staffDocuments, type Tx } from '@spa/db'
 import { asc, eq } from 'drizzle-orm'
-import { IMAGE_TYPES } from './storage'
 
 export const STAFF_DOCUMENT_TYPES = [
   { key: 'passport', label: 'Passport' },
@@ -24,8 +23,19 @@ export const BUSINESS_DOCUMENT_TYPES = [
 ] as const
 
 /** Scans and photos accepted for documents and receipts (stored privately, max 8 MB). */
-export const SCAN_FILE_TYPES = [...IMAGE_TYPES, 'application/pdf'] as const
+export const SCAN_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
+export type ScanFileType = (typeof SCAN_FILE_TYPES)[number]
 export const isScanType = (type: string) => (SCAN_FILE_TYPES as readonly string[]).includes(type)
+
+/** The scan's real type from its first bytes (the browser-declared type is not trusted), or null. */
+export function sniffScanType(bytes: Uint8Array): ScanFileType | null {
+  const at = (offset: number, sig: number[]) => sig.every((b, i) => bytes[offset + i] === b)
+  if (at(0, [0xff, 0xd8, 0xff])) return 'image/jpeg'
+  if (at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png'
+  if (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50])) return 'image/webp' // RIFF....WEBP
+  if (at(0, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf' // %PDF-
+  return null
+}
 
 /** Private file link served by the /files route (members of the file's tenant only). */
 export const fileLink = (id: string) => `/files/${id}`
@@ -84,6 +94,8 @@ export type TrackedDocument = {
   notes: string | null
   staffId: string | null
   owner: string
+  /** False for documents of staff who have left (kept for the record, but no reminders). */
+  ownerActive: boolean
   status: DocumentStatus
   days: number | null
 }
@@ -101,6 +113,7 @@ export async function trackedDocuments(tx: Tx, today: string): Promise<TrackedDo
       notes: staffDocuments.notes,
       staffId: staffDocuments.staffId,
       owner: staff.displayName,
+      ownerActive: staff.active,
     })
     .from(staffDocuments)
     .innerJoin(staff, eq(staff.id, staffDocuments.staffId))
@@ -118,6 +131,7 @@ export async function trackedDocuments(tx: Tx, today: string): Promise<TrackedDo
       notes: d.notes,
       staffId: null,
       owner: 'Business',
+      ownerActive: true,
       scope: 'business' as const,
     })),
   ].map((d) => ({ ...d, typeLabel: documentTypeLabel(d.type), ...documentStatus(d.expiresOn, today) }))
@@ -161,12 +175,12 @@ export async function documentSummary(tx: Tx, now = new Date()) {
   return summarizeDocuments(await trackedDocuments(tx, dubaiToday(now)))
 }
 
-/** Documents with exactly 60, 30, 7 or 0 days left today (one reminder per milestone). */
+/** Documents with exactly 60, 30, 7 or 0 days left today (one reminder per milestone); staff who left are skipped. */
 export async function documentsDueForReminder(tx: Tx, now = new Date()) {
   const today = dubaiToday(now)
   const docs = await trackedDocuments(tx, today)
   const milestones = new Set<number>(REMINDER_DAYS)
-  return docs.filter((d) => d.days !== null && milestones.has(d.days))
+  return docs.filter((d) => d.ownerActive && d.days !== null && milestones.has(d.days))
 }
 
 /** One push per tenant per day: a single document is named, several are summarised. */

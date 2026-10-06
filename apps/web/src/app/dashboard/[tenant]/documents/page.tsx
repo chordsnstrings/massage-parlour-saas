@@ -100,6 +100,7 @@ export default async function DocumentsPage({
           <span className="font-medium">{d.typeLabel}</span>
           <span className="text-xs text-muted">
             {d.scope === 'staff' ? d.owner : 'Business'}
+            {d.ownerActive ? '' : ' (inactive)'}
             {d.number ? ` · ${d.number}` : ''}
           </span>
         </span>
@@ -167,7 +168,7 @@ export default async function DocumentsPage({
   const addButton = (
     <DocumentSheet
       {...sheet}
-      defaultStaffId={who && who !== 'business' ? who : undefined}
+      defaultStaffId={staffChoices.some((s) => s.id === who) ? who : undefined}
       trigger={
         <Button>
           <Plus /> Add document

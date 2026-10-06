@@ -4,7 +4,7 @@ import { motion } from 'motion/react'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
-import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import type { ActionResult } from '@/lib/action'
@@ -16,6 +16,8 @@ export type EditableDocument = {
   id: string
   scope: 'staff' | 'business'
   staffId: string | null
+  /** The staff member's name (shown when they're no longer active). */
+  owner?: string
   type: string
   typeLabel: string
   number: string | null
@@ -76,6 +78,8 @@ export function ScanPicker({
   return (
     <div className="space-y-2">
       <input type="hidden" name="fileId" value={file?.id ?? ''} />
+      {/* Hidden, so the choice is submitted even after the "Current file" row is replaced by the undo note. */}
+      <input type="hidden" name="removeFile" value={current && removed && !file ? 'on' : ''} />
       <input
         ref={input}
         type="file"
@@ -116,14 +120,33 @@ export function ScanPicker({
             >
               <Paperclip className="size-4" /> Current file
             </a>
-            <Label className="flex items-center gap-2 font-normal text-muted">
-              <Checkbox name="removeFile" onChange={(e) => setRemoved(e.target.checked)} /> Remove
-            </Label>
+            <button
+              type="button"
+              onClick={() => setRemoved(true)}
+              className="min-h-8 text-muted underline-offset-4 hover:text-danger hover:underline"
+            >
+              Remove
+            </button>
           </span>
         ) : busy ? (
           <span className="flex items-center gap-1.5 text-sm text-muted">
             <Loader2 className="size-4 animate-spin" /> Uploading…
           </span>
+        ) : current && removed ? (
+          <motion.span
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-2 text-sm text-muted"
+          >
+            The file will be deleted when you save.
+            <button
+              type="button"
+              onClick={() => setRemoved(false)}
+              className="min-h-8 text-accent underline-offset-4 hover:underline"
+            >
+              Undo
+            </button>
+          </motion.span>
         ) : (
           <span className="text-[13px] text-muted">JPG, PNG, WebP or PDF · up to 8 MB</span>
         )}
@@ -200,6 +223,10 @@ export function DocumentSheet({
               <option value="" disabled>
                 Choose…
               </option>
+              {/* A document of someone no longer active keeps its owner instead of falling to the first option. */}
+              {doc?.staffId && !staff.some((s) => s.id === doc.staffId) && (
+                <option value={doc.staffId}>{`${doc.owner ?? 'Current owner'} (inactive)`}</option>
+              )}
               {staff.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}

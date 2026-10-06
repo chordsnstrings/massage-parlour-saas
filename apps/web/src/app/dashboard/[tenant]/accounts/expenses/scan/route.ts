@@ -64,14 +64,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
       image: `data:image/jpeg;base64,${jpeg.toString('base64')}`,
       today: dubaiToday(),
     })
+    // A receipt in another currency must not prefill the AED amount: the owner enters what they actually paid.
+    const currency = res.fields.currency
+    const foreign = currency && !/^(AED|DHS?)$/.test(currency) ? currency : null
     return json(200, {
       ok: true,
       file,
-      status: 'read',
-      message: res.fields.totalAed
-        ? 'Receipt read — check the details before saving.'
-        : 'Receipt attached, but the total wasn’t readable — please fill it in.',
-      fields: res.fields,
+      status: foreign ? 'currency' : 'read',
+      message: foreign
+        ? `Receipt is in ${foreign} — enter the AED amount you paid.`
+        : res.fields.totalAed
+          ? 'Receipt read — check the details before saving.'
+          : 'Receipt attached, but the total wasn’t readable — please fill it in.',
+      fields: foreign ? { ...res.fields, totalAed: null, vatAed: null } : res.fields,
       ocr: { ...res.fields, model: res.modelKey },
     })
   } catch (e) {

@@ -1,5 +1,5 @@
 import type { Permission } from '@spa/core'
-import { isScanType, MAX_FILE_BYTES } from '@spa/services'
+import { MAX_FILE_BYTES, sniffScanType } from '@spa/services'
 import { guard, type MemberContext } from '@/server/access'
 import { getSession } from '@/server/session'
 
@@ -36,12 +36,9 @@ export async function readScanUpload(
   const file = form.get('file')
   if (!(file instanceof File) || file.size === 0) return json(400, { ok: false, error: 'Choose a file.' })
   if (file.size > MAX_FILE_BYTES) return json(413, { ok: false, error: 'Files can be up to 8 MB.' })
-  if (!isScanType(file.type))
-    return json(415, { ok: false, error: 'Upload a photo (JPG, PNG, WebP) or a PDF.' })
-  return {
-    ctx,
-    bytes: Buffer.from(await file.arrayBuffer()),
-    contentType: file.type,
-    filename: file.name.slice(0, 200),
-  }
+  const bytes = Buffer.from(await file.arrayBuffer())
+  // The stored type comes from the file's own bytes, not the name or the browser's claim.
+  const contentType = sniffScanType(bytes)
+  if (!contentType) return json(415, { ok: false, error: 'Upload a photo (JPG, PNG, WebP) or a PDF.' })
+  return { ctx, bytes, contentType, filename: file.name.slice(0, 200) }
 }

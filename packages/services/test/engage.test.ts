@@ -25,6 +25,7 @@ const {
   expiryPhrase,
   filterDocuments,
   insightWeeks,
+  isPushEndpoint,
   matchCategory,
   memberUserIds,
   normalizeReceipt,
@@ -34,6 +35,7 @@ const {
   reminderMessage,
   savePushSubscription,
   shapeInsightsInput,
+  sniffScanType,
   trackedDocuments,
 } = await import('../src')
 type WeekNumbers = import('../src').WeekNumbers
@@ -125,11 +127,31 @@ describe('push notifications', () => {
     vi.stubEnv('VAPID_PUBLIC_KEY', 'pub')
     vi.stubEnv('VAPID_PRIVATE_KEY', 'priv')
     vi.stubEnv('VAPID_SUBJECT', 'mailto:ops@example.test')
-    await savePushSubscription('u-owner', { endpoint: 'https://push.test/owner-phone', keys }, platform)
-    await savePushSubscription('u-owner', { endpoint: 'https://push.test/owner-old', keys }, platform)
-    await savePushSubscription('u-reception', { endpoint: 'https://push.test/desk', keys }, platform)
-    await savePushSubscription('u-therapist', { endpoint: 'https://push.test/therapist', keys }, platform)
-    await savePushSubscription('u-former', { endpoint: 'https://push.test/former', keys }, platform)
+    await savePushSubscription(
+      'u-owner',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/owner-phone', keys },
+      platform,
+    )
+    await savePushSubscription(
+      'u-owner',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/owner-old', keys },
+      platform,
+    )
+    await savePushSubscription(
+      'u-reception',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/desk', keys },
+      platform,
+    )
+    await savePushSubscription(
+      'u-therapist',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/therapist', keys },
+      platform,
+    )
+    await savePushSubscription(
+      'u-former',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/former', keys },
+      platform,
+    )
     sendNotification.mockImplementation(async (sub: { endpoint: string }) => {
       if (sub.endpoint.endsWith('owner-old')) throw Object.assign(new Error('Gone'), { statusCode: 410 })
       if (sub.endpoint.endsWith('desk')) throw Object.assign(new Error('Server error'), { statusCode: 500 })
@@ -144,9 +166,9 @@ describe('push notifications', () => {
     expect(res).toEqual({ sent: 1, pruned: 1, failed: 1 })
     const endpoints = sendNotification.mock.calls.map((c) => (c[0] as { endpoint: string }).endpoint).sort()
     expect(endpoints).toEqual([
-      'https://push.test/desk',
-      'https://push.test/owner-old',
-      'https://push.test/owner-phone',
+      'https://fcm.googleapis.com/fcm/send/desk',
+      'https://fcm.googleapis.com/fcm/send/owner-old',
+      'https://fcm.googleapis.com/fcm/send/owner-phone',
     ])
     const [, payload, options] = sendNotification.mock.calls[0]!
     expect(JSON.parse(payload as string)).toMatchObject({
@@ -156,23 +178,81 @@ describe('push notifications', () => {
     expect(options).toMatchObject({ vapidDetails: { publicKey: 'pub', privateKey: 'priv' } })
 
     const left = await platform.select({ endpoint: pushSubscriptions.endpoint }).from(pushSubscriptions)
-    expect(left.map((r) => r.endpoint)).not.toContain('https://push.test/owner-old')
+    expect(left.map((r) => r.endpoint)).not.toContain('https://fcm.googleapis.com/fcm/send/owner-old')
     expect(left).toHaveLength(4)
     vi.unstubAllEnvs()
   })
 
+  it('only accepts endpoints on known push services', () => {
+    for (const ok of [
+      'https://fcm.googleapis.com/fcm/send/abc',
+      'https://updates.push.services.mozilla.com/wpush/v2/abc',
+      'https://wns2-par02p.notify.windows.com/w/?token=abc',
+      'https://web.push.apple.com/QGx',
+    ])
+      expect(isPushEndpoint(ok), ok).toBe(true)
+    for (const bad of [
+      'http://fcm.googleapis.com/fcm/send/abc',
+      'https://fcm.googleapis.com:8443/fcm/send/abc',
+      'https://fcm.googleapis.com.evil.test/x',
+      'https://169.254.169.254/latest/meta-data',
+      'https://127.0.0.1/x',
+      'https://localhost/x',
+      'https://[::1]/x',
+      'https://user:pw@fcm.googleapis.com/x',
+      'not a url',
+    ])
+      expect(isPushEndpoint(bad), bad).toBe(false)
+  })
+
+  it('never contacts a stored endpoint outside the push services', async () => {
+    vi.stubEnv('VAPID_PUBLIC_KEY', 'pub')
+    vi.stubEnv('VAPID_PRIVATE_KEY', 'priv')
+    vi.stubEnv('VAPID_SUBJECT', 'mailto:ops@example.test')
+    await savePushSubscription('u-owner', { endpoint: 'https://10.0.0.5/internal', keys }, platform)
+    const res = await notifyTenant(
+      ids.tenant!,
+      { title: 'x', body: 'y' },
+      { permission: 'calendar.manage', db: platform, appDb: app },
+    )
+    expect(res).toEqual({ sent: 0, pruned: 0, failed: 1 })
+    expect(sendNotification).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
+
   it('moves an endpoint to whoever subscribed last', async () => {
-    await savePushSubscription('u-owner', { endpoint: 'https://push.test/shared', keys }, platform)
-    await savePushSubscription('u-reception', { endpoint: 'https://push.test/shared', keys }, platform)
+    await savePushSubscription(
+      'u-owner',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/shared', keys },
+      platform,
+    )
+    await savePushSubscription(
+      'u-reception',
+      { endpoint: 'https://fcm.googleapis.com/fcm/send/shared', keys },
+      platform,
+    )
     const rows = await platform
       .select()
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.endpoint, 'https://push.test/shared'))
+      .where(eq(pushSubscriptions.endpoint, 'https://fcm.googleapis.com/fcm/send/shared'))
     expect(rows.map((r) => r.userId)).toEqual(['u-reception'])
   })
 })
 
 describe('documents', () => {
+  it('trusts a scan’s bytes, not its declared type', () => {
+    const b = (...xs: (number | string)[]) =>
+      Buffer.concat(xs.map((x) => (typeof x === 'string' ? Buffer.from(x, 'latin1') : Buffer.from([x]))))
+    expect(sniffScanType(b(0xff, 0xd8, 0xff, 0xe0))).toBe('image/jpeg')
+    expect(sniffScanType(b(0x89, 'PNG\r\n', 0x1a, '\n', 0))).toBe('image/png')
+    expect(sniffScanType(b('RIFF', 0, 0, 0, 0, 'WEBPVP8 '))).toBe('image/webp')
+    expect(sniffScanType(b('%PDF-1.7'))).toBe('application/pdf')
+    expect(sniffScanType(b('<svg xmlns="http://www.w3.org/2000/svg"/>'))).toBeNull()
+    expect(sniffScanType(b('GIF89a'))).toBeNull()
+    expect(sniffScanType(b('RIFF', 0, 0, 0, 0, 'WAVE'))).toBeNull()
+    expect(sniffScanType(new Uint8Array())).toBeNull()
+  })
+
   it('derives status from days left', () => {
     const today = '2026-10-06'
     expect(documentStatus(null, today)).toEqual({ status: 'none', days: null })
@@ -226,6 +306,23 @@ describe('documents', () => {
       body: 'Visa / residence permit — Maya: expires today',
     })
     expect(reminderMessage([])).toBeNull()
+  })
+
+  it('skips reminders for staff who have left', async () => {
+    const [sara] = await tx((db) =>
+      db.insert(staff).values({ tenantId: ids.tenant!, displayName: 'Sara', active: false }).returning(),
+    )
+    await tx((db) =>
+      db
+        .insert(staffDocuments)
+        .values({ tenantId: ids.tenant!, staffId: sara!.id, type: 'visa', expiresOn: '2026-10-13' }),
+    )
+    const docs = await tx((db) => trackedDocuments(db, '2026-10-06'))
+    expect(docs.find((d) => d.owner === 'Sara')).toMatchObject({ ownerActive: false, days: 7 })
+    const due = await tx((db) => documentsDueForReminder(db, new Date('2026-10-06T05:00:00Z')))
+    expect(due.map((d) => `${d.type}:${d.days}`)).toEqual(['trade_licence:7', 'emirates_id:60'])
+    await tx((db) => db.delete(staffDocuments).where(eq(staffDocuments.staffId, sara!.id)))
+    await tx((db) => db.delete(staff).where(eq(staff.id, sara!.id)))
   })
 })
 
