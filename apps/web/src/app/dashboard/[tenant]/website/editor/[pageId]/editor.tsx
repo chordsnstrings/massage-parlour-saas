@@ -1,20 +1,28 @@
 'use client'
 import '@/components/site/site.css'
-import { createUsePuck, type Data, Puck, useGetPuck, type Viewports } from '@puckeditor/core'
+import {
+  ActionBar,
+  createUsePuck,
+  type Data,
+  type Plugin,
+  Puck,
+  useGetPuck,
+  type Viewports,
+} from '@puckeditor/core'
+import { GLOBAL_SECTION, type PreflightContext, type PuckNode } from '@spa/services/site-kit'
 import {
   ArrowLeft,
-  Check,
-  ExternalLink,
+  BarChart3,
+  BookmarkPlus,
   Eye,
+  LibraryBig,
   Monitor,
   Redo2,
-  Rocket,
   Save,
   Smartphone,
   Tablet,
   Undo2,
 } from 'lucide-react'
-import { motion } from 'motion/react'
 import Link from 'next/link'
 import {
   createContext,
@@ -27,14 +35,41 @@ import {
   useTransition,
 } from 'react'
 import { editorConfig } from '@/components/site/config'
-import { EditorContext } from '@/components/site/fields'
+import { preflightColors } from '@/components/site/editor/colors'
+import {
+  type EditorServices,
+  EditorServicesContext,
+  type LibraryTab,
+  type SavedSection,
+  useEditorServices,
+} from '@/components/site/editor/context'
+import { FrameStyles } from '@/components/site/editor/frame-styles'
+import { GlobalSectionEditor } from '@/components/site/editor/global-editor'
+import { type InsightsMeta, withInsights } from '@/components/site/editor/insights'
+import { LibraryPanel } from '@/components/site/editor/library'
+import { PublishSheet } from '@/components/site/editor/publish'
+import { Segmented } from '@/components/site/editor/segmented'
+import { VersionsSheet } from '@/components/site/editor/versions'
+import { type AiAssist, EditorContext } from '@/components/site/fields'
 import type { Device, Locale, SiteMeta } from '@/components/site/types'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetClose } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
-import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import { publishPageAction, saveDraftAction } from '../../actions'
+import { saveDraftAction } from '../../actions'
+import {
+  aiTextAction,
+  blockStatsAction,
+  deleteSectionAction,
+  labelVersionAction,
+  listVersionsAction,
+  previewLinkAction,
+  publishCheckedAction,
+  renameSectionAction,
+  restoreVersionAction,
+  saveSectionAction,
+  translateBatchAction,
+  updateGlobalSectionAction,
+} from '../actions'
 
 const usePuckStore = createUsePuck()
 
@@ -51,6 +86,7 @@ const DEVICES = [
 ]
 
 type Status = 'draft' | 'published'
+type Insights = NonNullable<InsightsMeta['insights']>
 type Chrome = {
   props: EditorProps
   locale: Locale
@@ -61,6 +97,9 @@ type Chrome = {
   status: Status
   markSaved: (json: string, status: Status) => void
   setBaseline: (json: string) => void
+  insights: Insights | null
+  setInsights: (i: Insights | null) => void
+  preflight: Omit<PreflightContext, 'globalIds'>
 }
 const ChromeContext = createContext<Chrome | null>(null)
 const useChrome = () => useContext(ChromeContext)!
@@ -68,6 +107,7 @@ const useChrome = () => useContext(ChromeContext)!
 type EditorProps = {
   slug: string
   pageId: string
+  pageSlug: string
   pageTitle: string
   data: Record<string, unknown>
   meta: SiteMeta
@@ -75,6 +115,10 @@ type EditorProps = {
   savedAt: string | null
   canDesign: boolean
   canPublish: boolean
+  canInsights: boolean
+  aiReady: boolean
+  sections: SavedSection[]
+  pages: { slug: string; visible: boolean; published: boolean }[]
   backHref: string
   previewHref: string
   liveHref: string
@@ -82,16 +126,32 @@ type EditorProps = {
 
 /**
  * Full-screen Puck editor with our own minimal chrome (PLAN §11.6 / §12): page name, viewport switcher,
- * EN/AR content toggle, undo/redo, Save draft and Publish with confirmation.
+ * EN/AR content toggle, undo/redo, analytics overlay, versions + preview link, Save draft and Publish with
+ * preflight. The left rail adds a Library (section presets + saved/global sections).
  */
 export function SiteEditor(props: EditorProps) {
   const [locale, setLocale] = useState<Locale>('en')
   const [device, setDevice] = useState<Device>('lg')
   const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<Status>(props.status)
+  const [sections, setSectionsState] = useState<SavedSection[]>(props.sections)
+  const [tab, setTab] = useState<LibraryTab>('sections')
+  const [saving, setSaving] = useState(false)
+  const [editingGlobal, setEditingGlobal] = useState<string | null>(null)
+  const [insights, setInsights] = useState<Insights | null>(null)
   const baseline = useRef<string | null>(null)
-  const config = useMemo(() => editorConfig(props.canDesign), [props.canDesign])
-  const metadata = useMemo(() => ({ ...props.meta, locale, editing: true }), [props.meta, locale])
+  const { slug } = props
+
+  const baseConfig = useMemo(() => editorConfig(props.canDesign), [props.canDesign])
+  const config = useMemo(() => withInsights(baseConfig), [baseConfig])
+  const globals = useMemo(
+    () => Object.fromEntries(sections.filter((s) => s.isGlobal).map((s) => [s.id, s.data])),
+    [sections],
+  )
+  const metadata = useMemo(
+    () => ({ ...props.meta, locale, editing: true, globals, insights }),
+    [props.meta, locale, globals, insights],
+  )
   const onChange = useCallback((data: Data) => {
     if (baseline.current !== null) setDirty(JSON.stringify(data) !== baseline.current)
   }, [])
@@ -103,6 +163,14 @@ export function SiteEditor(props: EditorProps) {
   const setBaseline = useCallback((json: string) => {
     if (baseline.current === null) baseline.current = json
   }, [])
+  const preflightContext = useMemo(
+    () => ({
+      colors: preflightColors(props.meta.theme),
+      pages: props.pages,
+      currentSlug: props.pageSlug,
+    }),
+    [props.meta.theme, props.pages, props.pageSlug],
+  )
   const chrome: Chrome = {
     props,
     locale,
@@ -113,37 +181,119 @@ export function SiteEditor(props: EditorProps) {
     status,
     markSaved,
     setBaseline,
+    insights,
+    setInsights,
+    preflight: preflightContext,
   }
+
+  const setSections = useCallback(
+    (update: (prev: SavedSection[]) => SavedSection[]) => setSectionsState(update),
+    [],
+  )
+  const services: EditorServices = useMemo(
+    () => ({
+      slug,
+      canDesign: props.canDesign,
+      aiReady: props.aiReady,
+      sections,
+      setSections,
+      editGlobal: setEditingGlobal,
+      library: { tab, setTab, saving, setSaving },
+      api: {
+        saveSection: (input) => saveSectionAction(slug, input),
+        renameSection: (id, name) => renameSectionAction(slug, id, name),
+        deleteSection: (id) => deleteSectionAction(slug, id),
+        updateGlobal: (id, node) => updateGlobalSectionAction(slug, id, node),
+        translate: (texts) => translateBatchAction(slug, texts),
+      },
+    }),
+    [slug, props.canDesign, props.aiReady, sections, setSections, tab, saving],
+  )
+  const ai: AiAssist = useMemo(
+    () => ({
+      ready: props.aiReady,
+      run: async (op, text, from) => {
+        const r = await aiTextAction(slug, { op, text, locale: from })
+        if (r?.ok && typeof r.data?.text === 'string') return { ok: true as const, text: r.data.text }
+        return {
+          ok: false as const,
+          error: r && !r.ok ? (r.fieldErrors?.text ?? r.error) : 'Please try again',
+        }
+      },
+    }),
+    [slug, props.aiReady],
+  )
+  const plugins: Plugin[] = useMemo(
+    () =>
+      props.canDesign
+        ? [{ name: 'library', label: 'Library', icon: <LibraryBig />, render: () => <LibraryPanel /> }]
+        : [],
+    [props.canDesign],
+  )
+
   useEffect(() => {
     if (!dirty) return
     const warn = (e: BeforeUnloadEvent) => e.preventDefault()
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
+
+  const editing = editingGlobal ? sections.find((s) => s.id === editingGlobal && s.isGlobal) : undefined
+  const saveGlobal = useCallback(
+    async (node: PuckNode) => {
+      if (!editingGlobal) return false
+      const r = await updateGlobalSectionAction(slug, editingGlobal, node)
+      if (r?.ok) {
+        const next = r.data?.section as SavedSection
+        setSectionsState((prev) => prev.map((s) => (s.id === next.id ? next : s)))
+        toast.success(r.message ?? 'Saved')
+        return true
+      }
+      if (r) toast.error(r.error)
+      return false
+    },
+    [slug, editingGlobal],
+  )
+  const closeGlobal = useCallback(() => setEditingGlobal(null), [])
+
   const permissions = props.canDesign ? {} : { drag: false, duplicate: false, delete: false, insert: false }
   return (
     <div className="site-editor fixed inset-0 z-50 bg-bg text-fg">
-      <EditorContext.Provider value={{ locale, device }}>
-        <ChromeContext.Provider value={chrome}>
-          <Puck
-            config={config}
-            data={props.data as Partial<Data>}
-            metadata={metadata}
-            onChange={onChange}
-            permissions={permissions}
-            viewports={VIEWPORTS}
-            ui={{
-              viewports: {
-                current: { width: 1280, height: 'auto' },
-                controlsVisible: false,
-                options: VIEWPORTS,
-              },
-            }}
-            iframe={{ enabled: true }}
-            overrides={OVERRIDES}
-            height="100dvh"
-          />
-        </ChromeContext.Provider>
+      <EditorContext.Provider value={{ locale, device, ai }}>
+        <EditorServicesContext.Provider value={services}>
+          <ChromeContext.Provider value={chrome}>
+            <Puck
+              config={config}
+              data={props.data as Partial<Data>}
+              metadata={metadata}
+              onChange={onChange}
+              permissions={permissions}
+              plugins={plugins}
+              viewports={VIEWPORTS}
+              ui={{
+                viewports: {
+                  current: { width: 1280, height: 'auto' },
+                  controlsVisible: false,
+                  options: VIEWPORTS,
+                },
+              }}
+              iframe={{ enabled: true }}
+              overrides={OVERRIDES}
+              height="100dvh"
+            />
+          </ChromeContext.Provider>
+          {editing && (
+            <EditorContext.Provider value={{ locale, device: 'lg', ai }}>
+              <GlobalSectionEditor
+                section={editing}
+                config={baseConfig}
+                metadata={metadata}
+                onSave={saveGlobal}
+                onClose={closeGlobal}
+              />
+            </EditorContext.Provider>
+          )}
+        </EditorServicesContext.Provider>
       </EditorContext.Provider>
     </div>
   )
@@ -151,44 +301,47 @@ export function SiteEditor(props: EditorProps) {
 
 /* ------------------------------------------------------------------ Chrome */
 
-function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: T
-  onChange: (v: T) => void
-  options: { value: T; label: string; content: React.ReactNode }[]
-  label: string
-}) {
+function InsightsToggle() {
+  const chrome = useChrome()
+  const getPuck = useGetPuck()
+  const [pending, start] = useTransition()
+  const on = chrome.insights !== null
+  const toggle = () => {
+    if (on) {
+      chrome.setInsights(null)
+      return
+    }
+    start(async () => {
+      const top = getPuck()
+        .appState.data.content.map((c) => String(c.props.id))
+        .filter(Boolean)
+      const r = await blockStatsAction(chrome.props.slug, chrome.props.pageId, top)
+      if (!r?.ok) {
+        if (r) toast.error(r.error)
+        return
+      }
+      const stats = r.data as Omit<Insights, 'top'>
+      chrome.setInsights({ ...stats, top })
+      toast.success(
+        stats.sessions
+          ? `Last ${stats.days} days · ${stats.sessions.toLocaleString('en-AE')} ${stats.sessions === 1 ? 'visit' : 'visits'} to this page`
+          : `No visits to this page in the last ${stats.days} days yet`,
+      )
+    })
+  }
   return (
-    <fieldset className="relative m-0 flex items-center rounded-lg border-0 bg-subtle p-0.5">
-      <legend className="sr-only">{label}</legend>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={value === o.value}
-          aria-label={o.label}
-          title={o.label}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'relative grid h-8 min-w-9 place-items-center rounded-md px-2.5 text-[13px] font-medium transition-colors',
-            value === o.value ? 'text-fg' : 'text-muted hover:text-fg',
-          )}
-        >
-          {value === o.value && (
-            <motion.span
-              layoutId={`seg-${label}`}
-              transition={spring}
-              className="absolute inset-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.08)]"
-            />
-          )}
-          <span className="relative">{o.content}</span>
-        </button>
-      ))}
-    </fieldset>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggle}
+      pending={pending}
+      aria-pressed={on}
+      aria-label="Block analytics"
+      title="Block analytics (last 30 days)"
+      className={cn(on && 'bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent')}
+    >
+      {!pending && <BarChart3 />}
+    </Button>
   )
 }
 
@@ -200,11 +353,9 @@ function EditorHeader() {
   const viewports = usePuckStore((s) => s.appState.ui.viewports)
   const history = usePuckStore((s) => s.history)
   const [saving, startSave] = useTransition()
-  const [publishing, startPublish] = useTransition()
-  const [confirm, setConfirm] = useState(false)
 
   // Baseline for "unsaved changes" once Puck has normalised the initial data.
-  const { setBaseline } = chrome
+  const { setBaseline, markSaved } = chrome
   useEffect(() => {
     const t = setTimeout(() => setBaseline(JSON.stringify(getPuck().appState.data)), 400)
     return () => clearTimeout(t)
@@ -224,20 +375,25 @@ function EditorHeader() {
       const data = current()
       const r = await saveDraftAction(props.slug, props.pageId, data)
       if (r?.ok) {
-        chrome.markSaved(JSON.stringify(data), 'draft')
+        markSaved(JSON.stringify(data), 'draft')
         toast.success('Draft saved')
       } else if (r) toast.error(r.error)
     })
-  const publish = () =>
-    startPublish(async () => {
-      const data = current()
-      const r = await publishPageAction(props.slug, props.pageId, data)
-      if (r?.ok) {
-        chrome.markSaved(JSON.stringify(data), 'published')
-        setConfirm(false)
-        toast.success(r.message ?? 'Published')
-      } else if (r) toast.error(r.error)
-    })
+  const onRestored = (data: Record<string, unknown>) => {
+    getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
+    setTimeout(() => {
+      markSaved(JSON.stringify(getPuck().appState.data), 'draft')
+    }, 60)
+  }
+  const versionsApi = useMemo(
+    () => ({
+      list: () => listVersionsAction(props.slug, props.pageId),
+      label: (versionId: string, label: string) => labelVersionAction(props.slug, versionId, label),
+      restore: (versionId: string) => restoreVersionAction(props.slug, props.pageId, versionId),
+      previewLink: (days: 1 | 7 | 30) => previewLinkAction(props.slug, props.pageId, days),
+    }),
+    [props.slug, props.pageId],
+  )
 
   const state = chrome.dirty ? 'Unsaved changes' : chrome.status === 'published' ? 'Live' : 'Draft saved'
   return (
@@ -252,7 +408,7 @@ function EditorHeader() {
         <p className="flex items-center gap-1.5 text-xs text-muted">
           <span
             className={cn(
-              'size-1.5 rounded-full',
+              'size-1.5 shrink-0 rounded-full',
               chrome.dirty ? 'bg-warning' : chrome.status === 'published' ? 'bg-success' : 'bg-muted',
             )}
           />
@@ -271,7 +427,7 @@ function EditorHeader() {
           }))}
         />
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <Segmented
           label="Content language"
           value={chrome.locale}
@@ -305,7 +461,9 @@ function EditorHeader() {
               <Eye />
             </a>
           </Button>
+          {props.canInsights && <InsightsToggle />}
         </div>
+        <VersionsSheet api={versionsApi} dirty={chrome.dirty} onRestored={onRestored} />
         <Button
           variant="secondary"
           onClick={save}
@@ -317,79 +475,60 @@ function EditorHeader() {
           <span className="hidden sm:inline">Save draft</span>
         </Button>
         {props.canPublish && (
-          <Sheet
-            open={confirm}
-            onOpenChange={setConfirm}
-            title={`Publish ${props.pageTitle}?`}
-            description="Visitors will see this version straight away. You can keep editing afterwards."
-            trigger={
-              <Button className="px-3 sm:px-4">
-                <Rocket />
-                <span className="hidden sm:inline">Publish</span>
-              </Button>
-            }
-          >
-            <ul className="mb-6 space-y-2 text-sm text-muted">
-              <li className="flex gap-2">
-                <Check className="mt-0.5 size-4 shrink-0 text-success" /> Prices, team and hours stay live
-                from your dashboard.
-              </li>
-              <li className="flex gap-2">
-                <Check className="mt-0.5 size-4 shrink-0 text-success" /> Arabic visitors see the Arabic text
-                where you've added it.
-              </li>
-            </ul>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <SheetClose asChild>
-                <Button variant="secondary">Cancel</Button>
-              </SheetClose>
-              <Button onClick={publish} pending={publishing}>
-                Publish now
-              </Button>
-            </div>
-            <a
-              href={props.liveHref}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"
-            >
-              Open live page <ExternalLink className="size-3.5" />
-            </a>
-          </Sheet>
+          <PublishSheet
+            pageTitle={props.pageTitle}
+            liveHref={props.liveHref}
+            context={chrome.preflight}
+            publish={(data) => publishCheckedAction(props.slug, props.pageId, data)}
+            onPublished={(data) => markSaved(JSON.stringify(data), 'published')}
+          />
         )}
       </div>
     </header>
   )
 }
 
-/** Puck's selection colours in the canvas iframe follow our sage accent. */
-function FrameStyles({ children, document: doc }: { children: React.ReactNode; document?: Document }) {
-  useEffect(() => {
-    if (!doc) return
-    const el = doc.createElement('style')
-    el.textContent = `:root{${PUCK_VARS}}`
-    doc.head.appendChild(el)
-    return () => el.remove()
-  }, [doc])
-  return <>{children}</>
+/** Block action bar + "Save to library" (opens the Library's save form for the selected block). */
+function BlockActionBar({
+  label,
+  children,
+  parentAction,
+}: {
+  label?: string
+  children: React.ReactNode
+  parentAction: React.ReactNode
+}) {
+  const services = useEditorServices()
+  const dispatch = usePuckStore((s) => s.dispatch)
+  const type = usePuckStore((s) => s.selectedItem?.type)
+  const canSave = services?.canDesign && type && type !== GLOBAL_SECTION
+  return (
+    <ActionBar>
+      <ActionBar.Group>
+        {parentAction}
+        {label && <ActionBar.Label label={label} />}
+      </ActionBar.Group>
+      <ActionBar.Group>
+        {children}
+        {canSave && (
+          <ActionBar.Action
+            label="Save to library"
+            onClick={() => {
+              services.library.setTab('saved')
+              services.library.setSaving(true)
+              dispatch({ type: 'setUi', ui: { plugin: { current: 'library' }, leftSideBarVisible: true } })
+            }}
+          >
+            <BookmarkPlus size={16} />
+          </ActionBar.Action>
+        )}
+      </ActionBar.Group>
+    </ActionBar>
+  )
 }
-
-const PUCK_VARS = [
-  '--puck-color-azure-01:#16241c',
-  '--puck-color-azure-02:#22372b',
-  '--puck-color-azure-03:#2f4a3a',
-  '--puck-color-azure-04:#3f5f4c',
-  '--puck-color-azure-05:#5e7d6b',
-  '--puck-color-azure-06:#7d978a',
-  '--puck-color-azure-07:#9bb0a4',
-  '--puck-color-azure-08:#b9c9bf',
-  '--puck-color-azure-09:#d4dfd8',
-  '--puck-color-azure-10:#e8eeea',
-  '--puck-color-azure-11:#f2f6f3',
-  '--puck-color-azure-12:#f8faf8',
-].join(';')
 
 const OVERRIDES = {
   header: () => <EditorHeader />,
   iframe: FrameStyles,
+  actionBar: BlockActionBar,
 }

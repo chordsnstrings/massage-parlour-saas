@@ -1,5 +1,30 @@
+import {
+  describeSchedule,
+  type SectionSchedule,
+  safeSectionId,
+  scheduleState,
+  scopeSectionCss,
+} from '@spa/services/site-kit'
 import type { CSSProperties } from 'react'
 import type { Responsive } from './types'
+
+/** Advanced band props (PLAN §11.3 layer 6, owner/designer only): scoped custom CSS + show-between dates. */
+export type AdvancedProps = { customCss?: string; schedule?: SectionSchedule }
+
+/**
+ * Compiles a band's advanced props: sanitised CSS scoped to `[data-section-id]` and whether the schedule shows
+ * it right now (Asia/Dubai). Pure, so the editor canvas and the server render agree.
+ */
+export function advancedStyle(id: string, advanced: AdvancedProps | undefined, now = new Date()) {
+  const state = scheduleState(advanced?.schedule, now)
+  return {
+    sectionId: safeSectionId(id),
+    css: typeof advanced?.customCss === 'string' ? scopeSectionCss(advanced.customCss, id).css : '',
+    state,
+    visible: state === 'always' || state === 'live',
+    label: describeSchedule(advanced?.schedule),
+  }
+}
 
 /**
  * Responsive style props compile to CSS variables (base / md / lg) read by a few static classes in site.css,

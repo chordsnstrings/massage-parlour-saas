@@ -3,6 +3,7 @@
 import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
+import type { PuckNode } from './site-kit/tree'
 import {
   getEditablePage,
   getSite,
@@ -18,7 +19,6 @@ export type StudioTemplateRow = typeof siteTemplates.$inferSelect
 export type TemplatePage = SiteTemplate['pages'][number]
 
 /** Puck component node: `{ type, props: { id, …, slotName: Node[] } }`. */
-export type PuckNode = { type: string; props: Record<string, unknown> }
 
 const isNode = (v: unknown): v is PuckNode =>
   typeof v === 'object' &&

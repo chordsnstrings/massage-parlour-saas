@@ -1,9 +1,95 @@
-import type { ComponentConfig, Slot } from '@puckeditor/core'
+import type { ComponentConfig, CustomFieldRender, Field, PuckContext, Slot } from '@puckeditor/core'
 import { cn } from '@/lib/utils'
 import { alignField, hideField, imageField, padField, radio, select, text } from '../field-defs'
-import { type Align, type PadStep, responsiveStyle, type Visibility } from '../style'
+import { CustomCssField, ScheduleField } from '../fields'
+import {
+  type AdvancedProps,
+  type Align,
+  advancedStyle,
+  type PadStep,
+  responsiveStyle,
+  type Visibility,
+} from '../style'
 import type { Responsive, SiteMeta } from '../types'
 import { container, metaOf } from './shared'
+
+// biome-ignore lint/suspicious/noExplicitAny: Puck types props per component; the wrapper is prop-agnostic
+type AnyComponent = ComponentConfig<any>
+
+/** "Advanced" group on every band (PLAN §11.3 layer 6): Puck props `advanced: { schedule, customCss }`. */
+export const advancedField: Field = {
+  type: 'object',
+  label: 'Advanced',
+  objectFields: {
+    schedule: {
+      type: 'custom',
+      label: 'Schedule',
+      render: ScheduleField as unknown as CustomFieldRender<AdvancedProps['schedule']>,
+    },
+    customCss: {
+      type: 'custom',
+      label: 'Custom CSS',
+      render: CustomCssField as unknown as CustomFieldRender<string | undefined>,
+    },
+  },
+}
+
+/**
+ * Section-level advanced shell: wraps a band in `[data-section-id]` with its sanitised, scoped CSS, and hides
+ * it outside its schedule. In the editor a scheduled band stays visible (ghosted when hidden) with a badge.
+ */
+export function AdvancedShell({
+  id,
+  meta,
+  advanced,
+  children,
+}: {
+  id: string
+  meta: SiteMeta
+  advanced?: AdvancedProps
+  children: React.ReactNode
+}) {
+  const a = advancedStyle(id, advanced)
+  if (!a.visible && !meta.editing) return null
+  if (!a.css && a.state === 'always') return <>{children}</>
+  const body = (
+    <div data-section-id={a.sectionId}>
+      {/* Sanitised + scoped by advancedStyle (never contains `<`). */}
+      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: CSS must not be HTML-escaped */}
+      {a.css && <style dangerouslySetInnerHTML={{ __html: a.css }} />}
+      {children}
+    </div>
+  )
+  if (!meta.editing || a.state === 'always') return body
+  return (
+    <div className="relative">
+      <span
+        className={cn(
+          'pointer-events-none absolute start-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-sans text-[11px] font-medium tracking-normal shadow-[0_1px_3px_rgb(0_0_0/0.12)]',
+          a.visible ? 'bg-white/95 text-[#3f5f4c]' : 'bg-[#f5eedf] text-[#7a5d22]',
+        )}
+      >
+        <span className={cn('size-1.5 rounded-full', a.visible ? 'bg-[#5e7d6b]' : 'bg-[#a8823a]')} />
+        {a.visible ? 'Scheduled' : 'Hidden now'} · {a.label}
+      </span>
+      <div className={a.visible ? undefined : 'opacity-45'}>{body}</div>
+    </div>
+  )
+}
+
+/** Adds the Advanced group to a band block and renders it through AdvancedShell. */
+export function withAdvanced(component: AnyComponent): AnyComponent {
+  const Inner = component.render
+  return {
+    ...component,
+    fields: { ...component.fields, advanced: advancedField },
+    render: (props: { id: string; puck: PuckContext; advanced?: AdvancedProps }) => (
+      <AdvancedShell id={props.id} meta={metaOf(props.puck)} advanced={props.advanced}>
+        <Inner {...props} />
+      </AdvancedShell>
+    ),
+  }
+}
 
 export type Background = 'none' | 'surface' | 'subtle' | 'soft' | 'inverse' | 'accent' | 'image'
 const BG: Record<Background, string> = {
