@@ -33,6 +33,7 @@ SITE_HOST="__SITE_HOST__"
 [ -d /opt/spa/repo/.git ] || git clone --branch "$BRANCH" "$REPO_URL" /opt/spa/repo
 echo "$BRANCH" > /opt/spa/branch
 
+umask 077; printf '%s' "__SECRETS_KEY__" > /opt/spa/secrets.key; umask 022
 STATUS_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "__STATUS_PASSWORD__")
 umask 077
 cat > /opt/spa/.env <<ENV

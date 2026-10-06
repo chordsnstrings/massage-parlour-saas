@@ -24,6 +24,17 @@ such as Namecheap.
   - off-site to R2 via the worker's `db-backup` job when `R2_*` is set
   - enable DigitalOcean droplet backups for whole-machine snapshots
 
+## Secrets without SSH
+
+`/opt/spa/.env` is written at first boot. To add or rotate secrets later:
+1. Encrypt a dotenv file with the key in `/opt/spa/secrets.key`:
+   ```sh
+   openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt -pass file:<key> -in overlay.env -out deploy/droplet/secrets.env.enc
+   ```
+2. Commit and push.
+
+On its next run the updater decrypts the file and overrides those keys on top of the first-boot `.env`, then rebuilds.
+
 ## Hostname
 
 Until a domain is wired in, `SITE_HOST=auto` makes the site answer on `<ip-with-dashes>.sslip.io`, and Caddy gets a

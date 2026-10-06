@@ -28,6 +28,22 @@ snapshot() {
   } > "$STATUS/runtime.txt.tmp" 2>&1 && mv "$STATUS/runtime.txt.tmp" "$STATUS/runtime.txt"
 }
 
+# Encrypted secrets overlay committed in the repo (deploy/droplet/secrets.env.enc, AES-256 with the key in
+# /opt/spa/secrets.key): lets the operator add or rotate secrets without SSH. Overlay keys win over /opt/spa/.env.
+apply_overlay() {
+  local enc="$REPO/deploy/droplet/secrets.env.enc" base=/opt/spa/.env.base
+  [ -f /opt/spa/secrets.key ] && [ -f "$enc" ] || return 0
+  [ -f "$base" ] || cp /opt/spa/.env "$base"
+  local plain
+  plain=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass file:/opt/spa/secrets.key -in "$enc" 2>/dev/null) || { status error "secrets overlay could not be decrypted"; return 1; }
+  umask 077
+  {
+    grep -v -E -f <(printf '%s\n' "$plain" | sed -n 's/^\([A-Z0-9_]*\)=.*/^\1=/p') "$base"
+    printf '%s\n' "$plain"
+  } > /opt/spa/.env.new && mv /opt/spa/.env.new /opt/spa/.env
+  umask 022
+}
+
 git fetch -q origin "$BRANCH" || { status error "git fetch failed"; exit 1; }
 NEW=$(git rev-parse "origin/$BRANCH")
 CUR=$(cat "$STATUS/deployed" 2>/dev/null || true)
@@ -35,6 +51,7 @@ if [ "$NEW" = "$CUR" ] && [ "${1:-}" != "--force" ]; then snapshot; exit 0; fi
 
 status building "building ${NEW:0:7}"
 git reset -q --hard "$NEW"
+apply_overlay || true
 cd deploy/droplet
 export APP_RELEASE="${NEW:0:7}"
 if ! docker compose --env-file "$ENV" build --pull >"$STATUS/build.log" 2>&1; then
