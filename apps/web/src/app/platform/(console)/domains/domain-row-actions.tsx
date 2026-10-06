@@ -1,5 +1,5 @@
 'use client'
-import { Power, PowerOff, RefreshCw } from 'lucide-react'
+import { Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react'
 import { useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
@@ -7,7 +7,7 @@ import { adminDomainAction } from './actions'
 
 export function DomainRowActions({ id, hostname, status }: { id: string; hostname: string; status: string }) {
   const [pending, start] = useTransition()
-  const run = (op: 'recheck' | 'activate' | 'deactivate', question?: string) => {
+  const run = (op: 'recheck' | 'activate' | 'deactivate' | 'remove', question?: string) => {
     if (question && !window.confirm(question)) return
     start(async () => {
       const r = await adminDomainAction(id, op)
@@ -45,6 +45,21 @@ export function DomainRowActions({ id, hostname, status }: { id: string; hostnam
           <Power /> Activate
         </Button>
       )}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        aria-label={`Remove ${hostname}`}
+        className="text-danger hover:bg-danger-soft hover:text-danger"
+        onClick={() =>
+          run(
+            'remove',
+            `Remove ${hostname} from this spa? The hostname is freed so its real owner can connect it. This is audited.`,
+          )
+        }
+      >
+        <Trash2 /> Remove
+      </Button>
     </div>
   )
 }

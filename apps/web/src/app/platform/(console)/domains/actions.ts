@@ -1,6 +1,6 @@
 'use server'
 import { platformDb } from '@spa/db'
-import { checkDomain, DomainError, type DomainRun, forceDomainStatus } from '@spa/services'
+import { checkDomain, DomainError, type DomainRun, forceDomainStatus, removeDomain } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, ok } from '@/lib/action'
@@ -10,7 +10,13 @@ import { invalidateSiteHost } from '@/server/sites'
 
 // Super-admin only: platform role across every spa (the tenant pages use withTenant()).
 const platformRun: DomainRun = (fn) => fn(platformDb())
-const input = z.object({ id: z.uuid(), op: z.enum(['recheck', 'activate', 'deactivate']) })
+const input = z.object({ id: z.uuid(), op: z.enum(['recheck', 'activate', 'deactivate', 'remove']) })
+const VERB = {
+  recheck: 'rechecked',
+  activate: 'force_activated',
+  deactivate: 'force_deactivated',
+  remove: 'removed',
+}
 
 export async function adminDomainAction(id: string, op: string): Promise<ActionResult> {
   const { user } = await requirePlatformAdmin()
@@ -20,22 +26,27 @@ export async function adminDomainAction(id: string, op: string): Promise<ActionR
     const before = await platformDb().query.domains.findFirst({
       where: (d, { eq }) => eq(d.id, parsed.data.id),
     })
+    const { op } = parsed.data
+    // Remove frees the hostname (and its Cloudflare hostname) for its real owner, e.g. a squatted claim.
     const d =
-      parsed.data.op === 'recheck'
+      op === 'recheck'
         ? await checkDomain(platformRun, parsed.data.id)
-        : await forceDomainStatus(platformRun, parsed.data.id, parsed.data.op)
+        : op === 'remove'
+          ? await removeDomain(platformRun, parsed.data.id)
+          : await forceDomainStatus(platformRun, parsed.data.id, op)
     invalidateSiteHost(d.hostname)
     await audit({
       tenantId: d.tenantId,
       actorUserId: user.id,
-      action: `platform.domain.${parsed.data.op === 'recheck' ? 'rechecked' : `force_${parsed.data.op}d`}`,
+      action: `platform.domain.${VERB[op]}`,
       entity: 'domain',
       entityId: d.id,
-      data: { hostname: d.hostname, from: before?.status, to: d.status },
+      data: { hostname: d.hostname, from: before?.status, to: op === 'remove' ? null : d.status },
     })
     revalidatePath('/platform/domains')
-    if (parsed.data.op === 'activate') return ok(`${d.hostname} activated`)
-    if (parsed.data.op === 'deactivate') return ok(`${d.hostname} deactivated`)
+    if (op === 'remove') return ok(`${d.hostname} removed`)
+    if (op === 'activate') return ok(`${d.hostname} activated`)
+    if (op === 'deactivate') return ok(`${d.hostname} deactivated`)
     return ok(`${d.hostname}: ${d.status}`)
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message)

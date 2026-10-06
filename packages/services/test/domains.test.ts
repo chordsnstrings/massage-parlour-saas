@@ -299,6 +299,70 @@ describe('evaluateDomain state machine', () => {
     const manual = await evaluateDomain(old, deps(fakeDns({})))
     expect(manual.status).toBe('pending')
   })
+
+  it('a domain that connected before keeps its proof and is never given up on', async () => {
+    const reconnecting = row({
+      status: 'verifying',
+      verifiedAt: new Date(now.getTime() - 30 * 86_400_000),
+      createdAt: new Date(now.getTime() - 60 * 86_400_000),
+    })
+    // No TXT any more (owners clean up), CNAME not back yet: keeps verifying instead of failing after 7 days.
+    const waiting = await evaluateDomain(reconnecting, deps(fakeDns({})), { automatic: true })
+    expect(waiting).toMatchObject({ status: 'verifying', lastError: expect.stringMatching(/CNAME record/) })
+    const back = await evaluateDomain(
+      { ...reconnecting, status: 'failed' },
+      deps(fakeDns({ cname: cnameOk })),
+    )
+    expect(back).toMatchObject({ status: 'active', lastError: null })
+  })
+
+  it('trusts an active Cloudflare hostname when the records sit behind the owner’s Cloudflare proxy', async () => {
+    const { cfg } = fakeCloudflare(() => ({ json: cfHost('active', 'active') }))
+    const proxied = fakeDns({
+      txt: txtOk,
+      cname: { 'www.serenity.ae': 'ENODATA' },
+      a: { 'www.serenity.ae': ['172.67.1.1'], [TARGET]: ['104.16.1.1'] },
+    })
+    const p = await evaluateDomain(row({ cfHostnameId: 'cf-1' }), deps(proxied, cfg))
+    expect(p).toMatchObject({ status: 'active', lastError: null })
+    const kept = await evaluateDomain(
+      row({ status: 'active', verifiedAt: now, cfHostnameId: 'cf-1' }),
+      deps(proxied, cfg),
+      { automatic: true },
+    )
+    expect(kept.status).toBe('active')
+  })
+
+  it('manual checks restart a Cloudflare hostname that gave up; automatic ones only report it', async () => {
+    const timedOut = cfHost('pending', 'validation_timed_out')
+    const patched = cfHost('pending', 'pending_validation')
+    const handler = (c: { method: string }) => ({ json: c.method === 'PATCH' ? patched : timedOut })
+    const dns = fakeDns({ txt: txtOk, cname: cnameOk })
+    const auto = fakeCloudflare(handler)
+    const a = await evaluateDomain(row({ cfHostnameId: 'cf-1' }), deps(dns, auto.cfg), { automatic: true })
+    expect(a).toMatchObject({ status: 'failed', lastError: expect.stringMatching(/validation_timed_out/) })
+    expect(auto.calls.map((c) => c.method)).toEqual(['GET'])
+
+    const manual = fakeCloudflare(handler)
+    const m = await evaluateDomain(row({ status: 'failed', cfHostnameId: 'cf-1' }), deps(dns, manual.cfg))
+    expect(m).toMatchObject({ status: 'verifying', sslStatus: 'pending_validation' })
+    expect(manual.calls.map((c) => c.method)).toEqual(['GET', 'PATCH'])
+    expect(manual.calls[1]!.body).toEqual({
+      ssl: { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } },
+    })
+
+    // A moved hostname is recreated; a blocked one is left for Cloudflare support.
+    const moved = fakeCloudflare((c) => ({
+      json:
+        c.method === 'GET' ? cfHost('moved', 'active') : c.method === 'POST' ? patched : { success: true },
+    }))
+    await evaluateDomain(row({ status: 'failed', cfHostnameId: 'cf-1' }), deps(dns, moved.cfg))
+    expect(moved.calls.map((c) => c.method)).toEqual(['GET', 'DELETE', 'POST'])
+    const blocked = fakeCloudflare(() => ({ json: cfHost('blocked', 'active') }))
+    const b = await evaluateDomain(row({ status: 'failed', cfHostnameId: 'cf-1' }), deps(dns, blocked.cfg))
+    expect(b.status).toBe('failed')
+    expect(blocked.calls.map((c) => c.method)).toEqual(['GET'])
+  })
 })
 
 describe('isDomainCheckDue', () => {
@@ -351,7 +415,9 @@ describe('domain lifecycle (database, RLS)', () => {
     expect(d.verificationToken).toMatch(/^spamanagement-verify=[0-9a-f]{24}$/)
     await expect(addDomain(runA(), ids.a, 'www.serenity.ae', env)).rejects.toThrow(/already added/)
     await expect(addDomain(runA(), ids.a, 'www.other.ae', env)).rejects.toThrow(/one custom domain/)
-    await expect(addDomain(runB(), ids.b, 'www.serenity.ae', env)).rejects.toThrow(/another spa/)
+    await expect(addDomain(runB(), ids.b, 'www.serenity.ae', env, { platform })).rejects.toThrow(
+      /another spa/,
+    )
     await expect(addDomain(runB(), ids.b, 'b.spamanagement.ae', env)).rejects.toThrow(/already included/)
   })
 
@@ -406,5 +472,60 @@ describe('domain lifecycle (database, RLS)', () => {
     expect(await platform.select().from(domains).where(eq(domains.tenantId, ids.a))).toHaveLength(0)
     // The hostname is free again for another spa.
     expect((await addDomain(runB(), ids.b, 'www.serenity.ae', env)).tenantId).toBe(ids.b)
+  })
+
+  it('refuses manual checks in quick succession', async () => {
+    const [d] = await platform.select().from(domains).where(eq(domains.tenantId, ids.b))
+    const clock = deps(fakeDns({}), null, new Date())
+    await checkDomain(runB(), d!.id, { deps: clock, cooldownMs: 30_000 })
+    await expect(checkDomain(runB(), d!.id, { deps: clock, cooldownMs: 30_000 })).rejects.toThrow(
+      /Checked a moment ago — try again in \d+ seconds/,
+    )
+    // The worker and support aren't throttled.
+    expect((await checkDomain(runB(), d!.id, { deps: clock })).status).toBe('pending')
+  })
+
+  it('serialises adds per spa so the one-domain limit holds under concurrent submits', async () => {
+    const [c] = await platform.insert(tenants).values({ slug: 'dom-c', name: 'C' }).returning()
+    const runC = tenantDomainRun(c!.id, app)
+    const results = await Promise.allSettled([
+      addDomain(runC, c!.id, 'www.one.ae', env),
+      addDomain(runC, c!.id, 'www.two.ae', env),
+    ])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(await platform.select().from(domains).where(eq(domains.tenantId, c!.id))).toHaveLength(1)
+  })
+
+  it('releases a claim that never connected within 7 days, or one left by a cancelled spa', async () => {
+    const [d] = await platform.insert(tenants).values({ slug: 'dom-d', name: 'D' }).returning()
+    const runD = tenantDomainRun(d!.id, app)
+    const released: string[] = []
+    const opts = {
+      platform,
+      deps: { cf: null, now: () => new Date() },
+      onRelease: async (claim: { hostname: string }) => {
+        released.push(claim.hostname)
+      },
+    }
+    // B's claim on www.serenity.ae is fresh: still taken.
+    await expect(addDomain(runD, d!.id, 'www.serenity.ae', env, opts)).rejects.toThrow(/another spa/)
+    // Eight days old and never connected: D takes it over (and must prove the TXT record itself).
+    await platform
+      .update(domains)
+      .set({ createdAt: new Date(Date.now() - 8 * 86_400_000) })
+      .where(eq(domains.tenantId, ids.b))
+    const took = await addDomain(runD, d!.id, 'www.serenity.ae', env, opts)
+    expect(took).toMatchObject({ tenantId: d!.id, status: 'pending' })
+    expect(released).toEqual(['www.serenity.ae'])
+    expect(await platform.select().from(domains).where(eq(domains.tenantId, ids.b))).toHaveLength(0)
+
+    // A connected domain is never released, unless its spa is cancelled.
+    await platform
+      .update(domains)
+      .set({ status: 'active', verifiedAt: new Date(0), createdAt: new Date(0) })
+      .where(eq(domains.id, took.id))
+    await expect(addDomain(runB(), ids.b, 'www.serenity.ae', env, opts)).rejects.toThrow(/another spa/)
+    await platform.update(tenants).set({ status: 'cancelled' }).where(eq(tenants.id, d!.id))
+    expect((await addDomain(runB(), ids.b, 'www.serenity.ae', env, opts)).tenantId).toBe(ids.b)
   })
 })
