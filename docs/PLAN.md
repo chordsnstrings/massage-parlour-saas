@@ -18,10 +18,13 @@ official docs on 2026-10-06; re-check anything marked *(verify)* when its phase 
 | Team | Owner + Claude. |
 | Domain | `spamanagement.ae` (tenant sites at `{slug}.spamanagement.ae`, optional custom domain). |
 | Customer payments | Recorded only (cash, card on the parlour's own terminal, bank transfer). Platform processes nothing. Stripe later. |
-| SaaS billing | One-time setup fee + recurring subscription, paid by cash or bank transfer, recorded manually by super-admin. |
+| SaaS price | **AED 24,000 per spa per year** (setup fee / VAT treatment: open item), paid by cash or bank transfer, recorded manually by super-admin. |
 | Customer comms | **WhatsApp only**, receptionist click-to-send (no SMS, no email to customers, no unofficial automation). |
 | AI provider | BytePlus ModelArk, **Seed 2.0 family by default**; model per agent chosen by super-admin (GLM selectable, not default). |
 | Analytics | Block-level click/visibility analytics + funnels (no session replay in v1). |
+| Site builder | Drag-and-drop modular builder, 8 templates, granular per-device control so each spa makes the site its own (§11). |
+| Responsiveness | Every tenant site page and every role view is fully responsive, 360 px phones → wide desktops (§11.5, §12.4). |
+| Admin design | Minimal Swedish modern: airy, well-padded grid layouts, calm palette, one accent, micro-animations (§12). |
 | Infra budget | ≤ USD 50/month now; scale later. DigitalOcean. |
 | Legal | Out of scope for the software; the parlour/company owns it. Client waiver/contract is captured as a signed intake form. |
 
@@ -29,7 +32,7 @@ official docs on 2026-10-06; re-check anything marked *(verify)* when its phase 
 
 ## 1. Modules & scope
 
-Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see §12).
+Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see §13).
 
 ### 1.1 Tenancy, onboarding, domains
 - Self-serve signup → pick subdomain (`{slug}.spamanagement.ae`) → business info → theme → services/rooms/staff wizard → publish. **MVP**
@@ -124,7 +127,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 - Click-to-send campaigns: segment + template → outbox batch; stats: sent → booked within 14 days. **P2**
 - Promo codes. **P2**
 
-### 1.12 Site builder (§11) — **MVP** (core blocks, 3 themes, EN/AR) · rest P2
+### 1.12 Site builder (§11) — **MVP** (layout primitives, 15 core blocks, 3 templates, responsive overrides, EN/AR) · rest P2/P3
 ### 1.13 Analytics (§9) — business KPIs **MVP**, web/block analytics **P2**
 ### 1.14 Accounting (§10) — **P2** (daily close is MVP)
 ### 1.15 AI agents (§7) — **P3** (gateway + metering in P0)
@@ -137,7 +140,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 
 ### 1.17 Platform super-admin (`admin.spamanagement.ae`)
 - Tenants (status, plan, usage, last activity), impersonation (audited, banner shown). **MVP**
-- Plans: setup fee + monthly/annual price (AED), limits (branches, staff, AI budget, custom domain). **MVP**
+- Plans: launch plan **AED 24,000/year** (optional one-time setup fee), limits (branches, staff, AI budget, custom domain); more plans later. **MVP**
 - Platform invoices, **manual payment recording** (cash/bank transfer, reference, proof upload), due/overdue list,
   WhatsApp reminder links to tenant owners, grace period → dashboard read-only (public site stays live). **MVP**
 - AI: model per agent (Seed 2.0 defaults), price table, usage & cost per tenant, budgets, global + per-tenant kill switch. **P0/P3**
@@ -370,7 +373,9 @@ packages/config   tsconfig, eslint, prettier
 - `brand_profile` (voice, do/don't phrases, en/ar samples) · `media_assets` (r2_key, kind, w/h, alt_en/ar, source upload|ai)
 
 **Site & SEO**
-- `sites` (theme jsonb, locales[], default_locale, settings) · `pages` (site, slug, kind, title en/ar) · `page_versions` (page, puck_data, status, created_by)
+- `sites` (template_id, theme jsonb, locales[], default_locale, settings) · `site_globals` (header, footer, announcement bar, floating buttons)
+- `pages` (site, slug, kind, title en/ar, visibility) · `page_versions` (page, puck_data, schema_version, status, label, created_by)
+- `site_templates`, `section_presets` (platform-owned) · `saved_sections` (tenant, data, is_global) · `media_assets` shared with social
 - `redirects` · `seo_meta` (page, locale, title, description, og_image, schema jsonb) · `seo_audits`
 
 **Analytics**
@@ -391,6 +396,8 @@ packages/config   tsconfig, eslint, prettier
 - Every call: budget check → queue (pg-boss, per-model rate limit) → call → zod-validate → meter (`ai_usage`) → audit (`ai_runs`).
 - Prompt caching for the stable tenant context (services, prices, hours, FAQs, brand voice); cache hits ≈ 20% of input price.
 - **Flex tier** (≈ 50% off) for non-urgent batch jobs (SEO, blog drafts, weekly insights).
+- Default AI budget **USD 25 per tenant per month** (typical estimate USD 5–10: ~1,500 DM turns, 30 posts, 60 images, a few reels);
+  super-admin adjustable; agents pause and notify the owner when the budget is reached.
 
 **Default models (super-admin can change per agent)**
 
@@ -486,41 +493,177 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
 
 ---
 
-## 11. Site builder — "beautiful by default"
+## 11. Site builder — modular, multi-template, granular control
 
-- **Section-based** drag & drop with Puck (`slot` fields for nesting); no free-form pixel placement → can't break on mobile.
-- **Blocks (~25, each 2–4 layout variants):** Header/nav, Hero (image/video/split), Services menu (tabs by category, prices),
-  Service detail, Booking widget, Therapists, Packages, Gift cards (enquire via WhatsApp), Memberships, Offers/promo banner,
-  Testimonials, Google reviews (synced), Gallery/lightbox, Instagram feed, About/story, Amenities, FAQ, Opening hours,
-  Map & directions, Contact + WhatsApp CTA, floating WhatsApp button, Blog list/post, CTA band, Footer.
-- **Themes = design tokens:** palette, font pairing (Latin + Arabic pairs from Google Fonts), radius, spacing scale,
-  **motion intensity (none / subtle / expressive)**. 6 starter themes (Zen minimal, Dark luxury gold, Thai teak, Clean clinic,
-  Tropical, Desert sand).
-- **Micro-animations:** `motion` for interactions (hover lift, button press, stagger reveals, image parallax), CSS scroll-driven
-  reveals as progressive enhancement, View Transitions between pages; all disabled under `prefers-reduced-motion`.
-- **EN/AR with RTL:** per-locale content fields, `dir`/`lang` per page, logical CSS only; spike Puck canvas RTL in P0.
-- Editor: inline text edit, image upload/crop, undo/redo, autosave, desktop/tablet/mobile preview, draft/publish, version history + rollback,
-  scheduled publish, global header/footer, per-page SEO panel.
-- Rendering: published JSON → server components → cached by tag; publish = revalidate tag + Cloudflare purge.
-  Performance budget: LCP < 2.5 s on 4G, CLS < 0.1, JS < 100 KB per page outside the booking widget.
+### 11.1 Principles
+- **Content ≠ presentation.** Block content (text, images, links per locale) is stored apart from style props bound to theme
+  tokens → switching template keeps all content.
+- **Beautiful by default, granular when wanted.** Every control starts at the theme value; owners can override at any level;
+  every control has "Reset to theme". Curated choices first, exact values (px, hex, custom font) behind an "Advanced" toggle.
+- **Guard rails, not walls.** All layout primitives are responsive by construction (can't overflow on mobile); contrast checker
+  warns on unreadable text; preflight checks before publish.
+- **Puck is the engine** (`@puckeditor/core`: drag & drop, `slot` nesting, layers tree, history, viewports, per-block permissions,
+  UI overrides). We build: responsive style fields, templates, presets, data-bound blocks and our own editor chrome (§12 style).
+
+### 11.2 Templates
+- **8 full-site templates at launch**, each = theme tokens + header/footer + page set + demo content + recommended section variants:
+
+  | Template | Feel |
+  |---|---|
+  | Zen Minimal | stone & off-white, serif headings, slow fades |
+  | Dark Luxury | black & gold, editorial, video hero |
+  | Thai Teak | warm wood tones, subtle traditional patterns |
+  | Nordic Clean | white & birch, airy sans |
+  | Desert Sand | beige & terracotta, Arabic-forward typography |
+  | Tropical Bali | greens, organic shapes, soft parallax |
+  | Urban Express | bold, price-forward (foot / express massage) |
+  | Hotel Spa | premium long-form, rich galleries |
+
+- Page set per template: Home, Services, Service detail, Book, Packages & Gift cards, Team, Gallery, About, Contact, Blog,
+  Offer landing.
+- **"Try on" gallery:** live preview of each template with the tenant's own logo, services and photos before applying.
+- **Switch template any time:** content kept, sections remapped to equivalent variants, side-by-side preview, one-click undo.
+- **Section presets library** (~60 designed sections across templates) and **page templates** (e.g. "Ramadan offers",
+  "Couples package", "Corporate wellness") added in one click.
+- **Saved sections:** tenant saves any customised section; **global sections** (edit once → updates everywhere, e.g. promo bar)
+  or detached copies.
+- **Template studio (super-admin):** we author templates/presets in the same editor; they're JSON → new templates ship without deploys.
+
+### 11.3 Customisation layers (global → granular)
+
+| Layer | What the spa can change |
+|---|---|
+| 1. Theme | palette (primary, accent, surfaces, text — or generate from logo), heading/body fonts (Latin + Arabic pairs or uploaded font), type scale, spacing density (compact / comfortable / airy), corner radius, shadow style, button style (shape, fill/outline/ghost), link style, image treatment (radius, filter), motion intensity + style (fade / slide / scale), favicon, logo variants |
+| 2. Global elements | header layout (logo position, menu style, sticky / transparent-on-hero, CTA), mobile menu (drawer / full-screen), footer layout, announcement bar, floating WhatsApp / Book buttons (position, style), sticky mobile action bar |
+| 3. Page | content width, background, SEO panel, visibility (live / hidden / draft), page transition |
+| 4. Section | layout variant, background (colour, gradient, image, video, pattern + overlay/opacity), padding (token steps or custom), contained vs full-bleed, columns & gaps, alignment, shape dividers (wave / curve / angle), entrance animation (type, delay, stagger), anchor id, show/hide per device, schedule (show between dates) |
+| 5. Element | text (inline rich text, heading level, size step, colour, letter-spacing, alignment), buttons (label, action: page / booking / WhatsApp / call / map, style, icon), images (upload, crop + focal point, aspect ratio, alt EN/AR, filter, hover zoom), icons, spacing, per-element animation |
+| 6. Advanced (opt-in, owner only) | section-scoped custom CSS (sanitised, no JS), custom class, sandboxed embed block |
+
+- **Every style value is responsive:** base (mobile) → tablet → desktop overrides. The panel shows a dot where a value is
+  overridden for the current device; "apply to all devices" clears overrides.
+- Copy/paste styles between blocks; duplicate sections across pages.
+- Per-block **permissions/locks** (Puck permissions): owner can lock sections; ULM role "Content editor" may edit text/images
+  but not styles or structure.
+
+### 11.4 Building blocks
+- **Layout primitives** (granular layout, all nestable via `slot`): Section, Container, Grid (1–12 cols per breakpoint, gap),
+  Columns (50/50, 33/67, 25/75, 3-up, 4-up), Stack (vertical/horizontal, gap, align, wrap), Card, Spacer, Divider.
+- **Elements:** Heading, Rich text, Button group, Image, Gallery / carousel / lightbox, Video (upload / YouTube), Icon + text,
+  Checklist, Badge, Price row, Quote, Stat counter, Accordion, Tabs, Map, Social links, WhatsApp button, Enquiry form
+  (→ dashboard inbox + WhatsApp), Embed (sandboxed).
+- **Smart (data-bound) blocks** — read live dashboard data so prices/hours never go stale: Services menu, Service detail,
+  Booking widget (inline / modal / page), Team, Packages, Gift cards, Memberships, Offers, Google reviews, Testimonials,
+  Instagram feed, Media-library gallery, Blog list/post, Branches & hours.
+- Each block ships 2–4 designed variants plus full layer 4–5 controls.
+
+### 11.5 Responsive editing & output
+- Viewport switcher: mobile 375, tablet 768, laptop 1280, desktop 1536, plus drag-to-resize; edits apply to the active breakpoint.
+- Per-device show/hide and **stack order on mobile** for columns.
+- Mobile-first CSS, fluid type (`clamp()`), responsive `srcset` images, touch targets ≥ 44 px, safe-area insets,
+  optional sticky "Book / WhatsApp" bar on mobile.
+- **Preflight before publish** (with one-click fixes): missing alt text, low contrast, headings too long on mobile, heavy images,
+  broken links, empty sections, missing AR translation.
+
+### 11.6 Editor UX (styled per §12)
+- Left: Add (blocks, presets, saved sections) · Layers tree · Pages · Templates. Centre: real-render canvas (iframe).
+  Right: properties in tabs **Content | Style | Advanced** with the responsive toggle. Focus mode collapses panels.
+- Drag from library or within canvas/layers; inline text editing; drop image to replace; context menu; keyboard shortcuts
+  (copy, paste, duplicate, delete, undo/redo, move up/down).
+- Autosave; version history with named versions and restore; scheduled publish; shareable preview link + QR to check on a phone.
+- EN/AR toggle: per-locale content, automatic RTL mirroring, "copy from English" + AI translate.
+- Editing lock: one editor per page at a time (shows who's editing).
+- P2: block-analytics overlay. P3: AI assists (write/rewrite copy, section from prompt, Seedream images, layout suggestions from analytics).
+
+### 11.7 Storage
+- Page = Puck JSON; each block's props = `{ content: {en, ar}, style: { prop: {base, md, lg} }, advanced }`.
+- `sites.theme` (tokens) · `site_globals` · `site_templates` / `section_presets` (platform) · `saved_sections` (tenant).
+- `schema_version` per page + block prop migrations, so old pages keep rendering as blocks evolve.
+
+### 11.8 Rendering & performance
+- Published JSON → React Server Components; style props compiled at publish to CSS variables + atomic classes (no runtime style
+  calculation); theme = CSS variables on `:root` → instant theme/template switch.
+- Scoped custom CSS compiled + sanitised (lightningcss), prefixed with the section id.
+- Only interactive blocks ship client JS (booking widget, carousels, motion); everything else is static HTML.
+- Self-hosted subset fonts (Latin + Arabic, `font-display: swap`); sharp → AVIF/WebP + blur placeholders.
+- Budgets: LCP < 2.5 s on mid-range Android over 4G, CLS < 0.1, INP < 200 ms, ≤ 100 KB JS excluding the booking widget.
+- Cached per host + path by tag; Cloudflare edge cache; publish = revalidate tag + purge.
+
+### 11.9 Phasing
+- **P1 (MVP):** primitives, 15 core + smart blocks, 3 templates (Zen Minimal, Dark Luxury, Nordic Clean), layers 1–5 with
+  responsive spacing/typography/visibility, EN/AR, versions, preview link, template studio (how we build templates).
+- **P2:** all 8 templates, section presets, page templates, saved/global sections, template switching, preflight, scheduled
+  sections, custom CSS, analytics overlay.
+- **P3:** AI assists in the editor.
 
 ---
 
-## 12. Roadmap
+## 12. Admin design system — minimal Swedish modern, fully responsive
+
+Applies to every non-public screen: owner/manager/receptionist/therapist/accountant views, the site editor chrome and super-admin.
+
+### 12.1 Principles
+- *Lagom* — just enough: calm, airy, functional; content first; one accent colour; hairline structure instead of boxes and heavy shadows.
+- Every screen sits on the same well-padded 12-column grid; consistent rhythm beats decoration.
+- Motion explains change (where something came from / went); never decorative-only, never blocks input.
+
+### 12.2 Tokens (final values tuned in the P0 design pass)
+- **Colour, light:** background warm snow `#FAFAF8`, surface `#FFFFFF`, subtle `#F3F2EF`, hairline border `#E7E5E0`,
+  text `#1C1C1A`, muted text `#6B6A66`, one accent (muted sage `#5E7D6B` or Nordic blue `#3D5A80`), desaturated semantic
+  colours (moss success, ochre warning, brick danger).
+- **Colour, dark:** graphite `#121211`, surface `#1A1A19`, border `#2A2A28`, same accent lifted for contrast.
+- **Type:** Inter (variable) for UI, tabular figures for money/times; IBM Plex Sans Arabic when the dashboard gets AR.
+  Scale 12/13/14/16/20/24/32/40, weights 400/500/600 only, line-height 1.5.
+- **Space:** 4-pt base, 8-pt rhythm. Page padding 16 (mobile) / 24 (tablet) / 32 (desktop) / 48 (wide). Card padding 24–32.
+  Grid gap 24. Section gap 40–48.
+- **Shape:** radius 12 cards, 8 inputs, pill chips; no shadow at rest, one soft elevation on hover/overlays.
+- **Icons:** Lucide, 1.5 px stroke.
+- **Layout:** fluid 12-col grid, max content width 1440; sidebar 248 px, collapsible to 72 px; bottom tab bar on phones.
+
+### 12.3 Micro-animations (`motion`)
+- Timing: 120 ms hover/press, 200 ms enter/exit, 280 ms layout; easing `cubic-bezier(0.2, 0, 0, 1)`; springs for drag/sheets.
+- Patterns: button press scale 0.98 · card hover lift 2 px · list/stat staggered reveal (30 ms) · KPI number tickers ·
+  skeleton → content crossfade · shared-layout tab indicator · calendar drag with spring snap + layout animation on reorder ·
+  drawer/sheet spring · toast slide + fade · success check morph · chart draw-in · page transitions via View Transitions API.
+- `prefers-reduced-motion` → fades only.
+
+### 12.4 Responsive by role (designed 360 px → 1920 px+)
+
+| Role | Main device | Layout behaviour |
+|---|---|---|
+| Owner | phone + laptop | Phone: stacked KPI cards, swipe between branches, bottom nav (Home, Calendar, Sales, Reports, More). Laptop: 12-col dashboard, 3–4 KPI cards per row, charts 8/4 split. |
+| Manager / Receptionist | desktop or tablet at reception | Resource calendar (therapist/room columns) with sticky time axis and horizontal scroll on tablet; split view calendar + booking drawer; quick-action bar; keyboard shortcuts; WhatsApp outbox side panel. |
+| Therapist | phone (PWA) | Today agenda, next-client card, big check-in/out buttons, own earnings; bottom nav; actions in thumb reach. |
+| Accountant | laptop | Dense but airy tables, sticky headers, column chooser, filters, export. |
+| Super-admin | laptop | Tables + detail drawers. |
+
+- Patterns: tables → stacked cards below 768 px; drawers → full-screen sheets on phones; multi-column forms → single column;
+  calendar → agenda list with swipe between days on phones; charts simplify axes on small screens; touch targets ≥ 44 px;
+  safe-area insets; tablet landscape and portrait both supported.
+- Breakpoints 360 / 640 / 768 / 1024 / 1280 / 1536, plus **container queries** so widgets adapt to their slot, not just the viewport.
+
+### 12.5 Component stack
+- shadcn/ui (Radix) restyled to the tokens; TanStack Table for data grids; Recharts styled to tokens for charts.
+- **Resource calendar built in-house** on CSS grid + dnd-kit (FullCalendar's resource views are a paid licence).
+- A `/dev/kit` route shows every component and token in light/dark at each breakpoint (cheaper than running Storybook).
+
+---
+
+## 13. Roadmap
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| **P0 Foundations** | Repo, CI/CD, infra, tenancy + RLS, auth + ULM, host routing, signup → subdomain, super-admin skeleton, AI gateway stub, spikes. **Start Meta + Google applications.** | Pilot owner signs up, gets `pilot.spamanagement.ae`, invites a receptionist with a role. |
-| **P1 MVP** | Branch/rooms/services/staff/shifts, booking engine + calendar + walk-ins + rotation, online booking + WhatsApp confirm, clients + intake/waiver e-sign + notes, POS (recorded payments, tips, refunds), daily close, WhatsApp outbox (confirm/remind), business KPIs, site builder (15 blocks, 3 themes, EN/AR), super-admin billing (manual payments), PWA + push. | Pilot runs every booking, walk-in and cash close on the platform for 2 weeks. |
-| **P2 Money & growth** | Ledger + accounting screens + VAT, packages/gift cards/memberships, commissions/advances/payroll summary, inventory, document expiry tracker, custom domains, block analytics + funnels + attribution, reviews, segments + campaigns, CSV import, remaining blocks/themes, data export. | Owner reads monthly P&L and block analytics without help. |
-| **P3 AI** | Site generator onboarding, SEO agent, IG content + publishing (Seedream), IG DM agent + DM-to-booking + human inbox, IG comments, GBP reviews/posts/Book link, slot-filler, insights digest, receipt OCR. | Bookings attributed to AI/IG/GBP sources appear in reports. |
+| **P0 Foundations** | Repo, CI/CD, infra, tenancy + RLS, auth + ULM, host routing, signup → subdomain, super-admin skeleton, AI gateway stub, admin design system + responsive role shells, spikes. **Start Meta + Google applications.** | Pilot owner signs up, gets `pilot.spamanagement.ae`, invites a receptionist with a role. |
+| **P1 MVP** | Branch/rooms/services/staff/shifts, booking engine + calendar + walk-ins + rotation, online booking + WhatsApp confirm, clients + intake/waiver e-sign + notes, POS (recorded payments, tips, refunds), daily close, WhatsApp outbox (confirm/remind), business KPIs, site builder MVP (primitives, 15 core blocks, 3 templates, responsive overrides, EN/AR, template studio), super-admin billing (manual payments), PWA + push. | Pilot runs every booking, walk-in and cash close on the platform for 2 weeks. |
+| **P2 Money & growth** | Ledger + accounting screens + VAT, packages/gift cards/memberships, commissions/advances/payroll summary, inventory, document expiry tracker, custom domains, block analytics + funnels + attribution, reviews, segments + campaigns, CSV import, all 8 templates + section presets + saved/global sections + template switching + preflight, data export. | Owner reads monthly P&L and block analytics without help. |
+| **P3 AI** | Site generator onboarding, SEO agent, IG content + publishing (Seedream), IG DM agent + DM-to-booking + human inbox, IG comments, GBP reviews/posts/Book link, slot-filler, insights digest, receipt OCR, AI assists in the site editor. | Bookings attributed to AI/IG/GBP sources appear in reports. |
 | **P4 Scale** | Stripe (SaaS billing first), WPS SIF export, WhatsApp Cloud API option, Reserve with Google, RU/ZH, dashboard AR, home/hotel service, managed Postgres, second droplet. | — |
 
 Meta/Google approvals run in parallel from P0; the pilot uses tester access during P2–P3.
 
 ---
 
-## 13. Phase 0 task list
+## 14. Phase 0 task list
 
 **You (accounts & approvals — start now, they have lead time)**
 1. `spamanagement.ae` registered via an accredited .ae registrar; nameservers → Cloudflare.
@@ -544,23 +687,25 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 9. Infra: Dockerfiles (web standalone, worker), `docker-compose.prod.yml` (web, worker, postgres, cloudflared), Postgres tuning,
    GitHub Actions (lint/typecheck/test/build → GHCR; deploy via SSH with healthcheck + rollback), Sentry, uptime check.
 10. Spikes (timeboxed, written up in `docs/spikes/`): Puck 0.23 RTL canvas · Cloudflare for SaaS → Tunnel origin ·
-    WhatsApp Desktop/Web/wa.me send UX on the pilot's reception PC.
+    WhatsApp Desktop/Web/wa.me send UX on the pilot's reception PC · Puck responsive style fields + UI overrides (custom editor chrome).
+11. Admin design system foundation: tokens (light/dark), motion presets, responsive app shells per role (sidebar ↔ bottom nav),
+    `/dev/kit` component page.
 
 ---
 
-## 14. Working agreement (token-efficient, still thorough)
+## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.
 - **After each edit:** typecheck + lint + unit/integration tests for the touched packages only, plus the one e2e spec covering the touched flow.
+- UI edits: Playwright screenshot of the touched view at 360 / 768 / 1280 px only.
 - **At each phase end only:** full Playwright suite against the ephemeral compose stack + manual walkthrough with the pilot.
 - No repeated whole-app re-verification; reviews are per-PR diff.
 - `CLAUDE.md` holds decisions/commands so sessions don't rediscover context; `docs/PLAN.md` is the source of truth — update it when a decision changes.
 
 ---
 
-## 15. Open items
+## 16. Open items
 
-1. **Pricing (AED):** setup fee, monthly/annual price per plan, and how much AI usage each plan includes.
+1. **Price details:** is AED 24,000/year VAT-inclusive, and is there a one-time setup fee?
 2. **Platform company details** for Meta Business Verification and the .ae registrant (name must match company/trademark).
-3. **Pilot specifics:** emirate, number of branches, walk-in vs booked ratio, reception device (PC with WhatsApp Desktop/Web, tablet?), do they do home/hotel visits.
-4. **GitHub default branch:** the remote has no branches yet — confirm creating `main` so PRs have a base.
+3. **Pilot specifics** (coming later): emirate, branches, walk-in vs booked ratio, reception device, home/hotel visits.
