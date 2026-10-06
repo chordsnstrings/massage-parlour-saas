@@ -25,13 +25,14 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
   const [pending, start] = useTransition()
   const end = useRef<HTMLDivElement>(null)
   const id = useRef(0)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to the newest message whenever the thread changes
   useEffect(() => end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [items, pending])
 
   const send = (message: string) => {
     const msg = message.trim()
     if (!msg || pending) return
     const history: ChatTurn[] = items
-      .filter((i) => !i.note || i.note.kind !== 'error')
+      .filter((i) => i.note?.kind !== 'error')
       .map(({ from, text }) => ({ from, text }))
     setItems((x) => [...x, { id: ++id.current, from: 'customer', text: msg }])
     setText('')

@@ -186,15 +186,13 @@ export async function runImage(opts: {
     throw new AiBudgetExceededError(opts.tenantId)
   const res = await client.image({ model: cfg.modelId, prompt: opts.prompt, size: opts.size })
   const cost = Number(cfg.pricePerImage)
-  await db
-    .insert(aiUsage)
-    .values({
-      tenantId: opts.tenantId,
-      agentKey: opts.agentKey,
-      modelId: cfg.modelId,
-      images: 1,
-      costUsd: cost.toFixed(6),
-    })
+  await db.insert(aiUsage).values({
+    tenantId: opts.tenantId,
+    agentKey: opts.agentKey,
+    modelId: cfg.modelId,
+    images: 1,
+    costUsd: cost.toFixed(6),
+  })
   const url = res.data[0]?.url
   if (!url) throw new AiOutputError('no image returned')
   return { url, costUsd: cost }

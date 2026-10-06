@@ -147,28 +147,26 @@ export async function runDmTurn(opts: {
   }
   if (opts.conversationId) {
     await withTenant(opts.tenantId, async (tx) => {
-      await tx
-        .insert(conversationMessages)
-        .values([
-          {
-            tenantId: opts.tenantId,
-            conversationId: opts.conversationId!,
-            direction: 'in',
-            sender: 'customer',
-            text: opts.incoming,
-          },
-          ...(result.reply
-            ? [
-                {
-                  tenantId: opts.tenantId,
-                  conversationId: opts.conversationId!,
-                  direction: 'out' as const,
-                  sender: 'bot' as const,
-                  text: result.reply,
-                },
-              ]
-            : []),
-        ])
+      await tx.insert(conversationMessages).values([
+        {
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId!,
+          direction: 'in',
+          sender: 'customer',
+          text: opts.incoming,
+        },
+        ...(result.reply
+          ? [
+              {
+                tenantId: opts.tenantId,
+                conversationId: opts.conversationId!,
+                direction: 'out' as const,
+                sender: 'bot' as const,
+                text: result.reply,
+              },
+            ]
+          : []),
+      ])
       await tx
         .update(conversations)
         .set({

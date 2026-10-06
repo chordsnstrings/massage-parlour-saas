@@ -59,15 +59,13 @@ beforeAll(async () => {
       ids.variant = v.id
       const [m] = await tx.insert(staff).values({ tenantId: ids.tenant, displayName: 'Maya' }).returning()
       await tx.insert(staffServices).values({ tenantId: ids.tenant, staffId: m.id, serviceId: s.id })
-      await tx
-        .insert(shifts)
-        .values({
-          tenantId: ids.tenant,
-          staffId: m.id,
-          branchId: b.id,
-          startsAt: dubaiInstant(tomorrow, 10 * 60),
-          endsAt: dubaiInstant(tomorrow, 22 * 60),
-        })
+      await tx.insert(shifts).values({
+        tenantId: ids.tenant,
+        staffId: m.id,
+        branchId: b.id,
+        startsAt: dubaiInstant(tomorrow, 10 * 60),
+        endsAt: dubaiInstant(tomorrow, 22 * 60),
+      })
       await tx.insert(rooms).values({ tenantId: ids.tenant, branchId: b.id, name: 'Room 1' })
     },
     app,

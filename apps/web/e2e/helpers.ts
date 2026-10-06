@@ -115,15 +115,13 @@ export async function seedCatalog(slug: string) {
   for (const p of people) {
     await db.insert(staffServices).values({ tenantId: tenant.id, staffId: p.id, serviceId: swedish!.id })
     for (const d of days) {
-      await db
-        .insert(shifts)
-        .values({
-          tenantId: tenant.id,
-          staffId: p.id,
-          branchId: branch!.id,
-          startsAt: dubaiInstant(d, 9 * 60),
-          endsAt: dubaiInstant(d, 23 * 60),
-        })
+      await db.insert(shifts).values({
+        tenantId: tenant.id,
+        staffId: p.id,
+        branchId: branch!.id,
+        startsAt: dubaiInstant(d, 9 * 60),
+        endsAt: dubaiInstant(d, 23 * 60),
+      })
     }
   }
   const roomRows = await db

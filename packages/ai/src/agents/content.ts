@@ -71,15 +71,13 @@ ${SAFETY}`,
       })
       .returning()
     if (image)
-      await tx
-        .insert(mediaAssets)
-        .values({
-          tenantId: opts.tenantId,
-          url: image.url,
-          kind: 'image',
-          source: 'ai',
-          alt: { en: out.image_prompt.slice(0, 200) },
-        })
+      await tx.insert(mediaAssets).values({
+        tenantId: opts.tenantId,
+        url: image.url,
+        kind: 'image',
+        source: 'ai',
+        alt: { en: out.image_prompt.slice(0, 200) },
+      })
     const [post] = await tx
       .insert(socialPosts)
       .values({

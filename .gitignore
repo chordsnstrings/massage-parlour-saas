@@ -10,3 +10,6 @@ test-results
 .env.*
 !.env.example
 .DS_Store
+
+# workflow worktrees
+.claude/worktrees/

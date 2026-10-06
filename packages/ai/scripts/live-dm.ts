@@ -46,15 +46,13 @@ await withTenant(
     ])
     const [m] = await tx.insert(staff).values({ tenantId, displayName: 'Maya' }).returning()
     await tx.insert(staffServices).values({ tenantId, staffId: m!.id, serviceId: s!.id })
-    await tx
-      .insert(shifts)
-      .values({
-        tenantId,
-        staffId: m!.id,
-        branchId: b!.id,
-        startsAt: dubaiInstant(tomorrow, 12 * 60),
-        endsAt: dubaiInstant(tomorrow, 23 * 60),
-      })
+    await tx.insert(shifts).values({
+      tenantId,
+      staffId: m!.id,
+      branchId: b!.id,
+      startsAt: dubaiInstant(tomorrow, 12 * 60),
+      endsAt: dubaiInstant(tomorrow, 23 * 60),
+    })
     await tx.insert(rooms).values({ tenantId, branchId: b!.id, name: 'Room 1' })
   },
   createDb(testUrls.app, 2),

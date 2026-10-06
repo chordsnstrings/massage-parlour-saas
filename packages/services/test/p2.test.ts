@@ -87,15 +87,13 @@ beforeAll(async () => {
       })
       .returning()
     ids.client = c!.id
-    await db
-      .insert(clients)
-      .values({
-        tenantId: ids.tenant!,
-        name: 'Opted Out',
-        phoneE164: '971509999999',
-        tags: ['vip'],
-        marketingOptOutAt: new Date(),
-      })
+    await db.insert(clients).values({
+      tenantId: ids.tenant!,
+      name: 'Opted Out',
+      phoneE164: '971509999999',
+      tags: ['vip'],
+      marketingOptOutAt: new Date(),
+    })
   })
 })
 afterAll(closeAllDbs)
@@ -180,26 +178,22 @@ describe('commissions and payroll', () => {
           status: 'paid',
         })
         .returning()
-      await db
-        .insert(saleLines)
-        .values({
-          tenantId: ids.tenant!,
-          saleId: s!.id,
-          kind: 'service',
-          description: 'Swedish',
-          unitPriceAed: '350',
-          lineTotalAed: '350',
-          staffId: ids.staff!,
-        })
-      await db
-        .insert(tips)
-        .values({
-          tenantId: ids.tenant!,
-          saleId: s!.id,
-          staffId: ids.staff!,
-          amountAed: '20',
-          method: 'cash',
-        })
+      await db.insert(saleLines).values({
+        tenantId: ids.tenant!,
+        saleId: s!.id,
+        kind: 'service',
+        description: 'Swedish',
+        unitPriceAed: '350',
+        lineTotalAed: '350',
+        staffId: ids.staff!,
+      })
+      await db.insert(tips).values({
+        tenantId: ids.tenant!,
+        saleId: s!.id,
+        staffId: ids.staff!,
+        amountAed: '20',
+        method: 'cash',
+      })
       return s!.id
     })
     const entries = await tx((db) => accrueCommissions(db, saleId))
@@ -290,18 +284,16 @@ describe('inventory', () => {
           endsAt: dubaiInstant(D, 660),
         })
         .returning()
-      await db
-        .insert(bookingItems)
-        .values({
-          tenantId: ids.tenant!,
-          bookingId: b!.id,
-          serviceVariantId: ids.variant!,
-          serviceName: 'Swedish',
-          durationMin: 60,
-          priceAed: '350',
-          startsAt: b!.startsAt,
-          endsAt: b!.endsAt,
-        })
+      await db.insert(bookingItems).values({
+        tenantId: ids.tenant!,
+        bookingId: b!.id,
+        serviceVariantId: ids.variant!,
+        serviceName: 'Swedish',
+        durationMin: 60,
+        priceAed: '350',
+        startsAt: b!.startsAt,
+        endsAt: b!.endsAt,
+      })
       return b!.id
     })
     expect(

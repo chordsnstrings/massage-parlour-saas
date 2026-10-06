@@ -2,6 +2,7 @@
 import {
   Building2,
   CalendarDays,
+  ChartColumn,
   Contact,
   Ellipsis,
   Globe,
@@ -47,6 +48,7 @@ const icons = {
   services: HandHeart,
   staff: UserCog,
   website: Globe,
+  analytics: ChartColumn,
 } as const
 
 export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }

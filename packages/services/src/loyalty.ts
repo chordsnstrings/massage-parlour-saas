@@ -178,16 +178,14 @@ export async function issueGiftCard(
       expiresAt: new Date(`${expiresDate}T20:00:00Z`),
     })
     .returning()
-  await tx
-    .insert(giftCardTxns)
-    .values({
-      tenantId: g.tenantId,
-      giftCardId: card!.id,
-      kind: 'issue',
-      amountAed: g.amountAed.toFixed(2),
-      saleId: g.saleId ?? null,
-      createdBy: g.createdBy ?? null,
-    })
+  await tx.insert(giftCardTxns).values({
+    tenantId: g.tenantId,
+    giftCardId: card!.id,
+    kind: 'issue',
+    amountAed: g.amountAed.toFixed(2),
+    saleId: g.saleId ?? null,
+    createdBy: g.createdBy ?? null,
+  })
   return card!
 }
 
@@ -223,15 +221,13 @@ export async function redeemGiftCard(
     .update(giftCards)
     .set({ balanceAed: balance.toFixed(2), status: balance <= 0 ? 'redeemed' : 'active' })
     .where(eq(giftCards.id, card.id))
-  await tx
-    .insert(giftCardTxns)
-    .values({
-      tenantId: g.tenantId,
-      giftCardId: card.id,
-      kind: 'redeem',
-      amountAed: (-g.amountAed).toFixed(2),
-      saleId: g.saleId,
-      createdBy: g.createdBy ?? null,
-    })
+  await tx.insert(giftCardTxns).values({
+    tenantId: g.tenantId,
+    giftCardId: card.id,
+    kind: 'redeem',
+    amountAed: (-g.amountAed).toFixed(2),
+    saleId: g.saleId,
+    createdBy: g.createdBy ?? null,
+  })
   return { card: { ...card, balanceAed: balance.toFixed(2) } }
 }

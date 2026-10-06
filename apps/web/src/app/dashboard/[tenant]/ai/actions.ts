@@ -172,17 +172,15 @@ export async function addReviewAction(slug: string, _p: ActionResult, fd: FormDa
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   await withTenant(ctx.tenant.id, (tx) =>
-    tx
-      .insert(reviews)
-      .values({
-        tenantId: ctx.tenant.id,
-        source: 'google',
-        externalId: `manual-${Date.now()}`,
-        author: parsed.data.author || null,
-        rating: parsed.data.rating,
-        text: parsed.data.text || null,
-        reviewedAt: new Date(),
-      }),
+    tx.insert(reviews).values({
+      tenantId: ctx.tenant.id,
+      source: 'google',
+      externalId: `manual-${Date.now()}`,
+      author: parsed.data.author || null,
+      rating: parsed.data.rating,
+      text: parsed.data.text || null,
+      reviewedAt: new Date(),
+    }),
   )
   revalidatePath(`/dashboard/${slug}/ai/reviews`)
   return ok('Review added')

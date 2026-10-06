@@ -23,7 +23,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100
  */
 export async function accrueCommissions(tx: Tx, saleId: string, vatRatePct = 5) {
   const [sale] = await tx.select().from(sales).where(eq(sales.id, saleId))
-  if (!sale || sale.status !== 'paid') return []
+  if (sale?.status !== 'paid') return []
   const lines = await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId))
   const staffIds = [...new Set(lines.map((l) => l.staffId).filter((x): x is string => Boolean(x)))]
   if (!staffIds.length) return []

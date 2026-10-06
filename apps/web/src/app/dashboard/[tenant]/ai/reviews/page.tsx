@@ -21,9 +21,9 @@ import { DraftReplyButton } from './draft-button'
 export const metadata: Metadata = { title: 'Review replies' }
 
 const stars = (n: number) => (
-  <span className="inline-flex gap-0.5 text-warning" aria-label={`${n} stars`}>
-    {Array.from({ length: 5 }, (_, i) => (
-      <Star key={i} className="size-3.5" fill={i < n ? 'currentColor' : 'none'} strokeWidth={1.5} />
+  <span className="inline-flex gap-0.5 text-warning" role="img" aria-label={`${n} stars`}>
+    {[1, 2, 3, 4, 5].map((i) => (
+      <Star key={i} className="size-3.5" fill={i <= n ? 'currentColor' : 'none'} strokeWidth={1.5} />
     ))}
   </span>
 )

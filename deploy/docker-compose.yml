@@ -79,6 +79,7 @@ services:
       <<: *app-env
       DATABASE_URL_OWNER: postgres://spa_owner:${SPA_OWNER_PASSWORD}@postgres:5432/spa
       DATABASE_URL_PLATFORM: postgres://spa_platform:${SPA_PLATFORM_PASSWORD}@postgres:5432/spa
+      DATABASE_URL_APP: postgres://spa_app:${SPA_APP_PASSWORD}@postgres:5432/spa
       R2_ENDPOINT: ${R2_ENDPOINT:-}
       R2_BUCKET: ${R2_BUCKET:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
