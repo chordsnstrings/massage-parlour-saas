@@ -1,4 +1,5 @@
 // Phase 2/3 — growth: reviews, segments & campaigns, website analytics rollups, saved sections, social & AI agents.
+import { sql } from 'drizzle-orm'
 import {
   bigint,
   boolean,
@@ -13,6 +14,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { createdAt, id, updatedAt } from './_columns'
@@ -217,6 +219,8 @@ export const conversations = pgTable(
     lastCustomerMsgAt: ts('last_customer_msg_at'),
     flagged: boolean('flagged').notNull().default(false),
     assignedTo: text('assigned_to').references(() => user.id),
+    /** Last time staff opened the thread (unread = customer message after this). */
+    readAt: ts('read_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -232,12 +236,21 @@ export const conversationMessages = pgTable(
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
     direction: text('direction', { enum: ['in', 'out'] }).notNull(),
-    sender: text('sender', { enum: ['customer', 'bot', 'staff'] }).notNull(),
+    /** `ai_draft`: an AI reply waiting for staff approval (never sent until approved). */
+    sender: text('sender', { enum: ['customer', 'bot', 'staff', 'ai_draft'] }).notNull(),
     text: text('text').notNull(),
     externalId: text('external_id'),
+    /** Why an outbound message was not delivered (null = delivered / inbound). */
+    error: text('error'),
     createdAt: createdAt(),
   },
-  (t) => [index('conversation_messages_conv').on(t.conversationId, t.createdAt), ...tenantPolicies()],
+  (t) => [
+    index('conversation_messages_conv').on(t.conversationId, t.createdAt),
+    uniqueIndex('conversation_messages_external')
+      .on(t.tenantId, t.externalId)
+      .where(sql`${t.externalId} is not null`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const agentMode = pgEnum('agent_mode', ['approve', 'autopilot'])
