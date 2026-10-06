@@ -125,8 +125,13 @@ export class GoogleApiError extends Error {
     super(message)
     this.name = 'GoogleApiError'
   }
+  /** The server's own OAuth client was rejected (wrong or rotated GOOGLE_CLIENT_SECRET) — not the spa's grant. */
+  get isClientConfig() {
+    return this.reason === 'invalid_client' || this.reason === 'unauthorized_client'
+  }
   /** The token is unusable (expired, revoked or invalid) — refresh or reconnect. */
   get isAuth() {
+    if (this.isClientConfig) return false
     return this.status === 401 || this.reason === 'invalid_grant' || this.reason === 'UNAUTHENTICATED'
   }
 }
@@ -134,6 +139,8 @@ export class GoogleApiError extends Error {
 /** Plain-language explanation of a Google failure for staff (never includes tokens). */
 export function describeGoogleError(e: unknown): string {
   if (e instanceof GoogleApiError) {
+    if (e.isClientConfig)
+      return "Google rejected this server's sign-in settings. The platform team needs to check the Google client ID and secret — no need to reconnect."
     if (e.isAuth)
       return 'Google sign-in expired or was revoked. Reconnect Google Business Profile in Settings.'
     if (e.status === 403 || e.status === 429)

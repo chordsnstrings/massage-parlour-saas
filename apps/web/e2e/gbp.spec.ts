@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { reviews, socialAccounts, tenants } from '@spa/db'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { app, screenshotAt, signUpOwner, testDb } from './helpers'
 
 const LOC = 'accounts/111/locations/222'
@@ -135,6 +135,18 @@ test('Google Business Profile: not-configured card, synced reviews, filters, app
   await expect(review.getByText('Failed', { exact: true })).toBeVisible()
   await expect(review.getByLabel('Reply')).toHaveValue(/we're sorry the room felt cold/)
   await expect(page.getByRole('link', { name: 'Reconnect' })).toBeVisible()
+
+  // The failed post flagged the connection itself (the card badge depends on whether Google env is configured).
+  const db = testDb()
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [acct] = await db.select().from(socialAccounts).where(eq(socialAccounts.tenantId, tenant!.id))
+  expect(acct!.status).toBe('error')
+  expect(acct!.meta.lastError).toMatch(/Reconnect Google Business Profile/)
+  const [failed] = await db
+    .select()
+    .from(reviews)
+    .where(and(eq(reviews.tenantId, tenant!.id), eq(reviews.externalId, `${LOC}/reviews/r3`)))
+  expect(failed).toMatchObject({ replyStatus: 'failed', replyError: expect.stringMatching(/Reconnect/) })
 
   await page.goto(`${app}/${slug}/settings/integrations`)
   await expect(card.getByText('Reconnect needed').or(card.getByText('Not configured yet'))).toBeVisible()

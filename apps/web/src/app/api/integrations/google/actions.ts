@@ -95,7 +95,8 @@ export async function chooseLocationAction(
     entity: 'social_account',
     data: { locationName, title: match.title },
   })
-  // First import without AI drafts: older reviews are history, new ones get drafts from the next sync.
+  // First import without AI drafts. Reviews written before this choice (meta.importedAt) are history and never get
+  // drafts or autopilot replies, even if this import fails and the next sync is the first to see them.
   const res = await syncGbpReviews({ tenantId: ctx.tenant.id })
   revalidate(slug)
   return ok(
@@ -135,7 +136,7 @@ export async function disconnectGoogleAction(slug: string): Promise<ActionResult
   return ok('Google Business Profile disconnected')
 }
 
-/** "Sync now": new reviews get AI drafts (at most 5 here; the 2-hourly job handles the rest of the rules). */
+/** "Sync now": unanswered new reviews get AI drafts (at most 5 here; the 2-hourly job drafts the rest). */
 export async function syncGoogleReviewsAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.approve')
   if (error) return fail(error)

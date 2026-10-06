@@ -13,6 +13,7 @@ import {
   GBP_PENDING_ID,
   GbpAuthError,
   gbpAccessToken,
+  gbpErrorMessage,
   googleAuthorizeUrl,
   googleConfig,
   mapGoogleReview,
@@ -35,6 +36,8 @@ const cfg = googleConfig(env)!
 const ids = {} as Record<string, string>
 const tx = <T>(fn: Parameters<typeof withTenant<T>>[1]) => withTenant(ids.tenant!, fn, app)
 const NOW = new Date('2026-10-06T08:00:00Z')
+/** When the location was chosen: reviews written before it are history (no AI drafts / autopilot). */
+const IMPORTED = new Date('2026-10-01T00:00:00Z')
 const LOC = 'accounts/111/locations/222'
 
 type Call = { url: string; method: string; headers: Headers; body: string }
@@ -76,11 +79,16 @@ async function connect(opts: { expired?: boolean; refresh?: boolean } = {}) {
     ),
   )
   await tx((db) =>
-    chooseGbpLocation(db, ids.tenant!, {
-      accountName: 'accounts/111',
-      locationName: 'locations/222',
-      title: 'Serenity Spa Marina',
-    }),
+    chooseGbpLocation(
+      db,
+      ids.tenant!,
+      {
+        accountName: 'accounts/111',
+        locationName: 'locations/222',
+        title: 'Serenity Spa Marina',
+      },
+      IMPORTED,
+    ),
   )
 }
 
@@ -247,6 +255,23 @@ describe('tokens', () => {
     expect(row!.status).toBe('error')
     expect(row!.meta.lastError).toMatch(/Reconnect/)
   })
+  it("doesn't flag the connection when the server's own client is rejected", async () => {
+    await connect({ expired: true })
+    const f = mockFetch({
+      'POST https://oauth2.googleapis.com/token': [
+        401,
+        { error: 'invalid_client', error_description: 'The OAuth client was not found.' },
+      ],
+    })
+    const err = await gbpAccessToken({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env }).catch(
+      (e: unknown) => e,
+    )
+    expect(err).not.toBeInstanceOf(GbpAuthError)
+    expect(gbpErrorMessage(err)).toMatch(/client ID and secret/)
+    const [row] = await tx((db) => db.select().from(socialAccounts))
+    expect(row!.status).toBe('connected')
+    expect(row!.meta.lastError).toBeUndefined()
+  })
   it('keeps the location (and refresh token) on reconnect', async () => {
     await connect()
     await tx((db) =>
@@ -358,6 +383,103 @@ describe('reviews sync + replies', () => {
     })
   })
 
+  it('drafts from stored rows: failed or deferred drafts retry next sync, history before the import never', async () => {
+    await tx((db) =>
+      db
+        .insert(aiAgentSettings)
+        .values({ tenantId: ids.tenant!, agentKey: 'review_agent', enabled: true, mode: 'approve' })
+        .onConflictDoUpdate({
+          target: [aiAgentSettings.tenantId, aiAgentSettings.agentKey],
+          set: { enabled: true, mode: 'approve' },
+        }),
+    )
+    const review = (id: string, createTime: string) => ({
+      name: `${LOC}/reviews/${id}`,
+      reviewer: { displayName: id },
+      starRating: 'FIVE',
+      createTime,
+    })
+    const f = mockFetch({
+      [`GET https://mybusiness.googleapis.com/v4/${LOC}/reviews`]: {
+        reviews: [
+          review('n1', '2026-10-05T10:00:00Z'),
+          review('n2', '2026-10-04T10:00:00Z'),
+          review('old', '2026-09-20T10:00:00Z'),
+        ],
+      },
+    })
+    const drafted: string[] = []
+    const draft = async (reviewId: string) => {
+      drafted.push(reviewId)
+      await tx((db) =>
+        db
+          .update(reviews)
+          .set({ replyText: 'Thanks!', replyStatus: 'draft' })
+          .where(eq(reviews.id, reviewId)),
+      )
+    }
+    const sync = (d: (id: string) => Promise<unknown>, maxDrafts?: number) =>
+      syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, draft: d, maxDrafts })
+
+    // AI unavailable: everything inserted, nothing drafted
+    const busy = await sync(async () => {
+      throw new Error('AI busy')
+    })
+    expect(busy).toMatchObject({ ok: true, created: 3, drafted: 0 })
+    // AI back, one per run: newest first, then the next one
+    expect(await sync(draft, 1)).toMatchObject({ created: 0, drafted: 1 })
+    expect(await sync(draft, 1)).toMatchObject({ created: 0, drafted: 1 })
+    expect(await sync(draft)).toMatchObject({ drafted: 0 })
+    const rows = await tx((db) => db.select().from(reviews))
+    const by = Object.fromEntries(rows.map((r) => [r.externalId.split('/').pop(), r]))
+    expect(drafted).toEqual([by.n1!.id, by.n2!.id])
+    expect(by.old).toMatchObject({ replyStatus: 'none', replyText: null })
+  })
+
+  it("keeps a reply approved here (or whose post failed) over Google's older one", async () => {
+    await tx((db) =>
+      db.insert(reviews).values([
+        {
+          tenantId: ids.tenant!,
+          externalId: `${LOC}/reviews/edited`,
+          rating: 5,
+          replyText: 'Updated thanks',
+          replyStatus: 'failed',
+          replyError: 'Google refused the request (403)',
+        },
+        {
+          tenantId: ids.tenant!,
+          externalId: `${LOC}/reviews/drafted`,
+          rating: 5,
+          replyText: 'AI draft',
+          replyStatus: 'draft',
+        },
+      ]),
+    )
+    const reply = { comment: 'Old thanks', updateTime: '2026-10-02T10:00:00Z' }
+    const f = mockFetch({
+      [`GET https://mybusiness.googleapis.com/v4/${LOC}/reviews`]: {
+        reviews: ['edited', 'drafted'].map((id) => ({
+          name: `${LOC}/reviews/${id}`,
+          starRating: 'FIVE',
+          createTime: '2026-10-01T10:00:00Z',
+          reviewReply: reply,
+        })),
+      },
+    })
+    expect(
+      await syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env }),
+    ).toMatchObject({
+      ok: true,
+    })
+    const rows = await tx((db) => db.select().from(reviews))
+    const by = Object.fromEntries(rows.map((r) => [r.externalId.split('/').pop(), r]))
+    expect(by.edited).toMatchObject({ replyText: 'Updated thanks', replyStatus: 'failed' })
+    expect(by.edited!.replyError).toMatch(/403/)
+    // a draft loses to a reply written on Google directly
+    expect(by.drafted).toMatchObject({ replyText: 'Old thanks', replyStatus: 'posted' })
+  })
+
   it('posts an approved reply, and marks a rejected one failed with the reason', async () => {
     const [r] = await tx((db) =>
       db
@@ -463,6 +585,30 @@ describe('reviews sync + replies', () => {
     expect(
       (await postGbpReply({ tenantId: ids.tenant!, db: app, now: NOW, env, reviewId: manual!.id })).ok,
     ).toBe(false)
+    const [elsewhere] = await tx((db) =>
+      db
+        .insert(reviews)
+        .values({
+          tenantId: ids.tenant!,
+          externalId: 'accounts/111/locations/999/reviews/q',
+          rating: 5,
+          replyText: 'Thanks',
+          replyStatus: 'approved',
+        })
+        .returning(),
+    )
+    const none = mockFetch({})
+    expect(
+      await postGbpReply({
+        tenantId: ids.tenant!,
+        db: app,
+        fetch: none.fn,
+        now: NOW,
+        env,
+        reviewId: elsewhere!.id,
+      }),
+    ).toEqual({ ok: false, error: expect.stringMatching(/no longer connected/) })
+    expect(none.calls).toHaveLength(0)
 
     await tx((db) => db.update(socialAccounts).set({ tokenEnc: 'fake-token', refreshTokenEnc: null }))
     const [r] = await tx((db) =>

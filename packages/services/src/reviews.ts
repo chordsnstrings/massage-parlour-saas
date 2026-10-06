@@ -1,8 +1,17 @@
 // Google reviews: sync from Business Profile (upsert by review name), AI drafts for new reviews, autopilot for 4–5★,
 // posting approved replies, and summary stats. 1–3★ replies always wait for a person.
 import { aiAgentSettings, reviews, type Tx, withTenant } from '@spa/db'
-import { and, eq, inArray, sql } from 'drizzle-orm'
-import { type GbpOpts, gbpErrorMessage, gbpParent, setGbpSyncState, withGbpToken } from './gbp'
+import { and, desc, eq, gte, inArray, isNull, like, sql } from 'drizzle-orm'
+import {
+  GBP_PENDING_ID,
+  type GbpAccountRow,
+  type GbpOpts,
+  gbpErrorMessage,
+  gbpParent,
+  getGbpAccount,
+  setGbpSyncState,
+  withGbpToken,
+} from './gbp'
 import { listGbpReviews, type MappedReview, mapGoogleReview, putGbpReply } from './integrations/google'
 
 /** Lowest rating autopilot may answer on its own. */
@@ -18,11 +27,35 @@ export const isGoogleReviewName = (externalId: string) =>
   /^accounts\/[\w-]+\/locations\/[\w-]+\/reviews\/[\w-]+$/.test(externalId)
 
 /**
+ * True for a review of the connected location (`accounts/{a}/locations/{l}`). Reviews of a previously connected
+ * location are history: their replies can't go through the API any more.
+ */
+export const isLocationReview = (externalId: string, parent: string | null | undefined) =>
+  Boolean(parent) && externalId.startsWith(`${parent}/reviews/`) && isGoogleReviewName(externalId)
+
+/** The connected location's parent, or null while none is chosen. */
+const locationParent = (row: GbpAccountRow | null) => {
+  const m = row?.meta
+  return row && row.externalId !== GBP_PENDING_ID && m?.accountName && m.locationName
+    ? `${m.accountName}/${m.locationName}`
+    : null
+}
+
+/** Reviews written on Google before the location was chosen are history: no AI drafts, no autopilot. */
+const draftCutoff = (row: GbpAccountRow) => {
+  const t = Date.parse(row.meta?.importedAt ?? '')
+  return Number.isNaN(t) ? row.createdAt : new Date(t)
+}
+
+const likePrefix = (s: string) => `${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+
+/**
  * Inserts new Google reviews and refreshes changed ones. A reply found on Google marks the review `posted` (a missing
- * one never downgrades ours: the list can lag right after a reply is posted). Returns the new reviews still waiting for a reply.
+ * one never downgrades ours: the list can lag right after a reply is posted), except over a different reply a person
+ * approved here or whose post failed — that one is still to be posted. `created` counts new reviews without a reply.
  */
 export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: MappedReview[]) {
-  const created: { id: string; rating: number; reviewedAt: Date | null }[] = []
+  let created = 0
   let updated = 0
   if (!items.length) return { created, updated }
   const existing = await tx
@@ -58,14 +91,8 @@ export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: Mappe
         })),
       )
       .onConflictDoNothing()
-      .returning({
-        id: reviews.id,
-        rating: reviews.rating,
-        reviewedAt: reviews.reviewedAt,
-        replyText: reviews.replyText,
-      })
-    for (const r of rows)
-      if (!r.replyText) created.push({ id: r.id, rating: r.rating, reviewedAt: r.reviewedAt })
+      .returning({ replyText: reviews.replyText })
+    created += rows.filter((r) => !r.replyText).length
   }
   for (const r of items) {
     const ex = byExt.get(r.externalId)
@@ -75,7 +102,11 @@ export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: Mappe
     if (ex.rating !== r.rating) set.rating = r.rating
     if (ex.text !== r.text) set.text = r.text
     if (r.reviewedAt && ex.reviewedAt?.getTime() !== r.reviewedAt.getTime()) set.reviewedAt = r.reviewedAt
-    if (r.replyText) {
+    const pendingHere =
+      (ex.replyStatus === 'approved' || ex.replyStatus === 'failed') &&
+      Boolean(ex.replyText) &&
+      ex.replyText !== r.replyText
+    if (r.replyText && !pendingHere) {
       if (ex.replyStatus !== 'posted' || ex.replyText !== r.replyText)
         Object.assign(set, {
           replyText: r.replyText,
@@ -106,19 +137,26 @@ export type SyncResult =
 
 /**
  * Pulls every review of the connected location, upserts them and — when the review agent is on — drafts replies for
- * new ones (newest first, `maxDrafts` per run). Autopilot then posts 4–5★ replies; lower ratings wait for approval.
- * `draft` is the AI drafting function (the worker passes `draftReviewReply` from @spa/ai).
+ * unanswered ones written since the location was chosen (newest first, `maxDrafts` per run). The queue comes from the
+ * stored rows, so reviews whose draft failed or didn't fit this run are picked up by the next one. Autopilot then posts
+ * 4–5★ replies; lower ratings wait for approval. `draft` is the AI drafting function (the worker passes
+ * `draftReviewReply` from @spa/ai).
  */
 export async function syncGbpReviews(
   opts: GbpOpts & { draft?: (reviewId: string) => Promise<unknown>; maxDrafts?: number },
 ): Promise<SyncResult> {
   const now = opts.now ?? new Date()
   let mapped: MappedReview[]
+  let parent: string
+  let cutoff: Date
   try {
-    const list = await withGbpToken(opts, (token, account) =>
-      listGbpReviews(token, gbpParent(account), opts.fetch),
-    )
-    mapped = list.reviews.map(mapGoogleReview).filter((r): r is MappedReview => r !== null)
+    const res = await withGbpToken(opts, async (token, account) => ({
+      parent: gbpParent(account),
+      cutoff: draftCutoff(account),
+      list: await listGbpReviews(token, gbpParent(account), opts.fetch),
+    }))
+    ;({ parent, cutoff } = res)
+    mapped = res.list.reviews.map(mapGoogleReview).filter((r): r is MappedReview => r !== null)
   } catch (e) {
     const error = gbpErrorMessage(e)
     await setGbpSyncState(opts, { lastError: error }).catch(() => {})
@@ -146,9 +184,26 @@ export async function syncGbpReviews(
     opts.db,
   )
   if (opts.draft && agent?.enabled) {
-    const queue = [...created]
-      .sort((a, b) => (b.reviewedAt?.getTime() ?? 0) - (a.reviewedAt?.getTime() ?? 0))
-      .slice(0, opts.maxDrafts ?? 10)
+    const queue = await withTenant(
+      opts.tenantId,
+      (tx) =>
+        tx
+          .select({ id: reviews.id, rating: reviews.rating })
+          .from(reviews)
+          .where(
+            and(
+              eq(reviews.tenantId, opts.tenantId),
+              eq(reviews.source, 'google'),
+              like(reviews.externalId, likePrefix(`${parent}/reviews/`)),
+              eq(reviews.replyStatus, 'none'),
+              isNull(reviews.replyText),
+              gte(reviews.reviewedAt, cutoff),
+            ),
+          )
+          .orderBy(desc(reviews.reviewedAt))
+          .limit(opts.maxDrafts ?? 10),
+      opts.db,
+    )
     for (const r of queue) {
       try {
         await opts.draft(r.id)
@@ -171,7 +226,7 @@ export async function syncGbpReviews(
       else failed++
     }
   }
-  return { ok: true, fetched: mapped.length, created: created.length, updated, drafted, posted, failed }
+  return { ok: true, fetched: mapped.length, created, updated, drafted, posted, failed }
 }
 
 /** Posts an approved (or previously failed) reply to Google; the review ends `posted` or `failed` with the reason. */
@@ -179,18 +234,25 @@ export async function postGbpReply(
   opts: GbpOpts & { reviewId: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const now = opts.now ?? new Date()
-  const [review] = await withTenant(
+  const { review, parent } = await withTenant(
     opts.tenantId,
-    (tx) =>
-      tx
+    async (tx) => {
+      const [review] = await tx
         .select()
         .from(reviews)
-        .where(and(eq(reviews.tenantId, opts.tenantId), eq(reviews.id, opts.reviewId))),
+        .where(and(eq(reviews.tenantId, opts.tenantId), eq(reviews.id, opts.reviewId)))
+      return { review, parent: locationParent(await getGbpAccount(tx, opts.tenantId)) }
+    },
     opts.db,
   )
   if (!review) return { ok: false, error: 'Review not found.' }
   if (review.source !== 'google' || !isGoogleReviewName(review.externalId))
     return { ok: false, error: 'This review was added by hand — copy the reply into Google instead.' }
+  if (parent && !isLocationReview(review.externalId, parent))
+    return {
+      ok: false,
+      error: 'This review belongs to a Google location that is no longer connected — reply to it on Google.',
+    }
   const reply = review.replyText?.trim()
   if (!reply) return { ok: false, error: 'Write a reply first.' }
   if (review.replyStatus !== 'approved' && review.replyStatus !== 'failed')
