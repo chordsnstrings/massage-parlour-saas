@@ -160,9 +160,14 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
 
   await test.step('custom CSS on a section is scoped on the public page', async () => {
     // Select the heading, then its parent Section via the block action bar.
-    await canvas.getByRole('heading', { name: 'About our spa' }).click()
-    await canvas.getByRole('button', { name: 'Select parent' }).click()
-    await expect(page.getByRole('heading', { name: 'Section', exact: true })).toBeVisible()
+    // The canvas re-renders after publishing, which can detach the action bar mid-click: retry until selected.
+    await expect(async () => {
+      await canvas.getByRole('heading', { name: 'About our spa' }).click()
+      await canvas.getByRole('button', { name: 'Select parent' }).click({ timeout: 5_000 })
+      await expect(page.getByRole('heading', { name: 'Section', exact: true })).toBeVisible({
+        timeout: 2_000,
+      })
+    }).toPass({ timeout: 45_000 })
     const css = page.locator('textarea[placeholder^=":scope"]:visible')
     await expect(css).toBeVisible()
     // Schedule: an end before the start is shown, not saved; a date-only end covers that whole day.
