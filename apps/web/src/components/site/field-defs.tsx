@@ -1,4 +1,5 @@
 import type { CustomFieldRender, Field } from '@puckeditor/core'
+import { ImageFieldControl } from '@/components/media/image-field'
 import { BilingualField, ResponsiveField } from './fields'
 import type { Align, PadStep, Visibility } from './style'
 import type { Bi, Responsive } from './types'
@@ -82,8 +83,9 @@ export const radio = <T extends string | boolean>(label: string, options: [T, st
 
 export const text = (label: string, placeholder?: string): Field => ({ type: 'text', label, placeholder })
 
-/** Image field (URL today; the media module swaps in a library picker without touching the blocks). */
-export const imageField = (label = 'Image'): Field => text(label, 'https://…')
+/** Image field: preview + "Choose from library" (search, inline upload) + paste-URL fallback. Value is the URL. */
+export const imageField = (label = 'Image'): Field =>
+  custom<string>(label, (props) => <ImageFieldControl {...props} />)
 
 export const buttonsField = (): Field => ({
   type: 'array',

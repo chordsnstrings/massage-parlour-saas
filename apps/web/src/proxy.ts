@@ -40,8 +40,9 @@ export function proxy(req: NextRequest) {
   return NextResponse.rewrite(url, { request: { headers } })
 }
 
+// /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten.
 export const config = {
   matcher: [
-    '/((?!api/|_next/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
+    '/((?!api/|_next/|files/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
   ],
 }

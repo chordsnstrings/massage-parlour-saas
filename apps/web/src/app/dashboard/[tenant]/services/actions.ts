@@ -3,6 +3,7 @@ import { branches, rooms, serviceCategories, services, serviceVariants, withTena
 import { and, count, eq, inArray, notInArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { IMAGE_URL_PATTERN } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -126,6 +127,13 @@ const serviceSchema = z
     nameAr: optText(80),
     descriptionEn: optText(600),
     descriptionAr: optText(600),
+    imageUrl: z
+      .string()
+      .trim()
+      .max(500)
+      .regex(IMAGE_URL_PATTERN, 'Choose an image from the library')
+      .optional()
+      .or(z.literal('').transform(() => undefined)),
     bufferBeforeMin: z.coerce.number().int().min(0, 'Min 0').max(120, 'Max 120'),
     bufferAfterMin: z.coerce.number().int().min(0, 'Min 0').max(120, 'Max 120'),
     therapistsRequired: z.coerce.number().int().min(1).max(2),
@@ -176,6 +184,8 @@ export async function saveServiceAction(
     onlineBookable: d.onlineBookable,
     active: d.active,
     color: d.color,
+    // Only forms that post the field change the photo.
+    ...(formData.has('imageUrl') ? { imageUrl: d.imageUrl ?? null } : {}),
   }
   const id = await withTenant(ctx.tenant.id, async (tx) => {
     let serviceId = d.id
