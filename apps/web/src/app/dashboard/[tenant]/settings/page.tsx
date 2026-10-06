@@ -1,6 +1,14 @@
 import { branches, withTenant } from '@spa/db'
 import { eq } from 'drizzle-orm'
-import { ChevronRight, Clock } from 'lucide-react'
+import {
+  ChevronRight,
+  ClipboardSignature,
+  Clock,
+  FileSpreadsheet,
+  Globe,
+  MessageCircle,
+  Plug,
+} from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -83,21 +91,61 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
             <SubmitButton size="lg">Save changes</SubmitButton>
           </div>
         </ActionForm>
-        <Link
-          href={appPath(`/${t.slug}/settings/hours`)}
-          className="group flex items-center gap-4 rounded-xl border bg-surface px-5 py-5 transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-fg/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-6"
-        >
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
-            <Clock className="size-4" strokeWidth={1.5} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold tracking-tight">Opening hours</span>
-            <span className="block text-sm text-muted">
-              Per weekday and branch, including split shifts and late-night closing.
-            </span>
-          </span>
-          <ChevronRight className="size-4 text-muted transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            {
+              path: 'settings/hours',
+              icon: Clock,
+              title: 'Opening hours',
+              text: 'Per weekday and branch, including split shifts and late-night closing.',
+            },
+            {
+              path: 'settings/intake',
+              icon: ClipboardSignature,
+              title: 'Intake & waiver',
+              text: 'Health questions and the waiver clients sign before a treatment.',
+            },
+            {
+              path: 'messages/templates',
+              icon: MessageCircle,
+              title: 'WhatsApp templates',
+              text: 'Confirmation, reminder and thank-you messages in English and Arabic.',
+            },
+            {
+              path: 'settings/domains',
+              icon: Globe,
+              title: 'Custom domain',
+              text: 'Use your own web address for your site, with free SSL.',
+            },
+            {
+              path: 'settings/integrations',
+              icon: Plug,
+              title: 'Instagram & Google',
+              text: 'Connect your Instagram and Google Business Profile for the AI agents.',
+            },
+            {
+              path: 'settings/data',
+              icon: FileSpreadsheet,
+              title: 'Import & export',
+              text: 'Bring clients and your menu from spreadsheets; export everything anytime.',
+            },
+          ].map((l) => (
+            <Link
+              key={l.path}
+              href={appPath(`/${t.slug}/${l.path}`)}
+              className="group flex items-center gap-4 rounded-xl border bg-surface px-5 py-5 transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-fg/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-6"
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+                <l.icon className="size-4" strokeWidth={1.5} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold tracking-tight">{l.title}</span>
+                <span className="block text-sm text-muted">{l.text}</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          ))}
+        </div>
       </PageBody>
     </>
   )

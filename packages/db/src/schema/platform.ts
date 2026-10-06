@@ -147,6 +147,12 @@ export const domains = pgTable(
     status: domainStatus('status').notNull().default('pending'),
     isPrimary: boolean('is_primary').notNull().default(false),
     cfHostnameId: text('cf_hostname_id'),
+    /** TXT record value the owner adds at _spamanagement.<hostname> to prove control. */
+    verificationToken: text('verification_token'),
+    /** Cloudflare for SaaS SSL / hostname status, mirrored for the UI. */
+    sslStatus: text('ssl_status'),
+    lastError: text('last_error'),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),
     createdAt: createdAt(),
   },

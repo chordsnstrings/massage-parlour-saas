@@ -8,13 +8,18 @@ import {
   ChartColumn,
   Contact,
   Ellipsis,
+  FileBadge,
   Gift,
   Globe,
   HandHeart,
   House,
+  Images,
   Landmark,
   Layers,
+  LayoutTemplate,
+  Megaphone,
   MessageCircle,
+  MessagesSquare,
   ReceiptText,
   ScrollText,
   Settings2,
@@ -28,7 +33,7 @@ import {
 import { motion } from 'motion/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { Sheet } from '../ui/sheet'
@@ -57,9 +62,21 @@ const icons = {
   packages: Gift,
   payroll: BadgeDollarSign,
   inventory: Boxes,
+  inbox: MessagesSquare,
+  campaigns: Megaphone,
+  media: Images,
+  documents: FileBadge,
+  templates: LayoutTemplate,
 } as const
 
-export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }
+export type NavItem = {
+  href: string
+  label: string
+  icon: keyof typeof icons
+  exact?: boolean
+  /** Section heading shown above the first item of each group. */
+  group?: string
+}
 
 function useActive() {
   const pathname = usePathname()
@@ -74,29 +91,39 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
   const isActive = useActive()
   return (
     <nav className="flex flex-col gap-0.5">
-      {items.map((item) => {
+      {items.map((item, i) => {
         const Icon = icons[item.icon]
         const active = isActive(item)
+        const heading = item.group && item.group !== items[i - 1]?.group ? item.group : null
         return (
-          <Link
-            key={item.href}
-            href={item.href}
-            title={item.label}
-            className={cn(
-              'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
-              active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
+          <Fragment key={item.href}>
+            {heading && (
+              <p className="mt-4 mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/80 first:mt-0 md:hidden lg:block">
+                {heading}
+              </p>
             )}
-          >
-            {active && (
-              <motion.span
-                layoutId="sidebar-active"
-                transition={spring}
-                className="absolute inset-0 rounded-lg bg-subtle"
-              />
+            {heading && i > 0 && (
+              <span className="mx-3 my-2 hidden border-t md:block lg:hidden" aria-hidden />
             )}
-            <Icon className="relative size-[18px] shrink-0" strokeWidth={1.5} />
-            <span className="relative md:hidden lg:inline">{item.label}</span>
-          </Link>
+            <Link
+              href={item.href}
+              title={item.label}
+              className={cn(
+                'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
+                active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="sidebar-active"
+                  transition={spring}
+                  className="absolute inset-0 rounded-lg bg-subtle"
+                />
+              )}
+              <Icon className="relative size-[18px] shrink-0" strokeWidth={1.5} />
+              <span className="relative md:hidden lg:inline">{item.label}</span>
+            </Link>
+          </Fragment>
         )
       })}
     </nav>
@@ -149,21 +176,28 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
             }
           >
             <div className="grid gap-1">
-              {more.map((item) => {
+              {more.map((item, i) => {
                 const Icon = icons[item.icon]
+                const heading = item.group && item.group !== more[i - 1]?.group ? item.group : null
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      'flex h-12 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-subtle',
-                      isActive(item) && 'bg-subtle',
+                  <Fragment key={item.href}>
+                    {heading && (
+                      <p className="mt-3 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted first:mt-0">
+                        {heading}
+                      </p>
                     )}
-                  >
-                    <Icon className="size-5 text-muted" strokeWidth={1.5} />
-                    {item.label}
-                  </Link>
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        'flex h-12 items-center gap-3 rounded-lg px-3 text-[15px] hover:bg-subtle',
+                        isActive(item) && 'bg-subtle',
+                      )}
+                    >
+                      <Icon className="size-5 text-muted" strokeWidth={1.5} />
+                      {item.label}
+                    </Link>
+                  </Fragment>
                 )
               })}
             </div>

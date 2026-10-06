@@ -57,6 +57,13 @@
       "when": 1791275611244,
       "tag": "0007_tenant_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791278576149,
+      "tag": "0008_integrations_media_templates",
+      "breakpoints": true
     }
   ]
 }

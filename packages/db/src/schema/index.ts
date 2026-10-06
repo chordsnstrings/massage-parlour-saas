@@ -1,5 +1,6 @@
 export * from './auth'
 export * from './commerce'
+export * from './files'
 export * from './finance'
 export * from './growth'
 export * from './inventory'

@@ -82,3 +82,28 @@ export const pushSubscriptions = pgTable(
   },
   () => platformPolicies(),
 )
+
+/**
+ * Template studio (super-admin): full-site templates authored in the editor and stored as JSON, so new
+ * templates ship without a deploy. Built-in templates live in code; rows here add to or override them by key.
+ */
+export const siteTemplates = pgTable(
+  'site_templates',
+  {
+    id: id(),
+    key: text('key').notNull().unique(),
+    name: text('name').notNull(),
+    description: text('description'),
+    /** Theme tokens (same shape as sites.theme). */
+    theme: jsonb('theme').$type<Record<string, unknown>>().notNull(),
+    /** [{ slug, title: {en, ar}, data: PuckData }] */
+    pages: jsonb('pages').$type<Record<string, unknown>[]>().notNull(),
+    previewImageUrl: text('preview_image_url'),
+    active: boolean('active').notNull().default(true),
+    sort: integer('sort').notNull().default(0),
+    createdBy: text('created_by').references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  () => platformPolicies(),
+)

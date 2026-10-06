@@ -16,25 +16,38 @@ export default async function TenantLayout({
   const base = appPath(`/${ctx.tenant.slug}`)
   const item = (perm: Permission | null, path: string, label: string, icon: NavItem['icon']): NavItem[] =>
     perm === null || can(ctx, perm) ? [{ href: `${base}${path}`, label, icon }] : []
+  const g = (group: string, items: NavItem[]) => items.map((i) => ({ ...i, group }))
   const nav: NavItem[] = [
     { href: base, label: 'Home', icon: 'home', exact: true },
-    ...item('calendar.view', '/calendar', 'Calendar', 'calendar'),
-    ...item('clients.view', '/clients', 'Clients', 'clients'),
-    ...item('pos.use', '/sales', 'Sales', 'sales'),
-    ...item('marketing.send', '/messages', 'WhatsApp', 'messages'),
-    ...item('services.manage', '/services', 'Services & rooms', 'services'),
-    ...item('services.manage', '/packages', 'Packages & gifts', 'packages'),
-    ...item('inventory.manage', '/inventory', 'Inventory', 'inventory'),
-    ...item('staff.view', '/staff', 'Staff', 'staff'),
-    ...item('staff.manage', '/payroll', 'Payroll', 'payroll'),
-    ...item('site.content', '/website', 'Website', 'website'),
-    ...item('accounting.view', '/accounts', 'Accounts', 'accounts'),
-    ...item('reports.view', '/analytics', 'Analytics', 'analytics'),
-    ...item('ai.approve', '/ai', 'AI studio', 'ai'),
-    ...item('team.manage', '/team', 'Team', 'team'),
-    ...item('settings.manage', '/settings', 'Settings', 'settings'),
-    ...item('billing.view', '/billing', 'Subscription', 'billing'),
-    { href: appPath('/account'), label: 'Account', icon: 'account' },
+    ...g('Front desk', [
+      ...item('calendar.view', '/calendar', 'Calendar', 'calendar'),
+      ...item('clients.view', '/clients', 'Clients', 'clients'),
+      ...item('pos.use', '/sales', 'Sales', 'sales'),
+      ...item('marketing.send', '/messages', 'WhatsApp', 'messages'),
+      ...item('marketing.send', '/inbox', 'Inbox', 'inbox'),
+    ]),
+    ...g('Business', [
+      ...item('services.manage', '/services', 'Services & rooms', 'services'),
+      ...item('services.manage', '/packages', 'Packages & gifts', 'packages'),
+      ...item('inventory.manage', '/inventory', 'Inventory', 'inventory'),
+      ...item('staff.view', '/staff', 'Staff', 'staff'),
+      ...item('staff.manage', '/payroll', 'Payroll', 'payroll'),
+      ...item('staff.manage', '/documents', 'Documents', 'documents'),
+      ...item('accounting.view', '/accounts', 'Accounts', 'accounts'),
+    ]),
+    ...g('Growth', [
+      ...item('site.content', '/website', 'Website', 'website'),
+      ...item('site.content', '/media', 'Media', 'media'),
+      ...item('marketing.campaigns', '/campaigns', 'Campaigns', 'campaigns'),
+      ...item('reports.view', '/analytics', 'Analytics', 'analytics'),
+      ...item('ai.approve', '/ai', 'AI studio', 'ai'),
+    ]),
+    ...g('Admin', [
+      ...item('team.manage', '/team', 'Team', 'team'),
+      ...item('settings.manage', '/settings', 'Settings', 'settings'),
+      ...item('billing.view', '/billing', 'Subscription', 'billing'),
+      { href: appPath('/account'), label: 'Account', icon: 'account' },
+    ]),
   ]
   const banner = ctx.impersonating ? (
     <Banner tone="accent">Viewing as super-admin — every change is recorded in the audit log.</Banner>

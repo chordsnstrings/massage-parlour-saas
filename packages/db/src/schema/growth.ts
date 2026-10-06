@@ -18,6 +18,7 @@ import {
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
+import { storedFiles } from './files'
 import { bookings, clients } from './operations'
 import { tenants } from './platform'
 
@@ -159,6 +160,10 @@ export const socialAccounts = pgTable(
     /** AES-GCM encrypted access token. */
     tokenEnc: text('token_enc'),
     tokenExpiresAt: ts('token_expires_at'),
+    /** AES-GCM encrypted refresh token (Google). */
+    refreshTokenEnc: text('refresh_token_enc'),
+    /** Provider ids, e.g. { pageId, igUserId } or { accountName, locationName, locationTitle }. */
+    meta: jsonb('meta').$type<Record<string, string>>().notNull().default({}),
     scopes: text('scopes').array().notNull().default([]),
     status: text('status').notNull().default('connected'),
     createdAt: createdAt(),
@@ -297,6 +302,9 @@ export const mediaAssets = pgTable(
     id: id(),
     tenantId: tenantId(),
     url: text('url').notNull(),
+    /** Stored file behind this asset (uploads and persisted AI images). */
+    fileId: uuid('file_id').references(() => storedFiles.id, { onDelete: 'set null' }),
+    bytes: integer('bytes'),
     kind: text('kind').notNull().default('image'),
     width: integer('width'),
     height: integer('height'),

@@ -17,6 +17,8 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         { href: adminPath('/plans'), label: 'Plans & prices', icon: 'plans' },
         { href: adminPath('/settings'), label: 'Company', icon: 'company' },
         { href: adminPath('/ai'), label: 'AI models', icon: 'ai' },
+        { href: adminPath('/domains'), label: 'Domains', icon: 'website' },
+        { href: adminPath('/templates'), label: 'Site templates', icon: 'templates' },
         { href: adminPath('/audit'), label: 'Audit log', icon: 'audit' },
       ]}
     >
