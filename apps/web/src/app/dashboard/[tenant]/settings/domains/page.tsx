@@ -40,7 +40,7 @@ const STATUS = {
     label: 'Active',
     tone: 'success',
     dot: 'bg-success',
-    text: 'Connected — your website and online booking answer on this address with free SSL.',
+    text: 'Connected — your website and online booking answer on this address.',
   },
   failed: {
     label: 'Failed',
@@ -144,7 +144,10 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
                     [
                       ['pending', 'You add your domain and two DNS records.'],
                       ['verifying', 'We confirm you own it and that it points to us.'],
-                      ['active', 'Your site goes live on it with free SSL and becomes your primary address.'],
+                      [
+                        'active',
+                        `Your site goes live on it${sslAuto ? ' with free SSL' : ''} and it becomes your primary address.`,
+                      ],
                     ] as const
                   ).map(([key, text]) => (
                     <li key={key} className="flex items-start gap-3 text-sm">
@@ -164,10 +167,26 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
   )
 }
 
+const DAY_MS = 86_400_000
+
+/** When the worker looks at this domain next (see isDomainCheckDue): matches its schedule, or says nothing. */
+function autoCheckNote(d: DomainRow, now: number): string {
+  if (d.status === 'active') return ' · re-checked daily'
+  if (d.status === 'failed') return ''
+  const age = now - d.createdAt.getTime()
+  if (age < DAY_MS) return ' · we also check automatically every 10 minutes'
+  if (d.verifiedAt || age < 7 * DAY_MS) return ' · we also check automatically every hour'
+  return ''
+}
+
 function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow; sslAuto: boolean }) {
   const s = STATUS[domain.status]
   const waiting = domain.status === 'pending' || domain.status === 'verifying'
   const records = dnsRecordsFor(domain)
+  const text =
+    domain.status === 'active' && sslAuto
+      ? 'Connected — your website and online booking answer on this address with free SSL.'
+      : s.text
   return (
     <Card>
       <CardHeader
@@ -193,11 +212,10 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
             <span className={cn('relative inline-flex size-2.5 rounded-full', s.dot)} />
           </span>
           <div className="min-w-0 space-y-1">
-            <p className="text-[15px]">{s.text}</p>
+            <p className="text-[15px]">{text}</p>
             <p className="text-[13px] text-muted">
               {domain.checkedAt ? `Last checked ${formatDateTime(domain.checkedAt)}` : 'Not checked yet'}
-              {waiting ? ' · we also check automatically every 10 minutes' : ''}
-              {domain.status === 'active' ? ' · re-checked daily' : ''}
+              {autoCheckNote(domain, Date.now())}
             </p>
             {sslAuto && domain.sslStatus && (
               <p className="text-[13px] text-muted">
@@ -219,12 +237,14 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
             {domain.lastError}
           </div>
         )}
+        {domain.status === 'active' && !sslAuto && <SslNote />}
         <DomainActions
           slug={slug}
           id={domain.id}
           hostname={domain.hostname}
           status={domain.status}
           isPrimary={domain.isPrimary}
+          secure={sslAuto}
         />
       </CardBody>
       <div className="border-t">
@@ -272,7 +292,7 @@ function DnsInstructions({
           <RecordsTable records={records} />
           <p className="mt-3">
             Most providers add <span dir="ltr">{pair.apex}</span> for you, so enter the short name shown.
-            Leave TTL on its default.
+            Leave TTL on its default. DNS on Cloudflare? Set the CNAME to “DNS only” (grey cloud).
           </p>
         </Step>
         <Step n={3} title="Press Check now">
@@ -299,13 +319,17 @@ function DnsInstructions({
           )}
         </Note>
       )}
-      {!sslAuto && (
-        <Note title="Automatic SSL is not switched on yet">
-          We can verify your domain now; HTTPS certificates for custom domains start as soon as our team
-          enables them for your account.
-        </Note>
-      )}
+      {!sslAuto && <SslNote />}
     </CardBody>
+  )
+}
+
+function SslNote() {
+  return (
+    <Note title="Automatic SSL is not switched on yet">
+      We can verify and connect your domain now; HTTPS certificates for custom domains start as soon as our
+      team enables them for your account.
+    </Note>
   )
 }
 

@@ -3,14 +3,17 @@
 //   verifying → ownership proven; waiting for the CNAME (→ CF_CNAME_TARGET, or the APP_URL host without
 //               Cloudflare) and, when Cloudflare for SaaS is configured, for its hostname + certificate
 //   active    → served by resolveSiteTenant(); the first activation makes it the primary address
-//   failed    → Cloudflare gave up, the DNS moved away from us, automatic checks gave up after 7 days,
-//               or support deactivated it. "Check now" re-runs the checks from any state.
+//   failed    → Cloudflare gave up, the DNS moved away from us, automatic checks gave up after 7 days on a
+//               domain that never connected, or support deactivated it. "Check now" re-runs the checks from
+//               any state (and asks Cloudflare to retry a hostname it gave up on).
+// Ownership, once proven (verified_at), is kept. A claim that never connected within the give-up time — or one
+// left by a cancelled spa — is released when another spa adds the same hostname (support can also remove it).
 import { randomBytes } from 'node:crypto'
 import { Resolver } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { domainToASCII } from 'node:url'
-import { type Db, type DbOrTx, domains, withTenant } from '@spa/db'
-import { and, eq, ne } from 'drizzle-orm'
+import { type Db, type DbOrTx, domains, platformDb, tenants, withTenant } from '@spa/db'
+import { and, eq, ne, sql } from 'drizzle-orm'
 import { DomainError, pgCode } from './errors'
 import {
   type CfConfig,
@@ -19,6 +22,7 @@ import {
   cfCreateHostname,
   cfDeleteHostname,
   cfGetHostname,
+  cfRetryHostname,
   cloudflareConfig,
 } from './integrations/cloudflare'
 
@@ -35,8 +39,10 @@ export const tenantDomainRun =
 
 export const TXT_LABEL = '_spamanagement'
 export const MAX_CUSTOM_DOMAINS = 1
-/** Automatic checks stop (status → failed) when a domain hasn't connected within this time. */
+/** Automatic checks stop (status → failed) when a never-verified domain hasn't connected within this time. */
 export const GIVE_UP_AFTER_MS = 7 * 86_400_000
+/** Manual "Check now" presses closer together than this are refused (DNS + the shared Cloudflare quota). */
+export const MANUAL_CHECK_COOLDOWN_MS = 30_000
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -245,7 +251,8 @@ export type DomainPatch = Partial<
 
 /**
  * Runs the DNS (+ Cloudflare) checks for one domain and returns the new state. No database access.
- * `automatic` checks (the worker) give up after GIVE_UP_AFTER_MS; manual ones never do.
+ * `automatic` checks (the worker) give up on a never-verified domain after GIVE_UP_AFTER_MS; manual ones
+ * never give up and ask Cloudflare to retry a hostname it gave up on.
  */
 export async function evaluateDomain(
   row: DomainRow,
@@ -254,7 +261,8 @@ export async function evaluateDomain(
 ): Promise<DomainPatch> {
   const now = deps.now()
   const wasActive = row.status === 'active'
-  const stale = opts.automatic && now.getTime() - row.createdAt.getTime() > GIVE_UP_AFTER_MS
+  const stale =
+    opts.automatic && !row.verifiedAt && now.getTime() - row.createdAt.getTime() > GIVE_UP_AFTER_MS
   const notYet = (status: 'pending' | 'verifying', message: string): DomainPatch =>
     stale
       ? {
@@ -263,14 +271,14 @@ export async function evaluateDomain(
         }
       : { status, lastError: message }
 
-  // 1. Ownership — required until the first activation; an active domain keeps its proof.
-  if (!wasActive) {
+  // 1. Ownership — required until the first activation; a verified domain keeps its proof.
+  if (!wasActive && !row.verifiedAt) {
     const own = await checkOwnership(deps.dns, row.hostname, row.verificationToken)
     if (own.state !== 'ok') return { checkedAt: now, ...notYet('pending', own.message) }
   }
 
   // 2. Routing — the hostname must reach us.
-  const routing = await checkRouting(deps.dns, row.hostname, cnameTarget(deps.env))
+  let routing = await checkRouting(deps.dns, row.hostname, cnameTarget(deps.env))
 
   // 3. Cloudflare for SaaS hostname + certificate (created once ownership is proven).
   let cf: CfHostname | null = null
@@ -279,6 +287,7 @@ export async function evaluateDomain(
     try {
       cf = row.cfHostnameId ? await cfGetHostname(deps.cf, row.cfHostnameId) : null
       cf ??= await cfCreateHostname(deps.cf, row.hostname)
+      if (cf.failed && !opts.automatic) cf = await cfRetryHostname(deps.cf, cf)
     } catch (error) {
       cfError = error instanceof CloudflareError ? error.message : 'Cloudflare request failed.'
     }
@@ -288,6 +297,9 @@ export async function evaluateDomain(
     cfHostnameId: cf?.id ?? row.cfHostnameId,
     sslStatus: deps.cf ? (cf?.sslStatus ?? row.sslStatus) : null,
   }
+  // An active Cloudflare hostname passed HTTP validation, so traffic reaches us even when the records are
+  // hidden behind the customer's own Cloudflare proxy (orange cloud answers with their anycast IPs).
+  if (cf?.active) routing = { state: 'ok' }
 
   if (wasActive) {
     // Only definitive answers take a live site down; timeouts and API hiccups just leave a note.
@@ -352,11 +364,68 @@ async function saveDomain(run: DomainRun, row: DomainRow, patch: DomainPatch): P
   })
 }
 
-/** Adds a custom hostname for a spa (one for now) with a fresh verification token. */
-export async function addDomain(run: DomainRun, tenantId: string, input: string, env: Env = process.env) {
-  const hostname = normaliseHostname(input, env.ROOT_DOMAIN ?? '')
+const TAKEN = 'That domain is already connected to another spa. Contact support if it is yours.'
+
+export type ReleasedClaim = Pick<DomainRow, 'id' | 'tenantId' | 'hostname' | 'status'>
+
+/**
+ * Frees a hostname held by an abandoned claim so another spa can add it: the holding spa is cancelled, or the
+ * claim never connected within GIVE_UP_AFTER_MS (so nobody can squat a hostname for longer). A platform
+ * lookup (the claim belongs to another spa). Returns the released claim, or null when the hostname stays taken.
+ */
+export async function releaseAbandonedClaim(
+  hostname: string,
+  opts: { platform?: Db; deps?: Pick<DomainDeps, 'cf' | 'now'> } = {},
+): Promise<ReleasedClaim | null> {
+  const db = opts.platform ?? platformDb()
+  const deps = opts.deps ?? domainDeps()
+  const [claim] = await db
+    .select({
+      id: domains.id,
+      tenantId: domains.tenantId,
+      hostname: domains.hostname,
+      status: domains.status,
+      verifiedAt: domains.verifiedAt,
+      createdAt: domains.createdAt,
+      tenantStatus: tenants.status,
+    })
+    .from(domains)
+    .innerJoin(tenants, eq(tenants.id, domains.tenantId))
+    .where(and(eq(domains.hostname, hostname), eq(domains.kind, 'custom')))
+    .limit(1)
+  if (!claim) return null
+  const abandoned =
+    claim.tenantStatus === 'cancelled' ||
+    (!claim.verifiedAt && deps.now().getTime() - claim.createdAt.getTime() > GIVE_UP_AFTER_MS)
+  if (!abandoned) return null
   try {
-    return await run(async (db) => {
+    await removeDomain((fn) => fn(db), claim.id, deps)
+  } catch {
+    return null // Cloudflare unreachable: the claim stays until the next attempt
+  }
+  return { id: claim.id, tenantId: claim.tenantId, hostname: claim.hostname, status: claim.status }
+}
+
+/**
+ * Adds a custom hostname for a spa (one for now) with a fresh verification token. A hostname another spa holds
+ * is taken over only when that claim is abandoned (see releaseAbandonedClaim; `onRelease` can audit it).
+ */
+export async function addDomain(
+  run: DomainRun,
+  tenantId: string,
+  input: string,
+  env: Env = process.env,
+  opts: {
+    platform?: Db
+    deps?: Pick<DomainDeps, 'cf' | 'now'>
+    onRelease?: (claim: ReleasedClaim) => Promise<void>
+  } = {},
+) {
+  const hostname = normaliseHostname(input, env.ROOT_DOMAIN ?? '')
+  const insert = () =>
+    run(async (db) => {
+      // One add at a time per spa, so two quick submits can't both pass the one-domain limit.
+      await db.execute(sql`select pg_advisory_xact_lock(hashtext('domains.add'), hashtext(${tenantId}))`)
       const existing = await db
         .select({ hostname: domains.hostname })
         .from(domains)
@@ -376,23 +445,39 @@ export async function addDomain(run: DomainRun, tenantId: string, input: string,
         .returning()
       return row!
     })
+  try {
+    return await insert()
   } catch (error) {
-    if (pgCode(error) === '23505')
-      throw new DomainError(
-        'That domain is already connected to another spa. Contact support if it is yours.',
-      )
+    if (pgCode(error) !== '23505') throw error
+  }
+  const released = await releaseAbandonedClaim(hostname, opts)
+  if (!released) throw new DomainError(TAKEN)
+  await opts.onRelease?.(released)
+  try {
+    return await insert()
+  } catch (error) {
+    if (pgCode(error) === '23505') throw new DomainError(TAKEN)
     throw error
   }
 }
 
-/** Re-runs the checks for one domain and stores the outcome. */
+/**
+ * Re-runs the checks for one domain and stores the outcome. `cooldownMs` refuses a check when the last one
+ * was more recent (tenant "Check now": each check costs DNS lookups and shared Cloudflare API quota).
+ */
 export async function checkDomain(
   run: DomainRun,
   id: string,
-  opts: { deps?: DomainDeps; automatic?: boolean } = {},
+  opts: { deps?: DomainDeps; automatic?: boolean; cooldownMs?: number } = {},
 ): Promise<DomainRow> {
+  const deps = opts.deps ?? domainDeps()
   const row = await findDomain(run, id)
-  const patch = await evaluateDomain(row, opts.deps ?? domainDeps(), { automatic: opts.automatic })
+  const since = row.checkedAt ? deps.now().getTime() - row.checkedAt.getTime() : Number.POSITIVE_INFINITY
+  if (opts.cooldownMs && since < opts.cooldownMs)
+    throw new DomainError(
+      `Checked a moment ago — try again in ${Math.max(1, Math.ceil((opts.cooldownMs - since) / 1000))} seconds.`,
+    )
+  const patch = await evaluateDomain(row, deps, { automatic: opts.automatic })
   return saveDomain(run, row, patch)
 }
 
@@ -431,8 +516,8 @@ export async function removeDomain(run: DomainRun, id: string, deps: Pick<Domain
 }
 
 /**
- * Support override: activate without our DNS checks (Cloudflare hostname still created when configured)
- * or deactivate (status failed, the site stops answering on that host).
+ * Support override: activate without our DNS checks (the Cloudflare hostname is still created, or refreshed
+ * and retried when Cloudflare gave up on it) or deactivate (status failed, the site stops answering on it).
  */
 export async function forceDomainStatus(
   run: DomainRun,
@@ -455,11 +540,14 @@ export async function forceDomainStatus(
     lastError: null,
     verifiedAt: row.verifiedAt ?? now,
   }
-  if (deps.cf && !row.cfHostnameId) {
+  if (deps.cf) {
     try {
-      const cf = await cfCreateHostname(deps.cf, row.hostname)
+      let cf = row.cfHostnameId ? await cfGetHostname(deps.cf, row.cfHostnameId) : null
+      cf ??= await cfCreateHostname(deps.cf, row.hostname)
+      cf = await cfRetryHostname(deps.cf, cf)
       patch.cfHostnameId = cf.id
       patch.sslStatus = cf.sslStatus
+      if (cf.failed) patch.lastError = cfFailed(cf)
     } catch (error) {
       patch.lastError = error instanceof CloudflareError ? error.message : 'Cloudflare request failed.'
     }

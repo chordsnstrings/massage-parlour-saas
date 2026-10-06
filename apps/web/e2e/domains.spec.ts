@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { admin, app, PATH, PORT, screenshotAt, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
 
 const HOST = 'www.serenity-test.ae'
-/** Requests the dev server as if the browser had come in on the custom domain (host routing only). */
+/** Requests the dev server as if the browser had come in on the custom domain (served in both routing modes). */
 const viaCustomDomain = (page: Page) =>
   page.request.get(`http://127.0.0.1:${PORT}/`, { headers: { host: HOST }, failOnStatusCode: false })
 
@@ -37,7 +37,7 @@ test('domains: owner adds a custom domain, support force-activates it, the site 
   await expect(card.getByRole('status')).toContainText(/TXT record|look up/)
   await expect(card.getByText(/Last checked/)).toBeVisible()
   await expect(card.getByText('Pending', { exact: true })).toBeVisible()
-  if (!PATH) expect((await viaCustomDomain(page)).status()).toBe(404)
+  expect((await viaCustomDomain(page)).status()).toBe(404)
   await screenshotAt(page, 'domains')
 
   // Super-admin force-activates it.
@@ -61,11 +61,9 @@ test('domains: owner adds a custom domain, support force-activates it, the site 
   await expect(card.getByText('Active', { exact: true })).toBeVisible()
   await expect(card.getByText(/Primary address/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Make primary' })).toBeVisible()
-  if (!PATH) {
-    const res = await viaCustomDomain(page)
-    expect(res.status()).toBe(200)
-    expect(await res.text()).toContain('Serenity Spa')
-  }
+  const res = await viaCustomDomain(page)
+  expect(res.status()).toBe(200)
+  expect(await res.text()).toContain('Serenity Spa')
   await page.goto(`${app}/${slug}`)
   await expect(page.getByText(HOST).first()).toBeVisible()
 
@@ -77,7 +75,7 @@ test('domains: owner adds a custom domain, support force-activates it, the site 
   await card.getByRole('button', { name: 'Remove' }).click()
   await expect(page.getByText(`${HOST} removed`)).toBeVisible()
   await expect(page.getByLabel('Your domain')).toBeVisible()
-  if (!PATH) expect((await viaCustomDomain(page)).status()).toBe(404)
+  expect((await viaCustomDomain(page)).status()).toBe(404)
 })
 
 test('domains: owner requests a domain to buy, cancels one, support declines the other', async ({

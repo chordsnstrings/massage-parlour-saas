@@ -56,12 +56,15 @@ export function DomainActions({
   hostname,
   status,
   isPrimary,
+  secure,
 }: {
   slug: string
   id: string
   hostname: string
   status: string
   isPrimary: boolean
+  /** Certificates are issued automatically; without them the plain http address is the one that works. */
+  secure: boolean
 }) {
   const { pending, run } = useRun()
   const active = status === 'active'
@@ -85,7 +88,7 @@ export function DomainActions({
       )}
       {active && (
         <Button variant="ghost" asChild>
-          <a href={`https://${hostname}`} target="_blank" rel="noreferrer">
+          <a href={`${secure ? 'https' : 'http'}://${hostname}`} target="_blank" rel="noreferrer">
             <ExternalLink /> Open site
           </a>
         </Button>

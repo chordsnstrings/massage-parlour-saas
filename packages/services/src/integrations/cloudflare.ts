@@ -122,14 +122,13 @@ async function call<T>(cfg: CfConfig, method: string, path: string, body?: unkno
 
 /** Duplicate custom hostname (it already exists on our zone). */
 const DUPLICATE = 1406
+/** Certificate settings for every custom hostname: HTTP DCV, TLS ≥ 1.2. */
+const SSL = { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } }
 
 /** Creates the custom hostname (HTTP DCV certificate, TLS ≥ 1.2); returns the existing one if already there. */
 export async function cfCreateHostname(cfg: CfConfig, hostname: string): Promise<CfHostname> {
   try {
-    const raw = await call<RawHostname>(cfg, 'POST', '/custom_hostnames', {
-      hostname,
-      ssl: { method: 'http', type: 'dv', settings: { min_tls_version: '1.2' } },
-    })
+    const raw = await call<RawHostname>(cfg, 'POST', '/custom_hostnames', { hostname, ssl: SSL })
     return mapCfHostname(raw)
   } catch (error) {
     if (error instanceof CloudflareError && error.codes.includes(DUPLICATE)) {
@@ -167,4 +166,25 @@ export async function cfDeleteHostname(cfg: CfConfig, id: string): Promise<void>
     if (error instanceof CloudflareError && error.status === 404) return
     throw error
   }
+}
+
+/** Hostname states Cloudflare won't come back from on its own; a fresh hostname starts validation over. */
+const RECREATE = new Set(['moved', 'deleted', 'pending_deletion', 'test_failed'])
+/** Blocked by Cloudflare (abuse / high-risk) — only Cloudflare support can lift it, so retrying is pointless. */
+const BLOCKED = new Set(['blocked', 'test_blocked'])
+
+/**
+ * Restarts a custom hostname Cloudflare gave up on: re-sends the certificate settings (a new validation for
+ * timed-out certificates) or deletes and recreates a moved/deleted hostname. Blocked hostnames come back as-is.
+ */
+export async function cfRetryHostname(cfg: CfConfig, h: CfHostname): Promise<CfHostname> {
+  if (!h.failed || BLOCKED.has(h.status)) return h
+  if (RECREATE.has(h.status)) {
+    await cfDeleteHostname(cfg, h.id)
+    return cfCreateHostname(cfg, h.hostname)
+  }
+  const raw = await call<RawHostname>(cfg, 'PATCH', `/custom_hostnames/${encodeURIComponent(h.id)}`, {
+    ssl: SSL,
+  })
+  return mapCfHostname(raw)
 }

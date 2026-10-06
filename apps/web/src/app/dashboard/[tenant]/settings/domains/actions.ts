@@ -6,6 +6,7 @@ import {
   checkDomain,
   DomainError,
   type DomainOffer,
+  MANUAL_CHECK_COOLDOWN_MS,
   NamecheapError,
   normaliseHostname,
   removeDomain,
@@ -62,7 +63,26 @@ export async function addDomainAction(
   const parsed = z.object({ hostname: hostnameField }).safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   try {
-    const d = await addDomain(tenantDomainRun(ctx.tenant.id), ctx.tenant.id, parsed.data.hostname)
+    const d = await addDomain(
+      tenantDomainRun(ctx.tenant.id),
+      ctx.tenant.id,
+      parsed.data.hostname,
+      undefined,
+      {
+        // An abandoned claim by another spa was freed for this one: audited on the spa that lost it.
+        onRelease: async (claim) => {
+          invalidateSiteHost(claim.hostname)
+          await audit({
+            tenantId: claim.tenantId,
+            actorUserId: ctx.user.id,
+            action: 'domain.claim_released',
+            entity: 'domain',
+            entityId: claim.id,
+            data: { hostname: claim.hostname, status: claim.status, toTenantId: ctx.tenant.id },
+          })
+        },
+      },
+    )
     await record(ctx, 'domain.added', d.id, { hostname: d.hostname })
     refresh(slug)
     return ok(`${d.hostname} added — now add the two DNS records`)
@@ -79,7 +99,7 @@ export async function checkDomainAction(slug: string, id: string): Promise<Actio
   try {
     const run = tenantDomainRun(ctx.tenant.id)
     const before = await run((db) => db.query.domains.findFirst({ where: (d, { eq }) => eq(d.id, id) }))
-    const d = await checkDomain(run, id)
+    const d = await checkDomain(run, id, { cooldownMs: MANUAL_CHECK_COOLDOWN_MS })
     invalidateSiteHost(d.hostname)
     if (before?.status !== d.status)
       await record(ctx, 'domain.status_changed', d.id, {
