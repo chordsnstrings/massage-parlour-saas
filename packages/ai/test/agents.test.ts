@@ -40,9 +40,9 @@ beforeAll(async () => {
   await seedPlatform(platform)
   const [t] = await platform.insert(tenants).values({ slug: 'dm', name: 'Lotus Spa' }).returning()
   ids.tenant = t!.id
-  // biome-ignore lint/suspicious/noExplicitAny: test seeding helper
   await withTenant(
     ids.tenant,
+    // biome-ignore lint/suspicious/noExplicitAny: test seeding helper
     async (tx: any) => {
       const [b] = await tx
         .insert(branches)
