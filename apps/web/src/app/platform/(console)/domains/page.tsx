@@ -188,7 +188,7 @@ export default async function PlatformDomainsPage({
                       href={adminPath(`/tenants/${r.tenantId}`)}
                       className="block text-xs text-muted hover:text-fg"
                     >
-                      {r.tenantName} · {r.tenantSlug}
+                      {r.tenantName} · <span className="whitespace-nowrap">{r.tenantSlug}</span>
                     </Link>
                   </div>
                 ),
