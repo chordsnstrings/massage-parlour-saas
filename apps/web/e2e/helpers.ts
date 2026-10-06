@@ -147,8 +147,15 @@ export async function seedCatalog(slug: string) {
 }
 
 /** Creates a confirmed booking for the seeded client, `hoursFromNow` ahead (rounded to the quarter hour). */
-export async function seedBooking(seed: Awaited<ReturnType<typeof seedCatalog>>, hoursFromNow = 2) {
-  const start = new Date(Math.ceil((Date.now() + hoursFromNow * 3600_000) / 900_000) * 900_000)
+/**
+ * Seeds a confirmed booking for Fatima with Maya. `when` is either hours from now (rounded up to 15 min) or a
+ * fixed Dubai time today ('HH:MM') — use the latter whenever the test depends on clock positions.
+ */
+export async function seedBooking(seed: Awaited<ReturnType<typeof seedCatalog>>, when: number | string = 2) {
+  const start =
+    typeof when === 'string'
+      ? dubaiInstant(today(), Number(when.slice(0, 2)) * 60 + Number(when.slice(3, 5)))
+      : new Date(Math.ceil((Date.now() + when * 3600_000) / 900_000) * 900_000)
   return testDb().transaction((tx) =>
     createBooking(tx, {
       tenantId: seed.tenantId,

@@ -4,7 +4,8 @@ import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './help
 test('reception works the day calendar: check in, then book a client into a free slot', async ({ page }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  await seedBooking(seed)
+  // Fixed clock time: the drag step below relies on Maya being busy 14:15–15:15 (+15 min cleanup).
+  await seedBooking(seed, '14:15')
 
   await test.step('today shows the booking in Maya’s column', async () => {
     await page.goto(`${app}/${slug}/calendar`)
