@@ -131,7 +131,18 @@ export async function reverseSource(
     .select()
     .from(journalEntries)
     .where(and(eq(journalEntries.sourceType, sourceType), eq(journalEntries.sourceId, sourceId)))
-  for (const entry of entries.filter((x) => !x.reversesId)) {
+  const done = new Set(
+    (
+      await tx
+        .select({ reversesId: journalEntries.reversesId })
+        .from(journalEntries)
+        .where(
+          and(eq(journalEntries.sourceType, `${sourceType}_reversal`), eq(journalEntries.sourceId, sourceId)),
+        )
+    ).map((r) => r.reversesId),
+  )
+  // Idempotent: entries that already have a reversal are skipped.
+  for (const entry of entries.filter((x) => !x.reversesId && !done.has(x.id))) {
     const lines = await tx
       .select({ code: ledgerAccounts.code, debit: journalLines.debitAed, credit: journalLines.creditAed })
       .from(journalLines)

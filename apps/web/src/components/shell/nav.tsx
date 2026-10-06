@@ -1,6 +1,7 @@
 'use client'
 import {
   Building2,
+  Calculator,
   CalendarDays,
   ChartColumn,
   Contact,
@@ -49,6 +50,7 @@ const icons = {
   staff: UserCog,
   website: Globe,
   analytics: ChartColumn,
+  accounts: Calculator,
 } as const
 
 export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }
