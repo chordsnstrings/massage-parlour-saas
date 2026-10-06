@@ -1,6 +1,6 @@
 import type { ComponentConfig, Slot } from '@puckeditor/core'
 import { cn } from '@/lib/utils'
-import { alignField, hideField, padField, radio, select, text } from '../field-defs'
+import { alignField, hideField, imageField, padField, radio, select, text } from '../field-defs'
 import { type Align, type PadStep, responsiveStyle, type Visibility } from '../style'
 import type { Responsive, SiteMeta } from '../types'
 import { container, metaOf } from './shared'
@@ -70,7 +70,7 @@ export function SectionShell({
 
 const shellFields = {
   background: backgroundField,
-  bgImage: text('Background image URL', 'https://…'),
+  bgImage: imageField('Background image'),
   width: radio('Width', [
     ['narrow', 'Narrow'],
     ['contained', 'Contained'],

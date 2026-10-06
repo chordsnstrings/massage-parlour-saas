@@ -82,6 +82,9 @@ export const radio = <T extends string | boolean>(label: string, options: [T, st
 
 export const text = (label: string, placeholder?: string): Field => ({ type: 'text', label, placeholder })
 
+/** Image field (URL today; the media module swaps in a library picker without touching the blocks). */
+export const imageField = (label = 'Image'): Field => text(label, 'https://…')
+
 export const buttonsField = (): Field => ({
   type: 'array',
   label: 'Buttons',

@@ -1,6 +1,6 @@
 import type { ComponentConfig } from '@puckeditor/core'
 import { cn } from '@/lib/utils'
-import { alignField, biField, buttonsField, hideField, radio, select, text } from '../field-defs'
+import { alignField, biField, buttonsField, hideField, imageField, radio, select } from '../field-defs'
 import { tr } from '../i18n'
 import { type Align, responsiveStyle, type Visibility } from '../style'
 import type { Bi, Responsive } from '../types'
@@ -201,7 +201,7 @@ export const Image: ComponentConfig<{
 }> = {
   label: 'Image',
   fields: {
-    src: text('Image URL', 'https://…'),
+    src: imageField('Image'),
     alt: biField('Alt text (describe the image)'),
     caption: biField('Caption'),
     aspect: select('Shape', [
@@ -259,7 +259,7 @@ export const Gallery: ComponentConfig<
       max: 12,
       getItemSummary: (item: GalleryImage, i?: number) => item.alt?.en || `Image ${(i ?? 0) + 1}`,
       defaultItemProps: { src: '', alt: { en: '' } },
-      arrayFields: { src: text('Image URL', 'https://…'), alt: biField('Alt text') },
+      arrayFields: { src: imageField('Image'), alt: biField('Alt text') },
     },
     layout: radio('Layout', [
       ['grid', 'Grid'],
@@ -365,7 +365,7 @@ export const Hero: ComponentConfig<{
     title: biField('Headline'),
     subtitle: biField('Subheading', { multiline: true }),
     buttons: buttonsField(),
-    image: text('Image URL', 'https://…'),
+    image: imageField('Image'),
     imageAlt: biField('Image alt text'),
     background: bandFields.background,
     hide: hideField(),
