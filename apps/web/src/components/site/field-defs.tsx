@@ -1,5 +1,5 @@
 import type { CustomFieldRender, Field } from '@puckeditor/core'
-import { ImageFieldControl } from '@/components/media/image-field'
+import { lazy, Suspense } from 'react'
 import { BilingualField, ResponsiveField } from './fields'
 import type { Align, PadStep, Visibility } from './style'
 import type { Bi, Responsive } from './types'
@@ -84,8 +84,17 @@ export const radio = <T extends string | boolean>(label: string, options: [T, st
 export const text = (label: string, placeholder?: string): Field => ({ type: 'text', label, placeholder })
 
 /** Image field: preview + "Choose from library" (search, inline upload) + paste-URL fallback. Value is the URL. */
+// Loaded on first render: the picker is client-only (router, server actions) and the block config must stay importable
+// on its own (e.g. by the e2e structural checks).
+const ImageFieldControl = lazy(() =>
+  import('@/components/media/image-field').then((m) => ({ default: m.ImageFieldControl })),
+)
 export const imageField = (label = 'Image'): Field =>
-  custom<string>(label, (props) => <ImageFieldControl {...props} />)
+  custom<string>(label, (props) => (
+    <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-subtle" />}>
+      <ImageFieldControl {...props} />
+    </Suspense>
+  ))
 
 export const buttonsField = (): Field => ({
   type: 'array',
