@@ -19,6 +19,7 @@ import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
 import { storedFiles } from './files'
+import { promoCodes } from './finance'
 import { bookings, clients } from './operations'
 import { tenants } from './platform'
 
@@ -51,13 +52,36 @@ export const reviews = pgTable(
 )
 
 // ── Segments & click-to-send campaigns ───────────────────────────────────────
+/** One condition of a client segment; a segment matches clients meeting every rule (AND). */
 export type SegmentRule =
+  /** Last visit more than `days` ago. */
   | { kind: 'lapsed'; days: number }
-  | { kind: 'birthday_within'; days: number }
+  /** Last visit within the last `days`. */
+  | { kind: 'visited_within'; days: number }
   | { kind: 'visits_at_least'; count: number }
+  | { kind: 'visits_at_most'; count: number }
+  /** Total paid sales (AED, VAT-inclusive). */
   | { kind: 'spent_at_least'; aed: number }
   | { kind: 'service'; serviceId: string }
+  | { kind: 'birthday_month' }
+  | { kind: 'birthday_within'; days: number }
+  | { kind: 'gender'; gender: 'female' | 'male' | 'other' }
+  | { kind: 'language'; language: 'en' | 'ar' }
   | { kind: 'tag'; tag: string }
+  | { kind: 'has_package' }
+  | { kind: 'package_expiring'; days: number }
+  | { kind: 'no_shows_at_least'; count: number }
+
+/** Audience numbers frozen when a campaign is queued. */
+export type CampaignStats = {
+  matched?: number
+  /** Skipped: already messaged by another campaign within 7 days. */
+  skippedRecent?: number
+  /** Skipped: beyond the per-campaign recipient limit. */
+  skippedOverLimit?: number
+  en?: number
+  ar?: number
+}
 
 export const segments = pgTable(
   'segments',
@@ -83,8 +107,17 @@ export const campaigns = pgTable(
     body: jsonb('body').$type<{ en: string; ar?: string }>().notNull(),
     status: campaignStatus('status').notNull().default('draft'),
     recipients: integer('recipients').notNull().default(0),
+    /** Segment rules as they were when the campaign was saved (the segment may change later). */
+    rules: jsonb('rules').$type<SegmentRule[]>(),
+    promoCodeId: uuid('promo_code_id').references(() => promoCodes.id, { onDelete: 'set null' }),
+    /** When the messages become due in the WhatsApp outbox. */
+    scheduledAt: ts('scheduled_at'),
+    queuedAt: ts('queued_at'),
+    archivedAt: ts('archived_at'),
+    stats: jsonb('stats').$type<CampaignStats>().notNull().default({}),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   () => tenantPolicies(),
 )

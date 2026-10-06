@@ -1,4 +1,5 @@
 export * from './bookings'
+export * from './campaigns'
 export * from './clients'
 export * from './errors'
 export * from './growth'

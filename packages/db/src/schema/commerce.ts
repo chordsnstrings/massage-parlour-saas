@@ -228,6 +228,7 @@ export const outbox = pgTable(
   (t) => [
     index('outbox_queue').on(t.tenantId, t.status, t.dueAt),
     unique('outbox_booking_kind').on(t.bookingId, t.kind),
+    index('outbox_campaign').on(t.campaignId),
     ...tenantPolicies(),
   ],
 )
