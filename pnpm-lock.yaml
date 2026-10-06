@@ -139,9 +139,15 @@ importers:
 
   packages/ai:
     dependencies:
+      '@spa/core':
+        specifier: workspace:*
+        version: link:../core
       '@spa/db':
         specifier: workspace:*
         version: link:../db
+      '@spa/services':
+        specifier: workspace:*
+        version: link:../services
       drizzle-orm:
         specifier: 0.45.3
         version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)

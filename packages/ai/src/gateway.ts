@@ -162,3 +162,40 @@ function parseJson(content: string | null) {
     return undefined
   }
 }
+
+/** Image generation (Seedream) with the same config lookup, budget check and metering as chat. */
+export async function runImage(opts: {
+  tenantId: string
+  agentKey: string
+  prompt: string
+  size?: string
+  db?: Db
+  client?: ModelArkClient
+}) {
+  const db = opts.db ?? platformDb()
+  const client = opts.client ?? createModelArkClient()
+  const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
+  if (!cfg?.enabled || cfg.kind !== 'image')
+    throw new AiDisabledError(`AI image model "${opts.agentKey}" is disabled`)
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, opts.tenantId),
+    columns: { aiBudgetUsd: true },
+  })
+  if (!tenant) throw new Error('unknown tenant')
+  if ((await monthSpendUsd(db, opts.tenantId)) >= Number(tenant.aiBudgetUsd))
+    throw new AiBudgetExceededError(opts.tenantId)
+  const res = await client.image({ model: cfg.modelId, prompt: opts.prompt, size: opts.size })
+  const cost = Number(cfg.pricePerImage)
+  await db
+    .insert(aiUsage)
+    .values({
+      tenantId: opts.tenantId,
+      agentKey: opts.agentKey,
+      modelId: cfg.modelId,
+      images: 1,
+      costUsd: cost.toFixed(6),
+    })
+  const url = res.data[0]?.url
+  if (!url) throw new AiOutputError('no image returned')
+  return { url, costUsd: cost }
+}

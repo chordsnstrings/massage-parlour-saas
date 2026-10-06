@@ -11,7 +11,9 @@
     "smoke": "tsx --env-file-if-exists=../../.env src/smoke.ts"
   },
   "dependencies": {
+    "@spa/core": "workspace:*",
     "@spa/db": "workspace:*",
+    "@spa/services": "workspace:*",
     "drizzle-orm": "0.45.3",
     "zod": "^4.6.5"
   }
