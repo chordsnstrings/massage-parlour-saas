@@ -142,6 +142,7 @@ export default async function StaffDetailPage({
                 baseSalaryAed: Number(person.baseSalaryAed),
                 memberId: person.memberId,
                 skills: [...skillIds],
+                photoUrl: person.photoUrl,
               }}
             />
           ) : null

@@ -5,6 +5,7 @@ import { pgCode } from '@spa/services'
 import { eq, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { IMAGE_URL_PATTERN } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -52,6 +53,13 @@ const staffSchema = z.object({
   baseSalaryAed: z.coerce.number().min(0, 'Enter an amount').max(1_000_000),
   memberId: uuidOrEmpty,
   skills: z.preprocess(asArray, z.array(z.string().uuid())),
+  photoUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .regex(IMAGE_URL_PATTERN, 'Choose a photo from the library')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
 })
 
 export async function saveStaffAction(
@@ -77,6 +85,8 @@ export async function saveStaffAction(
     commissionPct: d.commissionPct.toFixed(2),
     baseSalaryAed: d.baseSalaryAed.toFixed(2),
     memberId: d.memberId ?? null,
+    // Only forms that post the field change the photo.
+    ...(formData.has('photoUrl') ? { photoUrl: d.photoUrl ?? null } : {}),
   }
   const result = await withTenant(ctx.tenant.id, async (tx) => {
     if (d.memberId) {

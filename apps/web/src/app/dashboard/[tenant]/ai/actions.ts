@@ -1,10 +1,12 @@
 'use server'
 import { draftInstagramPost, draftReviewReply, runDmTurn } from '@spa/ai'
 import { aiAgentSettings, brandProfiles, reviews, socialPosts, withTenant } from '@spa/db'
+import { fileIdFromUrl, persistRemoteAsset, postImageUrl, saveRemoteImage } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { tenantSiteUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -111,8 +113,9 @@ export async function draftPostAction(slug: string, _p: ActionResult, fd: FormDa
   const brief = String(fd.get('brief') ?? '')
     .trim()
     .slice(0, 500)
+  let post: Awaited<ReturnType<typeof draftInstagramPost>>
   try {
-    await draftInstagramPost({
+    post = await draftInstagramPost({
       tenantId: ctx.tenant.id,
       brief: brief || undefined,
       withImage: fd.get('image') === 'on',
@@ -122,8 +125,53 @@ export async function draftPostAction(slug: string, _p: ActionResult, fd: FormDa
     console.error('draft post failed', e)
     return fail(aiError(e))
   }
+  await persistPostImages(ctx.tenant.id, slug, post, ctx.user.id)
   revalidatePath(`/dashboard/${slug}/ai/content`)
+  revalidatePath(`/dashboard/${slug}/media`)
   return ok('Draft ready for review')
+}
+
+/**
+ * Seedream links expire after 7 days: copy the generated image into the media library and point the post at the
+ * permanent file (absolute on the spa's site origin as a ?f=jpg rendition — Instagram needs a public JPEG URL).
+ * On failure the draft keeps the temporary link and the library shows a "Save to library" retry.
+ */
+async function persistPostImages(
+  tenantId: string,
+  slug: string,
+  post: { id: string; media: { url: string; alt?: string }[] },
+  userId: string,
+) {
+  const remote = post.media.filter((m) => /^https:\/\//i.test(m.url) && !fileIdFromUrl(m.url))
+  if (remote.length === 0) return
+  const origin = new URL(tenantSiteUrl(slug)).origin
+  const moved = new Map<string, string>()
+  for (const m of remote) {
+    try {
+      const image = await saveRemoteImage(m.url)
+      const asset = await withTenant(tenantId, (tx) =>
+        persistRemoteAsset(tx, { tenantId, remoteUrl: m.url, image, alt: { en: m.alt }, createdBy: userId }),
+      )
+      moved.set(m.url, postImageUrl(asset.url, origin))
+    } catch (e) {
+      console.error('persist AI image failed', e instanceof Error ? e.message : e)
+    }
+  }
+  if (moved.size === 0) return
+  await withTenant(tenantId, (tx) =>
+    tx
+      .update(socialPosts)
+      .set({ media: post.media.map((m) => ({ ...m, url: moved.get(m.url) ?? m.url })) })
+      .where(eq(socialPosts.id, post.id)),
+  )
+  await audit({
+    tenantId,
+    actorUserId: userId,
+    action: 'media.persisted',
+    entity: 'social_post',
+    entityId: post.id,
+    data: { images: moved.size },
+  })
 }
 
 export async function setPostStatusAction(
@@ -144,6 +192,16 @@ export async function setPostStatusAction(
       })
       .where(eq(socialPosts.id, postId)),
   )
+  if (status !== 'draft') {
+    // Second chance for images whose copy into the library failed when the draft was made.
+    const [post] = await withTenant(ctx.tenant.id, (tx) =>
+      tx
+        .select({ id: socialPosts.id, media: socialPosts.media })
+        .from(socialPosts)
+        .where(eq(socialPosts.id, postId)),
+    )
+    if (post) await persistPostImages(ctx.tenant.id, slug, post, ctx.user.id)
+  }
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,

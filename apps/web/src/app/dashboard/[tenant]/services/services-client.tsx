@@ -2,6 +2,7 @@
 import { Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useState, useTransition } from 'react'
+import { ImageInput } from '@/components/media/image-input'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, FieldError, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
@@ -215,6 +216,7 @@ export type ServiceInput = {
   onlineBookable: boolean
   active: boolean
   color: string | null
+  imageUrl?: string | null
   variants: { id: string; durationMin: number; priceAed: number }[]
 }
 
@@ -328,6 +330,15 @@ function ServiceForm({
             defaultValue={service?.description?.ar}
           />
         </Field>
+        <div className="sm:col-span-2">
+          <ImageInput
+            slug={slug}
+            name="imageUrl"
+            label="Photo"
+            hint="Shown on your booking page and website menu."
+            defaultValue={service?.imageUrl}
+          />
+        </div>
         <Field label="Category" name="categoryId">
           <Select
             id="categoryId"

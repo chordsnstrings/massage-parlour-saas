@@ -3,6 +3,7 @@ import { CalendarPlus, Moon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { ImageInput } from '@/components/media/image-input'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, FieldError, SubmitButton, useFormCtx } from '@/components/ui/form'
 import { Checkbox, Input, Select } from '@/components/ui/input'
@@ -27,6 +28,7 @@ export type StaffInput = {
   baseSalaryAed: number
   memberId: string | null
   skills: string[]
+  photoUrl?: string | null
 }
 
 export function StaffSheet({
@@ -72,6 +74,13 @@ export function StaffSheet({
         }}
       >
         <input type="hidden" name="id" value={person?.id ?? ''} />
+        <ImageInput
+          slug={slug}
+          name="photoUrl"
+          label="Photo"
+          hint="Shown in the Team section of your website."
+          defaultValue={person?.photoUrl}
+        />
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Display name" name="displayName" hint="First name is enough — clients see it.">
             <Input

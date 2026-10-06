@@ -4,6 +4,7 @@ import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { syncAllGbpReviews } from './gbp'
 import { publishScheduledInstagramPosts, refreshInstagramAccessTokens } from './instagram'
+import { pruneExpiredAiImages } from './media'
 import { expireAllPackages, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
@@ -19,6 +20,7 @@ export const jobs: JobDef[] = [
   { name: 'analytics-rollup', cron: '7 * * * *', handler: () => rollupAnalytics() },
   { name: 'analytics-prune', cron: '20 4 * * *', handler: () => pruneAnalytics() },
   { name: 'packages-expire', cron: '10 4 * * *', handler: () => expireAllPackages() },
+  { name: 'media-prune-ai', cron: '40 4 * * *', handler: () => pruneExpiredAiImages() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
   { name: 'verify-custom-domains', cron: '*/10 * * * *', handler: () => verifyCustomDomains() },
   { name: 'instagram-publish', cron: '*/5 * * * *', handler: () => publishScheduledInstagramPosts() },
