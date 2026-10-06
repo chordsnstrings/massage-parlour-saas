@@ -459,6 +459,11 @@ export function BookingFlow({
                     action={submit}
                     onSuccess={(r) => {
                       setDone(r.data?.booking as BookingDone)
+                      // Cookieless site analytics (public/t.js) — closes the booking funnel.
+                      ;(window as { spaTrack?: (type: string, extra?: object) => void }).spaTrack?.(
+                        'booking_complete',
+                        { element: `${variant.durationMin} min` },
+                      )
                       go('done')
                     }}
                     className="space-y-5"

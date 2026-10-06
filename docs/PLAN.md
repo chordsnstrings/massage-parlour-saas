@@ -698,6 +698,29 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 - The worker and pg-boss use the owner role (pg-boss manages its own schema); web never does.
 - Backups go to Cloudflare R2 (free tier); Sentry is deferred to P1, before the pilot goes live.
 
+### 14.1 Build status — P1 complete, most of P2/P3 in place (2026-10-06)
+
+| Area | Status |
+|---|---|
+| P1 setup | ✅ services/variants/categories, rooms, staff + skills + shifts, opening hours (past midnight) |
+| P1 calendar | ✅ resource day view (therapists/rooms), booking sheets, drag-to-reschedule, walk-ins + rotation, agenda on phones |
+| P1 clients | ✅ CRM, visit history, notes, intake/waiver templates with e-signature |
+| P1 POS | ✅ recorded payments (split), tips, receipts (simplified tax invoice, WhatsApp share), voids/refunds, daily close (Z-report) |
+| P1 WhatsApp outbox | ✅ click-to-send queue (wa.me / Web / Desktop), EN/AR templates, confirm/remind/thank-you |
+| P1 online booking | ✅ public `/book` flow on subdomain/custom domain, EN/AR, .ics, WhatsApp confirm |
+| P1 KPIs | ✅ business dashboard on the tenant home |
+| P1 site builder | ✅ Puck editor, 18 blocks, 3 templates, per-device style, EN/AR, versions, preview |
+| P2 accounting | ✅ double-entry ledger (DB-enforced), P&L, VAT (Form 201 figures), balances, expenses, journal + CSV, period close |
+| P2 packages & gifts | ✅ package definitions, memberships, gift cards, promo codes; sold and redeemed through POS |
+| P2 payroll | ✅ commission accrual, advances, monthly run, WPS SIF export (pulled forward from P4) |
+| P2 inventory | ✅ products, receive/count, consumables per treatment drawn on completion, retail COGS |
+| P2 web analytics | ✅ cookieless tracker, block-level views/clicks, funnel, first-touch sources, hourly rollups, 90-day retention |
+| P3 AI | ✅ AI studio: receptionist chat (books via tools), IG captions + Seedream images, review replies, SEO, slot filler (worker) |
+| Still open | IG/Meta + GBP API connections (await approvals), custom-domain UI + Cloudflare for SaaS, campaigns/segments UI, CSV import, more templates/presets, PWA push, Sentry |
+
+Deployed for testing on DigitalOcean App Platform with path routing (`/app`, `/admin`, `/s/{slug}`) on the DO-provided hostname
+until `spamanagement.ae` is registered.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.
