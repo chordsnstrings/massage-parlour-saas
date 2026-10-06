@@ -8,7 +8,7 @@ DEP=$(api -X POST "https://api.digitalocean.com/v2/apps/$APP_ID/deployments" -d 
 echo "deployment $DEP started"
 last=""
 for _ in $(seq 1 180); do
-  PHASE=$(api "https://api.digitalocean.com/v2/apps/$APP_ID/deployments/$DEP" | python3 -c 'import json,sys; d=json.load(sys.stdin)["deployment"]; p=d.get("progress",{}); print(d["phase"], f"{p.get(\"success_steps\")}/{p.get(\"total_steps\")}")')
+  PHASE=$(api "https://api.digitalocean.com/v2/apps/$APP_ID/deployments/$DEP" | python3 -c 'import json,sys; d=json.load(sys.stdin)["deployment"]; p=d.get("progress",{}); print(d["phase"], "%s/%s" % (p.get("success_steps"), p.get("total_steps")))')
   [ "$PHASE" != "$last" ] && echo "$(date -u +%H:%M:%S) $PHASE" && last="$PHASE"
   case "$PHASE" in ACTIVE*) exit 0 ;; ERROR*|CANCELED*|SUPERSEDED*) exit 1 ;; esac
   sleep 15
