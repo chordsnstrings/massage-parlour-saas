@@ -1,6 +1,7 @@
 export * from './bookings'
 export * from './clients'
 export * from './errors'
+export * from './ledger'
 export * from './outbox'
 export * from './reports'
 export * from './sales'
