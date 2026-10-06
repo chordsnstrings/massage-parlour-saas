@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   applyAgentOutcome,
   authorizeUrl,
+  claimDraft,
   clipBytes,
   constantTimeEqual,
   decryptSecret,
@@ -21,20 +22,24 @@ import {
   dmWindowLeftMs,
   dmWindowOpen,
   encryptSecret,
+  forgetInstagramUser,
   getThread,
   ingestInstagramWebhook,
   listInbox,
   markConversationRead,
   metaConfig,
   metaSignature,
+  PUBLISHING_NOTE,
   parseInstagramWebhook,
   parseSignedRequest,
   publicImageUrl,
   publishDueInstagramPosts,
   publishInstagramPost,
   refreshInstagramTokens,
+  saveInstagramConnection,
   scrubSecrets,
   signState,
+  TAKEN_OVER_NOTE,
   verifyMetaSignature,
   verifyState,
 } from '../src'
@@ -495,5 +500,168 @@ describe('publishing and tokens', () => {
     expect(acct!.meta.tokenIssuedAt).toBe(t0.toISOString())
     expect(await refreshInstagramTokens({ ...base, fetch: f.fetch, now: t0 })).toMatchObject({ refreshed: 0 })
     expect(f.calls).toHaveLength(1)
+  })
+})
+
+describe('races, ordering and billing status', () => {
+  const later = new Date(t0.getTime() + 2 * 3600_000)
+  const draftOf = async () =>
+    (await withTenant(ids.a!, (tx) => getThread(tx, ids.conv!), app))!.messages.filter(
+      (m) => m.sender === 'ai_draft',
+    )
+
+  it('keeps an autopilot reply as a draft when staff took the thread over during the AI turn', async () => {
+    await withTenant(
+      ids.a!,
+      (tx) =>
+        tx
+          .update(conversations)
+          .set({ mode: 'human', flagged: false })
+          .where(eq(conversations.id, ids.conv!)),
+      app,
+    )
+    const f = fakeFetch(() => json({ message_id: 'never' }))
+    const r = await applyAgentOutcome(ids.a!, ids.conv!, { reply: 'Bot reply' }, 'autopilot', {
+      ...base,
+      fetch: f.fetch,
+      now: later,
+    })
+    expect(r).toBe('drafted')
+    expect(f.calls).toHaveLength(0)
+    expect(await draftOf()).toEqual([expect.objectContaining({ text: 'Bot reply', error: TAKEN_OVER_NOTE })])
+  })
+
+  it('claims a draft once, moves it to "now" when sent, and refuses staff DMs over the byte limit', async () => {
+    const [draft] = await draftOf()
+    const claim = await withTenant(ids.a!, (tx) => claimDraft(tx, draft!.id, 'Bot reply'), app)
+    expect(claim).toMatchObject({ messageId: draft!.id, sender: 'bot', edited: false })
+    expect(await withTenant(ids.a!, (tx) => claimDraft(tx, draft!.id, 'Bot reply'), app)).toBeNull()
+    const f = fakeFetch(() => json({ message_id: 'out-approved' }))
+    const r = await deliverReply(ids.a!, ids.conv!, 'Bot reply', {
+      ...base,
+      sender: 'bot',
+      messageId: draft!.id,
+      fetch: f.fetch,
+      now: later,
+    })
+    expect(r).toEqual({ ok: true, messageId: draft!.id })
+    const [row] = await withTenant(
+      ids.a!,
+      (tx) => tx.select().from(conversationMessages).where(eq(conversationMessages.id, draft!.id)),
+      app,
+    )
+    expect(row).toMatchObject({ sender: 'bot', error: null, externalId: 'out-approved' })
+    expect(row!.createdAt.getTime()).toBe(later.getTime())
+
+    const arabic = 'ي'.repeat(600) // 600 characters, 1,200 bytes
+    await expect(
+      deliverReply(ids.a!, ids.conv!, arabic, { ...base, sender: 'staff', fetch: f.fetch, now: later }),
+    ).rejects.toThrow(/Too long for an Instagram DM/)
+    await withTenant(
+      ids.a!,
+      (tx) =>
+        tx.insert(conversationMessages).values({
+          tenantId: ids.a!,
+          conversationId: ids.conv!,
+          direction: 'out',
+          sender: 'ai_draft',
+          text: 'Another draft',
+        }),
+      app,
+    )
+    const [next] = await draftOf()
+    await expect(withTenant(ids.a!, (tx) => claimDraft(tx, next!.id, arabic), app)).rejects.toThrow(
+      /Too long/,
+    )
+    expect((await draftOf()).map((d) => d.id)).toEqual([next!.id]) // still a draft
+    expect(f.calls).toHaveLength(1)
+  })
+
+  it('skips a post another request is publishing; an interrupted claim can be published by hand', async () => {
+    const [post] = await platform
+      .insert(socialPosts)
+      .values({
+        tenantId: ids.a!,
+        platform: 'instagram',
+        caption: 'Claimed',
+        status: 'failed',
+        error: PUBLISHING_NOTE,
+        publishedAt: new Date(t0.getTime() - 60_000),
+        media: [{ url: 'https://cdn.test/claimed.jpg' }],
+      })
+      .returning()
+    const f = fakeFetch((url) => {
+      if (url.endsWith('/media')) return json({ id: 'container-1' })
+      if (url.includes('container-1?fields=status_code')) return json({ status_code: 'FINISHED' })
+      if (url.endsWith('/media_publish')) return json({ id: 'ig-media-2' })
+      return json({ error: { message: 'unexpected' } }, 404)
+    })
+    expect(await publishInstagramPost(ids.a!, post!.id, { ...base, fetch: f.fetch, now: t0 })).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/right now/),
+    })
+    expect(f.calls).toHaveLength(0)
+    const r = await publishInstagramPost(ids.a!, post!.id, {
+      ...base,
+      fetch: f.fetch,
+      now: new Date(t0.getTime() + 5 * 60_000),
+      sleep: async () => {},
+    })
+    expect(r).toEqual({ ok: true, externalId: 'ig-media-2' })
+    const [row] = await platform.select().from(socialPosts).where(eq(socialPosts.id, post!.id))
+    expect(row).toMatchObject({ status: 'published', error: null, externalId: 'ig-media-2' })
+  })
+
+  it('stores messages for spas that are not live but gives them no AI turn, and skips their posts', async () => {
+    await platform.update(tenants).set({ status: 'suspended' }).where(eq(tenants.id, ids.a!))
+    try {
+      expect(await ingestInstagramWebhook(dm('mid-suspended', 'Hello?'), base)).toHaveLength(0)
+      const stored = await withTenant(
+        ids.a!,
+        (tx) =>
+          tx.select().from(conversationMessages).where(eq(conversationMessages.externalId, 'mid-suspended')),
+        app,
+      )
+      expect(stored).toHaveLength(1)
+      await platform.insert(socialPosts).values({
+        tenantId: ids.a!,
+        platform: 'instagram',
+        caption: 'Due while suspended',
+        status: 'scheduled',
+        scheduledAt: new Date(t0.getTime() - 60_000),
+        media: [{ url: 'https://cdn.test/s.jpg' }],
+      })
+      const f = fakeFetch(() => json({ id: 'never' }))
+      expect(
+        await publishDueInstagramPosts({ ...base, now: t0, fetch: f.fetch, sleep: async () => {} }),
+      ).toMatchObject({ attempted: 0 })
+      const weekLater = new Date(t0.getTime() + 8 * 86_400_000) // token would be due for a refresh
+      expect(await refreshInstagramTokens({ ...base, fetch: f.fetch, now: weekLater })).toMatchObject({
+        refreshed: 0,
+      })
+      expect(f.calls).toHaveLength(0)
+    } finally {
+      await platform.update(tenants).set({ status: 'active' }).where(eq(tenants.id, ids.a!))
+    }
+  })
+
+  it('forgets an account by its app-scoped id too', async () => {
+    await withTenant(
+      ids.b!,
+      (tx) =>
+        saveInstagramConnection(tx, ids.b!, {
+          igUserId: '17841400000000002',
+          appUserId: 'app-scoped-9',
+          accessToken: 'IGAAtoken-b',
+          expiresIn: 5_184_000,
+          scopes: [],
+          webhooks: 'subscribed',
+        }),
+      app,
+    )
+    expect(await forgetInstagramUser('app-scoped-9', base)).toBe(1)
+    const [acct] = await withTenant(ids.b!, (tx) => tx.select().from(socialAccounts), app)
+    expect(acct).toMatchObject({ status: 'disconnected', tokenEnc: null, meta: {}, username: null })
+    expect(await forgetInstagramUser('no-such-user', base)).toBe(0)
   })
 })

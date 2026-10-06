@@ -19,12 +19,17 @@ export async function POST(req: NextRequest) {
   const userId = data?.user_id
   if (!data || (typeof userId !== 'string' && typeof userId !== 'number'))
     return new Response('Invalid request', { status: 400 })
-  await forgetInstagramUser(String(userId))
+  const cleared = await forgetInstagramUser(String(userId))
+  // Nothing matched is still a valid answer (we hold no data for that id); log it so ops can check unexpected ids.
+  if (!cleared) console.info('instagram data-deletion: no connected account matched the request')
   const code = confirmation(String(userId))
   return Response.json({ url: `${metaUrls().dataDeletion}?code=${code}`, confirmation_code: code })
 }
 
-/** Status page for the confirmation code (deletion runs synchronously above). */
+/**
+ * Status page for the confirmation code. Deletion runs synchronously above, so every issued code is processed; the
+ * wording holds whether or not an account matched (the code doesn't say which).
+ */
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams
     .get('code')
@@ -32,7 +37,7 @@ export async function GET(req: NextRequest) {
     .slice(0, 16)
   if (!code) return new Response('Missing confirmation code', { status: 400 })
   return new Response(
-    `Deletion request ${code}: completed. The Instagram access token and profile details were removed from spamanagement.ae.`,
+    `Deletion request ${code}: processed. spamanagement.ae no longer holds an Instagram access token or profile details for this account (any it held were removed when the request arrived).`,
     { headers: { 'content-type': 'text/plain; charset=utf-8' } },
   )
 }

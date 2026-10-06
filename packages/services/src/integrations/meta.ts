@@ -407,6 +407,14 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
   }
 }
 
+/** Why staff DM text can't go out as written (Instagram counts UTF-8 bytes: Arabic letters take 2); null = it fits. */
+export function dmTooLong(text: string, max = MAX_DM_BYTES) {
+  const bytes = new TextEncoder().encode(text).length
+  return bytes > max
+    ? `Too long for an Instagram DM (${bytes}/${max} bytes; Arabic letters count as 2) — shorten it a little.`
+    : null
+}
+
 /** UTF-8 byte-safe truncation for DM text. */
 export function clipBytes(text: string, max = MAX_DM_BYTES) {
   const enc = new TextEncoder()
