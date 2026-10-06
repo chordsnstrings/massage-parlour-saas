@@ -339,6 +339,8 @@ export async function exportRows(
 /** Columns never exported: credentials, token hashes and raw file bytes. */
 const SECRET_COLUMN = /(token|secret|password|hash|_enc)$|^bytes$/
 
+const PHONE_COLUMN = /phone/
+
 export type ExportTable = { file: string; table: string; rows: unknown[][] }
 
 /** Every tenant-scoped table (RLS tenant policy) as header + rows, secrets removed. */
@@ -353,14 +355,15 @@ export async function fullExportTables(tx: Tx, opts: { phones: boolean }): Promi
     const cols = Object.entries(getTableColumns(t)).filter(
       ([, c]) => c.name !== 'tenant_id' && !SECRET_COLUMN.test(c.name),
     )
-    const rows = (await tx.select().from(t)) as Record<string, unknown>[]
+    // Only the exported columns: keeps stored file bytes and secrets out of memory entirely.
+    const rows = (await tx.select(Object.fromEntries(cols)).from(t)) as Record<string, unknown>[]
     out.push({
       file: `${cfg.name}.csv`,
       table: cfg.name,
       rows: [
         cols.map(([, c]) => c.name),
         ...rows.map((r) =>
-          cols.map(([key, c]) => (c.name === 'phone_e164' && !opts.phones ? '' : (r[key] ?? null))),
+          cols.map(([key, c]) => (PHONE_COLUMN.test(c.name) && !opts.phones ? '' : (r[key] ?? null))),
         ),
       ],
     })
@@ -387,7 +390,7 @@ export function fullExportReadme(opts: {
     '- Phone numbers are E.164 digits without "+" (971501234567).',
     '- Cells that start with = + - @ are prefixed with an apostrophe so spreadsheets do not run them.',
     '- Access tokens, invitation/session hashes and uploaded file bytes are not included.',
-    ...(opts.phones ? [] : ['- Client phone numbers are blank: your role cannot see phone numbers.']),
+    ...(opts.phones ? [] : ['- Phone numbers are blank: your role cannot see phone numbers.']),
     '',
     'Files:',
     ...opts.tables.map((t) => `  ${t.file.padEnd(32)} ${t.count} rows`),

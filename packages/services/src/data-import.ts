@@ -41,10 +41,13 @@ type Outcome = { row: number; result: 'created' | 'updated' | 'skipped' }
 const chunks = <T>(list: T[], size: number) =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, i * size + size))
 
-/** Row numbers (valid rows only) whose client, menu item or product already exists. */
+/**
+ * Row numbers (valid, first-in-file rows only) whose client, menu item or product already exists. Products
+ * replay the import's matching row by row, so a product created earlier in the file counts as existing.
+ */
 export async function existingRows(tx: Tx, kind: ImportKind, rows: ValidatedRow[]): Promise<Set<number>> {
   const found = new Set<string>()
-  const valid = rows.filter((r) => r.record && r.key)
+  const valid = rows.filter((r) => r.record && r.key && r.dupOfRow == null)
   if (!valid.length) return new Set()
   if (kind === 'clients') {
     const phones = valid.flatMap((r) => (r.key!.startsWith('name:') ? [] : [r.key!]))
@@ -75,22 +78,46 @@ export async function existingRows(tx: Tx, kind: ImportKind, rows: ValidatedRow[
   const index = productIndex(
     await tx.select({ id: products.id, sku: products.sku, name: products.name }).from(products),
   )
-  return new Set(valid.filter((r) => findProduct(index, r.record as ProductRecord)).map((r) => r.row))
+  const hits = new Set<number>()
+  for (const r of valid) {
+    const p = r.record as ProductRecord
+    const hit = findProduct(index, p)
+    if (hit) hits.add(r.row)
+    else addProduct(index, `row:${r.row}`, p.sku, p.name)
+  }
+  return hits
 }
 
-type ProductIndex = { bySku: Map<string, string>; byName: Map<string, string> }
+type ProductEntry = { id: string; sku: string | null }
+type ProductIndex = { bySku: Map<string, ProductEntry>; byName: Map<string, ProductEntry[]> }
 const productIndex = (rows: { id: string; sku: string | null; name: { en: string } }[]): ProductIndex => {
   const index: ProductIndex = { bySku: new Map(), byName: new Map() }
   for (const p of rows) addProduct(index, p.id, p.sku, p.name.en)
   return index
 }
 const addProduct = (index: ProductIndex, id: string, sku: string | null, name: string) => {
-  if (sku && !index.bySku.has(sku.toLowerCase())) index.bySku.set(sku.toLowerCase(), id)
-  if (!index.byName.has(name.toLowerCase())) index.byName.set(name.toLowerCase(), id)
+  const entry: ProductEntry = { id, sku: sku?.toLowerCase() || null }
+  if (entry.sku && !index.bySku.has(entry.sku)) index.bySku.set(entry.sku, entry)
+  const key = name.toLowerCase()
+  index.byName.set(key, [...(index.byName.get(key) ?? []), entry])
 }
-/** Same SKU, or else the same English name. */
-const findProduct = (index: ProductIndex, p: ProductRecord) =>
-  (p.sku ? index.bySku.get(p.sku.toLowerCase()) : undefined) ?? index.byName.get(p.name.toLowerCase())
+/**
+ * Same SKU, or else the same English name — but a row with a SKU only takes over a same-named product
+ * without one (two SKUs mean two products). The match claims that SKU, so the next row with the same
+ * name and another SKU becomes a new product (in update and skip mode alike, keeping the preview right).
+ */
+const findProduct = (index: ProductIndex, p: ProductRecord) => {
+  const sku = p.sku?.toLowerCase() || null
+  const bySku = sku ? index.bySku.get(sku) : undefined
+  if (bySku) return bySku
+  const named = index.byName.get(p.name.toLowerCase()) ?? []
+  const hit = named.find((e) => !e.sku) ?? (sku ? undefined : named[0])
+  if (hit && sku) {
+    hit.sku = sku
+    if (!index.bySku.has(sku)) index.bySku.set(sku, hit)
+  }
+  return hit
+}
 
 async function importClients(
   tx: Tx,
@@ -100,10 +127,10 @@ async function importClients(
 ): Promise<Outcome[]> {
   const out: Outcome[] = []
   const phones = rows.flatMap((r) => (r.record!.phone ? [r.record!.phone] : []))
-  const byKey = new Map<string, { id: string; tags: string[] }>()
+  const byKey = new Map<string, { id: string; tags: string[]; notes: string | null }>()
   if (phones.length) {
     const found = await tx
-      .select({ id: clients.id, phone: clients.phoneE164, tags: clients.tags })
+      .select({ id: clients.id, phone: clients.phoneE164, tags: clients.tags, notes: clients.notes })
       .from(clients)
       .where(inArray(clients.phoneE164, phones))
     for (const c of found) byKey.set(c.phone!, c)
@@ -111,7 +138,12 @@ async function importClients(
   const names = rows.flatMap((r) => (r.record!.phone ? [] : [r.record!.name.toLowerCase()]))
   if (names.length) {
     const found = await tx
-      .select({ id: clients.id, name: sql<string>`lower(${clients.name})`, tags: clients.tags })
+      .select({
+        id: clients.id,
+        name: sql<string>`lower(${clients.name})`,
+        tags: clients.tags,
+        notes: clients.notes,
+      })
       .from(clients)
       .where(and(isNull(clients.phoneE164), inArray(sql`lower(${clients.name})`, names)))
     for (const c of found) byKey.set(`name:${c.name}`, c)
@@ -128,16 +160,23 @@ async function importClients(
       out.push({ row: r.row, result: 'skipped' })
       continue
     }
+    // Never erases: the name typed at reception stays, file notes are appended, tags are merged.
     const tags = [...existing.tags]
     for (const t of rec.tags) if (!tags.some((x) => x.toLowerCase() === t.toLowerCase())) tags.push(t)
+    const current = existing.notes?.trim() ?? ''
+    const notes =
+      !rec.notes || current.toLowerCase().includes(rec.notes.toLowerCase())
+        ? null
+        : current
+          ? `${current}\n${rec.notes}`
+          : rec.notes
     await tx
       .update(clients)
       .set({
-        name: rec.name,
         ...(rec.gender ? { gender: rec.gender } : {}),
         ...(rec.birthday ? { birthday: rec.birthday } : {}),
         ...(rec.language ? { language: rec.language } : {}),
-        ...(rec.notes ? { notes: rec.notes } : {}),
+        ...(notes ? { notes } : {}),
         ...(rec.source ? { source: rec.source } : {}),
         tags,
         updatedAt: new Date(),
@@ -272,7 +311,7 @@ async function importProducts(
   let openingValue = 0
   for (const r of rows) {
     const p = r.record!
-    const id = findProduct(index, p)
+    const id = findProduct(index, p)?.id
     if (!id) {
       const [made] = await tx
         .insert(products)

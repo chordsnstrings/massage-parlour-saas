@@ -231,7 +231,31 @@ export const IMPORT_TEMPLATES: Record<ImportKind, string[][]> = {
 // Decoding and delimiter detection
 // ---------------------------------------------------------------------------
 
-/** File bytes → text: UTF-8 (BOM stripped), UTF-16 with BOM, or Windows-1252 for legacy Excel exports. */
+const hasUtf16Bom = (b: Uint8Array) => (b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff)
+
+/** Workbooks (.xlsx zip, legacy .xls) and other binary files that are not CSV text. */
+export function isBinaryFile(bytes: Uint8Array): boolean {
+  const starts = (...sig: number[]) => sig.every((b, i) => bytes[i] === b)
+  if (starts(0x50, 0x4b, 0x03, 0x04) || starts(0xd0, 0xcf, 0x11, 0xe0)) return true
+  return !hasUtf16Bom(bytes) && bytes.subarray(0, 8192).includes(0)
+}
+
+/**
+ * Legacy (non-UTF-8) bytes: Arabic Windows-1256 when most high bytes sit next to another high byte
+ * (Arabic words), otherwise Windows-1252, whose accented letters stand alone inside Latin words.
+ */
+const legacyEncoding = (bytes: Uint8Array) => {
+  let high = 0
+  let paired = 0
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i]! < 0xc0) continue
+    high++
+    if ((bytes[i - 1] ?? 0) >= 0xc0 || (bytes[i + 1] ?? 0) >= 0xc0) paired++
+  }
+  return high >= 4 && paired / high > 0.6 ? 'windows-1256' : 'windows-1252'
+}
+
+/** File bytes → text: UTF-8 (BOM stripped), UTF-16 with BOM, or Windows-1256/1252 for legacy Excel exports. */
 export function decodeCsvBytes(bytes: Uint8Array): string {
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2))
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2))
@@ -239,7 +263,7 @@ export function decodeCsvBytes(bytes: Uint8Array): string {
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   } catch {
-    text = new TextDecoder('windows-1252').decode(bytes)
+    text = new TextDecoder(legacyEncoding(bytes)).decode(bytes)
   }
   return text.replace(/^﻿/, '')
 }
@@ -381,8 +405,8 @@ export function parseDate(input: string, order: DateOrder = 'dmy'): string | nul
     const month = MONTHS[m[1]!]
     return month ? ymd(Number(m[3]), month, Number(m[2])) : null
   }
-  if (/^\d{4,5}$/.test(s)) {
-    // Excel serial date (days since 1899-12-30).
+  if (/^\d{5}$/.test(s)) {
+    // Excel serial date (days since 1899-12-30; five digits = 1927–2173, so a bare year is an error).
     const n = Number(s)
     if (n < 1 || n > 73_000) return null
     return new Date(Date.UTC(1899, 11, 30) + n * 86_400_000).toISOString().slice(0, 10)
@@ -763,8 +787,21 @@ function validateProduct(get: (k: string) => string) {
   return { record, errors, display, key }
 }
 
-/** Validates and normalises every data row with the chosen mapping (column index → field key). */
-export function validateRows(kind: ImportKind, rows: string[][], mapping: string[]): ValidatedRow[] {
+export const isBlankRow = (r: string[]) => r.every((c) => !c?.trim())
+
+/** Row error without the cell values quoted in it (for the audit log, which outlives the upload). */
+export const withoutValues = (message: string) => message.replace(/“[^”]*”/g, '“…”')
+
+/**
+ * Validates and normalises every data row with the chosen mapping (column index → field key). Blank rows
+ * are dropped but still counted, so `row` stays the spreadsheet row (`firstRow` = row number of rows[0]).
+ */
+export function validateRows(
+  kind: ImportKind,
+  rows: string[][],
+  mapping: string[],
+  firstRow = 2,
+): ValidatedRow[] {
   const col = new Map<string, number>()
   mapping.forEach((key, i) => {
     if (key && !col.has(key)) col.set(key, i)
@@ -775,7 +812,8 @@ export function validateRows(kind: ImportKind, rows: string[][], mapping: string
   }
   const order = col.has('birthday') ? detectDateOrder(rows.map((r) => cell(r, 'birthday'))) : 'dmy'
   const seen = new Map<string, number>()
-  return rows.map((r, i) => {
+  return rows.flatMap((r, i) => {
+    if (isBlankRow(r)) return []
     const get = (k: string) => cell(r, k)
     const v =
       kind === 'clients'
@@ -783,20 +821,22 @@ export function validateRows(kind: ImportKind, rows: string[][], mapping: string
         : kind === 'menu'
           ? validateMenu(get)
           : validateProduct(get)
-    const row = i + 2
+    const row = i + firstRow
     let dupOfRow: number | null = null
     if (!v.errors.length && v.key) {
       dupOfRow = seen.get(v.key) ?? null
       if (dupOfRow == null) seen.set(v.key, row)
     }
-    return {
-      row,
-      record: v.errors.length ? null : v.record,
-      errors: v.errors,
-      key: v.key,
-      dupOfRow,
-      display: v.display,
-    }
+    return [
+      {
+        row,
+        record: v.errors.length ? null : v.record,
+        errors: v.errors,
+        key: v.key,
+        dupOfRow,
+        display: v.display,
+      },
+    ]
   })
 }
 

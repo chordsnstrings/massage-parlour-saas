@@ -61,7 +61,8 @@ const COPY: Record<
     many: 'clients',
     question: 'Clients you already have (same mobile number)',
     update: 'Update their details',
-    updateHint: 'Fills in what the file has and adds tags. Nothing is erased.',
+    updateHint:
+      'Keeps their name and notes (new notes are added below), adds tags and updates other details the file has.',
     skip: 'Leave them as they are',
   },
   menu: {
