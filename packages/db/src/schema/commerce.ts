@@ -216,6 +216,7 @@ export const outbox = pgTable(
     clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
     bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'cascade' }),
     kind: messageKind('kind').notNull(),
+    campaignId: uuid('campaign_id'),
     phoneE164: text('phone_e164').notNull(),
     text: text('text').notNull(),
     status: outboxStatus('status').notNull().default('queued'),

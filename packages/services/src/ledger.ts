@@ -105,18 +105,16 @@ export async function post(
       reversesId: e.reversesId ?? null,
     })
     .returning()
-  await tx
-    .insert(journalLines)
-    .values(
-      lines.map((l) => ({
-        tenantId: e.tenantId,
-        entryId: entry!.id,
-        accountId: byCode.get(l.code)!,
-        debitAed: l.debit.toFixed(2),
-        creditAed: l.credit.toFixed(2),
-        memo: l.memo ?? null,
-      })),
-    )
+  await tx.insert(journalLines).values(
+    lines.map((l) => ({
+      tenantId: e.tenantId,
+      entryId: entry!.id,
+      accountId: byCode.get(l.code)!,
+      debitAed: l.debit.toFixed(2),
+      creditAed: l.credit.toFixed(2),
+      memo: l.memo ?? null,
+    })),
+  )
   return entry!
 }
 

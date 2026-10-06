@@ -122,6 +122,17 @@ export const staff = pgTable(
     bookable: boolean('bookable').notNull().default(true),
     commissionPct: numeric('commission_pct', { precision: 5, scale: 2 }).notNull().default('0'),
     baseSalaryAed: aed('base_salary_aed').notNull().default('0'),
+    /** WPS / payroll identifiers: { personId, labourCardNo, iban, routingCode, bank } */
+    payroll: jsonb('payroll')
+      .$type<{
+        personId?: string
+        labourCardNo?: string
+        iban?: string
+        routingCode?: string
+        bank?: string
+      }>()
+      .notNull()
+      .default({}),
     active: boolean('active').notNull().default(true),
     sort: integer('sort').notNull().default(0),
     createdAt: createdAt(),
