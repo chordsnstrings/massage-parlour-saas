@@ -17,7 +17,7 @@ if ! as_pg "$PGBIN/pg_ctl -D $PGDATA status" >/dev/null 2>&1; then
   as_pg "$PGBIN/pg_ctl -D $PGDATA -o '-p $PORT -k /tmp' -l $PGDATA/server.log -w start" >/dev/null
 fi
 for db in spa spa_test; do
-  psql -h localhost -p "$PORT" -U postgres -d postgres -q \
+  PGOPTIONS="-c client_min_messages=warning" psql -h localhost -p "$PORT" -U postgres -d postgres -q \
     -v db_name="$db" -v owner_password=spa_owner_dev -v platform_password=spa_platform_dev -v app_password=spa_app_dev \
     -f "$ROOT/packages/db/sql/bootstrap.sql"
 done

@@ -139,6 +139,9 @@ importers:
 
   packages/auth:
     dependencies:
+      '@spa/core':
+        specifier: workspace:*
+        version: link:../core
       '@spa/db':
         specifier: workspace:*
         version: link:../db

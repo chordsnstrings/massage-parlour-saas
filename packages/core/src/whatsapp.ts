@@ -1,0 +1,19 @@
+/** Normalises a UAE mobile number to E.164 digits without '+', e.g. 0501234567 → 971501234567. */
+export function toUaeE164(input: string): string | null {
+  let digits = input.replace(/\D/g, '')
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  if (digits.startsWith('0')) digits = `971${digits.slice(1)}`
+  if (digits.length === 9 && digits.startsWith('5')) digits = `971${digits}`
+  return /^9715\d{8}$/.test(digits) ? digits : null
+}
+
+export type WhatsAppMode = 'desktop' | 'web' | 'mobile'
+
+/** Click-to-send link; a human presses send in WhatsApp (no automation). */
+export function whatsappLink(phoneE164: string, text: string, mode: WhatsAppMode = 'mobile'): string {
+  const phone = phoneE164.replace(/\D/g, '')
+  const t = encodeURIComponent(text)
+  if (mode === 'desktop') return `whatsapp://send?phone=${phone}&text=${t}`
+  if (mode === 'web') return `https://web.whatsapp.com/send?phone=${phone}&text=${t}`
+  return `https://wa.me/${phone}?text=${t}`
+}
