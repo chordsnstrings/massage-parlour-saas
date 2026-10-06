@@ -4,10 +4,19 @@ export const NONCE_PATH = '/api/integrations/meta'
 
 /** Messages for `?ig=` after the OAuth round trip (shown on the integrations card). */
 export const CONNECT_NOTICES: Record<string, { tone: 'success' | 'error'; text: string }> = {
-  connected: { tone: 'success', text: 'Instagram is connected. New DMs and comments will appear in the inbox.' },
+  connected: {
+    tone: 'success',
+    text: 'Instagram is connected. New DMs and comments will appear in the inbox.',
+  },
   denied: { tone: 'error', text: 'Instagram access was not granted, so nothing was connected.' },
-  state: { tone: 'error', text: 'That connect link expired or was opened in another browser. Please try again.' },
-  forbidden: { tone: 'error', text: 'Only someone who can manage AI settings for this spa can connect Instagram.' },
+  state: {
+    tone: 'error',
+    text: 'That connect link expired or was opened in another browser. Please try again.',
+  },
+  forbidden: {
+    tone: 'error',
+    text: 'Only someone who can manage AI settings for this spa can connect Instagram.',
+  },
   in_use: {
     tone: 'error',
     text: 'That Instagram account is already connected to another spa. Disconnect it there first.',

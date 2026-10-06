@@ -24,7 +24,11 @@ const inboxPath = (slug: string) => `/dashboard/${slug}/inbox`
 const delivered = (r: Awaited<ReturnType<typeof deliverReply>>): ActionResult =>
   r.ok ? ok('Sent', { sent: true }) : ok(`Saved, not sent — ${r.error}`, { sent: false })
 
-export async function sendReplyAction(slug: string, conversationId: string, text: string): Promise<ActionResult> {
+export async function sendReplyAction(
+  slug: string,
+  conversationId: string,
+  text: string,
+): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
   const parsed = z.object({ conversationId: uuid, text: Text }).safeParse({ conversationId, text })
@@ -37,7 +41,9 @@ export async function sendReplyAction(slug: string, conversationId: string, text
         .set({ mode: 'human' })
         .where(and(eq(conversations.id, parsed.data.conversationId), eq(conversations.mode, 'bot'))),
     )
-    const r = await deliverReply(ctx.tenant.id, parsed.data.conversationId, parsed.data.text, { sender: 'staff' })
+    const r = await deliverReply(ctx.tenant.id, parsed.data.conversationId, parsed.data.text, {
+      sender: 'staff',
+    })
     await audit({
       tenantId: ctx.tenant.id,
       actorUserId: ctx.user.id,
@@ -55,7 +61,11 @@ export async function sendReplyAction(slug: string, conversationId: string, text
 }
 
 /** Sends an AI draft as-is (sender bot) or edited (sender staff). */
-export async function approveDraftAction(slug: string, messageId: string, text: string): Promise<ActionResult> {
+export async function approveDraftAction(
+  slug: string,
+  messageId: string,
+  text: string,
+): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
   const parsed = z.object({ messageId: uuid, text: Text }).safeParse({ messageId, text })
@@ -64,7 +74,9 @@ export async function approveDraftAction(slug: string, messageId: string, text: 
     tx
       .select()
       .from(conversationMessages)
-      .where(and(eq(conversationMessages.id, parsed.data.messageId), eq(conversationMessages.sender, 'ai_draft'))),
+      .where(
+        and(eq(conversationMessages.id, parsed.data.messageId), eq(conversationMessages.sender, 'ai_draft')),
+      ),
   )
   if (!draft) return fail('This draft was already handled.')
   const edited = draft.text.trim() !== parsed.data.text
@@ -91,7 +103,12 @@ export async function discardDraftAction(slug: string, messageId: string): Promi
   if (!parsed.success) return fail('Unknown draft')
   const done = await withTenant(ctx.tenant.id, (tx) => discardDraft(tx, parsed.data))
   if (!done) return fail('This draft was already handled.')
-  await audit({ tenantId: ctx.tenant.id, actorUserId: ctx.user.id, action: 'inbox.draft.discard', entityId: messageId })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'inbox.draft.discard',
+    entityId: messageId,
+  })
   revalidatePath(inboxPath(slug))
   return ok('Draft discarded')
 }
@@ -143,7 +160,9 @@ export async function setModeAction(
     .safeParse({ conversationId, mode })
   if (!parsed.success) return fail('Unknown conversation')
   try {
-    await withTenant(ctx.tenant.id, (tx) => setConversationMode(tx, parsed.data.conversationId, parsed.data.mode))
+    await withTenant(ctx.tenant.id, (tx) =>
+      setConversationMode(tx, parsed.data.conversationId, parsed.data.mode),
+    )
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message)
     throw e
@@ -159,12 +178,20 @@ export async function setModeAction(
   return ok(MODE_MESSAGES[parsed.data.mode])
 }
 
-export async function setFlagAction(slug: string, conversationId: string, flagged: boolean): Promise<ActionResult> {
+export async function setFlagAction(
+  slug: string,
+  conversationId: string,
+  flagged: boolean,
+): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
-  const parsed = z.object({ conversationId: uuid, flagged: z.boolean() }).safeParse({ conversationId, flagged })
+  const parsed = z
+    .object({ conversationId: uuid, flagged: z.boolean() })
+    .safeParse({ conversationId, flagged })
   if (!parsed.success) return fail('Unknown conversation')
-  await withTenant(ctx.tenant.id, (tx) => setConversationFlag(tx, parsed.data.conversationId, parsed.data.flagged))
+  await withTenant(ctx.tenant.id, (tx) =>
+    setConversationFlag(tx, parsed.data.conversationId, parsed.data.flagged),
+  )
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,

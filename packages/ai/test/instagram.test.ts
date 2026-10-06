@@ -91,7 +91,10 @@ afterAll(closeAllDbs)
 describe('Instagram agent hand-off', () => {
   it('stores an AI draft in approve mode (nothing is sent)', async () => {
     await settings('approve')
-    const [item] = await ingestInstagramWebhook(dm('m-1', 'cust-1', 'Are you open on Friday?'), { platform, app })
+    const [item] = await ingestInstagramWebhook(dm('m-1', 'cust-1', 'Are you open on Friday?'), {
+      platform,
+      app,
+    })
     const graph = vi.fn()
     const r = await respondToInstagram(item!, {
       platform,
@@ -140,7 +143,8 @@ describe('Instagram agent hand-off', () => {
     const [item] = await ingestInstagramWebhook(dm('m-3', 'cust-2', 'Thanks!'), { platform, app })
     await withTenant(
       ids.tenant!,
-      (tx) => tx.update(conversations).set({ mode: 'human' }).where(eq(conversations.id, item!.conversationId)),
+      (tx) =>
+        tx.update(conversations).set({ mode: 'human' }).where(eq(conversations.id, item!.conversationId)),
       app,
     )
     const client = modelReply('unused')
@@ -160,7 +164,9 @@ describe('Instagram agent hand-off', () => {
           {
             id: IG,
             time: Math.floor(now.getTime() / 1000),
-            changes: [{ field: 'comments', value: { id: 'cm-1', text: 'something rude', from: { id: '5' } } }],
+            changes: [
+              { field: 'comments', value: { id: 'cm-1', text: 'something rude', from: { id: '5' } } },
+            ],
           },
         ],
       },

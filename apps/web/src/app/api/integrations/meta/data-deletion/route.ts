@@ -4,7 +4,8 @@ import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const confirmation = (userId: string) => createHash('sha256').update(`ig-delete:${userId}`).digest('hex').slice(0, 16)
+const confirmation = (userId: string) =>
+  createHash('sha256').update(`ig-delete:${userId}`).digest('hex').slice(0, 16)
 
 /**
  * Meta "Data deletion request" callback: removes the account's token and profile data, then returns the status URL +
@@ -25,7 +26,10 @@ export async function POST(req: NextRequest) {
 
 /** Status page for the confirmation code (deletion runs synchronously above). */
 export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get('code')?.replace(/[^a-f0-9]/g, '').slice(0, 16)
+  const code = req.nextUrl.searchParams
+    .get('code')
+    ?.replace(/[^a-f0-9]/g, '')
+    .slice(0, 16)
   if (!code) return new Response('Missing confirmation code', { status: 400 })
   return new Response(
     `Deletion request ${code}: completed. The Instagram access token and profile details were removed from spamanagement.ae.`,

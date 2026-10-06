@@ -288,7 +288,10 @@ export async function loadAgentTurn(item: InboundItem, o: SocialOpts = {}) {
         .filter((r) => r.id !== item.messageId)
         .slice(0, 20)
         .reverse()
-        .map((r) => ({ from: r.sender === 'customer' ? ('customer' as const) : ('spa' as const), text: r.text }))
+        .map((r) => ({
+          from: r.sender === 'customer' ? ('customer' as const) : ('spa' as const),
+          text: r.text,
+        }))
       return { conversation: conv, history }
     },
     appOf(o),
@@ -411,7 +414,8 @@ export function replyBlocker(
   env?: Record<string, string | undefined>,
 ) {
   if (!metaConfig(env)) return "Instagram isn't set up on this server yet (sandbox) — saved here only."
-  if (!s.account || !s.token) return "Instagram isn't connected — connect it in Settings → Instagram & Google."
+  if (!s.account || !s.token)
+    return "Instagram isn't connected — connect it in Settings → Instagram & Google."
   if (s.account.tokenExpiresAt && s.account.tokenExpiresAt <= now)
     return 'The Instagram connection expired — reconnect it in Settings → Instagram & Google.'
   if (s.channel === 'instagram_dm' && !dmWindowOpen(s.lastCustomerMsgAt, now))
@@ -467,7 +471,8 @@ export async function deliverReply(
         : ((await client.replyToComment({ commentId: conv.externalThreadId, text: body, accessToken: token }))
             .id ?? null)
     } catch (e) {
-      error = e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Something went wrong while sending.'
+      error =
+        e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Something went wrong while sending.'
       expired = e instanceof MetaApiError && e.code === 190
     }
   }
@@ -565,13 +570,14 @@ export const isUnread = (lastCustomerMsgAt: Date | null, readAt: Date | null) =>
 export async function inboxCounts(tx: Tx) {
   const [row] = await tx
     .select({
+      total: sql<number>`count(*)::int`,
       open: sql<number>`count(*) filter (where ${conversations.mode} <> 'closed')::int`,
       unread: sql<number>`count(*) filter (where ${conversations.lastCustomerMsgAt} is not null and (${conversations.readAt} is null or ${conversations.lastCustomerMsgAt} > ${conversations.readAt}))::int`,
       flagged: sql<number>`count(*) filter (where ${conversations.flagged})::int`,
     })
     .from(conversations)
     .where(inArray(conversations.channel, CHANNELS))
-  return row ?? { open: 0, unread: 0, flagged: 0 }
+  return row ?? { total: 0, open: 0, unread: 0, flagged: 0 }
 }
 
 export async function getThread(tx: Tx, conversationId: string) {
@@ -644,8 +650,9 @@ export async function linkConversationClient(
       .limit(1)
     clientId =
       existing?.id ??
-      (await tx.insert(clients).values({ tenantId, name, source: 'instagram' }).returning({ id: clients.id }))[0]!
-        .id
+      (
+        await tx.insert(clients).values({ tenantId, name, source: 'instagram' }).returning({ id: clients.id })
+      )[0]!.id
   }
   await tx.update(conversations).set({ clientId }).where(eq(conversations.id, conversationId))
   return clientId

@@ -80,8 +80,8 @@ export async function InstagramCard({
           <div className="space-y-3 rounded-lg border border-dashed px-4 py-4">
             <p className="text-sm font-medium">Not configured yet</p>
             <p className="text-sm text-muted">
-              Instagram needs the platform’s Meta app before spas can connect. Once the keys below are set on the
-              server, a Connect button appears here.
+              Instagram needs the platform’s Meta app before spas can connect. Once the keys below are set on
+              the server, a Connect button appears here.
             </p>
             <div className="flex flex-wrap gap-1.5">
               {missing.map((k) => (
@@ -190,8 +190,8 @@ export async function InstagramCard({
         <div className="space-y-4 px-5 pb-5 text-sm sm:px-6 sm:pb-6">
           <p className="text-muted">
             For the platform’s Meta app (Instagram API with Instagram Login). Subscribe the webhook to{' '}
-            <span className="text-fg">messages</span> and <span className="text-fg">comments</span>; the verify
-            token is the server’s META_WEBHOOK_VERIFY_TOKEN.
+            <span className="text-fg">messages</span> and <span className="text-fg">comments</span>; the
+            verify token is the server’s META_WEBHOOK_VERIFY_TOKEN.
           </p>
           <UrlRow label="Webhook callback URL" value={urls.webhook} />
           <UrlRow label="OAuth redirect URI" value={urls.callback} />
@@ -208,7 +208,9 @@ function UrlRow({ label, value }: { label: string; value: string }) {
     <div className="space-y-1.5">
       <p className="text-[13px] text-muted">{label}</p>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md border bg-subtle/60 px-2.5 py-2 text-xs">{value}</code>
+        <code className="min-w-0 flex-1 truncate rounded-md border bg-subtle/60 px-2.5 py-2 text-xs">
+          {value}
+        </code>
         <CopyButton value={value} />
       </div>
     </div>

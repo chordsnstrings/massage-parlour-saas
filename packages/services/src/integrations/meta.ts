@@ -202,13 +202,17 @@ export function parseInstagramWebhook(body: unknown, now = new Date()): Instagra
       const attachment = obj(arr(message.attachments)[0])
       const text =
         str(message.text)?.trim() ||
-        (attachment ? `[${str(attachment.type) ?? 'attachment'}]` : message.is_unsupported ? '[unsupported]' : '')
+        (attachment
+          ? `[${str(attachment.type) ?? 'attachment'}]`
+          : message.is_unsupported
+            ? '[unsupported]'
+            : '')
       if (!text) continue
       out.push({ kind: 'dm', accountId, senderId, mid, text: clip(text), at: when(m.timestamp, entryAt) })
     }
     for (const raw of arr(entry.changes)) {
       const change = obj(raw)
-      if (!change || change.field !== 'comments') continue
+      if (change?.field !== 'comments') continue
       const v = obj(change.value)
       const commentId = str(v?.id)
       const text = str(v?.text)?.trim()
@@ -369,7 +373,12 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
       })
       return { id: str(data.id) }
     },
-    async createMediaContainer(o: { igUserId: string; imageUrl: string; caption: string; accessToken: string }) {
+    async createMediaContainer(o: {
+      igUserId: string
+      imageUrl: string
+      caption: string
+      accessToken: string
+    }) {
       const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media`), {
         ...json({ image_url: o.imageUrl, caption: o.caption }),
         token: o.accessToken,
