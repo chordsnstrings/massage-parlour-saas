@@ -7,7 +7,8 @@ import {
   subscriptions,
   withTenant,
 } from '@spa/db'
-import { desc, eq } from 'drizzle-orm'
+import { getCheckoutSession, StripeError, settleCheckoutSession, stripeConfig } from '@spa/services'
+import { and, desc, eq, isNotNull } from 'drizzle-orm'
 import { MessageCircle, ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -18,12 +19,46 @@ import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
 import { formatAed, formatDate } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { PayByCardButton } from './pay-button'
 
 export const metadata: Metadata = { title: 'Subscription' }
 
-export default async function BillingPage({ params }: { params: Promise<{ tenant: string }> }) {
+/** Card payments started on Stripe Checkout are confirmed by asking Stripe, never by trusting the return URL. */
+async function settlePendingCardPayments(tenantId: string) {
+  const cfg = stripeConfig()
+  if (!cfg) return
+  const db = platformDb()
+  const pending = await db
+    .select()
+    .from(platformInvoices)
+    .where(
+      and(
+        eq(platformInvoices.tenantId, tenantId),
+        eq(platformInvoices.status, 'issued'),
+        isNotNull(platformInvoices.stripeSessionId),
+      ),
+    )
+  for (const inv of pending) {
+    try {
+      await settleCheckoutSession(db, inv, await getCheckoutSession(cfg, inv.stripeSessionId!))
+    } catch (e) {
+      if (!(e instanceof StripeError)) throw e
+    }
+  }
+}
+
+export default async function BillingPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tenant: string }>
+  searchParams: Promise<{ paid?: string }>
+}) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'billing.view')) notFound()
+  const justPaid = Boolean((await searchParams).paid)
+  await settlePendingCardPayments(ctx.tenant.id)
+  const cardsOn = stripeConfig() !== null
   const { sub, invoices, payments } = await withTenant(ctx.tenant.id, async (tx) => ({
     sub: (await tx.select().from(subscriptions).limit(1))[0],
     invoices: await tx.select().from(platformInvoices).orderBy(desc(platformInvoices.issueDate)),
@@ -44,7 +79,11 @@ export default async function BillingPage({ params }: { params: Promise<{ tenant
     <>
       <PageHeader
         title="Subscription"
-        description="Your plan, invoices and payments. Pay by bank transfer or cash."
+        description={
+          cardsOn
+            ? 'Your plan, invoices and payments. Pay by card, bank transfer or cash.'
+            : 'Your plan, invoices and payments. Pay by bank transfer or cash.'
+        }
       />
       <PageBody>
         <div className="grid gap-6 lg:grid-cols-12">
@@ -104,6 +143,16 @@ export default async function BillingPage({ params }: { params: Promise<{ tenant
             </CardBody>
           </Card>
         </div>
+        {justPaid && (
+          <p
+            role="status"
+            className="anim-fade-in rounded-xl border border-success/25 bg-accent-soft px-5 py-4 text-sm"
+          >
+            {invoices.some((i) => i.status === 'issued' && i.stripeSessionId)
+              ? 'Thanks — your card payment is processing. This page updates once Stripe confirms it.'
+              : 'Thank you — your card payment was received and the invoice is marked paid.'}
+          </p>
+        )}
         <Card>
           <CardHeader title="Invoices" />
           <div className="mt-4 border-t">
@@ -131,7 +180,15 @@ export default async function BillingPage({ params }: { params: Promise<{ tenant
                   key: 'status',
                   header: 'Status',
                   className: 'text-end',
-                  cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge>,
+                  cell: (r) =>
+                    cardsOn && r.status === 'issued' ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                        <PayByCardButton slug={ctx.tenant.slug} invoiceId={r.id} />
+                      </span>
+                    ) : (
+                      <Badge tone={statusTone(r.status)}>{r.status}</Badge>
+                    ),
                 },
               ]}
             />

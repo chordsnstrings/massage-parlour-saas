@@ -774,6 +774,13 @@ until `spamanagement.ae` is registered.
 - **Push:** VAPID keys live in the droplet secrets overlay; worker notifications send app-relative URLs and the service
   worker (registered with `?base=/app` in path routing) adds the surface prefix.
 
+### 14.3 Marketing site & card billing (2026-10-06)
+- Marketing site: `/`, `/features`, `/website-builder`, `/pricing`, `/contact` (apps/web/src/app/marketing, shared
+  `components/marketing`). White, minimal, muted palette (sage/clay/mist/sand/plum tints) scoped under `.mkt`; scroll
+  scenes from the scroll-scenes skill (`lib/scroll-scenes.ts`, `lib/scenes.ts`, `marketing/scenes.css`), off for reduced
+  motion; feature copy lives in `components/marketing/content.ts`.
+- Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

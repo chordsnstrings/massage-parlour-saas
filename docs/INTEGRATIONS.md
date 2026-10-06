@@ -109,6 +109,18 @@ the platform's Namecheap account and points it at the spa's site (see PLAN.md §
 4. Fill in the platform company details (admin → Settings): they become the domains' admin/tech/billing contacts.
 5. Keep funds on the Namecheap account — the balance shows on /admin/domains; each approval charges it.
 
+## 3b. Card payments for the subscription (Stripe, optional)
+
+Spas pay their platform invoices by card from **Billing** through Stripe Checkout (hosted page — no card data touches
+the app). Client payments for treatments are still recorded only, never processed.
+
+1. Create a key in Stripe (a restricted key needs **Checkout Sessions: write**). Test keys (`rk_test_…`/`sk_test_…`)
+   work end to end with Stripe's test cards.
+2. Set `STRIPE_SECRET_KEY` (droplet: in the encrypted overlay). Without it the "Pay by card" button is hidden.
+3. No webhook needed: the app stores the Checkout Session on the invoice and confirms it with Stripe when the spa
+   returns to (or reopens) Billing; the payment is recorded once (reference `stripe:<payment_intent>`) and the invoice
+   is marked paid. A webhook can be added later for payments where nobody reopens Billing.
+
 ## 4. Web push notifications
 
 ```sh

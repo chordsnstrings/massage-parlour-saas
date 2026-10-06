@@ -38,7 +38,7 @@ export const subscriptionStatus = pgEnum('subscription_status', [
   'cancelled',
 ])
 export const invoiceStatus = pgEnum('invoice_status', ['draft', 'issued', 'paid', 'void'])
-export const paymentMethod = pgEnum('platform_payment_method', ['cash', 'bank_transfer', 'other'])
+export const paymentMethod = pgEnum('platform_payment_method', ['cash', 'bank_transfer', 'other', 'card'])
 export const domainKind = pgEnum('domain_kind', ['subdomain', 'custom'])
 export const domainStatus = pgEnum('domain_status', ['pending', 'verifying', 'active', 'failed'])
 
@@ -199,6 +199,8 @@ export const platformInvoices = pgTable(
     totalAed: numeric('total_aed', { precision: 12, scale: 2 }).notNull(),
     status: invoiceStatus('status').notNull().default('issued'),
     paidAt: timestamp('paid_at', { withTimezone: true }),
+    /** Latest Stripe Checkout Session started for this invoice (card payments, test mode until live keys). */
+    stripeSessionId: text('stripe_session_id'),
     createdAt: createdAt(),
   },
   () => tenantPolicies(),

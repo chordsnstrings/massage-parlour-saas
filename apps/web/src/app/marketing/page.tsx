@@ -1,151 +1,181 @@
-import { plans, platformDb } from '@spa/db'
-import { asc, eq } from 'drizzle-orm'
-import {
-  ArrowRight,
-  BarChart3,
-  CalendarDays,
-  Check,
-  Globe,
-  MessageCircle,
-  Sparkles,
-  Wallet,
-} from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
-import { Logo } from '@/components/brand'
-import { Button } from '@/components/ui/button'
-import { Reveal, Stagger, StaggerItem } from '@/components/ui/motion'
+import Link from 'next/link'
+import { AREAS, DAY } from '@/components/marketing/content'
+import { CalendarMock } from '@/components/marketing/mocks'
+import { activePlans } from '@/components/marketing/plans'
+import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
 
 export const metadata: Metadata = { title: { absolute: 'Spa Management — software for spas in the UAE' } }
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
-const features = [
-  {
-    icon: CalendarDays,
-    title: 'Calm calendar',
-    text: 'Therapists, rooms and walk-ins on one screen — no double bookings, ever.',
-  },
-  {
-    icon: Wallet,
-    title: 'Cash-first POS',
-    text: 'Cash, card terminal or transfer. Packages, gift cards and a daily close in minutes.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Simple accounts',
-    text: 'Profit, VAT and therapist payouts without spreadsheets.',
-  },
-  {
-    icon: Globe,
-    title: 'A beautiful website',
-    text: 'Drag-and-drop templates in English and Arabic, live on your own domain.',
-  },
-  {
-    icon: MessageCircle,
-    title: 'WhatsApp-first',
-    text: 'Confirmations, reminders and offers ready to send in one click.',
-  },
-  {
-    icon: Sparkles,
-    title: 'AI that fills slots',
-    text: 'Instagram posts, DM replies, Google reviews and SEO on autopilot.',
-  },
-]
-
-async function activePlans() {
-  try {
-    return await platformDb().select().from(plans).where(eq(plans.active, true)).orderBy(asc(plans.sort))
-  } catch {
-    return [] // e.g. image build without a database; regenerated at runtime
-  }
-}
+const css = (vars: Record<string, number>) => vars as React.CSSProperties
 
 export default async function MarketingPage() {
-  const planRows = await activePlans()
+  const [plan] = await activePlans()
   return (
-    <div className="overflow-x-hidden">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
-        <Logo />
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" asChild>
-            <a href={appUrl('/login')}>Sign in</a>
-          </Button>
-          <Button asChild className="hidden sm:inline-flex">
-            <a href={appUrl('/signup')}>Start free trial</a>
-          </Button>
+    <MarketingShell active="home">
+      {/* Hero — loads in, then sinks back as you scroll away */}
+      <section data-scene="depart" data-mode="leave" className="relative overflow-x-clip">
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="absolute top-10 left-[8%] size-72 rounded-full bg-[var(--sage-soft)] blur-3xl" />
+          <div className="absolute top-32 right-[6%] size-80 rounded-full bg-[var(--clay-soft)] blur-3xl" />
+          <div className="absolute bottom-0 left-1/3 size-64 rounded-full bg-[var(--mist-soft)] blur-3xl" />
         </div>
-      </header>
-
-      <section className="relative mx-auto max-w-6xl px-5 pt-16 pb-24 sm:px-8 sm:pt-28 sm:pb-32">
-        <div className="pointer-events-none absolute top-0 right-0 -z-10 size-[34rem] translate-x-1/3 rounded-full bg-accent-soft blur-3xl" />
-        <Reveal className="max-w-3xl">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted">
-            Made for spas across the UAE
-          </p>
-          <h1 className="mt-6 text-[40px] leading-[1.05] font-semibold tracking-tight sm:text-[64px]">
+        <div data-world className="mkt-wrap relative pt-20 pb-28 text-center sm:pt-28 sm:pb-36">
+          <p className="mkt-eyebrow mkt-rise">For massage spas in the UAE</p>
+          <h1
+            className="mkt-rise mx-auto mt-5 max-w-3xl text-[42px] leading-[1.04] font-semibold tracking-tight sm:text-[68px]"
+            style={css({ '--d': 1 })}
+          >
             Run a calmer, fuller spa.
           </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted">
-            Bookings, cash payments, accounts, your website and AI marketing — in one quiet, beautiful place.
+          <p
+            className="mkt-rise mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--ink-2)]"
+            style={css({ '--d': 2 })}
+          >
+            Bookings, WhatsApp, payments, accounts and a beautiful website — in one quiet place, built for how
+            UAE spas really work.
           </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button size="lg" asChild>
-              <a href={appUrl('/signup')}>
-                Start your free trial <ArrowRight />
-              </a>
-            </Button>
-            <Button size="lg" variant="secondary" asChild>
-              <a href="#pricing">See pricing</a>
-            </Button>
+          <div className="mkt-rise mt-9 flex flex-wrap justify-center gap-3" style={css({ '--d': 3 })}>
+            <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary">
+              Start your spa <ArrowRight className="mkt-arrow size-4" />
+            </a>
+            <Link href="/features" className="mkt-btn mkt-btn-ghost bg-white/70">
+              See every feature
+            </Link>
           </div>
-        </Reveal>
+          <p className="mkt-rise mt-8 text-[13px] text-[var(--mute)]" style={css({ '--d': 4 })}>
+            AED pricing · VAT ready · English & Arabic websites · Cash-first
+          </p>
+        </div>
       </section>
 
-      <section className="border-y bg-surface/60">
-        <Stagger className="mx-auto grid max-w-6xl gap-px px-5 py-20 sm:grid-cols-2 sm:px-8 lg:grid-cols-3">
-          {features.map((f) => (
-            <StaggerItem key={f.title} className="p-6 sm:p-8">
-              <f.icon className="size-5 text-accent" strokeWidth={1.5} />
-              <h3 className="mt-5 font-semibold tracking-tight">{f.title}</h3>
-              <p className="mt-2 text-[15px] text-muted">{f.text}</p>
-            </StaggerItem>
-          ))}
-        </Stagger>
+      {/* A day at the spa — five steps build up in turn */}
+      <section
+        data-scene="beats"
+        data-pin="wide"
+        style={css({ '--len': 360 })}
+        className="border-t border-[var(--line)]"
+      >
+        <div data-stage>
+          <div className="mkt-wrap py-20">
+            <p className="mkt-eyebrow">A day at the spa</p>
+            <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
+              From booking to thank-you, without the scramble.
+            </h2>
+            <div className="relative mt-12">
+              <div
+                data-beat="1"
+                data-from="sx:0 o:0"
+                data-origin="0 50%"
+                aria-hidden
+                className="absolute top-[1.15rem] right-6 left-6 hidden h-px bg-[var(--line)] lg:block"
+              />
+              <ol className="relative grid gap-4 lg:grid-cols-5">
+                {DAY.map((d, i) => (
+                  <li
+                    key={d.title}
+                    data-beat={i + 1}
+                    data-from="y:28 rx:-14 o:0"
+                    className="rounded-2xl border border-[var(--line)] bg-white p-5"
+                  >
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-[12px] tabular-nums tint-${d.tint}`}
+                    >
+                      {d.t}
+                    </span>
+                    <h3 className="mt-4 font-medium">{d.title}</h3>
+                    <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ink-2)]">{d.text}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section id="pricing" className="mx-auto max-w-6xl px-5 py-24 sm:px-8">
-        <h2 className="text-3xl font-semibold tracking-tight">One simple price</h2>
-        <p className="mt-2 text-muted">Everything included. Pay yearly by bank transfer or cash.</p>
-        <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {planRows.map((p) => (
-            <div key={p.id} className="rounded-2xl border bg-surface p-8">
-              <h3 className="font-semibold">{p.name}</h3>
-              <p className="tabular mt-4 text-4xl font-semibold tracking-tight">{formatAed(p.priceAed)}</p>
-              <p className="text-sm text-muted">
-                per {p.billingInterval} · {p.trialDays}-day free trial
-              </p>
-              <ul className="mt-6 space-y-2.5 text-sm">
-                {features.map((f) => (
-                  <li key={f.title} className="flex gap-2.5">
-                    <Check className="mt-0.5 size-4 text-accent" /> {f.title}
+      {/* Product — the calendar turns to face you while bookings drop in */}
+      <section
+        data-scene="device"
+        data-pin="wide"
+        style={css({ '--len': 320 })}
+        className="tint-sand border-y border-[var(--line)]"
+      >
+        <div data-stage>
+          <div className="mkt-wrap grid items-center gap-12 py-20 lg:grid-cols-[1fr_1.35fr]">
+            <div>
+              <p className="mkt-eyebrow">The calendar</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
+                Therapists, rooms and walk-ins on one calm screen.
+              </h2>
+              <ul className="mt-7 space-y-3 text-[15px] text-[var(--ink-2)]">
+                {[
+                  'No double bookings — the database won’t allow it',
+                  'Couples treatments reserve two therapists and a room',
+                  'Fair walk-in rotation, late-night business days',
+                ].map((t) => (
+                  <li key={t} className="flex gap-3">
+                    <Check className="mt-0.5 size-4 shrink-0 text-[var(--sage-deep)]" /> {t}
                   </li>
                 ))}
               </ul>
-              <Button className="mt-8 w-full" asChild>
-                <a href={appUrl('/signup')}>Start free trial</a>
-              </Button>
             </div>
+            <div data-world>
+              <CalendarMock />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Everything in one place — cards fly into the grid */}
+      <section data-scene="assemble" className="mkt-wrap py-24">
+        <p className="mkt-eyebrow">Everything in one place</p>
+        <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
+          Six tools you would otherwise pay for separately.
+        </h2>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {AREAS.map((a) => (
+            <Link
+              key={a.key}
+              href={`/features#${a.key}`}
+              data-beat
+              className={`mkt-card group block p-6 tint-${a.tint}`}
+            >
+              <h3 className="flex items-center justify-between font-medium">
+                {a.title} <ArrowRight className="mkt-arrow size-4 text-[var(--mute)]" />
+              </h3>
+              <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-2)]">{a.blurb}</p>
+              <p className="mt-5 text-[12px] text-[var(--mute)]">{a.features.length} features</p>
+            </Link>
           ))}
         </div>
       </section>
 
-      <footer className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-10 text-sm text-muted sm:px-8">
-          <Logo />
-          <span>© {new Date().getFullYear()} spamanagement.ae</span>
+      {/* Price */}
+      <section className="border-t border-[var(--line)]">
+        <div data-scene="reveal" data-span=".45" className="mkt-wrap py-24 text-center">
+          <p className="mkt-eyebrow">One simple price</p>
+          <p className="mt-4 text-[44px] font-semibold tracking-tight tabular-nums sm:text-[56px]">
+            {plan ? formatAed(plan.priceAed) : 'AED 24,000'}
+            <span className="text-lg font-normal text-[var(--mute)]"> / year</span>
+          </p>
+          <p className="mx-auto mt-3 max-w-md text-[var(--ink-2)]">
+            Every feature, unlimited staff and bookings, your website and domain. Pay by card or bank
+            transfer.
+          </p>
+          <Link
+            href="/pricing"
+            className="mkt-link mt-6 inline-flex items-center gap-1.5 text-[15px] font-medium"
+          >
+            See what’s included <ArrowRight className="mkt-arrow size-4" />
+          </Link>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      <CtaBand />
+    </MarketingShell>
   )
 }

@@ -21,7 +21,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Scroll scenes run only with motion allowed; set before first paint so pins never shift the layout. */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline bootstrap, no user input
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('scenes-on')}catch(e){}})()",
+          }}
+        />
+      </head>
       <body className="min-h-dvh font-sans antialiased">
         <MotionProvider>
           {children}

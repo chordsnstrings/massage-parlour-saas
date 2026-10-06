@@ -1,0 +1,200 @@
+/* Marketing site: white, minimal, muted palette. Scoped to .mkt so the app's tokens stay untouched. */
+/* In the components layer so Tailwind utilities on the same element still win. */
+@layer components {
+  .mkt {
+    color-scheme: light;
+    --ink: #23221f;
+    --ink-2: #4f4c46;
+    --mute: #86827a;
+    --line: #ecebe6;
+    --sage: #8fa89a;
+    --sage-deep: #5e7d6b;
+    --sage-soft: #e5ede8;
+    --clay: #c8a490;
+    --clay-soft: #f4e8df;
+    --mist: #9fb1c2;
+    --mist-soft: #e4ebf2;
+    --sand: #e8dfd2;
+    --sand-soft: #f7f2ea;
+    --plum: #b3a1b0;
+    --plum-soft: #efe6ed;
+    /* app tokens used by shared components, pinned to light inside the marketing site */
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --subtle: #f6f5f2;
+    --border: var(--line);
+    --fg: var(--ink);
+    --muted: var(--mute);
+    --accent: var(--sage-deep);
+    --accent-fg: #ffffff;
+    --accent-soft: var(--sage-soft);
+    background: #ffffff;
+    color: var(--ink);
+  }
+  :root {
+    --scene-top: 65px; /* sticky marketing header */
+  }
+  @media (max-width: 767px) {
+    :root {
+      --scene-top: 105px; /* header + mobile nav row */
+    }
+  }
+
+  .mkt-wrap {
+    margin-inline: auto;
+    max-width: 72rem;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .mkt-wrap {
+      padding-inline: 2rem;
+    }
+  }
+
+  .mkt-eyebrow {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+  }
+
+  /* buttons */
+  .mkt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    padding-inline: 1.25rem;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 500;
+    transition:
+      background-color 0.25s ease,
+      box-shadow 0.25s ease,
+      transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .mkt-btn-primary {
+    background: var(--ink);
+    color: #fff;
+  }
+  .mkt-btn-primary:hover {
+    background: #3a3833;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -12px rgb(35 34 31 / 0.45);
+  }
+  .mkt-btn-ghost {
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .mkt-btn-ghost:hover {
+    box-shadow: inset 0 0 0 1px #d9d6cf;
+    background: var(--sand-soft);
+  }
+  .mkt-arrow {
+    transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .group:hover .mkt-arrow,
+  .mkt-btn:hover .mkt-arrow {
+    transform: translateX(3px);
+  }
+
+  /* links: underline sweeps in */
+  .mkt-link {
+    background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+    transition:
+      background-size 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
+      color 0.2s ease;
+  }
+  .mkt-link:hover,
+  .mkt-link[aria-current="page"] {
+    background-size: 100% 1px;
+  }
+
+  /* cards lift a touch on hover */
+  .mkt-card {
+    border-radius: 1.25rem;
+    transition:
+      transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 0.35s ease;
+  }
+  .mkt-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px -28px rgb(35 34 31 / 0.35);
+  }
+
+  /* soft tints */
+  .tint-sage {
+    background: var(--sage-soft);
+  }
+  .tint-clay {
+    background: var(--clay-soft);
+  }
+  .tint-mist {
+    background: var(--mist-soft);
+  }
+  .tint-sand {
+    background: var(--sand-soft);
+  }
+  .tint-plum {
+    background: var(--plum-soft);
+  }
+  .dot-sage {
+    background: var(--sage);
+  }
+  .dot-clay {
+    background: var(--clay);
+  }
+  .dot-mist {
+    background: var(--mist);
+  }
+  .dot-sand {
+    background: #cdbfa9;
+  }
+  .dot-plum {
+    background: var(--plum);
+  }
+
+  /* load-in for hero copy (not scroll-driven) */
+  @keyframes mkt-rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .mkt-rise {
+    animation: mkt-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--d, 0) * 90ms);
+  }
+  @keyframes mkt-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  .mkt-pulse {
+    animation: mkt-pulse 2.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mkt-rise,
+    .mkt-pulse {
+      animation: none;
+    }
+    .mkt-card:hover,
+    .mkt-btn-primary:hover {
+      transform: none;
+    }
+  }
+
+  /* in-page anchors land below the sticky header */
+  .mkt [id] {
+    scroll-margin-top: 80px;
+  }
+}
