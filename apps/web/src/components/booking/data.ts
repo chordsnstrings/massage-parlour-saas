@@ -1,0 +1,118 @@
+import { addDays, businessDateOf, type OpeningHours, openIntervals } from '@spa/core'
+import {
+  branches,
+  serviceCategories,
+  services,
+  serviceVariants,
+  staff,
+  staffServices,
+  type Tx,
+  withTenant,
+} from '@spa/db'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import type { BookingCatalog, BookingGroup } from './types'
+
+export const BOOKING_DAYS = 14
+/** Online bookings need at least this much notice. */
+export const LEAD_MIN = 60
+
+/** Tenants whose public booking is open (suspended / cancelled accounts keep the site but not bookings). */
+export const acceptsBookings = (status: string) =>
+  status === 'trial' || status === 'active' || status === 'past_due'
+
+/** The branch online bookings go to: the default branch, else the first active one. */
+export async function bookingBranch(tx: Tx) {
+  const [branch] = await tx
+    .select()
+    .from(branches)
+    .where(eq(branches.active, true))
+    .orderBy(desc(branches.isDefault), asc(branches.createdAt))
+    .limit(1)
+  return branch ?? null
+}
+
+/** The next N business dates (branch cutoff aware), starting with today's business date. */
+export function bookingDates(branch: { businessDayCutoff: string; openingHours: unknown }, now = new Date()) {
+  const first = businessDateOf(now, branch.businessDayCutoff.slice(0, 5))
+  return Array.from({ length: BOOKING_DAYS }, (_, i) => {
+    const date = addDays(first, i)
+    return { date, closed: openIntervals(date, branch.openingHours as OpeningHours).length === 0 }
+  })
+}
+
+/** Everything the public booking page renders, read under the tenant's RLS context. */
+export async function loadBookingCatalog(tenant: {
+  id: string
+  name: string
+}): Promise<BookingCatalog | null> {
+  return withTenant(tenant.id, async (tx) => {
+    const branch = await bookingBranch(tx)
+    if (!branch) return null
+    const [cats, svcRows] = await Promise.all([
+      tx.select().from(serviceCategories).orderBy(asc(serviceCategories.sort)),
+      tx
+        .select()
+        .from(services)
+        .where(and(eq(services.active, true), eq(services.onlineBookable, true)))
+        .orderBy(asc(services.sort), asc(services.createdAt)),
+    ])
+    const ids = svcRows.map((s) => s.id)
+    const variants = ids.length
+      ? await tx
+          .select()
+          .from(serviceVariants)
+          .where(and(inArray(serviceVariants.serviceId, ids), eq(serviceVariants.active, true)))
+          .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+      : []
+    const staffRows = (
+      await tx
+        .select()
+        .from(staff)
+        .where(and(eq(staff.active, true), eq(staff.bookable, true)))
+        .orderBy(asc(staff.sort), asc(staff.displayName))
+    ).filter((s) => s.branchIds.length === 0 || s.branchIds.includes(branch.id))
+    const skills = staffRows.length
+      ? await tx
+          .select()
+          .from(staffServices)
+          .where(
+            inArray(
+              staffServices.staffId,
+              staffRows.map((s) => s.id),
+            ),
+          )
+      : []
+
+    const groups = new Map<string, BookingGroup>()
+    for (const c of cats) groups.set(c.id, { id: c.id, name: c.name, services: [] })
+    const other: BookingGroup = { id: 'other', name: null, services: [] }
+    for (const s of svcRows) {
+      const vs = variants
+        .filter((v) => v.serviceId === s.id)
+        .map((v) => ({ id: v.id, durationMin: v.durationMin, priceAed: Number(v.priceAed) }))
+      if (!vs.length) continue
+      const group = (s.categoryId && groups.get(s.categoryId)) || other
+      group.services.push({
+        id: s.id,
+        name: s.name,
+        description: s.description ?? null,
+        imageUrl: s.imageUrl,
+        therapistsRequired: s.therapistsRequired,
+        variants: vs,
+      })
+    }
+
+    return {
+      spa: tenant.name,
+      branch: { name: branch.name, address: branch.address, hasWhatsapp: Boolean(branch.whatsappE164) },
+      groups: [...groups.values(), other].filter((g) => g.services.length),
+      therapists: staffRows.map((s) => ({
+        id: s.id,
+        name: s.displayName,
+        photoUrl: s.photoUrl,
+        serviceIds: skills.filter((k) => k.staffId === s.id).map((k) => k.serviceId),
+      })),
+      dates: bookingDates(branch),
+    }
+  })
+}
