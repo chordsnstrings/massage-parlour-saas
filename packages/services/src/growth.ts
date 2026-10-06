@@ -19,7 +19,7 @@ import {
   type Tx,
   tenants,
 } from '@spa/db'
-import { and, asc, eq, isNotNull, isNull, lte, ne, type SQL, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, isNull, lte, ne, or, type SQL, sql } from 'drizzle-orm'
 import { CAMPAIGN_LIMITS, type CampaignVars, renderCampaignMessage } from './campaigns'
 import { DomainError } from './errors'
 
@@ -50,8 +50,12 @@ function ruleCondition(r: SegmentRule, now: Date): SQL {
       return sql`${clients.birthday} is not null
         and extract(month from ${clients.birthday}) = extract(month from ${dubaiDate(now)}::date)`
     case 'birthday_within':
-      return sql`${clients.birthday} is not null and to_char(${clients.birthday}, 'MM-DD') in (
-        select to_char(d, 'MM-DD') from generate_series(${dubaiDate(now)}::date, ${dubaiDate(now)}::date + ${r.days}::int, interval '1 day') d)`
+      // 29 February birthdays fall on 28 February in non-leap years (the day after it is 1 March).
+      return sql`${clients.birthday} is not null and exists (
+        select 1 from generate_series(${dubaiDate(now)}::date, ${dubaiDate(now)}::date + ${r.days}::int, interval '1 day') g(d)
+        where to_char(g.d, 'MM-DD') = to_char(${clients.birthday}, 'MM-DD')
+          or (to_char(${clients.birthday}, 'MM-DD') = '02-29' and to_char(g.d, 'MM-DD') = '02-28'
+            and to_char(g.d + interval '1 day', 'MM-DD') = '03-01'))`
     case 'gender':
       return sql`${clients.gender} = ${r.gender}`
     case 'language':
@@ -73,6 +77,35 @@ function ruleCondition(r: SegmentRule, now: Date): SQL {
 /** Tag that keeps a client out of every campaign (alongside the marketing opt-out date). */
 export const NO_MARKETING_TAG = 'no-marketing'
 
+/** Conditions on the `clients` row for receiving marketing: a mobile number, not blocklisted, not opted out. */
+const marketingConsent = () => [
+  isNotNull(clients.phoneE164),
+  isNull(clients.marketingOptOutAt),
+  eq(clients.blocklisted, false),
+  sql`not (${NO_MARKETING_TAG} = any(${clients.tags}))`,
+]
+
+/**
+ * True for an outbox row that belongs to a campaign whose client has since opted out, been blocklisted or
+ * tagged `no-marketing` — such messages must not be sent (consent is re-checked at send time, not only at queueing).
+ */
+export const campaignConsentWithdrawn = () =>
+  sql`(${outbox.campaignId} is not null and not exists (
+    select 1 from ${clients} where ${clients.id} = ${outbox.clientId} and ${and(...marketingConsent())}))`
+
+/**
+ * Takes campaign messages still waiting in the WhatsApp queue out of it (status `skipped`) when their client no
+ * longer accepts marketing. Returns how many were withdrawn.
+ */
+export async function withdrawCampaignMessagesWithoutConsent(tx: Tx) {
+  const rows = await tx
+    .update(outbox)
+    .set({ status: 'skipped' })
+    .where(and(inArray(outbox.status, ['queued', 'opened']), campaignConsentWithdrawn()))
+    .returning({ id: outbox.id })
+  return rows.length
+}
+
 /**
  * Clients matching every rule, most recent visitors first. Marketing guardrails always apply: a mobile number,
  * not blocklisted, not opted out (date or `no-marketing` tag) and — unless `requireVisit` is false — at least one visit.
@@ -86,10 +119,7 @@ export async function resolveSegment(
 ) {
   const conds: (SQL | undefined)[] = [
     eq(clients.tenantId, tenantId),
-    isNotNull(clients.phoneE164),
-    isNull(clients.marketingOptOutAt),
-    eq(clients.blocklisted, false),
-    sql`not (${NO_MARKETING_TAG} = any(${clients.tags}))`,
+    ...marketingConsent(),
     opts.requireVisit === false ? undefined : isNotNull(clients.lastVisitAt),
     ...rules.map((r) => ruleCondition(r, now)),
   ]
@@ -109,8 +139,13 @@ export async function resolveSegment(
 export type SegmentClient = Awaited<ReturnType<typeof resolveSegment>>[number]
 
 /**
- * Who a campaign sent at `sendAt` would reach: the segment minus clients another campaign messages within
- * 7 days of it (frequency cap), capped at 500 recipients.
+ * Who a campaign sent at `sendAt` would reach: the segment as it stands at `sendAt` (birthdays, lapsed days and
+ * package expiry are counted from the send time, not from when it was queued) minus clients another campaign
+ * messages within 7 days of it (frequency cap), capped at 500 recipients.
+ *
+ * Sending is manual, so the cap looks at when a message was actually sent (`sent_at`), and treats a message still
+ * waiting in the queue as sendable any time from its due time on: an unsent message due before `sendAt` + 7 days
+ * blocks the client, however old it is.
  */
 export async function planAudience(
   tx: Tx,
@@ -121,8 +156,11 @@ export async function planAudience(
   const now = opts.now ?? new Date()
   const sendAt = opts.sendAt ?? now
   const limit = opts.limit ?? CAMPAIGN_LIMITS.maxRecipients
-  const matched = await resolveSegment(tx, tenantId, rules, now)
+  const matched = await resolveSegment(tx, tenantId, rules, sendAt)
   const capMs = CAMPAIGN_LIMITS.capDays * DAY
+  const from = iso(new Date(sendAt.getTime() - capMs))
+  const until = iso(new Date(sendAt.getTime() + capMs))
+  const at = sql`coalesce(${outbox.sentAt}, ${outbox.dueAt})`
   const recent = await tx
     .selectDistinct({ clientId: outbox.clientId })
     .from(outbox)
@@ -132,8 +170,10 @@ export async function planAudience(
         isNotNull(outbox.campaignId),
         opts.excludeCampaignId ? ne(outbox.campaignId, opts.excludeCampaignId) : undefined,
         ne(outbox.status, 'skipped'),
-        sql`${outbox.dueAt} > ${iso(new Date(sendAt.getTime() - capMs))}::timestamptz`,
-        sql`${outbox.dueAt} < ${iso(new Date(sendAt.getTime() + capMs))}::timestamptz`,
+        or(
+          sql`${at} > ${from}::timestamptz and ${at} < ${until}::timestamptz`,
+          and(inArray(outbox.status, ['queued', 'opened']), sql`${outbox.dueAt} < ${until}::timestamptz`),
+        ),
       ),
     )
   const recentIds = new Set(recent.map((r) => r.clientId))

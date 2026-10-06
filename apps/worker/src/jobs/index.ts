@@ -24,5 +24,5 @@ export const jobs: JobDef[] = [
   { name: 'instagram-publish', cron: '*/5 * * * *', handler: () => publishScheduledInstagramPosts() },
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
-  { name: 'campaigns-finish', cron: '15 * * * *', handler: () => finishAllCampaigns() },
+  { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
 ]

@@ -184,8 +184,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ tenan
               label="Booked ≤ 14 days"
               value={r.bookedClients}
               hint={
-                r.sent
-                  ? `${Math.round((r.bookedClients / r.sent) * 100)}% of clients messaged`
+                r.reached
+                  ? `${Math.round((r.bookedClients / r.reached) * 100)}% of clients messaged`
                   : 'After sending'
               }
             />

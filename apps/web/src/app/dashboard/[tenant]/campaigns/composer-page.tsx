@@ -38,10 +38,10 @@ export async function ComposerPage({
       )
       .orderBy(asc(promoCodes.code)),
   }))
-  const segmentId =
-    initial.segmentId && data.segments.some((s) => s.id === initial.segmentId)
-      ? initial.segmentId
-      : (data.segments[0]?.id ?? '')
+  const segmentKnown = Boolean(initial.segmentId) && data.segments.some((s) => s.id === initial.segmentId)
+  // A saved draft whose segment was deleted must not silently switch to another audience: make staff choose.
+  const segmentLost = campaignId !== null && !segmentKnown
+  const segmentId = segmentKnown ? initial.segmentId : segmentLost ? '' : (data.segments[0]?.id ?? '')
 
   return (
     <>
@@ -72,21 +72,28 @@ export async function ComposerPage({
             />
           </Card>
         ) : (
-          <CampaignComposer
-            slug={slug}
-            campaignId={campaignId}
-            segments={data.segments.map((s) => ({ id: s.id, name: s.name, summary: s.summary }))}
-            promos={data.promos.map((p) => ({
-              id: p.id,
-              code: p.code,
-              label: p.kind === 'percent' ? `${Number(p.value)}% off` : `${formatAed(p.value)} off`,
-            }))}
-            spaName={ctx.tenant.name}
-            bookingLink={`${tenantSiteUrl(slug)}/book?src=campaign`}
-            newSegmentHref={`${base}/segments/new`}
-            minSendAt={dubaiLocalValue(new Date())}
-            initial={{ ...initial, segmentId }}
-          />
+          <>
+            {segmentLost && (
+              <p role="status" className="mb-6 rounded-lg border border-dashed px-4 py-3 text-sm text-muted">
+                The segment this campaign was written for has been deleted. Choose who should receive it.
+              </p>
+            )}
+            <CampaignComposer
+              slug={slug}
+              campaignId={campaignId}
+              segments={data.segments.map((s) => ({ id: s.id, name: s.name, summary: s.summary }))}
+              promos={data.promos.map((p) => ({
+                id: p.id,
+                code: p.code,
+                label: p.kind === 'percent' ? `${Number(p.value)}% off` : `${formatAed(p.value)} off`,
+              }))}
+              spaName={ctx.tenant.name}
+              bookingLink={`${tenantSiteUrl(slug)}/book?src=campaign`}
+              newSegmentHref={`${base}/segments/new`}
+              minSendAt={dubaiLocalValue(new Date())}
+              initial={{ ...initial, segmentId }}
+            />
+          </>
         )}
       </PageBody>
     </>

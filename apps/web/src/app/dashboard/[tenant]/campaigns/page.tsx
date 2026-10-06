@@ -90,8 +90,13 @@ export default async function CampaignsPage({
   const segName = new Map(data.segments.map((s) => [s.id, s.name]))
   const serviceName = (id: string) => data.services.find((s) => s.id === id)?.name
   const totals = [...data.results.values()].reduce(
-    (t, r) => ({ pending: t.pending + r.pending, sent: t.sent + r.sent, booked: t.booked + r.bookedClients }),
-    { pending: 0, sent: 0, booked: 0 },
+    (t, r) => ({
+      pending: t.pending + r.pending,
+      sent: t.sent + r.sent,
+      reached: t.reached + r.reached,
+      booked: t.booked + r.bookedClients,
+    }),
+    { pending: 0, sent: 0, reached: 0, booked: 0 },
   )
   type Row = (typeof data.list)[number]
   const result = (c: Row) => data.results.get(c.id)!
@@ -158,11 +163,11 @@ export default async function CampaignsPage({
       className: 'text-right tabular-nums',
       cell: (c) => {
         const r = result(c)
-        if (!r.sent) return '—'
+        if (!r.reached) return '—'
         return (
           <span>
             {r.bookedClients}
-            <span className="ms-1.5 text-[13px] text-muted">{pct(r.bookedClients, r.sent)}%</span>
+            <span className="ms-1.5 text-[13px] text-muted">{pct(r.bookedClients, r.reached)}%</span>
           </span>
         )
       },
@@ -218,8 +223,8 @@ export default async function CampaignsPage({
                 label="Booked within 14 days"
                 value={totals.booked}
                 hint={
-                  totals.sent
-                    ? `${pct(totals.booked, totals.sent)}% of clients messaged`
+                  totals.reached
+                    ? `${pct(totals.booked, totals.reached)}% of clients messaged`
                     : 'Clicks aren’t tracked'
                 }
               />

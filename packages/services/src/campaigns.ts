@@ -36,7 +36,9 @@ export type CampaignResult = {
   pending: number
   sent: number
   skipped: number
-  /** Recipients (messaged) who made a booking within 14 days of their message. */
+  /** Messages sent or opened in WhatsApp — the clients reached, and the base for the booking rate. */
+  reached: number
+  /** Recipients (sent or opened) who made a booking within 14 days of their message. */
   bookedClients: number
   bookings: number
 }
@@ -46,6 +48,7 @@ const emptyResult = (): CampaignResult => ({
   pending: 0,
   sent: 0,
   skipped: 0,
+  reached: 0,
   bookedClients: 0,
   bookings: 0,
 })
@@ -65,6 +68,7 @@ export async function campaignResults(tx: Tx, campaignIds: string[]) {
       pending: sql<number>`count(*) filter (where ${outbox.status} in ('queued', 'opened'))::int`,
       sent: sql<number>`count(*) filter (where ${outbox.status} = 'sent')::int`,
       skipped: sql<number>`count(*) filter (where ${outbox.status} = 'skipped')::int`,
+      reached: sql<number>`count(*) filter (where ${outbox.status} in ('sent', 'opened'))::int`,
     })
     .from(outbox)
     .where(inArray(outbox.campaignId, campaignIds))
@@ -116,14 +120,15 @@ export async function campaignBookedClients(tx: Tx, campaignId: string) {
   return new Set(rows.map((r) => r.clientId!))
 }
 
-/** Marks queued campaigns as done once every message was sent or skipped. Returns how many finished. */
-export async function finishCampaigns(tx: Tx) {
+/** Marks queued campaigns (or just `campaignId`) as done once every message was sent or skipped. Returns how many finished. */
+export async function finishCampaigns(tx: Tx, campaignId?: string) {
   const done = await tx
     .update(campaigns)
     .set({ status: 'done', updatedAt: new Date() })
     .where(
       and(
         eq(campaigns.status, 'queued'),
+        campaignId ? eq(campaigns.id, campaignId) : undefined,
         sql`not exists (select 1 from ${outbox} o where o.campaign_id = ${campaigns.id} and o.status in ('queued', 'opened'))`,
       ),
     )
@@ -151,8 +156,9 @@ export async function duplicateCampaign(tx: Tx, campaignId: string, userId?: str
 }
 
 /**
- * Archives a campaign (hidden from the main list). Messages not yet sent are taken out of the WhatsApp queue
- * so nobody sends them by accident; returns how many were withdrawn.
+ * Archives a campaign (hidden from the main list). Messages still waiting are taken out of the WhatsApp queue
+ * so nobody sends them by accident; returns how many were withdrawn. Messages already opened in WhatsApp were
+ * probably sent, so they stay for staff to confirm (they still count for the 7-day cap and results).
  */
 export async function archiveCampaign(tx: Tx, campaignId: string, archived = true) {
   const [c] = await tx
@@ -165,12 +171,8 @@ export async function archiveCampaign(tx: Tx, campaignId: string, archived = tru
   const withdrawn = await tx
     .update(outbox)
     .set({ status: 'skipped' })
-    .where(and(eq(outbox.campaignId, campaignId), inArray(outbox.status, ['queued', 'opened'])))
+    .where(and(eq(outbox.campaignId, campaignId), eq(outbox.status, 'queued')))
     .returning({ id: outbox.id })
-  // Nothing is left to send, so a queued campaign is finished.
-  await tx
-    .update(campaigns)
-    .set({ status: 'done' })
-    .where(and(eq(campaigns.id, campaignId), eq(campaigns.status, 'queued')))
+  await finishCampaigns(tx, campaignId)
   return withdrawn.length
 }
