@@ -10,6 +10,7 @@ import {
   numeric,
   pgEnum,
   pgPolicy,
+  pgSequence,
   pgTable,
   smallint,
   text,
@@ -167,6 +168,9 @@ export const subscriptions = pgTable(
   },
   () => tenantPolicies(),
 )
+
+/** Global invoice counter: numbers look like SM-2026-0001. */
+export const platformInvoiceSeq = pgSequence('platform_invoice_seq', { startWith: 1 })
 
 export const platformInvoices = pgTable(
   'platform_invoices',

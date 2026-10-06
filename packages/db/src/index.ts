@@ -1,5 +1,4 @@
 export * from './client'
-export { runMigrations } from './migrate'
 export * as schema from './schema'
 export * from './schema'
-export { defaultAiModels, seedPlatform } from './seed'
+// Migrations and seeding live at '@spa/db/migrate' and '@spa/db/seed' (kept out of app bundles).
