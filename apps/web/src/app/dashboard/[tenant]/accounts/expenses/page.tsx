@@ -1,15 +1,12 @@
+import { aiConfigured } from '@spa/ai'
 import { expenses, withTenant } from '@spa/db'
 import { EXPENSE_CODES } from '@spa/services'
 import { and, desc, gte, lte } from 'drizzle-orm'
-import { Plus, ReceiptText } from 'lucide-react'
+import { ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { Field } from '@/components/ui/form'
-import { FormSheet } from '@/components/ui/form-sheet'
-import { Checkbox, Input, Label, Select } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
 import { appPath } from '@/lib/paths'
@@ -19,6 +16,8 @@ import { addExpenseAction, voidExpenseAction } from '../actions'
 import { MonthNav, monthRange } from '../month'
 import { AccountsTabs } from '../tabs'
 import { VoidButton } from '../void-button'
+import { ExpenseSheet } from './expense-sheet'
+import { ReceiptThumb } from './receipt-thumb'
 
 export const metadata: Metadata = { title: 'Expenses' }
 
@@ -60,9 +59,12 @@ export default async function ExpensesPage({
       header: 'Expense',
       primary: true,
       cell: (r) => (
-        <span className="flex flex-col">
-          <span className="font-medium">{r.vendor || CATEGORY[r.accountCode] || r.accountCode}</span>
-          <span className="text-xs text-muted">{r.description || CATEGORY[r.accountCode]}</span>
+        <span className="flex items-center gap-3">
+          {r.receiptUrl && <ReceiptThumb url={r.receiptUrl} />}
+          <span className="flex min-w-0 flex-col">
+            <span className="font-medium">{r.vendor || CATEGORY[r.accountCode] || r.accountCode}</span>
+            <span className="text-xs text-muted">{r.description || CATEGORY[r.accountCode]}</span>
+          </span>
         </span>
       ),
     },
@@ -107,56 +109,13 @@ export default async function ExpensesPage({
           <>
             <MonthNav base={appPath(`/${slug}/accounts/expenses`)} range={range} />
             {manage && (
-              <FormSheet
-                title="Record an expense"
-                description="Enter the total you paid. Tick VAT if the invoice shows 5% VAT you can recover."
+              <ExpenseSheet
                 action={addExpenseAction.bind(null, slug)}
-                submitLabel="Record expense"
-                trigger={
-                  <Button>
-                    <Plus /> Add expense
-                  </Button>
-                }
-              >
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <Field label="Date" name="expenseDate">
-                    <Input id="expenseDate" name="expenseDate" type="date" defaultValue={todayDubai()} />
-                  </Field>
-                  <Field label="Amount paid (AED)" name="amountAed">
-                    <Input id="amountAed" name="amountAed" inputMode="decimal" placeholder="0.00" />
-                  </Field>
-                </div>
-                <Field label="Category" name="accountCode">
-                  <Select id="accountCode" name="accountCode" defaultValue="">
-                    <option value="" disabled>
-                      Choose…
-                    </option>
-                    {EXPENSE_CODES.map((a) => (
-                      <option key={a.code} value={a.code}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Supplier" name="vendor">
-                  <Input id="vendor" name="vendor" placeholder="e.g. DEWA" />
-                </Field>
-                <Field label="Note" name="description">
-                  <Input id="description" name="description" placeholder="Optional" />
-                </Field>
-                <Field label="Paid with" name="paidVia">
-                  <Select id="paidVia" name="paidVia" defaultValue="cash">
-                    {Object.entries(PAID_VIA).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Label className="flex items-center gap-2.5 text-sm font-normal">
-                  <Checkbox name="hasVat" defaultChecked /> Includes 5% VAT (on a tax invoice)
-                </Label>
-              </FormSheet>
+                scanUrl={appPath(`/${slug}/accounts/expenses/scan`)}
+                categories={EXPENSE_CODES.map((a) => ({ code: a.code, name: a.name }))}
+                today={todayDubai()}
+                aiReady={aiConfigured()}
+              />
             )}
           </>
         }

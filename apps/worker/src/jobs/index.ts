@@ -2,6 +2,7 @@ import { pruneAnalytics, rollupAnalytics } from './analytics'
 import { backupDatabase } from './backup'
 import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
+import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
 import { syncAllGbpReviews } from './gbp'
 import { publishScheduledInstagramPosts, refreshInstagramAccessTokens } from './instagram'
 import { pruneExpiredAiImages } from './media'
@@ -27,4 +28,7 @@ export const jobs: JobDef[] = [
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
+  { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
+  { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
+  { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },
 ]

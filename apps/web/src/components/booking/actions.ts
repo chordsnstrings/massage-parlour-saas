@@ -7,10 +7,12 @@ import {
   DomainError,
   enqueueBookingMessage,
   findOrCreateClient,
+  notifyTenant,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { audit } from '@/server/audit'
@@ -236,7 +238,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         spa: tenant.name,
         address: branch.address,
       }
-      return { kind: 'ok' as const, bookingId: booking.id, done }
+      return { kind: 'ok' as const, bookingId: booking.id, done, date, serviceEn: row.service.name.en }
     })
 
     if (result.kind === 'unavailable') return fail(t('unavailable', lang))
@@ -258,6 +260,19 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)
+    // Push to the front desk after the response; a failed push never affects the booking.
+    after(() =>
+      notifyTenant(
+        tenant.id,
+        {
+          title: 'New online booking',
+          body: `${v.name} · ${result.serviceEn} · ${fmtDate(result.date, 'en')} ${fmtTime(result.done.start, 'en')} — waiting for confirmation`,
+          url: `/${tenant.slug}/calendar?date=${result.date}`,
+          tag: `booking-${result.done.ref}`,
+        },
+        { permission: 'calendar.manage' },
+      ).catch((e) => console.error('booking push failed', e)),
+    )
     return ok(undefined, { booking: result.done })
   } catch (e) {
     if (e instanceof DomainError) {

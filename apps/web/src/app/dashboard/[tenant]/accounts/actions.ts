@@ -9,6 +9,7 @@ import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { todayDubai } from '@/lib/utils'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { receiptColumns, receiptFields } from './expenses/receipt'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
 const lockedMessage = (e: unknown) => {
@@ -26,6 +27,7 @@ const expenseSchema = z.object({
   amountAed: z.coerce.number({ message: 'Enter the amount' }).positive('Enter the amount').max(10_000_000),
   hasVat: z.preprocess((v) => v === 'on', z.boolean()),
   paidVia: z.enum(['cash', 'bank', 'card', 'owner']),
+  ...receiptFields,
 })
 
 export async function addExpenseAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -55,6 +57,7 @@ export async function addExpenseAction(slug: string, _p: ActionResult, fd: FormD
           vatAed: String(vatAed),
           paidVia: d.paidVia,
           createdBy: ctx.user.id,
+          ...(await receiptColumns(tx, d.receiptFileId, d.ocr)),
         })
         .returning({ id: expenses.id })
       await postExpense(tx, {

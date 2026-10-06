@@ -140,6 +140,7 @@ export const businessDocuments = pgTable(
     branchId: uuid('branch_id').references(() => branches.id, { onDelete: 'cascade' }),
     type: text('type').notNull(),
     number: text('number'),
+    issuedOn: date('issued_on'),
     expiresOn: date('expires_on'),
     fileUrl: text('file_url'),
     notes: text('notes'),
