@@ -47,6 +47,8 @@ export const reviews = pgTable(
     replyText: text('reply_text'),
     replyStatus: replyStatus('reply_status').notNull().default('none'),
     repliedAt: ts('replied_at'),
+    /** Why posting the reply to Google failed (set with reply_status `failed`). */
+    replyError: text('reply_error'),
     createdAt: createdAt(),
   },
   (t) => [unique('reviews_external').on(t.tenantId, t.source, t.externalId), ...tenantPolicies()],
