@@ -82,16 +82,18 @@ export default async function TenantHome({ params }: { params: Promise<{ tenant:
                     const row = (
                       <span className="flex items-center gap-3 py-3.5">
                         {s.done ? (
-                          <span className="grid size-5 place-items-center rounded-full bg-accent text-accent-fg">
+                          <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
                             <Check className="size-3" strokeWidth={2.5} />
                           </span>
                         ) : (
-                          <Circle className="size-5 text-border" strokeWidth={1.5} />
+                          <Circle className="size-5 shrink-0 text-border" strokeWidth={1.5} />
                         )}
-                        <span className={s.done ? 'text-muted line-through decoration-border' : ''}>
-                          {s.label}
+                        <span className="min-w-0">
+                          <span className={s.done ? 'text-muted line-through decoration-border' : ''}>
+                            {s.label}
+                          </span>
+                          {s.note && <span className="block text-xs text-muted">{s.note}</span>}
                         </span>
-                        {s.note && <span className="ms-auto text-xs text-muted">{s.note}</span>}
                       </span>
                     )
                     return (

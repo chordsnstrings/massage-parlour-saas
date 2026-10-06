@@ -9,6 +9,7 @@ const config: NextConfig = {
   serverExternalPackages: ['pg'],
   poweredByHeader: false,
   allowedDevOrigins: ['*.localhost'],
+  devIndicators: false,
 }
 
 export default config
