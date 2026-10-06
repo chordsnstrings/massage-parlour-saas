@@ -7,6 +7,12 @@ const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
 function internalPath(host: string, pathname: string): string {
   const tail = (p: string) => (p === '/' ? '' : p)
   if (PATH_ROUTING) {
+    // Single-host mode: the platform lives on ROOT_DOMAIN (or a bare IP / localhost); any other host is a spa's
+    // custom domain and only ever serves that spa's public site.
+    const bare = host.split(':')[0]!.toLowerCase()
+    const root = (process.env.ROOT_DOMAIN ?? 'localhost').split(':')[0]!.toLowerCase()
+    if (bare && bare !== root && bare !== 'localhost' && !/^[\d.]+$/.test(bare) && !bare.includes('['))
+      return `/domain/${bare}${tail(pathname)}`
     const m = pathname.match(/^\/(app|admin|s)(?=\/|$)(\/[^/]+)?(.*)$/)
     if (m?.[1] === 'app') return `/dashboard${tail(`${m[2] ?? ''}${m[3] ?? ''}` || '/')}`
     if (m?.[1] === 'admin') return `/platform${tail(`${m[2] ?? ''}${m[3] ?? ''}` || '/')}`

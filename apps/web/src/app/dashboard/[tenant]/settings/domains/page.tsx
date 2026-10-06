@@ -1,4 +1,4 @@
-import { domains, withTenant } from '@spa/db'
+import { domainOrders, domains, withTenant } from '@spa/db'
 import {
   cloudflareConfig,
   type DnsRecord,
@@ -6,7 +6,7 @@ import {
   dnsRecordsFor,
   domainPairNote,
 } from '@spa/services'
-import { asc, eq } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 import { ArrowLeft, Info } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -18,6 +18,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { appPath, tenantSiteUrl } from '@/lib/paths'
 import { cn, formatDate, formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { BuyDomain, CancelOrderButton } from './buy-domain'
 import { AddDomainForm, DomainActions, SubdomainPrimaryButton } from './domains-client'
 
 export const metadata: Metadata = { title: 'Domains' }
@@ -53,8 +54,11 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'settings.manage')) notFound()
   const slug = ctx.tenant.slug
-  const rows = await withTenant(ctx.tenant.id, (tx) =>
-    tx.select().from(domains).where(eq(domains.kind, 'custom')).orderBy(asc(domains.createdAt)),
+  const [rows, orders] = await withTenant(ctx.tenant.id, (tx) =>
+    Promise.all([
+      tx.select().from(domains).where(eq(domains.kind, 'custom')).orderBy(asc(domains.createdAt)),
+      tx.select().from(domainOrders).orderBy(desc(domainOrders.createdAt)).limit(10),
+    ]),
   )
   const custom = rows[0] ?? null
   const freeUrl = tenantSiteUrl(slug)
@@ -91,6 +95,18 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
                 </CardBody>
               </Card>
             )}
+            {!custom && (
+              <Card>
+                <CardHeader
+                  title="Buy a domain"
+                  description="Don’t have one yet? Find a name and we’ll buy it and connect it for you."
+                />
+                <CardBody>
+                  <BuyDomain slug={slug} />
+                </CardBody>
+              </Card>
+            )}
+            {orders.length > 0 && <OrdersCard slug={slug} orders={orders} />}
           </div>
           <aside className="min-w-0 space-y-6 lg:col-span-4">
             <Card>
@@ -356,5 +372,50 @@ function RecordLine({ label, value, full }: { label: string; value: string; full
         <CopyButton value={value} />
       </div>
     </div>
+  )
+}
+
+const ORDER = {
+  requested: { label: 'Awaiting approval', tone: 'warning' },
+  purchasing: { label: 'Buying', tone: 'accent' },
+  purchased: { label: 'Bought', tone: 'success' },
+  failed: { label: 'Needs attention', tone: 'danger' },
+  rejected: { label: 'Declined', tone: 'neutral' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+} as const
+
+function OrdersCard({ slug, orders }: { slug: string; orders: (typeof domainOrders.$inferSelect)[] }) {
+  return (
+    <Card>
+      <CardHeader title="Domain requests" description="Domains you asked us to buy." />
+      <ul className="divide-y divide-border">
+        {orders.map((o) => (
+          <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <div className="min-w-0 space-y-0.5">
+              <p dir="ltr" className="break-all font-medium">
+                {o.domain}
+              </p>
+              <p className="text-[13px] text-muted">
+                AED {Number(o.priceAed).toLocaleString('en-AE')} for {o.years} year{o.years > 1 ? 's' : ''} ·
+                requested {formatDate(o.createdAt)}
+              </p>
+              {o.status === 'rejected' && o.note && <p className="text-[13px] text-muted">“{o.note}”</p>}
+              {o.status === 'purchased' && (
+                <p className="text-[13px] text-muted">
+                  Registered — it connects automatically within an hour{o.error ? `. ${o.error}` : '.'}
+                </p>
+              )}
+              {o.status === 'failed' && (
+                <p className="text-[13px] text-danger">We couldn’t buy it yet — we’re on it.</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge tone={ORDER[o.status].tone}>{ORDER[o.status].label}</Badge>
+              {o.status === 'requested' && <CancelOrderButton slug={slug} id={o.id} domain={o.domain} />}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }

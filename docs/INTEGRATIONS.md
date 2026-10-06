@@ -97,6 +97,18 @@ The spa adds two DNS records, shown on *Settings → Custom domain*:
 
 The worker verifies every 10 minutes and activates the domain. Without Cloudflare configured, verification still checks DNS, and a super-admin can activate the domain from `/admin/domains`.
 
+## 3a. Buying domains (Namecheap, optional)
+
+Lets a spa request a domain under **Settings → Domains → Buy a domain**; you approve it in **/admin/domains**, which buys it on
+the platform's Namecheap account and points it at the spa's site (see PLAN.md §2 "Buy a domain").
+
+1. Namecheap → Profile → Tools → **API Access** → on (needs account balance/spend thresholds Namecheap requires).
+2. **Whitelisted IPs**: add the droplet's public IPv4 (API calls from any other IP fail).
+3. Set `NAMECHEAP_API_USER` (your Namecheap username), `NAMECHEAP_API_KEY` and `NAMECHEAP_CLIENT_IP` (the droplet IP;
+   cloud-init fills it). Optional: `NAMECHEAP_USERNAME` if it differs from the API user, `NAMECHEAP_SANDBOX=1` for the sandbox.
+4. Fill in the platform company details (admin → Settings): they become the domains' admin/tech/billing contacts.
+5. Keep funds on the Namecheap account — the balance shows on /admin/domains; each approval charges it.
+
 ## 4. Web push notifications
 
 ```sh

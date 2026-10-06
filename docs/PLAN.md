@@ -172,7 +172,17 @@ Reception → "Walk-in" → service → "next in rotation" therapist + free room
 **Custom domain**
 Tenant enters `www.theirspa.ae` → API creates Cloudflare custom hostname → UI shows `CNAME www → customers.spamanagement.ae`
 + ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
-(many .ae registrars lack CNAME flattening).
+(many .ae registrars lack CNAME flattening). On the droplet (no Cloudflare for SaaS) Caddy issues certificates on demand,
+asking `/api/domains/allowed` first; in path-routing mode any non-platform host is served as `/domain/{host}`.
+
+**Buy a domain (Namecheap)**
+The spa searches a name (candidates across .com/.co/.net/.spa/.salon/.beauty/.massage/.shop; Namecheap doesn't sell .ae) with live
+registrar prices in AED (USD × 3.6725, rounded up) → requests one (`domain_orders`, max 3 open, one open order per domain across
+spas) → super-admin approves in /admin/domains (shows the Namecheap balance) → platform registers it on the platform's Namecheap
+account (registrant = spa owner + spa legal name; admin/tech/billing = platform company details; free WhoisGuard), connects
+`www.<domain>` as the spa's custom domain and sets DNS (www CNAME → platform, apex URL-301 → www, TXT proof). The registrar price is
+recorded on the order and added to the spa's next manual invoice. A failed registration marks the order `failed` (retryable);
+once registered, connection problems are notes, never a failed order. API calls only work from the whitelisted droplet IP.
 
 **Publish site**
 Editor saves draft JSON → Publish creates immutable `page_version` → cache tag revalidated + Cloudflare purge for the host.

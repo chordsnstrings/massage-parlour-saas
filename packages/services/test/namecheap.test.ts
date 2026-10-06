@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   checkDomains,
+  getBalance,
   NamecheapError,
   namecheapConfig,
   namecheapPhone,
@@ -126,5 +127,12 @@ describe('namecheap', () => {
     expect(body).toContain('SLD=serenityspa&TLD=com')
     expect(body).toContain('RecordType1=CNAME&Address1=1-2-3-4.sslip.io.')
     expect(decodeURIComponent(body)).toContain('Address2=https://www.serenityspa.com')
+  })
+
+  it('reads the available balance', async () => {
+    const f = reply(
+      ok('<UserGetBalancesResult Currency="USD" AvailableBalance="42.50" AccountBalance="50.00"/>'),
+    )
+    expect(await getBalance(cfg, f)).toEqual({ currency: 'USD', availableUsd: 42.5 })
   })
 })

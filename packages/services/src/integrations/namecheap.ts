@@ -270,6 +270,13 @@ export function platformRecords(
   ]
 }
 
+/** Account funds (namecheap.users.getBalances) — purchases are charged to the available balance. */
+export async function getBalance(cfg: NamecheapConfig, fetchImpl?: typeof fetch) {
+  const xml = await call(cfg, 'namecheap.users.getBalances', {}, fetchImpl)
+  const [b] = tags(xml, 'UserGetBalancesResult')
+  return { currency: b?.Currency ?? 'USD', availableUsd: Number(b?.AvailableBalance) || 0 }
+}
+
 /** Whether Namecheap sells a TLD (namecheap.domains.getTldList). */
 export async function supportedTlds(cfg: NamecheapConfig, fetchImpl?: typeof fetch) {
   const xml = await call(cfg, 'namecheap.domains.getTldList', {}, fetchImpl)

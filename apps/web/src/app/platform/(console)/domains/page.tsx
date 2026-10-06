@@ -1,7 +1,7 @@
 import { domains, platformDb, tenants } from '@spa/db'
-import { cloudflareConfig, cnameTarget } from '@spa/services'
+import { cloudflareConfig, cnameTarget, getBalance, listDomainOrders, namecheapConfig } from '@spa/services'
 import { and, count, desc, eq, ilike, or } from 'drizzle-orm'
-import { Cloud, CloudOff, Globe, Search } from 'lucide-react'
+import { Cloud, CloudOff, Globe, Search, ShoppingBag } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
@@ -14,12 +14,32 @@ import { adminPath } from '@/lib/paths'
 import { cn, formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { DomainRowActions } from './domain-row-actions'
+import { OrderActions } from './order-actions'
 
 export const metadata: Metadata = { title: 'Domains' }
 
 const STATUSES = ['pending', 'verifying', 'active', 'failed'] as const
 type Status = (typeof STATUSES)[number]
 const TONE = { pending: 'warning', verifying: 'accent', active: 'success', failed: 'danger' } as const
+const ORDER_TONE = {
+  requested: 'warning',
+  purchasing: 'accent',
+  purchased: 'success',
+  failed: 'danger',
+  rejected: 'neutral',
+  cancelled: 'neutral',
+} as const
+
+/** Live Namecheap balance; null when not configured, 'error' when the API refuses (e.g. IP not whitelisted). */
+async function registrarBalance() {
+  const cfg = namecheapConfig()
+  if (!cfg) return null
+  try {
+    return await getBalance(cfg)
+  } catch {
+    return 'error' as const
+  }
+}
 
 export default async function PlatformDomainsPage({
   searchParams,
@@ -70,6 +90,7 @@ export default async function PlatformDomainsPage({
       .where(eq(domains.kind, 'custom'))
       .groupBy(domains.status),
   ])
+  const [orders, balance] = await Promise.all([listDomainOrders(30, db), registrarBalance()])
   const n = (s: Status) => totals.find((t) => t.status === s)?.n ?? 0
   const cf = cloudflareConfig()
   const filterHref = (s: Status | null) => {
@@ -110,13 +131,115 @@ export default async function PlatformDomainsPage({
                 </>
               ) : (
                 <>
-                  Domains are verified by DNS only and point at <span dir="ltr">{cnameTarget()}</span>; no
-                  certificates are issued. Set CF_API_TOKEN, CF_ZONE_ID and CF_CNAME_TARGET to switch it on.
+                  Domains are verified by DNS and point at <span dir="ltr">{cnameTarget()}</span>; the server
+                  issues their certificates on the first visit. Set CF_API_TOKEN, CF_ZONE_ID and
+                  CF_CNAME_TARGET to use Cloudflare instead.
                 </>
               )}
             </p>
           </div>
         </div>
+
+        <Card>
+          <div className="flex flex-col gap-1 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="min-w-0">
+              <h2 className="font-medium">Purchase requests</h2>
+              <p className="text-sm text-muted">
+                Spas ask; you approve; the domain is bought on Namecheap and connected.
+              </p>
+            </div>
+            <p className="text-sm text-muted">
+              {balance === null
+                ? 'Namecheap not configured'
+                : balance === 'error'
+                  ? 'Namecheap unreachable — check the API whitelist'
+                  : `Balance ${balance.currency} ${balance.availableUsd.toFixed(2)}`}
+            </p>
+          </div>
+          <DataTable
+            rows={orders}
+            rowKey={(r) => r.order.id}
+            empty={
+              <EmptyState
+                icon={<ShoppingBag className="size-5" />}
+                title="No purchase requests"
+                description="Spas request domains under Settings → Domains → Buy a domain."
+              />
+            }
+            columns={[
+              {
+                key: 'domain',
+                header: 'Domain',
+                primary: true,
+                cell: (r) => (
+                  <div className="min-w-0">
+                    <span dir="ltr" className="block break-all font-medium">
+                      {r.order.domain}
+                    </span>
+                    <Link
+                      href={adminPath(`/tenants/${r.order.tenantId}`)}
+                      className="block text-xs text-muted hover:text-fg"
+                    >
+                      {r.spa} · <span className="whitespace-nowrap">{r.slug}</span>
+                    </Link>
+                  </div>
+                ),
+              },
+              {
+                key: 'price',
+                header: 'Price',
+                cell: (r) => (
+                  <div className="min-w-0 whitespace-nowrap">
+                    <span className="block">USD {r.order.priceUsd}</span>
+                    <span className="block text-xs text-muted">
+                      AED {r.order.priceAed} · {r.order.years}y{r.order.premium ? ' · premium' : ''}
+                      {r.order.chargedUsd ? ` · charged ${r.order.chargedUsd}` : ''}
+                    </span>
+                  </div>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                className: 'max-w-xs',
+                cell: (r) => (
+                  <div className="min-w-0 space-y-0.5">
+                    <Badge tone={ORDER_TONE[r.order.status]}>{r.order.status}</Badge>
+                    <span className="block text-xs text-muted">
+                      {formatDateTime(r.order.decidedAt ?? r.order.createdAt)}
+                    </span>
+                    {(r.order.error || r.order.note) && (
+                      <span
+                        title={r.order.error ?? r.order.note ?? ''}
+                        className={cn(
+                          'block text-xs md:line-clamp-2',
+                          r.order.status === 'failed' ? 'text-danger' : 'text-muted',
+                        )}
+                      >
+                        {r.order.error ?? r.order.note}
+                      </span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'actions',
+                header: <span className="sr-only">Actions</span>,
+                className: 'text-end',
+                cell: (r) =>
+                  r.order.status === 'requested' || r.order.status === 'failed' ? (
+                    <OrderActions
+                      id={r.order.id}
+                      domain={r.order.domain}
+                      spa={r.spa}
+                      priceUsd={r.order.priceUsd}
+                      retry={r.order.status === 'failed'}
+                    />
+                  ) : null,
+              },
+            ]}
+          />
+        </Card>
 
         <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
           <StatCard label="Active" value={n('active')} />

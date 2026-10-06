@@ -1,12 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
+import { admin, app, base, signInPlatformAdmin, site } from './helpers'
 
-const PORT = 3100
-// E2E_ROUTING=path exercises single-hostname mode (/app, /admin, /s/{slug}) used on *.ondigitalocean.app.
-const PATH = process.env.E2E_ROUTING === 'path'
-const base = `http://localhost:${PORT}`
-const app = PATH ? `${base}/app` : `http://app.localhost:${PORT}`
-const admin = PATH ? `${base}/admin` : `http://admin.localhost:${PORT}`
-const site = (s: string) => (PATH ? `${base}/s/${s}` : `http://${s}.localhost:${PORT}`)
 const slug = `serenity-${Date.now().toString(36)}`
 const shots = (name: string) => `test-results/screens/${name}.png`
 
@@ -96,22 +90,7 @@ test('unknown subdomains 404', async ({ page }) => {
 })
 
 test('super-admin changes the plan price and the marketing page follows', async ({ page }) => {
-  await page.goto(`${app}/signup`)
-  await page.getByLabel('Your name').fill('Platform Admin')
-  await page.getByLabel('Work email').fill('admin@e2e.test')
-  await page.getByLabel('Password').fill('platform-admin-pass')
-  await page.getByLabel('Spa name').fill('Admin Test Spa')
-  await page.getByLabel('Web address').fill(`admin-${slug}`)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await page.waitForURL(`${app}/admin-${slug}`)
-
-  await page.goto(`${admin}/login`)
-  if (!PATH) {
-    // Separate host → separate session; on a single host the sign-up session already applies.
-    await page.getByLabel('Email').fill('admin@e2e.test')
-    await page.getByLabel('Password').fill('platform-admin-pass')
-    await page.getByRole('button', { name: 'Sign in' }).click()
-  }
+  await signInPlatformAdmin(page)
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
   await screenshotAt(page, 'platform-overview')
 

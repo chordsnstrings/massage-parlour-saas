@@ -15,6 +15,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { createdAt, id, updatedAt } from './_columns'
@@ -279,4 +280,50 @@ export const aiUsage = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('ai_usage_tenant_created').on(t.tenantId, t.createdAt), ...tenantPolicies()],
+)
+
+export const domainOrderStatus = pgEnum('domain_order_status', [
+  'requested',
+  'purchasing',
+  'purchased',
+  'failed',
+  'rejected',
+  'cancelled',
+])
+
+/**
+ * Domain purchases through the registrar (Namecheap): a spa requests a domain, a super-admin approves, the
+ * platform registers it, points DNS at the platform and connects it as the spa's custom domain.
+ */
+export const domainOrders = pgTable(
+  'domain_orders',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    domain: text('domain').notNull(),
+    years: integer('years').notNull().default(1),
+    /** Registrar price at request time (USD) and what the spa is billed (AED). */
+    priceUsd: numeric('price_usd', { precision: 10, scale: 2 }).notNull(),
+    priceAed: numeric('price_aed', { precision: 10, scale: 2 }).notNull(),
+    premium: boolean('premium').notNull().default(false),
+    status: domainOrderStatus('status').notNull().default('requested'),
+    requestedBy: text('requested_by').references(() => user.id),
+    decidedBy: text('decided_by').references(() => user.id),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    chargedUsd: numeric('charged_usd', { precision: 10, scale: 2 }),
+    registrarOrderId: text('registrar_order_id'),
+    registrarDomainId: text('registrar_domain_id'),
+    domainId: uuid('domain_id').references(() => domains.id, { onDelete: 'set null' }),
+    note: text('note'),
+    error: text('error'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('domain_orders_tenant').on(t.tenantId, t.createdAt),
+    uniqueIndex('domain_orders_open_domain')
+      .on(t.domain)
+      .where(sql`${t.status} in ('requested', 'purchasing', 'purchased')`),
+    ...tenantPolicies(),
+  ],
 )

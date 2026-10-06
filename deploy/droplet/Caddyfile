@@ -1,5 +1,9 @@
 {
 	email {$ACME_EMAIL:ops@spamanagement.ae}
+	# Spa custom domains: certificates are issued on first visit, only for hostnames the app has registered.
+	on_demand_tls {
+		ask http://web:3000/api/domains/allowed
+	}
 }
 
 {$SITE_HOST} {
@@ -18,5 +22,16 @@
 		reverse_proxy web:3000 {
 			header_up X-Forwarded-Proto {scheme}
 		}
+	}
+}
+
+# Any other hostname = a spa's custom domain (the app routes it to that spa's site).
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-Proto {scheme}
 	}
 }

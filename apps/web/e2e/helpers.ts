@@ -41,6 +41,38 @@ export async function signUpOwner(page: Page, opts: { slug?: string; name?: stri
   return { slug, dashboard: `${app}/${slug}` }
 }
 
+/**
+ * Signs the page in as the e2e super-admin (admin@e2e.test, in PLATFORM_ADMIN_EMAILS), creating the account through
+ * spa sign-up the first time any spec needs it.
+ */
+export async function signInPlatformAdmin(page: Page) {
+  const email = 'admin@e2e.test'
+  const password = 'platform-admin-pass'
+  const overview = page.getByRole('heading', { name: 'Overview' })
+  const signIn = async () => {
+    await page.goto(`${admin}/login`)
+    if (await overview.isVisible()) return true
+    await page.getByLabel('Email').fill(email)
+    await page.getByLabel('Password').fill(password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    return overview.waitFor({ timeout: 8_000 }).then(
+      () => true,
+      () => false,
+    )
+  }
+  if (await signIn()) return
+  const slug = uniqueSlug('admin')
+  await page.goto(`${app}/signup`)
+  await page.getByLabel('Your name').fill('Platform Admin')
+  await page.getByLabel('Work email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByLabel('Spa name').fill('Admin Test Spa')
+  await page.getByLabel('Web address').fill(slug)
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await page.waitForURL(`${app}/${slug}`)
+  expect(await signIn()).toBe(true)
+}
+
 /** Screenshots a view at phone, tablet and desktop widths into test-results/screens. */
 export async function screenshotAt(page: Page, name: string) {
   for (const width of [360, 768, 1280]) {
