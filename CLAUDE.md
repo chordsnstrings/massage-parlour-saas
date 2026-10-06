@@ -1,7 +1,7 @@
 # spamanagement.ae — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1 MVP complete plus most of P2/P3 (see docs/PLAN.md §14.1); live test deploy on DO App Platform (path routing).
+Status: P1 MVP complete plus most of P2/P3 (see docs/PLAN.md §14.1); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
@@ -50,8 +50,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
-- App Platform: a spec update (PUT) redeploys the *existing* build; run `scripts/do-deploy.sh` (force_build) to build the
-  branch head. Worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
+- Deploys: the droplet's `spa-update` timer pulls the deploy branch every 2 min and rebuilds; check
+  `https://<host>/_status/deploy.json` (basic auth `ops`). Secrets without SSH: commit `deploy/droplet/secrets.env.enc`
+  (see deploy/droplet/README.md). The worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
 - React effects must use block bodies (`useEffect(() => { … })`): newer Chromium returns a value from `scrollIntoView`,
   which React then calls as the cleanup.
 - Sandbox-only: Docker builds need the proxy CA (`--build-context ca=/root/.ccr` on a temp Dockerfile copy); committed Dockerfiles stay clean.

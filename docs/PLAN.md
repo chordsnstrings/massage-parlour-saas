@@ -718,7 +718,7 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 | P3 AI | ✅ AI studio: receptionist chat (books via tools), IG captions + Seedream images, review replies, SEO, slot filler (worker) |
 | Still open | IG/Meta + GBP API connections (await approvals), custom-domain UI + Cloudflare for SaaS, campaigns/segments UI, CSV import, more templates/presets, PWA push, Sentry |
 
-Deployed for testing on DigitalOcean App Platform with path routing (`/app`, `/admin`, `/s/{slug}`) on the DO-provided hostname
+Deployed on one DigitalOcean droplet (blr1, Compose + Caddy) with path routing (`/app`, `/admin`, `/s/{slug}`) on an sslip.io hostname
 until `spamanagement.ae` is registered.
 
 ## 15. Working agreement (token-efficient, still thorough)
