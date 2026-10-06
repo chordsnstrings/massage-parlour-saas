@@ -1,6 +1,7 @@
 import { branches, domains, platformDb, tenants, withTenant } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
+import { tenantSiteUrl } from '@/lib/paths'
 
 type SiteTenant = { id: string; slug: string; name: string; status: string }
 const cache = new LRUCache<string, SiteTenant | 'missing'>({ max: 5000, ttl: 60_000 })
@@ -32,6 +33,23 @@ export async function resolveSiteTenant(
   const value = row && row.status !== 'cancelled' ? row : null
   cache.set(cacheKey, value ?? 'missing')
   return value
+}
+
+/** Drops a custom hostname from the host cache after its domain changes (activate, deactivate, remove). */
+export function invalidateSiteHost(hostname: string) {
+  cache.delete(`h:${hostname.toLowerCase()}`)
+}
+
+/** The spa's public address: its primary active custom domain, else the free subdomain (or /s/{slug}). */
+export async function publicSiteUrl(tenant: { id: string; slug: string }): Promise<string> {
+  const [primary] = await withTenant(tenant.id, (tx) =>
+    tx
+      .select({ hostname: domains.hostname })
+      .from(domains)
+      .where(and(eq(domains.kind, 'custom'), eq(domains.status, 'active'), eq(domains.isPrimary, true)))
+      .limit(1),
+  )
+  return primary ? `https://${primary.hostname}` : tenantSiteUrl(tenant.slug)
 }
 
 export async function siteData(tenant: SiteTenant) {
