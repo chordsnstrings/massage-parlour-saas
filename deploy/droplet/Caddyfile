@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL:ops@spamanagement.ae}
+}
+
+{$SITE_HOST} {
+	encode zstd gzip
+
+	# Deploy status + recent logs for the operator (basic auth; no secrets are written there).
+	handle /_status/* {
+		basic_auth {
+			{$STATUS_USER:ops} {$STATUS_HASH}
+		}
+		root * /srv
+		file_server
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
