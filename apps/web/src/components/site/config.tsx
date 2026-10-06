@@ -1,6 +1,7 @@
 import type { Config, Field, PuckContext } from '@puckeditor/core'
 import { ButtonGroup, Gallery, Heading, Hero, Image, RichText } from './blocks/elements'
-import { Columns, Section, Spacer, Stack } from './blocks/layout'
+import { globalSectionBlock } from './blocks/global'
+import { Columns, Section, Spacer, Stack, withAdvanced } from './blocks/layout'
 import {
   BookingCTA,
   FAQ,
@@ -14,6 +15,7 @@ import {
 import { CONTENT_KEYS } from './content'
 import { biField } from './field-defs'
 import { SiteFrame } from './frame'
+import { themeVars } from './theme'
 import type { SiteMeta } from './types'
 
 /**
@@ -32,35 +34,53 @@ export const siteConfig: Config = {
       components: ['ServicesMenu', 'Team', 'OpeningHours', 'BookingCTA', 'WhatsAppButton'],
     },
     more: { title: 'More', components: ['Testimonials', 'FAQ', 'Footer'] },
+    // Inserted from the editor's library only (it references a saved section).
+    global: { title: 'Global sections', components: ['GlobalSection'], visible: false },
   },
   components: {
-    Section,
+    // Bands carry the Advanced group (schedule + scoped custom CSS, PLAN §11.3 layer 6).
+    Section: withAdvanced(Section),
     Columns,
     Stack,
     Spacer,
-    Hero,
+    Hero: withAdvanced(Hero),
     Heading,
     RichText,
     ButtonGroup,
     Image,
-    Gallery,
-    ServicesMenu,
-    Team,
-    OpeningHours,
-    BookingCTA,
+    Gallery: withAdvanced(Gallery),
+    ServicesMenu: withAdvanced(ServicesMenu),
+    Team: withAdvanced(Team),
+    OpeningHours: withAdvanced(OpeningHours),
+    BookingCTA: withAdvanced(BookingCTA),
     WhatsAppButton,
-    Testimonials,
-    FAQ,
-    Footer,
+    Testimonials: withAdvanced(Testimonials),
+    FAQ: withAdvanced(FAQ),
+    Footer: withAdvanced(Footer),
+    GlobalSection: globalSectionBlock(() => siteConfig),
   },
   root: {
     fields: {
       title: biField('Page title (search results)'),
       description: biField('Page description (search results)', { multiline: true }),
     },
-    render: ({ children, puck }: { children: React.ReactNode; puck: PuckContext }) => (
-      <SiteFrame meta={puck.metadata as SiteMeta}>{children}</SiteFrame>
-    ),
+    render: ({ children, puck }: { children: React.ReactNode; puck: PuckContext }) => {
+      const meta = puck.metadata as SiteMeta & { bare?: boolean }
+      // `bare`: theme only, no header — the modal editor for one global section.
+      if (meta.bare)
+        return (
+          <div
+            className="site-root"
+            dir={meta.locale === 'ar' ? 'rtl' : 'ltr'}
+            lang={meta.locale}
+            data-motion="none"
+            style={themeVars(meta.theme)}
+          >
+            {children}
+          </div>
+        )
+      return <SiteFrame meta={meta}>{children}</SiteFrame>
+    },
   },
 }
 

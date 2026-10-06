@@ -1,7 +1,7 @@
 import './site.css'
 import { type ComponentConfig, type Config, type Data, Render } from '@puckeditor/core'
 import { withTenant } from '@spa/db'
-import { getPublishedPage, PAGE_SLUG } from '@spa/services'
+import { getPublishedPage, globalSectionsFor, isScheduleVisible, PAGE_SLUG } from '@spa/services'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
@@ -10,6 +10,7 @@ import { siteData } from '@/server/sites'
 import { siteConfig } from './config'
 import { buildMeta, loadSite, localeOf } from './data'
 import { tr } from './i18n'
+import type { AdvancedProps } from './style'
 import type { Bi } from './types'
 
 type Tenant = { id: string; slug: string; name: string; status: string }
@@ -31,23 +32,29 @@ function trackedConfig(data: Partial<Data>): Config {
   const components = Object.fromEntries(
     Object.entries(siteConfig.components).map(([name, c]) => {
       const Inner = c.render as (props: Record<string, unknown>) => React.ReactNode
-      const render = (props: Record<string, unknown>) =>
-        top.has(String(props.id)) ? (
+      const render = (props: Record<string, unknown>) => {
+        // Outside its schedule a band renders nothing — not even the tracking box.
+        if (!isScheduleVisible((props.advanced as AdvancedProps | undefined)?.schedule)) return null
+        return top.has(String(props.id)) ? (
           <div data-block-id={String(props.id)} data-block-type={name}>
             <Inner {...props} />
           </div>
         ) : (
           <Inner {...props} />
         )
+      }
       return [name, { ...c, render } as ComponentConfig]
     }),
   )
   return { ...siteConfig, components }
 }
 
-/** Published page + live data, shared by generateMetadata and the page within one request. */
+/** Published page (+ the global sections it shows) and live data, shared by generateMetadata and the page. */
 const loadPublished = cache(async (tenant: Tenant, slug: string) => {
-  const published = await withTenant(tenant.id, (tx) => getPublishedPage(tx, tenant.id, slug))
+  const published = await withTenant(tenant.id, async (tx) => {
+    const page = await getPublishedPage(tx, tenant.id, slug)
+    return page ? { ...page, globals: await globalSectionsFor(tx, tenant.id, page.data) } : null
+  })
   if (!published) return null
   const { data } = await loadSite(tenant, { published: true })
   return { published, data }
@@ -103,13 +110,16 @@ export async function PublicSite({
     if (slug === '') return <PlaceholderSite data={await siteData(tenant)} />
     notFound()
   }
-  const meta = buildMeta({
-    data: loaded.data,
-    theme: loaded.published.site.theme,
-    locale: localeOf(lang),
-    base,
-    slug,
-  })
+  const meta = {
+    ...buildMeta({
+      data: loaded.data,
+      theme: loaded.published.site.theme,
+      locale: localeOf(lang),
+      base,
+      slug,
+    }),
+    globals: loaded.published.globals,
+  }
   const data = loaded.published.data as Partial<Data>
   return <Render config={trackedConfig(data)} data={data} metadata={meta} />
 }

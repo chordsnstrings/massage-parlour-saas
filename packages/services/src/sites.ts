@@ -1,7 +1,9 @@
 // Tenant website: site settings, pages and Puck page versions (docs/PLAN.md §11).
-import { pageVersions, sitePages, sites, type ThemeTokens, type Tx } from '@spa/db'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { pageVersions, savedSections, sitePages, sites, type ThemeTokens, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
+import { collectGlobalIds } from './site-kit/tree'
 
 export type SiteText = { en: string; ar?: string }
 /** Puck page data: `{ root: { props }, content: [...] }`. */
@@ -322,4 +324,195 @@ export async function setPageVisible(tx: Tx, tenantId: string, pageId: string, v
     .where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.id, pageId)))
     .returning()
   return updated!
+}
+
+/* ------------------------------------------------------------------ Versions (editor history drawer) */
+
+/** Names a version ("Before Ramadan"); an empty label clears it. */
+export async function labelVersion(tx: Tx, tenantId: string, versionId: string, label: string | null) {
+  const [row] = await tx
+    .update(pageVersions)
+    .set({ label: label?.trim() || null })
+    .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.id, versionId)))
+    .returning({ id: pageVersions.id, pageId: pageVersions.pageId, label: pageVersions.label })
+  if (!row) throw new DomainError('Version not found', 'not_found')
+  return row
+}
+
+export async function getVersion(tx: Tx, tenantId: string, versionId: string) {
+  const [row] = await tx
+    .select()
+    .from(pageVersions)
+    .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.id, versionId)))
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * Restores an earlier version as the page's draft. History is never rewritten: the published version stays
+ * live until the restored draft is published.
+ */
+export async function restoreVersion(
+  tx: Tx,
+  input: { tenantId: string; pageId: string; versionId: string; userId?: string },
+) {
+  const version = await getVersion(tx, input.tenantId, input.versionId)
+  if (!version || version.pageId !== input.pageId) throw new DomainError('Version not found', 'not_found')
+  const draft = await saveDraft(tx, {
+    tenantId: input.tenantId,
+    pageId: input.pageId,
+    data: version.data,
+    userId: input.userId,
+  })
+  return { draft, data: version.data as PageData }
+}
+
+/* ------------------------------------------------------------------ Saved & global sections */
+
+export type SavedSectionRow = typeof savedSections.$inferSelect
+
+/** The section library: global sections first, then by name. */
+export async function listSavedSections(tx: Tx, tenantId: string): Promise<SavedSectionRow[]> {
+  return tx
+    .select()
+    .from(savedSections)
+    .where(eq(savedSections.tenantId, tenantId))
+    .orderBy(desc(savedSections.isGlobal), asc(savedSections.name))
+}
+
+export async function createSavedSection(
+  tx: Tx,
+  input: { tenantId: string; name: string; data: Record<string, unknown>; isGlobal: boolean },
+): Promise<SavedSectionRow> {
+  const [row] = await tx
+    .insert(savedSections)
+    .values({ tenantId: input.tenantId, name: input.name.trim(), data: input.data, isGlobal: input.isGlobal })
+    .returning()
+  return row!
+}
+
+/** Renames a saved section and/or replaces its block (a global section's edit shows on every page at once). */
+export async function updateSavedSection(
+  tx: Tx,
+  tenantId: string,
+  id: string,
+  patch: { name?: string; data?: Record<string, unknown> },
+): Promise<SavedSectionRow> {
+  const [row] = await tx
+    .update(savedSections)
+    .set({
+      ...(patch.name ? { name: patch.name.trim() } : {}),
+      ...(patch.data ? { data: patch.data } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(savedSections.tenantId, tenantId), eq(savedSections.id, id)))
+    .returning()
+  if (!row) throw new DomainError('Saved section not found', 'not_found')
+  return row
+}
+
+/** Global sections referenced by GlobalSection blocks in `data`, keyed by id (deleted ones are absent). */
+export async function globalSectionsFor(
+  tx: Tx,
+  tenantId: string,
+  data: unknown,
+): Promise<Record<string, Record<string, unknown>>> {
+  const ids = collectGlobalIds(data).filter((id) => UUID.test(id))
+  if (!ids.length) return {}
+  const rows = await tx
+    .select({ id: savedSections.id, data: savedSections.data })
+    .from(savedSections)
+    .where(
+      and(
+        eq(savedSections.tenantId, tenantId),
+        eq(savedSections.isGlobal, true),
+        inArray(savedSections.id, ids),
+      ),
+    )
+  return Object.fromEntries(rows.map((r) => [r.id, r.data]))
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Pages whose newest version or live version shows global section `id`. */
+export async function globalSectionUsage(tx: Tx, tenantId: string, id: string): Promise<string[]> {
+  const rows = await tx
+    .select({ pageId: pageVersions.pageId, status: pageVersions.status, data: pageVersions.data })
+    .from(pageVersions)
+    .where(eq(pageVersions.tenantId, tenantId))
+    .orderBy(desc(pageVersions.createdAt))
+  const latestSeen = new Set<string>()
+  const publishedSeen = new Set<string>()
+  const using = new Set<string>()
+  for (const r of rows) {
+    const relevant = !latestSeen.has(r.pageId) || (r.status === 'published' && !publishedSeen.has(r.pageId))
+    latestSeen.add(r.pageId)
+    if (r.status === 'published') publishedSeen.add(r.pageId)
+    if (relevant && collectGlobalIds(r.data).includes(id)) using.add(r.pageId)
+  }
+  return [...using]
+}
+
+/** Deletes a saved section; a global one still placed on a page must be removed from those pages first. */
+export async function deleteSavedSection(tx: Tx, tenantId: string, id: string): Promise<SavedSectionRow> {
+  const [row] = await tx
+    .select()
+    .from(savedSections)
+    .where(and(eq(savedSections.tenantId, tenantId), eq(savedSections.id, id)))
+    .limit(1)
+  if (!row) throw new DomainError('Saved section not found', 'not_found')
+  if (row.isGlobal) {
+    const pages = await globalSectionUsage(tx, tenantId, id)
+    if (pages.length)
+      throw new DomainError(
+        `This global section is on ${pages.length} ${pages.length === 1 ? 'page' : 'pages'} — remove it there first.`,
+      )
+  }
+  await tx.delete(savedSections).where(and(eq(savedSections.tenantId, tenantId), eq(savedSections.id, id)))
+  return row
+}
+
+/* ------------------------------------------------------------------ Shareable draft preview links */
+
+export type PreviewClaims = { tenantId: string; pageId: string; exp: number }
+
+const mac = (payload: string, secret: string) =>
+  createHmac('sha256', secret).update(`page-preview.${payload}`).digest('base64url')
+
+/** Signed, expiring token for viewing a page's draft without signing in (HMAC-SHA256). */
+export function signPreviewToken(
+  claims: { tenantId: string; pageId: string; expiresAt: Date },
+  secret: string,
+): string {
+  if (!secret) throw new Error('A signing secret is required')
+  const payload = Buffer.from(
+    JSON.stringify({
+      t: claims.tenantId,
+      p: claims.pageId,
+      e: Math.floor(claims.expiresAt.getTime() / 1000),
+    }),
+  ).toString('base64url')
+  return `${payload}.${mac(payload, secret)}`
+}
+
+/** The token's claims, or null when it is malformed, tampered with or expired. */
+export function verifyPreviewToken(token: unknown, secret: string, now = new Date()): PreviewClaims | null {
+  if (!secret || typeof token !== 'string' || token.length > 600) return null
+  const [payload, signature, extra] = token.split('.')
+  if (!payload || !signature || extra !== undefined) return null
+  const expected = Buffer.from(mac(payload, secret))
+  const given = Buffer.from(signature)
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null
+  try {
+    const raw = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      t?: unknown
+      p?: unknown
+      e?: unknown
+    }
+    if (typeof raw.t !== 'string' || typeof raw.p !== 'string' || typeof raw.e !== 'number') return null
+    if (raw.e * 1000 <= now.getTime()) return null
+    return { tenantId: raw.t, pageId: raw.p, exp: raw.e }
+  } catch {
+    return null
+  }
 }
