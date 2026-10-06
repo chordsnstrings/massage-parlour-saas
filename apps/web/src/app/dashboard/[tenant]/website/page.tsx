@@ -14,9 +14,10 @@ import { CopyButton } from '@/components/ui/copy-button'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { publicSiteUrl } from '@/server/sites'
 import {
   ApplyTemplateSheet,
   PublishSiteSheet,
@@ -37,7 +38,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   }))
   const canDesign = can(ctx, 'site.design')
   const canPublish = can(ctx, 'site.publish')
-  const publicUrl = tenantSiteUrl(slug)
+  const publicUrl = await publicSiteUrl(ctx.tenant)
   const pending = pages.filter((p) => p.hasDraft).length
   const hasLive = pages.some((p) => p.publishedAt)
   const preview = (template: string) => appPath(`/${slug}/website/preview?template=${template}`)

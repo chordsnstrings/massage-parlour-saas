@@ -22,9 +22,10 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { formatAed, formatDate } from '@/lib/utils'
 import { can, type MemberContext, requireMember } from '@/server/access'
+import { publicSiteUrl } from '@/server/sites'
 
 const PERIODS = {
   today: { label: 'Today', days: 1 },
@@ -112,7 +113,7 @@ export default async function TenantHome({
   })
 
   const slug = tenant.slug
-  const site = tenantSiteUrl(slug)
+  const site = await publicSiteUrl(tenant)
   const steps = [
     {
       done: Boolean(data.branch?.whatsappE164 && data.branch.address),
