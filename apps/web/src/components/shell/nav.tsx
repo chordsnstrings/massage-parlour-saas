@@ -1,6 +1,7 @@
 'use client'
 import {
   BadgeDollarSign,
+  Boxes,
   Building2,
   Calculator,
   CalendarDays,
@@ -55,6 +56,7 @@ const icons = {
   accounts: Calculator,
   packages: Gift,
   payroll: BadgeDollarSign,
+  inventory: Boxes,
 } as const
 
 export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }

@@ -3,13 +3,20 @@ import { twMerge } from 'tailwind-merge'
 
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs))
 
-const aed = new Intl.NumberFormat('en-AE', {
-  style: 'currency',
-  currency: 'AED',
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-})
-export const formatAed = (value: number | string) => aed.format(Number(value))
+const aedFmt = (digits: number) =>
+  new Intl.NumberFormat('en-AE', {
+    style: 'currency',
+    currency: 'AED',
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+const aed0 = aedFmt(0)
+const aed2 = aedFmt(2)
+/** Whole dirhams print without decimals (AED 350); anything with fils always shows two (AED 0.10). */
+export const formatAed = (value: number | string) => {
+  const n = Number(value)
+  return (Math.round(n * 100) % 100 === 0 ? aed0 : aed2).format(n)
+}
 
 const dateFmt = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
