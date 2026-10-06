@@ -1,0 +1,17 @@
+{
+  "name": "@spa/auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@spa/db": "workspace:*",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3"
+  }
+}
