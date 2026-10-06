@@ -1,0 +1,58 @@
+import { withTenant } from '@spa/db'
+import { ArrowLeft } from 'lucide-react'
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { SEGMENT_PRESETS } from '@/components/campaigns/rules'
+import { SegmentBuilder } from '@/components/campaigns/segment-builder'
+import { Button } from '@/components/ui/button'
+import { PageBody, PageHeader } from '@/components/ui/page'
+import { appPath } from '@/lib/paths'
+import { can, requireMember } from '@/server/access'
+import { clientTags, serviceOptions } from '../../data'
+
+export const metadata: Metadata = { title: 'New segment' }
+
+export default async function NewSegmentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tenant: string }>
+  searchParams: Promise<{ preset?: string }>
+}) {
+  const ctx = await requireMember((await params).tenant)
+  if (!can(ctx, 'marketing.campaigns')) notFound()
+  const presetKey = (await searchParams).preset
+  const preset = SEGMENT_PRESETS.find((p) => p.key === presetKey)
+  const slug = ctx.tenant.slug
+  const data = await withTenant(ctx.tenant.id, async (tx) => ({
+    services: await serviceOptions(tx),
+    tags: await clientTags(tx),
+  }))
+  return (
+    <>
+      <PageHeader
+        eyebrow="Campaigns"
+        title="New segment"
+        description="A saved group of clients you can message again and again. The count updates as you go."
+        actions={
+          <Button variant="ghost" asChild>
+            <Link href={appPath(`/${slug}/campaigns?tab=segments`)}>
+              <ArrowLeft className="rtl:rotate-180" /> Segments
+            </Link>
+          </Button>
+        }
+      />
+      <PageBody>
+        <SegmentBuilder
+          slug={slug}
+          segmentId={null}
+          initialName={preset?.name ?? ''}
+          initialRules={preset?.rules ?? [{ kind: 'lapsed', days: 60 }]}
+          services={data.services}
+          tags={data.tags}
+        />
+      </PageBody>
+    </>
+  )
+}

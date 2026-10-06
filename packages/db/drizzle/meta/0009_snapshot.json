@@ -1,5 +1,5 @@
 {
-  "id": "ebb3a2f6-2aa6-46ed-b37c-fe97cac3ac22",
+  "id": "2ab09da7-7320-41c7-a0bb-9a3e2af31f2b",
   "prevId": "6afe5f0b-6964-4a57-9d89-eecf297cb601",
   "version": "7",
   "dialect": "postgresql",
@@ -890,6 +890,21 @@
             },
             {
               "expression": "due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_campaign": {
+          "name": "outbox_campaign",
+          "columns": [
+            {
+              "expression": "campaign_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4805,6 +4820,43 @@
           "notNull": true,
           "default": 0
         },
+        "rules": {
+          "name": "rules",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_code_id": {
+          "name": "promo_code_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scheduled_at": {
+          "name": "scheduled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "queued_at": {
+          "name": "queued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stats": {
+          "name": "stats",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -4813,6 +4865,13 @@
         },
         "created_at": {
           "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -4840,6 +4899,19 @@
           "tableTo": "segments",
           "columnsFrom": [
             "segment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "campaigns_promo_code_id_promo_codes_id_fk": {
+          "name": "campaigns_promo_code_id_promo_codes_id_fk",
+          "tableFrom": "campaigns",
+          "tableTo": "promo_codes",
+          "columnsFrom": [
+            "promo_code_id"
           ],
           "columnsTo": [
             "id"
@@ -5445,6 +5517,12 @@
         "replied_at": {
           "name": "replied_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_error": {
+          "name": "reply_error",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
