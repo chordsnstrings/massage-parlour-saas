@@ -1,3 +1,4 @@
+import type { Permission } from '@spa/core'
 import { AppShell, Banner } from '@/components/shell/app-shell'
 import type { NavItem } from '@/components/shell/nav'
 import { appPath } from '@/lib/paths'
@@ -13,15 +14,20 @@ export default async function TenantLayout({
   const { tenant: slug } = await params
   const ctx = await requireMember(slug)
   const base = appPath(`/${ctx.tenant.slug}`)
+  const item = (perm: Permission | null, path: string, label: string, icon: NavItem['icon']): NavItem[] =>
+    perm === null || can(ctx, perm) ? [{ href: `${base}${path}`, label, icon }] : []
   const nav: NavItem[] = [
     { href: base, label: 'Home', icon: 'home', exact: true },
-    ...(can(ctx, 'team.manage') ? [{ href: `${base}/team`, label: 'Team', icon: 'team' } as const] : []),
-    ...(can(ctx, 'settings.manage')
-      ? [{ href: `${base}/settings`, label: 'Settings', icon: 'settings' } as const]
-      : []),
-    ...(can(ctx, 'billing.view')
-      ? [{ href: `${base}/billing`, label: 'Subscription', icon: 'billing' } as const]
-      : []),
+    ...item('calendar.view', '/calendar', 'Calendar', 'calendar'),
+    ...item('clients.view', '/clients', 'Clients', 'clients'),
+    ...item('pos.use', '/sales', 'Sales', 'sales'),
+    ...item('marketing.send', '/messages', 'WhatsApp', 'messages'),
+    ...item('services.manage', '/services', 'Services & rooms', 'services'),
+    ...item('staff.view', '/staff', 'Staff', 'staff'),
+    ...item('site.content', '/website', 'Website', 'website'),
+    ...item('team.manage', '/team', 'Team', 'team'),
+    ...item('settings.manage', '/settings', 'Settings', 'settings'),
+    ...item('billing.view', '/billing', 'Subscription', 'billing'),
     { href: appPath('/account'), label: 'Account', icon: 'account' },
   ]
   const banner = ctx.impersonating ? (

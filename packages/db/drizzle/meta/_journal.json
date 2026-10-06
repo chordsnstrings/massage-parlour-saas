@@ -15,6 +15,20 @@
       "when": 1791269914515,
       "tag": "0001_invoice_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791272522169,
+      "tag": "0002_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791272523102,
+      "tag": "0003_reservations_exclusion",
+      "breakpoints": true
     }
   ]
 }

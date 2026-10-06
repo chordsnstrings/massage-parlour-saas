@@ -1,0 +1,17 @@
+{
+  "name": "@spa/services",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spa/core": "workspace:*",
+    "@spa/db": "workspace:*",
+    "drizzle-orm": "0.45.3"
+  }
+}

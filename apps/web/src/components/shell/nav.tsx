@@ -1,17 +1,24 @@
 'use client'
 import {
   Building2,
+  CalendarDays,
+  Contact,
   Ellipsis,
+  Globe,
+  HandHeart,
   House,
   Landmark,
   Layers,
+  MessageCircle,
   ReceiptText,
   ScrollText,
   Settings2,
   ShieldCheck,
   Sparkles,
+  UserCog,
   UserRound,
   Users,
+  Wallet,
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import Link from 'next/link'
@@ -33,6 +40,13 @@ const icons = {
   ai: Sparkles,
   audit: ScrollText,
   company: Landmark,
+  calendar: CalendarDays,
+  clients: Contact,
+  sales: Wallet,
+  messages: MessageCircle,
+  services: HandHeart,
+  staff: UserCog,
+  website: Globe,
 } as const
 
 export type NavItem = { href: string; label: string; icon: keyof typeof icons; exact?: boolean }

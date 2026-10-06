@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = 3100
-const local = (role: string) => `postgres://${role}:${role}_dev@localhost:5432/spa_test`
+const PORT = Number(process.env.E2E_PORT ?? 3100)
+const local = (role: string) =>
+  `postgres://${role}:${role}_dev@localhost:5432/${process.env.TEST_DB_NAME ?? 'spa_test'}`
 // Use a preinstalled Chromium when present (cloud sandbox); CI installs its own.
 const chromium =
   process.env.PW_CHROMIUM ??

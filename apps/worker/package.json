@@ -12,6 +12,7 @@
   "dependencies": {
     "@spa/ai": "workspace:*",
     "@spa/db": "workspace:*",
+    "@spa/services": "workspace:*",
     "aws4fetch": "^1.0.20",
     "pg-boss": "12.37.0"
   },
