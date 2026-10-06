@@ -12,6 +12,26 @@ const tenantId = () =>
 
 export type ThemeTokens = Record<string, string | number>
 
+/**
+ * What a template switch replaced: previous key + theme, and each touched page's prior draft. It also records
+ * what the switch wrote (`appliedTheme`, each draft's `versionId` + `savedAt`), so undo is refused once any of
+ * it has been edited or published since — undo never throws away later work.
+ */
+export type TemplateUndo = {
+  templateKey: string
+  theme: ThemeTokens
+  appliedTheme: ThemeTokens
+  at: string
+  /** `draft` = the page's previous draft data (null when it had none); `created` = page added by the switch. */
+  pages: {
+    pageId: string
+    created: boolean
+    draft: Record<string, unknown> | null
+    versionId: string
+    savedAt: string
+  }[]
+}
+
 export const sites = pgTable(
   'sites',
   {
@@ -22,6 +42,8 @@ export const sites = pgTable(
     locales: text('locales').array().notNull().default(['en']),
     defaultLocale: text('default_locale').notNull().default('en'),
     seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
+    /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
+    templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

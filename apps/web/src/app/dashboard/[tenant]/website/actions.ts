@@ -1,24 +1,35 @@
 'use server'
 import { withTenant } from '@spa/db'
 import {
+  addPage,
+  applySiteCopy,
+  applySiteCopyToPages,
   DomainError,
+  extractSiteCopy,
   getEditablePage,
   getSite,
+  hasCopySlots,
+  listPages,
+  type PageData,
   publishAll,
   publishPage,
+  type SiteCopy,
   saveDraft,
   setPageVisible,
   switchTemplate,
+  undoTemplateSwitch,
   updateTheme,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { designSignature, isPageData } from '@/components/site/content'
-import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
+import { PAGE_TEMPLATES, pageTemplateData } from '@/components/site/presets'
 import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
+import { resolveTemplate } from '@/server/site-templates'
+import { SiteCopySchema, siteWriterReady, writerError, writeSiteCopy } from '@/server/site-writer'
 
 const MAX_PAGE_BYTES = 512 * 1024
 const uuid = z.string().uuid()
@@ -44,11 +55,14 @@ function domainFail(e: unknown): ActionResult {
 /* ------------------------------------------------------------------ Template */
 
 const templateSchema = z.object({
-  template: z.string().refine(isTemplateKey, 'Choose a template'),
+  template: z.string().trim().min(1, 'Choose a template').max(60),
   replaceContent: z.string().optional(),
 })
 
-/** Creates the site from a template on first use; afterwards swaps theme tokens (optionally starter content). */
+/**
+ * Creates the site from a template on first use; afterwards swaps theme tokens (optionally starter content as
+ * drafts). The previous template is kept on the site so the switch can be undone in one click.
+ */
 export async function applyTemplateAction(
   slug: string,
   _prev: ActionResult,
@@ -58,7 +72,8 @@ export async function applyTemplateAction(
   if (error) return fail(error)
   const parsed = templateSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
-  const template = TEMPLATES[parsed.data.template as keyof typeof TEMPLATES]
+  const template = await resolveTemplate(parsed.data.template)
+  if (!template) return fail('Choose a template', { template: 'Choose a template' })
   const replaceContent = parsed.data.replaceContent === 'on'
   try {
     await withTenant(ctx.tenant.id, (tx) =>
@@ -70,6 +85,189 @@ export async function applyTemplateAction(
   await auditAs(ctx, 'site.template_applied', 'site', undefined, { template: template.key, replaceContent })
   revalidate(slug)
   return ok(`${template.name} applied`)
+}
+
+/** One-click undo of the last template switch (template, theme and replaced drafts). */
+export async function undoTemplateAction(
+  slug: string,
+  _prev: ActionResult,
+  _formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.design')
+  if (error) return fail(error)
+  let key = ''
+  try {
+    key = (await withTenant(ctx.tenant.id, (tx) => undoTemplateSwitch(tx, ctx.tenant.id, ctx.user.id)))
+      .templateKey
+  } catch (e) {
+    return domainFail(e)
+  }
+  await auditAs(ctx, 'site.template_undone', 'site', undefined, { template: key })
+  revalidate(slug)
+  const template = await resolveTemplate(key)
+  return ok(`Back to ${template?.name ?? key}`)
+}
+
+/** Adds a page from a page template (e.g. "Ramadan offers") as a draft. */
+export async function addPageFromTemplateAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.design')
+  if (error) return fail(error)
+  const parsed = z
+    .object({ template: z.string().refine((k) => PAGE_TEMPLATES.some((t) => t.key === k), 'Choose a page') })
+    .safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const t = PAGE_TEMPLATES.find((x) => x.key === parsed.data.template)!
+  let page: { id: string; slug: string }
+  try {
+    page = await withTenant(ctx.tenant.id, (tx) =>
+      addPage(tx, {
+        tenantId: ctx.tenant.id,
+        slug: t.slug,
+        title: t.title,
+        data: pageTemplateData(t, t.key),
+        userId: ctx.user.id,
+      }),
+    )
+  } catch (e) {
+    return domainFail(e)
+  }
+  await auditAs(ctx, 'site.page.created', 'site_page', page.id, { template: t.key, slug: page.slug })
+  revalidate(slug)
+  return ok(`${t.name} added as a draft`, { pageId: page.id })
+}
+
+/* ------------------------------------------------------------------ AI site writer */
+
+/**
+ * What applying will do: `new` creates the site from the template; `in-place` writes the copy into the spa's
+ * own pages (layout, images and theme stay); `starter` keeps the theme but replaces drafts with the template's
+ * starter pages (the spa's pages have no copy areas yet); `switch` changes template — the theme is live at once.
+ */
+export type SiteCopyMode = 'new' | 'in-place' | 'starter' | 'switch'
+
+export type SiteCopyPreview = {
+  template: string
+  templateName: string
+  mode: SiteCopyMode
+  /** The spa's own copy, or null when its pages have no copy areas to compare against. */
+  current: SiteCopy | null
+  proposed: SiteCopy
+}
+
+/**
+ * Writes hero, about, USPs, FAQs and CTA (EN + AR) from the spa's facts. Nothing is saved: the member reviews
+ * the before/after first and applies it with `applySiteCopyAction`.
+ */
+export async function generateSiteCopyAction(
+  slug: string,
+  input: { template: string; notes?: string },
+): Promise<{ ok: true; preview: SiteCopyPreview } | { ok: false; error: string }> {
+  const { ctx, error } = await guard(slug, 'site.design')
+  if (error) return { ok: false, error }
+  const parsed = z
+    .object({ template: z.string().trim().min(1).max(60), notes: z.string().trim().max(400).optional() })
+    .safeParse(input)
+  if (!parsed.success) return { ok: false, error: 'Choose a template' }
+  const template = await resolveTemplate(parsed.data.template)
+  if (!template) return { ok: false, error: 'Choose a template' }
+  if (!(await siteWriterReady())) return { ok: false, error: writerError(new Error('disabled')) }
+  let proposed: SiteCopy
+  try {
+    proposed = await writeSiteCopy({
+      tenantId: ctx.tenant.id,
+      template: { name: template.name, feel: template.feel },
+      notes: parsed.data.notes || undefined,
+    })
+  } catch (e) {
+    console.error('site writer failed', e)
+    return { ok: false, error: writerError(e) }
+  }
+  // "Before": what the spa's own pages say now (never the template's sample copy).
+  const { site, drafts } = await withTenant(ctx.tenant.id, async (tx) => {
+    const pages = await listPages(tx, ctx.tenant.id)
+    const out: { data: PageData }[] = []
+    for (const p of pages) {
+      const page = await getEditablePage(tx, ctx.tenant.id, p.id)
+      if (page) out.push({ data: page.data })
+    }
+    return { site: await getSite(tx, ctx.tenant.id), drafts: out }
+  })
+  const slotted = hasCopySlots(drafts)
+  const mode: SiteCopyMode = !site
+    ? 'new'
+    : site.templateKey !== template.key
+      ? 'switch'
+      : slotted
+        ? 'in-place'
+        : 'starter'
+  await auditAs(ctx, 'site.ai_copy_generated', 'site', undefined, { template: template.key })
+  return {
+    ok: true,
+    preview: {
+      template: template.key,
+      templateName: template.name,
+      mode,
+      current: slotted ? extractSiteCopy(drafts) : null,
+      proposed,
+    },
+  }
+}
+
+/**
+ * Applies reviewed AI copy as drafts (never publishes). For the current template it is written into the spa's
+ * own pages, keeping layout, images and theme; only pages without copy areas fall back to the template's
+ * starter pages (theme kept). Choosing another template switches to it (undoable).
+ */
+export async function applySiteCopyAction(
+  slug: string,
+  input: { template: string; copy: SiteCopy },
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.design')
+  if (error) return fail(error)
+  const parsed = z
+    .object({ template: z.string().trim().min(1).max(60), copy: SiteCopySchema })
+    .safeParse(input)
+  if (!parsed.success) return fail('This suggestion could not be read. Generate it again.')
+  const template = await resolveTemplate(parsed.data.template)
+  if (!template) return fail('Choose a template')
+  const copy = parsed.data.copy
+  let mode: SiteCopyMode
+  let count = 0
+  try {
+    mode = await withTenant(ctx.tenant.id, async (tx): Promise<SiteCopyMode> => {
+      const site = await getSite(tx, ctx.tenant.id)
+      if (site?.templateKey === template.key) {
+        const written = await applySiteCopyToPages(tx, ctx.tenant.id, copy, ctx.user.id)
+        count = written.filled
+        if (written.filled) return 'in-place'
+      }
+      const { template: filled, filled: n } = applySiteCopy(template, copy)
+      count = n
+      await switchTemplate(tx, ctx.tenant.id, filled, {
+        replaceContent: true,
+        keepTheme: site?.templateKey === template.key,
+        userId: ctx.user.id,
+      })
+      return !site ? 'new' : site.templateKey === template.key ? 'starter' : 'switch'
+    })
+  } catch (e) {
+    return domainFail(e)
+  }
+  await auditAs(ctx, 'site.ai_copy_applied', 'site', undefined, {
+    template: template.key,
+    fields: count,
+    mode,
+  })
+  revalidate(slug)
+  return ok(
+    mode === 'switch'
+      ? `Switched to ${template.name} — your new copy is saved as drafts; publish when you are happy`
+      : 'Your new copy is saved as drafts — review and publish when you are happy',
+  )
 }
 
 /* ------------------------------------------------------------------ Theme */

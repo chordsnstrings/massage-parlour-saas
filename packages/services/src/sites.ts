@@ -1,5 +1,5 @@
 // Tenant website: site settings, pages and Puck page versions (docs/PLAN.md §11).
-import { pageVersions, sitePages, sites, type ThemeTokens, type Tx } from '@spa/db'
+import { pageVersions, sitePages, sites, type TemplateUndo, type ThemeTokens, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
 
@@ -259,37 +259,167 @@ export async function listVersions(tx: Tx, tenantId: string, pageId: string, lim
 }
 
 /**
- * Applies another template. Theme tokens are always swapped and page content kept; with `replaceContent`
- * the template's starter pages are saved as new drafts (missing pages are created), nothing goes live until
- * it is published.
+ * Applies another template. Theme tokens are swapped (kept with `keepTheme`) and page content kept; with
+ * `replaceContent` the template's starter pages are saved as new drafts (missing pages are created), nothing
+ * goes live until it is published. The previous template, theme and drafts are kept on the site for undo.
  */
 export async function switchTemplate(
   tx: Tx,
   tenantId: string,
   template: SiteTemplate,
-  opts: { replaceContent?: boolean; userId?: string } = {},
+  opts: { replaceContent?: boolean; keepTheme?: boolean; userId?: string } = {},
 ): Promise<SiteRow> {
   const { site, created } = await ensureSite(tx, tenantId, template)
-  const [updated] = await tx
-    .update(sites)
-    .set({ templateKey: template.key, theme: template.theme })
-    .where(eq(sites.id, site.id))
-    .returning()
-  if (opts.replaceContent && !created) {
-    const pages = await listPages(tx, tenantId)
-    for (const [i, p] of template.pages.entries()) {
-      let page = pages.find((x) => x.slug === p.slug)
-      if (!page) {
-        const [row] = await tx
-          .insert(sitePages)
-          .values({ tenantId, siteId: site.id, slug: p.slug, title: p.title, sort: pages.length + i })
-          .returning()
-        page = { ...row!, editedAt: null, publishedAt: null, hasDraft: false }
+  const theme = opts.keepTheme ? site.theme : template.theme
+  const undo: TemplateUndo | null = created
+    ? null
+    : {
+        templateKey: site.templateKey,
+        theme: site.theme,
+        appliedTheme: theme,
+        at: new Date().toISOString(),
+        pages: [],
       }
-      await saveDraft(tx, { tenantId, pageId: page!.id, data: p.data, userId: opts.userId })
+  if (opts.replaceContent && undo) {
+    const pages = await listPages(tx, tenantId)
+    let sort = pages.reduce((max, p) => Math.max(max, p.sort), -1)
+    for (const p of template.pages) {
+      const existing = pages.find((x) => x.slug === p.slug)
+      let page: SitePageRow | undefined = existing
+      let draft: PageData | null = null
+      if (page) {
+        const latest = await latestVersion(tx, tenantId, page.id)
+        if (latest?.status === 'draft') draft = latest.data
+      } else {
+        ;[page] = await tx
+          .insert(sitePages)
+          .values({ tenantId, siteId: site.id, slug: p.slug, title: p.title, sort: ++sort })
+          .returning()
+      }
+      const written = await saveDraft(tx, { tenantId, pageId: page!.id, data: p.data, userId: opts.userId })
+      undo.pages.push({
+        pageId: page!.id,
+        created: !existing,
+        draft,
+        versionId: written.id,
+        savedAt: written.createdAt.toISOString(),
+      })
     }
   }
+  const [updated] = await tx
+    .update(sites)
+    .set({ templateKey: template.key, theme, ...(undo ? { templateUndo: undo } : {}) })
+    .where(eq(sites.id, site.id))
+    .returning()
   return updated!
+}
+
+const sameTokens = (a: ThemeTokens, b: ThemeTokens | undefined) =>
+  !!b && Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v)
+
+/**
+ * What has changed since the last template switch wrote it: 'Theme' and/or the titles of pages saved or
+ * published since. Undo is only offered (and only allowed) while this is empty, so it never discards later work.
+ */
+export async function templateUndoChanges(
+  tx: Tx,
+  tenantId: string,
+  site?: SiteRow | null,
+): Promise<string[]> {
+  const current = site === undefined ? await getSite(tx, tenantId) : site
+  const undo = current?.templateUndo
+  if (!current || !undo) return []
+  const changed = sameTokens(current.theme, undo.appliedTheme) ? [] : ['Theme']
+  for (const p of undo.pages) {
+    const page = await getPage(tx, tenantId, p.pageId)
+    if (!page) continue
+    const latest = await latestVersion(tx, tenantId, page.id)
+    const untouched =
+      latest?.id === p.versionId &&
+      latest.status === 'draft' &&
+      latest.createdAt.getTime() === Date.parse(p.savedAt)
+    if (!untouched) changed.push(page.title.en)
+  }
+  return changed
+}
+
+/**
+ * Reverts the last template switch: previous template key and theme, each replaced page's previous draft
+ * (or no draft), and pages the switch added. Refused once anything the switch wrote has been edited since.
+ */
+export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: string): Promise<SiteRow> {
+  const site = await getSite(tx, tenantId)
+  const undo = site?.templateUndo
+  if (!site || !undo) throw new DomainError('There is no template change to undo')
+  const changed = await templateUndoChanges(tx, tenantId, site)
+  if (changed.length)
+    throw new DomainError(
+      `Undo is no longer available: ${changed.join(', ')} changed since the switch. Your edits are kept.`,
+    )
+  for (const p of undo.pages) {
+    const page = await getPage(tx, tenantId, p.pageId)
+    if (!page) continue
+    if (p.created) {
+      // Untouched since the switch, so never published: the page and its draft go.
+      await tx.delete(sitePages).where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.id, page.id)))
+      continue
+    }
+    if (p.draft) {
+      await saveDraft(tx, { tenantId, pageId: page.id, data: p.draft, userId })
+      continue
+    }
+    // The page had no draft: drop the switch's draft when an older version remains (a page keeps one version).
+    const [older] = await tx
+      .select({ id: pageVersions.id })
+      .from(pageVersions)
+      .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.pageId, page.id)))
+      .orderBy(desc(pageVersions.createdAt))
+      .offset(1)
+      .limit(1)
+    if (older) await tx.delete(pageVersions).where(eq(pageVersions.id, p.versionId))
+  }
+  const [updated] = await tx
+    .update(sites)
+    .set({ templateKey: undo.templateKey, theme: undo.theme, templateUndo: null })
+    .where(eq(sites.id, site.id))
+    .returning()
+  return updated!
+}
+
+/** Slugs the public site uses for its own routes. */
+const RESERVED_SLUGS = new Set(['book', 'api', 's'])
+
+/** Adds a page (e.g. from a page template) with `data` as its first draft; the slug gets a suffix when taken. */
+export async function addPage(
+  tx: Tx,
+  input: { tenantId: string; slug: string; title: SiteText; data: PageData; userId?: string },
+): Promise<SitePageRow> {
+  const site = await getSite(tx, input.tenantId)
+  if (!site) throw new DomainError('Choose a template first', 'not_found')
+  if (!input.slug || !PAGE_SLUG.test(input.slug))
+    throw new DomainError('Use lowercase letters, numbers and dashes')
+  const pages = await listPages(tx, input.tenantId)
+  const taken = new Set([...pages.map((p) => p.slug), ...RESERVED_SLUGS])
+  let slug = input.slug
+  for (let i = 2; taken.has(slug); i++) slug = `${input.slug}-${i}`
+  const [page] = await tx
+    .insert(sitePages)
+    .values({
+      tenantId: input.tenantId,
+      siteId: site.id,
+      slug,
+      title: input.title,
+      sort: pages.reduce((max, p) => Math.max(max, p.sort), -1) + 1,
+    })
+    .returning()
+  await tx.insert(pageVersions).values({
+    tenantId: input.tenantId,
+    pageId: page!.id,
+    data: input.data,
+    status: 'draft',
+    createdBy: input.userId ?? null,
+  })
+  return page!
 }
 
 /** Replaces the site's theme tokens (validated by the caller). Live immediately: tokens apply to published pages. */
