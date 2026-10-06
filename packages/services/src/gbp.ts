@@ -163,11 +163,15 @@ export async function saveGbpTokens(tx: Tx, tenantId: string, tokens: GoogleToke
 const ACCOUNT_RE = /^accounts\/[\w-]{1,64}$/
 const LOCATION_RE = /^locations\/[\w-]{1,64}$/
 
-/** Points the connection at one location (`external_id` = location name). */
+/**
+ * Points the connection at one location (`external_id` = location name). `meta.importedAt` is the cutoff for AI drafts
+ * and autopilot: reviews written on Google before it are history, whether or not the first import succeeds.
+ */
 export async function chooseGbpLocation(
   tx: Tx,
   tenantId: string,
   loc: { accountName: string; locationName: string; title: string; address?: string },
+  now = new Date(),
 ) {
   if (!ACCOUNT_RE.test(loc.accountName) || !LOCATION_RE.test(loc.locationName))
     throw new DomainError('That location is not valid.')
@@ -184,6 +188,7 @@ export async function chooseGbpLocation(
         locationName: loc.locationName,
         title: loc.title.slice(0, 200),
         address: (loc.address ?? '').slice(0, 300),
+        importedAt: now.toISOString(),
       },
     })
     .where(eq(socialAccounts.id, row.id))
@@ -344,10 +349,17 @@ export async function publishGbpLocalPost(
     bookingUrl: opts.bookingUrl,
     imageUrl: post.media[0]?.url,
   })
+  let res: Awaited<ReturnType<typeof createGbpLocalPost>>
   try {
-    const res = await withGbpToken(opts, (token, account) =>
+    res = await withGbpToken(opts, (token, account) =>
       createGbpLocalPost(token, gbpParent(account), body, opts.fetch),
     )
+  } catch (e) {
+    return { ok: false, error: gbpErrorMessage(e) }
+  }
+  // Outside the Google try/catch: a failed insert must surface as a server error (with the created post's name),
+  // not as "try again" — a retry would publish the post on Google twice.
+  try {
     await withTenant(
       opts.tenantId,
       (tx) =>
@@ -365,8 +377,10 @@ export async function publishGbpLocalPost(
         }),
       opts.db,
     )
-    return { ok: true, name: res.name }
   } catch (e) {
-    return { ok: false, error: gbpErrorMessage(e) }
+    throw new Error(`Google local post ${res.name ?? '(unnamed)'} was created but could not be recorded`, {
+      cause: e,
+    })
   }
+  return { ok: true, name: res.name }
 }

@@ -1,11 +1,5 @@
 import { reviews, withTenant } from '@spa/db'
-import {
-  gbpConnectionView,
-  getGbpAccount,
-  googleConfig,
-  isGoogleReviewName,
-  reviewStats,
-} from '@spa/services'
+import { gbpConnectionView, getGbpAccount, googleConfig, isLocationReview, reviewStats } from '@spa/services'
 import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm'
 import { AlertCircle, ArrowLeft, Plus, Star } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -115,6 +109,10 @@ export default async function ReviewsPage({
       .limit(100),
   }))
   const connected = Boolean(conn?.hasLocation)
+  // Replies go through the API only for the connected location's reviews; older locations' reviews are history.
+  const parent = conn?.hasLocation ? `${conn.accountName}/${conn.locationName}` : null
+  // Reconnecting happens on the integrations card, which needs ai.manage.
+  const canReconnect = can(ctx, 'ai.manage')
   const base = appPath(`/${slug}/ai/reviews`)
   const href = (next: { rating?: number | null; status?: StatusFilter | null }) => {
     const q = new URLSearchParams()
@@ -177,12 +175,16 @@ export default async function ReviewsPage({
           <Card className="flex flex-wrap items-center gap-3 border-danger/30 bg-danger-soft p-4 text-sm text-danger sm:px-5">
             <AlertCircle className="size-4 shrink-0" strokeWidth={1.75} />
             <span className="min-w-0 flex-1">{conn.lastError ?? 'Google sign-in expired.'}</span>
-            <Link
-              href={appPath(`/${slug}/settings/integrations`)}
-              className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline sm:min-h-0"
-            >
-              Reconnect
-            </Link>
+            {canReconnect ? (
+              <Link
+                href={appPath(`/${slug}/settings/integrations`)}
+                className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline sm:min-h-0"
+              >
+                Reconnect
+              </Link>
+            ) : (
+              <span className="font-medium">Ask a manager to reconnect Google.</span>
+            )}
           </Card>
         )}
 
@@ -260,7 +262,7 @@ export default async function ReviewsPage({
           <Stagger className="grid gap-4 lg:grid-cols-2">
             {rows.map((r) => {
               const s = STATUS[r.replyStatus]
-              const viaGoogle = connected && isGoogleReviewName(r.externalId)
+              const viaGoogle = isLocationReview(r.externalId, parent)
               return (
                 <StaggerItem key={r.id}>
                   <Card className="flex h-full flex-col gap-4 p-5 sm:p-6" data-testid="review">

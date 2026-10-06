@@ -76,6 +76,8 @@ export async function GbpCard({
   const slug = ctx.tenant.slug
   const configured = Boolean(googleConfig() && process.env.BETTER_AUTH_SECRET)
   const manage = can(ctx, 'ai.manage')
+  /** Sync now and the reviews page need ai.approve (settings.manage alone can open this card). */
+  const approve = can(ctx, 'ai.approve')
   const { conn, stats } = await withTenant(ctx.tenant.id, async (tx) => {
     const row = await getGbpAccount(tx, ctx.tenant.id)
     return {
@@ -230,10 +232,12 @@ export async function GbpCard({
         {configured && manage && (!conn || conn.status === 'error') && (
           <ConnectGoogleButton slug={slug} label={conn ? 'Reconnect Google' : 'Connect Google'} />
         )}
-        {conn?.status === 'connected' && configured && <SyncGoogleButton slug={slug} />}
-        <Link href={reviewsHref} className={cn(buttonVariants({ variant: 'ghost' }), 'h-11 sm:h-10')}>
-          Review replies
-        </Link>
+        {conn?.status === 'connected' && configured && approve && <SyncGoogleButton slug={slug} />}
+        {approve && (
+          <Link href={reviewsHref} className={cn(buttonVariants({ variant: 'ghost' }), 'h-11 sm:h-10')}>
+            Review replies
+          </Link>
+        )}
         {conn && manage && (
           <span className="ms-auto flex flex-wrap gap-1">
             {conn.hasLocation && conn.status !== 'error' && <ChangeLocationButton slug={slug} />}

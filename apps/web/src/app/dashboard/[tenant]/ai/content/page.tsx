@@ -1,6 +1,6 @@
 import { socialPosts, withTenant } from '@spa/db'
 import { gbpConnectionView, getGbpAccount } from '@spa/services'
-import { desc } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -32,10 +32,30 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve')) notFound()
   const slug = ctx.tenant.slug
-  const { posts, gbp } = await withTenant(ctx.tenant.id, async (tx) => ({
-    posts: await tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30),
-    gbp: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
-  }))
+  const { posts, gbp, onGoogle } = await withTenant(ctx.tenant.id, async (tx) => {
+    const posts = await tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30)
+    // Captions already published as Google local posts (the same check publishGbpLocalPost makes).
+    const copies = posts.length
+      ? await tx
+          .select({ caption: socialPosts.caption })
+          .from(socialPosts)
+          .where(
+            and(
+              eq(socialPosts.platform, 'gbp'),
+              eq(socialPosts.status, 'published'),
+              inArray(
+                socialPosts.caption,
+                posts.map((p) => p.caption),
+              ),
+            ),
+          )
+      : []
+    return {
+      posts,
+      gbp: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
+      onGoogle: new Set(copies.map((c) => c.caption)),
+    }
+  })
   return (
     <>
       <Link
@@ -124,11 +144,17 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       {p.caption}
                     </p>
                     <PostActions slug={slug} postId={p.id} status={p.status} caption={p.caption} />
-                    {gbp?.status === 'connected' &&
+                    {p.platform !== 'gbp' && onGoogle.has(p.caption) ? (
+                      <Badge tone="success" className="self-start">
+                        On Google
+                      </Badge>
+                    ) : (
+                      gbp?.status === 'connected' &&
                       p.platform !== 'gbp' &&
                       (p.status === 'scheduled' || p.status === 'published') && (
                         <GbpPostButton slug={slug} postId={p.id} />
-                      )}
+                      )
+                    )}
                   </div>
                 </Card>
               </StaggerItem>
