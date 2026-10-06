@@ -30,6 +30,19 @@ import { cn } from '@/lib/utils'
 import type { ConversationMode } from './format'
 
 /** Toasts an action result; delivery problems come back as ok + `sent: false` and show as a warning. */
+/** Instagram limits DM text to 1,000 UTF-8 bytes (Arabic letters take 2), so DMs show a byte counter. */
+const MAX_DM_BYTES = 1000
+const dmBytes = (text: string) => new TextEncoder().encode(text.trim()).length
+
+function DmLimit({ bytes }: { bytes: number }) {
+  if (bytes < MAX_DM_BYTES * 0.8) return null
+  return (
+    <span className={cn('text-xs tabular-nums', bytes > MAX_DM_BYTES ? 'text-danger' : 'text-muted')}>
+      {bytes} / {MAX_DM_BYTES} bytes{bytes > MAX_DM_BYTES ? ' — too long for an Instagram DM' : ''}
+    </span>
+  )
+}
+
 function report(r: ActionResult) {
   if (!r) return false
   if (!r.ok) {
@@ -138,6 +151,7 @@ export function DraftCard({
   const [pending, start] = useTransition()
   const [busy, setBusy] = useState<'send' | 'discard' | null>(null)
   const edited = text.trim() !== draft.text.trim()
+  const bytes = isComment ? 0 : dmBytes(text)
   return (
     <div
       className="anim-fade-in ms-auto w-full max-w-[34rem] space-y-3 rounded-2xl border border-dashed border-accent/50 bg-surface p-4"
@@ -156,6 +170,11 @@ export function DraftCard({
         className="min-h-20 text-sm"
       />
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {!isComment && (
+          <span className="me-auto">
+            <DmLimit bytes={bytes} />
+          </span>
+        )}
         <Button
           variant="ghost"
           className="min-h-11 sm:min-h-10"
@@ -174,7 +193,7 @@ export function DraftCard({
         <Button
           className="min-h-11 sm:min-h-10"
           pending={busy === 'send'}
-          disabled={pending || !text.trim()}
+          disabled={pending || !text.trim() || bytes > MAX_DM_BYTES}
           onClick={() => {
             setBusy('send')
             start(async () => {
@@ -204,9 +223,10 @@ export function Composer({
 }) {
   const [text, setText] = useState('')
   const [pending, start] = useTransition()
+  const bytes = isComment ? 0 : dmBytes(text)
   const send = () => {
     const value = text.trim()
-    if (!value) return
+    if (!value || bytes > MAX_DM_BYTES) return
     start(async () => {
       if (report(await sendReplyAction(slug, id, value))) setText('')
     })
@@ -241,17 +261,20 @@ export function Composer({
           type="submit"
           className="size-11 shrink-0 px-0 sm:w-auto sm:px-4"
           pending={pending}
-          disabled={!text.trim()}
+          disabled={!text.trim() || bytes > MAX_DM_BYTES}
         >
           {!pending && <SendHorizontal className="rtl:-scale-x-100" />}
           <span className="sr-only sm:not-sr-only">Send</span>
         </Button>
       </div>
-      <p className="text-xs text-muted">
-        {isComment
-          ? 'Replies appear publicly under the post.'
-          : 'Replying takes the conversation over from the AI.'}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <p className="text-xs text-muted">
+          {isComment
+            ? 'Replies appear publicly under the post.'
+            : 'Replying takes the conversation over from the AI.'}
+        </p>
+        {!isComment && <DmLimit bytes={bytes} />}
+      </div>
     </form>
   )
 }

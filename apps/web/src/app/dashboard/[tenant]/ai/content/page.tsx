@@ -1,5 +1,12 @@
 import { socialPosts, withTenant } from '@spa/db'
-import { gbpConnectionView, getGbpAccount, instagramStatus, metaConfig, publicImageUrl } from '@spa/services'
+import {
+  gbpConnectionView,
+  getGbpAccount,
+  instagramStatus,
+  isPublishing,
+  metaConfig,
+  publicImageUrl,
+} from '@spa/services'
 import { desc } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -45,6 +52,7 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
       ? 'Connect Instagram in Settings → Instagram & Google to publish from here.'
       : null
   const publishBlocker = (p: (typeof posts)[number]) => {
+    if (isPublishing(p)) return 'Publishing to Instagram right now…'
     if (accountBlocker) return accountBlocker
     if (!p.media[0]?.url) return 'Instagram posts need an image.'
     if (!publicImageUrl(p.media[0].url))
@@ -123,7 +131,11 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                   <div className="flex flex-1 flex-col gap-3 p-5">
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Badge tone={tone[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</Badge>
+                        {isPublishing(p) ? (
+                          <Badge tone="accent">publishing</Badge>
+                        ) : (
+                          <Badge tone={tone[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</Badge>
+                        )}
                         {p.platform === 'gbp' && <Badge>Google</Badge>}
                       </span>
                       <span className="text-xs text-muted">
@@ -138,7 +150,7 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                     >
                       {p.caption}
                     </p>
-                    {p.status === 'failed' && p.error && (
+                    {p.status === 'failed' && p.error && !isPublishing(p) && (
                       <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{p.error}</p>
                     )}
                     {p.status === 'published' && p.externalId && (

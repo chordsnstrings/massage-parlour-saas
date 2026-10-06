@@ -74,6 +74,7 @@ export async function GET(req: NextRequest) {
       await withTenant(tenant.id, (tx) =>
         saveInstagramConnection(tx, tenant.id, {
           igUserId: me.userId,
+          appUserId: short.userId,
           username: me.username,
           profilePictureUrl: me.profilePictureUrl,
           accessToken: long.accessToken,

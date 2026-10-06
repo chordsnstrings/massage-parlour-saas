@@ -1,6 +1,7 @@
 'use server'
 import { conversationMessages, conversations, withTenant } from '@spa/db'
 import {
+  claimDraft,
   DomainError,
   deliverReply,
   discardDraft,
@@ -70,30 +71,30 @@ export async function approveDraftAction(
   if (error) return fail(error)
   const parsed = z.object({ messageId: uuid, text: Text }).safeParse({ messageId, text })
   if (!parsed.success) return fromZod(parsed.error)
-  const [draft] = await withTenant(ctx.tenant.id, (tx) =>
-    tx
-      .select()
-      .from(conversationMessages)
-      .where(
-        and(eq(conversationMessages.id, parsed.data.messageId), eq(conversationMessages.sender, 'ai_draft')),
-      ),
-  )
-  if (!draft) return fail('This draft was already handled.')
-  const edited = draft.text.trim() !== parsed.data.text
-  const r = await deliverReply(ctx.tenant.id, draft.conversationId, parsed.data.text, {
-    sender: edited ? 'staff' : 'bot',
-    messageId: draft.id,
-  })
-  await audit({
-    tenantId: ctx.tenant.id,
-    actorUserId: ctx.user.id,
-    action: 'inbox.draft.approve',
-    entity: 'conversation',
-    entityId: draft.conversationId,
-    data: { edited, delivered: r.ok },
-  })
-  revalidatePath(inboxPath(slug))
-  return delivered(r)
+  try {
+    // Claimed atomically first, so two approvals of the same draft can't both send it.
+    const draft = await withTenant(ctx.tenant.id, (tx) =>
+      claimDraft(tx, parsed.data.messageId, parsed.data.text),
+    )
+    if (!draft) return fail('This draft was already handled.')
+    const r = await deliverReply(ctx.tenant.id, draft.conversationId, parsed.data.text, {
+      sender: draft.sender,
+      messageId: draft.messageId,
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'inbox.draft.approve',
+      entity: 'conversation',
+      entityId: draft.conversationId,
+      data: { edited: draft.edited, delivered: r.ok },
+    })
+    revalidatePath(inboxPath(slug))
+    return delivered(r)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
 }
 
 export async function discardDraftAction(slug: string, messageId: string): Promise<ActionResult> {
@@ -126,10 +127,16 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
       .where(and(eq(conversationMessages.id, parsed.data), eq(conversationMessages.direction, 'out'))),
   )
   if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer') return fail('Nothing to resend.')
-  const r = await deliverReply(ctx.tenant.id, msg.conversationId, msg.text, {
-    sender: msg.sender,
-    messageId: msg.id,
-  })
+  let r: Awaited<ReturnType<typeof deliverReply>>
+  try {
+    r = await deliverReply(ctx.tenant.id, msg.conversationId, msg.text, {
+      sender: msg.sender,
+      messageId: msg.id,
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,

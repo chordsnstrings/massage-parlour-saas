@@ -67,8 +67,9 @@ export type InstagramTurn = 'missing' | 'human' | 'flagged' | 'off' | 'sent' | '
 
 /**
  * Handles one new inbound Instagram DM or comment per the spa's "Instagram receptionist" settings:
- * autopilot sends the reply (inside the 24-hour window), approve-first stores an AI draft,
+ * autopilot sends DM replies (inside the 24-hour window), approve-first stores an AI draft,
  * and human / closed / flagged threads are left for staff (they show as unread in the inbox).
+ * Comment replies are public, so they are always drafts for staff to approve, whatever the DM mode.
  */
 export async function respondToInstagram(
   item: InboundItem,
@@ -102,5 +103,5 @@ export async function respondToInstagram(
     return applyAgentOutcome(item.tenantId, item.conversationId, r, settings.mode, opts)
   }
   const r = await draftCommentReply({ tenantId: item.tenantId, comment: item.text, client: opts.client, now })
-  return applyAgentOutcome(item.tenantId, item.conversationId, r, settings.mode, opts)
+  return applyAgentOutcome(item.tenantId, item.conversationId, r, 'approve', opts)
 }

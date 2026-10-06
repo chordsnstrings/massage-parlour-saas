@@ -11,6 +11,7 @@ import {
   socialAccounts,
   socialPosts,
   type Tx,
+  tenants,
   withTenant,
 } from '@spa/db'
 import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
@@ -19,6 +20,7 @@ import { DomainError } from './errors'
 import {
   appOrigin,
   clipBytes,
+  dmTooLong,
   dmWindowOpen,
   type InstagramEvent,
   instagramClient,
@@ -46,6 +48,14 @@ const nowOf = (o: SocialOpts) => o.now ?? new Date()
 
 export type Channel = 'instagram_dm' | 'instagram_comment'
 export const CHANNELS: Channel[] = ['instagram_dm', 'instagram_comment']
+
+/** Spas the platform acts for (AI replies, scheduled publishing) — same set as the other tenant jobs. */
+const LIVE_STATUSES = ['trial', 'active', 'past_due'] as const
+const liveTenantIds = (o: SocialOpts) =>
+  platformOf(o)
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(inArray(tenants.status, [...LIVE_STATUSES]))
 
 // ── Connected account ───────────────────────────────────────────────────────
 
@@ -101,6 +111,8 @@ export async function saveInstagramConnection(
   tenantId: string,
   c: {
     igUserId: string
+    /** App-scoped id from the code exchange; Meta's deauthorize / data-deletion callbacks may send this one. */
+    appUserId?: string
     username?: string
     profilePictureUrl?: string
     accessToken: string
@@ -116,6 +128,7 @@ export async function saveInstagramConnection(
     webhooks: c.webhooks,
   }
   if (c.profilePictureUrl) meta.profilePictureUrl = c.profilePictureUrl
+  if (c.appUserId && c.appUserId !== c.igUserId) meta.appUserId = c.appUserId
   const values = {
     username: c.username ?? null,
     tokenEnc: encryptSecret(c.accessToken),
@@ -148,11 +161,12 @@ export async function disconnectInstagram(tx: Tx) {
   return rows.length
 }
 
-/** Tenants that have this Instagram account connected (platform lookup for webhooks / OAuth). */
-export async function instagramAccountTenants(igUserId: string, o: SocialOpts = {}) {
+/** Tenants that have this Instagram account connected, with whether the spa is live (platform lookup for webhooks / OAuth). */
+async function instagramOwners(igUserId: string, o: SocialOpts) {
   const rows = await platformOf(o)
-    .select({ tenantId: socialAccounts.tenantId })
+    .select({ tenantId: socialAccounts.tenantId, status: tenants.status })
     .from(socialAccounts)
+    .innerJoin(tenants, eq(tenants.id, socialAccounts.tenantId))
     .where(
       and(
         eq(socialAccounts.platform, 'instagram'),
@@ -160,15 +174,33 @@ export async function instagramAccountTenants(igUserId: string, o: SocialOpts = 
         eq(socialAccounts.status, 'connected'),
       ),
     )
-  return [...new Set(rows.map((r) => r.tenantId))]
+  const live = new Set<string>(LIVE_STATUSES)
+  return [...new Map(rows.map((r) => [r.tenantId, live.has(r.status)])).entries()].map(
+    ([tenantId, isLive]) => ({
+      tenantId,
+      live: isLive,
+    }),
+  )
 }
 
-/** Meta deauthorize / data-deletion callback: drop the token and profile data for this IG user everywhere. */
+/** Every tenant with this Instagram account connected, whatever its billing status (OAuth "already in use" check). */
+export async function instagramAccountTenants(igUserId: string, o: SocialOpts = {}) {
+  return (await instagramOwners(igUserId, o)).map((r) => r.tenantId)
+}
+
+/**
+ * Meta deauthorize / data-deletion callback: drop the token and profile data for this IG user everywhere.
+ * Matches the Instagram user id or the app-scoped id from the code exchange. Returns the number of accounts cleared.
+ */
 export async function forgetInstagramUser(igUserId: string, o: SocialOpts = {}) {
+  const matches = and(
+    eq(socialAccounts.platform, 'instagram'),
+    sql`(${socialAccounts.externalId} = ${igUserId} or ${socialAccounts.meta}->>'appUserId' = ${igUserId})`,
+  )
   const rows = await platformOf(o)
     .select({ tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
-    .where(and(eq(socialAccounts.platform, 'instagram'), eq(socialAccounts.externalId, igUserId)))
+    .where(matches)
   for (const tenantId of new Set(rows.map((r) => r.tenantId))) {
     await withTenant(
       tenantId,
@@ -176,7 +208,7 @@ export async function forgetInstagramUser(igUserId: string, o: SocialOpts = {}) 
         tx
           .update(socialAccounts)
           .set({ status: 'disconnected', tokenEnc: null, tokenExpiresAt: null, meta: {}, username: null })
-          .where(and(eq(socialAccounts.platform, 'instagram'), eq(socialAccounts.externalId, igUserId))),
+          .where(matches),
       appOf(o),
     )
   }
@@ -193,23 +225,26 @@ export type InboundItem = {
   text: string
 }
 
-/** Verified webhook body → stored conversations/messages (deduped by Meta id). Returns the new inbound messages. */
+/**
+ * Verified webhook body → stored conversations/messages (deduped by Meta id). Returns the new inbound messages the AI
+ * should answer: messages for spas that aren't live (read-only, suspended, cancelled) are kept for staff but get no AI turn.
+ */
 export async function ingestInstagramWebhook(body: unknown, o: SocialOpts = {}) {
   return ingestInstagramEvents(parseInstagramWebhook(body, nowOf(o)), o)
 }
 
 export async function ingestInstagramEvents(events: InstagramEvent[], o: SocialOpts = {}) {
-  const owners = new Map<string, string[]>()
+  const owners = new Map<string, { tenantId: string; live: boolean }[]>()
   const items: InboundItem[] = []
   for (const ev of events) {
-    let tenantIds = owners.get(ev.accountId)
-    if (!tenantIds) {
-      tenantIds = await instagramAccountTenants(ev.accountId, o)
-      owners.set(ev.accountId, tenantIds)
+    let tenantsOf = owners.get(ev.accountId)
+    if (!tenantsOf) {
+      tenantsOf = await instagramOwners(ev.accountId, o)
+      owners.set(ev.accountId, tenantsOf)
     }
-    for (const tenantId of tenantIds) {
+    for (const { tenantId, live } of tenantsOf) {
       const item = await withTenant(tenantId, (tx) => storeInbound(tx, tenantId, ev), appOf(o))
-      if (item) items.push(item)
+      if (item && live) items.push(item)
     }
   }
   return items
@@ -329,9 +364,13 @@ export async function fillParticipant(tenantId: string, conversationId: string, 
 
 export type AgentOutcome = { reply?: string; handoff?: string; flagged?: string; bookingRef?: string }
 
+export const TAKEN_OVER_NOTE =
+  'Not sent automatically — the team took this conversation over while the AI was replying.'
+
 /**
  * Applies a DM/comment agent turn: hand-off, flag and booking link first, then the reply —
  * sent straight away on autopilot (kept as a draft if it can't be delivered), or stored as an `ai_draft` for approval.
+ * The thread is re-read here, after the model turn: if staff took it over or flagged it meanwhile, the reply becomes a draft.
  */
 export async function applyAgentOutcome(
   tenantId: string,
@@ -340,9 +379,15 @@ export async function applyAgentOutcome(
   mode: 'approve' | 'autopilot',
   o: SocialOpts = {},
 ): Promise<'sent' | 'drafted' | 'none'> {
-  await withTenant(
+  const stillBot = await withTenant(
     tenantId,
     async (tx) => {
+      const [conv] = await tx
+        .select({ mode: conversations.mode, flagged: conversations.flagged })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .for('update')
+      if (!conv) return false
       const patch: Partial<typeof conversations.$inferInsert> = {}
       if (outcome.handoff) patch.mode = 'human'
       if (outcome.flagged) patch.flagged = true
@@ -358,16 +403,17 @@ export async function applyAgentOutcome(
       }
       if (Object.keys(patch).length)
         await tx.update(conversations).set(patch).where(eq(conversations.id, conversationId))
+      return conv.mode === 'bot' && !conv.flagged
     },
     appOf(o),
   )
   const reply = outcome.reply?.trim()
   if (!reply) return 'none'
-  if (mode === 'autopilot') {
+  if (mode === 'autopilot' && stillBot) {
     const r = await deliverReply(tenantId, conversationId, reply, { ...o, sender: 'bot', draftOnFail: true })
     return r.ok ? 'sent' : 'drafted'
   }
-  await storeDraft(tenantId, conversationId, reply, null, o)
+  await storeDraft(tenantId, conversationId, reply, mode === 'autopilot' ? TAKEN_OVER_NOTE : null, o)
   return 'drafted'
 }
 
@@ -446,6 +492,9 @@ export async function deliverReply(
   )
   const { conv, account } = state
   const isDm = conv.channel === 'instagram_dm'
+  // Staff text is never cut silently (the actions check it first); AI text is already byte-limited, clip as a backstop.
+  const tooLong = isDm && opts.sender === 'staff' ? dmTooLong(text.trim()) : null
+  if (tooLong) throw new DomainError(tooLong)
   const body = isDm ? clipBytes(text.trim()) : text.trim().slice(0, 2000)
   if (!body) throw new DomainError('Write a message first')
   const token = tokenOf(account)
@@ -483,10 +532,12 @@ export async function deliverReply(
       if (expired && account)
         await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, account.id))
       const values = { sender, text: body, error, externalId }
+      await tx.update(conversations).set({ updatedAt: now }).where(eq(conversations.id, conversationId))
       if (opts.messageId) {
+        // An approved draft / retried message moves to "now" so the thread, list preview and AI history stay in order.
         const [row] = await tx
           .update(conversationMessages)
-          .set(values)
+          .set({ ...values, createdAt: now })
           .where(
             and(
               eq(conversationMessages.id, opts.messageId),
@@ -510,7 +561,6 @@ export async function deliverReply(
         .insert(conversationMessages)
         .values({ tenantId, conversationId, direction: 'out', ...values })
         .returning({ id: conversationMessages.id })
-      await tx.update(conversations).set({ updatedAt: now }).where(eq(conversations.id, conversationId))
       return row!.id
     },
     appOf(opts),
@@ -621,6 +671,35 @@ export async function markConversationRead(tx: Tx, conversationId: string, now =
   await tx.update(conversations).set({ readAt: now }).where(eq(conversations.id, conversationId))
 }
 
+/** Shown on a message while it is being sent; it stays (with Retry) only if the send never finished. */
+export const SENDING_NOTE = 'Sending… if this stays, check Instagram before retrying.'
+
+/**
+ * Claims an AI draft for sending: locks it and turns it into an outbound message, so a second approval (another
+ * staff member, a retried request) finds nothing to send. Null when already handled; DomainError when a DM is too long.
+ */
+export async function claimDraft(tx: Tx, messageId: string, text: string) {
+  const [draft] = await tx
+    .select()
+    .from(conversationMessages)
+    .where(and(eq(conversationMessages.id, messageId), eq(conversationMessages.sender, 'ai_draft')))
+    .for('update', { skipLocked: true })
+  if (!draft) return null
+  const [conv] = await tx
+    .select({ channel: conversations.channel })
+    .from(conversations)
+    .where(eq(conversations.id, draft.conversationId))
+  const tooLong = conv?.channel === 'instagram_dm' ? dmTooLong(text.trim()) : null
+  if (tooLong) throw new DomainError(tooLong)
+  const edited = draft.text.trim() !== text.trim()
+  const sender: 'bot' | 'staff' = edited ? 'staff' : 'bot'
+  await tx
+    .update(conversationMessages)
+    .set({ sender, error: SENDING_NOTE })
+    .where(eq(conversationMessages.id, draft.id))
+  return { messageId: draft.id, conversationId: draft.conversationId, sender, edited }
+}
+
 export async function discardDraft(tx: Tx, messageId: string) {
   const rows = await tx
     .delete(conversationMessages)
@@ -673,10 +752,26 @@ export function publicImageUrl(url: string | undefined, origin = appOrigin()) {
 
 export type PublishResult = { ok: true; externalId: string } | { ok: false; error: string }
 
+/** Marks a post while Instagram is publishing it (status stays `failed` so the job never picks it up twice). */
+export const PUBLISHING_NOTE = 'Publishing to Instagram… if this stays, check Instagram before trying again.'
+const PUBLISH_CLAIM_MS = 3 * 60_000
+
+/** True while another request is publishing this post (claimed less than 3 minutes ago). */
+export const isPublishing = (
+  p: { status: string; error: string | null; publishedAt: Date | null },
+  now = new Date(),
+) =>
+  p.status === 'failed' &&
+  p.error === PUBLISHING_NOTE &&
+  Boolean(p.publishedAt && now.getTime() - p.publishedAt.getTime() < PUBLISH_CLAIM_MS)
+
 /**
- * Publishes one post (image + caption) to the connected account. The row is locked while publishing so the
- * 5-minute job and a manual click can't post twice. API failures mark the post `failed` with the reason.
- * `recordBlockers` also marks posts failed for setup problems (used by the job so it doesn't retry forever).
+ * Publishes one post (image + caption) to the connected account in three steps, so no transaction is held during the
+ * Graph calls: (1) a short transaction checks the post and claims it, (2) Instagram creates and publishes the media,
+ * (3) a second short transaction records the outcome. A claimed post is skipped by the 5-minute job and by a second
+ * click; if step 3 never happens the post shows "check Instagram" instead of being published again automatically.
+ * API failures mark the post `failed` with the reason. `recordBlockers` also marks posts failed for setup problems
+ * (used by the job so it doesn't retry forever).
  */
 export async function publishInstagramPost(
   tenantId: string,
@@ -685,20 +780,21 @@ export async function publishInstagramPost(
 ): Promise<PublishResult> {
   const now = nowOf(o)
   const sleep = o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
-  return withTenant(
+  const claim = await withTenant(
     tenantId,
     async (tx) => {
-      const [post] = await tx
-        .select()
-        .from(socialPosts)
-        .where(eq(socialPosts.id, postId))
-        .for('update', { skipLocked: true })
-      if (!post) return { ok: false, error: 'Post not found, or it is being published right now.' }
-      if (post.status === 'published') return { ok: false, error: 'This post is already published.' }
-      const fail = async (error: string, record: boolean): Promise<PublishResult> => {
+      const [post] = await tx.select().from(socialPosts).where(eq(socialPosts.id, postId)).for('update')
+      if (!post) return { ok: false as const, error: 'Post not found.' }
+      if (post.status === 'published') return { ok: false as const, error: 'This post is already published.' }
+      if (isPublishing(post, now))
+        return { ok: false as const, error: 'This post is being published right now.' }
+      const fail = async (error: string, record: boolean) => {
         if (record)
-          await tx.update(socialPosts).set({ status: 'failed', error }).where(eq(socialPosts.id, post.id))
-        return { ok: false, error }
+          await tx
+            .update(socialPosts)
+            .set({ status: 'failed', error, publishedAt: null })
+            .where(eq(socialPosts.id, post.id))
+        return { ok: false as const, error }
       }
       if (post.platform !== 'instagram') return fail('Only Instagram posts can be published here.', false)
       const account = await getInstagramAccount(tx)
@@ -716,42 +812,65 @@ export async function publishInstagramPost(
           'The image is not on a public https link, so Instagram cannot fetch it. Save it to the media library on the live site and try again.',
           Boolean(o.recordBlockers),
         )
-      const client = instagramClient(o.fetch)
-      try {
-        const container = await client.createMediaContainer({
-          igUserId: account.externalId,
-          imageUrl,
-          caption: post.caption.slice(0, 2200),
-          accessToken: token,
-        })
-        for (let i = 0; i < 8; i++) {
-          const status = await client.containerStatus(container.id, token)
-          if (status === 'FINISHED' || status === 'PUBLISHED') break
-          if (status === 'ERROR' || status === 'EXPIRED')
-            throw new MetaApiError(422, 'Instagram could not process the image (use a JPEG under 8 MB).')
-          await sleep(1500)
-        }
-        const published = await client.publishMedia({
-          igUserId: account.externalId,
-          creationId: container.id,
-          accessToken: token,
-        })
-        await tx
-          .update(socialPosts)
-          .set({ status: 'published', publishedAt: now, externalId: published.id, error: null })
-          .where(eq(socialPosts.id, post.id))
-        return { ok: true, externalId: published.id }
-      } catch (e) {
-        if (e instanceof MetaApiError && e.code === 190)
-          await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, account.id))
-        return fail(
-          e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Publishing failed — try again.',
-          true,
-        )
-      }
+      await tx
+        .update(socialPosts)
+        .set({ status: 'failed', error: PUBLISHING_NOTE, publishedAt: now })
+        .where(eq(socialPosts.id, post.id))
+      return { ok: true as const, post, account, token, imageUrl }
     },
     appOf(o),
   )
+  if (!claim.ok) return claim
+
+  const { post, account, token, imageUrl } = claim
+  const client = instagramClient(o.fetch)
+  let result: PublishResult
+  let expired = false
+  try {
+    const container = await client.createMediaContainer({
+      igUserId: account.externalId,
+      imageUrl,
+      caption: post.caption.slice(0, 2200),
+      accessToken: token,
+    })
+    for (let i = 0; i < 8; i++) {
+      const status = await client.containerStatus(container.id, token)
+      if (status === 'FINISHED' || status === 'PUBLISHED') break
+      if (status === 'ERROR' || status === 'EXPIRED')
+        throw new MetaApiError(422, 'Instagram could not process the image (use a JPEG under 8 MB).')
+      await sleep(1500)
+    }
+    const published = await client.publishMedia({
+      igUserId: account.externalId,
+      creationId: container.id,
+      accessToken: token,
+    })
+    result = { ok: true, externalId: published.id }
+  } catch (e) {
+    expired = e instanceof MetaApiError && e.code === 190
+    result = {
+      ok: false,
+      error: e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Publishing failed — try again.',
+    }
+  }
+
+  await withTenant(
+    tenantId,
+    async (tx) => {
+      if (expired)
+        await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, account.id))
+      await tx
+        .update(socialPosts)
+        .set(
+          result.ok
+            ? { status: 'published', publishedAt: nowOf(o), externalId: result.externalId, error: null }
+            : { status: 'failed', error: result.error, publishedAt: null },
+        )
+        .where(eq(socialPosts.id, post.id))
+    },
+    appOf(o),
+  )
+  return result
 }
 
 /** Job (every 5 min): publish approved posts whose scheduled time has come, for spas with Instagram connected. */
@@ -761,7 +880,13 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
   const connected = platformOf(o)
     .select({ tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
-    .where(and(eq(socialAccounts.platform, 'instagram'), eq(socialAccounts.status, 'connected')))
+    .where(
+      and(
+        eq(socialAccounts.platform, 'instagram'),
+        eq(socialAccounts.status, 'connected'),
+        inArray(socialAccounts.tenantId, liveTenantIds(o)),
+      ),
+    )
   const due = await platformOf(o)
     .select({ id: socialPosts.id, tenantId: socialPosts.tenantId })
     .from(socialPosts)
@@ -786,7 +911,10 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
 
 const DAY = 86_400_000
 
-/** Job (daily): refresh long-lived tokens older than 7 days; mark expired ones so the card asks to reconnect. */
+/**
+ * Job (daily): refresh long-lived tokens older than 7 days; mark expired ones so the card asks to reconnect.
+ * Read-only spas keep their connection alive (no AI or publishing happens for them); suspended / cancelled ones don't.
+ */
 export async function refreshInstagramTokens(o: SocialOpts = {}) {
   const result = { refreshed: 0, expired: 0, failed: 0 }
   if (!metaConfig(o.env)) return result
@@ -794,7 +922,14 @@ export async function refreshInstagramTokens(o: SocialOpts = {}) {
   const accounts = await platformOf(o)
     .select({ id: socialAccounts.id, tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
-    .where(and(eq(socialAccounts.platform, 'instagram'), eq(socialAccounts.status, 'connected')))
+    .innerJoin(tenants, eq(tenants.id, socialAccounts.tenantId))
+    .where(
+      and(
+        eq(socialAccounts.platform, 'instagram'),
+        eq(socialAccounts.status, 'connected'),
+        inArray(tenants.status, [...LIVE_STATUSES, 'read_only']),
+      ),
+    )
   const client = instagramClient(o.fetch)
   for (const a of accounts) {
     const row = await withTenant(

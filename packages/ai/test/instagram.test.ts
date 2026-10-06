@@ -155,6 +155,37 @@ describe('Instagram agent hand-off', () => {
     expect(await respondToInstagram(next!, { platform, app, env: {}, client })).toBe('off')
   })
 
+  it('never auto-posts a public comment reply, even on autopilot', async () => {
+    await settings('autopilot')
+    const [item] = await ingestInstagramWebhook(
+      {
+        object: 'instagram',
+        entry: [
+          {
+            id: IG,
+            time: Math.floor(now.getTime() / 1000),
+            changes: [{ field: 'comments', value: { id: 'cm-0', text: 'Lovely place!', from: { id: '4' } } }],
+          },
+        ],
+      },
+      { platform, app },
+    )
+    const graph = vi.fn(async () => new Response(JSON.stringify({ id: 'never' })))
+    const r = await respondToInstagram(item!, {
+      platform,
+      app,
+      env,
+      fetch: graph as unknown as typeof fetch,
+      client: modelReply(JSON.stringify({ reply: 'Thank you, see you soon!', inappropriate: false })),
+    })
+    expect(r).toBe('drafted')
+    expect(graph).not.toHaveBeenCalled()
+    expect((await messagesOf(item!.conversationId)).at(-1)).toMatchObject({
+      sender: 'ai_draft',
+      text: 'Thank you, see you soon!',
+    })
+  })
+
   it('drafts a neutral public reply to an inappropriate comment and flags it', async () => {
     await settings('approve')
     const [item] = await ingestInstagramWebhook(
