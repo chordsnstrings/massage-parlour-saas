@@ -1,21 +1,26 @@
 'use client'
 import { useState, useTransition } from 'react'
+import { InstagramGlyph } from '@/components/inbox/icons'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { setPostStatusAction } from '../actions'
+import { publishToInstagramAction } from './publish-actions'
 
 export function PostActions({
   slug,
   postId,
   status,
   caption,
+  publishBlocker,
 }: {
   slug: string
   postId: string
   status: string
   caption: string
+  /** Why "Publish to Instagram" can't run (null = ready). Only approved / failed posts get the button. */
+  publishBlocker?: string | null
 }) {
   const [pending, start] = useTransition()
   const [when, setWhen] = useState('')
@@ -25,30 +30,75 @@ export function PostActions({
       if (r?.ok) toast.success(r.message ?? 'Saved')
       else if (r) toast.error(r.error)
     })
+  const canPublish = status === 'scheduled' || status === 'failed'
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <CopyButton value={caption} label="Copy caption" />
-      {status !== 'published' && (
-        <>
-          <Input
-            type="datetime-local"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            className="h-8 w-auto text-[13px]"
-            aria-label="Schedule for"
-          />
-          <Button
-            size="sm"
-            pending={pending}
-            onClick={() => run('scheduled', when ? new Date(`${when}:00+04:00`).toISOString() : undefined)}
-          >
-            Approve
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => run('published')}>
-            Mark posted
-          </Button>
-        </>
+    <div className="space-y-3">
+      {canPublish && (
+        <PublishButton
+          slug={slug}
+          postId={postId}
+          blocker={publishBlocker ?? null}
+          retry={status === 'failed'}
+        />
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <CopyButton value={caption} label="Copy caption" />
+        {status !== 'published' && (
+          <>
+            <Input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="h-8 w-auto text-[13px]"
+              aria-label="Schedule for"
+            />
+            <Button
+              size="sm"
+              pending={pending}
+              onClick={() => run('scheduled', when ? new Date(`${when}:00+04:00`).toISOString() : undefined)}
+            >
+              Approve
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => run('published')}>
+              Mark posted
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PublishButton({
+  slug,
+  postId,
+  blocker,
+  retry,
+}: {
+  slug: string
+  postId: string
+  blocker: string | null
+  retry: boolean
+}) {
+  const [pending, start] = useTransition()
+  return (
+    <div className="space-y-1.5">
+      <Button
+        className="min-h-11 w-full sm:min-h-10"
+        pending={pending}
+        disabled={Boolean(blocker)}
+        onClick={() =>
+          start(async () => {
+            const r = await publishToInstagramAction(slug, postId)
+            if (r?.ok) toast.success(r.message ?? 'Published')
+            else if (r) toast.error(r.error)
+          })
+        }
+      >
+        {!pending && <InstagramGlyph />}
+        {pending ? 'Publishing…' : retry ? 'Retry publishing' : 'Publish to Instagram'}
+      </Button>
+      {blocker && <p className="text-xs text-muted">{blocker}</p>}
     </div>
   )
 }

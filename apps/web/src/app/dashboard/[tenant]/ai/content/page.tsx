@@ -1,9 +1,11 @@
 import { socialPosts, withTenant } from '@spa/db'
+import { instagramStatus, metaConfig, publicImageUrl } from '@spa/services'
 import { desc } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { InstagramGlyph } from '@/components/inbox/icons'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -30,9 +32,23 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve')) notFound()
   const slug = ctx.tenant.slug
-  const posts = await withTenant(ctx.tenant.id, (tx) =>
-    tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30),
-  )
+  const { posts, ig } = await withTenant(ctx.tenant.id, async (tx) => ({
+    posts: await tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30),
+    ig: await instagramStatus(tx),
+  }))
+  // Why "Publish to Instagram" can't run for a post (null = ready).
+  const accountBlocker = !metaConfig()
+    ? 'Instagram publishing isn’t configured on this server yet — copy the caption instead.'
+    : ig?.status !== 'connected'
+      ? 'Connect Instagram in Settings → Instagram & Google to publish from here.'
+      : null
+  const publishBlocker = (p: (typeof posts)[number]) => {
+    if (accountBlocker) return accountBlocker
+    if (!p.media[0]?.url) return 'Instagram posts need an image.'
+    if (!publicImageUrl(p.media[0].url))
+      return 'The image isn’t on a public https link, so Instagram can’t fetch it.'
+    return null
+  }
   return (
     <>
       <Link
@@ -43,7 +59,7 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
       </Link>
       <PageHeader
         title="Instagram drafts"
-        description="AI-written posts in English and Arabic with an image. Approve, schedule, or copy them into Instagram."
+        description="AI-written posts in English and Arabic with an image. Approve, then publish to Instagram now, schedule them, or copy the caption."
       />
       <PageBody>
         <Card>
@@ -117,7 +133,29 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                     >
                       {p.caption}
                     </p>
-                    <PostActions slug={slug} postId={p.id} status={p.status} caption={p.caption} />
+                    {p.status === 'failed' && p.error && (
+                      <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{p.error}</p>
+                    )}
+                    {p.status === 'published' && p.externalId && (
+                      <p className="flex items-center gap-1.5 text-[13px] text-muted">
+                        <InstagramGlyph className="size-3.5" /> Published to Instagram
+                        {p.publishedAt ? ` · ${formatDateTime(p.publishedAt)}` : ''}
+                      </p>
+                    )}
+                    {p.status === 'scheduled' && p.scheduledAt && !publishBlocker(p) && (
+                      <p className="text-[13px] text-muted">Publishes automatically at the scheduled time.</p>
+                    )}
+                    <PostActions
+                      slug={slug}
+                      postId={p.id}
+                      status={p.status}
+                      caption={p.caption}
+                      publishBlocker={
+                        p.platform === 'instagram'
+                          ? publishBlocker(p)
+                          : 'Only Instagram posts can be published here.'
+                      }
+                    />
                   </div>
                 </Card>
               </StaggerItem>
