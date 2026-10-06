@@ -23,9 +23,12 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Ledger is append-only; corrections are reversals.
 - Business date uses the branch `business_day_cutoff`, not calendar midnight.
 
-## Verification policy (token-efficient)
+## Working preferences (token efficiency — comprehensive results, frugal process)
 - After each edit: typecheck + lint + tests for touched packages + the one e2e spec for the touched flow.
-- Full e2e suite only at phase milestones. No whole-app re-verification per change.
+- One complete verification (full e2e suite + walkthrough) at phase milestones only. Never re-verify the whole app repeatedly.
+- Read only what's needed (grep / line ranges; relevant PLAN.md section only); don't re-read files just edited.
+- Parallel tool calls; subagents for broad search/research, keep only conclusions; small workflows only when they clearly pay off.
+- Record new decisions here or in `docs/PLAN.md` instead of re-deriving them later. Concise replies.
 
 ## Commands
 _To be filled in by P0 task 1 (scaffold)._
