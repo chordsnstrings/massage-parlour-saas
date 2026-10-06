@@ -528,6 +528,13 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
 - **Saved sections:** tenant saves any customised section; **global sections** (edit once → updates everywhere, e.g. promo bar)
   or detached copies.
 - **Template studio (super-admin):** we author templates/presets in the same editor; they're JSON → new templates ship without deploys.
+- *Built (P2 templates slice):* 8 built-ins in `components/site/templates.ts` (+ theme tokens `pattern`, `arabicFont`,
+  `imageShape`); 24 section presets + 7 page templates in `presets.ts`. Studio rows (`site_templates`, read with the
+  platform role — catalogue, no tenant data) override built-ins by key; "save a spa's site" copies live pages, renews
+  ids, swaps the spa name for `{name}` and strips images/outside links. Switching stores `sites.template_undo`
+  (previous key, theme, replaced drafts) for one-click undo. Copy slots live in node ids (`…--hero`, `--about`,
+  `--usp-N-title|text`, `--faq`, `--cta`) and are what the AI site writer (`site_generator` agent) fills — as drafts
+  only. Gallery thumbnails are script-less sandboxed iframes.
 
 ### 11.3 Customisation layers (global → granular)
 

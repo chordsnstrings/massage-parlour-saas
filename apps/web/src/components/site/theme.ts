@@ -23,6 +23,12 @@ export type SiteTheme = {
   buttonShape: 'square' | 'rounded' | 'pill'
   density: 'compact' | 'comfortable' | 'airy'
   motion: 'none' | 'subtle' | 'expressive'
+  /** Subtle background pattern on tinted bands (P2 templates). */
+  pattern: 'none' | 'lattice' | 'arabesque' | 'leaf'
+  /** Arabic heading face used in RTL: Naskh (classic), Kufi (geometric display) or plain sans. */
+  arabicFont: 'naskh' | 'kufi' | 'sans'
+  /** Image block corners: theme radius, Arabic arch, or soft organic shape. */
+  imageShape: 'theme' | 'arch' | 'organic'
 }
 
 /** Latin + Arabic-capable stacks (system fonts; Inter is already self-hosted by the app). */
@@ -30,6 +36,13 @@ export const FONT_STACKS = {
   sans: '"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", "Geeza Pro", Tahoma, sans-serif',
   serif:
     '"Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Noto Naskh Arabic", "Amiri", "Times New Roman", serif',
+} as const
+
+/** Arabic heading stacks (system fonts; Latin glyphs fall through to the Latin stack's fonts). */
+export const ARABIC_STACKS = {
+  naskh: '"Noto Naskh Arabic", "Amiri", "Geeza Pro", "Times New Roman", serif',
+  kufi: '"Noto Kufi Arabic", "Reem Kufi", "Al Bayan", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
+  sans: '"Noto Sans Arabic", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
 } as const
 
 export const DEFAULT_THEME: SiteTheme = {
@@ -53,6 +66,9 @@ export const DEFAULT_THEME: SiteTheme = {
   buttonShape: 'pill',
   density: 'comfortable',
   motion: 'subtle',
+  pattern: 'none',
+  arabicFont: 'sans',
+  imageShape: 'theme',
 }
 
 const HEX = /^#[0-9a-f]{3,8}$/i
@@ -89,12 +105,36 @@ export function normalizeTheme(tokens: Record<string, unknown> | null | undefine
     buttonShape: pick(t.buttonShape, ['square', 'rounded', 'pill'], DEFAULT_THEME.buttonShape),
     density: pick(t.density, ['compact', 'comfortable', 'airy'], DEFAULT_THEME.density),
     motion: pick(t.motion, ['none', 'subtle', 'expressive'], DEFAULT_THEME.motion),
+    pattern: pick(t.pattern, ['none', 'lattice', 'arabesque', 'leaf'], DEFAULT_THEME.pattern),
+    // Themes saved before the token existed keep the face that matches their Latin headings.
+    arabicFont: pick(t.arabicFont, ['naskh', 'kufi', 'sans'], t.headingFont === 'serif' ? 'naskh' : 'sans'),
+    imageShape: pick(t.imageShape, ['theme', 'arch', 'organic'], DEFAULT_THEME.imageShape),
   }
 }
 
 const RADIUS = { none: '0px', soft: '12px', round: '22px' } as const
 const BUTTON_RADIUS = { square: '0px', rounded: '10px', pill: '999px' } as const
 const DENSITY = { compact: '0.75', comfortable: '1', airy: '1.25' } as const
+const IMAGE_RADIUS = {
+  theme: 'var(--radius)',
+  arch: '999px 999px var(--radius) var(--radius)',
+  organic: '42% 58% 46% 54% / 38% 44% 56% 62%',
+} as const
+
+/** Tiled SVG motifs drawn in the accent colour at low opacity (no external assets). */
+function patternUrl(pattern: SiteTheme['pattern'], color: string): string {
+  if (pattern === 'none') return 'none'
+  const c = color
+  const svg = {
+    // Teak fretwork: a diamond lattice with small joints.
+    lattice: `<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44'><path d='M22 0L44 22L22 44L0 22Z' fill='none' stroke='${c}' stroke-opacity='.12'/><circle cx='22' cy='22' r='2' fill='${c}' fill-opacity='.12'/></svg>`,
+    // Eight-point star (khatam) tiling.
+    arabesque: `<svg xmlns='http://www.w3.org/2000/svg' width='56' height='56'><g fill='none' stroke='${c}' stroke-opacity='.13'><rect x='16' y='16' width='24' height='24'/><rect x='16' y='16' width='24' height='24' transform='rotate(45 28 28)'/><circle cx='0' cy='0' r='6'/><circle cx='56' cy='56' r='6'/><circle cx='56' cy='0' r='6'/><circle cx='0' cy='56' r='6'/></g></svg>`,
+    // Loose leaf sprigs.
+    leaf: `<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><g fill='${c}' fill-opacity='.08'><path d='M14 30c8-14 22-16 30-14-4 10-16 20-30 14z'/><path d='M50 66c6-10 16-12 22-10-3 8-12 14-22 10z'/></g></svg>`,
+  }[pattern]
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+}
 
 /**
  * Theme → CSS variables on the site root. The app's semantic tokens (--bg, --fg, --accent…) are overridden too,
@@ -123,5 +163,8 @@ export function themeVars(theme: SiteTheme): CSSProperties {
     '--radius': RADIUS[theme.radius],
     '--radius-btn': BUTTON_RADIUS[theme.buttonShape],
     '--density': DENSITY[theme.density],
+    '--font-heading-ar': ARABIC_STACKS[theme.arabicFont],
+    '--pattern': patternUrl(theme.pattern, theme.accent),
+    '--img-radius': IMAGE_RADIUS[theme.imageShape],
   } as CSSProperties
 }

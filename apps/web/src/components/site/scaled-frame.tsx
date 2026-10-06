@@ -36,6 +36,8 @@ export function ScaledFrame({
           src={src}
           title={title}
           loading="lazy"
+          // Thumbnails are server-rendered HTML: no scripts, so a gallery of previews doesn't boot one app each.
+          sandbox="allow-same-origin"
           tabIndex={-1}
           aria-hidden
           onLoad={() => setLoaded(true)}

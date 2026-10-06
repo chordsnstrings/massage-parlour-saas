@@ -4,8 +4,8 @@ import { ExternalLink, FileText, Globe, PencilLine } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { PAGE_TEMPLATES } from '@/components/site/presets'
 import { ScaledFrame } from '@/components/site/scaled-frame'
-import { TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 import { normalizeTheme } from '@/components/site/theme'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,10 +17,15 @@ import { DataTable } from '@/components/ui/table'
 import { appPath, tenantSiteUrl } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { templateCatalog } from '@/server/site-templates'
+import { siteWriterReady } from '@/server/site-writer'
 import {
+  AddPageSheet,
+  AiWriterSheet,
   ApplyTemplateSheet,
   PublishSiteSheet,
   ThemeSheet,
+  UndoTemplateBar,
   UseTemplateButton,
   VisibilityToggle,
 } from './website-client'
@@ -35,34 +40,56 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     site: await getSite(tx, ctx.tenant.id),
     pages: await listPages(tx, ctx.tenant.id),
   }))
+  const catalog = await templateCatalog()
   const canDesign = can(ctx, 'site.design')
   const canPublish = can(ctx, 'site.publish')
+  const aiReady = canDesign && (await siteWriterReady())
   const publicUrl = tenantSiteUrl(slug)
   const pending = pages.filter((p) => p.hasDraft).length
   const hasLive = pages.some((p) => p.publishedAt)
-  const preview = (template: string) => appPath(`/${slug}/website/preview?template=${template}`)
-  const current = site ? TEMPLATES[site.templateKey as keyof typeof TEMPLATES] : null
+  const preview = (query = '') => appPath(`/${slug}/website/preview${query ? `?${query}` : ''}`)
+  const current = site ? catalog.find((t) => t.key === site.templateKey) : null
+  // The undo offer stays for a week after a switch (the snapshot itself lives until the next switch).
+  const undo =
+    site?.templateUndo && Date.now() - new Date(site.templateUndo.at).getTime() < 7 * 86_400_000
+      ? site.templateUndo
+      : null
+  const nameOf = (key: string) => catalog.find((t) => t.key === key)?.name ?? key
 
   const gallery = (
-    <Stagger className="grid gap-5 md:grid-cols-3">
-      {TEMPLATE_KEYS.map((key) => {
-        const t = TEMPLATES[key]
-        const isCurrent = site?.templateKey === key
+    <Stagger className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      {catalog.map((t) => {
+        const isCurrent = site?.templateKey === t.key
         return (
-          <StaggerItem key={key}>
-            <article className="group overflow-hidden rounded-xl border bg-surface transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-fg/15 hover:shadow-soft">
-              <ScaledFrame src={preview(key)} title={`${t.name} preview`} className="aspect-[4/3] border-b" />
-              <div className="space-y-4 p-5">
-                <div className="space-y-1">
+          <StaggerItem key={t.key}>
+            <article
+              aria-label={t.name}
+              className="group flex h-full flex-col overflow-hidden rounded-xl border bg-surface transition-[transform,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-fg/15 hover:shadow-soft motion-reduce:hover:translate-y-0"
+            >
+              <ScaledFrame
+                src={preview(`template=${t.key}&starter=1`)}
+                title={`${t.name} preview`}
+                className="aspect-[4/3] border-b"
+              />
+              <div className="flex flex-1 flex-col gap-4 p-5">
+                <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-[15px] font-semibold tracking-tight">{t.name}</h3>
-                    {isCurrent && <Badge tone="accent">Current</Badge>}
+                    <h3 className="truncate text-[15px] font-semibold tracking-tight">{t.name}</h3>
+                    <span className="flex shrink-0 gap-1.5">
+                      {t.source === 'studio' && <Badge>Studio</Badge>}
+                      {isCurrent && <Badge tone="accent">Current</Badge>}
+                    </span>
                   </div>
                   <p className="text-sm text-muted">{t.feel}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" asChild className="flex-1">
-                    <a href={preview(key)} target="_blank" rel="noreferrer">
+                  <Button variant="ghost" asChild className="h-11 flex-1">
+                    <a
+                      href={preview(site ? `template=${t.key}` : `template=${t.key}&starter=1`)}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Try on ${t.name}`}
+                    >
                       Try on <ExternalLink />
                     </a>
                   </Button>
@@ -71,12 +98,16 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                       {site ? (
                         <ApplyTemplateSheet
                           slug={slug}
-                          template={key}
+                          template={t.key}
                           name={t.name}
+                          currentName={current?.name ?? site.templateKey}
                           hasLiveContent={hasLive}
+                          nowSrc={preview()}
+                          keepSrc={preview(`template=${t.key}`)}
+                          starterSrc={preview(`template=${t.key}&starter=1`)}
                         />
                       ) : (
-                        <UseTemplateButton slug={slug} template={key} name={t.name} />
+                        <UseTemplateButton slug={slug} template={t.key} name={t.name} />
                       )}
                     </div>
                   )}
@@ -89,22 +120,32 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     </Stagger>
   )
 
+  const writer = canDesign && (
+    <AiWriterSheet
+      slug={slug}
+      ready={aiReady}
+      templates={catalog.map((t) => ({ key: t.key, name: t.name }))}
+      current={site?.templateKey ?? 'zen'}
+    />
+  )
+
   return (
     <>
       <PageHeader
         title="Website"
         description="Your spa's public site. Prices, team and opening hours stay in sync with your dashboard."
         actions={
-          site && (
-            <>
+          <>
+            {writer}
+            {site && (
               <Button variant="secondary" asChild>
                 <a href={publicUrl} target="_blank" rel="noreferrer">
                   <Globe /> View site
                 </a>
               </Button>
-              {canPublish && pending > 0 && <PublishSiteSheet slug={slug} pending={pending} />}
-            </>
-          )
+            )}
+            {site && canPublish && pending > 0 && <PublishSiteSheet slug={slug} pending={pending} />}
+          </>
         }
       />
       <PageBody>
@@ -128,6 +169,15 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
           </Card>
         ) : (
           <>
+            {canDesign && undo && (
+              <UndoTemplateBar
+                slug={slug}
+                from={nameOf(undo.templateKey)}
+                to={current?.name ?? site.templateKey}
+                at={formatDateTime(new Date(undo.at))}
+                pages={undo.pages.length}
+              />
+            )}
             <div className="grid gap-6 lg:grid-cols-12">
               <Card className="lg:col-span-8">
                 <CardHeader
@@ -136,6 +186,19 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                     pending > 0
                       ? `${pending} ${pending === 1 ? 'page has' : 'pages have'} unpublished changes`
                       : 'Everything is live'
+                  }
+                  action={
+                    canDesign && (
+                      <AddPageSheet
+                        slug={slug}
+                        templates={PAGE_TEMPLATES.map((t) => ({
+                          key: t.key,
+                          name: t.name,
+                          description: t.description,
+                          slug: t.slug,
+                        }))}
+                      />
+                    )
                   }
                 />
                 <div className="mt-4 border-t">
@@ -216,15 +279,11 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                 </div>
               </Card>
               <Card className="overflow-hidden lg:col-span-4">
-                <ScaledFrame
-                  src={preview(site.templateKey)}
-                  title="Your home page"
-                  className="aspect-[16/11] border-b"
-                />
+                <ScaledFrame src={preview()} title="Your home page" className="aspect-[16/11] border-b" />
                 <CardBody className="space-y-4">
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Template</p>
-                    <p className="text-[15px] font-semibold tracking-tight">
+                    <p className="text-[15px] font-semibold tracking-tight" data-testid="current-template">
                       {current?.name ?? site.templateKey}
                     </p>
                   </div>
@@ -241,7 +300,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
             <Card>
               <CardHeader
                 title="Templates"
-                description="Try a new look with your own content. Switching keeps your words and images."
+                description="Try a new look with your own content. Switching keeps your words and images, and can be undone."
               />
               <CardBody>{gallery}</CardBody>
             </Card>

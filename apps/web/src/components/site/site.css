@@ -34,6 +34,13 @@
 .sb-card {
   border-radius: var(--radius);
 }
+/* Template tokens: Arabic heading face, image-block shape (arch / organic) and tinted-band patterns. */
+.site-root[dir="rtl"] .sb-heading {
+  font-family: var(--font-heading-ar, var(--font-heading));
+}
+figure > .sb-card {
+  border-radius: var(--img-radius, var(--radius));
+}
 
 /* Section background bands. Inverse/accent bands re-map the semantic tokens for their content. */
 .sb-bg-surface {
@@ -44,6 +51,10 @@
 }
 .sb-bg-soft {
   background: var(--accent-soft);
+}
+.sb-bg-subtle,
+.sb-bg-soft {
+  background-image: var(--pattern, none);
 }
 .sb-bg-inverse,
 .sb-bg-image {
