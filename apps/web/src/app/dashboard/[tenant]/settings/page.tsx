@@ -1,11 +1,14 @@
 import { branches, withTenant } from '@spa/db'
 import { eq } from 'drizzle-orm'
+import { ChevronRight, Clock } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { saveSettingsAction } from './actions'
 
@@ -80,6 +83,21 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
             <SubmitButton size="lg">Save changes</SubmitButton>
           </div>
         </ActionForm>
+        <Link
+          href={appPath(`/${t.slug}/settings/hours`)}
+          className="group flex items-center gap-4 rounded-xl border bg-surface px-5 py-5 transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-fg/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-6"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+            <Clock className="size-4" strokeWidth={1.5} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold tracking-tight">Opening hours</span>
+            <span className="block text-sm text-muted">
+              Per weekday and branch, including split shifts and late-night closing.
+            </span>
+          </span>
+          <ChevronRight className="size-4 text-muted transition-transform group-hover:translate-x-0.5" />
+        </Link>
       </PageBody>
     </>
   )
