@@ -1,3 +1,4 @@
+import { reportError } from '@spa/core'
 import { PgBoss } from 'pg-boss'
 import { jobs } from './jobs'
 import { log } from './log'
@@ -30,6 +31,7 @@ for (const job of jobs) {
       return result
     } catch (error) {
       log('error', 'job failed', { job: job.name, error: String(error) })
+      await reportError(process.env.SENTRY_DSN, error, { source: 'worker', tags: { job: job.name } })
       throw error
     }
   })

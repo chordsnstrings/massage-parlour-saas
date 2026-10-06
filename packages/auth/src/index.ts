@@ -27,12 +27,30 @@ function createAuth() {
         })
       },
     },
+    // Behind Cloudflare / DO App Platform the client IP arrives in these headers (first match wins).
+    advanced: {
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'do-connecting-ip', 'x-forwarded-for'] },
+    },
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
       cookieCache: { enabled: true, maxAge: 300 },
     },
-    rateLimit: { enabled: true, window: 60, max: 100 },
+    rateLimit: {
+      // Production only: dev/e2e servers sign up many accounts from one IP.
+      enabled: process.env.NODE_ENV === 'production',
+      window: 60,
+      max: 100,
+      // Brute-force guard on credential endpoints (per client IP).
+      customRules: {
+        '/sign-in/email': { window: 60, max: 8 },
+        '/sign-up/email': { window: 600, max: 5 },
+        '/request-password-reset': { window: 600, max: 5 },
+        '/forget-password': { window: 600, max: 5 },
+        '/two-factor/verify-totp': { window: 60, max: 8 },
+        '/two-factor/verify-backup-code': { window: 60, max: 5 },
+      },
+    },
     plugins: [twoFactorPlugin({ issuer: 'spamanagement.ae' }), nextCookies()],
   })
 }
