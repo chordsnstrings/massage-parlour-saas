@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { app, screenshotAt, seedCatalog, signUpOwner } from './helpers'
 
-test('inventory: add a consumable, receive stock, link it to a treatment, count it down', async ({ page }) => {
+test('inventory: add a consumable, receive stock, link it to a treatment, count it down', async ({
+  page,
+}) => {
   const { slug } = await signUpOwner(page)
   await seedCatalog(slug)
   await page.goto(`${app}/${slug}/inventory`)
