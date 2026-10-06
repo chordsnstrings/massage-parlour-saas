@@ -1,4 +1,5 @@
-import { members, platformDb, storedFiles, withTenant } from '@spa/db'
+import { type Permission, resolvePermissions } from '@spa/core'
+import { members, platformDb, roles, storedFiles, withTenant } from '@spa/db'
 import { getFile, IMAGE_TYPES, jpegVariant, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
@@ -33,18 +34,32 @@ const notFound = () =>
     headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' },
   })
 
-async function canRead(tenantId: string) {
+/** Private files by purpose: document scans need staff.manage, receipt scans need accounting access. */
+const PURPOSE_PERMISSIONS: Record<string, Permission[]> = {
+  staff_document: ['staff.manage'],
+  business_document: ['staff.manage'],
+  receipt: ['accounting.view', 'accounting.manage'],
+}
+
+async function canRead(tenantId: string, purpose: string) {
   const session = await getSession()
   if (!session) return false
   const userId = session.user.id
   const [m] = await withTenant(tenantId, (tx) =>
     tx
-      .select({ id: members.id })
+      .select({ roleKey: roles.key, rolePerms: roles.permissions })
       .from(members)
+      .innerJoin(roles, eq(roles.id, members.roleId))
       .where(and(eq(members.userId, userId), eq(members.status, 'active')))
       .limit(1),
   )
-  return Boolean(m) || (await isPlatformAdmin(userId))
+  if (m) {
+    const needs = PURPOSE_PERMISSIONS[purpose]
+    if (!needs) return true
+    const perms = resolvePermissions({ key: m.roleKey, permissions: m.rolePerms })
+    if (needs.some((p) => perms.has(p))) return true
+  }
+  return isPlatformAdmin(userId)
 }
 
 const asciiName = (name: string) => name.replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'file'
@@ -55,6 +70,7 @@ export async function serveFile(req: Request, id: string) {
     .select({
       tenantId: storedFiles.tenantId,
       isPublic: storedFiles.isPublic,
+      purpose: storedFiles.purpose,
       contentType: storedFiles.contentType,
       filename: storedFiles.filename,
     })
@@ -62,7 +78,7 @@ export async function serveFile(req: Request, id: string) {
     .where(eq(storedFiles.id, id))
     .limit(1)
   if (!meta) return notFound()
-  if (!meta.isPublic && !(await canRead(meta.tenantId))) return notFound()
+  if (!meta.isPublic && !(await canRead(meta.tenantId, meta.purpose))) return notFound()
 
   const params = new URL(req.url).searchParams
   const isImage = IMAGES.has(meta.contentType)

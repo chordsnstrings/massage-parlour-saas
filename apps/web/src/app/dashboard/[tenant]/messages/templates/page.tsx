@@ -10,8 +10,9 @@ import { TEMPLATE_KINDS } from '@/components/messages/shared'
 import { TemplateEditor } from '@/components/messages/template-editor'
 import { Button } from '@/components/ui/button'
 import { PageBody, PageHeader } from '@/components/ui/page'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { publicSiteUrl } from '@/server/sites'
 
 export const metadata: Metadata = { title: 'Message templates' }
 
@@ -56,7 +57,7 @@ export default async function TemplatesPage({ params }: { params: Promise<{ tena
       timeZone: 'Asia/Dubai',
     }),
   })
-  const common = { spa: ctx.tenant.name, ref: 'K7Q2M', link: tenantSiteUrl(slug), text: '' }
+  const common = { spa: ctx.tenant.name, ref: 'K7Q2M', link: await publicSiteUrl(ctx.tenant), text: '' }
   const samples = {
     en: {
       ...common,

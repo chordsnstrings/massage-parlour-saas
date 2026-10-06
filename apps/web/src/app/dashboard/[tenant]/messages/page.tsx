@@ -61,6 +61,7 @@ export default async function MessagesPage({
       .select({
         id: outbox.id,
         kind: outbox.kind,
+        campaignId: outbox.campaignId,
         status: outbox.status,
         phone: outbox.phoneE164,
         text: outbox.text,
@@ -108,6 +109,7 @@ export default async function MessagesPage({
   const rows: OutboxRow[] = data.rows.map((r) => ({
     id: r.id,
     kind: r.kind as MessageKind,
+    campaign: r.campaignId !== null,
     status: r.status,
     clientName: r.clientName ?? 'Client',
     phone: seePhone ? `+${r.phone}` : maskPhone(r.phone),

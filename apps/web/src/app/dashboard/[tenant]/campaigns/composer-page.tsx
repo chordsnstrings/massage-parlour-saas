@@ -6,9 +6,10 @@ import { CampaignComposer, type ComposerInitial } from '@/components/campaigns/c
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { formatAed, todayDubai } from '@/lib/utils'
 import type { MemberContext } from '@/server/access'
+import { publicSiteUrl } from '@/server/sites'
 import { dubaiLocalValue, segmentOptions } from './data'
 
 /** Shared by "new campaign" and "edit draft". */
@@ -88,7 +89,7 @@ export async function ComposerPage({
                 label: p.kind === 'percent' ? `${Number(p.value)}% off` : `${formatAed(p.value)} off`,
               }))}
               spaName={ctx.tenant.name}
-              bookingLink={`${tenantSiteUrl(slug)}/book?src=campaign`}
+              bookingLink={`${await publicSiteUrl(ctx.tenant)}/book?src=campaign`}
               newSegmentHref={`${base}/segments/new`}
               minSendAt={dubaiLocalValue(new Date())}
               initial={{ ...initial, segmentId }}

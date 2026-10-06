@@ -21,9 +21,9 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { tenantSiteUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { publicSiteUrl } from '@/server/sites'
 import { GBP_COOKIE, GBP_COOKIE_PATH } from './oauth'
 
 const revalidate = (slug: string) => {
@@ -170,7 +170,7 @@ export async function postToGoogleAction(slug: string, postId: string): Promise<
   const res = await publishGbpLocalPost({
     tenantId: ctx.tenant.id,
     postId,
-    bookingUrl: `${tenantSiteUrl(slug)}/book?src=gbp`,
+    bookingUrl: `${await publicSiteUrl(ctx.tenant)}/book?src=gbp`,
     createdBy: ctx.impersonating ? null : ctx.user.id,
   })
   if (!res.ok) return fail(res.error)

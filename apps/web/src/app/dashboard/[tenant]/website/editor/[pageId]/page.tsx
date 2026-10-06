@@ -5,8 +5,9 @@ import { notFound } from 'next/navigation'
 import { z } from 'zod'
 import { buildMeta, loadSite } from '@/components/site/data'
 import type { SavedSection } from '@/components/site/editor/context'
-import { appPath, PATH_ROUTING, tenantSiteUrl } from '@/lib/paths'
+import { appPath, PATH_ROUTING } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { publicSiteUrl } from '@/server/sites'
 import { SiteEditor } from './editor'
 
 export const metadata: Metadata = { title: 'Edit page' }
@@ -71,7 +72,7 @@ export default async function EditorPage({
       }))}
       backHref={appPath(`/${slug}/website`)}
       previewHref={appPath(`/${slug}/website/preview?page=${page.slug}`)}
-      liveHref={`${tenantSiteUrl(slug)}${page.slug ? `/${page.slug}` : ''}`}
+      liveHref={`${await publicSiteUrl(ctx.tenant)}${page.slug ? `/${page.slug}` : ''}`}
     />
   )
 }

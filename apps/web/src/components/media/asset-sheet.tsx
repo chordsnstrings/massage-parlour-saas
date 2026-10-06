@@ -19,10 +19,11 @@ import { ease } from '@/lib/motion'
 import { formatDate } from '@/lib/utils'
 import { formatBytes, isStored, type MediaItem, sized } from './types'
 
-type Usage = { pages: string[]; services: string[]; staff: string[]; posts: number }
+type Usage = { pages: string[]; services: string[]; staff: string[]; posts: number; sections: string[] }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-const usageTotal = (u: Usage) => u.pages.length + u.services.length + u.staff.length + u.posts
+const usageTotal = (u: Usage) =>
+  u.pages.length + u.services.length + u.staff.length + u.posts + u.sections.length
 /** "1 page: Home; 1 service photo: Hot stones; 2 unpublished social posts" */
 const describeUsage = (u: Usage) =>
   [
@@ -32,6 +33,8 @@ const describeUsage = (u: Usage) =>
     u.staff.length > 0 &&
       `${count(u.staff.length, 'therapist photo', 'therapist photos')}: ${u.staff.join(', ')}`,
     u.posts > 0 && count(u.posts, 'unpublished social post', 'unpublished social posts'),
+    u.sections.length > 0 &&
+      `${count(u.sections.length, 'saved section', 'saved sections')}: ${u.sections.join(', ')}`,
   ]
     .filter(Boolean)
     .join('; ')

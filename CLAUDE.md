@@ -1,7 +1,7 @@
 # spamanagement.ae — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1 MVP complete plus most of P2/P3 (see docs/PLAN.md §14.1); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.

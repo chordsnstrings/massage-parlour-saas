@@ -28,6 +28,7 @@ import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
+import { publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
 import { SiteCopySchema, siteWriterReady, writerError, writeSiteCopy } from '@/server/site-writer'
 
@@ -398,6 +399,8 @@ export async function publishSiteAction(
   if (error) return fail(error)
   let count = 0
   try {
+    const blocked = await withTenant(ctx.tenant.id, (tx) => publishAllErrors(tx, ctx.tenant.id))
+    if (blocked) return fail(blocked)
     count = await withTenant(ctx.tenant.id, (tx) => publishAll(tx, ctx.tenant.id, ctx.user.id))
   } catch (e) {
     return domainFail(e)

@@ -15,6 +15,7 @@ import { isIP } from 'node:net'
 import {
   mediaAssets,
   pageVersions,
+  savedSections,
   services,
   sitePages,
   socialPosts,
@@ -307,7 +308,7 @@ export async function assetUsage(tx: Tx, url: string) {
     .selectDistinctOn([pageVersions.pageId, pageVersions.status], { id: pageVersions.id })
     .from(pageVersions)
     .orderBy(pageVersions.pageId, pageVersions.status, desc(pageVersions.createdAt))
-  const [pages, serviceRows, staffRows, posts] = await Promise.all([
+  const [pages, serviceRows, staffRows, posts, sections] = await Promise.all([
     tx
       .selectDistinct({ id: sitePages.id, title: sitePages.title, slug: sitePages.slug })
       .from(pageVersions)
@@ -322,8 +323,12 @@ export async function assetUsage(tx: Tx, url: string) {
       .select({ id: socialPosts.id })
       .from(socialPosts)
       .where(and(ne(socialPosts.status, 'published'), sql`${socialPosts.media}::text ilike ${needle}`)),
+    tx
+      .select({ id: savedSections.id, name: savedSections.name, isGlobal: savedSections.isGlobal })
+      .from(savedSections)
+      .where(sql`${savedSections.data}::text ilike ${needle}`),
   ])
-  return { pages, services: serviceRows, staff: staffRows, posts }
+  return { pages, services: serviceRows, staff: staffRows, posts, sections }
 }
 
 /** Removes an asset and its stored file. Returns the deleted row (null if it wasn't there). */

@@ -85,6 +85,8 @@ export const WA_MODE_KEY = 'spa.wa-mode'
 export type OutboxRow = {
   id: string
   kind: MessageKind
+  /** Part of a campaign (sent as kind 'custom'): labelled "Campaign" in the queue. */
+  campaign: boolean
   status: 'queued' | 'opened' | 'sent' | 'skipped'
   clientName: string
   /** Masked unless the viewer may see phone numbers. */
@@ -96,3 +98,6 @@ export type OutboxRow = {
   sentBy: string | null
   links: Record<WaMode, string>
 }
+
+export const rowLabel = (row: Pick<OutboxRow, 'kind' | 'campaign'>) =>
+  row.campaign ? 'Campaign' : KIND_LABEL[row.kind]

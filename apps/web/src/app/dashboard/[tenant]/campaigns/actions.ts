@@ -15,16 +15,16 @@ import { z } from 'zod'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import { MAX_MESSAGE, segmentRulesSchema, unknownCampaignVariables } from '@/components/campaigns/rules'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { publicSiteUrl } from '@/server/sites'
 
 const refresh = (slug: string) => {
   revalidatePath(`/dashboard/${slug}/campaigns`, 'layout')
   revalidatePath(`/dashboard/${slug}/messages`)
 }
 const page = (slug: string, path = '') => appPath(`/${slug}/campaigns${path}`)
-const bookingLink = (slug: string) => `${tenantSiteUrl(slug)}/book?src=campaign`
 
 function parseRules(raw: unknown) {
   let value: unknown = raw
@@ -239,6 +239,7 @@ export async function saveCampaignAction(
   if (!d.promoCodeId && /\{offer_code\}/.test(`${d.bodyEn} ${d.bodyAr ?? ''}`))
     fieldErrors.promoCodeId = 'Choose the offer code to include'
   const now = new Date()
+  const bookingLink = `${await publicSiteUrl(ctx.tenant)}/book?src=campaign`
   let sendAt: Date | null = null
   if (d.when === 'later') {
     sendAt = dubaiLocal(d.sendAt)
@@ -294,7 +295,7 @@ export async function saveCampaignAction(
       if (d.intent === 'draft') return { id: campaignId!, queued: null }
       const queued = await queueCampaign(tx, campaignId!, seg.rules, {
         sendAt: sendAt ?? now,
-        bookingLink: bookingLink(slug),
+        bookingLink,
         now,
       })
       if (queued === 0)

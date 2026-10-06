@@ -21,8 +21,9 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { adminPath, appUrl, tenantSiteUrl } from '@/lib/paths'
+import { adminPath, appUrl } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
+import { publicSiteUrl } from '@/server/sites'
 import {
   createInvoiceAction,
   recordPaymentAction,
@@ -66,7 +67,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
     db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
   ])
   const today = todayDubai()
-  const site = tenantSiteUrl(tenant.slug)
+  const site = await publicSiteUrl(tenant)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
 
   return (

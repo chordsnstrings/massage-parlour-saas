@@ -2,7 +2,7 @@
 import { draftInstagramPost, draftReviewReply, runDmTurn } from '@spa/ai'
 import { aiAgentSettings, brandProfiles, reviews, socialPosts, withTenant } from '@spa/db'
 import { fileIdFromUrl, persistRemoteAsset, postImageUrl, saveRemoteImage } from '@spa/services'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
@@ -255,29 +255,4 @@ export async function draftReplyAction(slug: string, reviewId: string): Promise<
   }
   revalidatePath(`/dashboard/${slug}/ai/reviews`)
   return ok('Reply drafted')
-}
-
-export async function saveReplyAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
-  if (error) return fail(error)
-  const parsed = z
-    .object({
-      reviewId: z.uuid(),
-      reply: z.string().trim().min(2).max(2000),
-      posted: z.preprocess((v) => v === 'on', z.boolean()),
-    })
-    .safeParse(formObject(fd))
-  if (!parsed.success) return fromZod(parsed.error)
-  await withTenant(ctx.tenant.id, (tx) =>
-    tx
-      .update(reviews)
-      .set({
-        replyText: parsed.data.reply,
-        replyStatus: parsed.data.posted ? 'posted' : 'approved',
-        repliedAt: parsed.data.posted ? new Date() : null,
-      })
-      .where(and(eq(reviews.id, parsed.data.reviewId))),
-  )
-  revalidatePath(`/dashboard/${slug}/ai/reviews`)
-  return ok(parsed.data.posted ? 'Marked as replied' : 'Reply saved')
 }

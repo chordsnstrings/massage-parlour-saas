@@ -102,6 +102,7 @@ export async function assetUsageAction(slug: string, id: string) {
       services: (used?.services ?? []).map((s) => s.name.en || s.name.ar || 'Service'),
       staff: (used?.staff ?? []).map((s) => s.name),
       posts: used?.posts.length ?? 0,
+      sections: (used?.sections ?? []).map((s) => s.name),
     },
   }
 }

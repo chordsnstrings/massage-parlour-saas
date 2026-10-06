@@ -724,7 +724,7 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 - The worker and pg-boss use the owner role (pg-boss manages its own schema); web never does.
 - Backups go to Cloudflare R2 (free tier); Sentry is deferred to P1, before the pilot goes live.
 
-### 14.1 Build status — P1 complete, most of P2/P3 in place (2026-10-06)
+### 14.1 Build status — P1, P2 and P3 complete (2026-10-06)
 
 | Area | Status |
 |---|---|
@@ -742,10 +742,37 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 | P2 inventory | ✅ products, receive/count, consumables per treatment drawn on completion, retail COGS |
 | P2 web analytics | ✅ cookieless tracker, block-level views/clicks, funnel, first-touch sources, hourly rollups, 90-day retention |
 | P3 AI | ✅ AI studio: receptionist chat (books via tools), IG captions + Seedream images, review replies, SEO, slot filler (worker) |
-| Still open | IG/Meta + GBP API connections (await approvals), custom-domain UI + Cloudflare for SaaS, campaigns/segments UI, CSV import, more templates/presets, PWA push, Sentry |
+| P2 custom domains | ✅ connect own domain (TXT + CNAME, auto checks, primary), Cloudflare for SaaS optional, Caddy on-demand TLS on the droplet; buy a domain via Namecheap (super-admin approves) |
+| P2 campaigns | ✅ segment builder, WhatsApp click-to-send campaigns with offer codes, 7-day cap, 500/campaign, results (bookings within 14 days) |
+| P2 data | ✅ CSV import wizard (clients, menu, products incl. opening stock), CSV/zip exports |
+| P2 site builder | ✅ 8 templates + section presets, template switching with undo, template studio, saved/global sections, version history, preflight (editor and Publish all), scheduled publish, share previews + QR, media library with image variants |
+| P2 engage | ✅ staff/business document tracker with expiry pushes, web push (PWA), daily digest |
+| P3 AI | ✅ AI site writer, Instagram publishing + DM/comment inbox with AI drafts/autopilot, GBP review sync/replies + local posts, receipt scanning, weekly insights, AI assists in the editor |
+| Still open | Meta + Google API approvals (code ready; set META_* / GOOGLE_*), Reserve with Google, notification centre, low-stock pushes |
 
 Deployed on one DigitalOcean droplet (blr1, Compose + Caddy) with path routing (`/app`, `/admin`, `/s/{slug}`) on an sslip.io hostname
 until `spamanagement.ae` is registered.
+
+### 14.2 P2/P3 implementation decisions (recorded at integration)
+- **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
+  `conversation_messages.error`; `conversations.read_at` drives the unread dot; the inbox polls every 20 s. Each comment is
+  its own conversation. Autopilot replies run in `after()` in the web process (not durable across a restart — move to a
+  pg-boss job if that matters). Approve mode creates *pending* bookings the spa confirms.
+- **Campaigns:** the 7-day cap counts other campaigns' messages within ±7 days of the send (skipped ones ignored); max 500
+  recipients; result = non-cancelled bookings within 14 days of a sent/opened message; archiving withdraws unsent messages.
+  Segments always exclude never-visited clients and clients tagged `no-marketing`. Campaign messages are outbox kind `custom`
+  with `campaign_id` (labelled "Campaign" in Messages). Hourly `campaigns-housekeeping` job.
+- **Data import:** opening stock posts Dr 1200 Inventory / Cr 3000 Owner's equity (one entry per 500-row batch,
+  sourceType `stock_adjustment`); stock changes on existing products go through adjustStock (5100). Non-UAE phones are row
+  errors; rows without a phone import and de-dupe by name. Import history lives only in `audit_log` (≤ 500 row errors, no
+  raw values). Uploads use route handlers (server actions cap bodies at 1 MB).
+- **Site editor:** section style props live in `advanced`; `@spa/services/site-kit` holds client-safe code (preflight, CSS,
+  schedule, tree); the no-login share preview is `/website/preview` on the app host (`website` is a reserved slug). Global
+  sections update live pages immediately. "Publish all" runs the same server preflight as the editor.
+- **Files:** private files are served from `/files/{id}` to members only; document scans need `staff.manage`, receipt scans
+  `accounting.view|manage`. Caddy caps request bodies at 25 MB.
+- **Push:** VAPID keys live in the droplet secrets overlay; worker notifications send app-relative URLs and the service
+  worker (registered with `?base=/app` in path routing) adds the surface prefix.
 
 ## 15. Working agreement (token-efficient, still thorough)
 

@@ -8,6 +8,10 @@
 
 {$SITE_HOST} {
 	encode zstd gzip
+	# Largest legitimate body is a 20 MB image upload; the app enforces exact limits per route.
+	request_body {
+		max_size 25MB
+	}
 
 	# Deploy status + recent logs for the operator (basic auth; no secrets are written there).
 	handle /_status/* {
@@ -31,6 +35,10 @@ https:// {
 		on_demand
 	}
 	encode zstd gzip
+	# Largest legitimate body is a 20 MB image upload; the app enforces exact limits per route.
+	request_body {
+		max_size 25MB
+	}
 	reverse_proxy web:3000 {
 		header_up X-Forwarded-Proto {scheme}
 	}

@@ -22,7 +22,7 @@ import { EmptyState, PageBody } from '@/components/ui/page'
 import { toast } from '@/components/ui/toast'
 import { duration, ease, spring } from '@/lib/motion'
 import { cn, formatDateTime, initials } from '@/lib/utils'
-import { KIND_LABEL, KIND_TONE, type OutboxRow, WA_MODE_KEY, WA_MODES, type WaMode } from './shared'
+import { KIND_TONE, type OutboxRow, rowLabel, WA_MODE_KEY, WA_MODES, type WaMode } from './shared'
 
 type Tab = 'due' | 'scheduled' | 'sent'
 type Counts = { due: number; scheduled: number; sentToday: number; sentWeek: number }
@@ -388,7 +388,7 @@ function MessageCard({
     // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard selection is handled globally (J/K)
     <article
       onClick={onSelect}
-      aria-label={`${KIND_LABEL[row.kind]} for ${row.clientName}`}
+      aria-label={`${rowLabel(row)} for ${row.clientName}`}
       aria-current={selected ? 'true' : undefined}
       className={cn(
         'rounded-xl border bg-surface transition-[border-color,box-shadow,transform] duration-200',
@@ -402,7 +402,7 @@ function MessageCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="truncate text-[15px] font-medium">{row.clientName}</h3>
-            <Badge tone={KIND_TONE[row.kind]}>{KIND_LABEL[row.kind]}</Badge>
+            <Badge tone={row.campaign ? 'accent' : KIND_TONE[row.kind]}>{rowLabel(row)}</Badge>
             {opened && !readOnly && <Badge tone="warning">Opened</Badge>}
           </div>
           <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted">

@@ -1,6 +1,6 @@
 'use server'
 import { AiBudgetExceededError, AiDisabledError, loadSpaContext, runChat } from '@spa/ai'
-import { platformDb, type Tx, user, withTenant } from '@spa/db'
+import { platformDb, user, withTenant } from '@spa/db'
 import {
   collectGlobalIds,
   createSavedSection,
@@ -9,18 +9,13 @@ import {
   GLOBAL_SECTION,
   getEditablePage,
   getPage,
-  getSite,
   getVersion,
-  globalSectionsFor,
   globalSectionUsage,
   labelVersion,
-  listPages,
   listSavedSections,
   listVersions,
   pageBlockStats,
   pagePaths,
-  preflight,
-  preflightErrors,
   restoreVersion,
   type SavedSectionRow,
   signPreviewToken,
@@ -32,14 +27,14 @@ import QRCode from 'qrcode'
 import { z } from 'zod'
 import { siteConfig } from '@/components/site/config'
 import { designSignature, isPageData } from '@/components/site/content'
-import { preflightColors, TRANSLATE_BATCH } from '@/components/site/editor/colors'
+import { TRANSLATE_BATCH } from '@/components/site/editor/colors'
 import type { SavedSection } from '@/components/site/editor/context'
 import type { VersionItem } from '@/components/site/editor/versions'
-import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { appUrl } from '@/lib/paths'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
+import { publishErrors } from '@/server/site-preflight'
 import { publishPageAction } from '../actions'
 
 const uuid = z.string().uuid()
@@ -452,38 +447,6 @@ export async function blockStatsAction(
 }
 
 /* ------------------------------------------------------------------ Publish with preflight */
-
-/**
- * Server-side preflight errors for `data` (plus the global sections it shows, whose content goes live with
- * it), as one message — or null when nothing blocks publishing. Warnings never block.
- */
-async function publishErrors(
-  tx: Tx,
-  tenantId: string,
-  data: Record<string, unknown>,
-  { currentSlug = '', verb = 'publishing' }: { currentSlug?: string; verb?: string } = {},
-): Promise<string | null> {
-  const [site, pages, sections, globals] = await Promise.all([
-    getSite(tx, tenantId),
-    listPages(tx, tenantId),
-    listSavedSections(tx, tenantId),
-    globalSectionsFor(tx, tenantId, data),
-  ])
-  const context = {
-    colors: preflightColors(normalizeTheme(site?.theme)),
-    currentSlug,
-    pages: pages.map((p) => ({ slug: p.slug, visible: p.visible, published: Boolean(p.publishedAt) })),
-    globalIds: new Set(sections.filter((s) => s.isGlobal).map((s) => s.id)),
-  }
-  const errors = [
-    ...preflightErrors(preflight(data, context)),
-    ...preflightErrors(preflight({ root: { props: {} }, content: Object.values(globals) }, context)).map(
-      (i) => ({ ...i, message: `${i.message} (in a global section)` }),
-    ),
-  ]
-  if (!errors.length) return null
-  return `Fix ${errors.length === 1 ? 'the error' : `${errors.length} errors`} before ${verb}: ${errors[0]!.message}`
-}
 
 /**
  * Publishes after a server-side preflight: errors (e.g. images not served over https) block, warnings
