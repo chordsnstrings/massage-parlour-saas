@@ -1,6 +1,6 @@
 'use server'
 import { AiBudgetExceededError, AiDisabledError, loadSpaContext, runChat } from '@spa/ai'
-import { platformDb, user, withTenant } from '@spa/db'
+import { platformDb, type Tx, user, withTenant } from '@spa/db'
 import {
   collectGlobalIds,
   createSavedSection,
@@ -11,6 +11,8 @@ import {
   getPage,
   getSite,
   getVersion,
+  globalSectionsFor,
+  globalSectionUsage,
   labelVersion,
   listPages,
   listSavedSections,
@@ -30,7 +32,7 @@ import QRCode from 'qrcode'
 import { z } from 'zod'
 import { siteConfig } from '@/components/site/config'
 import { designSignature, isPageData } from '@/components/site/content'
-import { preflightColors } from '@/components/site/editor/colors'
+import { preflightColors, TRANSLATE_BATCH } from '@/components/site/editor/colors'
 import type { SavedSection } from '@/components/site/editor/context'
 import type { VersionItem } from '@/components/site/editor/versions'
 import { normalizeTheme } from '@/components/site/theme'
@@ -99,6 +101,9 @@ async function spaVoice(ctx: MemberContext) {
   }`
 }
 
+/** Output budget for `chars` characters of copy (Arabic needs more tokens per character than English). */
+const tokenBudget = (chars: number) => Math.min(8000, 400 + Math.ceil(chars * 1.5))
+
 const COMMON = `Keep placeholders such as {name}, prices, numbers and brand names exactly as they are. Never make medical or therapeutic claims. No emojis, hashtags or surrounding quotes.`
 
 /** ✨ menu in bilingual fields: rewrite / shorten / warmer in the same language, or translate EN↔AR. */
@@ -118,7 +123,7 @@ export async function aiTextAction(slug: string, input: unknown): Promise<Action
       agentKey: translate ? 'translator' : 'content_agent',
       schema: AiOut,
       temperature: translate ? 0.2 : 0.7,
-      maxTokens: 800,
+      maxTokens: tokenBudget(text.length),
       messages: [
         {
           role: 'system',
@@ -135,7 +140,7 @@ export async function aiTextAction(slug: string, input: unknown): Promise<Action
   }
 }
 
-const batchSchema = z.array(z.string().trim().min(1).max(2000)).min(1).max(40)
+const batchSchema = z.array(z.string().trim().min(1)).min(1)
 
 /** Preflight "Translate with AI": English → Arabic for several fields in one call. */
 export async function translateBatchAction(slug: string, texts: unknown): Promise<ActionResult> {
@@ -143,6 +148,11 @@ export async function translateBatchAction(slug: string, texts: unknown): Promis
   if (error) return fail(error)
   const parsed = batchSchema.safeParse(texts)
   if (!parsed.success) return fail('Nothing to translate.')
+  if (parsed.data.some((t) => t.length > 2000))
+    return fail('One field is too long to translate with AI (2,000 characters at most).')
+  const chars = parsed.data.reduce((n, t) => n + t.length, 0)
+  if (parsed.data.length > TRANSLATE_BATCH.items || chars > TRANSLATE_BATCH.chars)
+    return fail('Too much text for one translation — translate fewer fields at a time.')
   if (!aiConfigured()) return fail('AI translation isn’t set up yet.')
   try {
     const about = await spaVoice(ctx)
@@ -151,7 +161,7 @@ export async function translateBatchAction(slug: string, texts: unknown): Promis
       agentKey: 'translator',
       schema: BatchOut,
       temperature: 0.2,
-      maxTokens: 4000,
+      maxTokens: tokenBudget(chars + parsed.data.length * 8),
       messages: [
         {
           role: 'system',
@@ -364,7 +374,10 @@ export async function deleteSectionAction(slug: string, id: string): Promise<Act
   return ok('Removed from your library')
 }
 
-/** Saves the modal editor's block into a global section: every page showing it updates at once. */
+/**
+ * Saves the modal editor's block into a global section: every page showing it updates at once — so on a
+ * live page this is publishing, and needs 'Publish' as well as 'Edit design' and a clean preflight.
+ */
 export async function updateGlobalSectionAction(
   slug: string,
   id: string,
@@ -374,19 +387,42 @@ export async function updateGlobalSectionAction(
   if (error) return fail(error)
   const parsed = z.object({ id: uuid, node: nodeSchema }).safeParse({ id, node })
   if (!parsed.success) return fromZod(parsed.error)
-  let row: SavedSectionRow
+  let result: { row: SavedSectionRow; live: string[] }
   try {
-    row = await withTenant(ctx.tenant.id, async (tx) => {
+    result = await withTenant(ctx.tenant.id, async (tx) => {
       const existing = (await listSavedSections(tx, ctx.tenant.id)).find((s) => s.id === parsed.data.id)
       if (!existing?.isGlobal) throw new DomainError('Global section not found', 'not_found')
-      return updateSavedSection(tx, ctx.tenant.id, parsed.data.id, { data: parsed.data.node })
+      const pages = await globalSectionUsage(tx, ctx.tenant.id, parsed.data.id, { live: true })
+      if (pages.length && !can(ctx, 'site.publish'))
+        throw new DomainError(
+          "This global section is on your live site — saving it needs the 'Publish' permission.",
+        )
+      const errors = await publishErrors(
+        tx,
+        ctx.tenant.id,
+        { root: { props: {} }, content: [parsed.data.node] },
+        { verb: 'saving' },
+      )
+      if (errors) throw new DomainError(errors)
+      const updated = await updateSavedSection(tx, ctx.tenant.id, parsed.data.id, { data: parsed.data.node })
+      return { row: updated, live: pages }
     })
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, 'site.section.updated', 'saved_section', row.id, { name: row.name, global: true })
+  const { row, live } = result
+  await auditAs(ctx, 'site.section.updated', 'saved_section', row.id, {
+    name: row.name,
+    global: true,
+    livePages: live.length,
+  })
   revalidate(slug)
-  return ok('Global section updated — live pages show it straight away', { section: toClient(row) })
+  return ok(
+    live.length
+      ? 'Global section updated — live pages show it straight away'
+      : 'Global section updated — it goes live with the next publish of a page that uses it',
+    { section: toClient(row) },
+  )
 }
 
 /* ------------------------------------------------------------------ Analytics overlay */
@@ -418,8 +454,40 @@ export async function blockStatsAction(
 /* ------------------------------------------------------------------ Publish with preflight */
 
 /**
+ * Server-side preflight errors for `data` (plus the global sections it shows, whose content goes live with
+ * it), as one message — or null when nothing blocks publishing. Warnings never block.
+ */
+async function publishErrors(
+  tx: Tx,
+  tenantId: string,
+  data: Record<string, unknown>,
+  { currentSlug = '', verb = 'publishing' }: { currentSlug?: string; verb?: string } = {},
+): Promise<string | null> {
+  const [site, pages, sections, globals] = await Promise.all([
+    getSite(tx, tenantId),
+    listPages(tx, tenantId),
+    listSavedSections(tx, tenantId),
+    globalSectionsFor(tx, tenantId, data),
+  ])
+  const context = {
+    colors: preflightColors(normalizeTheme(site?.theme)),
+    currentSlug,
+    pages: pages.map((p) => ({ slug: p.slug, visible: p.visible, published: Boolean(p.publishedAt) })),
+    globalIds: new Set(sections.filter((s) => s.isGlobal).map((s) => s.id)),
+  }
+  const errors = [
+    ...preflightErrors(preflight(data, context)),
+    ...preflightErrors(preflight({ root: { props: {} }, content: Object.values(globals) }, context)).map(
+      (i) => ({ ...i, message: `${i.message} (in a global section)` }),
+    ),
+  ]
+  if (!errors.length) return null
+  return `Fix ${errors.length === 1 ? 'the error' : `${errors.length} errors`} before ${verb}: ${errors[0]!.message}`
+}
+
+/**
  * Publishes after a server-side preflight: errors (e.g. images not served over https) block, warnings
- * don't. The checks are the same ones the publish dialog shows.
+ * don't. The checks are the same ones the publish dialog shows, plus the page's global sections.
  */
 export async function publishCheckedAction(
   slug: string,
@@ -429,30 +497,11 @@ export async function publishCheckedAction(
   const { ctx, error } = await guard(slug, 'site.publish')
   if (error) return fail(error)
   if (!uuid.safeParse(pageId).success || !isPageData(data)) return fail('This page could not be read.')
-  const context = await withTenant(ctx.tenant.id, async (tx) => {
-    const [site, pages, page, sections] = await Promise.all([
-      getSite(tx, ctx.tenant.id),
-      listPages(tx, ctx.tenant.id),
-      getPage(tx, ctx.tenant.id, pageId),
-      listSavedSections(tx, ctx.tenant.id),
-    ])
-    return { site, pages, page, sections }
+  const blocked = await withTenant(ctx.tenant.id, async (tx) => {
+    const page = await getPage(tx, ctx.tenant.id, pageId)
+    if (!page) return 'Page not found'
+    return publishErrors(tx, ctx.tenant.id, data, { currentSlug: page.slug })
   })
-  if (!context.page) return fail('Page not found')
-  const issues = preflight(data, {
-    colors: preflightColors(normalizeTheme(context.site?.theme)),
-    currentSlug: context.page.slug,
-    pages: context.pages.map((p) => ({
-      slug: p.slug,
-      visible: p.visible,
-      published: Boolean(p.publishedAt),
-    })),
-    globalIds: new Set(context.sections.filter((s) => s.isGlobal).map((s) => s.id)),
-  })
-  const errors = preflightErrors(issues)
-  if (errors.length)
-    return fail(
-      `Fix ${errors.length === 1 ? 'the error' : `${errors.length} errors`} before publishing: ${errors[0]!.message}`,
-    )
+  if (blocked) return fail(blocked)
   return publishPageAction(slug, pageId, data)
 }

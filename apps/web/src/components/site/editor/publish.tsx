@@ -14,6 +14,7 @@ import { Sheet, SheetClose } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
+import { TRANSLATE_BATCH } from './colors'
 import { useEditorServices } from './context'
 import { scrollToBlock } from './frame-styles'
 
@@ -74,22 +75,41 @@ export function PublishSheet({ pageTitle, liveHref, context, publish, onPublishe
 
   const setData = (next: Data) => getPuck().dispatch({ type: 'setData', data: next })
 
+  /** Translates in batches the server accepts, applying each batch as it arrives. */
   const translate = (targets: PreflightIssue[]) =>
     startFix(async () => {
       if (!services) return
-      const texts = targets.map((t) => (t.fix?.kind === 'translate' ? t.fix.text : ''))
-      const r = await services.api.translate(texts)
-      if (!r?.ok) {
-        if (r) toast.error(r.error)
-        return
+      const batches: { issue: PreflightIssue; text: string }[][] = [[]]
+      let chars = 0
+      for (const issue of targets) {
+        const text = issue.fix?.kind === 'translate' ? issue.fix.text : ''
+        const last = batches[batches.length - 1]!
+        if (
+          last.length &&
+          (last.length >= TRANSLATE_BATCH.items || chars + text.length > TRANSLATE_BATCH.chars)
+        ) {
+          batches.push([])
+          chars = 0
+        }
+        batches[batches.length - 1]!.push({ issue, text })
+        chars += text.length
       }
-      const items = r.data?.items as string[]
-      let next = getPuck().appState.data
-      targets.forEach((t, n) => {
-        next = setAt(next, [...t.path, 'ar'], items[n])
-      })
-      setData(next)
-      toast.success(targets.length === 1 ? 'Arabic added' : `Arabic added to ${targets.length} fields`)
+      let done = 0
+      for (const batch of batches) {
+        const r = await services.api.translate(batch.map((b) => b.text))
+        if (!r?.ok) {
+          if (r) toast.error(done ? `Arabic added to ${done} fields, then: ${r.error}` : r.error)
+          return
+        }
+        const items = r.data?.items as string[]
+        let next = getPuck().appState.data
+        batch.forEach((b, n) => {
+          next = setAt(next, [...b.issue.path, 'ar'], items[n])
+        })
+        setData(next)
+        done += batch.length
+      }
+      toast.success(done === 1 ? 'Arabic added' : `Arabic added to ${done} fields`)
     })
 
   const fix = (i: PreflightIssue) => {

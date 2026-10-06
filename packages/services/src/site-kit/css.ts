@@ -158,6 +158,8 @@ function cleanDeclarations(body: string, removed: Set<string>): string {
 function scopeSelector(selector: string, scope: string): string | null {
   const s = selector.trim().replace(/\s+/g, ' ')
   if (!s || !SELECTOR.test(s)) return null
+  // A leading sibling combinator (`~ *`, `+ section`) would match the section's neighbours, not its content.
+  if (/^[~+]/.test(s)) return null
   // `:scope` (and root-ish selectors) mean the section element itself: the wrapper's only child but <style>.
   const root = s.match(/^(:root|html|body|:scope|&)(?![\w-])/i)
   if (root) return `${scope} > :not(style)${s.slice(root[0].length)}`
@@ -187,13 +189,13 @@ function compile(input: string, scope: string, removed: Set<string>, depth: numb
       continue
     }
     if (block.body === null) continue
-    const selectors = splitTop(block.prelude, ',')
-      .map((s) => scopeSelector(s, scope))
-      .filter((s): s is string => s !== null)
-    if (!selectors.length) {
-      if (block.prelude.trim()) removed.add(`selector “${block.prelude.trim().slice(0, 40)}”`)
-      continue
+    const selectors: string[] = []
+    for (const part of splitTop(block.prelude, ',')) {
+      const scoped = scopeSelector(part, scope)
+      if (scoped) selectors.push(scoped)
+      else if (part.trim()) removed.add(`selector “${part.trim().slice(0, 40)}”`)
     }
+    if (!selectors.length) continue
     const decls = cleanDeclarations(block.body, removed)
     if (decls) out += `${selectors.join(',')}{${decls}}`
   }
@@ -205,7 +207,8 @@ function compile(input: string, scope: string, removed: Set<string>, depth: numb
  * a half-applied stylesheet never reaches visitors.
  */
 export function scopeSectionCss(input: string | null | undefined, sectionId: string): ScopedCss {
-  const source = input ?? ''
+  // Page JSON is only shape-checked, so anything but a string counts as "no CSS".
+  const source = typeof input === 'string' ? input : ''
   if (!source.trim()) return { css: '', removed: [], tooLarge: false }
   if (byteLength(source) > MAX_SECTION_CSS_BYTES) {
     return { css: '', removed: ['everything — custom CSS is limited to 4 KB'], tooLarge: true }

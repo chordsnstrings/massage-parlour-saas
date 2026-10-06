@@ -19,7 +19,7 @@ export function advancedStyle(id: string, advanced: AdvancedProps | undefined, n
   const state = scheduleState(advanced?.schedule, now)
   return {
     sectionId: safeSectionId(id),
-    css: advanced?.customCss ? scopeSectionCss(advanced.customCss, id).css : '',
+    css: typeof advanced?.customCss === 'string' ? scopeSectionCss(advanced.customCss, id).css : '',
     state,
     visible: state === 'always' || state === 'live',
     label: describeSchedule(advanced?.schedule),

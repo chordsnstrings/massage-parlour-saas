@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { sitePages, webEvents } from '@spa/db'
-import { ensureSite } from '@spa/services'
+import { savedSections, sitePages, webEvents } from '@spa/db'
+import { ensureSite, saveDraft } from '@spa/services'
 import { eq } from 'drizzle-orm'
+import QRCode from 'qrcode'
 import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 const HERO = 'Unwind in the heart of the city'
@@ -164,6 +165,18 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
     await expect(page.getByRole('heading', { name: 'Section', exact: true })).toBeVisible()
     const css = page.locator('textarea[placeholder^=":scope"]:visible')
     await expect(css).toBeVisible()
+    // Schedule: an end before the start is shown, not saved; a date-only end covers that whole day.
+    const from = page.locator('input[aria-label="Show from date"]:visible')
+    const until = page.locator('input[aria-label="Until date"]:visible')
+    await from.fill('2026-03-14')
+    await until.fill('2026-03-01')
+    await expect(page.getByText('“Until” must be after “Show from” — not saved yet.')).toBeVisible()
+    await until.fill('2026-03-14')
+    await expect(page.getByText(/must be after/)).toHaveCount(0)
+    await expect(page.getByText('Ended — hidden from visitors · Dubai time')).toBeVisible()
+    await until.fill('')
+    await from.fill('')
+    await expect(page.locator('span:visible', { hasText: 'Always shown · Dubai time' })).toBeVisible()
     await css.fill('h2 { color: rgb(200, 0, 0) }\n@import url("https://evil.test/x.css");')
     await expect(page.getByText('Ignored: @import')).toBeVisible()
     await expect(canvas.locator('[data-section-id="about-1"] h2')).toHaveCSS('color', 'rgb(200, 0, 0)')
@@ -217,6 +230,13 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
     await page.screenshot({ path: 'test-results/screens/editor-versions-1280.png' })
     const url = await sheet.getByRole('textbox', { name: 'Preview link' }).inputValue()
     expect(url).toContain('/website/preview?token=')
+    // The QR code encodes exactly that link (same modules as a reference encoding at level M).
+    const modules = (svg: string) => svg.match(/<path[^>]*stroke="[^"]*"[^>]*\sd="([^"]+)"/)?.[1]
+    const shown = modules(await sheet.getByRole('img', { name: 'QR code for the preview link' }).innerHTML())
+    expect(shown).toBeTruthy()
+    expect(shown).toBe(
+      modules(await QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'M', margin: 1 })),
+    )
 
     // Works without signing in.
     const guest = await browser.newContext()
@@ -246,5 +266,43 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
       'color',
       'rgb(200, 0, 0)',
     )
+  })
+
+  await test.step('the server refuses to publish an http image, even inside a global section', async () => {
+    const [banner] = await db
+      .insert(savedSections)
+      .values({
+        tenantId: seed.tenantId,
+        name: 'Old banner',
+        isGlobal: true,
+        data: {
+          type: 'Image',
+          props: {
+            id: 'image-old',
+            src: 'http://127.0.0.1:9/banner.png',
+            alt: { en: 'Banner' },
+            caption: { en: '' },
+            aspect: 'wide',
+            rounded: true,
+          },
+        },
+      })
+      .returning()
+    const data = {
+      ...homePage,
+      content: [
+        ...homePage.content,
+        { type: 'GlobalSection', props: { id: 'global-old', sectionId: banner!.id } },
+      ],
+    }
+    await db.transaction((tx) => saveDraft(tx, { tenantId: seed.tenantId, pageId: home!.id, data }))
+    await page.goto(editorUrl)
+    await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
+    await page.getByRole('button', { name: 'Publish', exact: true }).click()
+    // The dialog only checks the page itself; the server also checks the global sections it shows.
+    await page.getByRole('dialog').getByRole('button', { name: 'Publish now' }).click()
+    await expect(
+      page.getByText(/Image address must start with https:\/\/ \(in a global section\)/),
+    ).toBeVisible()
   })
 })

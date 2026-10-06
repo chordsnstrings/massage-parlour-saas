@@ -72,7 +72,7 @@ export function VersionsSheet({
       open={open}
       onOpenChange={setOpen}
       title="Versions & preview"
-      description="Every save and publish is kept. Name the ones that matter."
+      description="Every publish is kept, and so is a draft once you name it or restore over it."
       trigger={
         <Button variant="ghost" size="icon" aria-label="Versions and preview link" title="Versions & preview">
           <History />
@@ -99,6 +99,7 @@ export function VersionsSheet({
                 key={v.id}
                 version={v}
                 current={i === 0}
+                draftKept={versions[0]?.status === 'draft'}
                 dirty={dirty}
                 api={api}
                 onChanged={reload}
@@ -193,6 +194,7 @@ function SharePreview({ api }: { api: Api }) {
 function VersionRow({
   version,
   current,
+  draftKept,
   dirty,
   api,
   onChanged,
@@ -200,6 +202,8 @@ function VersionRow({
 }: {
   version: VersionItem
   current: boolean
+  /** The newest version is a saved draft: restoring keeps it in the history. */
+  draftKept: boolean
   dirty: boolean
   api: Api
   onChanged: () => void
@@ -310,8 +314,9 @@ function VersionRow({
       {mode === 'restore' && (
         <div className="mt-2.5 ms-5 rounded-lg bg-subtle px-3 py-2.5 text-xs">
           <p className="text-muted">
-            This becomes your draft{dirty ? ' and replaces your unsaved changes' : ''}. The live page doesn’t
-            change until you publish.
+            This becomes your new draft{dirty ? ' and replaces your unsaved changes' : ''}.
+            {draftKept ? ' Your current saved draft stays in this list.' : ''} The live page doesn’t change
+            until you publish.
           </p>
           <div className="mt-2 flex gap-1.5">
             <Button size="sm" pending={pending} onClick={restore}>

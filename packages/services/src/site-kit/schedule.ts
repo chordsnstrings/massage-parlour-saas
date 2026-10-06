@@ -11,8 +11,8 @@ export type ScheduleState = 'always' | 'live' | 'upcoming' | 'ended'
 const LOCAL = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2}))?$/
 
 /** Dubai local date/time → instant; date-only `end` values mean the end of that day. */
-export function dubaiLocalInstant(value: string | null | undefined, end = false): Date | null {
-  const m = value?.trim().match(LOCAL)
+export function dubaiLocalInstant(value: unknown, end = false): Date | null {
+  const m = typeof value === 'string' ? value.trim().match(LOCAL) : null
   if (!m) return null
   const [, date, hh, mm] = m
   if (hh === undefined) return dubaiInstant(date!, end ? 24 * 60 : 0)

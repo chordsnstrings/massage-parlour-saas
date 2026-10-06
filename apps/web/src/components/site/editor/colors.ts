@@ -13,3 +13,6 @@ export const preflightColors = (t: SiteTheme): PreflightColors => ({
   inverseBg: t.inverseBg,
   inverseFg: t.inverseFg,
 })
+
+/** Most text one "Translate with AI" request takes; the publish sheet sends bigger jobs in batches. */
+export const TRANSLATE_BATCH = { items: 15, chars: 6000 } as const

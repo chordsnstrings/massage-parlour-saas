@@ -1,6 +1,7 @@
 'use client'
 import { FieldLabel } from '@puckeditor/core'
 import {
+  dubaiLocalInstant,
   MAX_SECTION_CSS_BYTES,
   type SectionSchedule,
   scheduleState,
@@ -264,7 +265,17 @@ const SCHEDULE_TEXT = {
   ended: 'Ended — hidden from visitors',
 } as const
 
-/** Show-between dates for a section, in Dubai time. Hidden sections stay visible (badged) in the editor. */
+/** Why a schedule can't be saved, or null. */
+function scheduleError(v: SectionSchedule): string | null {
+  const from = dubaiLocalInstant(v.from)
+  const to = dubaiLocalInstant(v.to, true)
+  return from && to && from >= to ? '“Until” must be after “Show from” — not saved yet.' : null
+}
+
+/**
+ * Show-between dates for a section, in Dubai time. Each end is a date with an optional time: a date-only
+ * "Until" includes that whole day. Hidden sections stay visible (badged) in the editor.
+ */
 export function ScheduleField({
   field,
   id,
@@ -272,31 +283,67 @@ export function ScheduleField({
   onChange,
   readOnly,
 }: FieldRenderProps<SectionSchedule | undefined>) {
-  const v = value ?? {}
-  const state = scheduleState(v)
-  const set = (key: 'from' | 'to', next: string) => {
-    const out = { ...v, [key]: next || undefined }
-    if (!out[key]) delete out[key]
-    onChange(out)
+  const saved = value ?? {}
+  // Local copy so an invalid range can be shown (and fixed) without being saved.
+  const [v, setV] = useState<SectionSchedule>(saved)
+  const savedKey = `${saved.from ?? ''}|${saved.to ?? ''}`
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync only when the stored value changes
+  useEffect(() => {
+    setV(value ?? {})
+  }, [savedKey])
+  const error = scheduleError(v)
+  const state = scheduleState(error ? saved : v)
+  const update = (next: SectionSchedule) => {
+    const out: SectionSchedule = {}
+    if (next.from) out.from = next.from
+    if (next.to) out.to = next.to
+    setV(out)
+    if (!scheduleError(out)) onChange(out)
   }
-  const input = (key: 'from' | 'to', label: string) => (
-    <label className="flex flex-col gap-1 text-[11px] font-medium text-muted" htmlFor={`${id}-${key}`}>
-      {label}
-      <input
-        id={`${id}-${key}`}
-        type="datetime-local"
-        value={v[key] ? (v[key]!.length === 10 ? `${v[key]}T00:00` : v[key]) : ''}
-        readOnly={readOnly}
-        onChange={(e) => set(key, e.target.value)}
-        className={cn(control, 'min-h-10 py-1.5 text-[13px]')}
-      />
-    </label>
-  )
+  const input = (key: 'from' | 'to', label: string) => {
+    const raw = typeof v[key] === 'string' ? v[key]! : ''
+    const date = raw.slice(0, 10)
+    const time = raw.length > 10 ? raw.slice(11, 16) : ''
+    return (
+      <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
+        <legend className="mb-1 p-0 text-[11px] font-medium text-muted">{label}</legend>
+        <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-1.5">
+          <input
+            id={`${id}-${key}`}
+            type="date"
+            aria-label={`${label} date`}
+            value={date}
+            readOnly={readOnly}
+            onChange={(e) =>
+              update({ ...v, [key]: e.target.value && (time ? `${e.target.value}T${time}` : e.target.value) })
+            }
+            className={cn(control, 'min-h-10 py-1.5 text-[13px]')}
+          />
+          <input
+            id={`${id}-${key}-time`}
+            type="time"
+            aria-label={`${label} time (optional)`}
+            value={time}
+            readOnly={readOnly}
+            disabled={!date}
+            onChange={(e) => update({ ...v, [key]: e.target.value ? `${date}T${e.target.value}` : date })}
+            className={cn(control, 'min-h-10 py-1.5 text-[13px] disabled:opacity-50')}
+          />
+        </div>
+      </fieldset>
+    )
+  }
   return (
     <FieldLabel label={field.label ?? 'Schedule'} el="div" readOnly={readOnly}>
       <div className="grid gap-2">
         {input('from', 'Show from')}
         {input('to', 'Until')}
+        <p className="text-[11px] text-muted">Leave the time empty to include the whole day.</p>
+        {error && (
+          <p role="alert" className="text-[11px] font-medium text-danger">
+            {error}
+          </p>
+        )}
         <p className="flex items-center justify-between text-[11px] text-muted">
           <span className={cn(state === 'upcoming' || state === 'ended' ? 'text-warning' : undefined)}>
             {SCHEDULE_TEXT[state]} · Dubai time
@@ -304,7 +351,7 @@ export function ScheduleField({
           {(v.from || v.to) && !readOnly && (
             <button
               type="button"
-              onClick={() => onChange({})}
+              onClick={() => update({})}
               className="inline-flex min-h-8 items-center gap-1 font-medium text-accent hover:underline"
             >
               <RotateCcw className="size-3" /> Clear

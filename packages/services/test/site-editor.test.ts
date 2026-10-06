@@ -10,7 +10,9 @@ import {
   describeSchedule,
   ensureSite,
   getEditablePage,
+  getVersion,
   globalSectionsFor,
+  globalSectionUsage,
   isScheduleVisible,
   labelVersion,
   listPages,
@@ -91,6 +93,21 @@ describe('section custom CSS', () => {
   it('drops unclosed blocks and selectors with braces or at-signs', () => {
     expect(scopeSectionCss('.ok{color:red} .bad { color: blue', id).css).toBe(`${scope} .ok{color:red}`)
   })
+
+  it('drops selectors that start with a sibling combinator (they would reach neighbouring blocks)', () => {
+    expect(scopeSectionCss('~ * { display:none }', id)).toMatchObject({
+      css: '',
+      removed: ['selector “~ *”'],
+    })
+    const { css, removed } = scopeSectionCss('h2, + section, > p { color: red }', id)
+    expect(css).toBe(`${scope} h2,${scope} > p{color:red}`)
+    expect(removed).toEqual(['selector “+ section”'])
+  })
+
+  it('treats non-string input as no CSS (page JSON is only shape-checked)', () => {
+    expect(scopeSectionCss(42 as never, id)).toEqual({ css: '', removed: [], tooLarge: false })
+    expect(scopeSectionCss({ a: 1 } as never, id).css).toBe('')
+  })
 })
 
 describe('section schedule (Asia/Dubai)', () => {
@@ -108,6 +125,8 @@ describe('section schedule (Asia/Dubai)', () => {
     expect(isScheduleVisible({ from: '2026-03-01T18:30' }, at('2026-03-01T14:30:00Z'))).toBe(true)
     expect(scheduleState({ to: 'soon' })).toBe('always')
     expect(scheduleState(undefined)).toBe('always')
+    expect(scheduleState({ from: 5, to: { x: 1 } } as never)).toBe('always')
+    expect(describeSchedule({ from: 5 } as never)).toBe('Always shown')
   })
 })
 
@@ -354,10 +373,19 @@ describe('editor data (saved sections, versions, block stats)', () => {
 
     await expect(tx((db) => deleteSavedSection(db, ids.tenant!, promo.id))).rejects.toThrow(/on 1 page/)
     await tx((db) => deleteSavedSection(db, ids.tenant!, plain.id))
-    // Removing it from the page frees it.
+    // Live usage: only once a page showing it is published.
+    const live = () => tx((db) => globalSectionUsage(db, ids.tenant!, promo.id, { live: true }))
+    expect(await live()).toEqual([])
+    await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.home! }))
+    expect(await live()).toEqual([ids.home])
+    // Removing it from the draft isn't enough while the live page shows it; publishing that frees it.
     await tx((db) =>
       saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: { root: { props: {} }, content: [] } }),
     )
+    expect(await tx((db) => globalSectionUsage(db, ids.tenant!, promo.id))).toEqual([ids.home])
+    await expect(tx((db) => deleteSavedSection(db, ids.tenant!, promo.id))).rejects.toThrow(/on 1 page/)
+    await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.home! }))
+    expect(await live()).toEqual([])
     await tx((db) => deleteSavedSection(db, ids.tenant!, promo.id))
     expect(await tx((db) => listSavedSections(db, ids.tenant!))).toEqual([])
   })
@@ -367,20 +395,38 @@ describe('editor data (saved sections, versions, block stats)', () => {
     await tx((db) => saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: v1 }))
     const published = await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.home! }))
     await tx((db) => labelVersion(db, ids.tenant!, published.id, '  Launch  '))
-    await tx((db) =>
-      saveDraft(db, {
-        tenantId: ids.tenant!,
-        pageId: ids.home!,
-        data: { root: { props: {} }, content: [node('second')] },
-      }),
-    )
+    const v2 = { root: { props: {} }, content: [node('second')] }
+    const second = await tx((db) => saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: v2 }))
     const restored = await tx((db) =>
       restoreVersion(db, { tenantId: ids.tenant!, pageId: ids.home!, versionId: published.id }),
     )
     expect(restored.data).toEqual(v1)
     expect((await tx((db) => getEditablePage(db, ids.tenant!, ids.home!)))!.data).toEqual(v1)
+    // The saved draft it replaced is still in the history, unchanged.
+    expect(restored.draft.id).not.toBe(second.id)
     const versions = await tx((db) => listVersions(db, ids.tenant!, ids.home!))
+    expect(versions.slice(0, 3).map((v) => v.id)).toEqual([restored.draft.id, second.id, published.id])
+    expect((await tx((db) => getVersion(db, ids.tenant!, second.id)))!.data).toEqual(v2)
     expect(versions.find((v) => v.id === published.id)!.label).toBe('Launch')
+
+    // A named draft is never overwritten: the next save starts a new draft, and publishing keeps the name.
+    await tx((db) => labelVersion(db, ids.tenant!, restored.draft.id, 'Try A'))
+    const v3 = { root: { props: {} }, content: [node('third')] }
+    const third = await tx((db) => saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: v3 }))
+    expect(third.id).not.toBe(restored.draft.id)
+    expect((await tx((db) => getVersion(db, ids.tenant!, restored.draft.id)))!.data).toEqual(v1)
+    await tx((db) => labelVersion(db, ids.tenant!, third.id, 'Try B'))
+    const live = await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.home! }))
+    expect(live).toMatchObject({ id: third.id, status: 'published', label: 'Try B' })
+    const named = await tx((db) => saveDraft(db, { tenantId: ids.tenant!, pageId: ids.home!, data: v2 }))
+    await tx((db) => labelVersion(db, ids.tenant!, named.id, 'Kept'))
+    const edited = await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.home!, data: v3 }))
+    expect(edited.id).not.toBe(named.id)
+    expect(await tx((db) => getVersion(db, ids.tenant!, named.id))).toMatchObject({
+      status: 'draft',
+      label: 'Kept',
+      data: v2,
+    })
     await expect(
       tx(
         (db) => restoreVersion(db, { tenantId: ids.other!, pageId: ids.home!, versionId: published.id }),

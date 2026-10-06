@@ -23,7 +23,6 @@ import {
   Tablet,
   Undo2,
 } from 'lucide-react'
-import { motion } from 'motion/react'
 import Link from 'next/link'
 import {
   createContext,
@@ -49,12 +48,12 @@ import { GlobalSectionEditor } from '@/components/site/editor/global-editor'
 import { type InsightsMeta, withInsights } from '@/components/site/editor/insights'
 import { LibraryPanel } from '@/components/site/editor/library'
 import { PublishSheet } from '@/components/site/editor/publish'
+import { Segmented } from '@/components/site/editor/segmented'
 import { VersionsSheet } from '@/components/site/editor/versions'
 import { type AiAssist, EditorContext } from '@/components/site/fields'
 import type { Device, Locale, SiteMeta } from '@/components/site/types'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
-import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { saveDraftAction } from '../../actions'
 import {
@@ -301,47 +300,6 @@ export function SiteEditor(props: EditorProps) {
 }
 
 /* ------------------------------------------------------------------ Chrome */
-
-function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: T
-  onChange: (v: T) => void
-  options: { value: T; label: string; content: React.ReactNode }[]
-  label: string
-}) {
-  return (
-    <fieldset className="relative m-0 flex items-center rounded-lg border-0 bg-subtle p-0.5">
-      <legend className="sr-only">{label}</legend>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={value === o.value}
-          aria-label={o.label}
-          title={o.label}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'relative grid h-8 min-w-9 place-items-center rounded-md px-2.5 text-[13px] font-medium transition-colors',
-            value === o.value ? 'text-fg' : 'text-muted hover:text-fg',
-          )}
-        >
-          {value === o.value && (
-            <motion.span
-              layoutId={`seg-${label}`}
-              transition={spring}
-              className="absolute inset-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.08)]"
-            />
-          )}
-          <span className="relative">{o.content}</span>
-        </button>
-      ))}
-    </fieldset>
-  )
-}
 
 function InsightsToggle() {
   const chrome = useChrome()

@@ -183,7 +183,8 @@ export async function saveDraft(
   const page = await getPage(tx, input.tenantId, input.pageId)
   if (!page) throw new DomainError('Page not found', 'not_found')
   const latest = await latestVersion(tx, input.tenantId, input.pageId)
-  if (latest?.status === 'draft') {
+  // The working draft is updated in place; a named draft is kept as it is and a new draft starts after it.
+  if (latest?.status === 'draft' && !latest.label) {
     const [updated] = await tx
       .update(pageVersions)
       .set({ data: input.data, createdBy: input.userId ?? latest.createdBy, createdAt: stamp(latest) })
@@ -215,13 +216,14 @@ export async function publishPage(
   const latest = await latestVersion(tx, input.tenantId, input.pageId)
   const data = input.data ?? latest?.data
   if (!data) throw new DomainError('Nothing to publish yet')
-  if (latest?.status === 'draft') {
+  // Promote the draft in place, unless it is a named draft that new content would overwrite.
+  if (latest?.status === 'draft' && (!latest.label || !input.data)) {
     const [promoted] = await tx
       .update(pageVersions)
       .set({
         data,
         status: 'published',
-        label: input.label ?? null,
+        label: input.label ?? latest.label,
         createdBy: input.userId ?? latest.createdBy,
         createdAt: stamp(latest),
       })
@@ -349,8 +351,8 @@ export async function getVersion(tx: Tx, tenantId: string, versionId: string) {
 }
 
 /**
- * Restores an earlier version as the page's draft. History is never rewritten: the published version stays
- * live until the restored draft is published.
+ * Restores an earlier version as a new draft. History is never rewritten: a saved draft stays in the list
+ * behind it, and the published version stays live until the restored draft is published.
  */
 export async function restoreVersion(
   tx: Tx,
@@ -358,13 +360,19 @@ export async function restoreVersion(
 ) {
   const version = await getVersion(tx, input.tenantId, input.versionId)
   if (!version || version.pageId !== input.pageId) throw new DomainError('Version not found', 'not_found')
-  const draft = await saveDraft(tx, {
-    tenantId: input.tenantId,
-    pageId: input.pageId,
-    data: version.data,
-    userId: input.userId,
-  })
-  return { draft, data: version.data as PageData }
+  const latest = await latestVersion(tx, input.tenantId, input.pageId)
+  const [draft] = await tx
+    .insert(pageVersions)
+    .values({
+      tenantId: input.tenantId,
+      pageId: input.pageId,
+      data: version.data,
+      status: 'draft',
+      createdBy: input.userId ?? null,
+      createdAt: stamp(latest),
+    })
+    .returning()
+  return { draft: draft!, data: version.data as PageData }
 }
 
 /* ------------------------------------------------------------------ Saved & global sections */
@@ -434,23 +442,24 @@ export async function globalSectionsFor(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Pages whose newest version or live version shows global section `id`. */
-export async function globalSectionUsage(tx: Tx, tenantId: string, id: string): Promise<string[]> {
-  const rows = await tx
-    .select({ pageId: pageVersions.pageId, status: pageVersions.status, data: pageVersions.data })
-    .from(pageVersions)
-    .where(eq(pageVersions.tenantId, tenantId))
-    .orderBy(desc(pageVersions.createdAt))
-  const latestSeen = new Set<string>()
-  const publishedSeen = new Set<string>()
-  const using = new Set<string>()
-  for (const r of rows) {
-    const relevant = !latestSeen.has(r.pageId) || (r.status === 'published' && !publishedSeen.has(r.pageId))
-    latestSeen.add(r.pageId)
-    if (r.status === 'published') publishedSeen.add(r.pageId)
-    if (relevant && collectGlobalIds(r.data).includes(id)) using.add(r.pageId)
-  }
-  return [...using]
+/**
+ * Pages whose newest version or live version shows global section `id` (`live` only: pages where visitors
+ * see it now). Reads at most two versions per page, however long the history.
+ */
+export async function globalSectionUsage(
+  tx: Tx,
+  tenantId: string,
+  id: string,
+  opts: { live?: boolean } = {},
+): Promise<string[]> {
+  const newest = (status?: 'published') =>
+    tx
+      .selectDistinctOn([pageVersions.pageId], { pageId: pageVersions.pageId, data: pageVersions.data })
+      .from(pageVersions)
+      .where(and(eq(pageVersions.tenantId, tenantId), status ? eq(pageVersions.status, status) : undefined))
+      .orderBy(pageVersions.pageId, desc(pageVersions.createdAt))
+  const rows = [...(opts.live ? [] : await newest()), ...(await newest('published'))]
+  return [...new Set(rows.filter((r) => collectGlobalIds(r.data).includes(id)).map((r) => r.pageId))]
 }
 
 /** Deletes a saved section; a global one still placed on a page must be removed from those pages first. */
