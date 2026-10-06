@@ -50,10 +50,16 @@ export async function monthSpendUsd(db: Db, tenantId: string, now = new Date()) 
   return Number(row?.total ?? 0)
 }
 
+/** OpenAI-compatible multimodal user content (vision models): text + images as data: or https: URLs. */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+export type InputMessage = ChatMessage | { role: 'user'; content: ContentPart[] }
+
 export type RunChatOptions<T extends z.ZodType | undefined> = {
   tenantId: string
   agentKey: string
-  messages: ChatMessage[]
+  messages: InputMessage[]
   tools?: ToolDef[]
   /** Validates the reply as JSON. Uses json_schema mode when the model supports it, else instructions + one retry. */
   schema?: T
@@ -91,7 +97,8 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
     throw new AiBudgetExceededError(opts.tenantId)
 
   const jsonSchema = opts.schema ? z.toJSONSchema(opts.schema) : undefined
-  const messages: ChatMessage[] = [...opts.messages]
+  // Image parts go over the wire as-is; the client's ChatMessage type only models text.
+  const messages = [...opts.messages] as ChatMessage[]
   const request: ChatRequest = {
     model: cfg.modelId,
     messages,

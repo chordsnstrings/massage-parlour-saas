@@ -232,6 +232,13 @@ importers:
       drizzle-orm:
         specifier: 0.45.3
         version: 0.45.3(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
+      web-push:
+        specifier: ^3.6.7
+        version: 3.6.7
+    devDependencies:
+      '@types/web-push':
+        specifier: ^3.6.4
+        version: 3.6.4
 
 packages:
 

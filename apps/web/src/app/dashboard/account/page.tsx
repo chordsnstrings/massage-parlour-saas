@@ -1,4 +1,6 @@
+import { pushConfig } from '@spa/services'
 import type { Metadata } from 'next'
+import { NotificationsCard } from '@/components/push/enable-notifications'
 import { AppShell } from '@/components/shell/app-shell'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { appPath } from '@/lib/paths'
@@ -24,6 +26,7 @@ export default async function AccountPage() {
         <ProfileCard name={user.name} />
         <PasswordCard />
         <TwoFactorCard enabled={Boolean((user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled)} />
+        <NotificationsCard publicKey={pushConfig()?.publicKey ?? null} />
       </PageBody>
     </AppShell>
   )

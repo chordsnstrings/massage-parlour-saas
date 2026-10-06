@@ -1,0 +1,102 @@
+import { aiConfigured, generateInsights, NotEnoughDataError } from '@spa/ai'
+import { businessDateOf } from '@spa/core'
+import { branches, platformDb, tenants, withTenant } from '@spa/db'
+import { documentsDueForReminder, notifyTenant, pushConfigured, reminderMessage } from '@spa/services'
+import { eq, inArray, sql } from 'drizzle-orm'
+import { log } from '../log'
+
+const activeTenants = () =>
+  platformDb()
+    .select({ id: tenants.id, slug: tenants.slug })
+    .from(tenants)
+    .where(inArray(tenants.status, ['trial', 'active', 'past_due']))
+
+/** Daily 09:00 Dubai: push staff managers about documents with 60, 30, 7 or 0 days left. */
+export async function documentExpiryReminders(now = new Date()) {
+  if (!pushConfigured()) return { skipped: 'push not configured' }
+  let notified = 0
+  for (const t of await activeTenants()) {
+    try {
+      const due = await withTenant(t.id, (tx) => documentsDueForReminder(tx, now))
+      const msg = reminderMessage(due)
+      if (!msg) continue
+      const res = await notifyTenant(
+        t.id,
+        { ...msg, url: `/${t.slug}/documents`, tag: 'documents' },
+        { permission: 'staff.manage' },
+      )
+      notified += res.sent
+      log('info', 'document reminders', { tenant: t.slug, documents: due.length, ...res })
+    } catch (error) {
+      log('error', 'document reminders failed', { tenant: t.slug, error: String(error) })
+    }
+  }
+  return { notified }
+}
+
+/** Mondays 08:00 Dubai: AI insights digest for every active spa with activity, then a push to report viewers. */
+export async function weeklyInsights(now = new Date()) {
+  if (!aiConfigured()) return { skipped: 'AI not configured' }
+  let generated = 0
+  for (const t of await activeTenants()) {
+    try {
+      const run = await generateInsights({ tenantId: t.id, trigger: 'schedule', now })
+      generated++
+      const first = (run.output as { insights?: { title: string }[] } | null)?.insights?.[0]?.title
+      await notifyTenant(
+        t.id,
+        {
+          title: 'Your weekly insights are ready',
+          body: first ?? 'See what changed last week and two things to try this week.',
+          url: `/${t.slug}`,
+          tag: 'insights',
+        },
+        { permission: 'reports.view' },
+      )
+    } catch (error) {
+      if (error instanceof NotEnoughDataError) continue
+      log('error', 'weekly insights failed', { tenant: t.slug, error: String(error) })
+    }
+  }
+  return { generated }
+}
+
+/** Daily 09:30 Dubai (optional digest): today's bookings and online requests still waiting for confirmation. */
+export async function dailyDigest(now = new Date()) {
+  if (!pushConfigured()) return { skipped: 'push not configured' }
+  for (const t of await activeTenants()) {
+    try {
+      const counts = await withTenant(t.id, async (tx) => {
+        const [branch] = await tx
+          .select({ cutoff: branches.businessDayCutoff })
+          .from(branches)
+          .where(eq(branches.isDefault, true))
+          .limit(1)
+        const today = businessDateOf(now, branch?.cutoff.slice(0, 5) ?? '05:00')
+        const [row] = (
+          await tx.execute(sql`select
+              count(*) filter (where status not in ('cancelled', 'no_show'))::int as booked,
+              count(*) filter (where status = 'pending')::int as pending
+            from bookings where business_date = ${today}::date`)
+        ).rows as { booked: number; pending: number }[]
+        return { booked: Number(row?.booked ?? 0), pending: Number(row?.pending ?? 0) }
+      })
+      if (!counts.booked) continue
+      await notifyTenant(
+        t.id,
+        {
+          title: `Today: ${counts.booked} booking${counts.booked === 1 ? '' : 's'}`,
+          body: counts.pending
+            ? `${counts.pending} still waiting for confirmation — confirm them on WhatsApp.`
+            : 'All confirmed. Have a calm day.',
+          url: `/${t.slug}/calendar`,
+          tag: 'digest',
+        },
+        { permission: 'calendar.manage' },
+      )
+    } catch (error) {
+      log('error', 'daily digest failed', { tenant: t.slug, error: String(error) })
+    }
+  }
+  return { ok: true }
+}

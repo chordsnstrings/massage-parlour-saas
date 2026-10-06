@@ -1,0 +1,1 @@
+ALTER TABLE "business_documents" ADD COLUMN "issued_on" date;

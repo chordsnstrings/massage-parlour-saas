@@ -13,6 +13,7 @@ import { type AgendaItem, kpis, peakHours, revenueSeries, upcomingItems } from '
 import { and, count, eq } from 'drizzle-orm'
 import { ArrowUpRight, CalendarDays, Check, Circle, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { InsightsCard } from '@/components/kpis/insights-card'
 import { PeriodSwitch } from '@/components/kpis/period-switch'
 import { Sparkline } from '@/components/kpis/sparkline'
 import { AgendaList, MetricStrip, PeakHeatmap, RankedList } from '@/components/kpis/widgets'
@@ -305,6 +306,8 @@ export default async function TenantHome({
             ]}
           />
         )}
+
+        <InsightsCard ctx={ctx} />
 
         <div className="grid gap-6 lg:grid-cols-12">
           <Card className="lg:col-span-8">

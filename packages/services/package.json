@@ -13,6 +13,10 @@
     "@spa/core": "workspace:*",
     "@spa/db": "workspace:*",
     "aws4fetch": "^1.0.20",
-    "drizzle-orm": "0.45.3"
+    "drizzle-orm": "0.45.3",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4"
   }
 }

@@ -105,7 +105,10 @@ npx web-push generate-vapid-keys
 | `VAPID_PRIVATE_KEY` | private key |
 | `VAPID_SUBJECT` | `mailto:support@spamanagement.ae` |
 
-Staff enable notifications per device on their *Account* page.
+Staff enable notifications per device on their *Account* page. Who gets what: new online bookings → members with
+`calendar.manage`; document expiry (60/30/7/0 days, daily 09:00) → `staff.manage`; weekly insights (Mon 08:00) →
+`reports.view`. Push payload links are dashboard paths without the routing prefix; `/sw.js?base=/app` adds it in
+path routing. Endpoints the push service reports gone (404/410) are deleted automatically.
 
 ## 5. File storage (optional)
 
@@ -135,3 +138,5 @@ Server errors, browser error-boundary hits and failed worker jobs are reported. 
 | `ARK_BASE_URL` | `https://ark.ap-southeast.bytepluses.com/api/v3` |
 
 Model IDs per task are chosen in the super-admin under *AI models*; Seed 2.0 is the default. Each spa has a monthly AI budget, also set in the super-admin.
+Receipt scanning uses an `ai_model_config` row with key `vision` when one exists (kind `chat`, a multimodal model), else the
+`dm_agent` model (Seed 2.0 Lite reads images). Weekly insights use `insights_agent` and are stored in `ai_runs` (`agent_key = 'insights'`).
