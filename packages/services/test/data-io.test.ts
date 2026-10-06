@@ -21,6 +21,7 @@ import {
   exportRows,
   fullExportReadme,
   fullExportTables,
+  isBinaryFile,
   missingRequired,
   normalisePhone,
   parseAmount,
@@ -29,6 +30,7 @@ import {
   runImport,
   toCsv,
   validateRows,
+  withoutValues,
 } from '../src'
 
 describe('decoding and delimiters', () => {
@@ -40,6 +42,14 @@ describe('decoding and delimiters', () => {
     const utf16 = new Uint8Array([0xff, 0xfe, ...Buffer.from('a\tb', 'utf16le')])
     expect(decodeCsvBytes(utf16)).toBe('a\tb')
     expect(decodeCsvBytes(new Uint8Array([0x43, 0x61, 0x66, 0xe9]))).toBe('Café')
+  })
+  it('decodes Arabic Windows-1256 and spots workbooks that are not CSV', () => {
+    const arabic = new Uint8Array([0x4e, 0x61, 0x6d, 0x65, 0x2c, 0xc7, 0xe1, 0xc7, 0xd3, 0xe3])
+    expect(decodeCsvBytes(arabic)).toBe('Name,الاسم')
+    expect(isBinaryFile(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14]))).toBe(true)
+    expect(isBinaryFile(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0]))).toBe(true)
+    expect(isBinaryFile(new TextEncoder().encode('Name,Phone\nSara,050'))).toBe(false)
+    expect(isBinaryFile(new Uint8Array([0xff, 0xfe, ...Buffer.from('a,b', 'utf16le')]))).toBe(false)
   })
   it('detects comma, semicolon (Excel EU), tab and the sep= hint', () => {
     expect(detectDelimiter('Name,Phone\nA,050\nB,055')).toBe(',')
@@ -67,6 +77,7 @@ describe('value parsing', () => {
   })
   it('rejects impossible dates', () => {
     expect(parseDate('31/02/1990')).toBeNull()
+    expect(parseDate('1990')).toBeNull()
     expect(parseDate('5-Foo-1990')).toBeNull()
     expect(parseDate('yesterday')).toBeNull()
   })
@@ -150,6 +161,21 @@ describe('mapping and validation', () => {
     expect(rows[3]).toMatchObject({ row: 5, dupOfRow: 2 })
     expect(rows[4]).toMatchObject({ key: 'name:no phone', errors: [] })
   })
+  it('drops blank rows but keeps spreadsheet row numbers, and strips values from messages', () => {
+    const rows = validateRows(
+      'products',
+      [
+        ['Oil', 'x'],
+        ['', ' '],
+        ['Lotion', ''],
+      ],
+      ['name', 'cost'],
+      3,
+    )
+    expect(rows.map((r) => r.row)).toEqual([3, 5])
+    expect(rows[0]!.errors).toEqual(['Cost “x” should be a number of 0 or more'])
+    expect(withoutValues(rows[0]!.errors[0]!)).toBe('Cost “…” should be a number of 0 or more')
+  })
 })
 
 describe('CSV output', () => {
@@ -223,9 +249,21 @@ describe('database import and export', () => {
     })
     expect(update).toMatchObject({ created: 0, updated: 3, skipped: 1 })
     const [merged] = await platform.select().from(clients).where(eq(clients.phoneE164, '971501234567'))
-    expect(merged).toMatchObject({ name: 'Fatima', tags: ['vip', 'regular'] })
+    expect(merged).toMatchObject({ name: 'Existing', tags: ['vip', 'regular'] })
     const all = await platform.select().from(clients).where(eq(clients.tenantId, ids.tenant!))
     expect(all).toHaveLength(3)
+  })
+
+  it('update mode keeps the name and existing notes, appending new notes once', async () => {
+    await platform
+      .update(clients)
+      .set({ notes: 'Allergic to nuts' })
+      .where(eq(clients.phoneE164, '971501234567'))
+    const rows = clientRows(['name', 'phone', 'notes'], [['Renamed', '0501234567', 'Firm pressure']])
+    for (const _ of [1, 2])
+      await runImport({ tenantId: ids.tenant!, kind: 'clients', rows, onDuplicate: 'update', db: app })
+    const [c] = await platform.select().from(clients).where(eq(clients.phoneE164, '971501234567'))
+    expect(c).toMatchObject({ name: 'Existing', notes: 'Allergic to nuts\nFirm pressure' })
   })
 
   it('imports a menu as services with duration variants and categories', async () => {
@@ -287,6 +325,32 @@ describe('database import and export', () => {
     expect(r2).toMatchObject({ created: 0, updated: 1 })
     const [after] = await platform.select().from(stockLevels).where(eq(stockLevels.productId, oil!.id))
     expect(Number(after!.qty)).toBe(7)
+  })
+
+  it('keeps same-named products with different SKUs apart, in the preview and the import', async () => {
+    const rows = validateRows(
+      'products',
+      [
+        ['Massage oil', 'MO-1', '10'],
+        ['Massage oil', 'MO-2', '12'],
+        ['Lavender oil', 'OIL-9', '5'],
+        ['Lotion', 'LOT-1', '20'],
+        ['Lotion', 'LOT-1', '20'],
+      ],
+      ['name', 'sku', 'cost'],
+    )
+    // Lavender oil already has SKU oil-1 (a second product); Lotion had no SKU, so row 5 takes it over.
+    expect(await tx((t) => existingRows(t, 'products', rows))).toEqual(new Set([5]))
+    const res = await runImport({
+      tenantId: ids.tenant!,
+      kind: 'products',
+      rows,
+      onDuplicate: 'update',
+      db: app,
+    })
+    expect(res).toMatchObject({ created: 3, updated: 1, skipped: 1, errors: [] })
+    const all = await platform.select().from(products).where(eq(products.tenantId, ids.tenant!))
+    expect(all.map((p) => p.sku).sort()).toEqual(['LOT-1', 'MO-1', 'MO-2', 'OIL-9', 'oil-1'])
   })
 
   it('exports clients with phones only when allowed, and a full dump without secrets', async () => {

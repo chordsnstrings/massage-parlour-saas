@@ -6,6 +6,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { IMPORT_LABEL, IMPORT_PERMISSION } from '@/components/data/kinds'
+import { canExportAll } from '@/components/data/server'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
@@ -51,7 +52,7 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
   const exportable = (Object.keys(EXPORT_DATASETS) as ExportDataset[]).filter((d) =>
     can(ctx, EXPORT_DATASETS[d].permission),
   )
-  const full = can(ctx, 'settings.manage')
+  const full = canExportAll(ctx)
   if (!importable.length && !exportable.length && !full) notFound()
 
   const history: HistoryRow[] = importable.length
