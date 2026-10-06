@@ -583,8 +583,11 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
   re-encoded once with sharp (auto-rotate, metadata stripped, ≤ 2400 px, WebP q82) and referenced as `/files/{id}`.
   `/files/*` is served on every host (proxy pass-through): public = immutable + ETag, private = members only.
   Thumbnails are rendered on demand (`?w=480|960`, in-process LRU + edge/browser cache) rather than stored.
-  Uploads go to `POST /files/upload` (outside the proxy's 10 MB body buffer, 20 MB raw cap). Seedream links (7-day
-  expiry) are copied into the library when a post is drafted/approved; the worker prunes rows whose link expired unsaved.
+  Uploads go to `POST /files/upload?tenant=` (outside the proxy's 10 MB body buffer; access checked before the body is
+  read; streamed 20 MB raw cap). Seedream links (7-day expiry) are copied into the library when a post is
+  drafted/approved or via "Save to library"; posts then use the absolute `/files/{id}?f=jpg` URL (JPEG rendition —
+  Instagram publishing takes JPEG only). The picker hides unsaved AI links; the delete warning counts pages, service /
+  therapist photos and unpublished posts. The worker (`media-prune-ai`, daily) prunes rows whose link expired unsaved.
 
 ### 11.8 Rendering & performance
 - Published JSON → React Server Components; style props compiled at publish to CSS variables + atomic classes (no runtime style

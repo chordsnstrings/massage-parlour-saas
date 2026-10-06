@@ -7,6 +7,8 @@ import {
   fileIdFromUrl,
   listAssets,
   persistRemoteAsset,
+  postImageUrl,
+  repointPostImages,
   saveRemoteImage,
   setTags,
   updateAlt,
@@ -16,6 +18,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { toMediaItem } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { tenantSiteUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -29,13 +32,18 @@ const Filter = z.object({
   offset: z.number().int().min(0).max(5000).optional(),
 })
 
-/** Library page for the image picker in the website editor. */
+/**
+ * Library page for the image picker (website editor, service / therapist photos). AI images still on their
+ * temporary 7-day link are left out — picking one would embed a URL that soon breaks.
+ */
 export async function listMediaAction(slug: string, filter: z.input<typeof Filter> = {}) {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return { ok: false as const, error }
   const f = Filter.safeParse(filter)
   if (!f.success) return { ok: false as const, error: 'Invalid filter' }
-  const rows = await withTenant(ctx.tenant.id, (tx) => listAssets(tx, { ...f.data, limit: 49 }))
+  const rows = await withTenant(ctx.tenant.id, (tx) =>
+    listAssets(tx, { ...f.data, storedOnly: true, limit: 49 }),
+  )
   return { ok: true as const, items: rows.slice(0, 48).map(toMediaItem), more: rows.length > 48 }
 }
 
@@ -78,16 +86,24 @@ export async function saveAssetAction(
   return ok('Image details saved')
 }
 
-/** Pages whose current draft or live version shows this image (for the delete warning). */
+/** Where this image is used — pages, service and therapist photos, unpublished posts (for the delete warning). */
 export async function assetUsageAction(slug: string, id: string) {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return { ok: false as const, error }
   if (!uuid.safeParse(id).success) return { ok: false as const, error: 'Image not found' }
-  const pages = await withTenant(ctx.tenant.id, async (tx) => {
+  const used = await withTenant(ctx.tenant.id, async (tx) => {
     const [row] = await tx.select({ url: mediaAssets.url }).from(mediaAssets).where(eq(mediaAssets.id, id))
-    return row ? assetUsage(tx, row.url) : []
+    return row ? assetUsage(tx, row.url) : null
   })
-  return { ok: true as const, pages: pages.map((p) => ({ id: p.id, title: p.title.en || 'Home' })) }
+  return {
+    ok: true as const,
+    usage: {
+      pages: (used?.pages ?? []).map((p) => p.title.en || 'Home'),
+      services: (used?.services ?? []).map((s) => s.name.en || s.name.ar || 'Service'),
+      staff: (used?.staff ?? []).map((s) => s.name),
+      posts: used?.posts.length ?? 0,
+    },
+  }
 }
 
 export async function deleteAssetAction(slug: string, id: string): Promise<ActionResult> {
@@ -108,7 +124,10 @@ export async function deleteAssetAction(slug: string, id: string): Promise<Actio
   return ok('Image deleted')
 }
 
-/** Saves an AI image that still points at its temporary (7-day) link into the library. */
+/**
+ * Saves an AI image that still points at its temporary (7-day) link into the library, and moves the social
+ * posts that use that link onto the stored copy (so approval doesn't download it again, and it outlives the link).
+ */
 export async function persistAssetAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return fail(error)
@@ -120,9 +139,16 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
   if (fileIdFromUrl(row.url)) return ok('Already saved')
   try {
     const image = await saveRemoteImage(row.url)
-    await withTenant(ctx.tenant.id, (tx) =>
-      persistRemoteAsset(tx, { tenantId: ctx.tenant.id, remoteUrl: row.url, image, createdBy: ctx.user.id }),
-    )
+    const origin = new URL(tenantSiteUrl(slug)).origin
+    await withTenant(ctx.tenant.id, async (tx) => {
+      const asset = await persistRemoteAsset(tx, {
+        tenantId: ctx.tenant.id,
+        remoteUrl: row.url,
+        image,
+        createdBy: ctx.user.id,
+      })
+      await repointPostImages(tx, row.url, postImageUrl(asset.url, origin))
+    })
   } catch (e) {
     if (e instanceof DomainError) return fail(`Couldn’t save it: ${e.message}`)
     console.error('persist media failed', e)
@@ -136,5 +162,6 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
     entityId: id,
   })
   revalidate(slug)
+  revalidatePath(`/dashboard/${slug}/ai/content`)
   return ok('Saved to your library')
 }

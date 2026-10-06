@@ -168,6 +168,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                 onlineBookable: s.onlineBookable,
                                 active: s.active,
                                 color: s.color,
+                                imageUrl: s.imageUrl,
                                 variants: s.variants,
                               }}
                             />

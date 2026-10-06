@@ -19,9 +19,24 @@ import { ease } from '@/lib/motion'
 import { formatDate } from '@/lib/utils'
 import { formatBytes, isStored, type MediaItem, sized } from './types'
 
-type Usage = { id: string; title: string }[]
+type Usage = { pages: string[]; services: string[]; staff: string[]; posts: number }
 
-/** Details for one image: preview, EN/AR alt text, tags, copy URL, delete (with "used on N pages" warning). */
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+const usageTotal = (u: Usage) => u.pages.length + u.services.length + u.staff.length + u.posts
+/** "1 page: Home; 1 service photo: Hot stones; 2 unpublished social posts" */
+const describeUsage = (u: Usage) =>
+  [
+    u.pages.length > 0 && `${count(u.pages.length, 'page', 'pages')}: ${u.pages.join(', ')}`,
+    u.services.length > 0 &&
+      `${count(u.services.length, 'service photo', 'service photos')}: ${u.services.join(', ')}`,
+    u.staff.length > 0 &&
+      `${count(u.staff.length, 'therapist photo', 'therapist photos')}: ${u.staff.join(', ')}`,
+    u.posts > 0 && count(u.posts, 'unpublished social post', 'unpublished social posts'),
+  ]
+    .filter(Boolean)
+    .join('; ')
+
+/** Details for one image: preview, EN/AR alt text, tags, copy URL, delete (with a "used on …" warning). */
 export function AssetSheet({
   slug,
   item,
@@ -78,7 +93,7 @@ function Details({
     start(async () => {
       const res = await assetUsageAction(slug, item.id)
       if (!res.ok) return void toast.error(res.error)
-      setUsage(res.pages)
+      setUsage(res.usage)
       setConfirming(true)
     })
   const doDelete = () =>
@@ -188,13 +203,13 @@ function Details({
               >
                 <p className="flex items-start gap-2 font-medium">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" strokeWidth={1.75} />
-                  {usage.length === 0
-                    ? 'Not used on any website page. Delete it for good?'
-                    : `Used on ${usage.length} ${usage.length === 1 ? 'page' : 'pages'}: ${usage.map((p) => p.title).join(', ')}. Deleting it will leave an empty image there.`}
+                  {usageTotal(usage) === 0
+                    ? 'Not used on your website, services, team or posts. Delete it for good?'
+                    : `Used on ${describeUsage(usage)}. Deleting it will leave an empty image there.`}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="danger" size="sm" onClick={doDelete} pending={pending}>
-                    {usage.length === 0 ? 'Delete image' : 'Delete anyway'}
+                    {usageTotal(usage) === 0 ? 'Delete image' : 'Delete anyway'}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
                     Cancel

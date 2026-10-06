@@ -24,7 +24,8 @@ const CONCURRENCY = 2
 function send(slug: string, file: File, onProgress: (p: number) => void) {
   return new Promise<MediaItem>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/files/upload')
+    // The tenant goes in the query so the server checks access before reading the body.
+    xhr.open('POST', `/files/upload?tenant=${encodeURIComponent(slug)}`)
     xhr.responseType = 'json'
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.min(0.97, e.loaded / e.total))
@@ -36,7 +37,6 @@ function send(slug: string, file: File, onProgress: (p: number) => void) {
     }
     xhr.onerror = () => reject(new Error('Network error — check your connection.'))
     const fd = new FormData()
-    fd.set('tenant', slug)
     fd.set('file', file)
     xhr.send(fd)
   })

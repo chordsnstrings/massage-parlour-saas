@@ -1,5 +1,17 @@
-import { closeAllDbs, mediaAssets, pageVersions, sitePages, sites, tenants, withTenant } from '@spa/db'
+import {
+  closeAllDbs,
+  mediaAssets,
+  pageVersions,
+  services,
+  sitePages,
+  sites,
+  socialPosts,
+  staff,
+  tenants,
+  withTenant,
+} from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
+import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -11,11 +23,14 @@ import {
   fileIdFromUrl,
   getFile,
   isPrivateAddress,
+  jpegVariant,
   listAssets,
   listTags,
   persistRemoteAsset,
+  postImageUrl,
   processImage,
   pruneExpiredAiLinks,
+  repointPostImages,
   sniffImageType,
   updateAlt,
 } from '../src'
@@ -89,6 +104,13 @@ describe('processImage', () => {
       /isn’t an image/,
     )
     await expect(processImage(Buffer.alloc(0))).rejects.toThrow(/empty/)
+  })
+
+  it('renders JPEG copies (Instagram) from the stored WebP', async () => {
+    const webp = (await processImage(await png(1200, 800))).bytes
+    expect(sniffImageType(await jpegVariant(webp))).toBe('image/jpeg')
+    const small = await sharp(await jpegVariant(webp, 480)).metadata()
+    expect([small.format, small.width]).toEqual(['jpeg', 480])
   })
 
   it('reports damaged images instead of crashing', async () => {
@@ -271,6 +293,13 @@ describe('url helpers', () => {
       `https://serenity.spamanagement.ae/files/${id}`,
     )
     expect(absoluteFileUrl('https://cdn.example/a.png', 'https://x')).toBe('https://cdn.example/a.png')
+    expect(postImageUrl(`/files/${id}`, 'https://serenity.spamanagement.ae')).toBe(
+      `https://serenity.spamanagement.ae/files/${id}?f=jpg`,
+    )
+    expect(postImageUrl(`https://x.example/files/${id}?f=jpg`, 'https://y')).toBe(
+      `https://x.example/files/${id}?f=jpg`,
+    )
+    expect(postImageUrl('https://cdn.example/a.png', 'https://x')).toBe('https://cdn.example/a.png')
   })
 })
 
@@ -364,8 +393,22 @@ describe('library (database)', () => {
           },
           { tenantId: ids.a!, pageId: about!.id, data: { content: [] }, status: 'draft' },
         ])
+        await tx
+          .insert(services)
+          .values({ tenantId: ids.a!, name: { en: 'Hot stones' }, imageUrl: asset.url })
+        await tx
+          .insert(staff)
+          .values({ tenantId: ids.a!, displayName: 'Layla', photoUrl: `https://a.example${asset.url}` })
+        const postMedia = [{ url: `https://a.example${asset.url}?f=jpg` }]
+        await tx.insert(socialPosts).values([
+          { tenantId: ids.a!, platform: 'instagram', caption: 'Soon', media: postMedia },
+          { tenantId: ids.a!, platform: 'instagram', caption: 'Done', media: postMedia, status: 'published' },
+        ])
         const used = await assetUsage(tx, asset.url)
-        expect(used.map((p) => p.title.en)).toEqual(['Home'])
+        expect(used.pages.map((p) => p.title.en)).toEqual(['Home'])
+        expect(used.services.map((x) => x.name.en)).toEqual(['Hot stones'])
+        expect(used.staff.map((x) => x.name)).toEqual(['Layla'])
+        expect(used.posts).toHaveLength(1)
       },
       app,
     )
@@ -396,6 +439,42 @@ describe('library (database)', () => {
     const all = await withTenant(ids.b!, (tx) => listAssets(tx), app)
     expect(all).toHaveLength(1)
     expect(all[0]?.url).toBe(row.url)
+  })
+
+  it('hides temporary AI links from pickers and moves posts onto the stored copy', async () => {
+    const temp = 'https://ark-cdn.example/seedream/post.png'
+    await withTenant(
+      ids.b!,
+      async (tx) => {
+        await tx.insert(mediaAssets).values({ tenantId: ids.b!, url: temp, source: 'ai' })
+        await tx.insert(socialPosts).values({
+          tenantId: ids.b!,
+          platform: 'instagram',
+          caption: 'Oils',
+          media: [{ url: temp, alt: 'Oils' }],
+        })
+        expect((await listAssets(tx)).map((r) => r.url)).toContain(temp)
+        expect((await listAssets(tx, { storedOnly: true })).map((r) => r.url)).not.toContain(temp)
+      },
+      app,
+    )
+    const image = await processImage(await png(64, 64))
+    const origin = 'https://serenity.spamanagement.ae'
+    const { asset, target, media } = await withTenant(
+      ids.b!,
+      async (tx) => {
+        const asset = await persistRemoteAsset(tx, { tenantId: ids.b!, remoteUrl: temp, image })
+        const target = postImageUrl(asset.url, origin)
+        expect(await repointPostImages(tx, temp, target)).toBe(1)
+        expect(await repointPostImages(tx, temp, target)).toBe(0)
+        const [post] = await tx.select().from(socialPosts).where(eq(socialPosts.caption, 'Oils'))
+        expect((await listAssets(tx, { storedOnly: true })).map((r) => r.url)).toContain(asset.url)
+        return { asset, target, media: post!.media }
+      },
+      app,
+    )
+    expect(target).toBe(`${origin}${asset.url}?f=jpg`)
+    expect(media).toEqual([{ url: target, alt: 'Oils' }])
   })
 
   it('prunes AI rows whose temporary link expired, keeping saved and recent ones', async () => {

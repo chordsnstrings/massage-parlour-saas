@@ -12,8 +12,32 @@
 // is ModelArk's own CDN, so this is defence in depth rather than the last line.
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
-import { mediaAssets, pageVersions, sitePages, storedFiles, type Tx } from '@spa/db'
-import { and, arrayContains, desc, eq, ilike, inArray, isNull, lt, notLike, or, sql } from 'drizzle-orm'
+import {
+  mediaAssets,
+  pageVersions,
+  services,
+  sitePages,
+  socialPosts,
+  staff,
+  storedFiles,
+  type Tx,
+} from '@spa/db'
+import {
+  and,
+  arrayContains,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  ne,
+  notLike,
+  or,
+  sql,
+} from 'drizzle-orm'
 import { DomainError } from './errors'
 import { deleteFile, MAX_FILE_BYTES, putFile } from './storage'
 
@@ -109,6 +133,14 @@ export async function resizeVariant(input: Buffer, width: number) {
     .toBuffer()
 }
 
+/** A JPEG rendition (/files/{id}?f=jpg) — Instagram's publishing API only accepts JPEG. Transparency → white. */
+export async function jpegVariant(input: Buffer, width?: number) {
+  const sharp = await loadSharp()
+  const img = sharp(input, { failOn: 'none' })
+  if (width) img.resize({ width, withoutEnlargement: true })
+  return img.flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer()
+}
+
 // ─── Library rows ───────────────────────────────────────────────────────────
 
 export type MediaSource = 'upload' | 'ai'
@@ -124,6 +156,12 @@ export const fileIdFromUrl = (url: string | null | undefined) =>
 /** Absolute URL for a relative /files path (Instagram and other APIs need absolute URLs). */
 export const absoluteFileUrl = (url: string, origin: string) =>
   /^https?:\/\//i.test(url) ? url : `${origin.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`
+
+/** The URL a social post stores for a library file: absolute, as a JPEG rendition (Instagram takes JPEG only). */
+export const postImageUrl = (url: string, origin: string) => {
+  const abs = absoluteFileUrl(url, origin)
+  return fileIdFromUrl(abs) && !/[?&]f=jpg\b/.test(abs) ? `${abs}${abs.includes('?') ? '&' : '?'}f=jpg` : abs
+}
 
 const cleanTags = (tags: string[] | undefined) =>
   [...new Set((tags ?? []).map((t) => t.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean))]
@@ -176,13 +214,25 @@ export async function createAsset(
   return { ...row!, filename: name }
 }
 
-export type AssetFilter = { source?: MediaSource; tag?: string; q?: string; limit?: number; offset?: number }
+export type AssetFilter = {
+  source?: MediaSource
+  tag?: string
+  q?: string
+  limit?: number
+  offset?: number
+  /** Leave out AI rows still on their temporary (7-day) generator link — for pickers that embed the URL. */
+  storedOnly?: boolean
+}
 
 /** Library listing, newest first, with the original filename. */
 export async function listAssets(tx: Tx, f: AssetFilter = {}) {
   const where = []
   if (f.source) where.push(eq(mediaAssets.source, f.source))
   if (f.tag) where.push(arrayContains(mediaAssets.tags, [f.tag]))
+  if (f.storedOnly)
+    where.push(
+      or(ne(mediaAssets.source, 'ai'), isNotNull(mediaAssets.fileId), like(mediaAssets.url, '/files/%')),
+    )
   const q = f.q?.trim()
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
@@ -246,8 +296,9 @@ export async function setTags(tx: Tx, id: string, tags: string[]) {
 }
 
 /**
- * Site pages whose current draft or published version references the file (by `/files/{id}` in the Puck JSON,
- * relative, absolute or with a ?w= variant).
+ * Where a library image is in use, so deleting it can warn first: site pages (current draft or published
+ * version), service photos, therapist photos and social posts not yet published. Matches `/files/{id}` however
+ * it's written (relative, absolute, with ?w= / ?f= variants).
  */
 export async function assetUsage(tx: Tx, url: string) {
   const fileId = fileIdFromUrl(url)
@@ -256,11 +307,23 @@ export async function assetUsage(tx: Tx, url: string) {
     .selectDistinctOn([pageVersions.pageId, pageVersions.status], { id: pageVersions.id })
     .from(pageVersions)
     .orderBy(pageVersions.pageId, pageVersions.status, desc(pageVersions.createdAt))
-  return tx
-    .selectDistinct({ id: sitePages.id, title: sitePages.title, slug: sitePages.slug })
-    .from(pageVersions)
-    .innerJoin(sitePages, eq(sitePages.id, pageVersions.pageId))
-    .where(and(inArray(pageVersions.id, latest), sql`${pageVersions.data}::text ilike ${needle}`))
+  const [pages, serviceRows, staffRows, posts] = await Promise.all([
+    tx
+      .selectDistinct({ id: sitePages.id, title: sitePages.title, slug: sitePages.slug })
+      .from(pageVersions)
+      .innerJoin(sitePages, eq(sitePages.id, pageVersions.pageId))
+      .where(and(inArray(pageVersions.id, latest), sql`${pageVersions.data}::text ilike ${needle}`)),
+    tx
+      .select({ id: services.id, name: services.name })
+      .from(services)
+      .where(ilike(services.imageUrl, needle)),
+    tx.select({ id: staff.id, name: staff.displayName }).from(staff).where(ilike(staff.photoUrl, needle)),
+    tx
+      .select({ id: socialPosts.id })
+      .from(socialPosts)
+      .where(and(ne(socialPosts.status, 'published'), sql`${socialPosts.media}::text ilike ${needle}`)),
+  ])
+  return { pages, services: serviceRows, staff: staffRows, posts }
 }
 
 /** Removes an asset and its stored file. Returns the deleted row (null if it wasn't there). */
@@ -466,6 +529,20 @@ export async function pruneExpiredAiLinks(tx: Tx, now = new Date()) {
     )
     .returning({ id: mediaAssets.id })
   return rows.length
+}
+
+/** Points social posts still using a temporary remote image link at its stored copy. Returns the posts changed. */
+export async function repointPostImages(tx: Tx, fromUrl: string, toUrl: string) {
+  const posts = await tx
+    .select({ id: socialPosts.id, media: socialPosts.media })
+    .from(socialPosts)
+    .where(sql`${socialPosts.media} @> ${JSON.stringify([{ url: fromUrl }])}::jsonb`)
+  for (const p of posts)
+    await tx
+      .update(socialPosts)
+      .set({ media: p.media.map((m) => (m.url === fromUrl ? { ...m, url: toUrl } : m)) })
+      .where(eq(socialPosts.id, p.id))
+  return posts.length
 }
 
 /**

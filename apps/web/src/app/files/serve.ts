@@ -1,17 +1,18 @@
 import { members, platformDb, storedFiles, withTenant } from '@spa/db'
-import { getFile, IMAGE_TYPES, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
+import { getFile, IMAGE_TYPES, jpegVariant, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
 import { isPlatformAdmin } from '@/server/access'
 import { getSession } from '@/server/session'
 
 /**
- * GET /files/{id}[/{name}][?w=480] on every host (app, tenant subdomain, /s/{slug} path routing, custom domains;
+ * GET /files/{id}[/{name}][?w=480][&f=jpg] on every host (app, tenant subdomain, /s/{slug} path routing, custom domains;
  * proxy.ts lets /files/* through untouched).
  *  - public files (site images): anyone, `public, max-age=1y, immutable` + ETag — a file id never changes content.
  *  - private files (receipts, documents): a signed-in active member of the file's tenant (or a super-admin),
  *    `Cache-Control: private, no-cache` so every reuse re-checks access (cheap 304s via ETag).
- * The platform lookup only decides access; private bytes are then read inside the tenant's RLS scope.
+ * `?f=jpg` renders a JPEG copy of an image (Instagram's publishing API only accepts JPEG).
+ * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IMAGES = new Set<string>(IMAGE_TYPES)
@@ -63,11 +64,12 @@ export async function serveFile(req: Request, id: string) {
   if (!meta) return notFound()
   if (!meta.isPublic && !(await canRead(meta.tenantId))) return notFound()
 
-  const wParam = Number(new URL(req.url).searchParams.get('w'))
-  const width = IMAGES.has(meta.contentType)
-    ? (VARIANT_WIDTHS as readonly number[]).find((w) => w === wParam)
-    : undefined
-  const etag = `"${id}${width ? `-w${width}` : ''}"`
+  const params = new URL(req.url).searchParams
+  const isImage = IMAGES.has(meta.contentType)
+  const wParam = Number(params.get('w'))
+  const width = isImage ? (VARIANT_WIDTHS as readonly number[]).find((w) => w === wParam) : undefined
+  const jpeg = isImage && params.get('f') === 'jpg' && (meta.contentType !== 'image/jpeg' || Boolean(width))
+  const etag = `"${id}${width ? `-w${width}` : ''}${jpeg ? '-jpg' : ''}"`
   const cacheControl = meta.isPublic ? 'public, max-age=31536000, immutable' : 'private, no-cache'
   const headers: Record<string, string> = {
     etag,
@@ -80,19 +82,17 @@ export async function serveFile(req: Request, id: string) {
   if (!meta.isPublic) headers.vary = 'Cookie'
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers })
 
-  const file = meta.isPublic
-    ? await platformDb().transaction((tx) => getFile(tx, id))
-    : await withTenant(meta.tenantId, (tx) => getFile(tx, id))
+  const file = await withTenant(meta.tenantId, (tx) => getFile(tx, id))
   if (!file) return notFound()
 
   let body = file.bytes
   let type = file.contentType
-  if (width) {
-    const key = `${id}:${width}`
+  if (width || jpeg) {
+    const key = `${id}:${width ?? 0}:${jpeg ? 'jpg' : 'webp'}`
     let hit = variants.get(key)
     if (!hit) {
       try {
-        hit = await resizeVariant(file.bytes, width)
+        hit = jpeg ? await jpegVariant(file.bytes, width) : await resizeVariant(file.bytes, width!)
         variants.set(key, hit)
       } catch {
         hit = undefined // undecodable → fall back to the original
@@ -100,10 +100,11 @@ export async function serveFile(req: Request, id: string) {
     }
     if (hit) {
       body = hit
-      type = 'image/webp'
+      type = jpeg ? 'image/jpeg' : 'image/webp'
     }
   }
-  const name = file.filename ? asciiName(file.filename) : null
+  let name = file.filename ? asciiName(file.filename) : null
+  if (name && jpeg && type === 'image/jpeg') name = `${name.replace(/\.[a-z0-9]{2,5}$/i, '')}.jpg`
   headers['content-type'] = type
   headers['content-length'] = String(body.length)
   headers['content-disposition'] =

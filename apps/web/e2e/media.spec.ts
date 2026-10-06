@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { storedFiles, tenants } from '@spa/db'
+import { services, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { app, PORT, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
@@ -106,6 +106,11 @@ test('media library: upload, describe, pick in the editor, publish and serve fro
     const thumb = await anon.get(thumbUrl, { headers: siteHost })
     expect(thumb.status()).toBe(200)
     expect((await sharp(await thumb.body()).metadata()).width).toBe(480)
+    // JPEG rendition for Instagram (its publishing API only takes JPEG).
+    const [jpgUrl] = viaHost(siteOrigin, `${fileUrl}?f=jpg`)
+    const jpg = await anon.get(jpgUrl, { headers: siteHost })
+    expect(jpg.headers()['content-type']).toBe('image/jpeg')
+    expect((await sharp(await jpg.body()).metadata()).format).toBe('jpeg')
     const [missing] = viaHost(siteOrigin, '/files/00000000-0000-4000-8000-000000000000')
     expect((await anon.get(missing, { headers: siteHost })).status()).toBe(404)
 
@@ -175,16 +180,42 @@ test('media library: upload, describe, pick in the editor, publish and serve fro
       .toBe(2400)
   })
 
+  await test.step('service photo from the library survives editing the service', async () => {
+    await page.goto(`${app}/${slug}/services`)
+    await page.getByRole('button', { name: 'Edit Swedish massage' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Choose from library' }).click()
+    const picker = page.getByRole('dialog', { name: 'Choose an image' })
+    await picker.getByRole('button', { name: 'Use Quiet treatment room' }).click()
+    await expect(picker).toBeHidden()
+    await page.getByRole('dialog').getByRole('button', { name: 'Save service' }).click()
+    await expect(page.getByText('Service saved')).toBeVisible()
+    // Re-open and save without touching the photo: the form must re-post the stored URL, not clear it.
+    await page.reload()
+    await page.getByRole('button', { name: 'Edit Swedish massage' }).click()
+    await expect(page.getByRole('dialog').locator(`img[src="${fileUrl}?w=480"]`)).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Save service' }).click()
+    await expect(page.getByText('Service saved')).toBeVisible()
+    const db = testDb()
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+    const [service] = await db
+      .select({ imageUrl: services.imageUrl })
+      .from(services)
+      .where(eq(services.tenantId, tenant!.id))
+    expect(service?.imageUrl).toBe(fileUrl)
+  })
+
   await test.step('deleting warns where an image is used', async () => {
     await page.goto(`${app}/${slug}/media`)
     await page.getByRole('button', { name: 'Edit Quiet treatment room' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
-    await expect(page.getByText(/Used on 1 page: /)).toBeVisible()
+    await expect(page.getByText(/Used on 1 page: Home; 1 service photo: Swedish massage\./)).toBeVisible()
     await page.getByRole('button', { name: 'Cancel' }).click()
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: 'Edit hot-stones.webp' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
-    await expect(page.getByText('Not used on any website page. Delete it for good?')).toBeVisible()
+    await expect(
+      page.getByText('Not used on your website, services, team or posts. Delete it for good?'),
+    ).toBeVisible()
     await page.getByRole('button', { name: 'Delete image' }).click()
     await expect(page.getByText('Image deleted')).toBeVisible()
     await expect(page.getByRole('button', { name: /^Edit / })).toHaveCount(1)

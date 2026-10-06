@@ -1,7 +1,7 @@
 'use server'
 import { draftInstagramPost, draftReviewReply, runDmTurn } from '@spa/ai'
 import { aiAgentSettings, brandProfiles, reviews, socialPosts, withTenant } from '@spa/db'
-import { absoluteFileUrl, fileIdFromUrl, persistRemoteAsset, saveRemoteImage } from '@spa/services'
+import { fileIdFromUrl, persistRemoteAsset, postImageUrl, saveRemoteImage } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -133,8 +133,8 @@ export async function draftPostAction(slug: string, _p: ActionResult, fd: FormDa
 
 /**
  * Seedream links expire after 7 days: copy the generated image into the media library and point the post at the
- * permanent file (absolute on the spa's site origin, as Instagram needs a public URL). On failure the draft keeps
- * the temporary link and the library shows a "Save to library" retry.
+ * permanent file (absolute on the spa's site origin as a ?f=jpg rendition — Instagram needs a public JPEG URL).
+ * On failure the draft keeps the temporary link and the library shows a "Save to library" retry.
  */
 async function persistPostImages(
   tenantId: string,
@@ -152,7 +152,7 @@ async function persistPostImages(
       const asset = await withTenant(tenantId, (tx) =>
         persistRemoteAsset(tx, { tenantId, remoteUrl: m.url, image, alt: { en: m.alt }, createdBy: userId }),
       )
-      moved.set(m.url, absoluteFileUrl(asset.url, origin))
+      moved.set(m.url, postImageUrl(asset.url, origin))
     } catch (e) {
       console.error('persist AI image failed', e instanceof Error ? e.message : e)
     }
