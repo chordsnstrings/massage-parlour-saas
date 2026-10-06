@@ -25,6 +25,7 @@ export default async function TenantLayout({
     ...item('services.manage', '/services', 'Services & rooms', 'services'),
     ...item('staff.view', '/staff', 'Staff', 'staff'),
     ...item('site.content', '/website', 'Website', 'website'),
+    ...item('ai.approve', '/ai', 'AI studio', 'ai'),
     ...item('team.manage', '/team', 'Team', 'team'),
     ...item('settings.manage', '/settings', 'Settings', 'settings'),
     ...item('billing.view', '/billing', 'Subscription', 'billing'),
