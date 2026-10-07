@@ -48,6 +48,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Biome reformats on `pnpm format`; patch the formatted code (prefer the Edit tool over string-replace scripts).
 - The web app loads the root `.env` through `apps/web/scripts/next.mjs` (Next's render workers don't see env set in next.config).
 - Server components: read `headers()` (e.g. `getSession()`) before touching DB/auth so pages stay dynamic at build time.
+- `appUrl`/`adminUrl`/`tenantSiteUrl`/`marketingUrl` read runtime env (APP_URL…), which doesn't exist when the image is
+  built: they throw during `next build`, so any page using them must render per request (marketing layout is force-dynamic).
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
