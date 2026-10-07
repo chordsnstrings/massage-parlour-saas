@@ -64,7 +64,7 @@ function Header({ active }: { active: MarketingPage }) {
   )
 }
 
-export function CtaBand({ title = 'Give your spa a calmer day.' }: { title?: string }) {
+export function CtaBand({ title = 'Let your spa run itself.' }: { title?: string }) {
   return (
     <section className="mkt-wrap py-24">
       <div className="tint-sage relative overflow-hidden rounded-[2rem] px-6 py-16 text-center sm:px-12">

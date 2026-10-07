@@ -1,12 +1,12 @@
 import { Check } from 'lucide-react'
 import type { Metadata } from 'next'
-import { AREAS, INCLUDED } from '@/components/marketing/content'
+import { AREAS, AUTOMATIONS } from '@/components/marketing/content'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 
 export const metadata: Metadata = {
   title: 'Features',
   description:
-    'Everything Spa Management does: calendar, WhatsApp, checkout, accounts, website builder and AI.',
+    'Every automation in Spa Management: bookings, follow-ups, accounts, marketing and your website.',
 }
 
 const NEXT = [
@@ -24,7 +24,7 @@ export default function FeaturesPage() {
       <section className="mkt-wrap pt-20 pb-12 sm:pt-28">
         <p className="mkt-eyebrow mkt-rise">Features</p>
         <h1 className="mkt-rise mt-4 max-w-3xl text-[38px] leading-[1.06] font-semibold tracking-tight sm:text-[56px]">
-          Everything a UAE spa runs on, in one place.
+          Everything that runs itself.
         </h1>
         <nav aria-label="Feature areas" className="mkt-rise mt-10 flex flex-wrap gap-2">
           {AREAS.map((a) => (
@@ -67,11 +67,13 @@ export default function FeaturesPage() {
       <section data-scene="flip" className="border-t border-[var(--line)]">
         <div className="mkt-wrap grid gap-10 py-20 lg:grid-cols-2">
           <div>
-            <p className="mkt-eyebrow">Included</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">No add-ons, no surprises.</h2>
+            <p className="mkt-eyebrow">Runs on its own</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
+              Working in the background, every day.
+            </h2>
           </div>
           <ul className="divide-y divide-[var(--line)] rounded-2xl border border-[var(--line)]">
-            {INCLUDED.map((t) => (
+            {AUTOMATIONS.map((t) => (
               <li key={t} data-beat className="flex items-center gap-3 bg-white px-5 py-4 text-[15px]">
                 <Check className="size-4 text-[var(--sage-deep)]" /> {t}
               </li>

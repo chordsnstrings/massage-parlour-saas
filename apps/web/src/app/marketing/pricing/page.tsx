@@ -14,21 +14,25 @@ export const dynamic = 'force-dynamic' // prices are edited live in the super-ad
 
 const BANDS = [
   {
-    title: 'Run the day',
-    text: 'Calendar, online booking, walk-ins, clients and WhatsApp',
+    title: 'Bookings on autopilot',
+    text: 'Online booking, AI receptionist, Instagram replies, one calendar',
     tint: 'tint-sage',
   },
   {
-    title: 'Get paid and stay compliant',
-    text: 'Checkout, daily close, accounts, VAT figures and payroll',
+    title: 'Books that do themselves',
+    text: 'Sales post to accounts; VAT, commissions and WPS ready',
     tint: 'tint-sand',
   },
   {
-    title: 'Look your best online',
-    text: 'Website builder, 8 templates, your own domain',
+    title: 'A website that sells',
+    text: '8 templates, AI-written copy, your own domain',
     tint: 'tint-mist',
   },
-  { title: 'Grow quietly', text: 'Campaigns, reviews, Instagram and AI tools', tint: 'tint-plum' },
+  {
+    title: 'Marketing on repeat',
+    text: 'Campaigns, quiet-slot offers, reviews and Instagram',
+    tint: 'tint-plum',
+  },
 ]
 
 export default async function PricingPage() {
@@ -41,7 +45,7 @@ export default async function PricingPage() {
       <section className="mkt-wrap pt-20 pb-12 text-center sm:pt-28">
         <p className="mkt-eyebrow mkt-rise">Pricing</p>
         <h1 className="mkt-rise mx-auto mt-4 max-w-2xl text-[38px] leading-[1.06] font-semibold tracking-tight sm:text-[56px]">
-          One simple price. Everything included.
+          One price. Everything automated.
         </h1>
       </section>
 

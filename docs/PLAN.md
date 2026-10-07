@@ -779,6 +779,8 @@ until `spamanagement.ae` is registered.
   `components/marketing`). White, minimal, muted palette (sage/clay/mist/sand/plum tints) scoped under `.mkt`; scroll
   scenes from the scroll-scenes skill (`lib/scroll-scenes.ts`, `lib/scenes.ts`, `marketing/scenes.css`), off for reduced
   motion; feature copy lives in `components/marketing/content.ts`.
+- Positioning: **automation — "More bookings. Less work."** Copy only claims what is automated in code; WhatsApp
+  messages are described as written and queued automatically, sent by the spa in one tap (click-to-send stays locked).
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
 
 ## 15. Working agreement (token-efficient, still thorough)

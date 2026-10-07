@@ -8,7 +8,9 @@ import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
 
-export const metadata: Metadata = { title: { absolute: 'Spa Management — software for spas in the UAE' } }
+export const metadata: Metadata = {
+  title: { absolute: 'Spa Management — more bookings, less work for UAE spas' },
+}
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties
@@ -25,19 +27,19 @@ export default async function MarketingPage() {
           <div className="absolute bottom-0 left-1/3 size-64 rounded-full bg-[var(--mist-soft)] blur-3xl" />
         </div>
         <div data-world className="mkt-wrap relative pt-20 pb-28 text-center sm:pt-28 sm:pb-36">
-          <p className="mkt-eyebrow mkt-rise">For massage spas in the UAE</p>
+          <p className="mkt-eyebrow mkt-rise">Automation for UAE spas</p>
           <h1
             className="mkt-rise mx-auto mt-5 max-w-3xl text-[42px] leading-[1.04] font-semibold tracking-tight sm:text-[68px]"
             style={css({ '--d': 1 })}
           >
-            Run a calmer, fuller spa.
+            More bookings. Less work.
           </h1>
           <p
             className="mkt-rise mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-[var(--ink-2)]"
             style={css({ '--d': 2 })}
           >
-            Bookings, WhatsApp, payments, accounts and a beautiful website — in one quiet place, built for how
-            UAE spas really work.
+            Clients book themselves around the clock. Reminders, follow-ups, offers and your accounts take
+            care of themselves. Your team just looks after guests.
           </p>
           <div className="mkt-rise mt-9 flex flex-wrap justify-center gap-3" style={css({ '--d': 3 })}>
             <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary">
@@ -48,7 +50,7 @@ export default async function MarketingPage() {
             </Link>
           </div>
           <p className="mkt-rise mt-8 text-[13px] text-[var(--mute)]" style={css({ '--d': 4 })}>
-            AED pricing · VAT ready · English & Arabic websites · Cash-first
+            Bookings 24/7 · Reminders queued for you · Accounts & VAT done · English & Arabic
           </p>
         </div>
       </section>
@@ -62,9 +64,9 @@ export default async function MarketingPage() {
       >
         <div data-stage>
           <div className="mkt-wrap py-20">
-            <p className="mkt-eyebrow">A day at the spa</p>
+            <p className="mkt-eyebrow">On autopilot</p>
             <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-              From booking to thank-you, without the scramble.
+              What happens while your team is busy with guests.
             </h2>
             <div className="relative mt-12">
               <div
@@ -107,15 +109,15 @@ export default async function MarketingPage() {
         <div data-stage>
           <div className="mkt-wrap grid items-center gap-12 py-20 lg:grid-cols-[1fr_1.35fr]">
             <div>
-              <p className="mkt-eyebrow">The calendar</p>
+              <p className="mkt-eyebrow">Bookings land by themselves</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-                Therapists, rooms and walk-ins on one calm screen.
+                Every booking, from every channel, on one calendar.
               </h2>
               <ul className="mt-7 space-y-3 text-[15px] text-[var(--ink-2)]">
                 {[
-                  'No double bookings — the database won’t allow it',
-                  'Couples treatments reserve two therapists and a room',
-                  'Fair walk-in rotation, late-night business days',
+                  'Website, AI chat and Instagram bookings arrive on their own',
+                  'Therapist and room reserved together — never double-booked',
+                  'Couples, walk-ins and late nights handled for you',
                 ].map((t) => (
                   <li key={t} className="flex gap-3">
                     <Check className="mt-0.5 size-4 shrink-0 text-[var(--sage-deep)]" /> {t}
@@ -132,9 +134,9 @@ export default async function MarketingPage() {
 
       {/* Everything in one place — cards fly into the grid */}
       <section data-scene="assemble" className="mkt-wrap py-24">
-        <p className="mkt-eyebrow">Everything in one place</p>
+        <p className="mkt-eyebrow">Everything automated</p>
         <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-          Six tools you would otherwise pay for separately.
+          Six jobs you no longer do by hand.
         </h2>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {AREAS.map((a) => (
@@ -163,8 +165,7 @@ export default async function MarketingPage() {
             <span className="text-lg font-normal text-[var(--mute)]"> / year</span>
           </p>
           <p className="mx-auto mt-3 max-w-md text-[var(--ink-2)]">
-            Every feature, unlimited staff and bookings, your website and domain. Pay by card or bank
-            transfer.
+            Every automation and feature, unlimited staff and bookings, your website and domain.
           </p>
           <Link
             href="/pricing"

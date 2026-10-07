@@ -18,7 +18,7 @@ let inviteLink = ''
 test('owner signs up, gets a live site, configures and invites', async ({ page }) => {
   await test.step('marketing shows the live price', async () => {
     await page.goto(base)
-    await expect(page.getByRole('heading', { name: 'Run a calmer, fuller spa.' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'More bookings. Less work.', exact: true })).toBeVisible()
     await expect(page.getByText(/AED\s?24,000/).first()).toBeVisible()
   })
 

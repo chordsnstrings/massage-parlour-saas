@@ -31,13 +31,13 @@ export default function WebsiteBuilderPage() {
       <section className="mkt-wrap pt-20 pb-16 text-center sm:pt-28">
         <p className="mkt-eyebrow mkt-rise">Website builder</p>
         <h1 className="mkt-rise mx-auto mt-4 max-w-3xl text-[38px] leading-[1.06] font-semibold tracking-tight sm:text-[56px]">
-          A beautiful spa website, in an afternoon.
+          A website that turns visitors into bookings.
         </h1>
         <p
           className="mkt-rise mx-auto mt-5 max-w-xl text-[17px] text-[var(--ink-2)]"
           style={css({ '--d': 1 })}
         >
-          Pick a template, drop in your services and photos, publish. Change anything later — nothing breaks.
+          Pick a template, let AI write the copy, publish. Every page has a Book button, tracked by source.
         </p>
       </section>
 
@@ -102,7 +102,7 @@ export default function WebsiteBuilderPage() {
         </div>
       </section>
 
-      <CtaBand title="Your spa, beautifully online." />
+      <CtaBand title="A website that books for you." />
     </MarketingShell>
   )
 }
