@@ -54,7 +54,7 @@ test('owner sees today’s revenue, KPIs and the upcoming booking on the home da
     await expect(therapists).toContainText('Maya')
     // Catalog exists now, so the services step is ticked off.
     await expect(page.getByRole('link', { name: 'Add services, rooms and prices' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Design and publish your website' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Review your website' })).toBeVisible()
   })
 
   await test.step('up next lists today’s booking (first name only)', async () => {

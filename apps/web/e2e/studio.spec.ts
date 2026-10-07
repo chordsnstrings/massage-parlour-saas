@@ -1,17 +1,19 @@
 import { expect, type Page, test } from '@playwright/test'
-import { admin, app, PATH, seedCatalog, signInPlatformAdmin, signUpOwner } from './helpers'
+import { admin, app, seedCatalog, signInPlatformAdmin, signUpOwner } from './helpers'
 
 const REQUEST = 'Please use our new rooftop photo on the home page.'
 
 /** The studio lives on the app host; in subdomain mode the super-admin signs in there too. */
-async function signInOnApp(page: Page, next: string) {
-  await page.goto(`${app}/login?next=${encodeURIComponent(next)}`)
-  if (!PATH && (await page.getByLabel('Email').isVisible())) {
+async function signInOnApp(page: Page, path: string) {
+  const target = `${app}${path}`
+  await page.goto(`${app}/login?next=${encodeURIComponent(new URL(target).pathname)}`)
+  if (await page.getByLabel('Email').isVisible()) {
     await page.getByLabel('Email').fill('admin@e2e.test')
     await page.getByLabel('Password').fill('platform-admin-pass')
     await page.getByRole('button', { name: 'Sign in' }).click()
   }
-  await page.goto(`${app}${next}`)
+  // Signing in (or an existing session) redirects to `next`; wait for it rather than racing a second goto.
+  await page.waitForURL(target)
 }
 
 test('website studio: the spa asks, the super-admin builds and sends for review, the spa approves', async ({
