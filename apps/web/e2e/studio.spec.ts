@@ -43,14 +43,17 @@ test('website studio: the spa asks, the super-admin builds and sends for review,
 
     await signInOnApp(studio, `/${slug}/website`)
     await studio.getByRole('button', { name: 'Use Nordic Clean' }).click()
-    // Creating the site writes every starter page and re-renders the layout — slow on the CI dev server.
+    // Each studio action re-renders the whole website page; on the CI dev server the client can take >10 s to apply it
+    // after the server has answered (seen in CI traces), so these steps get the 30 s allowance used for slow site steps.
     await expect(studio.getByRole('link', { name: 'Edit Home' })).toBeVisible({ timeout: 30_000 })
     await studio.getByRole('button', { name: 'Resolve' }).click()
     await studio.getByLabel('Note to the spa (optional)').fill('Swapped in.')
     await studio.getByRole('button', { name: 'Close request' }).click()
-    await expect(studio.getByText('Studio: Swapped in.').first()).toBeVisible()
+    await expect(studio.getByText('Studio: Swapped in.').first()).toBeVisible({ timeout: 30_000 })
     await studio.getByRole('button', { name: 'Send for review' }).click()
-    await expect(studio.getByTestId('studio-status').getByText('Ready for review')).toBeVisible()
+    await expect(studio.getByTestId('studio-status').getByText('Ready for review')).toBeVisible({
+      timeout: 30_000,
+    })
   })
 
   await test.step('spa: no editing, approves the review', async () => {
@@ -59,6 +62,8 @@ test('website studio: the spa asks, the super-admin builds and sends for review,
     await expect(page.getByRole('link', { name: 'Edit Home' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Approve', exact: true }).click()
     await page.getByRole('button', { name: 'Approve website' }).click()
-    await expect(page.getByTestId('studio-status').getByText('Approved', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('studio-status').getByText('Approved', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    })
   })
 })
