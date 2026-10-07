@@ -111,6 +111,25 @@ export const backgroundField = select<Background>('Background', [
   ['image', 'Image'],
 ])
 
+/**
+ * Per-section scroll effect (scroll-scenes engine, `lib/scenes.ts`). `auto` keeps the theme's gentle entrance.
+ * Only on the public site and preview — never in the editor.
+ */
+export type SceneKey = 'auto' | 'none' | 'reveal' | 'rise' | 'assemble' | 'flip' | 'depart'
+export const sceneField = select<SceneKey>('Scroll effect', [
+  ['auto', 'Theme default'],
+  ['none', 'None'],
+  ['reveal', 'Tilt up'],
+  ['rise', 'Wipe in, one by one'],
+  ['assemble', 'Fly into place'],
+  ['flip', 'Flip open'],
+  ['depart', 'Sink back (hero)'],
+])
+const SCENE_ATTRS: Partial<Record<SceneKey, Record<string, string>>> = {
+  reveal: { 'data-span': '.45' },
+  depart: { 'data-mode': 'leave' },
+}
+
 export type ShellProps = {
   background: Background
   padding: Responsive<PadStep>
@@ -118,6 +137,7 @@ export type ShellProps = {
   width?: keyof typeof container
   bgImage?: string
   anchor?: string
+  scene?: SceneKey
 }
 
 /** Every top-level band (Section and the smart blocks) shares this shell: background, padding, width, entrance. */
@@ -129,15 +149,19 @@ export function SectionShell({
   width = 'contained',
   bgImage,
   anchor,
+  scene = 'auto',
   className,
   children,
 }: ShellProps & { meta: SiteMeta; className?: string; children: React.ReactNode }) {
   const s = responsiveStyle({ padding, hide }, { editing: meta.editing, padFallback: 'lg' })
   const image = background === 'image' && bgImage
+  const scripted = !meta.editing && scene !== 'auto' && scene !== 'none'
   return (
     <section
       id={anchor || undefined}
-      data-reveal={meta.editing ? undefined : ''}
+      data-reveal={meta.editing || scene !== 'auto' ? undefined : ''}
+      data-scene={scripted ? scene : undefined}
+      {...(scripted ? SCENE_ATTRS[scene] : undefined)}
       {...s.attrs}
       className={cn('relative isolate', BG[background] ?? '', s.className)}
       style={s.style}
@@ -149,7 +173,13 @@ export function SectionShell({
           <div className="absolute inset-0 -z-10 bg-black/45" />
         </>
       )}
-      <div className={cn(container[width], className)}>{children}</div>
+      <div
+        data-beats={scripted ? '' : undefined}
+        data-world={scripted && scene === 'depart' ? '' : undefined}
+        className={cn(container[width], className)}
+      >
+        {children}
+      </div>
     </section>
   )
 }
@@ -165,6 +195,7 @@ const shellFields = {
   padding: padField('Vertical padding'),
   hide: hideField(),
   anchor: text('Anchor id', 'e.g. offers'),
+  scene: sceneField,
 }
 export const shellDefaults: ShellProps = { background: 'none', padding: { base: 'lg' }, width: 'contained' }
 /** Smart blocks expose the band controls too (without the background image / anchor extras). */
@@ -172,6 +203,7 @@ export const bandFields = {
   background: shellFields.background,
   padding: shellFields.padding,
   hide: shellFields.hide,
+  scene: sceneField,
 }
 
 export const Section: ComponentConfig<ShellProps & { content: Slot; gap: 'sm' | 'md' | 'lg' }> = {

@@ -1,8 +1,8 @@
 import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/brand'
+import { ScrollScenes } from '@/components/scroll-scenes'
 import { appUrl } from '@/lib/paths'
-import { ScrollScenes } from './scroll-scenes'
 
 export type MarketingPage = 'home' | 'features' | 'website-builder' | 'pricing' | 'contact'
 

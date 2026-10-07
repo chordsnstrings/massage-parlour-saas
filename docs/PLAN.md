@@ -783,6 +783,23 @@ until `spamanagement.ae` is registered.
   messages are described as written and queued automatically, sent by the spa in one tap (click-to-send stays locked).
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
 
+### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
+- **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
+  page: live link, preview, status, **Request a change** (`site_change_requests`) and **Approve** while a review is
+  pending. Editing = `studioGuard`/`isStudio` (platform admin acting on the spa, or a platform admin who is also a
+  member). Flow: `sites.studio_status` building → review (studio sends) → approved (spa only); a request made during
+  review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
+  the spa's existing editor. Live data blocks (prices, team, hours) keep the site current without edits.
+- Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
+  via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
+- Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
+  first, style kits (palette + Latin/Arabic font pairs), Impeccable shape/craft/audit at build/QA time, screenshot QA
+  360/768/1280 EN+AR, Design Lab gallery. **C** intake form + crawler (sitemap-first, ≤25 pages, depth 2, SSRF guard;
+  headless Chromium in the worker for JS sites) → Seed 2.0 spa profile; brand colours; image/video import to DO
+  Spaces with ffmpeg transcode + posters; consent checkbox. **D** AI composer pg-boss job (sitemap → section/variant
+  picks validated against schemas → style kit → EN/AR copy → Seedream images; per-section regenerate; locks on edited
+  sections). AI cost is platform-paid (part of the service). **E** extended preflight, perf budgets, visual regression.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

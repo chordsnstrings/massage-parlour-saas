@@ -1,11 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { platformAdmins, user } from '@spa/db'
 import { type BlockSpec, checkNodes } from '@spa/services'
-import { eq } from 'drizzle-orm'
 import { siteConfig } from '../src/components/site/config'
 import { PAGE_TEMPLATES, SECTION_PRESETS } from '../src/components/site/presets'
 import { TEMPLATES } from '../src/components/site/templates'
-import { admin, app, PATH, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { admin, app, makeStudio, PATH, screenshotAt, seedCatalog, signUpOwner, site } from './helpers'
 
 const NAMES = [
   'Zen Minimal',
@@ -60,6 +58,7 @@ test('templates: gallery of 8, side-by-side switch with undo, Desert Sand in EN 
 }) => {
   const owner = await signUpOwner(page, { spa: 'Dune Spa' })
   const { slug } = owner
+  await makeStudio(slug) // the website is built by the studio (super-admin)
   await seedCatalog(slug)
 
   await test.step('the gallery shows all 8 templates with live previews', async () => {
@@ -151,12 +150,6 @@ test('templates: gallery of 8, side-by-side switch with undo, Desert Sand in EN 
   })
 
   await test.step('super-admin saves the spa site as a studio template; spas see it in the gallery', async () => {
-    const db = testDb()
-    const [owner] = await db
-      .select({ id: user.id })
-      .from(user)
-      .where(eq(user.email, `owner-${slug}@e2e.test`))
-    await db.insert(platformAdmins).values({ userId: owner!.id })
     await page.goto(`${admin}/login`)
     if (!PATH) {
       await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)

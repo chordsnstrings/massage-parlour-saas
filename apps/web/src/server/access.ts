@@ -96,6 +96,22 @@ export async function guard(slug: string, permission: Permission) {
   return { ctx, error: null }
 }
 
+/**
+ * Website Studio (PLAN §14.4): sites are built as a bespoke service, so only a super-admin (acting on the spa, or
+ * also a member of it) may change them. Spa members see a read-only view and send change requests instead.
+ */
+export const isStudio = async (ctx: MemberContext) => ctx.impersonating || isPlatformAdmin(ctx.user.id)
+
+export async function studioGuard(slug: string, permission: Permission) {
+  const result = await guard(slug, permission)
+  if (!result.error && !(await isStudio(result.ctx)))
+    return {
+      ctx: result.ctx,
+      error: 'Your website is built by our studio team — send them a change request.',
+    }
+  return result
+}
+
 export async function requirePlatformAdmin() {
   const session = await requireUser()
   if (!(await isPlatformAdmin(session.user.id))) notFound()

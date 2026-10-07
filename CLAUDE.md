@@ -12,6 +12,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - Infra ≤ USD 50/month: one DO droplet (docker compose: web, worker, postgres, cloudflared) behind Cloudflare Free. No Redis.
 - Price: AED 24,000 per spa per year (manual cash/bank-transfer billing).
 - Site builder: Puck-based drag & drop, 8 templates, granular per-device style overrides (PLAN.md §11).
+  **Website Studio:** only super-admins edit sites; spas review, approve and request changes (PLAN.md §14.4).
 - All admin UI (every role + editor chrome + super-admin): minimal Swedish modern, airy well-padded 12-col grid, one accent,
   micro-animations via `motion`, fully responsive 360 px → wide desktop (PLAN.md §12). Tenant sites fully responsive too.
 - Legal/compliance is the operator's responsibility — don't add legal features beyond what PLAN.md lists.

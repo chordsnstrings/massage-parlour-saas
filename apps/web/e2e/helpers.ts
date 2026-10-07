@@ -4,6 +4,7 @@ import {
   branches,
   clients,
   createDb,
+  platformAdmins,
   rooms,
   services,
   serviceVariants,
@@ -11,6 +12,7 @@ import {
   staff,
   staffServices,
   tenants,
+  user,
 } from '@spa/db'
 import { testUrls } from '@spa/db/testing'
 import { createBooking } from '@spa/services'
@@ -88,6 +90,16 @@ export async function screenshotAt(page: Page, name: string) {
 // ---------------------------------------------------------------------------
 
 export const testDb = () => createDb(testUrls.platform, 3)
+
+/** Makes a signed-up owner a super-admin too, so the Website Studio (super-admin only) opens on their spa. */
+export async function makeStudio(slug: string) {
+  const db = testDb()
+  const [owner] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, `owner-${slug}@e2e.test`))
+  await db.insert(platformAdmins).values({ userId: owner!.id }).onConflictDoNothing()
+}
 
 /** Today's business date in Dubai (05:00 cutoff). */
 export const today = () => businessDateOf(new Date(), '05:00')

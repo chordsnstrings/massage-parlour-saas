@@ -3,7 +3,7 @@ import { savedSections, sitePages, webEvents } from '@spa/db'
 import { ensureSite, saveDraft } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import QRCode from 'qrcode'
-import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { app, makeStudio, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 const HERO = 'Unwind in the heart of the city'
 
@@ -58,6 +58,7 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
   browser,
 }) => {
   const { slug } = await signUpOwner(page, { spa: 'Juniper Spa' })
+  await makeStudio(slug) // the website is built by the studio (super-admin)
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db.transaction((tx) =>

@@ -20,6 +20,7 @@ import {
   Megaphone,
   MessageCircle,
   MessagesSquare,
+  PanelsTopLeft,
   ReceiptText,
   ScrollText,
   Settings2,
@@ -67,6 +68,7 @@ const icons = {
   media: Images,
   documents: FileBadge,
   templates: LayoutTemplate,
+  studio: PanelsTopLeft,
 } as const
 
 export type NavItem = {

@@ -1,6 +1,6 @@
 import { withTenant } from '@spa/db'
-import { getSite, listPages, templateUndoChanges } from '@spa/services'
-import { ExternalLink, FileText, Globe, PencilLine } from 'lucide-react'
+import { getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
+import { ExternalLink, Eye, FileText, Globe, MessageSquare, PencilLine } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -16,10 +16,11 @@ import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
 import { appPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
-import { can, requireMember } from '@/server/access'
+import { can, isStudio, requireMember } from '@/server/access'
 import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
+import { ApproveSiteSheet, RequestChangeSheet, ResolveRequestSheet, ReviewButton } from './studio-client'
 import {
   AddPageSheet,
   AiWriterSheet,
@@ -31,24 +32,43 @@ import {
   VisibilityToggle,
 } from './website-client'
 
+const STUDIO_STATUS = {
+  building: { label: 'In the studio', tone: 'neutral', spa: 'Our studio is crafting your site.' },
+  review: {
+    label: 'Ready for review',
+    tone: 'accent',
+    spa: 'Your site is ready — have a look and approve it.',
+  },
+  approved: { label: 'Approved', tone: 'success', spa: 'You approved this site. Ask for changes any time.' },
+} as const
+
 export const metadata: Metadata = { title: 'Website' }
 
 export default async function WebsitePage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'site.content') && !can(ctx, 'site.design') && !can(ctx, 'site.publish')) notFound()
   const slug = ctx.tenant.slug
-  const { site, pages, undoBlocked } = await withTenant(ctx.tenant.id, async (tx) => {
+  const { site, pages, undoBlocked, requests } = await withTenant(ctx.tenant.id, async (tx) => {
     const site = await getSite(tx, ctx.tenant.id)
     return {
       site,
       pages: await listPages(tx, ctx.tenant.id),
+      requests: await listChangeRequests(tx, ctx.tenant.id),
       // Undo is only offered while nothing the switch wrote has been edited or published since.
       undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
     }
   })
   const catalog = await templateCatalog()
-  const canDesign = can(ctx, 'site.design')
-  const canPublish = can(ctx, 'site.publish')
+  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits; the spa reviews and asks.
+  const studio = await isStudio(ctx)
+  const canDesign = studio && can(ctx, 'site.design')
+  const canPublish = studio && can(ctx, 'site.publish')
+  const canEdit = studio && can(ctx, 'site.content')
+  const canRequest = !studio && can(ctx, 'site.content')
+  const canApprove = !studio && can(ctx, 'site.publish') && site?.studioStatus === 'review'
+  const status = STUDIO_STATUS[site?.studioStatus ?? 'building']
+  const openRequests = requests.filter((r) => r.status === 'open').length
+  const pageOptions = pages.map((p) => ({ id: p.id, title: p.title.en }))
   const aiReady = canDesign && (await siteWriterReady())
   const publicUrl = await publicSiteUrl(ctx.tenant)
   const pending = pages.filter((p) => p.hasDraft).length
@@ -141,10 +161,26 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     <>
       <PageHeader
         title="Website"
-        description="Your spa's public site. Prices, team and opening hours stay in sync with your dashboard."
+        description={
+          studio
+            ? "Studio view — you're building this spa's site. Prices, team and hours come live from its dashboard."
+            : 'Handcrafted for you by our studio. Prices, team and opening hours stay in sync with your dashboard.'
+        }
         actions={
           <>
             {writer}
+            {studio && site && site.studioStatus !== 'approved' && (
+              <ReviewButton slug={slug} review={site.studioStatus === 'building'} />
+            )}
+            {!studio && site && (
+              <Button variant="secondary" asChild>
+                <a href={preview()} target="_blank" rel="noreferrer">
+                  <Eye /> Preview
+                </a>
+              </Button>
+            )}
+            {canRequest && <RequestChangeSheet slug={slug} pages={pageOptions} />}
+            {canApprove && <ApproveSiteSheet slug={slug} />}
             {site && (
               <Button variant="secondary" asChild>
                 <a href={publicUrl} target="_blank" rel="noreferrer">
@@ -169,14 +205,34 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               ) : (
                 <EmptyState
                   icon={<Globe className="size-5" />}
-                  title="No website yet"
-                  description="Ask the owner or a manager to choose a template first."
+                  title="Our studio is crafting your website"
+                  description="We design every spa's site by hand from your menu, team and photos. Send us anything you'd like included."
                 />
               )}
             </CardBody>
           </Card>
         ) : (
           <>
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-xl border bg-surface px-5 py-4"
+              data-testid="studio-status"
+            >
+              <Badge tone={status.tone}>{status.label}</Badge>
+              <p className="min-w-0 flex-1 text-sm text-muted">
+                {studio
+                  ? site.studioStatus === 'review'
+                    ? 'Waiting for the spa to approve or ask for changes.'
+                    : site.studioStatus === 'approved'
+                      ? 'The spa approved this site.'
+                      : 'Send it for review when it is ready for the spa.'
+                  : status.spa}
+              </p>
+              {openRequests > 0 && (
+                <span className="text-sm text-muted">
+                  {openRequests} open {openRequests === 1 ? 'request' : 'requests'}
+                </span>
+              )}
+            </div>
             {canDesign && undo && (
               <UndoTemplateBar
                 slug={slug}
@@ -225,11 +281,13 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                               <span className="block truncate font-medium">{p.title.en}</span>
                               <span className="block truncate text-xs text-muted">/{p.slug}</span>
                             </span>
-                            <Button variant="secondary" size="sm" asChild className="h-10 md:hidden">
-                              <Link href={appPath(`/${slug}/website/editor/${p.id}`)}>
-                                <PencilLine /> Edit
-                              </Link>
-                            </Button>
+                            {canEdit && (
+                              <Button variant="secondary" size="sm" asChild className="h-10 md:hidden">
+                                <Link href={appPath(`/${slug}/website/editor/${p.id}`)}>
+                                  <PencilLine /> Edit
+                                </Link>
+                              </Button>
+                            )}
                           </span>
                         ),
                       },
@@ -271,16 +329,17 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                         header: <span className="sr-only">Actions</span>,
                         className: 'text-end',
                         hideOnMobile: true,
-                        cell: (p) => (
-                          <Button variant="secondary" size="sm" asChild>
-                            <Link
-                              href={appPath(`/${slug}/website/editor/${p.id}`)}
-                              aria-label={`Edit ${p.title.en}`}
-                            >
-                              <PencilLine /> Edit
-                            </Link>
-                          </Button>
-                        ),
+                        cell: (p) =>
+                          canEdit && (
+                            <Button variant="secondary" size="sm" asChild>
+                              <Link
+                                href={appPath(`/${slug}/website/editor/${p.id}`)}
+                                aria-label={`Edit ${p.title.en}`}
+                              >
+                                <PencilLine /> Edit
+                              </Link>
+                            </Button>
+                          ),
                       },
                     ]}
                   />
@@ -305,14 +364,79 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                 </CardBody>
               </Card>
             </div>
-            <Card>
-              <CardHeader
-                title="Templates"
-                description="Try a new look with your own content. Switching keeps your words and images, and can be undone."
-              />
-              <CardBody>{gallery}</CardBody>
-            </Card>
+            {canDesign && (
+              <Card>
+                <CardHeader
+                  title="Templates"
+                  description="Try a new look with the spa's own content. Switching keeps words and images, and can be undone."
+                />
+                <CardBody>{gallery}</CardBody>
+              </Card>
+            )}
           </>
+        )}
+        {(requests.length > 0 || canRequest) && (
+          <Card>
+            <CardHeader
+              title="Change requests"
+              description={
+                studio
+                  ? 'What the spa asked the studio for.'
+                  : 'What you asked the studio for, and their replies.'
+              }
+            />
+            <div className="mt-4 border-t">
+              <DataTable
+                rows={requests}
+                rowKey={(r) => r.id}
+                empty={
+                  <EmptyState
+                    icon={<MessageSquare className="size-5" />}
+                    title="No requests yet"
+                    description="New photos, a seasonal offer, different wording — just ask."
+                  />
+                }
+                columns={[
+                  {
+                    key: 'request',
+                    header: 'Request',
+                    primary: true,
+                    cell: (r) => (
+                      <span className="block min-w-0 space-y-1">
+                        <span className="block whitespace-pre-line text-sm">{r.body}</span>
+                        <span className="block text-xs text-muted">
+                          {r.pageTitle?.en ?? 'Whole site'} · {formatDateTime(r.createdAt)}
+                        </span>
+                        {r.response && (
+                          <span className="block whitespace-pre-line text-[13px] text-muted">
+                            Studio: {r.response}
+                          </span>
+                        )}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'status',
+                    header: 'Status',
+                    cell: (r) => (
+                      <Badge
+                        tone={r.status === 'open' ? 'accent' : r.status === 'done' ? 'success' : 'neutral'}
+                      >
+                        {r.status === 'open' ? 'Open' : r.status === 'done' ? 'Done' : 'Declined'}
+                      </Badge>
+                    ),
+                  },
+                  {
+                    key: 'act',
+                    header: <span className="sr-only">Actions</span>,
+                    className: 'text-end',
+                    cell: (r) =>
+                      canEdit && r.status === 'open' && <ResolveRequestSheet slug={slug} id={r.id} />,
+                  },
+                ]}
+              />
+            </div>
+          </Card>
         )}
       </PageBody>
     </>

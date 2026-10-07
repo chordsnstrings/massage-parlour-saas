@@ -31,7 +31,7 @@ export function toward(from: Move, u: number, origin?: string): Move {
 /** [data-beat="n"] elements move in order (same n = same beat) from their data-from pose to rest.
  *  The beat in progress gets data-on (map it to the site's existing "active" style if it has one). */
 function beats(stage: HTMLElement) {
-  const items = [...stage.querySelectorAll<HTMLElement>('[data-beat]')]
+  const items = beatsOf(stage)
   const nums = items.map((it, i) => (it.dataset.beat ? +it.dataset.beat : i)) // unnumbered → DOM order
   const groups = [...new Set(nums)].sort((a, b) => a - b)
   const from = items.map((it) => parseMove(it.dataset.from ?? 'y:16 o:0'))
@@ -68,6 +68,16 @@ function chapters(stage: HTMLElement) {
 }
 
 /** beats — a flow, steps or a diagram builds up part by part. */
+/** Marked `[data-beat]` parts, else the items inside a `[data-beats]` box (site sections), skipping single
+ *  wrappers so a section holding one grid animates the grid's cells. */
+function beatsOf(stage: HTMLElement): HTMLElement[] {
+  const marked = [...stage.querySelectorAll<HTMLElement>('[data-beat]')]
+  if (marked.length) return marked
+  let box = stage.querySelector<HTMLElement>('[data-beats]')
+  while (box && box.children.length === 1) box = box.firstElementChild as HTMLElement
+  return box ? ([...box.children] as HTMLElement[]) : []
+}
+
 registerScene('beats', (_el, stage) => {
   const run = beats(stage),
     chap = chapters(stage)
@@ -119,7 +129,7 @@ registerScene('device', (_el, stage) => {
 
 /** assemble — cards start scattered in depth and fly into their place in today's grid. */
 registerScene('assemble', (_el, stage) => {
-  const items = [...stage.querySelectorAll<HTMLElement>('[data-beat]')]
+  const items = beatsOf(stage)
   return (c) => {
     const k = c.phone ? 0.45 : 1
     items.forEach((it, i) => {
@@ -145,7 +155,7 @@ registerScene('assemble', (_el, stage) => {
 /** rise — bars, bands or tiers are revealed one by one (data-grow="x" sideways, default upward).
  *  Uses a clip wipe, so text inside is never squashed. */
 registerScene('rise', (el, stage) => {
-  const items = [...stage.querySelectorAll<HTMLElement>('[data-beat]')]
+  const items = beatsOf(stage)
   const dir = el.dataset.grow === 'x' ? 'x' : 'y'
   return (c) => {
     const u = items.map((_, i) => beat(c.p, i, items.length, 0.05, 0.85, 0.3))
@@ -160,7 +170,7 @@ registerScene('rise', (el, stage) => {
 
 /** flip — rows hinge open from flat, like a departure board, and land as today's list. */
 registerScene('flip', (_el, stage) => {
-  const items = [...stage.querySelectorAll<HTMLElement>('[data-beat]')]
+  const items = beatsOf(stage)
   return (c) =>
     items.forEach((it, i) => {
       const u = beat(c.p, i, items.length, 0.05, 0.85, 0.6)

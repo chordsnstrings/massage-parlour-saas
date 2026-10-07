@@ -142,7 +142,7 @@ export default async function TenantHome({
     },
     {
       done: data.published,
-      label: 'Design and publish your website',
+      label: 'Review your website',
       href: appPath(`/${slug}/website`),
       show: can(ctx, 'site.design') || can(ctx, 'site.publish'),
     },
@@ -447,7 +447,7 @@ export default async function TenantHome({
                   </Button>
                   {(can(ctx, 'site.design') || can(ctx, 'site.content')) && (
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={appPath(`/${slug}/website`)}>Edit</Link>
+                      <Link href={appPath(`/${slug}/website`)}>Manage</Link>
                     </Button>
                   )}
                 </div>

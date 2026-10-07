@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { app, screenshotAt, seedCatalog, signUpOwner, site } from './helpers'
+import { app, makeStudio, screenshotAt, seedCatalog, signUpOwner, site } from './helpers'
 
 const HERO = 'Calm, clear and restorative.'
 
@@ -7,6 +7,7 @@ test('owner picks a template, publishes from the editor and the public site rend
   page,
 }) => {
   const { slug } = await signUpOwner(page, { spa: 'Birch Spa' })
+  await makeStudio(slug) // the website is built by the studio (super-admin)
   await seedCatalog(slug)
 
   await test.step('nothing published yet → placeholder site', async () => {

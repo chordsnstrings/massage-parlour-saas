@@ -5,6 +5,7 @@ import { getPublishedPage, globalSectionsFor, isScheduleVisible, PAGE_SLUG } fro
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
+import { ScrollScenes } from '@/components/scroll-scenes'
 import { PlaceholderSite } from '@/components/site/placeholder-site'
 import { siteData } from '@/server/sites'
 import { siteConfig } from './config'
@@ -121,5 +122,11 @@ export async function PublicSite({
     globals: loaded.published.globals,
   }
   const data = loaded.published.data as Partial<Data>
-  return <Render config={trackedConfig(data)} data={data} metadata={meta} />
+  // ScrollScenes mounts last so it commits with the sections it drives (per-section scroll effects).
+  return (
+    <>
+      <Render config={trackedConfig(data)} data={data} metadata={meta} />
+      <ScrollScenes key={slug} />
+    </>
+  )
 }

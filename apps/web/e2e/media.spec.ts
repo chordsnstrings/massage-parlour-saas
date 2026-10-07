@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { services, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { app, PORT, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { app, makeStudio, PORT, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 const HERO = 'Calm, clear and restorative.'
 const png = async (name: string, background: string, width: number, height: number) => ({
@@ -23,6 +23,7 @@ test('media library: upload, describe, pick in the editor, publish and serve fro
   playwright,
 }) => {
   const { slug } = await signUpOwner(page, { spa: 'Cedar Spa' })
+  await makeStudio(slug) // the website is built by the studio (super-admin)
   await seedCatalog(slug)
   const siteOrigin = new URL(site(slug)).origin
   let fileUrl = ''

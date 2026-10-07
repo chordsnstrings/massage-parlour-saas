@@ -1,5 +1,16 @@
 // Phase 1 — tenant website (Puck page data, versions, theme).
-import { boolean, integer, jsonb, pgEnum, pgTable, text, unique, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { createdAt, id, updatedAt } from './_columns'
 import { platformPolicies, tenantPolicies } from './_rls'
 import { user } from './auth'
@@ -32,6 +43,9 @@ export type TemplateUndo = {
   }[]
 }
 
+/** Website Studio (PLAN §14.4): the platform builds the site; the spa reviews it. */
+export const siteStudioStatus = pgEnum('site_studio_status', ['building', 'review', 'approved'])
+
 export const sites = pgTable(
   'sites',
   {
@@ -44,6 +58,7 @@ export const sites = pgTable(
     seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
     /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
     templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
+    studioStatus: siteStudioStatus('studio_status').notNull().default('building'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -128,4 +143,24 @@ export const siteTemplates = pgTable(
     updatedAt: updatedAt(),
   },
   () => platformPolicies(),
+)
+
+export const changeRequestStatus = pgEnum('change_request_status', ['open', 'done', 'declined'])
+
+/** Spa → studio change requests (the spa can't edit its site; PLAN §14.4). */
+export const siteChangeRequests = pgTable(
+  'site_change_requests',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    pageId: uuid('page_id').references(() => sitePages.id, { onDelete: 'set null' }),
+    body: text('body').notNull(),
+    status: changeRequestStatus('status').notNull().default('open'),
+    response: text('response'),
+    createdBy: text('created_by').references(() => user.id),
+    resolvedBy: text('resolved_by').references(() => user.id),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('site_change_requests_status').on(t.status, t.createdAt), ...tenantPolicies()],
 )

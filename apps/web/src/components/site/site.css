@@ -285,13 +285,11 @@ figure > .sb-card {
     --rise: 48px;
     --rise-scale: 0.97;
   }
-  /* Reduced motion: content is simply there (no scroll-tied movement or fades). */
-  @media (prefers-reduced-motion: no-preference) {
-    .site-root:not([data-motion="none"]) [data-reveal] {
-      animation: sb-rise linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 55%;
-    }
+  /* On for every visitor, including OS reduced motion (owner decision 2026-10-07, PLAN §14.4). */
+  .site-root:not([data-motion="none"]) [data-reveal] {
+    animation: sb-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 55%;
   }
 }
 .site-root[data-motion="none"] .sb-float {

@@ -26,7 +26,7 @@ import { designSignature, isPageData } from '@/components/site/content'
 import { PAGE_TEMPLATES, pageTemplateData } from '@/components/site/presets'
 import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { can, guard, type MemberContext } from '@/server/access'
+import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
@@ -69,7 +69,7 @@ export async function applyTemplateAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = templateSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
@@ -94,7 +94,7 @@ export async function undoTemplateAction(
   _prev: ActionResult,
   _formData: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   let key = ''
   try {
@@ -115,7 +115,7 @@ export async function addPageFromTemplateAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z
     .object({ template: z.string().refine((k) => PAGE_TEMPLATES.some((t) => t.key === k), 'Choose a page') })
@@ -167,7 +167,7 @@ export async function generateSiteCopyAction(
   slug: string,
   input: { template: string; notes?: string },
 ): Promise<{ ok: true; preview: SiteCopyPreview } | { ok: false; error: string }> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return { ok: false, error }
   const parsed = z
     .object({ template: z.string().trim().min(1).max(60), notes: z.string().trim().max(400).optional() })
@@ -227,7 +227,7 @@ export async function applySiteCopyAction(
   slug: string,
   input: { template: string; copy: SiteCopy },
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z
     .object({ template: z.string().trim().min(1).max(60), copy: SiteCopySchema })
@@ -290,7 +290,7 @@ export async function saveThemeAction(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = themeSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
@@ -357,7 +357,7 @@ async function storeDraft(ctx: MemberContext, pageId: string, data: Record<strin
 }
 
 export async function saveDraftAction(slug: string, pageId: string, data: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const check = checkData(pageId, data)
   if (check.error) return fail(check.error)
@@ -373,7 +373,7 @@ export async function saveDraftAction(slug: string, pageId: string, data: unknow
 
 /** Publishes the editor state for one page (saving it first when the member may edit content). */
 export async function publishPageAction(slug: string, pageId: string, data: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.publish')
+  const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
   const check = checkData(pageId, data)
   if (check.error) return fail(check.error)
@@ -395,7 +395,7 @@ export async function publishSiteAction(
   _prev: ActionResult,
   _formData: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.publish')
+  const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
   let count = 0
   try {
@@ -415,7 +415,7 @@ export async function setPageVisibleAction(
   pageId: string,
   visible: boolean,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z.object({ pageId: uuid, visible: z.boolean() }).safeParse({ pageId, visible })
   if (!parsed.success) return fromZod(parsed.error)

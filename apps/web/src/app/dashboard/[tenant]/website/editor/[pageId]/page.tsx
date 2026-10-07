@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { buildMeta, loadSite } from '@/components/site/data'
 import type { SavedSection } from '@/components/site/editor/context'
 import { appPath, PATH_ROUTING } from '@/lib/paths'
-import { can, requireMember } from '@/server/access'
+import { can, isStudio, requireMember } from '@/server/access'
 import { publicSiteUrl } from '@/server/sites'
 import { SiteEditor } from './editor'
 
@@ -19,7 +19,7 @@ export default async function EditorPage({
 }) {
   const { tenant, pageId } = await params
   const ctx = await requireMember(tenant)
-  if (!can(ctx, 'site.content')) notFound()
+  if (!can(ctx, 'site.content') || !(await isStudio(ctx))) notFound()
   if (!z.string().uuid().safeParse(pageId).success) notFound()
   const loaded = await withTenant(ctx.tenant.id, async (tx) => {
     const editable = await getEditablePage(tx, ctx.tenant.id, pageId)

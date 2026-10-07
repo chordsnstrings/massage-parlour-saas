@@ -32,7 +32,7 @@ import type { SavedSection } from '@/components/site/editor/context'
 import type { VersionItem } from '@/components/site/editor/versions'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { appUrl } from '@/lib/paths'
-import { can, guard, type MemberContext } from '@/server/access'
+import { can, guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { publishErrors } from '@/server/site-preflight'
 import { publishPageAction } from '../actions'
@@ -103,7 +103,7 @@ const COMMON = `Keep placeholders such as {name}, prices, numbers and brand name
 
 /** ✨ menu in bilingual fields: rewrite / shorten / warmer in the same language, or translate EN↔AR. */
 export async function aiTextAction(slug: string, input: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const parsed = aiSchema.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)
@@ -139,7 +139,7 @@ const batchSchema = z.array(z.string().trim().min(1)).min(1)
 
 /** Preflight "Translate with AI": English → Arabic for several fields in one call. */
 export async function translateBatchAction(slug: string, texts: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const parsed = batchSchema.safeParse(texts)
   if (!parsed.success) return fail('Nothing to translate.')
@@ -177,7 +177,7 @@ export async function translateBatchAction(slug: string, texts: unknown): Promis
 /* ------------------------------------------------------------------ Versions + preview links */
 
 export async function listVersionsAction(slug: string, pageId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   if (!uuid.safeParse(pageId).success) return fail('Page not found')
   const rows = await withTenant(ctx.tenant.id, (tx) => listVersions(tx, ctx.tenant.id, pageId, 30))
@@ -213,7 +213,7 @@ export async function labelVersionAction(
   versionId: string,
   label: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const parsed = labelSchema.safeParse({ versionId, label })
   if (!parsed.success) return fromZod(parsed.error)
@@ -238,7 +238,7 @@ export async function restoreVersionAction(
   pageId: string,
   versionId: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const parsed = z.object({ pageId: uuid, versionId: uuid }).safeParse({ pageId, versionId })
   if (!parsed.success) return fail('Version not found')
@@ -276,7 +276,7 @@ const previewSchema = z.object({ pageId: uuid, days: z.union([z.literal(1), z.li
 
 /** Shareable draft preview: a signed link (no sign-in needed) that expires, plus its QR code as SVG. */
 export async function previewLinkAction(slug: string, pageId: string, days: number): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
+  const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const parsed = previewSchema.safeParse({ pageId, days })
   if (!parsed.success) return fromZod(parsed.error)
@@ -316,7 +316,7 @@ const nodeSchema = z
 const nameSchema = z.string().trim().min(1, 'Give it a name').max(60, 'Keep it under 60 characters')
 
 export async function saveSectionAction(slug: string, input: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z.object({ name: nameSchema, node: nodeSchema, isGlobal: z.boolean() }).safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)
@@ -338,7 +338,7 @@ export async function saveSectionAction(slug: string, input: unknown): Promise<A
 }
 
 export async function renameSectionAction(slug: string, id: string, name: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z.object({ id: uuid, name: nameSchema }).safeParse({ id, name })
   if (!parsed.success) return fromZod(parsed.error)
@@ -356,7 +356,7 @@ export async function renameSectionAction(slug: string, id: string, name: string
 }
 
 export async function deleteSectionAction(slug: string, id: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   if (!uuid.safeParse(id).success) return fail('Saved section not found')
   try {
@@ -378,7 +378,7 @@ export async function updateGlobalSectionAction(
   id: string,
   node: unknown,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.design')
+  const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   const parsed = z.object({ id: uuid, node: nodeSchema }).safeParse({ id, node })
   if (!parsed.success) return fromZod(parsed.error)
@@ -457,7 +457,7 @@ export async function publishCheckedAction(
   pageId: string,
   data: unknown,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.publish')
+  const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
   if (!uuid.safeParse(pageId).success || !isPageData(data)) return fail('This page could not be read.')
   const blocked = await withTenant(ctx.tenant.id, async (tx) => {
