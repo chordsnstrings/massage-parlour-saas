@@ -14,9 +14,9 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { type NextRequest, NextResponse } from 'next/server'
-import { appUrl } from '@/lib/paths'
 import { can, isWritable, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
+import { requestUrls } from '@/server/origin'
 import { NONCE_COOKIE, NONCE_PATH } from '../oauth'
 
 export const dynamic = 'force-dynamic'
@@ -38,9 +38,10 @@ export async function GET(req: NextRequest) {
         columns: { id: true, slug: true },
       })
     : undefined
-  if (!state || !tenant) return NextResponse.redirect(appUrl('/'))
+  const urls = await requestUrls()
+  if (!state || !tenant) return NextResponse.redirect(urls.app('/'))
   const back = (status: string) =>
-    NextResponse.redirect(appUrl(`/${tenant.slug}/settings/integrations?ig=${status}`))
+    NextResponse.redirect(urls.app(`/${tenant.slug}/settings/integrations?ig=${status}`))
   if (!constantTimeEqual(nonce, state.n)) return back('state')
 
   const ctx = await requireMember(tenant.slug) // signs in / 404s as needed

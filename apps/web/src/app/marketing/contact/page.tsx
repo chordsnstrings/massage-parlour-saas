@@ -2,7 +2,7 @@ import { Mail, MessageCircle, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import { companyContact } from '@/components/marketing/plans'
 import { MarketingShell } from '@/components/marketing/shell'
-import { appUrl } from '@/lib/paths'
+import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
   title: 'Contact',
@@ -73,7 +73,7 @@ export default async function ContactPage() {
         {c?.address && <p className="mt-12 text-[14px] text-[var(--mute)]">{c.address}</p>}
         <p className="mt-10 text-[15px] text-[var(--ink-2)]">
           Already a customer?{' '}
-          <a href={appUrl('/login')} className="mkt-link font-medium text-[var(--ink)]">
+          <a href={await appUrl('/login')} className="mkt-link font-medium text-[var(--ink)]">
             Sign in
           </a>
         </p>

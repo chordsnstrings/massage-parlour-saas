@@ -5,9 +5,9 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { appUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { appUrl } from '@/server/origin'
 import { hashToken, newToken } from '@/server/token'
 
 const inviteSchema = z.object({
@@ -62,7 +62,7 @@ export async function inviteAction(
     },
   )
   if (result.error !== null) return fail(result.error, { email: result.error })
-  const link = appUrl(`/invite/${token}`)
+  const link = await appUrl(`/invite/${token}`)
   await sendStaffEmail({
     to: email,
     subject: `You're invited to ${ctx.tenant.name}`,

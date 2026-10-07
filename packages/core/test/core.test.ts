@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   ALL_PERMISSIONS,
   checkSlug,
+  matchRoot,
   normalizeSlug,
+  parseRoots,
   resolvePermissions,
   resolveSurface,
   SYSTEM_ROLES,
@@ -25,6 +27,38 @@ describe('resolveSurface', () => {
   it('handles the dev root with a port', () => {
     expect(resolveSurface('pilot.localhost:3000', 'localhost:3000')).toEqual({ kind: 'site', slug: 'pilot' })
     expect(resolveSurface('localhost:3000', 'localhost:3000')).toEqual({ kind: 'marketing' })
+  })
+})
+
+describe('platform roots', () => {
+  it('parses canonical + extra roots from comma or space separated config', () => {
+    expect(parseRoots('SpaManagement.ae', 'old.example.com, other.example.com  third.example.com.')).toEqual([
+      'spamanagement.ae',
+      'old.example.com',
+      'other.example.com',
+      'third.example.com',
+    ])
+    expect(parseRoots('localhost:3000', undefined, '')).toEqual(['localhost:3000'])
+  })
+
+  it('matches a host to the most specific root it belongs to', () => {
+    const roots = ['localhost:3100', 'spa.localhost:3100']
+    expect(matchRoot('app.spa.localhost:3100', roots)).toBe('spa.localhost:3100')
+    expect(matchRoot('app.localhost:3100', roots)).toBe('localhost:3100')
+    expect(matchRoot('evilspamanagement.ae', ['spamanagement.ae'])).toBeNull()
+    expect(matchRoot('www.serenityspa.ae', roots)).toBeNull()
+  })
+
+  it('resolves surfaces on every platform domain', () => {
+    const roots = ['spamanagement.ae', 'spa-old.example.com']
+    expect(resolveSurface('app.spa-old.example.com', roots)).toEqual({ kind: 'app' })
+    expect(resolveSurface('spa-old.example.com', roots)).toEqual({ kind: 'marketing' })
+    expect(resolveSurface('pilot.spa-old.example.com', roots)).toEqual({ kind: 'site', slug: 'pilot' })
+    expect(resolveSurface('admin.spamanagement.ae', roots)).toEqual({ kind: 'admin' })
+    expect(resolveSurface('www.serenityspa.ae', roots)).toEqual({
+      kind: 'custom',
+      hostname: 'www.serenityspa.ae',
+    })
   })
 })
 

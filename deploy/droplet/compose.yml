@@ -9,6 +9,8 @@ x-app-env: &app-env
   ROOT_DOMAIN: ${SITE_HOST}
   APP_URL: https://${SITE_HOST}
   ADMIN_URL: https://${SITE_HOST}/admin
+  # More platform domains (comma or space separated) — each serves the whole platform with its own links + TLS.
+  EXTRA_ROOT_DOMAINS: ${EXTRA_ROOT_DOMAINS:-}
   PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}

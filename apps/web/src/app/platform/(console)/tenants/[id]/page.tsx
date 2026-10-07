@@ -21,8 +21,9 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { adminPath, appUrl } from '@/lib/paths'
+import { adminPath } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
+import { appUrl } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
 import {
   createInvoiceAction,
@@ -90,7 +91,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
               </a>
             </Button>
             <Button variant="secondary" asChild>
-              <a href={appUrl(`/${tenant.slug}`)} target="_blank" rel="noreferrer">
+              <a href={await appUrl(`/${tenant.slug}`)} target="_blank" rel="noreferrer">
                 Open dashboard <ArrowUpRight />
               </a>
             </Button>

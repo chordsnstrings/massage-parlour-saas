@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 import { StudioDemo } from '@/components/marketing/studio-demo'
-import { appUrl } from '@/lib/paths'
+import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
   title: 'Website studio',
@@ -70,7 +70,8 @@ const INCLUDED = [
   'Your own domain with HTTPS, connected for you',
 ]
 
-export default function WebsiteStudioPage() {
+export default async function WebsiteStudioPage() {
+  const signup = await appUrl('/signup')
   return (
     <MarketingShell active="website-builder">
       {/* Hero */}
@@ -95,7 +96,7 @@ export default function WebsiteStudioPage() {
             Arabic — from your treatments, your team and your photos. You approve it. It takes bookings.
           </p>
           <div className="mkt-rise mt-9 flex flex-wrap justify-center gap-3" style={css({ '--d': 3 })}>
-            <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary">
+            <a href={signup} className="mkt-btn mkt-btn-primary">
               Start your spa <ArrowRight className="mkt-arrow size-4" />
             </a>
             <a href="#make-it-yours" className="mkt-btn mkt-btn-ghost bg-white/70">

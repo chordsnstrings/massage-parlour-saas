@@ -3,8 +3,8 @@ import type { Metadata } from 'next'
 import { FAQ, INCLUDED } from '@/components/marketing/content'
 import { activePlans } from '@/components/marketing/plans'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
-import { appUrl } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
+import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
   title: 'Pricing',
@@ -37,6 +37,7 @@ const BANDS = [
 
 export default async function PricingPage() {
   const plans = await activePlans()
+  const signup = await appUrl('/signup')
   const shown = plans.length
     ? plans
     : [{ id: 'launch', name: 'Spa', priceAed: '24000', billingInterval: 'year', setupFeeAed: null }]
@@ -76,7 +77,7 @@ export default async function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary mt-9 w-full justify-center">
+              <a href={signup} className="mkt-btn mkt-btn-primary mt-9 w-full justify-center">
                 Start your spa <ArrowRight className="mkt-arrow size-4" />
               </a>
             </div>

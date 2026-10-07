@@ -5,8 +5,8 @@ import { AREAS, DAY } from '@/components/marketing/content'
 import { CalendarMock } from '@/components/marketing/mocks'
 import { activePlans } from '@/components/marketing/plans'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
-import { appUrl } from '@/lib/paths'
 import { formatAed } from '@/lib/utils'
+import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
   title: { absolute: 'Spa Management — more bookings, less work for UAE spas' },
@@ -42,7 +42,7 @@ export default async function MarketingPage() {
             care of themselves. Your team just looks after guests.
           </p>
           <div className="mkt-rise mt-9 flex flex-wrap justify-center gap-3" style={css({ '--d': 3 })}>
-            <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary">
+            <a href={await appUrl('/signup')} className="mkt-btn mkt-btn-primary">
               Start your spa <ArrowRight className="mkt-arrow size-4" />
             </a>
             <Link href="/features" className="mkt-btn mkt-btn-ghost bg-white/70">

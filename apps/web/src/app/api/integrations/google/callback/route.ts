@@ -13,9 +13,9 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { type NextRequest, NextResponse } from 'next/server'
-import { appUrl } from '@/lib/paths'
 import { can, isWritable, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
+import { requestUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
 import { GBP_COOKIE, GBP_COOKIE_PATH } from '../oauth'
 
@@ -38,9 +38,10 @@ export async function GET(req: NextRequest) {
         columns: { id: true, slug: true },
       })
     : undefined
-  if (!state || !tenant) return NextResponse.redirect(appUrl('/'))
+  const urls = await requestUrls()
+  if (!state || !tenant) return NextResponse.redirect(urls.app('/'))
   const back = (status: string) =>
-    NextResponse.redirect(appUrl(`/${tenant.slug}/settings/integrations?gbp=${status}`))
+    NextResponse.redirect(urls.app(`/${tenant.slug}/settings/integrations?gbp=${status}`))
   if (!sameSecret(nonce, state.nonce) || !verifier) return back('state')
 
   const session = await getSession()

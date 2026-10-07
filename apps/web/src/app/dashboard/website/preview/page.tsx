@@ -9,7 +9,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { siteConfig } from '@/components/site/config'
 import { buildMeta, loadSite, localeOf } from '@/components/site/data'
-import { tenantSiteUrl } from '@/lib/paths'
+import { tenantSiteUrl } from '@/server/origin'
 
 export const metadata: Metadata = { title: 'Draft preview', robots: { index: false, follow: false } }
 
@@ -54,7 +54,7 @@ export default async function SharedDraftPreview({ searchParams }: Props) {
       theme: site?.theme ?? null,
       locale,
       // Links lead to the live site.
-      base: tenantSiteUrl(tenant.slug),
+      base: await tenantSiteUrl(tenant.slug),
       slug: draft.page.slug,
     }),
     globals: draft.globals,

@@ -140,6 +140,10 @@ describe('normaliseHostname', () => {
 
   it('ignores a dev port on the root domain', () => {
     expect(() => normaliseHostname('pilot.localhost', 'localhost:3000')).toThrow()
+    // Every platform domain counts, not just the canonical one.
+    expect(() => normaliseHostname('pilot.old-platform.ae', [ROOT, 'old-platform.ae'])).toThrow(
+      'old-platform.ae',
+    )
     expect(normaliseHostname('www.serenity.ae', 'localhost:3000')).toBe('www.serenity.ae')
   })
 })

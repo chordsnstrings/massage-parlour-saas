@@ -6,8 +6,9 @@ import { notFound } from 'next/navigation'
 import { MediaLibrary } from '@/components/media/media-library'
 import { formatBytes, toMediaItem } from '@/components/media/types'
 import { PageBody, PageHeader } from '@/components/ui/page'
-import { appPath, tenantSiteUrl } from '@/lib/paths'
+import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { tenantSiteUrl } from '@/server/origin'
 
 export const metadata: Metadata = { title: 'Media' }
 
@@ -60,7 +61,7 @@ export default async function MediaPage({
         <MediaLibrary
           slug={slug}
           base={base}
-          origin={new URL(tenantSiteUrl(slug)).origin}
+          origin={new URL(await tenantSiteUrl(slug)).origin}
           items={items}
           tags={data.tags}
           filter={filter}

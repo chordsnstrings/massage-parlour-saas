@@ -800,6 +800,14 @@ until `spamanagement.ae` is registered.
   picks validated against schemas → style kit → EN/AR copy → Seedream images; per-section regenerate; locks on edited
   sections). AI cost is platform-paid (part of the service). **E** extended preflight, perf budgets, visual regression.
 
+### 14.5 Domain-agnostic links (decided 2026-10-07)
+- Absolute URLs are built per request from the visitor's platform domain (`server/origin.ts`: `appUrl`, `adminUrl`,
+  `tenantSiteUrl`, `marketingUrl`, `requestUrls`). Platform domains = `ROOT_DOMAIN` (canonical) + `EXTRA_ROOT_DOMAINS`;
+  any other Host (forged, or a spa custom domain) falls back to the canonical domain. Never bake a domain in at build time.
+- Proxy routing, Better Auth (dynamic `baseURL` with an exact allowed-hosts list + canonical fallback, so reset links
+  can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
+- No visitor → canonical `APP_URL`: OAuth redirect URIs, spa CNAME target, worker jobs.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

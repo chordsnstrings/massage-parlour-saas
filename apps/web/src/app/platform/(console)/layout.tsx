@@ -1,6 +1,7 @@
 import { AppShell } from '@/components/shell/app-shell'
-import { adminPath, appUrl } from '@/lib/paths'
+import { adminPath } from '@/lib/paths'
 import { requirePlatformAdmin } from '@/server/access'
+import { appUrl } from '@/server/origin'
 
 export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { user } = await requirePlatformAdmin()
@@ -10,7 +11,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
       subtitle="spamanagement.ae"
       homeHref={adminPath()}
       user={user}
-      accountHref={appUrl('/account')}
+      accountHref={await appUrl('/account')}
       nav={[
         { href: adminPath(), label: 'Overview', icon: 'home', exact: true },
         { href: adminPath('/tenants'), label: 'Spas', icon: 'tenants' },

@@ -7,9 +7,9 @@ import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
-import { appUrl } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
+import { requestUrls } from '@/server/origin'
 
 export const metadata: Metadata = { title: 'Websites' }
 
@@ -23,6 +23,7 @@ const STATUS = {
 /** Website Studio (PLAN §14.4): every spa's site, its review state and open change requests. */
 export default async function PlatformWebsitesPage() {
   await requirePlatformAdmin()
+  const urls = await requestUrls()
   const rows = (await studioOverview()).sort(
     (a, b) => b.openRequests - a.openRequests || Number(a.hasSite) - Number(b.hasSite),
   )
@@ -88,7 +89,7 @@ export default async function PlatformWebsitesPage() {
                 className: 'text-end',
                 cell: (r) => (
                   <Button variant="secondary" size="sm" asChild className="h-10">
-                    <a href={appUrl(`/${r.slug}/website`)} aria-label={`Open studio for ${r.name}`}>
+                    <a href={urls.app(`/${r.slug}/website`)} aria-label={`Open studio for ${r.name}`}>
                       Open studio <ArrowUpRight />
                     </a>
                   </Button>

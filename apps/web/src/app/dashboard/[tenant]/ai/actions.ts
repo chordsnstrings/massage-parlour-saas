@@ -6,9 +6,9 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { tenantSiteUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { tenantSiteUrl } from '@/server/origin'
 
 const AGENTS = ['dm_agent', 'content_agent', 'review_agent', 'seo_agent', 'slot_filler'] as const
 const aiError = (e: unknown) => {
@@ -144,7 +144,7 @@ async function persistPostImages(
 ) {
   const remote = post.media.filter((m) => /^https:\/\//i.test(m.url) && !fileIdFromUrl(m.url))
   if (remote.length === 0) return
-  const origin = new URL(tenantSiteUrl(slug)).origin
+  const origin = new URL(await tenantSiteUrl(slug)).origin
   const moved = new Map<string, string>()
   for (const m of remote) {
     try {

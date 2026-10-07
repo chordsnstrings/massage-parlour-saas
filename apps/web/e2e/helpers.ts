@@ -24,6 +24,9 @@ export const PATH = process.env.E2E_ROUTING === 'path'
 export const base = `http://localhost:${PORT}`
 export const app = PATH ? `${base}/app` : `http://app.localhost:${PORT}`
 export const admin = PATH ? `${base}/admin` : `http://admin.localhost:${PORT}`
+/** The same platform on its second domain (EXTRA_ROOT_DOMAINS in playwright.config.ts). */
+export const altBase = `http://alt.localhost:${PORT}`
+export const altApp = PATH ? `${altBase}/app` : `http://app.alt.localhost:${PORT}`
 export const site = (slug: string) => (PATH ? `${base}/s/${slug}` : `http://${slug}.localhost:${PORT}`)
 export const uniqueSlug = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`

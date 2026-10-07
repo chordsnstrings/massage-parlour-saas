@@ -1,4 +1,4 @@
-import { sendStaffEmail } from '@spa/core'
+import { parseRoots, sendStaffEmail } from '@spa/core'
 import { account, platformDb, session, twoFactor, user, verification } from '@spa/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -6,12 +6,19 @@ import { nextCookies } from 'better-auth/next-js'
 import { twoFactor as twoFactorPlugin } from 'better-auth/plugins'
 
 function createAuth() {
-  const appUrl = process.env.APP_URL ?? 'http://app.localhost:3000'
+  // Every platform domain (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS) signs people in on itself: the base URL follows the request
+  // Host when it is one of ours (bare domain for path routing, app./admin. for host routing; dev ports included) and is
+  // the canonical APP_URL otherwise — so a forged Host or a spa's custom domain can never shape reset links.
+  const roots = parseRoots(process.env.ROOT_DOMAIN ?? 'localhost:3000', process.env.EXTRA_ROOT_DOMAINS)
+  const canonical = new URL(process.env.APP_URL ?? 'http://app.localhost:3000').origin
   return betterAuth({
     appName: 'spamanagement.ae',
-    baseURL: appUrl,
+    baseURL: {
+      allowedHosts: roots.flatMap((r) => [r, `app.${r}`, `admin.${r}`]),
+      fallback: canonical,
+      protocol: canonical.startsWith('https:') ? 'https' : 'http',
+    },
     secret: process.env.BETTER_AUTH_SECRET,
-    trustedOrigins: [appUrl, process.env.ADMIN_URL ?? 'http://admin.localhost:3000'],
     database: drizzleAdapter(platformDb(), {
       provider: 'pg',
       schema: { user, session, account, verification, twoFactor },

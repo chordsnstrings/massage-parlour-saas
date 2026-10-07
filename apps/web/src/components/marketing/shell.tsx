@@ -2,7 +2,7 @@ import { ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/brand'
 import { ScrollScenes } from '@/components/scroll-scenes'
-import { appUrl } from '@/lib/paths'
+import { requestUrls } from '@/server/origin'
 
 export type MarketingPage = 'home' | 'features' | 'website-builder' | 'pricing' | 'contact'
 
@@ -13,7 +13,8 @@ const NAV: { key: MarketingPage; href: string; label: string }[] = [
   { key: 'contact', href: '/contact', label: 'Contact' },
 ]
 
-function Header({ active }: { active: MarketingPage }) {
+async function Header({ active }: { active: MarketingPage }) {
+  const urls = await requestUrls()
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-white/85 backdrop-blur-md">
       <div className="mkt-wrap flex h-16 items-center justify-between gap-4">
@@ -35,12 +36,12 @@ function Header({ active }: { active: MarketingPage }) {
         </nav>
         <div className="flex items-center gap-2">
           <a
-            href={appUrl('/login')}
+            href={urls.app('/login')}
             className="mkt-link hidden px-2 text-[14px] text-[var(--ink-2)] sm:inline"
           >
             Sign in
           </a>
-          <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary h-10 px-4 text-[14px]">
+          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary h-10 px-4 text-[14px]">
             Start
           </a>
         </div>
@@ -64,7 +65,8 @@ function Header({ active }: { active: MarketingPage }) {
   )
 }
 
-export function CtaBand({ title = 'Let your spa run itself.' }: { title?: string }) {
+export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: string }) {
+  const urls = await requestUrls()
   return (
     <section className="mkt-wrap py-24">
       <div className="tint-sage relative overflow-hidden rounded-[2rem] px-6 py-16 text-center sm:px-12">
@@ -82,7 +84,7 @@ export function CtaBand({ title = 'Let your spa run itself.' }: { title?: string
             Set up in an afternoon. We help you import your clients and menu.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <a href={appUrl('/signup')} className="mkt-btn mkt-btn-primary">
+            <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary">
               Start your spa <ArrowRight className="mkt-arrow size-4" />
             </a>
             <Link href="/contact" className="mkt-btn mkt-btn-ghost bg-white/70">
@@ -95,7 +97,8 @@ export function CtaBand({ title = 'Let your spa run itself.' }: { title?: string
   )
 }
 
-function Footer() {
+async function Footer() {
+  const urls = await requestUrls()
   return (
     <footer className="border-t border-[var(--line)]">
       <div className="mkt-wrap grid gap-10 py-14 text-[14px] sm:grid-cols-2 lg:grid-cols-4">
@@ -118,7 +121,7 @@ function Footer() {
           <Link href="/contact" className="mkt-link block w-fit text-[var(--ink-2)]">
             Contact
           </Link>
-          <a href={appUrl('/login')} className="mkt-link block w-fit text-[var(--ink-2)]">
+          <a href={urls.app('/login')} className="mkt-link block w-fit text-[var(--ink-2)]">
             Sign in
           </a>
         </div>

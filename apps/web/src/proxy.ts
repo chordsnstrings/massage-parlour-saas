@@ -1,17 +1,25 @@
-import { resolveSurface } from '@spa/core'
+import { parseRoots, resolveSurface } from '@spa/core'
 import { type NextRequest, NextResponse } from 'next/server'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
+/** Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — every one serves the whole platform. */
+const ROOTS = parseRoots(process.env.ROOT_DOMAIN ?? 'localhost:3000', process.env.EXTRA_ROOT_DOMAINS)
+const BARE_ROOTS = ROOTS.map((r) => r.split(':')[0]!)
 
 /** Maps a public request to an internal route prefix. See lib/paths.ts for the two routing modes. */
 function internalPath(host: string, pathname: string): string {
   const tail = (p: string) => (p === '/' ? '' : p)
   if (PATH_ROUTING) {
-    // Single-host mode: the platform lives on ROOT_DOMAIN (or a bare IP / localhost); any other host is a spa's
+    // Single-host mode: the platform lives on its domains (or a bare IP / localhost); any other host is a spa's
     // custom domain and only ever serves that spa's public site.
     const bare = host.split(':')[0]!.toLowerCase()
-    const root = (process.env.ROOT_DOMAIN ?? 'localhost').split(':')[0]!.toLowerCase()
-    if (bare && bare !== root && bare !== 'localhost' && !/^[\d.]+$/.test(bare) && !bare.includes('['))
+    if (
+      bare &&
+      !BARE_ROOTS.includes(bare) &&
+      bare !== 'localhost' &&
+      !/^[\d.]+$/.test(bare) &&
+      !bare.includes('[')
+    )
       return `/domain/${bare}${tail(pathname)}`
     const m = pathname.match(/^\/(app|admin|s)(?=\/|$)(\/[^/]+)?(.*)$/)
     if (m?.[1] === 'app') return `/dashboard${tail(`${m[2] ?? ''}${m[3] ?? ''}` || '/')}`
@@ -19,7 +27,7 @@ function internalPath(host: string, pathname: string): string {
     if (m?.[1] === 's' && m[2]) return `/site${m[2]}${m[3] ?? ''}`
     return `/marketing${tail(pathname)}`
   }
-  const surface = resolveSurface(host, process.env.ROOT_DOMAIN ?? 'localhost:3000')
+  const surface = resolveSurface(host, ROOTS)
   const prefix =
     surface.kind === 'marketing'
       ? '/marketing'

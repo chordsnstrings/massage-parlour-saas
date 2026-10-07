@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { Resolver } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { domainToASCII } from 'node:url'
+import { parseRoots } from '@spa/core'
 import { type Db, type DbOrTx, domains, platformDb, tenants, withTenant } from '@spa/db'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import { DomainError, pgCode } from './errors'
@@ -72,9 +73,12 @@ const notIp = () => new DomainError('Enter a domain name (like www.yourspa.ae), 
 
 /**
  * Turns what an owner typed ("https://WWW.TheirSpa.ae/booking", "مثال.امارات") into a bare ASCII hostname.
- * Rejects IPs, localhost/reserved names, our own root domain and its subdomains, and malformed names.
+ * Rejects IPs, localhost/reserved names, our own platform domains and their subdomains, and malformed names.
  */
-export function normaliseHostname(input: string, rootDomain = process.env.ROOT_DOMAIN ?? ''): string {
+export function normaliseHostname(
+  input: string,
+  roots: string | readonly string[] = parseRoots(process.env.ROOT_DOMAIN, process.env.EXTRA_ROOT_DOMAINS),
+): string {
   let host = input.trim().toLowerCase()
   host = host.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
   host = (host.split(/[/?#\\\s]/)[0] ?? '').replace(/^.*@/, '')
@@ -92,9 +96,9 @@ export function normaliseHostname(input: string, rootDomain = process.env.ROOT_D
   if (labels.length < 2) throw new DomainError('Enter the full domain, e.g. www.yourspa.ae')
   if (!labels.every((l) => LABEL.test(l)) || !TLD.test(labels.at(-1)!))
     throw new DomainError("That doesn't look like a valid domain name")
-  const root = stripHost(rootDomain)
-  if (root && (ascii === root || ascii.endsWith(`.${root}`)))
-    throw new DomainError(`${root} addresses are already included — add a domain you own`)
+  for (const root of (typeof roots === 'string' ? [roots] : roots).map(stripHost).filter(Boolean))
+    if (ascii === root || ascii.endsWith(`.${root}`))
+      throw new DomainError(`${root} addresses are already included — add a domain you own`)
   return ascii
 }
 
@@ -421,7 +425,7 @@ export async function addDomain(
     onRelease?: (claim: ReleasedClaim) => Promise<void>
   } = {},
 ) {
-  const hostname = normaliseHostname(input, env.ROOT_DOMAIN ?? '')
+  const hostname = normaliseHostname(input, parseRoots(env.ROOT_DOMAIN, env.EXTRA_ROOT_DOMAINS))
   const insert = () =>
     run(async (db) => {
       // One add at a time per spa, so two quick submits can't both pass the one-domain limit.

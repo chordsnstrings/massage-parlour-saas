@@ -43,6 +43,8 @@ export default defineConfig({
       DATABASE_URL_APP: process.env.TEST_DATABASE_URL_APP ?? local('spa_app'),
       BETTER_AUTH_SECRET: 'e2e-secret-e2e-secret-e2e-secret-e2e',
       PLATFORM_ADMIN_EMAILS: 'admin@e2e.test',
+      // A second platform domain (resolves to loopback): links and sign-in must follow whichever domain is used.
+      EXTRA_ROOT_DOMAINS: `alt.localhost:${PORT}`,
       RESEND_API_KEY: '',
     },
   },

@@ -40,10 +40,19 @@ On its next run the updater decrypts the file and overrides those keys on top of
 Until a domain is wired in, `SITE_HOST=auto` makes the site answer on `<ip-with-dashes>.sslip.io`, and Caddy gets a
 Let's Encrypt certificate for it. Routing is path-based (`/app`, `/admin`, `/s/{slug}`).
 
-When `spamanagement.ae` is ready:
-1. point `app.`, `admin.` and `*.` at the droplet (or put Cloudflare in front)
-2. set `SITE_HOST`, switch `ROUTING=host`, and extend the Caddyfile with the extra hosts
-3. run `spa-update --force`
+Links are domain-agnostic: every link, sign-in and redirect is built from the platform domain the visitor is on
+(apps/web/src/server/origin.ts). The app only needs to know which domains are ours:
+- `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN`/`APP_URL` derive from it). Used for anything
+  without a visitor: OAuth redirect URIs registered with Meta/Google, CNAME targets for spa domains, worker jobs.
+- `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform. Caddy issues
+  their certificates on demand (approved by `/api/domains/allowed`), so no Caddyfile edit is needed.
+
+Move to a new domain without downtime:
+1. point the new domain at the droplet (with host routing also `app.`, `admin.` and `*.`)
+2. add it to `EXTRA_ROOT_DOMAINS` (encrypted overlay, see above) — it works alongside the old one
+3. when ready, make it `SITE_HOST` and keep the old one in `EXTRA_ROOT_DOMAINS` so old links still work; update the
+   OAuth redirect URIs in the Meta/Google consoles to the new canonical domain
+4. for host routing (`app.example.ae`, `{slug}.example.ae`) also set `ROUTING=host`, then `spa-update --force`
 
 ## Creating the droplet
 

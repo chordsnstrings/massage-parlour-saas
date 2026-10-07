@@ -3,9 +3,9 @@ import { platformDb, platformInvoices } from '@spa/db'
 import { createInvoiceCheckout, StripeError, stripeConfig } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { appUrl } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { appUrl } from '@/server/origin'
 
 /** Starts a Stripe Checkout for one of the spa's open invoices and returns the hosted payment page URL. */
 export async function payInvoiceByCardAction(
@@ -24,7 +24,7 @@ export async function payInvoiceByCardAction(
     .from(platformInvoices)
     .where(and(eq(platformInvoices.id, invoiceId), eq(platformInvoices.tenantId, ctx.tenant.id)))
   if (invoice?.status !== 'issued') return { ok: false, error: 'This invoice is not open for payment' }
-  const back = appUrl(`/${slug}/billing`)
+  const back = await appUrl(`/${slug}/billing`)
   try {
     const session = await createInvoiceCheckout(cfg, {
       invoice,
