@@ -40,8 +40,9 @@ On its next run the updater decrypts the file and overrides those keys on top of
 Until a domain is wired in, `SITE_HOST=auto` makes the site answer on `<ip-with-dashes>.sslip.io`, and Caddy gets a
 Let's Encrypt certificate for it. Routing is path-based (`/app`, `/admin`, `/s/{slug}`).
 
-Links are domain-agnostic: every link, sign-in and redirect is built from the platform domain the visitor is on
-(apps/web/src/server/origin.ts). The app only needs to know which domains are ours:
+Links are domain-agnostic (apps/web/src/server/origin.ts): getting around and signing in use the platform domain the
+visitor is on; addresses that are shared, stored or sent use the canonical `SITE_HOST`. The app only needs to know
+which domains are ours:
 - `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN`/`APP_URL` derive from it). Every address that
   is shared or stored uses it (spa site links, invites, campaign links), as do CNAME targets and worker jobs.
 - `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform. Caddy issues

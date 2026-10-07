@@ -23,6 +23,16 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     }
   })
 
+  await test.step('a trailing-dot host is redirected to the plain domain', async () => {
+    const port = new URL(base).port
+    const res = await page.request.get(`http://127.0.0.1:${port}/features?x=1`, {
+      headers: { host: `alt.localhost.:${port}` },
+      maxRedirects: 0,
+    })
+    expect(res.status()).toBe(308)
+    expect(res.headers().location).toBe(`http://alt.localhost:${port}/features?x=1`)
+  })
+
   await test.step('second domain: sign up and land in the dashboard there', async () => {
     const slug = uniqueSlug('alt')
     await page.goto(`${altApp}/signup`)

@@ -12,7 +12,7 @@ function internalPath(host: string, pathname: string): string {
   if (PATH_ROUTING) {
     // Single-host mode: the platform lives on its domains (or a bare IP / localhost); any other host is a spa's
     // custom domain and only ever serves that spa's public site.
-    const bare = host.split(':')[0]!.toLowerCase().replace(/\.$/, '') // a trailing dot is the same host
+    const bare = host.split(':')[0]!.toLowerCase()
     if (
       bare &&
       !BARE_ROOTS.includes(bare) &&
@@ -46,6 +46,15 @@ function internalPath(host: string, pathname: string): string {
  * Pages re-check tenant and permissions themselves.
  */
 export function proxy(req: NextRequest) {
+  // `example.ae.` is the same host as `example.ae`: send it to the canonical spelling so sign-in, cookies and links all
+  // see one host (otherwise the dotted host would show pages it can't sign in on).
+  const host = req.headers.get('host') ?? ''
+  if (/\.(:\d+)?$/.test(host)) {
+    const proto =
+      req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
+    const fixed = host.replace(/\.+(?=:\d+$|$)/, '')
+    return NextResponse.redirect(`${proto}://${fixed}${req.nextUrl.pathname}${req.nextUrl.search}`, 308)
+  }
   const url = req.nextUrl.clone()
   const originalPath = url.pathname
   url.pathname = internalPath(req.headers.get('host') ?? '', originalPath)

@@ -801,8 +801,8 @@ until `spamanagement.ae` is registered.
   sections). AI cost is platform-paid (part of the service). **E** extended preflight, perf budgets, visual regression.
 
 ### 14.5 Domain-agnostic links (decided 2026-10-07)
-- Absolute URLs are built per request from the visitor's platform domain (`server/origin.ts`: `appUrl`, `adminUrl`,
-  `tenantSiteUrl`, `marketingUrl`, `requestUrls`). Platform domains = `ROOT_DOMAIN` (canonical) + `EXTRA_ROOT_DOMAINS`;
+- Navigation and sign-in URLs are built per request from the visitor's platform domain (`server/origin.ts`:
+  `requestUrls`, `appUrl`, `adminUrl`, `tenantSiteUrl`, `marketingUrl`); shared/stored addresses are the exception below. Platform domains = `ROOT_DOMAIN` (canonical) + `EXTRA_ROOT_DOMAINS`;
   any other Host (forged, or a spa custom domain) falls back to the canonical domain. Never bake a domain in at build time.
 - Proxy routing, Better Auth (dynamic `baseURL` with an exact allowed-hosts list + canonical fallback, so reset links
   can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
