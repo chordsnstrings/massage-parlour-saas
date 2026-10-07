@@ -43,7 +43,8 @@ test('website studio: the spa asks, the super-admin builds and sends for review,
 
     await signInOnApp(studio, `/${slug}/website`)
     await studio.getByRole('button', { name: 'Use Nordic Clean' }).click()
-    await expect(studio.getByRole('link', { name: 'Edit Home' })).toBeVisible()
+    // Creating the site writes every starter page and re-renders the layout — slow on the CI dev server.
+    await expect(studio.getByRole('link', { name: 'Edit Home' })).toBeVisible({ timeout: 30_000 })
     await studio.getByRole('button', { name: 'Resolve' }).click()
     await studio.getByLabel('Note to the spa (optional)').fill('Swapped in.')
     await studio.getByRole('button', { name: 'Close request' }).click()
