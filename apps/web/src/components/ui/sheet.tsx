@@ -25,10 +25,11 @@ export function Sheet({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px] data-[state=closed]:anim-fade-out data-[state=open]:anim-fade-in" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px] data-[state=closed]:pointer-events-none data-[state=closed]:anim-fade-out data-[state=open]:anim-fade-in" />
         <Dialog.Content
           className={cn(
-            'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-2xl border bg-surface pb-safe shadow-pop data-[state=closed]:anim-sheet-down data-[state=open]:anim-sheet-up',
+            // While it animates out a closed sheet ignores clicks, so a quick second click can't resubmit its form.
+            'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-2xl border bg-surface pb-safe shadow-pop data-[state=closed]:pointer-events-none data-[state=closed]:anim-sheet-down data-[state=open]:anim-sheet-up',
             'md:inset-auto md:top-1/2 md:left-1/2 md:w-full md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:pb-0 md:data-[state=open]:anim-pop-in md:data-[state=closed]:anim-fade-out',
             className,
           )}

@@ -40,6 +40,7 @@ test('engage: document expiry tracker, notifications card, insights card, receip
   await expect(sheet.getByText('scan.png')).toBeVisible()
   await sheet.getByRole('button', { name: 'Add document' }).click()
   await expect(page.getByText('Document added')).toBeVisible()
+  await expect(sheet).toBeHidden()
   await expect(page.getByText('Expires in 10 days').first()).toBeVisible()
   await expect(page.getByText('Due in 30 days').first()).toBeVisible()
 

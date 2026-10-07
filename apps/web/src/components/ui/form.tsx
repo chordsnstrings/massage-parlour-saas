@@ -28,9 +28,18 @@ export function ActionForm({
   const [state, setState] = useState<ActionResult>(null)
   const [pending, start] = useTransition()
   const ref = useRef<HTMLFormElement>(null)
-  const submit = (fd: FormData) =>
+  // One submission at a time: a double click lands before `pending` re-renders the button as disabled.
+  const inFlight = useRef(false)
+  const submit = (fd: FormData) => {
+    if (inFlight.current) return
+    inFlight.current = true
     start(async () => {
-      const result = await action(state, fd)
+      let result: ActionResult
+      try {
+        result = await action(state, fd)
+      } finally {
+        inFlight.current = false
+      }
       setState(result)
       // Feedback is fired here rather than in an effect so it survives the form unmounting after revalidation.
       if (!result) return
@@ -43,6 +52,7 @@ export function ActionForm({
         toast.error(result.error)
       }
     })
+  }
   return (
     <FormCtx.Provider value={{ state, pending }}>
       {/* Submitted via a transition instead of `action=` so React doesn't reset the fields when validation fails. */}
