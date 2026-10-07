@@ -806,7 +806,11 @@ until `spamanagement.ae` is registered.
   any other Host (forged, or a spa custom domain) falls back to the canonical domain. Never bake a domain in at build time.
 - Proxy routing, Better Auth (dynamic `baseURL` with an exact allowed-hosts list + canonical fallback, so reset links
   can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
-- No visitor → canonical `APP_URL`: OAuth redirect URIs, spa CNAME target, worker jobs.
+- Shared/stored/sent addresses use the canonical domain (`canonicalUrls()`): a spa's site address (`publicSiteUrl`,
+  GBP booking link, campaign and WhatsApp links), invites, preview share links, public file URLs for Instagram.
+- OAuth (Meta, Google) runs entirely on the domain it starts on — session and nonce cookies are per host — so each
+  platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: spa CNAME target,
+  Meta webhooks/deauthorize/data-deletion, worker jobs.
 
 ## 15. Working agreement (token-efficient, still thorough)
 

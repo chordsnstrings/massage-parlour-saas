@@ -1,13 +1,13 @@
 import type { Metadata } from 'next'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { PATH_ROUTING } from '@/lib/paths'
-import { tenantSiteUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
 import { SignupForm } from './signup-form'
 
-/** How a spa's web address is previewed while typing its name — on the domain the visitor is using. */
-async function siteAddress() {
-  const sample = new URL(await tenantSiteUrl('slug'))
+/** How a spa's web address (on the canonical domain) is previewed while typing its name. */
+function siteAddress() {
+  const sample = new URL(canonicalUrls().site('slug'))
   if (PATH_ROUTING) return { prefix: `${sample.host}/s/`, suffix: '' }
   return { prefix: '', suffix: sample.host.slice('slug'.length) }
 }
@@ -25,7 +25,7 @@ export default async function SignupPage() {
           : '14-day free trial. Your site goes live instantly.'
       }
     >
-      <SignupForm address={await siteAddress()} signedIn={Boolean(session)} />
+      <SignupForm address={siteAddress()} signedIn={Boolean(session)} />
     </AuthLayout>
   )
 }

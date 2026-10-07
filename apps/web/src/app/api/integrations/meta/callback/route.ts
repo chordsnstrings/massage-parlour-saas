@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     const short = await ig.exchangeCode({
       appId: cfg.appId,
       appSecret: cfg.appSecret,
-      redirectUri: metaUrls().callback,
+      redirectUri: metaUrls(urls.api('')).callback,
       code,
     })
     const long = await ig.longLivedToken({ appSecret: cfg.appSecret, accessToken: short.accessToken })

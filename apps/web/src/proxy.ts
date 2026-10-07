@@ -12,7 +12,7 @@ function internalPath(host: string, pathname: string): string {
   if (PATH_ROUTING) {
     // Single-host mode: the platform lives on its domains (or a bare IP / localhost); any other host is a spa's
     // custom domain and only ever serves that spa's public site.
-    const bare = host.split(':')[0]!.toLowerCase()
+    const bare = host.split(':')[0]!.toLowerCase().replace(/\.$/, '') // a trailing dot is the same host
     if (
       bare &&
       !BARE_ROOTS.includes(bare) &&

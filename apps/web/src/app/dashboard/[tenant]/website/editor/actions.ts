@@ -33,7 +33,7 @@ import type { VersionItem } from '@/components/site/editor/versions'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { appUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { publishErrors } from '@/server/site-preflight'
 import { publishPageAction } from '../actions'
 
@@ -286,7 +286,7 @@ export async function previewLinkAction(slug: string, pageId: string, days: numb
   if (!page) return fail('Page not found')
   const expiresAt = new Date(Date.now() + parsed.data.days * 86_400_000)
   const token = signPreviewToken({ tenantId: ctx.tenant.id, pageId, expiresAt }, secret)
-  const url = await appUrl(`/website/preview?token=${token}`)
+  const url = canonicalUrls().app(`/website/preview?token=${token}`)
   const qr = await QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'M', margin: 1 })
   await auditAs(ctx, 'site.page.preview_link_created', 'site_page', pageId, { days: parsed.data.days })
   return ok(undefined, { url, qr, expiresAt: expiresAt.toISOString() })

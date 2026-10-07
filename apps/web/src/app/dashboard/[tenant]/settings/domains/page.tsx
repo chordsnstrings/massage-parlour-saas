@@ -18,7 +18,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { appPath } from '@/lib/paths'
 import { cn, formatDate, formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
-import { tenantSiteUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { BuyDomain, CancelOrderButton } from './buy-domain'
 import { AddDomainForm, DomainActions, SubdomainPrimaryButton } from './domains-client'
 
@@ -62,7 +62,7 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
     ]),
   )
   const custom = rows[0] ?? null
-  const freeUrl = await tenantSiteUrl(slug)
+  const freeUrl = canonicalUrls().site(slug)
   const customPrimary = custom?.status === 'active' && custom.isPrimary
   const sslAuto = cloudflareConfig() !== null
 

@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { altApp, altBase, app, base, PATH, uniqueSlug } from './helpers'
+import { altApp, altBase, app, base, PATH, site, uniqueSlug } from './helpers'
 
-// The platform answers on every configured domain, and every link stays on the domain the visitor is using.
+// The platform answers on every configured domain: getting around stays on the domain the visitor is using, while a
+// spa's own addresses (its site, invites, campaign links) always use the canonical domain.
 test('links and sign-in follow whichever platform domain is used', async ({ page }) => {
   await test.step('canonical domain links to the canonical app', async () => {
     await page.goto(`${base}/features`)
@@ -25,8 +26,13 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
   await test.step('second domain: sign up and land in the dashboard there', async () => {
     const slug = uniqueSlug('alt')
     await page.goto(`${altApp}/signup`)
-    // The address preview uses this domain too.
-    await expect(page.getByText(PATH ? `alt.localhost` : `.alt.localhost`).first()).toBeVisible()
+    // A spa's address lives on the canonical domain, whichever domain it signs up on.
+    await expect(
+      page.getByText(PATH ? `localhost:${new URL(base).port}/s/` : `.localhost:${new URL(base).port}`, {
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(page.getByText('alt.localhost')).toHaveCount(0)
     await page.getByLabel('Your name').fill('Noor Haddad')
     await page.getByLabel('Work email').fill(`owner-${slug}@e2e.test`)
     await page.getByLabel('Password').fill('correct-horse-battery')
@@ -35,5 +41,9 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     await page.getByRole('button', { name: 'Create account' }).click()
     await page.waitForURL(`${altApp}/${slug}`)
     await expect(page.getByRole('link', { name: 'Website' }).first()).toBeVisible()
+
+    // Navigation stays on this domain; the spa's free address is the canonical one.
+    await page.goto(`${altApp}/${slug}/settings/domains`)
+    await expect(page.getByText(site(slug).replace(/^https?:\/\//, ''), { exact: true })).toBeVisible()
   })
 })

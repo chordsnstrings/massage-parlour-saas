@@ -10,6 +10,7 @@ import { CopyButton } from '@/components/ui/copy-button'
 import { appPath } from '@/lib/paths'
 import { cn, formatDate } from '@/lib/utils'
 import { can, type MemberContext } from '@/server/access'
+import { requestUrls } from '@/server/origin'
 import { InstagramGlyph } from '../inbox/icons'
 import { InstagramConnectButton, InstagramDisconnectButton } from './instagram-card-actions'
 
@@ -42,6 +43,8 @@ export async function InstagramCard({
   const missing = missingMetaEnv()
   const account = await withTenant(ctx.tenant.id, (tx) => instagramStatus(tx))
   const urls = metaUrls()
+  // Connecting runs on the platform domain in use, so Meta needs this domain's redirect URI too.
+  const redirectUri = metaUrls((await requestUrls()).api('')).callback
   const canManage = can(ctx, 'ai.manage')
   const notice = CONNECT_NOTICES[one(searchParams.ig) ?? '']
   const badge = !configured
@@ -194,7 +197,7 @@ export async function InstagramCard({
             verify token is the server’s META_WEBHOOK_VERIFY_TOKEN.
           </p>
           <UrlRow label="Webhook callback URL" value={urls.webhook} />
-          <UrlRow label="OAuth redirect URI" value={urls.callback} />
+          <UrlRow label="OAuth redirect URI (add one for each platform domain)" value={redirectUri} />
           <UrlRow label="Deauthorize callback URL" value={urls.deauthorize} />
           <UrlRow label="Data deletion request URL" value={urls.dataDeletion} />
         </div>

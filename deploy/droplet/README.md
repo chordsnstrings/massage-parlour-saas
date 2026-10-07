@@ -42,17 +42,19 @@ Let's Encrypt certificate for it. Routing is path-based (`/app`, `/admin`, `/s/{
 
 Links are domain-agnostic: every link, sign-in and redirect is built from the platform domain the visitor is on
 (apps/web/src/server/origin.ts). The app only needs to know which domains are ours:
-- `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN`/`APP_URL` derive from it). Used for anything
-  without a visitor: OAuth redirect URIs registered with Meta/Google, CNAME targets for spa domains, worker jobs.
+- `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN`/`APP_URL` derive from it). Every address that
+  is shared or stored uses it (spa site links, invites, campaign links), as do CNAME targets and worker jobs.
 - `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform. Caddy issues
   their certificates on demand (approved by `/api/domains/allowed`), so no Caddyfile edit is needed.
 
 Move to a new domain without downtime:
 1. point the new domain at the droplet (with host routing also `app.`, `admin.` and `*.`)
 2. add it to `EXTRA_ROOT_DOMAINS` (encrypted overlay, see above) — it works alongside the old one
-3. when ready, make it `SITE_HOST` and keep the old one in `EXTRA_ROOT_DOMAINS` so old links still work; update the
-   OAuth redirect URIs in the Meta/Google consoles to the new canonical domain
-4. for host routing (`app.example.ae`, `{slug}.example.ae`) also set `ROUTING=host`, then `spa-update --force`
+3. register its OAuth callback in the Meta and Google consoles (`https://<domain>/api/integrations/meta/callback`,
+   `…/google/callback`; with host routing on `app.<domain>`) — connecting runs on whichever domain you are on
+4. when ready, make it `SITE_HOST` (shared links switch to it) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
+   already sent keep working; point Meta's webhook / deauthorize / data-deletion URLs at the new domain
+5. for host routing (`app.example.ae`, `{slug}.example.ae`) also set `ROUTING=host`, then `spa-update --force`
 
 ## Creating the droplet
 

@@ -8,7 +8,7 @@ import { formatBytes, toMediaItem } from '@/components/media/types'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { tenantSiteUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 
 export const metadata: Metadata = { title: 'Media' }
 
@@ -61,7 +61,7 @@ export default async function MediaPage({
         <MediaLibrary
           slug={slug}
           base={base}
-          origin={new URL(await tenantSiteUrl(slug)).origin}
+          origin={new URL(canonicalUrls().site(slug)).origin}
           items={items}
           tags={data.tags}
           filter={filter}

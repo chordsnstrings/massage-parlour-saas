@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { appUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { hashToken, newToken } from '@/server/token'
 
 const inviteSchema = z.object({
@@ -62,7 +62,7 @@ export async function inviteAction(
     },
   )
   if (result.error !== null) return fail(result.error, { email: result.error })
-  const link = await appUrl(`/invite/${token}`)
+  const link = canonicalUrls().app(`/invite/${token}`)
   await sendStaffEmail({
     to: email,
     subject: `You're invited to ${ctx.tenant.name}`,

@@ -20,7 +20,7 @@ import { toMediaItem } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { tenantSiteUrl } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 
 const uuid = z.string().uuid()
 const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/media`)
@@ -140,7 +140,7 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
   if (fileIdFromUrl(row.url)) return ok('Already saved')
   try {
     const image = await saveRemoteImage(row.url)
-    const origin = new URL(await tenantSiteUrl(slug)).origin
+    const origin = new URL(canonicalUrls().site(slug)).origin
     await withTenant(ctx.tenant.id, async (tx) => {
       const asset = await persistRemoteAsset(tx, {
         tenantId: ctx.tenant.id,

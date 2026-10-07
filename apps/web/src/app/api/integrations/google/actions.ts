@@ -23,6 +23,7 @@ import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { requestUrls } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
 import { GBP_COOKIE, GBP_COOKIE_PATH } from './oauth'
 
@@ -41,7 +42,8 @@ export async function connectGoogleAction(slug: string): Promise<ActionResult> {
   const nonce = newGoogleNonce()
   const { verifier, challenge } = createPkce()
   const state = signGoogleState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
-  const redirectUri = googleRedirectUri()
+  // Stays on the platform domain the flow starts on (cookies are per host); register each domain's callback with Google.
+  const redirectUri = googleRedirectUri((await requestUrls()).api(''))
   ;(await cookies()).set(GBP_COOKIE, `${nonce}.${verifier}`, {
     httpOnly: true,
     sameSite: 'lax',

@@ -30,9 +30,13 @@ export function googleConfig(env: Env = process.env): GoogleConfig | null {
   return clientId && clientSecret ? { clientId, clientSecret } : null
 }
 
-/** `{APP_URL}/api/integrations/google/callback` (API routes are served at the app origin in both routing modes). */
-export const googleRedirectUri = (env: Env = process.env) =>
-  `${(env.APP_URL ?? 'http://app.localhost:3000').replace(/\/$/, '')}/api/integrations/google/callback`
+/**
+ * `{origin}/api/integrations/google/callback` (API routes are served at the app origin in both routing modes). The web
+ * app passes the platform domain the connect flow runs on; it defaults to the canonical APP_URL.
+ */
+export const googleRedirectUri = (
+  origin = (process.env.APP_URL ?? 'http://app.localhost:3000').replace(/\/$/, ''),
+) => `${origin.replace(/\/$/, '')}/api/integrations/google/callback`
 
 // ── OAuth state + PKCE ──────────────────────────────────────────────────────
 

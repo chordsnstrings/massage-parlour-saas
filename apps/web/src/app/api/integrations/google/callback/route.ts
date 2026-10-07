@@ -55,7 +55,12 @@ export async function GET(req: NextRequest) {
 
   let status = 'choose'
   try {
-    const tokens = await exchangeGoogleCode({ cfg, code, verifier, redirectUri: googleRedirectUri() })
+    const tokens = await exchangeGoogleCode({
+      cfg,
+      code,
+      verifier,
+      redirectUri: googleRedirectUri(urls.api('')),
+    })
     if (!tokens.scopes.includes(GOOGLE_SCOPE)) {
       status = 'scope'
     } else {

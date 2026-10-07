@@ -7,14 +7,16 @@ import { twoFactor as twoFactorPlugin } from 'better-auth/plugins'
 
 function createAuth() {
   // Every platform domain (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS) signs people in on itself: the base URL follows the request
-  // Host when it is one of ours (bare domain for path routing, app./admin. for host routing; dev ports included) and is
-  // the canonical APP_URL otherwise — so a forged Host or a spa's custom domain can never shape reset links.
+  // Host when it is one of ours and is the canonical APP_URL otherwise — so a forged Host or a spa's custom domain can
+  // never shape reset links. Only the hosts that serve sign-in are allowed: the bare domain with path routing, app. and
+  // admin. with host routing (dev ports included; Better Auth matches host:port exactly).
   const roots = parseRoots(process.env.ROOT_DOMAIN ?? 'localhost:3000', process.env.EXTRA_ROOT_DOMAINS)
+  const pathRouting = process.env.NEXT_PUBLIC_ROUTING === 'path'
   const canonical = new URL(process.env.APP_URL ?? 'http://app.localhost:3000').origin
   return betterAuth({
     appName: 'spamanagement.ae',
     baseURL: {
-      allowedHosts: roots.flatMap((r) => [r, `app.${r}`, `admin.${r}`]),
+      allowedHosts: pathRouting ? roots : roots.flatMap((r) => [`app.${r}`, `admin.${r}`]),
       fallback: canonical,
       protocol: canonical.startsWith('https:') ? 'https' : 'http',
     },
