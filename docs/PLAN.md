@@ -777,8 +777,8 @@ until `spamanagement.ae` is registered.
 ### 14.3 Marketing site & card billing (2026-10-06)
 - Marketing site: `/`, `/features`, `/website-builder`, `/pricing`, `/contact` (apps/web/src/app/marketing, shared
   `components/marketing`). White, minimal, muted palette (sage/clay/mist/sand/plum tints) scoped under `.mkt`; scroll
-  scenes from the scroll-scenes skill (`lib/scroll-scenes.ts`, `lib/scenes.ts`, `marketing/scenes.css`), off for reduced
-  motion; feature copy lives in `components/marketing/content.ts`.
+  scenes from the scroll-scenes skill (`lib/scroll-scenes.ts`, `lib/scenes.ts`, `marketing/scenes.css`), on for
+  every visitor including OS reduced motion (owner decision 2026-10-07); feature copy lives in `components/marketing/content.ts`.
 - Positioning: **automation — "More bookings. Less work."** Copy only claims what is automated in code; WhatsApp
   messages are described as written and queued automatically, sent by the spa in one tap (click-to-send stays locked).
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.

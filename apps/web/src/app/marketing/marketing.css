@@ -182,16 +182,6 @@
   .mkt-pulse {
     animation: mkt-pulse 2.4s ease-in-out infinite;
   }
-  @media (prefers-reduced-motion: reduce) {
-    .mkt-rise,
-    .mkt-pulse {
-      animation: none;
-    }
-    .mkt-card:hover,
-    .mkt-btn-primary:hover {
-      transform: none;
-    }
-  }
 
   /* in-page anchors land below the sticky header */
   .mkt [id] {

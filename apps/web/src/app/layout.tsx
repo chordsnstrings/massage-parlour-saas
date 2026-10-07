@@ -23,12 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Scroll scenes run only with motion allowed; set before first paint so pins never shift the layout. */}
+        {/* Scroll scenes run for every visitor (owner decision: also with OS reduced motion); set before first paint so pins never shift the layout. */}
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline bootstrap, no user input
           dangerouslySetInnerHTML={{
-            __html:
-              "(function(){try{if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('scenes-on')}catch(e){}})()",
+            __html: "document.documentElement.classList.add('scenes-on')",
           }}
         />
       </head>
