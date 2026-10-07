@@ -155,7 +155,7 @@ export function StudioDemo() {
         </p>
       </div>
 
-      <div
+      <figure
         className="overflow-hidden rounded-[1.25rem] border border-[var(--line)] bg-white shadow-[0_30px_80px_-40px_rgb(35_34_31/0.35)]"
         aria-label="Example spa website"
       >
@@ -222,7 +222,7 @@ export function StudioDemo() {
             </ul>
           </div>
         </div>
-      </div>
+      </figure>
     </div>
   )
 }
