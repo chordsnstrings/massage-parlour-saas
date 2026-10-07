@@ -24,8 +24,8 @@ const BANDS = [
     tint: 'tint-sand',
   },
   {
-    title: 'A website that sells',
-    text: '8 templates, AI-written copy, your own domain',
+    title: 'A website crafted for you',
+    text: 'Designed and written by our studio, English & Arabic, your own domain',
     tint: 'tint-mist',
   },
   {

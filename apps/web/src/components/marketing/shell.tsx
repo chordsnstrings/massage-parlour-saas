@@ -8,7 +8,7 @@ export type MarketingPage = 'home' | 'features' | 'website-builder' | 'pricing' 
 
 const NAV: { key: MarketingPage; href: string; label: string }[] = [
   { key: 'features', href: '/features', label: 'Features' },
-  { key: 'website-builder', href: '/website-builder', label: 'Website builder' },
+  { key: 'website-builder', href: '/website-builder', label: 'Website studio' },
   { key: 'pricing', href: '/pricing', label: 'Pricing' },
   { key: 'contact', href: '/contact', label: 'Contact' },
 ]

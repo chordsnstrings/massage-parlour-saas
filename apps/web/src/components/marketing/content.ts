@@ -63,14 +63,14 @@ export const AREAS: Area[] = [
   },
   {
     key: 'website',
-    title: 'A website that sells',
-    blurb: 'Eight designer templates, booking built in, live in an afternoon.',
+    title: 'A website crafted for you',
+    blurb: 'Designed, written and built by our studio — with booking built in.',
     tint: 'mist',
     features: [
-      '8 designer templates and ready-made sections',
-      'Drag-and-drop editor with per-device styling, English and Arabic',
-      'Checks before publishing catch missing alt text, Arabic copy and broken links',
-      'Scheduled publishing, version history and one-click template undo',
+      'Handcrafted by our studio from your menu, team, photos and story',
+      'Every section composed from hundreds of hand-tuned designs, in English and Arabic',
+      'Already have a site? We read it and bring your content across',
+      'Ask for any change — we make it; prices, team and hours update themselves',
       'Your own domain, or buy one from us — connected and secured automatically',
     ],
   },
@@ -134,17 +134,6 @@ export const AUTOMATIONS = [
   'Morning digest and weekly insights',
   'Domains checked and secured automatically',
   'Nightly backups',
-]
-
-export const TEMPLATES: { name: string; mood: string; colors: [string, string, string] }[] = [
-  { name: 'Zen Minimal', mood: 'Calm and airy', colors: ['#eef2ef', '#8fa89a', '#23221f'] },
-  { name: 'Dark Luxury', mood: 'Evening and gold', colors: ['#2a2723', '#b8a07a', '#f3efe7'] },
-  { name: 'Nordic Clean', mood: 'Light and precise', colors: ['#f2f3f5', '#9fb1c2', '#1e2530'] },
-  { name: 'Thai Teak', mood: 'Warm wood tones', colors: ['#f7f0ea', '#a7826a', '#2c221c'] },
-  { name: 'Desert Sand', mood: 'Warm and grounded', colors: ['#f9f6f1', '#c8a490', '#3b2f27'] },
-  { name: 'Tropical Bali', mood: 'Lush and green', colors: ['#eef3ec', '#6f8f6a', '#1f2a1e'] },
-  { name: 'Urban Express', mood: 'Quick and modern', colors: ['#f5f1f4', '#b3a1b0', '#2e2530'] },
-  { name: 'Hotel Spa', mood: 'Quiet luxury', colors: ['#f6f3ee', '#cdbfa9', '#2a2620'] },
 ]
 
 export const INCLUDED = [
