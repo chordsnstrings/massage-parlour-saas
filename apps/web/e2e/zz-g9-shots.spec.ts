@@ -3,7 +3,8 @@ import { user } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { app, signUpOwner, testDb } from './helpers'
 
-const OUT = '/tmp/claude-0/-home-user-massage-parlour-saas/1998ad9b-1e61-58ef-a73e-ab788ef65ade/scratchpad/p2/G9'
+const OUT =
+  '/tmp/claude-0/-home-user-massage-parlour-saas/1998ad9b-1e61-58ef-a73e-ab788ef65ade/scratchpad/p2/G9'
 test.setTimeout(300_000)
 
 test('G9 screenshots', async ({ page, browser }) => {
@@ -28,9 +29,13 @@ test('G9 screenshots', async ({ page, browser }) => {
     await shot(`${app}/account`, `account-${w}`)
   }
   const db = testDb()
-  await db.update(user).set({ locale: 'th' }).where(eq(user.email, `owner-${slug}@e2e.test`))
+  await db
+    .update(user)
+    .set({ locale: 'th' })
+    .where(eq(user.email, `owner-${slug}@e2e.test`))
   await page.setViewportSize({ width: 1280, height: 900 })
-  for (const p of ['settings', 'settings/domains', 'settings/data']) await shot(`${app}/${slug}/${p}`, `${p.replaceAll('/', '-')}-th`)
+  for (const p of ['settings', 'settings/domains', 'settings/data'])
+    await shot(`${app}/${slug}/${p}`, `${p.replaceAll('/', '-')}-th`)
   await page.setViewportSize({ width: 360, height: 900 })
   await shot(`${app}/${slug}/settings/hours`, 'settings-hours-th-360')
   await shot(`${app}/account`, 'account-th-360')
