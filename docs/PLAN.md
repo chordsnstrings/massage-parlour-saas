@@ -889,6 +889,10 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   *B2 built (X3, 2026-10-08): migration 0022_notifications; bell + /notifications; producers online booking, pending
   booking, low stock, document expiry, AI drafts, overdue invoice/payment reminder; push in each recipient's locale.
   See CODEMAP "Notifications".*
+- **B3 ✅ (2026-10-08):** 9 switches in `tenants.settings.automations` (missing = on; no new switches table), Automations
+  page in the System menu (`settings.manage`; backups + domains/SSL shown "Always on"), tenant `job_runs` log (migration
+  0022) shown as "Last 24 hours". Switches only stop QUEUEING (outbox) / pushes — click-to-send unchanged. Details: CODEMAP
+  "Automation switches".
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

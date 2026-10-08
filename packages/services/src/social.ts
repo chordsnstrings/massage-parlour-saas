@@ -15,6 +15,7 @@ import {
   withTenant,
 } from '@spa/db'
 import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
+import { automationOnSql } from './automations'
 import { findOrCreateClient } from './clients'
 import { DomainError } from './errors'
 import {
@@ -51,11 +52,6 @@ export const CHANNELS: Channel[] = ['instagram_dm', 'instagram_comment']
 
 /** Spas the platform acts for (AI replies, scheduled publishing) — same set as the other tenant jobs. */
 const LIVE_STATUSES = ['trial', 'active', 'past_due'] as const
-const liveTenantIds = (o: SocialOpts) =>
-  platformOf(o)
-    .select({ id: tenants.id })
-    .from(tenants)
-    .where(inArray(tenants.status, [...LIVE_STATUSES]))
 
 // ── Connected account ───────────────────────────────────────────────────────
 
@@ -875,8 +871,18 @@ export async function publishInstagramPost(
 
 /** Job (every 5 min): publish approved posts whose scheduled time has come, for spas with Instagram connected. */
 export async function publishDueInstagramPosts(o: SocialOpts = {}) {
-  const result = { attempted: 0, published: 0, failed: 0 }
+  const result = {
+    attempted: 0,
+    published: 0,
+    failed: 0,
+    byTenant: {} as Record<string, { published: number; failed: number }>,
+  }
   if (!metaConfig(o.env)) return result
+  // Spas with the Instagram automation switched off (B3) keep their scheduled posts until it is back on.
+  const switchedOn = platformOf(o)
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(and(inArray(tenants.status, [...LIVE_STATUSES]), automationOnSql('instagram')))
   const connected = platformOf(o)
     .select({ tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
@@ -884,7 +890,7 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
       and(
         eq(socialAccounts.platform, 'instagram'),
         eq(socialAccounts.status, 'connected'),
-        inArray(socialAccounts.tenantId, liveTenantIds(o)),
+        inArray(socialAccounts.tenantId, switchedOn),
       ),
     )
   const due = await platformOf(o)
@@ -903,8 +909,15 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
   for (const p of due) {
     result.attempted++
     const r = await publishInstagramPost(p.tenantId, p.id, { ...o, recordBlockers: true })
-    if (r.ok) result.published++
-    else result.failed++
+    const per = result.byTenant[p.tenantId] ?? { published: 0, failed: 0 }
+    result.byTenant[p.tenantId] = per
+    if (r.ok) {
+      result.published++
+      per.published++
+    } else {
+      result.failed++
+      per.failed++
+    }
   }
   return result
 }

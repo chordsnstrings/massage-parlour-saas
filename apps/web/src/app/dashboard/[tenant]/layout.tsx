@@ -77,7 +77,7 @@ export default async function TenantLayout({
   const base = appPath(`/${ctx.tenant.slug}`)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
-  // Automations and Coming next stay hidden until Phase 3 builds them.
+  // Coming next stays hidden until Phase 3 builds it.
   const allowed = (perm: Permission | Permission[] | null) =>
     perm === null || (Array.isArray(perm) ? perm.some((p) => can(ctx, p)) : can(ctx, perm))
   const page = (
@@ -143,6 +143,7 @@ export default async function TenantLayout({
       ...single('billing', 'billing.view', '/billing', t('nav.billing')),
     ]),
     ...group(t('nav.group.system'), [
+      ...single('automations', 'settings.manage', '/automations', t('nav.automations')),
       ...single('settings', 'settings.manage', '/settings', t('nav.settings')),
     ]),
   ]

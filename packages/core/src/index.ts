@@ -1,3 +1,4 @@
+export * from './automations'
 export * from './booking'
 export * from './email'
 export * from './hosts'

@@ -20,6 +20,7 @@ export const nav = {
   accounts: 'Accounts',
   vatPayroll: 'VAT & payroll',
   billing: 'Billing',
+  automations: 'Automations',
   settings: 'Settings',
   // Pages grouped under a menu item (shown as section tabs under the top bar).
   whatsapp: 'WhatsApp',

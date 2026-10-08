@@ -4,7 +4,8 @@ import { branches, withTenant } from '@spa/db'
 import { notifyTenant, pushConfigured } from '@spa/services'
 import { eq, sql } from 'drizzle-orm'
 import { log } from '../log'
-import { activeTenants, notifyDocumentExpiry } from './notifications'
+import { notifyDocumentExpiry } from './notifications'
+import { activeTenants, recordRun } from './runs'
 
 /** Daily 09:00 Dubai: bell + push for staff managers about documents with 60, 30, 7 or 0 days left. */
 export const documentExpiryReminders = (now = new Date()) => notifyDocumentExpiry(now)
@@ -13,7 +14,7 @@ export const documentExpiryReminders = (now = new Date()) => notifyDocumentExpir
 export async function weeklyInsights(now = new Date()) {
   if (!aiConfigured()) return { skipped: 'AI not configured' }
   let generated = 0
-  for (const t of await activeTenants()) {
+  for (const t of await activeTenants('weeklyInsights')) {
     try {
       const run = await generateInsights({ tenantId: t.id, trigger: 'schedule', now })
       generated++
@@ -28,9 +29,14 @@ export async function weeklyInsights(now = new Date()) {
         },
         { permission: 'reports.view' },
       )
+      await recordRun(t.id, 'weekly-insights', 'ok')
     } catch (error) {
-      if (error instanceof NotEnoughDataError) continue
+      if (error instanceof NotEnoughDataError) {
+        await recordRun(t.id, 'weekly-insights', 'skipped')
+        continue
+      }
       log('error', 'weekly insights failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'weekly-insights', 'failed')
     }
   }
   return { generated }
@@ -39,7 +45,7 @@ export async function weeklyInsights(now = new Date()) {
 /** Daily 09:30 Dubai (optional digest): today's bookings and online requests still waiting for confirmation. */
 export async function dailyDigest(now = new Date()) {
   if (!pushConfigured()) return { skipped: 'push not configured' }
-  for (const t of await activeTenants()) {
+  for (const t of await activeTenants('dailyDigest')) {
     try {
       const counts = await withTenant(t.id, async (tx) => {
         const [branch] = await tx
@@ -56,7 +62,10 @@ export async function dailyDigest(now = new Date()) {
         ).rows as { booked: number; pending: number }[]
         return { booked: Number(row?.booked ?? 0), pending: Number(row?.pending ?? 0) }
       })
-      if (!counts.booked) continue
+      if (!counts.booked) {
+        await recordRun(t.id, 'daily-digest', 'skipped', { count: 0 })
+        continue
+      }
       await notifyTenant(
         t.id,
         {
@@ -69,8 +78,10 @@ export async function dailyDigest(now = new Date()) {
         },
         { permission: 'calendar.manage' },
       )
+      await recordRun(t.id, 'daily-digest', 'ok', { count: counts.booked, pending: counts.pending })
     } catch (error) {
       log('error', 'daily digest failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'daily-digest', 'failed')
     }
   }
   return { ok: true }

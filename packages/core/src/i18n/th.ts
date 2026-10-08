@@ -8,6 +8,7 @@ import { accounts } from './th/accounts'
 import { ai } from './th/ai'
 import { analytics } from './th/analytics'
 import { auth } from './th/auth'
+import { automations } from './th/automations'
 import { billing } from './th/billing'
 import { bookings } from './th/bookings'
 import { calendar } from './th/calendar'
@@ -82,6 +83,7 @@ export const th: Messages = {
   accounts,
   payroll,
   billing,
+  automations,
   settings,
   sheets,
   account,

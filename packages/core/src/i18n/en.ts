@@ -9,6 +9,7 @@ import { accounts } from './en/accounts'
 import { ai } from './en/ai'
 import { analytics } from './en/analytics'
 import { auth } from './en/auth'
+import { automations } from './en/automations'
 import { billing } from './en/billing'
 import { bookings } from './en/bookings'
 import { calendar } from './en/calendar'
@@ -82,6 +83,7 @@ export const en = {
   accounts,
   payroll,
   billing,
+  automations,
   settings,
   sheets,
   account,

@@ -21,6 +21,7 @@ import {
   MessagesSquare,
   ReceiptText,
   Settings2,
+  Sparkles,
   Star,
   UserRound,
   Users,
@@ -53,6 +54,7 @@ const icons = {
   accounts: Calculator,
   vat: ReceiptText,
   billing: CreditCard,
+  automations: Sparkles,
   settings: Settings2,
 } as const
 

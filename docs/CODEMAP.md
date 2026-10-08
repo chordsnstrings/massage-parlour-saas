@@ -326,6 +326,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 Integration jobs do nothing until their credentials are configured.
 
+**Automation switches (B3).** `tenants.settings.automations` = `{ [AutomationKey]: boolean }`, missing = on
+(`AUTOMATIONS` / `automationOn` in `packages/core/src/automations.ts`; `automationOnSql` / `setAutomation` (atomic
+jsonb merge) / `getAutomations` / `isAutomationOn` in `services/src/automations.ts`). Gates: `bookingMessages`
+(confirmation + reminder) and `thankYou` (thank_you + review_request) inside `enqueueBookingMessage` (returns null
+when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `instagram` (in
+`publishDueInstagramPosts`), `googleReviews`, `weeklyInsights`, `dailyDigest`, `documentAlerts` in the worker's
+tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). Backups + domain checks are locked on. Not
+switchable (housekeeping): analytics, media prune, campaigns housekeeping, Instagram token refresh. **Run log:**
+tenant-scoped `job_runs` (job, status ok·skipped·failed, `summary` counts; RLS) written by `recordRun()` (never
+throws; prunes > 7 days); Instagram logs only when it published/failed. UI: `/automations` (`settings.manage`),
+i18n namespace `automations`.
+
 ## Deploy, CI, e2e
 
 - **Droplet stack** (`deploy/droplet/compose.yml`):

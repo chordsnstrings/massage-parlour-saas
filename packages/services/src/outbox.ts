@@ -1,4 +1,4 @@
-import { type WhatsAppMode, whatsappLink } from '@spa/core'
+import { type AutomationKey, automationOn, type WhatsAppMode, whatsappLink } from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -67,6 +67,14 @@ const fmtTime = (d: Date, lang: string) =>
     timeZone: 'Asia/Dubai',
   })
 
+/** Automation switch that gates each booking message kind (others are queued by their own flows). */
+const BOOKING_MESSAGE_AUTOMATION: Partial<Record<MessageKind, AutomationKey>> = {
+  booking_confirmation: 'bookingMessages',
+  reminder: 'bookingMessages',
+  thank_you: 'thankYou',
+  review_request: 'thankYou',
+}
+
 async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
   const [row] = await tx
     .select({ body: messageTemplates.body })
@@ -77,7 +85,8 @@ async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
 
 /**
  * Queues a WhatsApp message about a booking (idempotent per booking + kind). Returns null when the
- * client has no mobile number. `dueAt` lets reminders appear in the outbox at the right time.
+ * client has no mobile number or the spa switched that automation off (B3). `dueAt` lets reminders appear in the
+ * outbox at the right time.
  */
 export async function enqueueBookingMessage(
   tx: Tx,
@@ -86,13 +95,21 @@ export async function enqueueBookingMessage(
   dueAt = new Date(),
 ) {
   const [row] = await tx
-    .select({ booking: bookings, client: clients, spa: tenants.name, branch: branches })
+    .select({
+      booking: bookings,
+      client: clients,
+      spa: tenants.name,
+      settings: tenants.settings,
+      branch: branches,
+    })
     .from(bookings)
     .innerJoin(tenants, eq(tenants.id, bookings.tenantId))
     .innerJoin(branches, eq(branches.id, bookings.branchId))
     .leftJoin(clients, eq(clients.id, bookings.clientId))
     .where(eq(bookings.id, bookingId))
   if (!row?.client?.phoneE164) return null
+  const automation = BOOKING_MESSAGE_AUTOMATION[kind]
+  if (automation && !automationOn(row.settings, automation)) return null
   const [first] = await tx
     .select()
     .from(bookingItems)
