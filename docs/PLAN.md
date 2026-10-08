@@ -898,8 +898,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   the sum of these commissions only (no base, no % accrual). Receptionists (and other non-therapists): fixed salary or
   commission, chosen per person by the owner. Payroll + WPS build from this.
   *Built (W2, branch worktree-agent-a97b77d5b8dd6e500): migration 0019_booking_commissions; "% commission" for
-  non-therapists = % of net POS lines credited to them (existing `commission_pct`); open: owner to confirm vs
-  fixed AED per booking. Details: CODEMAP Service invariants (Bookings marks/commission, Payroll / pay types).*
+  non-therapists = % of net POS lines credited to them (existing `commission_pct`); superseded by the owner decisions below
+  (fixed AED per booking). Details: CODEMAP Service invariants (Bookings marks/commission, Payroll / pay types).*
+- **R2 owner decisions (2026-10-08):** (1) receptionists on commission get a fixed AED fee set by the owner in the
+  commission settings (`receptionist_booking_fee`) × the bookings they created that ended Completed in the period; no %
+  option for receptionists. (2) Therapist payroll pays booking commissions only; a separate "Tips & advances" payout
+  view shows Net = tips received − advances taken. (3) Consumables are never auto-restocked when a booking is
+  re-opened; manual stock adjustment/restock allowed for Accountant, Manager and Receptionist. (4) Migration converts
+  existing monthly subscriptions (e.g. AED 2,000/month) to the yearly price (× 12) on the 12-month plan; yearly stay.
 - **R3 Subscription:** AED 24,000/yr = 12 monthly invoices of AED 2,000, or one-time annual; setup fee is separate
   from the plan and set per spa by the super-admin.
 - **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide
