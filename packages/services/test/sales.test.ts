@@ -13,6 +13,7 @@ import {
   packageDefinitions,
   products,
   rooms,
+  sales,
   services,
   serviceVariants,
   staff,
@@ -410,5 +411,77 @@ describe('sales of products, packages and gift cards', () => {
     ).rejects.toThrow(/Only AED 150.00 left/)
     const [left] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.id, card!.id)))
     expect(left!.balanceAed).toBe('150.00')
+  })
+})
+
+describe('a booking is checked out once (F3)', () => {
+  const D3 = '2026-10-27'
+  const at = dubaiInstant(D3, 12 * 60)
+  const book = (hour: number) =>
+    tx((db) =>
+      createBooking(db, {
+        ...base(),
+        clientId: ids.client,
+        source: 'phone',
+        status: 'confirmed',
+        allowOffShift: true,
+        items: [
+          { serviceVariantId: ids.variant!, start: dubaiInstant(D3, hour * 60), staffIds: [ids.maya!] },
+        ],
+      }),
+    )
+  const checkout = (bookingId: string) =>
+    tx((db) =>
+      createSale(db, {
+        ...base(),
+        bookingId,
+        lines: [swedish(ids.maya)],
+        payments: [{ method: 'cash', amountAed: 350 }],
+        now: at,
+      }),
+    )
+  const liveSales = (bookingId: string) =>
+    tx((db) =>
+      db.select().from(sales).where(sql`${sales.bookingId} = ${bookingId} and ${sales.status} <> 'void'`),
+    )
+
+  it('rejects a second checkout of the same booking', async () => {
+    const b = await book(10)
+    await checkout(b.id)
+    await expect(checkout(b.id)).rejects.toBeInstanceOf(DomainError)
+    expect(await liveSales(b.id)).toHaveLength(1)
+  })
+
+  it('lets exactly one of two concurrent checkouts through', async () => {
+    const b = await book(13)
+    const results = await Promise.allSettled([checkout(b.id), checkout(b.id)])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const failed = results.find((r) => r.status === 'rejected') as PromiseRejectedResult
+    expect(failed.reason).toBeInstanceOf(DomainError)
+    expect(await liveSales(b.id)).toHaveLength(1)
+  })
+
+  it('allows a new checkout once the earlier sale is voided; the index backs it up', async () => {
+    const b = await book(16)
+    const { sale: first } = await checkout(b.id)
+    await tx((db) => voidSale(db, { saleId: first.id, reason: 'Wrong items' }))
+    // Voiding leaves the booking completed; reopen it so the status check doesn't mask the sale check.
+    await tx((db) => db.update(bookings).set({ status: 'in_service' }).where(eq(bookings.id, b.id)))
+    const { sale: second } = await checkout(b.id)
+    expect(second.bookingId).toBe(b.id)
+    // A second live sale for the booking is refused by the partial unique index itself.
+    await expect(
+      tx((db) =>
+        db.insert(sales).values({
+          ...base(),
+          bookingId: b.id,
+          number: 9999,
+          businessDate: D3,
+          subtotalAed: '350',
+          totalAed: '350',
+          status: 'paid',
+        }),
+      ),
+    ).rejects.toMatchObject({ cause: { code: '23505', constraint: 'sales_booking_once' } })
   })
 })

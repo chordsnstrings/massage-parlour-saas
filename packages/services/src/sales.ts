@@ -21,7 +21,7 @@ import {
 } from '@spa/db'
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { setBookingStatus } from './bookings'
-import { DomainError, pgCode } from './errors'
+import { DomainError, pgCode, pgConstraint } from './errors'
 import { returnSoldStock, sellStock } from './inventory'
 import { post, postRefund, postSale, reverseSource } from './ledger'
 import {
@@ -188,7 +188,8 @@ export async function createSale(tx: Tx, input: NewSale) {
   let clientId = input.clientId ?? null
   let booking: typeof bookings.$inferSelect | undefined
   if (input.bookingId) {
-    ;[booking] = await tx.select().from(bookings).where(eq(bookings.id, input.bookingId))
+    // Lock the booking so concurrent checkouts of it serialise on the earlier-sale check below.
+    ;[booking] = await tx.select().from(bookings).where(eq(bookings.id, input.bookingId)).for('update')
     if (!booking) throw new DomainError('Booking not found', 'not_found')
     if (booking.branchId !== input.branchId) throw new DomainError('That booking belongs to another branch')
     if (!['confirmed', 'checked_in', 'in_service'].includes(booking.status))
@@ -218,24 +219,32 @@ export async function createSale(tx: Tx, input: NewSale) {
   }
 
   const number = await nextCounter(tx, input.tenantId, 'sale')
-  const [sale] = await tx
-    .insert(sales)
-    .values({
-      tenantId: input.tenantId,
-      branchId: input.branchId,
-      clientId,
-      bookingId: booking?.id ?? null,
-      number,
-      businessDate,
-      subtotalAed: aed(subtotal),
-      discountAed: aed(saleDiscount),
-      vatAed: aed(vat),
-      totalAed: aed(total),
-      tipsAed: aed(tipTotal),
-      status: 'paid',
-      createdBy: input.createdBy ?? null,
-    })
-    .returning()
+  let sale: typeof sales.$inferSelect | undefined
+  try {
+    ;[sale] = await tx
+      .insert(sales)
+      .values({
+        tenantId: input.tenantId,
+        branchId: input.branchId,
+        clientId,
+        bookingId: booking?.id ?? null,
+        number,
+        businessDate,
+        subtotalAed: aed(subtotal),
+        discountAed: aed(saleDiscount),
+        vatAed: aed(vat),
+        totalAed: aed(total),
+        tipsAed: aed(tipTotal),
+        status: 'paid',
+        createdBy: input.createdBy ?? null,
+      })
+      .returning()
+  } catch (e) {
+    // Backstop for the booking lock: the partial unique index allows one non-void sale per booking.
+    if (pgCode(e) === '23505' && pgConstraint(e) === 'sales_booking_once')
+      throw new DomainError('This booking has already been checked out')
+    throw e
+  }
   const lines = await tx
     .insert(saleLines)
     .values(

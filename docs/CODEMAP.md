@@ -178,7 +178,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The business date comes from the branch cutoff.
   - Void is allowed only on the same open day, with no refunds and nothing prepaid. It reverses the sale,
     commission and COGS entries and returns stock.
-  - A refund posts a new `refund` entry.
+  - A refund posts a new `refund` entry. Its debits mirror the sale entry's 4000/4100/2100/2110/2000 credit lines,
+    prorated in fils (remainder on the largest line; tips stay in 2200). Sales without a ledger entry fall back to
+    4000 + 2000.
   - `closeDay` runs once per branch and day.
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
@@ -229,7 +231,7 @@ Integration jobs do nothing until their credentials are configured.
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch, so every push to it reaches production
   within about 2 minutes.
-- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main`: bootstrap `spa_test` → lint → typecheck →
+- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main` and the deploy branch: bootstrap `spa_test` → lint → typecheck →
   test → web build → Playwright e2e.
 - **e2e**:
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
@@ -243,12 +245,13 @@ Integration jobs do nothing until their credentials are configured.
 Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
 in **PLAN §17** (items F1–F7 match the numbers below).
 
-1. **Refund postings**: `ledger.postRefund` (`packages/services/src/ledger.ts`) always debits 4000 + 2000.
-   Retail refunds belong in 4100, and prepaid lines (2100/2110, no VAT) are misposted.
+1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
+   before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
 2. **Refund side effects**: `refundSale` (`packages/services/src/sales.ts`) does not return stock or reverse COGS or
    commissions. Void does all three.
-3. **Double checkout**: `createSale` guards against checking out a booking twice with check-then-insert. There is no
-   unique key or row lock on `sales.booking_id`, so concurrent checkouts can both succeed.
+3. ✅ **Double checkout** (fixed, F3): `createSale` locks the booking row (`FOR UPDATE`) before the earlier-sale check;
+   partial unique index `sales_booking_once` (one non-void sale per booking, migration 0014) backs it up and its
+   `23505` maps to a `DomainError`. Migration 0014 skips the index with a WARNING if duplicates already exist.
 4. **Booking ref race**: booking `refCode` uses a select-then-insert loop. A concurrent `bookings_tenant_ref` `23505`
    isn't mapped to a `DomainError`. Rare: the code is 5 characters.
 5. **Loyalty cutoff**: `packages/services/src/loyalty.ts` (`businessDateOf(now)`, lines 92 and 117) uses the default

@@ -840,7 +840,7 @@ CLAUDE.md). Rules for the work:
 - Existing ledger rows are never edited; corrections are new entries.
 - When an item ships, mark it ✅ here.
 
-**F1. Refunds post to the wrong accounts.**
+**F1. Refunds post to the wrong accounts.** ✅ Fixed (prorated from the sale entry; legacy fallback 4000/2000; no historical corrections).
 - Where: `packages/services/src/ledger.ts` `postRefund`, called from `sales.ts` `refundSale`.
 - Problem: it always debits 4000 + 2000. Retail refunds belong in 4100. Prepaid lines (2100/2110) carried no VAT.
 - Planned fix:
@@ -861,7 +861,7 @@ CLAUDE.md). Rules for the work:
   - Partial refunds: **owner decision**, see below.
 - Tests: services `sales` and `p2` tests; e2e `pos-prepaid.spec`.
 
-**F3. A booking can be checked out twice.**
+**F3. A booking can be checked out twice.** ✅ Fixed (booking lock + `sales_booking_once`, migration 0014).
 - Where: `packages/services/src/sales.ts` `createSale` (check-then-insert); schema `commerce.ts`.
 - Planned fix:
   - Lock the booking row (`FOR UPDATE`) before the earlier-sale check.

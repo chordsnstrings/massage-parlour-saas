@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # The droplet deploys claude/intelligent-heisenberg-g9e81o: every push there must be checked too.
+    branches: [main, claude/intelligent-heisenberg-g9e81o]
 
 concurrency:
   group: ci-${{ github.ref }}
