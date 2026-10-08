@@ -930,6 +930,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   through Meta MCP but never sends; staff tap to send. Instagram/Facebook via Meta MCP: read, draft, publish approved posts.
 - **B1 decision (2026-10-08):** staff emails (invites, password reset, 2FA) keep sending from spamanagement.ae
   (`EMAIL_FROM`) until spamanagement.co is verified in Resend; then switch the env value.
+- **Phone visibility (owner, 2026-10-09):** client phone numbers are shown only to owner, manager and receptionist —
+  always; never to therapist, accountant, content editor or custom roles (no per-spa toggle).
 - **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):
   Services & menu → Purchases; one ledger entry per purchase (stock → 1200, rest → 6150/6160/6170/6900 by category,
   input VAT 1300); void = reversal + stock back out (CODEMAP "Stock locations + purchases").
