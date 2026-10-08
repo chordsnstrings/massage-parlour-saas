@@ -229,7 +229,7 @@ Integration jobs do nothing until their credentials are configured.
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch, so every push to it reaches production
   within about 2 minutes.
-- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main`: bootstrap `spa_test` → lint → typecheck →
+- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main` and the deploy branch: bootstrap `spa_test` → lint → typecheck →
   test → web build → Playwright e2e.
 - **e2e**:
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
