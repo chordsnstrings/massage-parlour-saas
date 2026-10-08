@@ -51,20 +51,20 @@ beforeAll(async () => {
 afterAll(() => closeAllDbs())
 
 describe('website studio', () => {
-  it('runs building → review → approved, with the spa only approving a pending review', async () => {
+  it('runs building → review → approved, all moved by the studio', async () => {
     expect(await status()).toBe('building')
-    await expect(tx((db) => setStudioStatus(db, ids.tenant!, 'approved', 'spa'))).rejects.toThrow()
-    await expect(tx((db) => setStudioStatus(db, ids.tenant!, 'approved', 'studio'))).rejects.toThrow()
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'review', 'studio'))
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'approved', 'spa'))
+    await expect(tx((db) => setStudioStatus(db, ids.tenant!, 'building'))).rejects.toThrow()
+    await tx((db) => setStudioStatus(db, ids.tenant!, 'review'))
+    await tx((db) => setStudioStatus(db, ids.tenant!, 'approved'))
     expect(await status()).toBe('approved')
-    await expect(tx((db) => setStudioStatus(db, ids.other!, 'review', 'studio'), ids.other)).rejects.toThrow(
+    await tx((db) => setStudioStatus(db, ids.tenant!, 'building'))
+    await expect(tx((db) => setStudioStatus(db, ids.other!, 'review'), ids.other)).rejects.toThrow(
       'no website',
     )
   })
 
   it('records change requests; one made during review sends the site back to the studio', async () => {
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'review', 'studio'))
+    await tx((db) => setStudioStatus(db, ids.tenant!, 'review'))
     const [home] = await tx((db) => listPages(db, ids.tenant!))
     const id = await tx((db) =>
       createChangeRequest(db, ids.tenant!, {

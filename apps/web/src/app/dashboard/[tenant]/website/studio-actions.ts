@@ -4,10 +4,11 @@ import { createChangeRequest, DomainError, resolveChangeRequest, setStudioStatus
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
-import { guard, isStudio, type MemberContext, studioGuard } from '@/server/access'
+import { guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 
-// Website Studio workflow (PLAN §14.4): the spa reviews, approves and asks for changes; the studio resolves them.
+// Website Studio workflow (PLAN §14.4): the spa reviews and asks for changes; the studio resolves them and alone
+// moves the site through review and approval (R1).
 
 const auditAs = (ctx: MemberContext, action: string, entityId?: string, data?: unknown) =>
   audit({
@@ -61,34 +62,34 @@ export async function requestChangeAction(
   return ok('website.sent')
 }
 
-/** Only the spa approves its own site — a super-admin can't approve on its behalf. */
-export async function approveSiteAction(slug: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.publish')
-  if (error) return fail(error)
-  if (await isStudio(ctx)) return fail('website.onlySpa')
-  try {
-    await withTenant(ctx.tenant.id, (tx) => setStudioStatus(tx, ctx.tenant.id, 'approved', 'spa'))
-  } catch (e) {
-    return domainFail(e)
-  }
-  await auditAs(ctx, 'site.approved')
-  revalidate(slug)
-  return ok('website.approved')
-}
+const STATUS_RESULT = {
+  building: 'website.backInStudio',
+  review: 'website.sentForReview',
+  approved: 'website.approved',
+} as const
+const STATUS_AUDIT = {
+  building: 'site.back_in_studio',
+  review: 'site.sent_for_review',
+  approved: 'site.approved',
+} as const
 
-export async function setReviewAction(slug: string, review: boolean): Promise<ActionResult> {
+/** Studio only (R1): send for review, pull back, approve or reopen. Spa members can only request changes. */
+export async function setStudioStatusAction(
+  slug: string,
+  to: keyof typeof STATUS_RESULT,
+): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
+  const parsed = z.enum(['building', 'review', 'approved']).safeParse(to)
+  if (!parsed.success) return fromZod(parsed.error)
   try {
-    await withTenant(ctx.tenant.id, (tx) =>
-      setStudioStatus(tx, ctx.tenant.id, review ? 'review' : 'building', 'studio'),
-    )
+    await withTenant(ctx.tenant.id, (tx) => setStudioStatus(tx, ctx.tenant.id, parsed.data))
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, review ? 'site.sent_for_review' : 'site.review_withdrawn')
+  await auditAs(ctx, STATUS_AUDIT[parsed.data])
   revalidate(slug)
-  return ok(review ? 'website.sentForReview' : 'website.backInStudio')
+  return ok(STATUS_RESULT[parsed.data])
 }
 
 const resolveSchema = z.object({

@@ -24,7 +24,12 @@ import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
 import { requestChangeAction } from './studio-actions'
-import { ApproveSiteSheet, RequestChangeSheet, ResolveRequestSheet, ReviewButton } from './studio-client'
+import {
+  ApproveSiteSheet,
+  RequestChangeSheet,
+  ResolveRequestSheet,
+  StudioStatusButton,
+} from './studio-client'
 import {
   AddPageSheet,
   AiWriterSheet,
@@ -72,13 +77,13 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     },
   )
   const catalog = await templateCatalog()
-  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits; the spa reviews and asks.
+  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits, approves and publishes; the spa
+  // previews and requests changes (R1).
   const studio = await isStudio(ctx)
   const canDesign = studio && can(ctx, 'site.design')
   const canPublish = studio && can(ctx, 'site.publish')
   const canEdit = studio && can(ctx, 'site.content')
   const canRequest = !studio && can(ctx, 'site.content')
-  const canApprove = !studio && can(ctx, 'site.publish') && site?.studioStatus === 'review'
   const studioStatus = site?.studioStatus ?? 'building'
   const openRequests = requests.filter((r) => r.status === 'open').length
   const pageOptions = pages.map((p) => ({ id: p.id, title: p.title.en }))
@@ -340,9 +345,14 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
         actions={
           <>
             {writer}
-            {studio && site && site.studioStatus !== 'approved' && (
-              <ReviewButton slug={slug} review={site.studioStatus === 'building'} />
+            {canPublish && site && (
+              <StudioStatusButton
+                slug={slug}
+                to={site.studioStatus === 'building' ? 'review' : 'building'}
+                reopen={site.studioStatus === 'approved'}
+              />
             )}
+            {canPublish && site && site.studioStatus !== 'approved' && <ApproveSiteSheet slug={slug} />}
             {!studio && site && (
               <Button variant="secondary" asChild>
                 <a href={preview()} target="_blank" rel="noreferrer">
@@ -351,7 +361,6 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               </Button>
             )}
             {canRequest && <RequestChangeSheet slug={slug} pages={pageOptions} />}
-            {canApprove && <ApproveSiteSheet slug={slug} />}
             {site && (
               <Button variant="secondary" asChild>
                 <a href={publicUrl} target="_blank" rel="noreferrer">
