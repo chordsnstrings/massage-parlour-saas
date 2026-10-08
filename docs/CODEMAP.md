@@ -35,6 +35,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
   = soft delete (`requireMember` 404s members).
+- **Notifications (B2, migration 0022)**: `notifications` (tenant, `user_id` NULL = everyone holding `permission`,
+  `kind`, `payload {params,url}`, partial-unique `dedupe_key`, `read_at` for personal rows) + `notification_reads`
+  (per-user read of shared rows). Kinds → permission + text: `@spa/core` `NOTIFICATION_KINDS`/`notificationText`
+  (i18n ns `notifications.kind.*`; params `at`/`date`/`amount` formatted in the reader's locale). Services
+  `notifications.ts` (`notify` = create deduped → push per recipient locale via `notify.ts`; list/unread/markRead/
+  markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
+  `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
+  10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
+  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest stay push-only.
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
     `staff | room` only (no equipment yet).
@@ -181,7 +190,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   2. `findOrCreateClient`; blocklisted clients are refused.
   3. `createBooking` with status `pending`, source `online`.
   4. `enqueueBookingMessage`.
-  5. Push to the spa via `after(notifyTenant)`.
+  5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
 
 ## Service invariants (`packages/services`)
 

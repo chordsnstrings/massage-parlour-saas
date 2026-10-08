@@ -25,6 +25,7 @@ import { marketing } from './th/marketing'
 import { media } from './th/media'
 import { messages } from './th/messages'
 import { nav } from './th/nav'
+import { notifications } from './th/notifications'
 import { overview } from './th/overview'
 import { packages } from './th/packages'
 import { payroll } from './th/payroll'
@@ -85,4 +86,5 @@ export const th: Messages = {
   auth,
   enums,
   permissions,
+  notifications,
 }

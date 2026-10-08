@@ -1,38 +1,13 @@
 import { aiConfigured, generateInsights, NotEnoughDataError } from '@spa/ai'
 import { businessDateOf } from '@spa/core'
-import { branches, platformDb, tenants, withTenant } from '@spa/db'
-import { documentsDueForReminder, notifyTenant, pushConfigured, reminderMessage } from '@spa/services'
-import { eq, inArray, sql } from 'drizzle-orm'
+import { branches, withTenant } from '@spa/db'
+import { notifyTenant, pushConfigured } from '@spa/services'
+import { eq, sql } from 'drizzle-orm'
 import { log } from '../log'
+import { activeTenants, notifyDocumentExpiry } from './notifications'
 
-const activeTenants = () =>
-  platformDb()
-    .select({ id: tenants.id, slug: tenants.slug })
-    .from(tenants)
-    .where(inArray(tenants.status, ['trial', 'active', 'past_due']))
-
-/** Daily 09:00 Dubai: push staff managers about documents with 60, 30, 7 or 0 days left. */
-export async function documentExpiryReminders(now = new Date()) {
-  if (!pushConfigured()) return { skipped: 'push not configured' }
-  let notified = 0
-  for (const t of await activeTenants()) {
-    try {
-      const due = await withTenant(t.id, (tx) => documentsDueForReminder(tx, now))
-      const msg = reminderMessage(due)
-      if (!msg) continue
-      const res = await notifyTenant(
-        t.id,
-        { ...msg, url: `/${t.slug}/documents`, tag: 'documents' },
-        { permission: 'staff.manage' },
-      )
-      notified += res.sent
-      log('info', 'document reminders', { tenant: t.slug, documents: due.length, ...res })
-    } catch (error) {
-      log('error', 'document reminders failed', { tenant: t.slug, error: String(error) })
-    }
-  }
-  return { notified }
-}
+/** Daily 09:00 Dubai: bell + push for staff managers about documents with 60, 30, 7 or 0 days left. */
+export const documentExpiryReminders = (now = new Date()) => notifyDocumentExpiry(now)
 
 /** Mondays 08:00 Dubai: AI insights digest for every active spa with activity, then a push to report viewers. */
 export async function weeklyInsights(now = new Date()) {

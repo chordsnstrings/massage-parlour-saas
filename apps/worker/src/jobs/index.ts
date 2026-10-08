@@ -6,6 +6,13 @@ import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
 import { syncAllGbpReviews } from './gbp'
 import { publishScheduledInstagramPosts, refreshInstagramAccessTokens } from './instagram'
 import { pruneExpiredAiImages } from './media'
+import {
+  notifyAiDrafts,
+  notifyBilling,
+  notifyLowStock,
+  notifyPendingBookings,
+  pruneAllNotifications,
+} from './notifications'
 import { expireAllPackages, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
@@ -31,4 +38,9 @@ export const jobs: JobDef[] = [
   { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
   { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
   { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },
+  { name: 'notify-pending-bookings', cron: '*/15 * * * *', handler: () => notifyPendingBookings() },
+  { name: 'notify-low-stock', cron: '15 9 * * *', handler: () => notifyLowStock() },
+  { name: 'notify-ai-drafts', cron: '0 10 * * *', handler: () => notifyAiDrafts() },
+  { name: 'notify-billing', cron: '20 9 * * *', handler: () => notifyBilling() },
+  { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
 ]

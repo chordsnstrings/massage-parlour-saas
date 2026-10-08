@@ -1,6 +1,7 @@
 export * from './booking'
 export * from './email'
 export * from './hosts'
+export * from './notifications'
 export * from './permissions'
 export * from './report'
 export * from './slug'

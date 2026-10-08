@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { bookings, clients } from '@spa/db'
+import { bookings, clients, notifications } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
-import { screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 test('visitor books online: service → tomorrow → first time → details → pending booking + WhatsApp confirm', async ({
   page,
@@ -47,6 +47,28 @@ test('visitor books online: service → tomorrow → first time → details → 
     .innerJoin(clients, eq(clients.id, bookings.clientId))
     .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
   expect(row).toEqual({ status: 'pending', source: 'online', phone: '971501234567' })
+
+  // The front desk's bell (PLAN §14.7 B2): the booking arrives as an unread notification with a deep link.
+  await expect
+    .poll(
+      async () =>
+        (await db.select().from(notifications).where(eq(notifications.tenantId, seed.tenantId))).length,
+    )
+    .toBe(1)
+  await page.goto(`${app}/${slug}`)
+  const bell = page.getByTestId('notification-bell')
+  await expect(bell).toHaveAccessibleName('Notifications, 1 unread')
+  await bell.click()
+  const item = page.getByRole('menuitem', { name: /New online booking.*Noura Haddad.*Swedish massage/ })
+  await expect(item).toBeVisible()
+  await screenshotAt(page, 'notifications-bell')
+  await item.click()
+  await expect(page).toHaveURL(/\/calendar\?date=\d{4}-\d{2}-\d{2}$/)
+  await expect(bell).toHaveAccessibleName('Notifications')
+  await page.goto(`${app}/${slug}/notifications`)
+  await expect(page.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: /New online booking/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Mark all as read' })).toHaveCount(0)
 })
 
 test('Arabic booking page renders right-to-left', async ({ page }) => {
