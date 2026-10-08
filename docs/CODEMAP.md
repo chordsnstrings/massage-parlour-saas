@@ -270,3 +270,5 @@ in **PLAN §17** (items F1–F7 match the numbers below).
 7. **Slot filler DB role**: the worker's `runSlotFiller` (`apps/worker/src/jobs/tenant-jobs.ts`) reads `outbox` and
    `branches` through `platformDb()` instead of `withTenant()`. The queries filter by `tenant_id`, but this departs
    from the tenant-access rule.
+8. **Discounted package liability (F8)**: `loyalty.issuePackage` stores the list price, not the discounted price paid,
+   so 2110 and per-session values drift on discounted package sales.

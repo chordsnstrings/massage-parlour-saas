@@ -904,6 +904,13 @@ CLAUDE.md). Rules for the work:
   `withTenant`.
 - Tests: `apps/worker/test/jobs.test.ts`.
 
+**F8. A discounted package's liability drifts.** (found during F2, verified 2026-10-08)
+- Where: `packages/services/src/loyalty.ts` `issuePackage` (~line 41) stores the definition's list price
+  (`pricePaidAed`/`remainingValueAed = def.priceAed`), not the discounted line price actually paid.
+- Effect: when a package is sold at a discount, 2110 and the per-session redemption value no longer match the money taken.
+- Planned fix: pass the sale line's net price to `issuePackage`.
+- Tests: services `p2` test with a discounted package sale.
+
 **Owner decisions for F1/F2 (2026-10-08):**
 - **Partial refunds are line-level:** staff pick sale lines and quantities; stock, COGS and commission are reversed
   for exactly those lines and quantities. The amount-only flow is gone.
