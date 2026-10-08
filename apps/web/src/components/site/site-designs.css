@@ -519,8 +519,6 @@
   justify-content: center;
 }
 .sb-bento-wide {
-  grid-column: span 2;
-  min-height: 5.5rem;
   justify-content: center;
 }
 .sb-bento-k {
@@ -541,7 +539,7 @@
   display: flex;
   gap: 0.6rem;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.15rem;
 }
 .sb-bento-lang > span:nth-child(2) {
   color: var(--accent);

@@ -308,7 +308,7 @@ export const Gallery: ComponentConfig<
           className={cn('sb-card size-full object-cover', extra)}
         />
       ) : (
-        <ArtPlaceholder seed={i + 3} className={cn('sb-card', extra)} />
+        <ArtPlaceholder seed={i + 3} className={cn('sb-card size-full', extra)} />
       )
     return (
       <SectionShell meta={meta} {...shell} width="contained">

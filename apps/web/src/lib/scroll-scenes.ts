@@ -149,6 +149,8 @@ type Live = {
   stageH: number
   span: number
   p: number
+  /** Left the viewport since the last frame: draw once more so a jump past it (anchor, End key) lands at rest. */
+  flush: boolean
 }
 
 /** Finds every [data-scene] under root and drives it. Returns a cleanup function
@@ -177,6 +179,7 @@ export function mountScenes(root: ParentNode = document): () => void {
       stageH: 0,
       span: 0.7,
       p: -1,
+      flush: false,
     })
   })
 
@@ -205,7 +208,10 @@ export function mountScenes(root: ParentNode = document): () => void {
     (entries) =>
       entries.forEach((e) => {
         const s = live.find((x) => x.el === e.target)
-        if (s) s.on = e.isIntersecting
+        if (s) {
+          if (s.on && !e.isIntersecting) s.flush = true
+          s.on = e.isIntersecting
+        }
       }),
     { rootMargin: '25% 0px' },
   )
@@ -249,7 +255,8 @@ export function mountScenes(root: ParentNode = document): () => void {
     const vh = innerHeight,
       phone = innerWidth <= 620,
       t = still ? 0 : (now - t0) / 1000
-    const act = live.filter((s) => s.on)
+    // Off-screen scenes still mid-move (a jump past them: anchor, End key, fling) are drawn until they settle.
+    const act = live.filter((s) => s.on || s.flush || (s.p >= 0 && s.p < 1))
     const rects = act.map((s) => s.el.getBoundingClientRect()) // read everything, then write
     act.forEach((s, i) => {
       const r = rects[i] as DOMRect
@@ -259,6 +266,7 @@ export function mountScenes(root: ParentNode = document): () => void {
           : s.mode === 'leave'
             ? clamp(-r.top / r.height)
             : clamp((vh - r.top) / (vh * s.span))
+      s.flush = false
       const idle = !still && p > 0 && p < 1 // pointer tilt / float keep moving
       if (p === s.p && !idle) return
       s.p = p
