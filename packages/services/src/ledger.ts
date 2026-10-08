@@ -231,6 +231,52 @@ export async function postSale(tx: Tx, s: SaleForPosting) {
   })
 }
 
+/** Sale-entry credit accounts a refund unwinds: revenue, prepaid liabilities and VAT (tips, 2200, stay owed). */
+const REFUNDABLE_CODES = ['4000', '4100', '2100', '2110', '2000']
+
+/**
+ * Refund debits mirroring the sale's own (unreversed) `sale` entry: its revenue/liability credit lines,
+ * prorated by refund ÷ their total in fils, with the rounding remainder on the largest line.
+ * Returns null when the sale has no entry (sold before the ledger existed).
+ */
+async function refundDebits(
+  tx: Tx,
+  tenantId: string,
+  saleId: string,
+  amountAed: number,
+): Promise<PostingLine[] | null> {
+  const entries = await tx
+    .select({ id: journalEntries.id, reversesId: journalEntries.reversesId })
+    .from(journalEntries)
+    .where(
+      and(
+        eq(journalEntries.tenantId, tenantId),
+        inArray(journalEntries.sourceType, ['sale', 'sale_reversal']),
+        eq(journalEntries.sourceId, saleId),
+      ),
+    )
+  const reversed = new Set(entries.map((e) => e.reversesId).filter(Boolean))
+  const live = entries.filter((e) => !e.reversesId && !reversed.has(e.id)).map((e) => e.id)
+  if (!live.length) return null
+  const rows = await tx
+    .select({ code: ledgerAccounts.code, credit: journalLines.creditAed })
+    .from(journalLines)
+    .innerJoin(ledgerAccounts, eq(ledgerAccounts.id, journalLines.accountId))
+    .where(and(inArray(journalLines.entryId, live), inArray(ledgerAccounts.code, REFUNDABLE_CODES)))
+  const byCode = new Map<string, number>()
+  for (const row of rows) {
+    const f = Math.round(Number(row.credit) * 100)
+    if (f > 0) byCode.set(row.code, (byCode.get(row.code) ?? 0) + f)
+  }
+  const total = [...byCode.values()].reduce((s, f) => s + f, 0)
+  if (total <= 0) return null
+  const refund = Math.round(amountAed * 100)
+  const shares = [...byCode].map(([code, f]) => ({ code, f, share: Math.round((refund * f) / total) }))
+  const largest = shares.reduce((a, b) => (b.f > a.f ? b : a))
+  largest.share += refund - shares.reduce((s, x) => s + x.share, 0)
+  return shares.map((x) => ({ code: x.code, debit: x.share / 100 }))
+}
+
 export async function postRefund(
   tx: Tx,
   r: {
@@ -245,6 +291,11 @@ export async function postRefund(
   },
 ) {
   const vat = includedVat(r.amountAed, r.vatRatePct ?? 5)
+  // Legacy sales without a ledger entry keep the treatment-revenue + VAT split.
+  const debits = (await refundDebits(tx, r.tenantId, r.saleId, r.amountAed)) ?? [
+    { code: '4000', debit: r.amountAed - vat },
+    { code: '2000', debit: vat },
+  ]
   return post(tx, {
     tenantId: r.tenantId,
     branchId: r.branchId,
@@ -253,11 +304,7 @@ export async function postRefund(
     sourceId: r.saleId,
     memo: 'Refund',
     createdBy: r.createdBy,
-    lines: [
-      { code: '4000', debit: r.amountAed - vat },
-      { code: '2000', debit: vat },
-      { code: PAYMENT_ACCOUNT[r.method] ?? '1000', credit: r.amountAed },
-    ],
+    lines: [...debits, { code: PAYMENT_ACCOUNT[r.method] ?? '1000', credit: r.amountAed }],
   })
 }
 

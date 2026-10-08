@@ -840,7 +840,7 @@ CLAUDE.md). Rules for the work:
 - Existing ledger rows are never edited; corrections are new entries.
 - When an item ships, mark it ✅ here.
 
-**F1. Refunds post to the wrong accounts.**
+**F1. Refunds post to the wrong accounts.** ✅ Fixed (prorated from the sale entry; legacy fallback 4000/2000; no historical corrections).
 - Where: `packages/services/src/ledger.ts` `postRefund`, called from `sales.ts` `refundSale`.
 - Problem: it always debits 4000 + 2000. Retail refunds belong in 4100. Prepaid lines (2100/2110) carried no VAT.
 - Planned fix:

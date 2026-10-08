@@ -178,7 +178,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The business date comes from the branch cutoff.
   - Void is allowed only on the same open day, with no refunds and nothing prepaid. It reverses the sale,
     commission and COGS entries and returns stock.
-  - A refund posts a new `refund` entry.
+  - A refund posts a new `refund` entry. Its debits mirror the sale entry's 4000/4100/2100/2110/2000 credit lines,
+    prorated in fils (remainder on the largest line; tips stay in 2200). Sales without a ledger entry fall back to
+    4000 + 2000.
   - `closeDay` runs once per branch and day.
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
@@ -243,8 +245,8 @@ Integration jobs do nothing until their credentials are configured.
 Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
 in **PLAN §17** (items F1–F7 match the numbers below).
 
-1. **Refund postings**: `ledger.postRefund` (`packages/services/src/ledger.ts`) always debits 4000 + 2000.
-   Retail refunds belong in 4100, and prepaid lines (2100/2110, no VAT) are misposted.
+1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
+   before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
 2. **Refund side effects**: `refundSale` (`packages/services/src/sales.ts`) does not return stock or reverse COGS or
    commissions. Void does all three.
 3. **Double checkout**: `createSale` guards against checking out a booking twice with check-then-insert. There is no
