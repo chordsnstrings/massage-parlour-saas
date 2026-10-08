@@ -1,3 +1,7 @@
+import '@fontsource-variable/dm-sans'
+import '@fontsource-variable/space-grotesk'
+import '../brand-app.css'
+import { Check } from 'lucide-react'
 import { Logo } from '@/components/brand'
 import { Reveal } from '@/components/ui/motion'
 
@@ -17,16 +21,21 @@ export function AuthLayout({
   subtitle?: React.ReactNode
 }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <aside className="relative hidden overflow-hidden border-e bg-subtle/60 lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
-        <div className="pointer-events-none absolute -top-32 -left-24 size-[28rem] rounded-full bg-accent-soft blur-3xl" />
+    // Marketing look (.mkt-app, components/brand-app.css; R13 §14.8): dark band beside a white form column.
+    <div className="mkt-app grid min-h-dvh bg-surface lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <aside className="mkt-app-dark relative hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
         <Logo className="relative h-8 self-start" />
-        <div className="relative max-w-md space-y-8">
-          <h2 className="text-[34px] leading-[1.15] font-semibold tracking-tight">Run a calmer spa.</h2>
+        <div className="relative max-w-md space-y-7">
+          <span className="mkt-app-chip">Automation for UAE spas</span>
+          <h2 className="text-[44px] leading-[1.02] font-bold">
+            More bookings.
+            <br />
+            Less work.
+          </h2>
           <ul className="space-y-4 text-[15px] text-muted">
             {points.map((p) => (
               <li key={p} className="flex gap-3">
-                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+                <Check className="mt-0.5 size-[18px] shrink-0 text-accent" strokeWidth={2.25} />
                 {p}
               </li>
             ))}
@@ -38,7 +47,7 @@ export function AuthLayout({
         <Logo className="mb-12 h-7 self-start lg:hidden" />
         <Reveal className="mx-auto w-full max-w-[400px]">
           <div className="mb-8 space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-[32px] leading-[1.05]">{title}</h1>
             {subtitle && <p className="text-[15px] text-muted">{subtitle}</p>}
           </div>
           {children}

@@ -937,8 +937,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   one-line red bar at the top of the CRM ("Please pay your invoice to avoid …"). Status is set by the super-admin only.
 - **R12 Admin console overview:** pause a spa (late payment), delete a spa, subscription one-time or monthly, setup fee
   separate, generate payment reminders.
-- **R13 Login + super-admin console** use the marketing site design.
+- **R13 Login + super-admin console** use the marketing site design. ✅ `.mkt-app` scope (`components/brand-app.css`, imported by AppShell + AuthLayout): marketing tokens on `:root:has(.mkt-app)` (so portals match; light only), DM Sans / Space Grotesk, UI-kit `--ui-*` hooks (12px buttons, 18px cards), dark `.mkt-app-dark` sidebar / auth band with lime chip + active bar. `.crm` and spa sites untouched.
 - **R14 Domain orders:** price shown/charged = current price + USD 10.
+- **R16 AI site editing (owner, 2026-10-08):** super-admins only — in the studio editor, type an instruction ("dark
+  hero", "add FAQ after services", "rewrite About in Arabic"); the AI (ModelArk via `@spa/ai` gateway) returns a change to
+  the Puck draft built only from existing blocks/templates/presets; preview + undo; publishing stays a separate click.
+  Spas still only request changes. Drag & drop editor stays.
 - **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 

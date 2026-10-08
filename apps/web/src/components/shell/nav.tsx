@@ -111,6 +111,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
             <Link
               href={item.href}
               title={item.label}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
                 active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
