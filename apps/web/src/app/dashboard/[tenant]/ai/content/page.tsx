@@ -1,3 +1,4 @@
+import { enumLabel } from '@spa/core/i18n'
 import { socialPosts, withTenant } from '@spa/db'
 import {
   gbpConnectionView,
@@ -7,40 +8,44 @@ import {
   metaConfig,
   publicImageUrl,
 } from '@spa/services'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { BarChart, Card, Grid, Legend, Pill, Stat, statusTone } from '@/components/crm'
 import { InstagramGlyph } from '@/components/inbox/icons'
 import { GbpPostButton } from '@/components/integrations/gbp-post-button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Textarea } from '@/components/ui/input'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { draftPostAction } from '../actions'
 import { PostActions } from './post-actions'
 
-export const metadata: Metadata = { title: 'Instagram drafts' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('marketing.title') }
+}
 
-const tone: Record<string, 'accent' | 'warning' | 'success' | 'neutral' | 'danger'> = {
-  pending_approval: 'warning',
-  scheduled: 'accent',
-  published: 'success',
-  draft: 'neutral',
-  failed: 'danger',
+type Agg = {
+  scheduled: number
+  next: string | null
+  awaiting: number
+  reviews: number
+  avg: string | null
+  clicks: number
 }
 
 export default async function ContentPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve')) notFound()
   const slug = ctx.tenant.slug
-  const { posts, ig, gbp, onGoogle } = await withTenant(ctx.tenant.id, async (tx) => {
+  const reports = can(ctx, 'reports.view')
+  const { t, fmt } = await getI18n()
+  const { posts, ig, gbp, onGoogle, agg, sources } = await withTenant(ctx.tenant.id, async (tx) => {
     const posts = await tx.select().from(socialPosts).orderBy(desc(socialPosts.createdAt)).limit(30)
     // Captions already published as Google local posts (the same check publishGbpLocalPost makes).
     const copies = posts.length
@@ -58,8 +63,27 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
             ),
           )
       : []
+    // Marketing header stats (crm-spec §5.8) — cheap aggregates over existing tables.
+    const [agg] = (
+      await tx.execute(sql`select
+        (select count(*)::int from social_posts where status = 'scheduled') as scheduled,
+        (select min(scheduled_at)::text from social_posts where status = 'scheduled' and scheduled_at > now()) as next,
+        (select count(*)::int from social_posts where status in ('draft', 'pending_approval')) as awaiting,
+        (select count(*)::int from reviews) as reviews,
+        (select round(avg(rating), 1)::text from reviews) as avg,
+        (select count(*)::int from web_events where type in ('wa_click', 'booking_start')
+          and ts >= now() - interval '30 days') as clicks`)
+    ).rows as unknown as Agg[]
+    const sources = reports
+      ? ((
+          await tx.execute(sql`select source::text as key, count(*)::int as n from bookings
+            where created_at >= now() - interval '30 days' and status <> 'cancelled' group by 1 order by 2 desc`)
+        ).rows as unknown as { key: string; n: number }[])
+      : []
     return {
       posts,
+      agg: agg!,
+      sources,
       ig: await instagramStatus(tx),
       gbp: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
       onGoogle: new Set(copies.map((c) => c.caption)),
@@ -67,74 +91,114 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
   })
   // Why "Publish to Instagram" can't run for a post (null = ready).
   const accountBlocker = !metaConfig()
-    ? 'Instagram publishing isn’t configured on this server yet — copy the caption instead.'
+    ? t('marketing.blockNotConfigured')
     : ig?.status !== 'connected'
-      ? 'Connect Instagram in Settings → Instagram & Google to publish from here.'
+      ? t('marketing.blockConnect')
       : null
   const publishBlocker = (p: (typeof posts)[number]) => {
-    if (isPublishing(p)) return 'Publishing to Instagram right now…'
+    if (isPublishing(p)) return t('marketing.blockPublishing')
     if (accountBlocker) return accountBlocker
-    if (!p.media[0]?.url) return 'Instagram posts need an image.'
-    if (!publicImageUrl(p.media[0].url))
-      return 'The image isn’t on a public https link, so Instagram can’t fetch it.'
+    if (!p.media[0]?.url) return t('marketing.blockNoImage')
+    if (!publicImageUrl(p.media[0].url)) return t('marketing.blockPrivateImage')
     return null
   }
+  const top = sources[0]
   return (
     <>
       <Link
         href={appPath(`/${slug}/ai`)}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
+        className="crm-muted mb-4 inline-flex items-center gap-1.5 text-sm transition-colors hover:text-fg"
       >
-        <ArrowLeft className="size-4" strokeWidth={1.5} /> AI studio
+        <ArrowLeft className="size-4 rtl:rotate-180" strokeWidth={1.5} /> {t('ai.studio')}
       </Link>
-      <PageHeader
-        title="Instagram drafts"
-        description="AI-written posts in English and Arabic with an image. Approve, then publish to Instagram now, schedule them, or copy the caption."
-      />
+      <PageHeader title={t('marketing.title')} description={t('marketing.description')} />
       <PageBody>
-        <Card>
-          <CardHeader
-            title="New draft"
-            description="Give an idea, or leave it empty for a fresh suggestion. Images take about 15 seconds."
+        <Grid cols="g4">
+          <Stat
+            label={t('marketing.statScheduled')}
+            value={fmt.number(agg.scheduled)}
+            change={{
+              text: agg.next
+                ? t('marketing.statNext', { when: fmt.dateTime(agg.next) })
+                : t('marketing.statNoneNext'),
+            }}
           />
-          <CardBody>
-            <ActionForm
-              action={draftPostAction.bind(null, slug)}
-              className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
-              resetOnSuccess
-            >
-              <Field label="Idea" name="brief">
-                <Textarea
-                  id="brief"
-                  name="brief"
-                  className="min-h-20"
-                  placeholder="Weekday afternoon offer on our 90-minute Thai massage"
-                />
+          <Stat
+            label={t('marketing.statAwaiting')}
+            value={fmt.number(agg.awaiting)}
+            change={{ text: t('marketing.statAwaitingSub') }}
+          />
+          <Stat
+            label={t('marketing.statReviews')}
+            value={fmt.number(agg.reviews)}
+            change={
+              agg.avg ? { text: t('marketing.statAvg', { avg: fmt.number(Number(agg.avg)) }) } : undefined
+            }
+          />
+          <Stat
+            label={t('marketing.statClicks')}
+            value={fmt.number(agg.clicks)}
+            change={{ text: t('marketing.statClicksSub') }}
+          />
+        </Grid>
+        <div className={reports ? 'crm-grid crm-col-2' : undefined}>
+          <Card title={t('marketing.newDraft')} sub={t('marketing.newDraftSub')}>
+            <ActionForm action={draftPostAction.bind(null, slug)} className="grid gap-4" resetOnSuccess>
+              <Field label={t('marketing.idea')} name="brief">
+                <Textarea id="brief" name="brief" className="min-h-20" placeholder={t('marketing.ideaPh')} />
               </Field>
-              <div className="flex flex-col gap-3 md:items-end">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="flex items-center gap-2.5 text-sm">
-                  <Checkbox name="image" defaultChecked /> Create an image
+                  <Checkbox name="image" defaultChecked /> {t('marketing.createImage')}
                 </label>
                 <SubmitButton>
-                  <Sparkles /> Draft post
+                  <Sparkles /> {t('marketing.draftPost')}
                 </SubmitButton>
               </div>
             </ActionForm>
-          </CardBody>
-        </Card>
+          </Card>
+          {reports && (
+            <Card title={t('marketing.sources')} sub={t('marketing.sourcesSub')}>
+              {top ? (
+                <>
+                  <BarChart
+                    label={t('marketing.sources')}
+                    data={sources.map((r) => ({
+                      label: enumLabel(t, 'bookingSource', r.key),
+                      value: r.n,
+                      hi: r.key === top.key,
+                      title: t('marketing.bookingsCount', { count: r.n }),
+                    }))}
+                  />
+                  <Legend
+                    className="mt-3"
+                    items={[
+                      {
+                        label: t('marketing.topSource'),
+                        value: `${enumLabel(t, 'bookingSource', top.key)} · ${t('marketing.bookingsCount', { count: top.n })}`,
+                      },
+                    ]}
+                  />
+                </>
+              ) : (
+                <p className="crm-muted text-sm">{t('marketing.sourcesEmpty')}</p>
+              )}
+            </Card>
+          )}
+        </div>
         {posts.length === 0 ? (
           <Card>
             <EmptyState
               icon={<ImageIcon className="size-5" />}
-              title="No drafts yet"
-              description="Your first AI post will appear here for review."
+              title={t('marketing.emptyTitle')}
+              description={t('marketing.emptyBody')}
             />
           </Card>
         ) : (
-          <Stagger className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <Stagger className="crm-grid crm-g3">
             {posts.map((p) => (
               <StaggerItem key={p.id}>
-                <Card className="flex h-full flex-col overflow-hidden">
+                <Card as="article" flush className="flex h-full flex-col overflow-hidden">
                   {p.media[0] ? (
                     // biome-ignore lint/performance/noImgElement: remote AI image URL
                     <img
@@ -148,20 +212,24 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       <ImageIcon className="size-6" strokeWidth={1.5} />
                     </div>
                   )}
-                  <div className="flex flex-1 flex-col gap-3 p-5">
-                    <div className="flex items-center justify-between">
+                  <div className="flex flex-1 flex-col gap-3 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5">
                         {isPublishing(p) ? (
-                          <Badge tone="accent">publishing</Badge>
+                          <Pill tone="info" dot>
+                            {t('marketing.publishing')}
+                          </Pill>
                         ) : (
-                          <Badge tone={tone[p.status] ?? 'neutral'}>{p.status.replace('_', ' ')}</Badge>
+                          <Pill tone={p.status === 'pending_approval' ? 'warn' : statusTone(p.status)} dot>
+                            {enumLabel(t, 'postStatus', p.status)}
+                          </Pill>
                         )}
-                        {p.platform === 'gbp' && <Badge>Google</Badge>}
+                        {p.platform === 'gbp' && <Pill>{t('marketing.google')}</Pill>}
                       </span>
-                      <span className="text-xs text-muted">
+                      <span className="crm-muted text-xs">
                         {p.scheduledAt
-                          ? `Scheduled ${formatDateTime(p.scheduledAt)}`
-                          : formatDateTime(p.createdAt)}
+                          ? t('marketing.scheduledAt', { when: fmt.dateTime(p.scheduledAt) })
+                          : fmt.dateTime(p.createdAt)}
                       </span>
                     </div>
                     <p
@@ -174,13 +242,13 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{p.error}</p>
                     )}
                     {p.status === 'published' && p.externalId && (
-                      <p className="flex items-center gap-1.5 text-[13px] text-muted">
-                        <InstagramGlyph className="size-3.5" /> Published to Instagram
-                        {p.publishedAt ? ` · ${formatDateTime(p.publishedAt)}` : ''}
+                      <p className="crm-muted flex items-center gap-1.5 text-[13px]">
+                        <InstagramGlyph className="size-3.5" /> {t('marketing.publishedIg')}
+                        {p.publishedAt ? ` · ${fmt.dateTime(p.publishedAt)}` : ''}
                       </p>
                     )}
                     {p.status === 'scheduled' && p.scheduledAt && !publishBlocker(p) && (
-                      <p className="text-[13px] text-muted">Publishes automatically at the scheduled time.</p>
+                      <p className="crm-muted text-[13px]">{t('marketing.autoPublish')}</p>
                     )}
                     <PostActions
                       slug={slug}
@@ -188,15 +256,13 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       status={p.status}
                       caption={p.caption}
                       publishBlocker={
-                        p.platform === 'instagram'
-                          ? publishBlocker(p)
-                          : 'Only Instagram posts can be published here.'
+                        p.platform === 'instagram' ? publishBlocker(p) : t('marketing.blockNotIg')
                       }
                     />
                     {p.platform !== 'gbp' && onGoogle.has(p.caption) ? (
-                      <Badge tone="success" className="self-start">
-                        On Google
-                      </Badge>
+                      <Pill tone="ok" className="self-start">
+                        {t('marketing.onGoogle')}
+                      </Pill>
                     ) : (
                       gbp?.status === 'connected' &&
                       p.platform !== 'gbp' &&

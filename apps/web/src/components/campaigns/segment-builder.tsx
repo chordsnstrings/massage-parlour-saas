@@ -4,20 +4,25 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { previewSegmentAction, saveSegmentAction } from '@/app/dashboard/[tenant]/campaigns/actions'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
+import { Card, Pill } from '@/components/crm'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select } from '@/components/ui/input'
 import { NumberTicker } from '@/components/ui/motion'
+import { resultText, useI18n, useT } from '@/i18n/client'
 import { duration, ease } from '@/lib/motion'
-import { cn, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import {
   completeRules,
-  GENDER_LABEL,
-  LANGUAGE_LABEL,
+  GENDERS,
+  LANGUAGES,
+  presetDescription,
+  presetName,
   RULE_DEFS,
   RULE_GROUPS,
   type RuleKind,
+  ruleAfter,
+  ruleBefore,
+  ruleLabel,
   SEGMENT_PRESETS,
   type SegmentRule,
 } from './rules'
@@ -47,6 +52,7 @@ export function SegmentBuilder({
   tags: string[]
 }) {
   const router = useRouter()
+  const { t, fmt } = useI18n()
   const [name, setName] = useState(initialName)
   const [rows, setRows] = useState<Row[]>(() => toRows(initialRules))
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -68,13 +74,13 @@ export function SegmentBuilder({
         if (res?.ok) {
           setPreview(res.data as Preview)
           setPreviewError(null)
-        } else setPreviewError(res?.error ?? 'Preview unavailable')
+        } else setPreviewError((res && resultText(t, res)) || t('campaigns.builder.previewUnavailable'))
       })
     }, 300)
     return () => {
       clearTimeout(timer)
     }
-  }, [slug, rulesKey])
+  }, [slug, rulesKey, t])
 
   const update = (key: number, rule: SegmentRule) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, rule } : r)))
@@ -89,34 +95,30 @@ export function SegmentBuilder({
     const preset = SEGMENT_PRESETS.find((p) => p.key === key)
     if (!preset) return
     setRows(toRows(preset.rules))
-    setName(preset.name)
+    setName(presetName(t, preset))
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
       <div className="min-w-0 space-y-6 lg:col-span-7">
-        <Card>
-          <CardHeader
-            title="Start from a preset"
-            description="Pick one to fill in the conditions, then adjust."
-          />
-          <CardBody className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
+        <Card title={t('campaigns.builder.presetsTitle')} sub={t('campaigns.builder.presetsSub')}>
+          <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible">
             {SEGMENT_PRESETS.map((p) => (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => applyPreset(p.key)}
-                title={p.description}
+                title={presetDescription(t, p)}
                 className={cn(
                   'inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-4 text-sm transition-[background-color,border-color,transform] duration-150 hover:-translate-y-px hover:border-accent/40 hover:bg-accent-soft active:scale-[0.98]',
-                  name === p.name && 'border-accent/50 bg-accent-soft text-fg',
+                  name === presetName(t, p) && 'border-accent/50 bg-accent-soft text-fg',
                 )}
               >
                 <Sparkles className="size-3.5 text-accent" strokeWidth={1.75} />
-                {p.name}
+                {presetName(t, p)}
               </button>
             ))}
-          </CardBody>
+          </div>
         </Card>
 
         <Card>
@@ -128,35 +130,35 @@ export function SegmentBuilder({
             }}
           >
             <input type="hidden" name="rules" value={JSON.stringify(rules)} />
-            <CardHeader
-              title="Who should be in it"
-              description="Clients must match every condition."
-              action={
-                preview ? (
-                  // Phones: the full preview sits below, so keep the live count in view here.
-                  <Badge tone="accent" className="lg:hidden" aria-live="polite">
-                    {preview.count} {preview.count === 1 ? 'client' : 'clients'}
-                  </Badge>
-                ) : null
-              }
-            />
-            <CardBody className="space-y-6">
-              <Field label="Segment name" name="name">
+            <div className="crm-card-h">
+              <div className="min-w-0">
+                <h3>{t('campaigns.builder.whoTitle')}</h3>
+                <p className="crm-sub">{t('campaigns.builder.whoSub')}</p>
+              </div>
+              {preview ? (
+                // Phones: the full preview sits below, so keep the live count in view here.
+                <span className="crm-act lg:hidden" aria-live="polite">
+                  <Pill tone="acc">{t('campaigns.builder.clients', { count: preview.count })}</Pill>
+                </span>
+              ) : null}
+            </div>
+            <div className="space-y-6">
+              <Field label={t('campaigns.builder.name')} name="name">
                 <Input
                   id="name"
                   name="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Win back — summer"
+                  placeholder={t('campaigns.builder.namePlaceholder')}
                   maxLength={60}
                 />
               </Field>
 
               <div className="space-y-2">
-                <p className="text-sm font-medium">Conditions</p>
+                <p className="text-sm font-medium">{t('campaigns.builder.conditions')}</p>
                 {rows.length === 0 && (
                   <p className="rounded-lg border border-dashed px-4 py-5 text-sm text-muted">
-                    No conditions yet — this segment includes every client who can receive marketing.
+                    {t('campaigns.builder.noConditions')}
                   </p>
                 )}
                 <ol className="space-y-2">
@@ -172,7 +174,7 @@ export function SegmentBuilder({
                       >
                         {i > 0 && (
                           <p className="py-1 ps-4 text-xs font-medium uppercase tracking-[0.08em] text-muted">
-                            and
+                            {t('campaigns.builder.and')}
                           </p>
                         )}
                         <RuleRow
@@ -192,21 +194,21 @@ export function SegmentBuilder({
                     strokeWidth={1.75}
                   />
                   <Select
-                    aria-label="Add a condition"
+                    aria-label={t('campaigns.builder.addCondition')}
                     value=""
                     onChange={(e) => {
                       if (e.target.value) add(e.target.value as RuleKind)
                     }}
                     className="h-11 ps-10"
                   >
-                    <option value="">Add a condition…</option>
+                    <option value="">{t('campaigns.builder.addConditionOption')}</option>
                     {RULE_GROUPS.map((g) => (
-                      <optgroup key={g} label={g}>
+                      <optgroup key={g} label={t(`campaigns.group.${g}`)}>
                         {(Object.keys(RULE_DEFS) as RuleKind[])
                           .filter((k) => RULE_DEFS[k].group === g)
                           .map((k) => (
                             <option key={k} value={k}>
-                              {RULE_DEFS[k].label}
+                              {ruleLabel(t, k)}
                             </option>
                           ))}
                       </optgroup>
@@ -214,30 +216,31 @@ export function SegmentBuilder({
                   </Select>
                 </div>
               </div>
-            </CardBody>
-            <CardFooter>
+            </div>
+            <div className="mt-4 flex flex-col-reverse gap-2 border-t border-[var(--crm-line)] pt-4 sm:flex-row sm:justify-end">
               <SubmitButton variant="secondary" name="intent" value="save" className="w-full sm:w-auto">
-                Save segment
+                {t('campaigns.builder.save')}
               </SubmitButton>
               <SubmitButton name="intent" value="campaign" className="w-full sm:w-auto">
-                Save &amp; write campaign
+                {t('campaigns.builder.saveAndWrite')}
               </SubmitButton>
-            </CardFooter>
+            </div>
           </ActionForm>
         </Card>
       </div>
 
       <aside className="min-w-0 lg:col-span-5">
-        <Card className="lg:sticky lg:top-6" aria-label="Segment preview">
-          <CardHeader
-            title="Preview"
-            action={
-              loading ? (
-                <Loader2 className="size-4 animate-spin text-muted" strokeWidth={1.75} aria-hidden />
-              ) : null
-            }
-          />
-          <CardBody className="space-y-5">
+        <Card
+          className="lg:sticky lg:top-6"
+          aria-label={t('campaigns.builder.previewAria')}
+          title={t('campaigns.builder.previewTitle')}
+          actions={
+            loading ? (
+              <Loader2 className="size-4 animate-spin text-muted" strokeWidth={1.75} aria-hidden />
+            ) : null
+          }
+        >
+          <div className="space-y-5">
             <div>
               <p
                 className="text-[40px] font-semibold leading-none tracking-tight"
@@ -246,8 +249,8 @@ export function SegmentBuilder({
                 {preview ? <NumberTicker value={preview.count} /> : '—'}
               </p>
               <p className="mt-2 text-sm text-muted">
-                {preview?.count === 1 ? 'client matches' : 'clients match'}
-                {ready.length < rules.length && ' · finish the highlighted condition'}
+                {t('campaigns.builder.matches', { count: preview?.count ?? 0 })}
+                {ready.length < rules.length && t('campaigns.builder.finishCondition')}
               </p>
               {previewError && <p className="mt-2 text-[13px] text-danger">{previewError}</p>}
             </div>
@@ -258,15 +261,23 @@ export function SegmentBuilder({
                     <div className="min-w-0">
                       <p className="flex items-center gap-2 font-medium">
                         <span className="truncate">{c.name}</span>
-                        {c.language === 'ar' && <Badge tone="accent">AR</Badge>}
+                        {c.language === 'ar' && <Pill tone="acc">{t('campaigns.langAr')}</Pill>}
                       </p>
                       <p className="text-[13px] text-muted tabular-nums" dir="ltr">
                         {c.phone}
                       </p>
                     </div>
                     <p className="shrink-0 text-end text-[13px] text-muted">
-                      <span className="hidden sm:inline">{c.lastVisitAt ? 'Last visit ' : ''}</span>
-                      {c.lastVisitAt ? formatDate(c.lastVisitAt) : 'No visit yet'}
+                      {c.lastVisitAt ? (
+                        <>
+                          <span className="sm:hidden">{fmt.date(c.lastVisitAt)}</span>
+                          <span className="hidden sm:inline">
+                            {t('campaigns.builder.lastVisit', { date: fmt.date(c.lastVisitAt) })}
+                          </span>
+                        </>
+                      ) : (
+                        t('campaigns.builder.noVisit')
+                      )}
                     </p>
                   </li>
                 ))}
@@ -274,17 +285,16 @@ export function SegmentBuilder({
             ) : preview ? (
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center">
                 <Users className="size-5 text-muted" strokeWidth={1.5} />
-                <p className="text-sm text-muted">Nobody matches yet. Try loosening a condition.</p>
+                <p className="text-sm text-muted">{t('campaigns.builder.nobody')}</p>
               </div>
             ) : null}
             {preview && preview.count > preview.sample.length && (
-              <p className="text-[13px] text-muted">Showing the first {preview.sample.length}.</p>
+              <p className="text-[13px] text-muted">
+                {t('campaigns.builder.showingFirst', { count: preview.sample.length })}
+              </p>
             )}
-            <p className="text-[13px] leading-relaxed text-muted">
-              Only clients who have visited, have a mobile number and can receive marketing are counted —
-              opted-out, blocklisted and clients tagged “no-marketing” are always left out.
-            </p>
-          </CardBody>
+            <p className="text-[13px] leading-relaxed text-muted">{t('campaigns.builder.footer')}</p>
+          </div>
         </Card>
       </aside>
     </div>
@@ -304,7 +314,10 @@ function RuleRow({
   onChange: (rule: SegmentRule) => void
   onRemove: () => void
 }) {
+  const t = useT()
   const def = RULE_DEFS[rule.kind]
+  const label = ruleLabel(t, rule.kind)
+  const after = ruleAfter(t, rule.kind)
   const incomplete = (rule.kind === 'service' && !rule.serviceId) || (rule.kind === 'tag' && !rule.tag.trim())
   const control = 'h-10 w-auto min-w-0'
   let input: React.ReactNode = null
@@ -312,7 +325,7 @@ function RuleRow({
     const { key, min, max } = def.number
     input = (
       <NumberInput
-        label={def.label}
+        label={label}
         min={min}
         max={max}
         value={(rule as Record<string, unknown>)[key] as number}
@@ -323,12 +336,12 @@ function RuleRow({
   } else if (rule.kind === 'service') {
     input = (
       <Select
-        aria-label="Treatment"
+        aria-label={t('campaigns.builder.treatment')}
         value={rule.serviceId}
         onChange={(e) => onChange({ ...rule, serviceId: e.target.value })}
         className={cn(control, 'max-w-full')}
       >
-        <option value="">Choose a treatment…</option>
+        <option value="">{t('campaigns.builder.chooseTreatment')}</option>
         {services.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}
@@ -339,14 +352,14 @@ function RuleRow({
   } else if (rule.kind === 'gender') {
     input = (
       <Select
-        aria-label="Gender"
+        aria-label={t('campaigns.builder.gender')}
         value={rule.gender}
         onChange={(e) => onChange({ ...rule, gender: e.target.value as typeof rule.gender })}
         className={control}
       >
-        {Object.entries(GENDER_LABEL).map(([v, l]) => (
+        {GENDERS.map((v) => (
           <option key={v} value={v}>
-            {l}
+            {t(`campaigns.genderOption.${v}`)}
           </option>
         ))}
       </Select>
@@ -354,14 +367,14 @@ function RuleRow({
   } else if (rule.kind === 'language') {
     input = (
       <Select
-        aria-label="Language"
+        aria-label={t('campaigns.builder.language')}
         value={rule.language}
         onChange={(e) => onChange({ ...rule, language: e.target.value as typeof rule.language })}
         className={control}
       >
-        {Object.entries(LANGUAGE_LABEL).map(([v, l]) => (
+        {LANGUAGES.map((v) => (
           <option key={v} value={v}>
-            {l}
+            {t(`campaigns.language.${v}`)}
           </option>
         ))}
       </Select>
@@ -370,7 +383,7 @@ function RuleRow({
     input = (
       <>
         <Input
-          aria-label="Tag"
+          aria-label={t('campaigns.builder.tag')}
           list="segment-tags"
           value={rule.tag}
           placeholder="vip"
@@ -394,14 +407,14 @@ function RuleRow({
       )}
     >
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-2 text-sm">
-        <span>{def.before}</span>
+        <span>{ruleBefore(t, rule.kind)}</span>
         {input}
-        {def.after && <span>{def.after}</span>}
+        {after && <span>{after}</span>}
       </div>
       <button
         type="button"
         onClick={onRemove}
-        aria-label={`Remove “${def.label}”`}
+        aria-label={t('campaigns.builder.remove', { label })}
         className="grid size-11 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-fg"
       >
         <X className="size-4" strokeWidth={1.5} />

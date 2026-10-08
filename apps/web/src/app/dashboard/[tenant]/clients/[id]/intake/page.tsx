@@ -8,12 +8,16 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { IntakeForm } from './intake-form'
 
-export const metadata: Metadata = { title: 'Intake form' }
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT()
+  return { title: t('clients.intake.pageTitle') }
+}
 
 export default async function IntakePage({
   params,
@@ -27,6 +31,7 @@ export default async function IntakePage({
   if (!can(ctx, 'clients.manage')) notFound()
   if (!z.uuid().safeParse(id).success) notFound()
   const slug = ctx.tenant.slug
+  const t = await getT()
   const { client, template } = await withTenant(ctx.tenant.id, async (tx) => {
     const [client] = await tx
       .select({ id: clients.id, name: clients.name, language: clients.language })
@@ -53,9 +58,12 @@ export default async function IntakePage({
           href={profile}
           className="inline-flex min-h-11 items-center gap-1.5 text-sm text-muted hover:text-fg"
         >
-          <ArrowLeft className="size-4" /> {client.name}
+          <ArrowLeft className="size-4 rtl:rotate-180" /> {client.name}
         </Link>
-        <nav aria-label="Form language" className="inline-flex rounded-lg border bg-surface p-1">
+        <nav
+          aria-label={t('clients.intake.formLanguage')}
+          className="inline-flex rounded-lg border bg-surface p-1"
+        >
           {(['en', 'ar'] as const).map((l) => (
             <Link
               key={l}
@@ -90,12 +98,12 @@ export default async function IntakePage({
         <Card>
           <EmptyState
             icon={<ClipboardList className="size-5" />}
-            title="No intake form yet"
-            description="Create the questions and waiver clients sign before their treatment."
+            title={t('clients.intake.noTemplate')}
+            description={t('clients.intake.noTemplateSub')}
             action={
               can(ctx, 'settings.manage') ? (
                 <Button asChild>
-                  <Link href={appPath(`/${slug}/settings/intake`)}>Set up intake form</Link>
+                  <Link href={appPath(`/${slug}/settings/intake`)}>{t('clients.intake.setup')}</Link>
                 </Button>
               ) : undefined
             }

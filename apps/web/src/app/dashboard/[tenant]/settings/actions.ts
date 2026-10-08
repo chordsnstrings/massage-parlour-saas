@@ -16,19 +16,19 @@ const opt = z
   .optional()
   .transform((v) => v || null)
 const schema = z.object({
-  name: z.string().trim().min(2, 'Enter the spa name').max(80),
+  name: z.string().trim().min(2, 'settings.profile.errors.name').max(80),
   legalName: opt,
   trn: z
     .string()
     .trim()
-    .regex(/^\d{15}$|^$/, 'A TRN has 15 digits')
+    .regex(/^\d{15}$|^$/, 'settings.profile.errors.trn')
     .optional()
     .transform((v) => v || null),
-  branchName: z.string().trim().min(2, 'Enter a branch name').max(80),
+  branchName: z.string().trim().min(2, 'settings.profile.errors.branchName').max(80),
   address: opt,
   phone: opt,
   whatsapp: z.string().trim().optional(),
-  cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'Use HH:MM'),
+  cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),
 })
 
 export async function saveSettingsAction(
@@ -43,7 +43,7 @@ export async function saveSettingsAction(
   const d = parsed.data
   const whatsapp = d.whatsapp ? toUaeE164(d.whatsapp) : null
   if (d.whatsapp && !whatsapp)
-    return fail('Enter a UAE mobile number.', { whatsapp: 'Enter a UAE mobile, e.g. 050 123 4567' })
+    return fail('settings.profile.errors.whatsapp', { whatsapp: 'validation.uaeMobile' })
   await withTenant(ctx.tenant.id, async (tx) => {
     await tx
       .update(tenants)
@@ -68,7 +68,7 @@ export async function saveSettingsAction(
     data: d,
   })
   revalidatePath(`/dashboard/${slug}`, 'layout')
-  return ok('Settings saved')
+  return ok('settings.profile.saved')
 }
 
 /** Settings › Business: upload (or remove, with intent=remove) the spa logo shown in the dashboard sidebar. */

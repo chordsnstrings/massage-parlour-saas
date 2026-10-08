@@ -10,11 +10,14 @@ import { TEMPLATE_KINDS } from '@/components/messages/shared'
 import { TemplateEditor } from '@/components/messages/template-editor'
 import { Button } from '@/components/ui/button'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { publicSiteUrl } from '@/server/sites'
 
-export const metadata: Metadata = { title: 'Message templates' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('messages.templates.title') }
+}
 
 const addDays = (date: string, n: number) => {
   const d = new Date(`${date}T00:00:00Z`)
@@ -26,6 +29,7 @@ export default async function TemplatesPage({ params }: { params: Promise<{ tena
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'marketing.send')) notFound()
   const slug = ctx.tenant.slug
+  const t = await getT()
   const { overrides, service } = await withTenant(ctx.tenant.id, async (tx) => ({
     overrides: await tx.select().from(messageTemplates),
     service: (
@@ -78,13 +82,13 @@ export default async function TemplatesPage({ params }: { params: Promise<{ tena
   return (
     <>
       <PageHeader
-        eyebrow="WhatsApp"
-        title="Message templates"
-        description="The words your team sends, in English and Arabic. Clients get the language set on their profile."
+        eyebrow={t('messages.templates.eyebrow')}
+        title={t('messages.templates.title')}
+        description={t('messages.templates.description')}
         actions={
           <Button variant="secondary" asChild>
             <Link href={appPath(`/${slug}/messages`)}>
-              <ArrowLeft className="rtl:rotate-180" /> Outbox
+              <ArrowLeft className="rtl:rotate-180" /> {t('messages.templates.back')}
             </Link>
           </Button>
         }
@@ -97,10 +101,7 @@ export default async function TemplatesPage({ params }: { params: Promise<{ tena
           saved={saved}
           samples={samples}
         />
-        <p className="max-w-2xl text-[13px] text-muted">
-          Only message clients who have booked or visited, and always press send yourself — automated or bulk
-          WhatsApp tools get numbers banned.
-        </p>
+        <p className="max-w-2xl text-[13px] text-muted">{t('messages.templates.footer')}</p>
       </PageBody>
     </>
   )

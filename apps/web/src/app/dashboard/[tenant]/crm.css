@@ -30,6 +30,19 @@
   --crm-bad-bg: rgb(242 96 60 / 0.14);
   --crm-shadow-card: 0 1px 2px rgb(32 44 94 / 0.04), 0 6px 20px rgb(32 44 94 / 0.05);
   --crm-shadow-window: 0 20px 60px rgb(32 44 94 / 0.12);
+  --crm-info: #3b6fe0;
+  --crm-info-bg: rgb(59 111 224 / 0.12);
+  --crm-bg2: #f4f6fd;
+  --crm-tint1: #9db8f2;
+  --crm-tint2: #dce6fb;
+  --crm-tint3: #6e8fec;
+  --crm-blue: #3b6fe0;
+  --crm-amber: #f5b82e;
+  --crm-orange: #f2603c;
+  --crm-green: #28c877;
+  --crm-violet: #7a6ce0;
+  --crm-wa: #25d366;
+  --crm-shadow-kpi: 0 1px 2px rgb(32 44 94 / 0.04), 0 4px 14px rgb(32 44 94 / 0.04);
 
   /* Compact density (spec §D) — tune here */
   --crm-side: 216px;
@@ -38,6 +51,24 @@
   --crm-window-radius: 16px;
   --crm-view-pad: 20px;
   --crm-h-ctl: 36px;
+  /* Page kit (crm-kit.css) sizes */
+  --crm-radius: 12px;
+  --crm-radius-sm: 8px;
+  --crm-rp: 12px;
+  --crm-grid-gap: 12px;
+  --crm-pad-card: 16px;
+  --crm-fs-card-title: 15px;
+  --crm-fs-sub: 11.5px;
+  --crm-fs-note: 12px;
+  --crm-fs-row: 13px;
+  --crm-fs-th: 10px;
+  --crm-fs-td: 12.5px;
+  --crm-fs-pill: 10.5px;
+  --crm-fs-micro: 10.5px;
+  --crm-fs-label: 11.5px;
+  --crm-fs-stat: 24px;
+  --crm-fs-kpi: 22px;
+  --crm-fs-display: 22px;
 
   /* UI-kit colour tokens (globals.css names) → design */
   --bg: var(--crm-bg);
@@ -101,16 +132,40 @@
   --ui-stat-pad: 14px;
   --ui-stat-pad-sm: 14px;
   --ui-stat-fs: 24px;
+  --ui-sheet-px: 18px;
+  --ui-sheet-pt: 16px;
+  --ui-sheet-gap: 12px;
+  --ui-sheet-pb: 18px;
+  --ui-sheet-radius: 14px;
+  --ui-sheet-title-fs: 15px;
+  --ui-sheet-desc-fs: 12px;
+  --ui-toast-radius: 12px;
+  --ui-toast-py: 10px;
+  --ui-toast-fs: 12.5px;
+  --ui-empty-py: 40px;
+  --ui-empty-title-fs: 14px;
+  --ui-mcard-px: 14px;
+  --ui-mcard-py: 12px;
+  --ui-mcard-title-fs: 13.5px;
+  --ui-mcard-fs: 12.5px;
 }
 
 /* Thai: taller glyphs — never below 12 px for reading text (spec §D), no wide uppercase tracking. */
 :root:has(.crm[lang="th"]):not(:has([data-crm-off])) {
   --ui-btn-fs-sm: 12px;
+  --crm-fs-sub: 12px;
+  --crm-fs-note: 12.5px;
+  --crm-fs-th: 11px;
+  --crm-fs-pill: 11px;
+  --crm-fs-micro: 12px;
+  --crm-fs-label: 12px;
   --ui-label-fs: 12px;
   --ui-card-desc-fs: 12px;
   --ui-pill-fs: 11px;
   --ui-th-fs: 11px;
   --ui-desc-fs: 13px;
+  --ui-toast-fs: 13px;
+  --ui-mcard-fs: 13px;
 }
 
 /* Touch: keep ≥ 40 px controls (PLAN §12.4). */
@@ -128,6 +183,7 @@
     --crm-gap: 8px;
     --crm-window-radius: 14px;
     --crm-view-pad: 14px;
+    --crm-pad-card: 14px;
   }
 }
 

@@ -1,4 +1,5 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n'
 import { Loader2, Plus, ScanLine, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useRef, useState } from 'react'
@@ -7,6 +8,7 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Input, Label, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
 import { ReceiptThumb } from './receipt-thumb'
@@ -28,7 +30,7 @@ type Scan = {
   ocr?: Record<string, unknown>
 }
 
-const PAID_VIA = { cash: 'Cash', bank: 'Bank transfer', card: 'Card', owner: 'Paid by owner' } as const
+const PAID_VIA = ['cash', 'bank', 'card', 'owner'] as const
 
 /** "Add expense" sheet with "Scan receipt": photo → private file → vision model → prefilled fields. */
 export function ExpenseSheet({
@@ -44,6 +46,7 @@ export function ExpenseSheet({
   today: string
   aiReady: boolean
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [scan, setScan] = useState<Scan | null>(null)
@@ -54,7 +57,7 @@ export function ExpenseSheet({
 
   async function upload(file: File) {
     if (file.size > 8 * 1024 * 1024) {
-      toast.error('Files can be up to 8 MB.')
+      toast.error(t('errors.file.tooLarge', { size: '8 MB' }))
       return
     }
     setBusy(true)
@@ -64,13 +67,13 @@ export function ExpenseSheet({
       const res = await fetch(scanUrl, { method: 'POST', body })
       const data = (await res.json().catch(() => null)) as (Scan & { ok?: boolean; error?: string }) | null
       if (!res.ok || !data?.file) {
-        toast.error(data?.error ?? 'Upload failed — please try again.')
+        toast.error(t.maybe(data?.error) ?? data?.error ?? t('errors.file.uploadFailed'))
         return
       }
       setScan(data)
       if (data.fields) setVersion((v) => v + 1)
     } catch {
-      toast.error('Upload failed — check your connection.')
+      toast.error(t('accounts.sheet.offline'))
     } finally {
       setBusy(false)
       if (picker.current) picker.current.value = ''
@@ -84,11 +87,11 @@ export function ExpenseSheet({
         setOpen(next)
         if (!next) setScan(null)
       }}
-      title="Record an expense"
-      description="Enter the total you paid. Tick VAT if the invoice shows 5% VAT you can recover."
+      title={t('accounts.sheet.title')}
+      description={t('accounts.sheet.description')}
       trigger={
         <Button>
-          <Plus /> Add expense
+          <Plus /> {t('accounts.sheet.trigger')}
         </Button>
       }
     >
@@ -112,7 +115,7 @@ export function ExpenseSheet({
             accept="image/jpeg,image/png,image/webp,application/pdf"
             className="sr-only"
             tabIndex={-1}
-            aria-label="Receipt photo"
+            aria-label={t('accounts.sheet.receiptPhoto')}
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) void upload(file)
@@ -122,7 +125,7 @@ export function ExpenseSheet({
           <input type="hidden" name="ocr" value={scan?.ocr ? JSON.stringify(scan.ocr) : ''} />
           <div className="flex items-center gap-3">
             {scan ? (
-              <ReceiptThumb url={scan.file.url} />
+              <ReceiptThumb url={scan.file.url} label={t('accounts.expenses.viewReceipt')} />
             ) : (
               <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-surface text-accent">
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ScanLine className="size-4" />}
@@ -130,14 +133,14 @@ export function ExpenseSheet({
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">
-                {busy ? 'Reading receipt…' : scan ? scan.file.name : 'Have the receipt?'}
+                {busy ? t('accounts.sheet.reading') : scan ? scan.file.name : t('accounts.sheet.have')}
               </p>
               <p className="text-[13px] text-muted">
                 {scan
-                  ? 'Attached to this expense'
+                  ? t('accounts.sheet.attached')
                   : aiReady
-                    ? 'Snap or upload it — we fill in the details.'
-                    : 'Attach a photo or PDF to keep it with the expense.'}
+                    ? t('accounts.sheet.snap')
+                    : t('accounts.sheet.attach')}
               </p>
             </div>
             {scan ? (
@@ -145,7 +148,7 @@ export function ExpenseSheet({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Remove receipt"
+                aria-label={t('accounts.sheet.remove')}
                 className="shrink-0"
                 onClick={() => setScan(null)}
               >
@@ -159,7 +162,7 @@ export function ExpenseSheet({
                 pending={busy}
                 onClick={() => picker.current?.click()}
               >
-                <ScanLine /> Scan receipt
+                <ScanLine /> {t('accounts.sheet.scan')}
               </Button>
             )}
           </div>
@@ -182,7 +185,7 @@ export function ExpenseSheet({
               >
                 <span className="block pt-3">
                   {scan.message}
-                  {f?.trn ? ` TRN ${f.trn}.` : ''}
+                  {f?.trn ? ` ${t('accounts.sheet.trn', { trn: f.trn })}` : ''}
                 </span>
               </motion.p>
             )}
@@ -191,10 +194,10 @@ export function ExpenseSheet({
 
         <div key={version} className="space-y-5">
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Date" name="expenseDate">
+            <Field label={t('accounts.sheet.date')} name="expenseDate">
               <Input id="expenseDate" name="expenseDate" type="date" defaultValue={f?.date ?? today} />
             </Field>
-            <Field label="Amount paid (AED)" name="amountAed">
+            <Field label={t('accounts.sheet.amount')} name="amountAed">
               <Input
                 id="amountAed"
                 name="amountAed"
@@ -204,10 +207,10 @@ export function ExpenseSheet({
               />
             </Field>
           </div>
-          <Field label="Category" name="accountCode">
+          <Field label={t('accounts.sheet.category')} name="accountCode">
             <Select id="accountCode" name="accountCode" defaultValue={f?.category ?? ''}>
               <option value="" disabled>
-                Choose…
+                {t('accounts.sheet.choose')}
               </option>
               {categories.map((a) => (
                 <option key={a.code} value={a.code}>
@@ -216,27 +219,32 @@ export function ExpenseSheet({
               ))}
             </Select>
           </Field>
-          <Field label="Supplier" name="vendor">
-            <Input id="vendor" name="vendor" placeholder="e.g. DEWA" defaultValue={f?.vendor ?? undefined} />
+          <Field label={t('accounts.sheet.supplier')} name="vendor">
+            <Input
+              id="vendor"
+              name="vendor"
+              placeholder={t('accounts.sheet.supplierPh')}
+              defaultValue={f?.vendor ?? undefined}
+            />
           </Field>
-          <Field label="Note" name="description">
-            <Input id="description" name="description" placeholder="Optional" />
+          <Field label={t('accounts.sheet.note')} name="description">
+            <Input id="description" name="description" placeholder={t('common.optional')} />
           </Field>
-          <Field label="Paid with" name="paidVia">
+          <Field label={t('accounts.sheet.paidWith')} name="paidVia">
             <Select id="paidVia" name="paidVia" defaultValue="cash">
-              {Object.entries(PAID_VIA).map(([k, v]) => (
+              {PAID_VIA.map((k) => (
                 <option key={k} value={k}>
-                  {v}
+                  {enumLabel(t, 'expensePaidVia', k)}
                 </option>
               ))}
             </Select>
           </Field>
           <Label className="flex items-center gap-2.5 text-sm font-normal">
-            <Checkbox name="hasVat" defaultChecked={f ? (f.vatAed ?? 0) > 0 : true} /> Includes 5% VAT (on a
-            tax invoice)
+            <Checkbox name="hasVat" defaultChecked={f ? (f.vatAed ?? 0) > 0 : true} />{' '}
+            {t('accounts.sheet.hasVat')}
           </Label>
         </div>
-        <SubmitButton className="w-full sm:w-auto">Record expense</SubmitButton>
+        <SubmitButton className="w-full sm:w-auto">{t('accounts.sheet.submit')}</SubmitButton>
       </ActionForm>
     </Sheet>
   )

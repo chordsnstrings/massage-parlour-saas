@@ -18,12 +18,14 @@ import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
 const uuid = z.uuid()
-const Text = z.string().trim().min(1, 'Write a message first').max(2000)
+const Text = z.string().trim().min(1, 'inbox.validation.writeFirst').max(2000)
 const inboxPath = (slug: string) => `/dashboard/${slug}/inbox`
 
 /** Delivery problems are not errors for the action: the message is saved with a note the thread shows. */
 const delivered = (r: Awaited<ReturnType<typeof deliverReply>>): ActionResult =>
-  r.ok ? ok('Sent', { sent: true }) : ok(`Saved, not sent — ${r.error}`, { sent: false })
+  r.ok
+    ? ok('inbox.results.sent', { sent: true })
+    : ok({ key: 'inbox.results.notSent', params: { reason: r.error } }, { sent: false })
 
 export async function sendReplyAction(
   slug: string,
@@ -76,7 +78,7 @@ export async function approveDraftAction(
     const draft = await withTenant(ctx.tenant.id, (tx) =>
       claimDraft(tx, parsed.data.messageId, parsed.data.text),
     )
-    if (!draft) return fail('This draft was already handled.')
+    if (!draft) return fail('inbox.results.draftHandled')
     const r = await deliverReply(ctx.tenant.id, draft.conversationId, parsed.data.text, {
       sender: draft.sender,
       messageId: draft.messageId,
@@ -101,9 +103,9 @@ export async function discardDraftAction(slug: string, messageId: string): Promi
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
-  if (!parsed.success) return fail('Unknown draft')
+  if (!parsed.success) return fail('inbox.results.unknownDraft')
   const done = await withTenant(ctx.tenant.id, (tx) => discardDraft(tx, parsed.data))
-  if (!done) return fail('This draft was already handled.')
+  if (!done) return fail('inbox.results.draftHandled')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -111,7 +113,7 @@ export async function discardDraftAction(slug: string, messageId: string): Promi
     entityId: messageId,
   })
   revalidatePath(inboxPath(slug))
-  return ok('Draft discarded')
+  return ok('inbox.results.draftDiscarded')
 }
 
 /** Re-sends an outbound message that wasn't delivered. */
@@ -119,14 +121,15 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
-  if (!parsed.success) return fail('Unknown message')
+  if (!parsed.success) return fail('inbox.results.unknownMessage')
   const [msg] = await withTenant(ctx.tenant.id, (tx) =>
     tx
       .select()
       .from(conversationMessages)
       .where(and(eq(conversationMessages.id, parsed.data), eq(conversationMessages.direction, 'out'))),
   )
-  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer') return fail('Nothing to resend.')
+  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer')
+    return fail('inbox.results.nothingToResend')
   let r: Awaited<ReturnType<typeof deliverReply>>
   try {
     r = await deliverReply(ctx.tenant.id, msg.conversationId, msg.text, {
@@ -150,9 +153,9 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
 }
 
 const MODE_MESSAGES = {
-  human: 'You’re handling this conversation',
-  bot: 'Handed back to the AI receptionist',
-  closed: 'Conversation closed',
+  human: 'inbox.results.modeHuman',
+  bot: 'inbox.results.modeBot',
+  closed: 'inbox.results.modeClosed',
 } as const
 
 export async function setModeAction(
@@ -165,7 +168,7 @@ export async function setModeAction(
   const parsed = z
     .object({ conversationId: uuid, mode: z.enum(['bot', 'human', 'closed']) })
     .safeParse({ conversationId, mode })
-  if (!parsed.success) return fail('Unknown conversation')
+  if (!parsed.success) return fail('inbox.results.unknownConversation')
   try {
     await withTenant(ctx.tenant.id, (tx) =>
       setConversationMode(tx, parsed.data.conversationId, parsed.data.mode),
@@ -195,7 +198,7 @@ export async function setFlagAction(
   const parsed = z
     .object({ conversationId: uuid, flagged: z.boolean() })
     .safeParse({ conversationId, flagged })
-  if (!parsed.success) return fail('Unknown conversation')
+  if (!parsed.success) return fail('inbox.results.unknownConversation')
   await withTenant(ctx.tenant.id, (tx) =>
     setConversationFlag(tx, parsed.data.conversationId, parsed.data.flagged),
   )
@@ -207,7 +210,7 @@ export async function setFlagAction(
     entityId: parsed.data.conversationId,
   })
   revalidatePath(inboxPath(slug))
-  return ok(parsed.data.flagged ? 'Flagged for review' : 'Flag cleared')
+  return ok(parsed.data.flagged ? 'inbox.results.flagged' : 'inbox.results.flagCleared')
 }
 
 /** Opening a thread clears its unread dot (read receipts aren't audited). */
@@ -215,13 +218,13 @@ export async function markReadAction(slug: string, conversationId: string): Prom
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
   const parsed = uuid.safeParse(conversationId)
-  if (!parsed.success) return fail('Unknown conversation')
+  if (!parsed.success) return fail('inbox.results.unknownConversation')
   await withTenant(ctx.tenant.id, (tx) => markConversationRead(tx, parsed.data))
   return ok()
 }
 
 const LinkClient = z.object({
-  name: z.string().trim().min(1, 'Enter a name').max(120),
+  name: z.string().trim().min(1, 'inbox.validation.enterName').max(120),
   phone: z.string().trim().max(30).optional(),
 })
 
@@ -233,9 +236,9 @@ export async function linkClientAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.send')
   if (error) return fail(error)
-  if (!can(ctx, 'clients.manage')) return fail("You don't have permission to do that.")
+  if (!can(ctx, 'clients.manage')) return fail('errors.forbidden')
   const id = uuid.safeParse(conversationId)
-  if (!id.success) return fail('Unknown conversation')
+  if (!id.success) return fail('inbox.results.unknownConversation')
   const parsed = LinkClient.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   let clientId: string
@@ -259,5 +262,5 @@ export async function linkClientAction(
     data: { clientId },
   })
   revalidatePath(inboxPath(slug))
-  return ok('Client linked')
+  return ok('inbox.results.clientLinked')
 }

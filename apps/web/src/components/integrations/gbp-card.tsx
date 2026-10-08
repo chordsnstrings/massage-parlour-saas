@@ -14,12 +14,12 @@ import { AlertCircle, CheckCircle2, MapPin, Star } from 'lucide-react'
 import Link from 'next/link'
 import { chooseLocationAction } from '@/app/api/integrations/google/actions'
 import { GBP_NOTICES } from '@/app/api/integrations/google/oauth'
-import { Badge } from '@/components/ui/badge'
+import { Card, Pill } from '@/components/crm'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
 import { ActionForm, FieldError, SubmitButton } from '@/components/ui/form'
+import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type { MemberContext } from '@/server/access'
 import { can } from '@/server/access'
 import {
@@ -74,6 +74,7 @@ export async function GbpCard({
   searchParams: Record<string, string | string[] | undefined>
 }) {
   const slug = ctx.tenant.slug
+  const { t, fmt } = await getI18n()
   const configured = Boolean(googleConfig() && process.env.BETTER_AUTH_SECRET)
   const manage = can(ctx, 'ai.manage')
   /** Sync now and the reviews page need ai.approve (settings.manage alone can open this card). */
@@ -88,83 +89,69 @@ export async function GbpCard({
   const picker =
     conn?.status === 'pending_location' && configured && manage ? await loadLocations(ctx.tenant.id) : null
   const noticeKey = typeof searchParams.gbp === 'string' ? searchParams.gbp : undefined
-  const notice = noticeKey ? GBP_NOTICES[noticeKey] : undefined
+  const known = noticeKey ? GBP_NOTICES[noticeKey] : undefined
+  const notice = known && {
+    tone: known.tone,
+    text: t.maybe(`settings.integrations.gbp.notices.${noticeKey}`) ?? known.text,
+  }
   const reviewsHref = appPath(`/${slug}/ai/reviews`)
 
   const badge = !configured ? (
-    <Badge tone="neutral">Not configured yet</Badge>
+    <Pill>{t('settings.integrations.status.notConfigured')}</Pill>
   ) : !conn ? (
-    <Badge tone="neutral">Not connected</Badge>
+    <Pill>{t('settings.integrations.status.notConnected')}</Pill>
   ) : conn.status === 'error' ? (
-    <Badge tone="danger">Reconnect needed</Badge>
+    <Pill tone="bad">{t('settings.integrations.status.reconnect')}</Pill>
   ) : conn.status === 'pending_location' ? (
-    <Badge tone="warning">Choose location</Badge>
+    <Pill tone="warn">{t('settings.integrations.status.chooseLocation')}</Pill>
   ) : (
-    <Badge tone="success">Connected</Badge>
+    <Pill tone="ok">{t('settings.integrations.status.connected')}</Pill>
   )
 
   return (
-    <Card className="flex flex-col" data-testid="gbp-card">
-      <CardHeader
-        title="Google Business Profile"
-        description="Sync Google reviews, post approved replies and share offers with a Book button."
-        action={badge}
-      />
-      <CardBody className="flex-1 space-y-5">
+    <Card
+      className="flex flex-col"
+      data-testid="gbp-card"
+      title={t('settings.integrations.gbp.title')}
+      sub={t('settings.integrations.gbp.sub')}
+      actions={badge}
+    >
+      <div className="flex-1 space-y-5">
         {notice && <Notice tone={notice.tone} text={notice.text} />}
 
         {!configured ? (
           <div className="space-y-3 text-sm text-muted">
-            <p>
-              Google sign-in isn't set up on this server yet. The platform administrator adds{' '}
-              <code className="rounded bg-subtle px-1.5 py-0.5 text-[13px] text-fg">GOOGLE_CLIENT_ID</code>{' '}
-              and{' '}
-              <code className="rounded bg-subtle px-1.5 py-0.5 text-[13px] text-fg">
-                GOOGLE_CLIENT_SECRET
-              </code>{' '}
-              once Google approves API access.
-            </p>
-            <p>
-              Until then, paste new reviews into Review replies — the AI drafts a reply you can copy into
-              Google.
-            </p>
+            <p>{t('settings.integrations.gbp.notConfigured')}</p>
+            <p>{t('settings.integrations.gbp.untilThen')}</p>
           </div>
         ) : !conn ? (
           <ul className="space-y-2.5 text-sm text-muted">
-            {[
-              'Reviews arrive every two hours, with an AI draft reply when the review agent is on.',
-              'Autopilot answers 4–5★ reviews; 1–3★ always wait for your approval.',
-              'Approved AI-studio posts can go to Google with a Book button to your booking page.',
-            ].map((t) => (
-              <li key={t} className="flex gap-2.5">
+            {(['reviews', 'autopilot', 'posts'] as const).map((k) => (
+              <li key={k} className="flex gap-2.5">
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
-                {t}
+                {t(`settings.integrations.gbp.features.${k}`)}
               </li>
             ))}
           </ul>
         ) : null}
 
         {conn?.status === 'error' && (
-          <Notice
-            tone="error"
-            text={conn.lastError ?? 'Google sign-in expired. Reconnect to keep syncing.'}
-          />
+          <Notice tone="error" text={conn.lastError ?? t('settings.integrations.gbp.expired')} />
         )}
 
         {conn?.status === 'pending_location' &&
           (!configured || !manage ? (
-            <p className="text-sm text-muted">Signed in with Google — a location still needs to be chosen.</p>
+            <p className="text-sm text-muted">{t('settings.integrations.gbp.pendingLocation')}</p>
           ) : picker?.error ? (
             <Notice tone="error" text={picker.error} />
           ) : picker && picker.choices.length === 0 ? (
-            <p className="text-sm text-muted">
-              This Google account doesn't manage any Business Profile locations. Sign in with the account that
-              owns or manages the spa's profile.
-            </p>
+            <p className="text-sm text-muted">{t('settings.integrations.gbp.noLocations')}</p>
           ) : picker ? (
             <ActionForm action={chooseLocationAction.bind(null, slug)} className="space-y-4">
               <fieldset className="space-y-2">
-                <legend className="mb-2 text-sm font-medium">Which location is this spa?</legend>
+                <legend className="mb-2 text-sm font-medium">
+                  {t('settings.integrations.gbp.whichLocation')}
+                </legend>
                 {picker.choices.map((l, i) => (
                   <label
                     key={`${l.accountName}|${l.name}`}
@@ -188,7 +175,7 @@ export async function GbpCard({
               </fieldset>
               <FieldError name="location" />
               <SubmitButton className="h-11 sm:h-10">
-                <MapPin /> Use this location
+                <MapPin /> {t('settings.integrations.gbp.useLocation')}
               </SubmitButton>
             </ActionForm>
           ) : null)}
@@ -196,19 +183,27 @@ export async function GbpCard({
         {conn?.hasLocation && (
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
-              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Location</dt>
+              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                {t('settings.integrations.gbp.location')}
+              </dt>
               <dd className="font-medium">{conn.title}</dd>
               {conn.address && <dd className="text-muted">{conn.address}</dd>}
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Last sync</dt>
-              <dd>{conn.lastSyncAt ? formatDateTime(conn.lastSyncAt) : 'Not yet'}</dd>
+              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                {t('settings.integrations.gbp.lastSync')}
+              </dt>
+              <dd>
+                {conn.lastSyncAt ? fmt.dateTime(conn.lastSyncAt) : t('settings.integrations.gbp.notYet')}
+              </dd>
             </div>
             {stats && (
               <div className="space-y-1">
-                <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Reviews</dt>
+                <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                  {t('settings.integrations.gbp.reviews')}
+                </dt>
                 <dd className="inline-flex items-center gap-1.5">
-                  {stats.count}
+                  {fmt.number(stats.count)}
                   {stats.count > 0 && (
                     <>
                       <span className="text-muted">·</span>
@@ -223,19 +218,22 @@ export async function GbpCard({
         )}
         {conn?.hasLocation && conn.lastError && conn.status !== 'error' && (
           <p className="text-[13px] text-danger" role="alert">
-            Last sync failed: {conn.lastError}
+            {t('settings.integrations.gbp.lastSyncFailed', { error: conn.lastError })}
           </p>
         )}
-      </CardBody>
+      </div>
 
-      <CardFooter className="justify-start gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
         {configured && manage && (!conn || conn.status === 'error') && (
-          <ConnectGoogleButton slug={slug} label={conn ? 'Reconnect Google' : 'Connect Google'} />
+          <ConnectGoogleButton
+            slug={slug}
+            label={conn ? t('settings.integrations.gbp.reconnect') : t('settings.integrations.gbp.connect')}
+          />
         )}
         {conn?.status === 'connected' && configured && approve && <SyncGoogleButton slug={slug} />}
         {approve && (
           <Link href={reviewsHref} className={cn(buttonVariants({ variant: 'ghost' }), 'h-11 sm:h-10')}>
-            Review replies
+            {t('settings.integrations.gbp.reviewReplies')}
           </Link>
         )}
         {conn && manage && (
@@ -244,7 +242,7 @@ export async function GbpCard({
             <DisconnectGoogleButton slug={slug} />
           </span>
         )}
-      </CardFooter>
+      </div>
     </Card>
   )
 }

@@ -2,6 +2,7 @@ import { payrollLines, payrollRuns, staff, tenants, withTenant } from '@spa/db'
 import { wpsSif } from '@spa/services'
 import { eq, inArray } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
+import { getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -35,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tenant:
   })
   if (!data) notFound()
   if (!data.wps?.employerId || !data.wps.routingCode)
-    return new Response('Set up the WPS employer details on the payroll page first.', { status: 422 })
+    return new Response((await getT())('payroll.wps.missing'), { status: 422 })
   const byId = new Map(data.people.map((p) => [p.id, p]))
   const period = days(data.run.periodStart, data.run.periodEnd)
   const rows = data.lines.flatMap((l) => {

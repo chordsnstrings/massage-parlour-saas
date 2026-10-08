@@ -15,14 +15,15 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone } from '@/components/calendar/time'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
+import { formatAed } from '@/lib/utils'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { pickBranch } from './data'
 
 const money = z.coerce
-  .number({ error: 'Enter an amount' })
-  .min(0, 'Cannot be negative')
-  .max(1_000_000, 'Too large')
+  .number({ error: 'sales.v.amount' })
+  .min(0, 'sales.v.negative')
+  .max(1_000_000, 'sales.v.tooLarge')
 const method = z.enum(POS_METHODS)
 const payMethod = z.enum(PAY_METHODS)
 const optionalUuid = z
@@ -80,7 +81,7 @@ const saleSchema = z.object({
   bookingId: optionalUuid,
   clientId: optionalUuid,
   newClient: z
-    .object({ name: z.string().trim().min(2, 'Enter a name').max(120), phone: z.string().trim().max(30) })
+    .object({ name: z.string().trim().min(2, 'sales.v.name').max(120), phone: z.string().trim().max(30) })
     .nullish(),
   lines: z
     .array(
@@ -88,19 +89,19 @@ const saleSchema = z.object({
         kind: z.enum(['service', 'product', 'package', 'gift_card', 'other']),
         refId: optionalUuid,
         clientPackageId: optionalUuid,
-        description: z.string().trim().min(1, 'Describe the item').max(200),
+        description: z.string().trim().min(1, 'sales.v.describe').max(200),
         qty: z.coerce.number().int().min(1).max(99),
         unitPriceAed: money,
         discountAed: money.default(0),
         staffId: optionalUuid,
       }),
     )
-    .min(1, 'Add at least one item'),
+    .min(1, 'sales.v.addItem'),
   discountAed: money.default(0),
   payments: z
     .array(z.object({ method: payMethod, amountAed: money, reference: z.string().trim().max(60).nullish() }))
     .max(8),
-  tips: z.array(z.object({ staffId: z.uuid('Choose a therapist'), amountAed: money, method })).max(12),
+  tips: z.array(z.object({ staffId: z.uuid('sales.v.therapist'), amountAed: money, method })).max(12),
 })
 export type SalePayload = z.input<typeof saleSchema>
 
@@ -140,7 +141,7 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
     })
     revalidate(slug)
     if (v.bookingId) revalidatePath(`/dashboard/${slug}/calendar`)
-    return ok(`Sale #${sale.number} recorded`, { id: sale.id })
+    return ok({ key: 'sales.toast.recorded', params: { number: sale.number } }, { id: sale.id })
   } catch (e) {
     return handle(e)
   }
@@ -150,7 +151,7 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
 // Void / refund
 // ---------------------------------------------------------------------------
 
-const reason = z.string().trim().min(3, 'Give a reason').max(300)
+const reason = z.string().trim().min(3, 'sales.v.reason').max(300)
 
 export async function voidSaleAction(slug: string, saleId: string, _p: ActionResult, formData: FormData) {
   const { ctx, error } = await guard(slug, 'pos.refund')
@@ -170,7 +171,7 @@ export async function voidSaleAction(slug: string, saleId: string, _p: ActionRes
       data: { number: sale.number, reason: parsed.data.reason },
     })
     revalidate(slug)
-    return ok(`Sale #${sale.number} voided`)
+    return ok({ key: 'sales.toast.voided', params: { number: sale.number } })
   } catch (e) {
     return handle(e)
   }
@@ -180,11 +181,9 @@ const refundInput = z.object({
   method,
   reason,
   lines: z
-    .array(
-      z.object({ saleLineId: z.uuid(), qty: z.coerce.number().int('Whole numbers only').min(0).max(1000) }),
-    )
+    .array(z.object({ saleLineId: z.uuid(), qty: z.coerce.number().int('sales.v.whole').min(0).max(1000) }))
     .transform((lines) => lines.filter((l) => l.qty > 0))
-    .refine((lines) => lines.length > 0, 'Choose what to refund'),
+    .refine((lines) => lines.length > 0, 'sales.v.chooseRefund'),
 })
 
 /** Line-level refund: the form sends `qty.<saleLineId>` per line (0 = not refunded). */
@@ -221,7 +220,7 @@ export async function refundSaleAction(slug: string, saleId: string, _p: ActionR
       },
     })
     revalidate(slug)
-    return ok(`Refund of AED ${refund.amountAed} recorded`)
+    return ok({ key: 'sales.toast.refunded', params: { amount: formatAed(refund.amountAed) } })
   } catch (e) {
     return handle(e)
   }
@@ -272,7 +271,7 @@ export async function closeDayAction(
       },
     })
     revalidate(slug)
-    return ok('Day closed')
+    return ok('sales.toast.dayClosed')
   } catch (e) {
     return handle(e)
   }

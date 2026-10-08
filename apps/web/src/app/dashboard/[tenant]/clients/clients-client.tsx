@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button'
 import { ActionForm, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
+import { useT } from '@/i18n/client'
 import { appPath } from '@/lib/paths'
 import { createClientAction } from './actions'
 
 /** Search box that keeps the query in the URL (debounced), so results are shareable and server-rendered. */
 export function ClientSearch({ initial, placeholder }: { initial: string; placeholder: string }) {
+  const t = useT()
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -23,7 +25,7 @@ export function ClientSearch({ initial, placeholder }: { initial: string; placeh
       first.current = false
       return
     }
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       const p = new URLSearchParams(params.toString())
       if (value.trim()) p.set('q', value.trim())
       else p.delete('q')
@@ -31,7 +33,7 @@ export function ClientSearch({ initial, placeholder }: { initial: string; placeh
       if (s === params.toString()) return
       start(() => router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false }))
     }, 250)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [value, params, pathname, router])
   return (
     <div className="relative w-full sm:w-72">
@@ -40,7 +42,7 @@ export function ClientSearch({ initial, placeholder }: { initial: string; placeh
       </span>
       <Input
         type="search"
-        aria-label="Search clients"
+        aria-label={t('clients.search.label')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder}
@@ -49,7 +51,7 @@ export function ClientSearch({ initial, placeholder }: { initial: string; placeh
       {value && (
         <button
           type="button"
-          aria-label="Clear search"
+          aria-label={t('clients.search.clear')}
           onClick={() => setValue('')}
           className="absolute inset-y-0 end-1 grid w-9 place-items-center text-muted hover:text-fg"
         >
@@ -61,18 +63,19 @@ export function ClientSearch({ initial, placeholder }: { initial: string; placeh
 }
 
 export function NewClientSheet({ slug }: { slug: string }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const router = useRouter()
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title="New client"
-      description="Add someone who called or walked in."
+      title={t('clients.newSheet.title')}
+      description={t('clients.newSheet.sub')}
       className="md:max-w-xl"
       trigger={
         <Button>
-          <Plus /> New client
+          <Plus /> {t('clients.newClient')}
         </Button>
       }
     >
@@ -87,7 +90,7 @@ export function NewClientSheet({ slug }: { slug: string }) {
       >
         <ClientDetailsFields />
         <SubmitButton className="w-full" size="lg">
-          Add client
+          {t('clients.newSheet.submit')}
         </SubmitButton>
       </ActionForm>
     </Sheet>

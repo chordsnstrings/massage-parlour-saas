@@ -5,80 +5,47 @@ import { AlertCircle, ArrowLeft, Plus, Star } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Card, Grid, Pill, Seg, Stat, TName, type Tone } from '@/components/crm'
 import { SyncGoogleButton } from '@/components/integrations/gbp-card-actions'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { StatCard } from '@/components/ui/stat-card'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn, formatDate } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { addReviewAction } from '../actions'
 import { ReplyEditor } from './reply-editor'
 
-export const metadata: Metadata = { title: 'Google reviews' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('reviews.title') }
+}
 
-const stars = (n: number) => (
-  <span className="inline-flex gap-0.5 text-warning" role="img" aria-label={`${n} stars`}>
+const stars = (n: number, label: string) => (
+  <span className="inline-flex gap-0.5 text-warning" role="img" aria-label={label}>
     {[1, 2, 3, 4, 5].map((i) => (
       <Star key={i} className="size-3.5" fill={i <= n ? 'currentColor' : 'none'} strokeWidth={1.5} />
     ))}
   </span>
 )
 
-const STATUS = {
-  none: { label: 'Needs reply', tone: 'warning' },
-  draft: { label: 'Draft', tone: 'neutral' },
-  approved: { label: 'Approved', tone: 'accent' },
-  posted: { label: 'Posted', tone: 'success' },
-  failed: { label: 'Failed', tone: 'danger' },
-} as const
+const STATUS_TONE: Record<string, Tone> = {
+  none: 'warn',
+  draft: 'neutral',
+  approved: 'info',
+  posted: 'ok',
+  failed: 'bad',
+}
 
 const STATUS_FILTERS = {
-  open: { label: 'Needs reply', statuses: ['none', 'draft', 'failed'] },
-  approved: { label: 'Approved', statuses: ['approved'] },
-  posted: { label: 'Posted', statuses: ['posted'] },
-  failed: { label: 'Failed', statuses: ['failed'] },
+  open: ['none', 'draft', 'failed'],
+  approved: ['approved'],
+  posted: ['posted'],
+  failed: ['failed'],
 } as const
 type StatusFilter = keyof typeof STATUS_FILTERS
-
-/** Phones: one sideways-scrolling row bleeding to the screen edge; wider screens wrap. */
-const FILTER_ROW =
-  '-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0'
-
-function Chip({
-  href,
-  active,
-  label,
-  children,
-}: {
-  href: string
-  active: boolean
-  label?: string
-  children: React.ReactNode
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      aria-current={active ? 'true' : undefined}
-      scroll={false}
-      className={cn(
-        'inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border px-3.5 text-sm transition-colors sm:min-h-9',
-        active
-          ? 'border-accent bg-accent-soft font-medium text-accent'
-          : 'text-muted hover:bg-subtle hover:text-fg',
-      )}
-    >
-      {children}
-    </Link>
-  )
-}
 
 export default async function ReviewsPage({
   params,
@@ -97,10 +64,19 @@ export default async function ReviewsPage({
 
   const where: SQL[] = [eq(reviews.tenantId, ctx.tenant.id)]
   if (rating) where.push(eq(reviews.rating, rating))
-  if (status) where.push(inArray(reviews.replyStatus, [...STATUS_FILTERS[status].statuses]))
-  const { conn, stats, rows } = await withTenant(ctx.tenant.id, async (tx) => ({
+  if (status) where.push(inArray(reviews.replyStatus, [...STATUS_FILTERS[status]]))
+  const { t, fmt } = await getI18n()
+  const { conn, stats, extra, rows } = await withTenant(ctx.tenant.id, async (tx) => ({
     conn: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
     stats: await reviewStats(tx, ctx.tenant.id),
+    // New this month (Dubai) + AI drafts waiting — for the crm-spec §5.10 stat row.
+    extra: (
+      await tx.execute(sql`select
+        (count(*) filter (where coalesce(reviewed_at, created_at) >=
+          date_trunc('month', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai'))::int as fresh,
+        (count(*) filter (where reply_status = 'draft'))::int as drafts
+        from reviews`)
+    ).rows[0] as { fresh: number; drafts: number },
     rows: await tx
       .select()
       .from(reviews)
@@ -124,46 +100,47 @@ export default async function ReviewsPage({
     return qs ? `${base}?${qs}` : base
   }
 
+  const starsLabel = (n: number) => t('reviews.stars', { count: n })
   return (
     <>
       <Link
         href={appPath(`/${slug}/ai`)}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
+        className="crm-muted mb-4 inline-flex items-center gap-1.5 text-sm transition-colors hover:text-fg"
       >
-        <ArrowLeft className="size-4" strokeWidth={1.5} /> AI studio
+        <ArrowLeft className="size-4 rtl:rotate-180" strokeWidth={1.5} /> {t('ai.studio')}
       </Link>
       <PageHeader
-        title="Google reviews"
+        title={t('reviews.title')}
         description={
           connected
-            ? `Synced from ${conn?.title ?? 'your Google Business Profile'} every two hours. Draft a reply with AI, approve it, then post it to Google.`
-            : 'Until Google Business Profile is connected, paste new reviews here — the AI drafts a reply you can copy into Google.'
+            ? t('reviews.descConnected', { name: conn?.title ?? t('reviews.yourProfile') })
+            : t('reviews.descManual')
         }
         actions={
           <>
             {connected && googleConfig() && <SyncGoogleButton slug={slug} variant="primary" />}
             <FormSheet
-              title="Add a review"
+              title={t('reviews.addTitle')}
               action={addReviewAction.bind(null, slug)}
               trigger={
                 <Button variant={connected ? 'secondary' : 'primary'} className="h-11 sm:h-10">
-                  <Plus /> Add review
+                  <Plus /> {t('reviews.add')}
                 </Button>
               }
             >
-              <Field label="Reviewer" name="author">
+              <Field label={t('reviews.reviewer')} name="author">
                 <Input id="author" name="author" />
               </Field>
-              <Field label="Rating" name="rating">
+              <Field label={t('reviews.rating')} name="rating">
                 <Select id="rating" name="rating" defaultValue="5">
                   {[5, 4, 3, 2, 1].map((n) => (
                     <option key={n} value={n}>
-                      {n} stars
+                      {starsLabel(n)}
                     </option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Review text" name="text">
+              <Field label={t('reviews.reviewText')} name="text">
                 <Textarea id="text" name="text" dir="auto" />
               </Field>
             </FormSheet>
@@ -172,79 +149,103 @@ export default async function ReviewsPage({
       />
       <PageBody>
         {conn?.status === 'error' && (
-          <Card className="flex flex-wrap items-center gap-3 border-danger/30 bg-danger-soft p-4 text-sm text-danger sm:px-5">
+          <div
+            role="status"
+            className="crm-card flex flex-wrap items-center gap-3 border-danger/30 bg-danger-soft text-sm text-danger"
+          >
             <AlertCircle className="size-4 shrink-0" strokeWidth={1.75} />
-            <span className="min-w-0 flex-1">{conn.lastError ?? 'Google sign-in expired.'}</span>
+            <span className="min-w-0 flex-1">{conn.lastError ?? t('reviews.signInExpired')}</span>
             {canReconnect ? (
               <Link
                 href={appPath(`/${slug}/settings/integrations`)}
                 className="inline-flex min-h-11 items-center font-medium underline-offset-4 hover:underline sm:min-h-0"
               >
-                Reconnect
+                {t('reviews.reconnect')}
               </Link>
             ) : (
-              <span className="font-medium">Ask a manager to reconnect Google.</span>
+              <span className="font-medium">{t('reviews.askManager')}</span>
             )}
-          </Card>
+          </div>
         )}
 
-        <Stagger className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StaggerItem>
-            <Card className="h-full p-5 sm:p-6">
-              <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Average rating</p>
-              <p className="mt-3 flex items-center gap-2 text-[26px] font-semibold tracking-tight">
-                <span className="tabular">{stats.count ? stats.average.toFixed(1) : '–'}</span>
-                <Star className="size-5 text-warning" fill="currentColor" strokeWidth={1.5} />
-              </p>
-              <p className="mt-1 text-[13px] text-muted">Out of 5</p>
-            </Card>
-          </StaggerItem>
-          <StaggerItem>
-            <StatCard label="Reviews" value={stats.count} format="int" hint="All time" />
-          </StaggerItem>
-          <StaggerItem>
-            <StatCard label="Response rate" value={stats.responseRate} format="pct" hint="Replies posted" />
-          </StaggerItem>
-          <StaggerItem>
-            <StatCard label="Needs reply" value={stats.needsReply} format="int" hint="Not yet on Google" />
-          </StaggerItem>
-        </Stagger>
+        <Grid cols="g4">
+          <Stat
+            label={t('reviews.statRating')}
+            value={
+              <span className="inline-flex items-center gap-1.5">
+                <span>{stats.count ? stats.average.toFixed(1) : '–'}</span>
+                <Star className="size-5 text-warning" fill="currentColor" strokeWidth={1.5} aria-hidden />
+              </span>
+            }
+            change={{ text: t('reviews.statRatingSub', { count: stats.count }) }}
+          />
+          <Stat
+            label={t('reviews.statNew')}
+            value={fmt.number(extra.fresh)}
+            change={{ text: t('reviews.statNewSub', { count: stats.count }) }}
+          />
+          <Stat
+            label={t('reviews.statAwaiting')}
+            value={fmt.number(stats.needsReply)}
+            change={{ text: t('reviews.statAwaitingSub', { count: extra.drafts }) }}
+          />
+          <Stat
+            label={t('reviews.statRate')}
+            value={fmt.percent(stats.responseRate / 100)}
+            change={{ text: t('reviews.statRateSub') }}
+          />
+        </Grid>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <nav aria-label="Filter by rating" className={FILTER_ROW}>
-            <Chip href={href({ rating: null })} active={!rating}>
-              All ratings
-            </Chip>
-            {[5, 4, 3, 2, 1].map((n) => (
-              <Chip key={n} href={href({ rating: n })} active={rating === n} label={`${n} stars`}>
-                {n}
-                <Star className="size-3.5" fill="currentColor" strokeWidth={1.5} aria-hidden />
-              </Chip>
-            ))}
-          </nav>
-          <nav aria-label="Filter by reply status" className={FILTER_ROW}>
-            <Chip href={href({ status: null })} active={!status}>
-              Any status
-            </Chip>
-            {(Object.keys(STATUS_FILTERS) as StatusFilter[]).map((k) => (
-              <Chip key={k} href={href({ status: k })} active={status === k}>
-                {STATUS_FILTERS[k].label}
-              </Chip>
-            ))}
-          </nav>
+          <div className="max-w-full overflow-x-auto">
+            <Seg
+              label={t('reviews.filterRating')}
+              value={rating ? String(rating) : 'all'}
+              items={[
+                { value: 'all', label: t('reviews.allRatings'), href: href({ rating: null }) },
+                ...[5, 4, 3, 2, 1].map((n) => ({
+                  value: String(n),
+                  href: href({ rating: n }),
+                  label: (
+                    <>
+                      <span aria-hidden className="inline-flex items-center gap-0.5">
+                        {n}
+                        <Star className="size-3.5" fill="currentColor" strokeWidth={1.5} />
+                      </span>
+                      <span className="sr-only">{starsLabel(n)}</span>
+                    </>
+                  ),
+                })),
+              ]}
+            />
+          </div>
+          <div className="max-w-full overflow-x-auto">
+            <Seg
+              label={t('reviews.filterStatus')}
+              value={status ?? 'any'}
+              items={[
+                { value: 'any', label: t('reviews.anyStatus'), href: href({ status: null }) },
+                ...(Object.keys(STATUS_FILTERS) as StatusFilter[]).map((k) => ({
+                  value: k,
+                  label: t(`reviews.filter.${k}`),
+                  href: href({ status: k }),
+                })),
+              ]}
+            />
+          </div>
         </div>
 
         {rows.length === 0 ? (
           <Card>
             <EmptyState
               icon={<Star className="size-5" />}
-              title={rating || status ? 'No reviews match these filters' : 'No reviews yet'}
+              title={rating || status ? t('reviews.emptyFiltered') : t('reviews.emptyTitle')}
               description={
                 rating || status
-                  ? 'Try another rating or status.'
+                  ? t('reviews.emptyFilteredBody')
                   : connected
-                    ? 'New Google reviews appear here after the next sync.'
-                    : 'Add your latest Google reviews to draft replies.'
+                    ? t('reviews.emptyConnected')
+                    : t('reviews.emptyManual')
               }
               action={
                 rating || status ? (
@@ -252,40 +253,37 @@ export default async function ReviewsPage({
                     href={base}
                     className="text-sm font-medium text-accent underline-offset-4 hover:underline"
                   >
-                    Clear filters
+                    {t('reviews.clearFilters')}
                   </Link>
                 ) : undefined
               }
             />
           </Card>
         ) : (
-          <Stagger className="grid gap-4 lg:grid-cols-2">
+          <Stagger className="crm-grid crm-g2">
             {rows.map((r) => {
-              const s = STATUS[r.replyStatus]
               const viaGoogle = isLocationReview(r.externalId, parent)
+              const author = r.author ?? t('reviews.googleUser')
               return (
                 <StaggerItem key={r.id}>
-                  <Card className="flex h-full flex-col gap-4 p-5 sm:p-6" data-testid="review">
+                  <Card as="article" className="flex h-full flex-col gap-3" data-testid="review">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate font-medium">{r.author ?? 'Google user'}</p>
-                        <div className="flex items-center gap-2">
-                          {stars(r.rating)}
-                          {r.reviewedAt && (
-                            <span className="text-xs text-muted">{formatDate(r.reviewedAt)}</span>
-                          )}
-                        </div>
-                      </div>
-                      <Badge tone={s.tone}>{s.label}</Badge>
+                      <TName name={author} sub={stars(r.rating, starsLabel(r.rating))} />
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <Pill tone={STATUS_TONE[r.replyStatus] ?? 'neutral'} dot>
+                          {t(`reviews.status.${r.replyStatus}`)}
+                        </Pill>
+                        {r.reviewedAt && <span className="crm-muted text-xs">{fmt.date(r.reviewedAt)}</span>}
+                      </span>
                     </div>
                     {r.text ? (
-                      <p dir="auto" className="whitespace-pre-line text-[15px] leading-relaxed text-muted">
+                      <p dir="auto" className="crm-muted whitespace-pre-line text-[15px] leading-relaxed">
                         {r.text}
                       </p>
                     ) : (
-                      <p className="text-sm italic text-muted">Rating only — no written review.</p>
+                      <p className="crm-muted text-sm italic">{t('reviews.ratingOnly')}</p>
                     )}
-                    <div className="mt-auto border-t pt-4">
+                    <div className="mt-auto border-t border-[var(--crm-line)] pt-3">
                       <ReplyEditor
                         key={`${r.replyStatus}:${r.replyText ?? ''}:${r.replyError ?? ''}`}
                         slug={slug}

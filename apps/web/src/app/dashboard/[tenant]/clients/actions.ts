@@ -40,21 +40,21 @@ const phoneField = z
     if (!v) return null
     const e164 = toUaeE164(v)
     if (!e164) {
-      c.addIssue({ code: 'custom', message: 'Enter a UAE mobile number, e.g. 050 123 4567' })
+      c.addIssue({ code: 'custom', message: 'clients.error.phone' })
       return z.NEVER
     }
     return e164
   })
 const birthday = z
-  .union([z.iso.date('Enter a valid date'), z.literal('')])
+  .union([z.iso.date('clients.error.date'), z.literal('')])
   .optional()
   .transform((v) => v || null)
 
 const detailsSchema = z.object({
-  name: z.string().trim().min(2, 'Enter the client’s name').max(120),
+  name: z.string().trim().min(2, 'clients.error.name').max(120),
   phone: phoneField,
   email: z
-    .union([z.email('Enter a valid email'), z.literal('')])
+    .union([z.email('validation.email'), z.literal('')])
     .optional()
     .transform((v) => v?.toLowerCase() || null),
   gender: z
@@ -72,8 +72,7 @@ const detailsSchema = z.object({
   notes: optional(4000),
 })
 
-const dupPhone = () =>
-  fail('Another client already has this number.', { phone: 'Already used by another client' })
+const dupPhone = () => fail('clients.result.dupPhone', { phone: 'clients.error.dupPhone' })
 const clientsPath = (slug: string) => `/dashboard/${slug}/clients`
 
 export async function createClientAction(
@@ -101,7 +100,7 @@ export async function createClientAction(
       entityId: row!.id,
     })
     revalidatePath(clientsPath(slug))
-    return ok('Client added', { id: row!.id })
+    return ok('clients.result.added', { id: row!.id })
   } catch (e) {
     if (pgCode(e) === '23505') return dupPhone()
     throw e
@@ -129,7 +128,7 @@ export async function updateClientAction(
         .where(eq(clients.id, clientId))
         .returning({ id: clients.id }),
     )
-    if (!row) return fail('Client not found.')
+    if (!row) return fail('clients.result.notFound')
   } catch (e) {
     if (pgCode(e) === '23505') return dupPhone()
     throw e
@@ -143,7 +142,7 @@ export async function updateClientAction(
   })
   revalidatePath(clientsPath(slug))
   revalidatePath(`${clientsPath(slug)}/${clientId}`)
-  return ok('Client updated')
+  return ok('clients.result.updated')
 }
 
 const prefsSchema = z.object({
@@ -178,14 +177,14 @@ export async function updatePreferencesAction(
         .select({ id: staff.id })
         .from(staff)
         .where(eq(staff.id, preferences.preferredStaffId))
-      if (!s) return 'Therapist not found.'
+      if (!s) return 'clients.result.therapistNotFound'
     }
     const [row] = await tx
       .update(clients)
       .set({ preferences, updatedAt: new Date() })
       .where(eq(clients.id, clientId))
       .returning({ id: clients.id })
-    return row ? null : 'Client not found.'
+    return row ? null : 'clients.result.notFound'
   })
   if (result) return fail(result)
   await audit({
@@ -196,14 +195,14 @@ export async function updatePreferencesAction(
     entityId: clientId,
   })
   revalidatePath(`${clientsPath(slug)}/${clientId}`)
-  return ok('Preferences saved')
+  return ok('clients.result.prefsSaved')
 }
 
 const blocklistSchema = z
   .object({ blocklisted: z.enum(['true', 'false']), reason: optional(500) })
   .superRefine((v, c) => {
     if (v.blocklisted === 'true' && !v.reason)
-      c.addIssue({ code: 'custom', path: ['reason'], message: 'Add a reason so the team knows why' })
+      c.addIssue({ code: 'custom', path: ['reason'], message: 'clients.error.reason' })
   })
 
 export async function setBlocklistAction(
@@ -224,7 +223,7 @@ export async function setBlocklistAction(
       .where(eq(clients.id, clientId))
       .returning({ id: clients.id }),
   )
-  if (!row) return fail('Client not found.')
+  if (!row) return fail('clients.result.notFound')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -235,11 +234,11 @@ export async function setBlocklistAction(
   })
   revalidatePath(clientsPath(slug))
   revalidatePath(`${clientsPath(slug)}/${clientId}`)
-  return ok(blocklisted ? 'Client blocklisted' : 'Client removed from blocklist')
+  return ok(blocklisted ? 'clients.result.blocklisted' : 'clients.result.unblocked')
 }
 
 const noteSchema = z.object({
-  text: z.string().trim().min(2, 'Write a short note').max(4000),
+  text: z.string().trim().min(2, 'clients.error.note').max(4000),
   bookingId: optionalId,
 })
 
@@ -256,13 +255,13 @@ export async function addTreatmentNoteAction(
   if (!parsed.success) return fromZod(parsed.error)
   const result = await withTenant(ctx.tenant.id, async (tx) => {
     const [client] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId))
-    if (!client) return { error: 'Client not found.' as const }
+    if (!client) return { error: 'clients.result.notFound' as const }
     if (parsed.data.bookingId) {
       const [b] = await tx
         .select({ id: bookings.id })
         .from(bookings)
         .where(and(eq(bookings.id, parsed.data.bookingId), eq(bookings.clientId, clientId)))
-      if (!b) return { error: 'Visit not found.' as const }
+      if (!b) return { error: 'clients.result.visitNotFound' as const }
     }
     const [note] = await tx
       .insert(treatmentNotes)
@@ -286,7 +285,7 @@ export async function addTreatmentNoteAction(
     entityId: result.id,
   })
   revalidatePath(`${clientsPath(slug)}/${clientId}`)
-  return ok('Note added')
+  return ok('clients.result.noteAdded')
 }
 
 /** Saves a signed intake against the active template (answers, waiver snapshot, signature, version, ip). */

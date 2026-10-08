@@ -15,26 +15,27 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { resultText, useI18n, useT } from '@/i18n/client'
 import { ease } from '@/lib/motion'
-import { formatDate } from '@/lib/utils'
 import { formatBytes, isStored, type MediaItem, sized } from './types'
+
+type Translator = ReturnType<typeof useT>
+type Format = ReturnType<typeof useI18n>['fmt']
 
 type Usage = { pages: string[]; services: string[]; staff: string[]; posts: number; sections: string[] }
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const usageTotal = (u: Usage) =>
   u.pages.length + u.services.length + u.staff.length + u.posts + u.sections.length
 /** "1 page: Home; 1 service photo: Hot stones; 2 unpublished social posts" */
-const describeUsage = (u: Usage) =>
+const describeUsage = (t: Translator, u: Usage) =>
   [
-    u.pages.length > 0 && `${count(u.pages.length, 'page', 'pages')}: ${u.pages.join(', ')}`,
+    u.pages.length > 0 && t('media.usePages', { count: u.pages.length, names: u.pages.join(', ') }),
     u.services.length > 0 &&
-      `${count(u.services.length, 'service photo', 'service photos')}: ${u.services.join(', ')}`,
-    u.staff.length > 0 &&
-      `${count(u.staff.length, 'therapist photo', 'therapist photos')}: ${u.staff.join(', ')}`,
-    u.posts > 0 && count(u.posts, 'unpublished social post', 'unpublished social posts'),
+      t('media.useServices', { count: u.services.length, names: u.services.join(', ') }),
+    u.staff.length > 0 && t('media.useStaff', { count: u.staff.length, names: u.staff.join(', ') }),
+    u.posts > 0 && t('media.usePosts', { count: u.posts }),
     u.sections.length > 0 &&
-      `${count(u.sections.length, 'saved section', 'saved sections')}: ${u.sections.join(', ')}`,
+      t('media.useSections', { count: u.sections.length, names: u.sections.join(', ') }),
   ]
     .filter(Boolean)
     .join('; ')
@@ -51,12 +52,13 @@ export function AssetSheet({
   origin: string
   onOpenChange: (open: boolean) => void
 }) {
+  const { t, fmt } = useI18n()
   return (
     <Sheet
       open={item !== null}
       onOpenChange={onOpenChange}
-      title={item?.filename ?? (item?.source === 'ai' ? 'AI image' : 'Image')}
-      description={item ? describe(item) : undefined}
+      title={item?.filename ?? (item?.source === 'ai' ? t('media.aiImage') : t('media.image'))}
+      description={item ? describe(t, fmt, item) : undefined}
       className="md:max-w-3xl"
     >
       {item && (
@@ -66,11 +68,11 @@ export function AssetSheet({
   )
 }
 
-const describe = (i: MediaItem) =>
+const describe = (t: Translator, fmt: Format, i: MediaItem) =>
   [
     i.width && i.height ? `${i.width} × ${i.height}px` : null,
     formatBytes(i.bytes),
-    `added ${formatDate(i.createdAt)}`,
+    t('media.added', { date: fmt.date(i.createdAt) }),
   ]
     .filter(Boolean)
     .join(' · ')
@@ -91,26 +93,27 @@ function Details({
   const [usage, setUsage] = useState<Usage | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [pending, start] = useTransition()
+  const t = useT()
 
   const askDelete = () =>
     start(async () => {
       const res = await assetUsageAction(slug, item.id)
-      if (!res.ok) return void toast.error(res.error)
+      if (!res.ok) return void toast.error(t.maybe(res.error) ?? res.error)
       setUsage(res.usage)
       setConfirming(true)
     })
   const doDelete = () =>
     start(async () => {
       const res = await deleteAssetAction(slug, item.id)
-      if (!res?.ok) return void toast.error(res?.error ?? 'Couldn’t delete the image')
-      toast.success(res.message ?? 'Image deleted')
+      if (!res?.ok) return void toast.error(res ? (resultText(t, res) ?? '') : t('media.deleteFailed'))
+      toast.success(resultText(t, res) ?? t('media.deleted'))
       onClose()
     })
   const persist = () =>
     start(async () => {
       const res = await persistAssetAction(slug, item.id)
-      if (!res?.ok) return void toast.error(res?.error ?? 'Couldn’t save the image')
-      toast.success(res.message ?? 'Saved')
+      if (!res?.ok) return void toast.error(res ? (resultText(t, res) ?? '') : t('media.saveFailed'))
+      toast.success(resultText(t, res) ?? t('media.savedToLibrary'))
       onClose()
     })
 
@@ -128,11 +131,11 @@ function Details({
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Badge tone={item.source === 'ai' ? 'accent' : 'neutral'}>
-            {item.source === 'ai' ? 'AI image' : 'Upload'}
+            {item.source === 'ai' ? t('media.aiImage') : t('media.upload')}
           </Badge>
-          {!stored && <Badge tone="warning">Temporary link</Badge>}
-          {item.tags.map((t) => (
-            <Badge key={t}>#{t}</Badge>
+          {!stored && <Badge tone="warning">{t('media.temporaryLink')}</Badge>}
+          {item.tags.map((tag) => (
+            <Badge key={tag}>#{tag}</Badge>
           ))}
         </div>
       </div>
@@ -140,42 +143,35 @@ function Details({
       <div className="space-y-6">
         {!stored && (
           <div className="space-y-3 rounded-lg border border-warning/30 bg-warning-soft/50 p-4 text-sm">
-            <p>
-              This AI image still lives on the generator’s temporary link, which expires 7 days after
-              creation.
-            </p>
+            <p>{t('media.tempNote')}</p>
             <Button type="button" size="sm" onClick={persist} pending={pending}>
-              <CloudDownload /> Save to library
+              <CloudDownload /> {t('media.saveToLibrary')}
             </Button>
           </div>
         )}
         <ActionForm action={saveAssetAction.bind(null, slug, item.id)} className="space-y-4">
-          <Field
-            label="Alt text (English)"
-            name="altEn"
-            hint="Describe the image for screen readers and Google."
-          >
+          <Field label={t('media.altEn')} name="altEn" hint={t('media.altEnHint')}>
             <Input
               id="altEn"
               name="altEn"
               defaultValue={item.alt.en ?? ''}
-              placeholder="Warm stones on a towel"
+              placeholder={t('media.altEnPh')}
             />
           </Field>
-          <Field label="Alt text (Arabic)" name="altAr">
+          <Field label={t('media.altAr')} name="altAr">
             <Input id="altAr" name="altAr" dir="rtl" lang="ar" defaultValue={item.alt.ar ?? ''} />
           </Field>
-          <Field label="Tags" name="tags" hint="Comma-separated, e.g. rooms, team, offers">
+          <Field label={t('media.tags')} name="tags" hint={t('media.tagsHint')}>
             <Input id="tags" name="tags" defaultValue={item.tags.join(', ')} />
           </Field>
-          <SubmitButton className="w-full sm:w-auto">Save details</SubmitButton>
+          <SubmitButton className="w-full sm:w-auto">{t('media.saveDetails')}</SubmitButton>
         </ActionForm>
 
         <div className="flex flex-wrap gap-2 border-t pt-5">
-          <CopyButton value={absolute} label="Copy URL" />
+          <CopyButton value={absolute} label={t('media.copyUrl')} />
           <Button asChild variant="secondary" size="sm">
             <a href={item.url} target="_blank" rel="noreferrer">
-              <ExternalLink /> Open
+              <ExternalLink /> {t('media.open')}
             </a>
           </Button>
           <Button
@@ -187,7 +183,7 @@ function Details({
             pending={pending && !confirming}
             disabled={confirming}
           >
-            <Trash2 /> Delete
+            <Trash2 /> {t('media.delete')}
           </Button>
         </div>
 
@@ -207,15 +203,15 @@ function Details({
                 <p className="flex items-start gap-2 font-medium">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" strokeWidth={1.75} />
                   {usageTotal(usage) === 0
-                    ? 'Not used on your website, services, team or posts. Delete it for good?'
-                    : `Used on ${describeUsage(usage)}. Deleting it will leave an empty image there.`}
+                    ? t('media.notUsed')
+                    : t('media.usedOn', { list: describeUsage(t, usage) })}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="danger" size="sm" onClick={doDelete} pending={pending}>
-                    {usageTotal(usage) === 0 ? 'Delete image' : 'Delete anyway'}
+                    {usageTotal(usage) === 0 ? t('media.deleteImage') : t('media.deleteAnyway')}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-                    Cancel
+                    {t('media.cancel')}
                   </Button>
                 </div>
               </div>

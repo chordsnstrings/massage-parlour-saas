@@ -51,7 +51,7 @@ export function Toaster() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={spring}
-            className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-xl border bg-surface px-4 py-3 text-sm shadow-pop"
+            className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-[var(--ui-toast-radius,0.75rem)] border bg-surface px-4 py-[var(--ui-toast-py,0.75rem)] text-[length:var(--ui-toast-fs,0.875rem)] shadow-pop"
           >
             {t.tone === 'success' ? (
               <CheckCircle2 className="size-4 shrink-0 text-success" strokeWidth={1.75} />

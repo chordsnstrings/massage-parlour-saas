@@ -1,19 +1,17 @@
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
 import type { InboxFilter, listInbox } from '@spa/services'
 import { Flag, MessageSquareText, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { Seg } from '@/components/crm'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
-import { displayName, MODE_LABEL, shortTime } from './format'
+import { displayName, modeLabel, shortTime } from './format'
 import { InstagramGlyph } from './icons'
 
 type Row = Awaited<ReturnType<typeof listInbox>>[number]
 
-export const FILTERS: { key: InboxFilter; label: string }[] = [
-  { key: 'open', label: 'Open' },
-  { key: 'flagged', label: 'Flagged' },
-  { key: 'closed', label: 'Closed' },
-  { key: 'all', label: 'All' },
-]
+export const FILTERS: InboxFilter[] = ['open', 'flagged', 'closed', 'all']
 
 export const inboxHref = (slug: string, q: { f?: InboxFilter; c?: string }) => {
   const sp = new URLSearchParams()
@@ -28,40 +26,43 @@ export function InboxFilters({
   slug,
   active,
   counts,
+  t,
+  fmt,
 }: {
   slug: string
   active: InboxFilter
   counts: { open: number; flagged: number }
+  t: Translator
+  fmt: Format
 }) {
   const count = (k: InboxFilter) => (k === 'open' ? counts.open : k === 'flagged' ? counts.flagged : null)
   return (
-    <nav aria-label="Filter conversations" className="flex gap-1 rounded-lg bg-subtle p-1">
-      {FILTERS.map((f) => {
-        const n = count(f.key)
-        const on = f.key === active
-        return (
-          <Link
-            key={f.key}
-            href={inboxHref(slug, { f: f.key })}
-            aria-current={on ? 'page' : undefined}
-            className={cn(
-              'inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md px-2 text-[13px] font-medium transition-[background-color,color,box-shadow] duration-150',
-              on ? 'bg-surface text-fg shadow-[0_1px_2px_rgb(0_0_0/0.06)]' : 'text-muted hover:text-fg',
-            )}
-          >
-            {f.label}
-            {n ? <span className="text-xs text-muted tabular-nums">{n}</span> : null}
-          </Link>
-        )
+    <Seg
+      fill
+      label={t('inbox.filters.label')}
+      value={active}
+      items={FILTERS.map((f) => {
+        const n = count(f)
+        return {
+          value: f,
+          href: inboxHref(slug, { f }),
+          label: (
+            <>
+              {t(`inbox.filters.${f}`)}
+              {n ? <span className="crm-num opacity-70">{fmt.number(n)}</span> : null}
+            </>
+          ),
+        }
       })}
-    </nav>
+    />
   )
 }
 
-const preview = (r: Row) => {
-  if (!r.lastText) return 'No messages yet'
-  const who = r.lastSender === 'bot' ? 'AI: ' : r.lastSender === 'staff' ? 'You: ' : ''
-  return `${who}${r.lastText}`
+const preview = (t: Translator, r: Row) => {
+  if (!r.lastText) return t('inbox.list.noMessages')
+  if (r.lastSender === 'bot') return t('inbox.list.ai', { text: r.lastText })
+  if (r.lastSender === 'staff') return t('inbox.list.you', { text: r.lastText })
+  return r.lastText
 }
 
 export function ConversationList({
@@ -69,29 +70,33 @@ export function ConversationList({
   rows,
   filter,
   selectedId,
+  t,
+  fmt,
 }: {
   slug: string
   rows: Row[]
   filter: InboxFilter
   selectedId?: string
+  t: Translator
+  fmt: Format
 }) {
   if (!rows.length)
     return (
-      <p className="px-5 py-12 text-center text-sm text-muted">
+      <p className="crm-muted px-5 py-12 text-center text-[length:var(--crm-fs-note)]">
         {filter === 'flagged'
-          ? 'Nothing flagged. The AI flags threads it shouldn’t handle.'
+          ? t('inbox.list.emptyFlagged')
           : filter === 'closed'
-            ? 'No closed conversations.'
-            : 'No conversations here yet.'}
+            ? t('inbox.list.emptyClosed')
+            : t('inbox.list.emptyAll')}
       </p>
     )
   const now = new Date()
   return (
-    <ul className="divide-y" data-testid="conversation-list">
+    <ul className="divide-y divide-[var(--crm-line)]" data-testid="conversation-list">
       {rows.map((r) => {
         const active = r.id === selectedId
         const unread = r.unread && !active
-        const name = displayName(r)
+        const name = displayName(t, r)
         return (
           <li key={r.id}>
             <Link
@@ -99,17 +104,23 @@ export function ConversationList({
               aria-current={active ? 'true' : undefined}
               className={cn(
                 'flex min-h-[4.5rem] gap-3 px-4 py-3.5 transition-colors duration-150 sm:px-5',
-                active ? 'bg-accent-soft/60' : 'hover:bg-subtle/60',
+                active ? 'bg-[var(--crm-info-bg)]' : 'hover:bg-[var(--crm-surface2)]',
               )}
             >
               <span
                 className={cn(
                   'relative grid size-10 shrink-0 place-items-center rounded-full',
-                  active ? 'bg-surface text-accent' : 'bg-subtle text-muted',
+                  active
+                    ? 'bg-[var(--crm-surface)] text-[var(--crm-accent)]'
+                    : 'bg-[var(--crm-surface2)] text-[var(--crm-muted)]',
                 )}
               >
                 {r.channel === 'instagram_comment' ? (
-                  <MessageSquareText className="size-4" strokeWidth={1.5} aria-label="Comment" />
+                  <MessageSquareText
+                    className="size-4"
+                    strokeWidth={1.5}
+                    aria-label={t('inbox.list.comment')}
+                  />
                 ) : (
                   <InstagramGlyph />
                 )}
@@ -124,13 +135,13 @@ export function ConversationList({
                       className={cn('text-xs tabular-nums', unread ? 'text-accent' : 'text-muted')}
                       dateTime={r.lastAt.toISOString()}
                     >
-                      {shortTime(r.lastAt, now)}
+                      {shortTime(fmt, r.lastAt, now)}
                     </time>
                     {unread && (
                       <span
                         className="anim-pop-in size-2 rounded-full bg-accent"
                         role="img"
-                        aria-label="Unread"
+                        aria-label={t('inbox.list.unread')}
                       />
                     )}
                   </span>
@@ -139,7 +150,7 @@ export function ConversationList({
                   dir="auto"
                   className={cn('block truncate text-[13px]', unread ? 'text-fg' : 'text-muted')}
                 >
-                  {preview(r)}
+                  {preview(t, r)}
                 </span>
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs text-muted">
                   <span className="inline-flex items-center gap-1.5">
@@ -149,16 +160,16 @@ export function ConversationList({
                         r.mode === 'bot' ? 'bg-accent' : r.mode === 'human' ? 'bg-warning' : 'bg-border',
                       )}
                     />
-                    {MODE_LABEL[r.mode]}
+                    {modeLabel(t, r.mode)}
                   </span>
                   {r.hasDraft && (
                     <span className="inline-flex items-center gap-1 text-accent">
-                      <Sparkles className="size-3" strokeWidth={1.75} /> Draft to approve
+                      <Sparkles className="size-3" strokeWidth={1.75} /> {t('inbox.list.draft')}
                     </span>
                   )}
                   {r.flagged && (
                     <span className="inline-flex items-center gap-1 text-danger">
-                      <Flag className="size-3" strokeWidth={1.75} /> Flagged
+                      <Flag className="size-3" strokeWidth={1.75} /> {t('inbox.list.flagged')}
                     </span>
                   )}
                 </span>

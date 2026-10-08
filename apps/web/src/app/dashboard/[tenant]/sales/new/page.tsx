@@ -1,3 +1,4 @@
+import { enumLabel } from '@spa/core/i18n'
 import {
   bookingItems,
   bookings,
@@ -16,15 +17,18 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { maskPhone } from '@/components/calendar/time'
+import { Card } from '@/components/crm'
 import { Checkout, type CheckoutLine } from '@/components/pos/checkout'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { EmptyState, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { pickBranch } from '../data'
 
-export const metadata: Metadata = { title: 'New sale' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('sales.newSale') }
+}
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -43,6 +47,7 @@ export default async function NewSalePage({
   const sp = await searchParams
   const bookingParam = one(sp.booking)
   const seePhone = can(ctx, 'clients.phone')
+  const { t } = await getI18n()
 
   const data = await withTenant(ctx.tenant.id, async (tx) => {
     let booking: typeof bookings.$inferSelect | undefined
@@ -170,7 +175,7 @@ export default async function NewSalePage({
   const back = (
     <Button variant="ghost" asChild>
       <Link href={appPath(`/${slug}/sales`)}>
-        <ArrowLeft /> Sales
+        <ArrowLeft /> {t('sales.back')}
       </Link>
     </Button>
   )
@@ -178,16 +183,14 @@ export default async function NewSalePage({
   if (!data) {
     return (
       <>
-        <PageHeader title="New sale" actions={back} />
-        <PageBody>
-          <Card>
-            <EmptyState
-              icon={<Store className="size-5" />}
-              title="Nothing to check out here"
-              description="The booking wasn’t found, or it belongs to a branch you don’t have access to."
-            />
-          </Card>
-        </PageBody>
+        <PageHeader title={t('sales.newSale')} actions={back} />
+        <Card>
+          <EmptyState
+            icon={<Store className="size-5" />}
+            title={t('sales.checkout.notFoundTitle')}
+            description={t('sales.checkout.notFoundBody')}
+          />
+        </Card>
       </>
     )
   }
@@ -197,35 +200,35 @@ export default async function NewSalePage({
   return (
     <>
       <PageHeader
-        eyebrow={prefill ? `Booking ${prefill.ref}` : data.branch.name}
-        title={prefill ? 'Check out' : 'New sale'}
-        description="Payments are recorded here, not charged — take the money with cash, your card terminal or a transfer."
+        eyebrow={prefill ? t('sales.checkout.booking', { ref: prefill.ref }) : data.branch.name}
+        title={prefill ? t('sales.checkout.title') : t('sales.newSale')}
+        description={t('sales.checkout.description')}
         actions={back}
       />
-      <PageBody>
-        {blocked ? (
-          <Card>
-            <EmptyState
-              icon={<Store className="size-5" />}
-              title="This booking can’t be checked out"
-              description={`It is ${prefill.status.replace('_', ' ')}. Open the sales list to find its receipt.`}
-            />
-          </Card>
-        ) : (
-          <Checkout
-            slug={slug}
-            branchId={data.branch.id}
-            bookingId={prefill?.bookingId ?? null}
-            client={prefill?.client ?? null}
-            initialLines={prefill?.lines ?? []}
-            menu={data.menu}
-            products={data.products}
-            packages={data.packages}
-            staff={data.staff}
-            receiptBase={appPath(`/${slug}/sales`)}
+      {blocked ? (
+        <Card>
+          <EmptyState
+            icon={<Store className="size-5" />}
+            title={t('sales.checkout.blockedTitle')}
+            description={t('sales.checkout.blockedBody', {
+              status: enumLabel(t, 'bookingStatus', prefill.status).toLowerCase(),
+            })}
           />
-        )}
-      </PageBody>
+        </Card>
+      ) : (
+        <Checkout
+          slug={slug}
+          branchId={data.branch.id}
+          bookingId={prefill?.bookingId ?? null}
+          client={prefill?.client ?? null}
+          initialLines={prefill?.lines ?? []}
+          menu={data.menu}
+          products={data.products}
+          packages={data.packages}
+          staff={data.staff}
+          receiptBase={appPath(`/${slug}/sales`)}
+        />
+      )}
     </>
   )
 }

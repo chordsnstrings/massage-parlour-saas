@@ -7,6 +7,7 @@ import { APIError } from 'better-auth/api'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { audit } from '@/server/audit'
@@ -14,24 +15,34 @@ import { isSlugAvailable, provisionTenant } from '@/server/provision'
 import { getSession } from '@/server/session'
 
 const business = z.object({
-  businessName: z.string().trim().min(2, 'Enter your spa’s name').max(80),
-  slug: z.string().trim().min(1, 'Choose a web address'),
+  businessName: z.string().trim().min(2, 'auth.signup.errors.businessName').max(80),
+  slug: z.string().trim().min(1, 'auth.signup.errors.slug'),
 })
 const account = business.extend({
-  name: z.string().trim().min(2, 'Enter your name').max(80),
-  email: z.email('Enter a valid email').transform((e) => e.toLowerCase()),
-  password: z.string().min(10, 'Use at least 10 characters').max(128),
+  name: z.string().trim().min(2, 'auth.signup.errors.name').max(80),
+  email: z.email('validation.email').transform((e) => e.toLowerCase()),
+  password: z.string().min(10, 'auth.signup.errors.password').max(128),
 })
+
+/** `checkSlug` (packages/core) reasons → auth keys. */
+const SLUG_REASON: Record<string, 'auth.signup.errors.slugFormat' | 'auth.signup.errors.reserved'> = {
+  'Use 3–40 lowercase letters, numbers or hyphens.': 'auth.signup.errors.slugFormat',
+  'This name is reserved.': 'auth.signup.errors.reserved',
+}
 
 export async function checkSlugAction(
   input: string,
 ): Promise<{ slug: string; ok: boolean; reason?: string }> {
   const slug = normalizeSlug(input)
+  const t = await getT()
   const check = checkSlug(slug)
-  if (!check.ok) return { slug, ok: false, reason: check.reason }
+  if (!check.ok) {
+    const key = SLUG_REASON[check.reason]
+    return { slug, ok: false, reason: key ? t(key) : check.reason }
+  }
   return (await isSlugAvailable(slug))
     ? { slug, ok: true }
-    : { slug, ok: false, reason: 'That address is taken.' }
+    : { slug, ok: false, reason: t('auth.signup.errors.taken') }
 }
 
 export async function signupAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -41,7 +52,7 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   const slug = normalizeSlug(parsed.data.slug)
   const slugCheck = await checkSlugAction(slug)
   if (!slugCheck.ok)
-    return fail(slugCheck.reason ?? 'Choose another address.', { slug: slugCheck.reason ?? '' })
+    return fail(slugCheck.reason ?? 'auth.signup.errors.chooseAnother', { slug: slugCheck.reason ?? '' })
 
   // Optional logo: validated before the account exists, stored once the spa is provisioned.
   let logo: ProcessedImage | undefined
@@ -67,15 +78,15 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     } catch (e) {
       if (e instanceof APIError) {
         const exists = /exist/i.test(e.message)
-        return fail(
-          exists ? 'An account with this email already exists. Sign in instead.' : e.message,
-          exists ? { email: 'Already registered' } : undefined,
-        )
+        if (exists) return fail('auth.signup.errors.exists', { email: 'auth.signup.errors.registered' })
+        const code = (e.body as { code?: string } | undefined)?.code
+        const t = await getT()
+        return fail((code && t.maybe(`auth.errors.${code}`)) || e.message)
       }
       throw e
     }
   }
-  if (!user) return fail('Could not create your account.')
+  if (!user) return fail('auth.signup.errors.failed')
 
   let tenantId: string
   try {
@@ -93,7 +104,7 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     }
   } catch (e) {
     if (String((e as { cause?: { code?: string } }).cause?.code) === '23505')
-      return fail('That address is taken.', { slug: 'That address is taken.' })
+      return fail('auth.signup.errors.taken', { slug: 'auth.signup.errors.taken' })
     throw e
   }
   await audit({

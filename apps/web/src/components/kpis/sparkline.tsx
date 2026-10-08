@@ -1,24 +1,27 @@
 'use client'
 import { motion, useReducedMotion } from 'motion/react'
 import { useId, useState } from 'react'
+import { useI18n } from '@/i18n/client'
 import { ease } from '@/lib/motion'
-import { formatAed } from '@/lib/utils'
 
 const W = 600
 const H = 140
 const PAD = 8
 
-const dayFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
-const label = (date: string) => dayFmt.format(new Date(`${date}T00:00:00Z`))
-
 /** Revenue line drawn in with a stroke animation; hover / tap reveals each day's value. */
 export function Sparkline({
   points,
   format = 'aed',
+  label: ariaLabel,
 }: {
   points: { date: string; value: number }[]
   format?: 'aed' | 'int'
+  /** Accessible name of the chart (translated by the caller). */
+  label: string
 }) {
+  const { fmt: f } = useI18n()
+  // Business dates are calendar days: noon UTC is the same date in Dubai.
+  const label = (date: string) => f.dateShort(`${date}T12:00:00Z`)
   const id = useId()
   const reduced = useReducedMotion()
   const [hover, setHover] = useState<number | null>(null)
@@ -30,7 +33,7 @@ export function Sparkline({
   }))
   const line = xy.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const area = xy.length ? `${line} L${xy.at(-1)!.x},${H} L${xy[0]!.x},${H} Z` : ''
-  const fmt = (v: number) => (format === 'aed' ? formatAed(v) : v.toLocaleString('en-AE'))
+  const fmt = (v: number) => (format === 'aed' ? f.aed(v) : f.number(v))
   const active = hover ?? points.length - 1
   const shown = points[active]
 
@@ -46,7 +49,7 @@ export function Sparkline({
           preserveAspectRatio="none"
           className="h-32 w-full overflow-visible sm:h-36"
           role="img"
-          aria-label={`Daily revenue, ${points.length} days`}
+          aria-label={ariaLabel}
           onPointerLeave={() => setHover(null)}
           onPointerMove={(e) => {
             const box = e.currentTarget.getBoundingClientRect()

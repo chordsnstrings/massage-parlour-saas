@@ -1,5 +1,8 @@
+'use client'
+import { enumLabel } from '@spa/core/i18n'
 import { Field } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
+import { useT } from '@/i18n/client'
 
 export type ClientDetails = {
   name: string
@@ -23,13 +26,14 @@ export function ClientDetailsFields({
   showPhone?: boolean
   full?: boolean
 }) {
+  const t = useT()
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      <Field label="Name" name="name" className="sm:col-span-2">
+      <Field label={t('clients.field.name')} name="name" className="sm:col-span-2">
         <Input id="name" name="name" defaultValue={value?.name} autoComplete="off" required />
       </Field>
       {showPhone && (
-        <Field label="UAE mobile" name="phone" hint="Used for WhatsApp, e.g. 050 123 4567.">
+        <Field label={t('clients.field.phone')} name="phone" hint={t('clients.field.phoneHint')}>
           <Input
             id="phone"
             name="phone"
@@ -40,43 +44,43 @@ export function ClientDetailsFields({
           />
         </Field>
       )}
-      <Field label="Gender" name="gender">
+      <Field label={t('clients.field.gender')} name="gender">
         <Select id="gender" name="gender" defaultValue={value?.gender ?? ''}>
-          <option value="">Not set</option>
-          <option value="female">Female</option>
-          <option value="male">Male</option>
-          <option value="other">Other</option>
+          <option value="">{t('clients.field.notSet')}</option>
+          <option value="female">{enumLabel(t, 'staffGender', 'female')}</option>
+          <option value="male">{enumLabel(t, 'staffGender', 'male')}</option>
+          <option value="other">{enumLabel(t, 'staffGender', 'other')}</option>
         </Select>
       </Field>
-      <Field label="Language" name="language" hint="Intake forms open in this language.">
+      <Field label={t('clients.field.language')} name="language" hint={t('clients.field.languageHint')}>
         <Select id="language" name="language" defaultValue={value?.language ?? 'en'}>
-          <option value="en">English</option>
-          <option value="ar">العربية (Arabic)</option>
+          <option value="en">{t('clients.lang.en')}</option>
+          <option value="ar">{t('clients.lang.ar')}</option>
         </Select>
       </Field>
-      <Field label="Birthday" name="birthday">
+      <Field label={t('clients.field.birthday')} name="birthday">
         <Input id="birthday" name="birthday" type="date" defaultValue={value?.birthday} />
       </Field>
       {full && (
         <>
-          <Field label="Email" name="email">
+          <Field label={t('clients.field.email')} name="email">
             <Input id="email" name="email" type="email" defaultValue={value?.email} />
           </Field>
-          <Field label="Nationality" name="nationality">
+          <Field label={t('clients.field.nationality')} name="nationality">
             <Input id="nationality" name="nationality" defaultValue={value?.nationality} />
           </Field>
         </>
       )}
       <Field
-        label="Tags"
+        label={t('clients.field.tags')}
         name="tags"
-        hint="Separate with commas, e.g. vip, regular."
+        hint={t('clients.field.tagsHint')}
         className="sm:col-span-2"
       >
         <Input id="tags" name="tags" defaultValue={value?.tags?.join(', ')} placeholder="vip, regular" />
       </Field>
       {full && (
-        <Field label="Notes" name="notes" className="sm:col-span-2">
+        <Field label={t('clients.field.notes')} name="notes" className="sm:col-span-2">
           <Textarea id="notes" name="notes" rows={4} defaultValue={value?.notes} />
         </Field>
       )}

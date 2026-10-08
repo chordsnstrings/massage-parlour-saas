@@ -1,0 +1,26 @@
+export const errors = {
+  generic: 'Something went wrong — please try again.',
+  forbidden: "You don't have permission to do that.",
+  readOnly: 'This account is read-only. Please contact support.',
+  studioOnly: 'Your website is built by our studio team — send them a change request.',
+  checkFields: 'Please check the highlighted fields.',
+  notFound: 'Not found.',
+  signInAgain: 'Please sign in again.',
+  boundary: {
+    title: 'Something went wrong',
+    body: 'We’ve been notified. Try again, and if it keeps happening, let us know what you were doing.',
+    ref: 'Ref {digest}',
+    retry: 'Try again',
+  },
+  file: {
+    empty: 'The file is empty',
+    tooLarge: 'Files can be up to {size}',
+    imageTooLarge: 'Images can be up to {size}',
+    compressedTooLarge: 'That image is too large even after compression',
+    unreadable: 'We couldn’t read that image — it may be damaged.',
+    svg: 'SVG files aren’t supported — please upload a JPG, PNG or WebP.',
+    notImage: 'That file isn’t an image we can use (JPG, PNG, WebP, AVIF or GIF).',
+    uploadFailed: 'Upload failed — please try again.',
+    choose: 'Choose an image to upload.',
+  },
+} as const

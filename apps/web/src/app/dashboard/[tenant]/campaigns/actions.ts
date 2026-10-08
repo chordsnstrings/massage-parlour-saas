@@ -89,17 +89,17 @@ export async function saveSegmentAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
-  if (badId(id)) return fail('Segment not found')
+  if (badId(id)) return fail('campaigns.errors.segmentNotFound')
   const raw = formObject(fd)
   const parsed = z
     .object({
-      name: z.string().trim().min(2, 'Give the segment a name').max(60),
+      name: z.string().trim().min(2, 'campaigns.validation.segmentName').max(60),
       intent: z.enum(['save', 'campaign']).default('save'),
     })
     .safeParse(raw)
   if (!parsed.success) return fromZod(parsed.error)
   const rules = parseRules(raw.rules)
-  if (!rules.success) return fail(rules.error.issues[0]?.message ?? 'Check the conditions.')
+  if (!rules.success) return fail(rules.error.issues[0]?.message ?? 'campaigns.validation.checkConditions')
   const values = { name: parsed.data.name, rules: rules.data as SegmentRule[] }
   const saved = await withTenant(ctx.tenant.id, async (tx) => {
     if (id) {
@@ -112,7 +112,7 @@ export async function saveSegmentAction(
       .returning()
     return row
   })
-  if (!saved) return fail('Segment not found')
+  if (!saved) return fail('campaigns.errors.segmentNotFound')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -122,7 +122,7 @@ export async function saveSegmentAction(
     data: values,
   })
   refresh(slug)
-  return ok(id ? 'Segment updated' : 'Segment saved', {
+  return ok(id ? 'campaigns.results.segmentUpdated' : 'campaigns.results.segmentSaved', {
     href:
       parsed.data.intent === 'campaign'
         ? page(slug, `/new?segment=${saved.id}`)
@@ -138,11 +138,11 @@ export async function deleteSegmentAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
-  if (badId(id)) return fail('Segment not found')
+  if (badId(id)) return fail('campaigns.errors.segmentNotFound')
   const gone = await withTenant(ctx.tenant.id, (tx) =>
     tx.delete(segments).where(eq(segments.id, id)).returning({ id: segments.id, name: segments.name }),
   )
-  if (!gone.length) return fail('Segment not found')
+  if (!gone.length) return fail('campaigns.errors.segmentNotFound')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -152,7 +152,7 @@ export async function deleteSegmentAction(
     data: gone[0],
   })
   refresh(slug)
-  return ok('Segment deleted', { href: page(slug, '?tab=segments') })
+  return ok('campaigns.results.segmentDeleted', { href: page(slug, '?tab=segments') })
 }
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ export async function estimateAudienceAction(
       excludeCampaignId: d.campaignId ?? undefined,
     })
   })
-  if (!plan) return fail('Segment not found')
+  if (!plan) return fail('campaigns.errors.segmentNotFound')
   const ar = plan.recipients.filter((r) => r.language === 'ar')
   const en = plan.recipients.filter((r) => r.language !== 'ar')
   return ok(undefined, {
@@ -199,14 +199,14 @@ export async function estimateAudienceAction(
 }
 
 const campaignInput = z.object({
-  name: z.string().trim().min(2, 'Give the campaign a name').max(80),
-  segmentId: z.uuid('Choose who receives it'),
+  name: z.string().trim().min(2, 'campaigns.validation.campaignName').max(80),
+  segmentId: z.uuid('campaigns.validation.chooseSegment'),
   bodyEn: z
     .string()
     .trim()
-    .min(5, 'Write the English message')
-    .max(MAX_MESSAGE, `At most ${MAX_MESSAGE} characters`),
-  bodyAr: z.string().trim().max(MAX_MESSAGE, `At most ${MAX_MESSAGE} characters`).optional(),
+    .min(5, 'campaigns.validation.englishMessage')
+    .max(MAX_MESSAGE, 'campaigns.validation.tooLong'),
+  bodyAr: z.string().trim().max(MAX_MESSAGE, 'campaigns.validation.tooLong').optional(),
   promoCodeId: z
     .uuid()
     .optional()
@@ -224,7 +224,7 @@ export async function saveCampaignAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
-  if (badId(id)) return fail('Campaign not found')
+  if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   const parsed = campaignInput.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
@@ -234,20 +234,21 @@ export async function saveCampaignAction(
     ['bodyAr', d.bodyAr ?? ''],
   ] as const) {
     const unknown = unknownCampaignVariables(text)
-    if (unknown.length) fieldErrors[field] = `Unknown variable: {${unknown[0]}}`
+    if (unknown.length) fieldErrors[field] = 'campaigns.validation.unknownVariable'
   }
   if (!d.promoCodeId && /\{offer_code\}/.test(`${d.bodyEn} ${d.bodyAr ?? ''}`))
-    fieldErrors.promoCodeId = 'Choose the offer code to include'
+    fieldErrors.promoCodeId = 'campaigns.validation.chooseOffer'
   const now = new Date()
   const bookingLink = `${await publicSiteUrl(ctx.tenant)}/book?src=campaign`
   let sendAt: Date | null = null
   if (d.when === 'later') {
     sendAt = dubaiLocal(d.sendAt)
-    if (!sendAt) fieldErrors.sendAt = 'Pick a date and time'
-    else if (sendAt.getTime() < now.getTime() + 60_000) fieldErrors.sendAt = 'Pick a time in the future'
-    else if (sendAt.getTime() > now.getTime() + 90 * 86_400_000) fieldErrors.sendAt = 'At most 90 days ahead'
+    if (!sendAt) fieldErrors.sendAt = 'campaigns.validation.pickDateTime'
+    else if (sendAt.getTime() < now.getTime() + 60_000) fieldErrors.sendAt = 'campaigns.validation.future'
+    else if (sendAt.getTime() > now.getTime() + 90 * 86_400_000)
+      fieldErrors.sendAt = 'campaigns.validation.maxAhead'
   }
-  if (Object.keys(fieldErrors).length) return fail('Please check the highlighted fields.', fieldErrors)
+  if (Object.keys(fieldErrors).length) return fail('errors.checkFields', fieldErrors)
 
   const values = {
     name: d.name,
@@ -261,21 +262,24 @@ export async function saveCampaignAction(
   try {
     result = await withTenant(ctx.tenant.id, async (tx) => {
       const [seg] = await tx.select().from(segments).where(eq(segments.id, d.segmentId))
-      if (!seg) throw new DomainError('That segment no longer exists')
+      if (!seg)
+        throw new DomainError('That segment no longer exists', 'invalid', {
+          key: 'campaigns.errors.segmentGone',
+        })
       if (d.promoCodeId) {
         const [promo] = await tx
           .select()
           .from(promoCodes)
           .where(and(eq(promoCodes.id, d.promoCodeId), eq(promoCodes.active, true)))
-        if (!promo) throw new FieldError('promoCodeId', 'That promo code is paused or no longer exists')
+        if (!promo) throw new FieldError('promoCodeId', 'campaigns.validation.promoGone')
         // The code must still work on the day clients receive it.
         const sendDay = dubaiParts(sendAt ?? now).date
         if (promo.validTo && promo.validTo < sendDay)
-          throw new FieldError('promoCodeId', `This code expires before the send date (${promo.validTo})`)
+          throw new FieldError('promoCodeId', 'campaigns.validation.promoExpires')
         if (promo.validFrom && promo.validFrom > sendDay)
-          throw new FieldError('promoCodeId', `This code only starts on ${promo.validFrom}`)
+          throw new FieldError('promoCodeId', 'campaigns.validation.promoNotStarted')
         if (promo.maxUses !== null && promo.uses >= promo.maxUses)
-          throw new FieldError('promoCodeId', 'This code has been used up')
+          throw new FieldError('promoCodeId', 'campaigns.validation.promoUsedUp')
       }
       let campaignId = id
       if (id) {
@@ -284,7 +288,10 @@ export async function saveCampaignAction(
           .set({ ...values, rules: seg.rules })
           .where(and(eq(campaigns.id, id), eq(campaigns.status, 'draft')))
           .returning({ id: campaigns.id })
-        if (!row) throw new DomainError('Only drafts can be edited')
+        if (!row)
+          throw new DomainError('Only drafts can be edited', 'invalid', {
+            key: 'campaigns.errors.onlyDrafts',
+          })
       } else {
         const [row] = await tx
           .insert(campaigns)
@@ -301,11 +308,13 @@ export async function saveCampaignAction(
       if (queued === 0)
         throw new DomainError(
           'Nobody in this segment can be messaged right now (opted out, or already messaged this week).',
+          'invalid',
+          { key: 'campaigns.errors.nobody' },
         )
       return { id: campaignId!, queued }
     })
   } catch (e) {
-    if (e instanceof FieldError) return fail('Please check the highlighted fields.', { [e.field]: e.message })
+    if (e instanceof FieldError) return fail('errors.checkFields', { [e.field]: e.message })
     if (e instanceof DomainError) return failDomain(e)
     throw e
   }
@@ -320,8 +329,8 @@ export async function saveCampaignAction(
   refresh(slug)
   return ok(
     result.queued === null
-      ? 'Draft saved'
-      : `${result.queued} ${result.queued === 1 ? 'message' : 'messages'} added to the WhatsApp queue`,
+      ? 'campaigns.results.draftSaved'
+      : { key: 'campaigns.results.queued', params: { count: result.queued } },
     { href: page(slug, `/${result.id}`) },
   )
 }
@@ -334,7 +343,7 @@ export async function duplicateCampaignAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
-  if (badId(id)) return fail('Campaign not found')
+  if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   let copyId: string
   try {
     copyId = (await withTenant(ctx.tenant.id, (tx) => duplicateCampaign(tx, id, ctx.user.id))).id
@@ -351,7 +360,7 @@ export async function duplicateCampaignAction(
     data: { from: id },
   })
   refresh(slug)
-  return ok('Copied into a new draft', { href: page(slug, `/${copyId}/edit`) })
+  return ok('campaigns.results.duplicated', { href: page(slug, `/${copyId}/edit`) })
 }
 
 export async function archiveCampaignAction(
@@ -363,7 +372,7 @@ export async function archiveCampaignAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'marketing.campaigns')
   if (error) return fail(error)
-  if (badId(id)) return fail('Campaign not found')
+  if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   const archived = archivedInput === true
   let withdrawn: number
   try {
@@ -384,8 +393,8 @@ export async function archiveCampaignAction(
   return ok(
     archived
       ? withdrawn
-        ? `Archived · ${withdrawn} unsent ${withdrawn === 1 ? 'message' : 'messages'} withdrawn`
-        : 'Campaign archived'
-      : 'Campaign restored',
+        ? { key: 'campaigns.results.archivedWithdrawn', params: { count: withdrawn } }
+        : 'campaigns.results.archived'
+      : 'campaigns.results.restored',
   )
 }

@@ -1,18 +1,24 @@
 /** Client-safe segment rule + campaign helpers (no DB imports). */
+
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
 import type { SegmentRule } from '@spa/db'
 import { z } from 'zod'
+import type { Tone } from '@/components/crm'
 
 export type { SegmentRule }
 export type RuleKind = SegmentRule['kind']
 
 type NumberParam = { key: 'days' | 'count' | 'aed'; min: number; max: number }
+export type RuleGroup = 'visits' | 'spend' | 'birthday' | 'profile' | 'packages'
 
+/**
+ * Text lives in the `campaigns.rule.<kind>` keys: `label` (menu), and the sentence around the input
+ * "{before} [input] {after}" (`after` only when `hasAfter`).
+ */
 export type RuleDef = {
-  label: string
-  group: 'Visits' | 'Spend' | 'Birthday' | 'Profile' | 'Packages'
-  /** Sentence around the input: "{before} [input] {after}". */
-  before: string
-  after?: string
+  group: RuleGroup
+  hasAfter?: boolean
   number?: NumberParam
   select?: 'service' | 'gender' | 'language' | 'tag'
   defaults: SegmentRule
@@ -22,175 +28,126 @@ const days = (max = 3650): NumberParam => ({ key: 'days', min: 1, max })
 const count = (min = 0): NumberParam => ({ key: 'count', min, max: 1000 })
 
 export const RULE_DEFS: Record<RuleKind, RuleDef> = {
-  lapsed: {
-    label: 'Last visit more than N days ago',
-    group: 'Visits',
-    before: 'Last visit more than',
-    after: 'days ago',
-    number: days(),
-    defaults: { kind: 'lapsed', days: 60 },
-  },
+  lapsed: { group: 'visits', hasAfter: true, number: days(), defaults: { kind: 'lapsed', days: 60 } },
   visited_within: {
-    label: 'Last visit within N days',
-    group: 'Visits',
-    before: 'Last visit within the last',
-    after: 'days',
+    group: 'visits',
+    hasAfter: true,
     number: days(),
     defaults: { kind: 'visited_within', days: 30 },
   },
   visits_at_least: {
-    label: 'Visits at least N',
-    group: 'Visits',
-    before: 'At least',
-    after: 'visits',
+    group: 'visits',
+    hasAfter: true,
     number: count(1),
     defaults: { kind: 'visits_at_least', count: 2 },
   },
   visits_at_most: {
-    label: 'Visits at most N',
-    group: 'Visits',
-    before: 'At most',
-    after: 'visits',
+    group: 'visits',
+    hasAfter: true,
     number: count(1),
     defaults: { kind: 'visits_at_most', count: 1 },
   },
-  service: {
-    label: 'Has booked a treatment',
-    group: 'Visits',
-    before: 'Has booked',
-    select: 'service',
-    defaults: { kind: 'service', serviceId: '' },
-  },
+  service: { group: 'visits', select: 'service', defaults: { kind: 'service', serviceId: '' } },
   no_shows_at_least: {
-    label: 'No-shows at least N',
-    group: 'Visits',
-    before: 'At least',
-    after: 'no-shows',
+    group: 'visits',
+    hasAfter: true,
     number: count(1),
     defaults: { kind: 'no_shows_at_least', count: 1 },
   },
   spent_at_least: {
-    label: 'Total spend at least AED',
-    group: 'Spend',
-    before: 'Spent at least AED',
-    after: 'in total',
+    group: 'spend',
+    hasAfter: true,
     number: { key: 'aed', min: 1, max: 1_000_000 },
     defaults: { kind: 'spent_at_least', aed: 2000 },
   },
-  birthday_month: {
-    label: 'Birthday this month',
-    group: 'Birthday',
-    before: 'Birthday this month',
-    defaults: { kind: 'birthday_month' },
-  },
+  birthday_month: { group: 'birthday', defaults: { kind: 'birthday_month' } },
   birthday_within: {
-    label: 'Birthday in the next N days',
-    group: 'Birthday',
-    before: 'Birthday in the next',
-    after: 'days',
+    group: 'birthday',
+    hasAfter: true,
     number: days(90),
     defaults: { kind: 'birthday_within', days: 14 },
   },
-  gender: {
-    label: 'Gender',
-    group: 'Profile',
-    before: 'Gender is',
-    select: 'gender',
-    defaults: { kind: 'gender', gender: 'female' },
-  },
-  language: {
-    label: 'Language',
-    group: 'Profile',
-    before: 'Prefers',
-    select: 'language',
-    defaults: { kind: 'language', language: 'ar' },
-  },
-  tag: {
-    label: 'Has a tag',
-    group: 'Profile',
-    before: 'Tagged',
-    select: 'tag',
-    defaults: { kind: 'tag', tag: '' },
-  },
-  has_package: {
-    label: 'Has an active package',
-    group: 'Packages',
-    before: 'Has an active package',
-    defaults: { kind: 'has_package' },
-  },
+  gender: { group: 'profile', select: 'gender', defaults: { kind: 'gender', gender: 'female' } },
+  language: { group: 'profile', select: 'language', defaults: { kind: 'language', language: 'ar' } },
+  tag: { group: 'profile', select: 'tag', defaults: { kind: 'tag', tag: '' } },
+  has_package: { group: 'packages', defaults: { kind: 'has_package' } },
   package_expiring: {
-    label: 'Package expiring within N days',
-    group: 'Packages',
-    before: 'Package expires within',
-    after: 'days',
+    group: 'packages',
+    hasAfter: true,
     number: days(365),
     defaults: { kind: 'package_expiring', days: 14 },
   },
 }
 
-export const RULE_GROUPS = ['Visits', 'Spend', 'Birthday', 'Profile', 'Packages'] as const
+export const RULE_GROUPS = ['visits', 'spend', 'birthday', 'profile', 'packages'] as const
+export const GENDERS = ['female', 'male', 'other'] as const
+export const LANGUAGES = ['en', 'ar'] as const
 
-export const GENDER_LABEL = { female: 'Female', male: 'Male', other: 'Other' } as const
-export const LANGUAGE_LABEL = { en: 'English', ar: 'Arabic' } as const
+export const ruleLabel = (t: Translator, kind: RuleKind) => t(`campaigns.rule.${kind}.label`)
+export const ruleBefore = (t: Translator, kind: RuleKind) => t(`campaigns.rule.${kind}.before`)
+export const ruleAfter = (t: Translator, kind: RuleKind) =>
+  RULE_DEFS[kind].hasAfter ? t.maybe(`campaigns.rule.${kind}.after`) : undefined
 
-/** Human sentence for a rule ("Last visit more than 60 days ago"). */
-export function describeRule(r: SegmentRule, serviceName?: (id: string) => string | undefined) {
-  const d = RULE_DEFS[r.kind]
+/** Human sentence for a rule ("Last visit more than 60 days ago"); service names and tags stay as typed. */
+export function describeRule(
+  t: Translator,
+  fmt: Format,
+  r: SegmentRule,
+  serviceName?: (id: string) => string | undefined,
+) {
+  const before = ruleBefore(t, r.kind)
   switch (r.kind) {
     case 'service':
-      return `${d.before} ${serviceName?.(r.serviceId) ?? 'a treatment'}`
+      return `${before} ${serviceName?.(r.serviceId) ?? t('campaigns.rule.aTreatment')}`
     case 'gender':
-      return `${d.before} ${GENDER_LABEL[r.gender].toLowerCase()}`
+      return `${before} ${t(`campaigns.gender.${r.gender}`)}`
     case 'language':
-      return `${d.before} ${LANGUAGE_LABEL[r.language]}`
+      return `${before} ${t(`campaigns.language.${r.language}`)}`
     case 'tag':
-      return `${d.before} “${r.tag}”`
-    case 'spent_at_least':
-      return `${d.before} ${r.aed.toLocaleString('en-AE')} ${d.after}`
+      return `${before} “${r.tag}”`
     default: {
-      const n = d.number ? (r as Record<string, unknown>)[d.number.key] : undefined
-      return [d.before, n, d.after].filter((p) => p !== undefined && p !== '').join(' ')
+      const key = RULE_DEFS[r.kind].number?.key
+      const n = key ? (r as Record<string, unknown>)[key] : undefined
+      return [before, typeof n === 'number' ? fmt.number(n) : n, ruleAfter(t, r.kind)]
+        .filter((p) => p !== undefined && p !== '')
+        .join(' ')
     }
   }
 }
 
-export type SegmentPreset = { key: string; name: string; description: string; rules: SegmentRule[] }
+/** One line for a whole segment (or "everyone" when it has no conditions). */
+export const summarizeRules = (
+  t: Translator,
+  fmt: Format,
+  rules: SegmentRule[],
+  serviceName?: (id: string) => string | undefined,
+) =>
+  rules.length ? rules.map((r) => describeRule(t, fmt, r, serviceName)).join(' · ') : t('campaigns.everyone')
+
+/** Presets; name + description via `campaigns.preset.<key>.{name,description}`. */
+export type SegmentPreset = {
+  key: 'winback' | 'birthday' | 'packageExpiring' | 'vip' | 'firstTimers'
+  slug: string
+  rules: SegmentRule[]
+}
 
 export const SEGMENT_PRESETS: SegmentPreset[] = [
+  { key: 'winback', slug: 'winback', rules: [{ kind: 'lapsed', days: 60 }] },
+  { key: 'birthday', slug: 'birthday', rules: [{ kind: 'birthday_month' }] },
+  { key: 'packageExpiring', slug: 'package-expiring', rules: [{ kind: 'package_expiring', days: 14 }] },
+  { key: 'vip', slug: 'vip', rules: [{ kind: 'spent_at_least', aed: 2000 }] },
   {
-    key: 'winback',
-    name: 'Win back (no visit 60 days)',
-    description: 'Regulars who have not been in for two months.',
-    rules: [{ kind: 'lapsed', days: 60 }],
-  },
-  {
-    key: 'birthday',
-    name: 'Birthday this month',
-    description: 'A birthday treat brings them in.',
-    rules: [{ kind: 'birthday_month' }],
-  },
-  {
-    key: 'package-expiring',
-    name: 'Package expiring in 14 days',
-    description: 'Remind them to use the sessions they paid for.',
-    rules: [{ kind: 'package_expiring', days: 14 }],
-  },
-  {
-    key: 'vip',
-    name: 'VIPs (spent AED 2,000+)',
-    description: 'Your best clients — first to hear about offers.',
-    rules: [{ kind: 'spent_at_least', aed: 2000 }],
-  },
-  {
-    key: 'first-timers',
-    name: 'First-timers (1 visit)',
-    description: 'Turn a first visit into a habit.',
+    key: 'firstTimers',
+    slug: 'first-timers',
     rules: [
       { kind: 'visits_at_least', count: 1 },
       { kind: 'visits_at_most', count: 1 },
     ],
   },
 ]
+export const presetName = (t: Translator, p: SegmentPreset) => t(`campaigns.preset.${p.key}.name`)
+export const presetDescription = (t: Translator, p: SegmentPreset) =>
+  t(`campaigns.preset.${p.key}.description`)
 
 const int = (min: number, max: number) => z.coerce.number().int().min(min).max(max)
 
@@ -203,18 +160,21 @@ export const segmentRulesSchema = z
       z.object({ kind: z.literal('visits_at_least'), count: int(1, 1000) }),
       z.object({ kind: z.literal('visits_at_most'), count: int(1, 1000) }),
       z.object({ kind: z.literal('spent_at_least'), aed: z.coerce.number().min(1).max(1_000_000) }),
-      z.object({ kind: z.literal('service'), serviceId: z.uuid('Choose a treatment') }),
+      z.object({ kind: z.literal('service'), serviceId: z.uuid('campaigns.validation.chooseTreatment') }),
       z.object({ kind: z.literal('birthday_month') }),
       z.object({ kind: z.literal('birthday_within'), days: int(1, 90) }),
       z.object({ kind: z.literal('gender'), gender: z.enum(['female', 'male', 'other']) }),
       z.object({ kind: z.literal('language'), language: z.enum(['en', 'ar']) }),
-      z.object({ kind: z.literal('tag'), tag: z.string().trim().min(1, 'Choose a tag').max(40) }),
+      z.object({
+        kind: z.literal('tag'),
+        tag: z.string().trim().min(1, 'campaigns.validation.chooseTag').max(40),
+      }),
       z.object({ kind: z.literal('has_package') }),
       z.object({ kind: z.literal('package_expiring'), days: int(1, 365) }),
       z.object({ kind: z.literal('no_shows_at_least'), count: int(1, 1000) }),
     ]),
   )
-  .max(12, 'Up to 12 conditions')
+  .max(12, 'campaigns.validation.maxConditions')
 
 /** Rules that are complete enough to preview (a service/tag picked). */
 export const completeRules = (rules: SegmentRule[]) =>
@@ -222,13 +182,9 @@ export const completeRules = (rules: SegmentRule[]) =>
 
 // ── Campaign messages ────────────────────────────────────────────────────────
 
-export const CAMPAIGN_VARIABLES = [
-  { key: 'name', label: 'First name' },
-  { key: 'spa', label: 'Spa name' },
-  { key: 'booking_link', label: 'Booking link' },
-  { key: 'offer_code', label: 'Offer code' },
-] as const
-const KNOWN = new Set<string>([...CAMPAIGN_VARIABLES.map((v) => v.key), 'first_name', 'full_name'])
+/** Labels: `campaigns.variables.<key>`. */
+export const CAMPAIGN_VARIABLES = ['name', 'spa', 'booking_link', 'offer_code'] as const
+const KNOWN = new Set<string>([...CAMPAIGN_VARIABLES, 'first_name', 'full_name'])
 
 export const MAX_MESSAGE = 700
 /** WhatsApp click-to-send links stop opening reliably past ~2000 characters. */
@@ -264,11 +220,22 @@ export type CampaignView = {
   scheduledAt: Date | string | null
 }
 
-export function campaignState(c: CampaignView, pending: number, now = new Date()) {
-  if (c.archivedAt) return { label: 'Archived', tone: 'neutral' as const }
-  if (c.status === 'draft') return { label: 'Draft', tone: 'neutral' as const }
+export type CampaignStateKey =
+  | 'campaigns.state.archived'
+  | 'campaigns.state.draft'
+  | 'campaigns.state.scheduled'
+  | 'campaigns.state.sending'
+  | 'campaigns.state.done'
+
+export function campaignState(
+  c: CampaignView,
+  pending: number,
+  now = new Date(),
+): { key: CampaignStateKey; tone: Tone } {
+  if (c.archivedAt) return { key: 'campaigns.state.archived', tone: 'neutral' }
+  if (c.status === 'draft') return { key: 'campaigns.state.draft', tone: 'neutral' }
   if (c.status === 'queued' && c.scheduledAt && new Date(c.scheduledAt) > now)
-    return { label: 'Scheduled', tone: 'warning' as const }
-  if (c.status === 'queued' && pending > 0) return { label: 'Sending', tone: 'accent' as const }
-  return { label: 'Done', tone: 'success' as const }
+    return { key: 'campaigns.state.scheduled', tone: 'warn' }
+  if (c.status === 'queued' && pending > 0) return { key: 'campaigns.state.sending', tone: 'acc' }
+  return { key: 'campaigns.state.done', tone: 'ok' }
 }

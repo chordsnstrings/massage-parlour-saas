@@ -1,14 +1,14 @@
-import Link from 'next/link'
-import { cn } from '@/lib/utils'
+import { SectionTabs } from '@/components/crm'
+import { getT } from '@/i18n/server'
 
 const TABS = [
-  { key: 'overview', label: 'Overview', path: '' },
-  { key: 'expenses', label: 'Expenses', path: '/expenses' },
-  { key: 'journal', label: 'Journal', path: '/journal' },
+  { key: 'overview', path: '' },
+  { key: 'expenses', path: '/expenses' },
+  { key: 'journal', path: '/journal' },
 ] as const
 
 /** Section tabs shared by the accounting pages; the month carries over. */
-export function AccountsTabs({
+export async function AccountsTabs({
   base,
   month,
   active,
@@ -17,23 +17,16 @@ export function AccountsTabs({
   month: string
   active: (typeof TABS)[number]['key']
 }) {
+  const t = await getT()
   return (
-    <nav className="-mt-4 mb-8 flex gap-6 border-b text-sm sm:-mt-6" aria-label="Accounts">
-      {TABS.map((t) => (
-        <Link
-          key={t.key}
-          href={`${base}${t.path}?month=${month}`}
-          aria-current={active === t.key ? 'page' : undefined}
-          className={cn(
-            '-mb-px border-b-2 pb-3 transition-colors',
-            active === t.key
-              ? 'border-fg font-medium text-fg'
-              : 'border-transparent text-muted hover:text-fg',
-          )}
-        >
-          {t.label}
-        </Link>
-      ))}
-    </nav>
+    <SectionTabs
+      label={t('accounts.tabs.label')}
+      value={active}
+      items={TABS.map((tab) => ({
+        value: tab.key,
+        label: t(`accounts.tabs.${tab.key}`),
+        href: `${base}${tab.path}?month=${month}`,
+      }))}
+    />
   )
 }

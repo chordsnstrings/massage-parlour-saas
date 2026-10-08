@@ -1,5 +1,6 @@
 'use client'
 import { PERMISSION_GROUPS } from '@spa/core'
+import { permissionGroupLabel, permissionLabel } from '@spa/core/i18n/labels'
 import { Plus } from 'lucide-react'
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
@@ -7,11 +8,14 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Input } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import { deleteRoleAction, saveRoleAction } from './actions'
 
+/** `name`/`description` arrive in the viewer's language (roleName/roleDescription on the server). */
 type Role = { id: string; name: string; description: string | null; permissions: string[]; isSystem: boolean }
 
 export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const readOnly = role?.isSystem
   const granted = new Set(role?.permissions ?? [])
@@ -19,21 +23,17 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={role ? role.name : 'New role'}
-      description={
-        readOnly
-          ? 'System roles are fixed. Create a custom role to adjust access.'
-          : 'Choose exactly what this role can do.'
-      }
+      title={role ? role.name : t('roles.sheet.new')}
+      description={readOnly ? t('roles.sheet.fixed') : t('roles.sheet.choose')}
       className="md:max-w-2xl"
       trigger={
         role ? (
           <Button variant="ghost" size="sm">
-            {readOnly ? 'View' : 'Edit'}
+            {readOnly ? t('roles.sheet.view') : t('common.edit')}
           </Button>
         ) : (
           <Button>
-            <Plus /> New role
+            <Plus /> {t('roles.sheet.new')}
           </Button>
         )
       }
@@ -46,10 +46,10 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
         {role && <input type="hidden" name="id" value={role.id} />}
         {!readOnly && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" name="name">
+            <Field label={t('roles.sheet.name')} name="name">
               <Input id="name" name="name" defaultValue={role?.name} required />
             </Field>
-            <Field label="Description" name="description">
+            <Field label={t('roles.sheet.description')} name="description">
               <Input id="description" name="description" defaultValue={role?.description ?? ''} />
             </Field>
           </div>
@@ -58,9 +58,9 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
           {Object.entries(PERMISSION_GROUPS).map(([resource, group]) => (
             <fieldset key={resource} className="space-y-2.5">
               <legend className="mb-1 text-xs font-medium uppercase tracking-[0.06em] text-muted">
-                {group.label}
+                {permissionGroupLabel(t, resource)}
               </legend>
-              {Object.entries(group.actions).map(([action, label]) => {
+              {Object.keys(group.actions).map((action) => {
                 const key = `${resource}.${action}`
                 return (
                   <label key={key} className="flex items-center gap-2.5 text-sm">
@@ -70,7 +70,7 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
                       defaultChecked={granted.has(key)}
                       disabled={readOnly}
                     />
-                    {label}
+                    {permissionLabel(t, key)}
                   </label>
                 )
               })}
@@ -80,7 +80,7 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
         {!readOnly && (
           <div className="flex flex-wrap justify-between gap-2 border-t pt-5">
             {role ? <DeleteRole slug={slug} roleId={role.id} onDone={() => setOpen(false)} /> : <span />}
-            <SubmitButton>Save role</SubmitButton>
+            <SubmitButton>{t('roles.sheet.save')}</SubmitButton>
           </div>
         )}
       </ActionForm>
@@ -89,6 +89,7 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
 }
 
 function DeleteRole({ slug, roleId, onDone }: { slug: string; roleId: string; onDone: () => void }) {
+  const t = useT()
   const [pending, start] = useTransition()
   return (
     <Button
@@ -99,13 +100,13 @@ function DeleteRole({ slug, roleId, onDone }: { slug: string; roleId: string; on
         start(async () => {
           const r = await deleteRoleAction(slug, roleId)
           if (r?.ok) {
-            toast.success('Role deleted')
+            toast.success(resultText(t, r) ?? '')
             onDone()
-          } else if (r) toast.error(r.error)
+          } else if (r) toast.error(resultText(t, r) ?? t('errors.generic'))
         })
       }
     >
-      Delete
+      {t('common.delete')}
     </Button>
   )
 }

@@ -1,28 +1,31 @@
 import { aiConfigured } from '@spa/ai'
+import { enumLabel } from '@spa/core/i18n'
 import { expenses, withTenant } from '@spa/db'
 import { EXPENSE_CODES } from '@spa/services'
 import { and, desc, gte, lte } from 'drizzle-orm'
 import { ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, Meter, Pill } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatAed, formatDate, todayDubai } from '@/lib/utils'
+import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { addExpenseAction, voidExpenseAction } from '../actions'
-import { MonthNav, monthRange } from '../month'
+import { accountName } from '../labels'
+import { MonthNav, monthLabel, monthRange } from '../month'
 import { AccountsTabs } from '../tabs'
 import { VoidButton } from '../void-button'
 import { ExpenseSheet } from './expense-sheet'
 import { ReceiptThumb } from './receipt-thumb'
 
-export const metadata: Metadata = { title: 'Expenses' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('accounts.expenses.title') }
+}
 
 const CATEGORY = Object.fromEntries(EXPENSE_CODES.map((a) => [a.code, a.name]))
-const PAID_VIA = { cash: 'Cash', bank: 'Bank transfer', card: 'Card', owner: 'Paid by owner' } as const
 type Row = typeof expenses.$inferSelect
 
 export default async function ExpensesPage({
@@ -34,7 +37,11 @@ export default async function ExpensesPage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'accounting.view')) notFound()
+  const { t, fmt } = await getI18n()
   const range = monthRange((await searchParams).month)
+  const label = monthLabel(fmt, range.month)
+  const category = (code: string) => (CATEGORY[code] ? accountName(t, code, CATEGORY[code]) : code)
+  const day = (d: string) => fmt.date(`${d}T12:00:00Z`)
   const slug = ctx.tenant.slug
   const manage = can(ctx, 'accounting.manage')
   const rows = await withTenant(ctx.tenant.id, (tx) =>
@@ -56,37 +63,41 @@ export default async function ExpensesPage({
   const columns: Column<Row>[] = [
     {
       key: 'what',
-      header: 'Expense',
+      header: t('accounts.expenses.expense'),
       primary: true,
       cell: (r) => (
         <span className="flex items-center gap-3">
-          {r.receiptUrl && <ReceiptThumb url={r.receiptUrl} />}
+          {r.receiptUrl && <ReceiptThumb url={r.receiptUrl} label={t('accounts.expenses.viewReceipt')} />}
           <span className="flex min-w-0 flex-col">
-            <span className="font-medium">{r.vendor || CATEGORY[r.accountCode] || r.accountCode}</span>
-            <span className="text-xs text-muted">{r.description || CATEGORY[r.accountCode]}</span>
+            <span className="font-medium">{r.vendor || category(r.accountCode)}</span>
+            <span className="crm-muted text-xs">{r.description || category(r.accountCode)}</span>
           </span>
         </span>
       ),
     },
-    { key: 'date', header: 'Date', cell: (r) => formatDate(r.expenseDate) },
+    { key: 'date', header: t('accounts.expenses.date'), cell: (r) => day(r.expenseDate) },
     {
       key: 'category',
-      header: 'Category',
+      header: t('accounts.expenses.category'),
       hideOnMobile: true,
-      cell: (r) => CATEGORY[r.accountCode] ?? r.accountCode,
+      cell: (r) => category(r.accountCode),
     },
-    { key: 'paid', header: 'Paid', cell: (r) => <Badge>{PAID_VIA[r.paidVia]}</Badge> },
+    {
+      key: 'paid',
+      header: t('accounts.expenses.paid'),
+      cell: (r) => <Pill>{enumLabel(t, 'expensePaidVia', r.paidVia)}</Pill>,
+    },
     {
       key: 'vat',
-      header: 'VAT',
+      header: t('accounts.expenses.vat'),
       className: 'text-right tabular-nums',
-      cell: (r) => (Number(r.vatAed) ? formatAed(r.vatAed) : '—'),
+      cell: (r) => (Number(r.vatAed) ? fmt.aed(r.vatAed) : '—'),
     },
     {
       key: 'amount',
-      header: 'Amount',
+      header: t('accounts.expenses.amount'),
       className: 'text-right tabular-nums font-medium',
-      cell: (r) => formatAed(r.amountAed),
+      cell: (r) => fmt.aed(r.amountAed),
     },
     ...(manage
       ? [
@@ -103,8 +114,8 @@ export default async function ExpensesPage({
   return (
     <>
       <PageHeader
-        title="Expenses"
-        description="Rent, DEWA, visas, supplies — every expense lands in your P&L and VAT return automatically."
+        title={t('accounts.expenses.title')}
+        description={t('accounts.expenses.description')}
         actions={
           <>
             <MonthNav base={appPath(`/${slug}/accounts/expenses`)} range={range} />
@@ -112,7 +123,10 @@ export default async function ExpensesPage({
               <ExpenseSheet
                 action={addExpenseAction.bind(null, slug)}
                 scanUrl={appPath(`/${slug}/accounts/expenses/scan`)}
-                categories={EXPENSE_CODES.map((a) => ({ code: a.code, name: a.name }))}
+                categories={EXPENSE_CODES.map((a) => ({
+                  code: a.code,
+                  name: accountName(t, a.code, a.name),
+                }))}
                 today={todayDubai()}
                 aiReady={aiConfigured()}
               />
@@ -122,40 +136,41 @@ export default async function ExpensesPage({
       />
       <AccountsTabs base={appPath(`/${slug}/accounts`)} month={range.month} active="expenses" />
       <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-8">
+        <Grid cols="col-2">
+          <Card flush>
             {rows.length === 0 ? (
               <EmptyState
                 icon={<ReceiptText className="size-5" strokeWidth={1.5} />}
-                title={`No expenses in ${range.label}`}
-                description="Record rent, utilities, supplies and visa costs to see your real profit."
+                title={t('accounts.expenses.emptyTitle', { month: label })}
+                description={t('accounts.expenses.emptyBody')}
               />
             ) : (
-              <div className="py-2">
-                <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
-              </div>
+              <DataTable columns={columns} rows={rows} rowKey={(r) => r.id} />
             )}
           </Card>
-          <Card className="lg:col-span-4">
-            <CardHeader title={range.label} description={`${rows.length} expenses`} />
-            <CardBody className="space-y-2 pt-3">
+          <Card title={label} sub={t('accounts.expenses.count', { count: rows.length })}>
+            <div className="space-y-3">
               {byCategory.map(([code, amount]) => (
-                <div key={code} className="flex justify-between gap-3 text-sm">
-                  <span className="truncate text-muted">{CATEGORY[code] ?? code}</span>
-                  <span className="tabular-nums">{formatAed(amount)}</span>
-                </div>
+                <Meter
+                  key={code}
+                  value={amount}
+                  max={byCategory[0]?.[1] ?? 1}
+                  label={category(code)}
+                  valueText={fmt.aed(amount)}
+                  showLabel
+                />
               ))}
-              <div className="mt-3 flex justify-between border-t pt-3 text-sm font-semibold">
-                <span>Total</span>
-                <span className="tabular-nums">{formatAed(total)}</span>
-              </div>
-              <div className="flex justify-between text-[13px] text-muted">
-                <span>of which recoverable VAT</span>
-                <span className="tabular-nums">{formatAed(vat)}</span>
-              </div>
-            </CardBody>
+            </div>
+            <div className="mt-4 flex justify-between border-t pt-3 text-sm font-semibold">
+              <span>{t('accounts.expenses.total')}</span>
+              <span className="crm-num">{fmt.aed(total)}</span>
+            </div>
+            <div className="crm-muted flex justify-between text-[13px]">
+              <span>{t('accounts.expenses.recoverable')}</span>
+              <span className="crm-num">{fmt.aed(vat)}</span>
+            </div>
           </Card>
-        </div>
+        </Grid>
       </PageBody>
     </>
   )

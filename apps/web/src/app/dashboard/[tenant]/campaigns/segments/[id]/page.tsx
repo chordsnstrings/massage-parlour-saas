@@ -9,11 +9,14 @@ import { DeleteSegmentButton } from '@/components/campaigns/campaign-buttons'
 import { SegmentBuilder } from '@/components/campaigns/segment-builder'
 import { Button } from '@/components/ui/button'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { clientTags, serviceOptions } from '../../data'
 
-export const metadata: Metadata = { title: 'Edit segment' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('campaigns.segments.editTitle') }
+}
 
 export default async function SegmentPage({ params }: { params: Promise<{ tenant: string; id: string }> }) {
   const { tenant, id } = await params
@@ -21,6 +24,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ tenant
   if (!can(ctx, 'marketing.campaigns')) notFound()
   if (!z.uuid().safeParse(id).success) notFound()
   const slug = ctx.tenant.slug
+  const t = await getT()
   const data = await withTenant(ctx.tenant.id, async (tx) => ({
     segment: (await tx.select().from(segments).where(eq(segments.id, id)))[0],
     services: await serviceOptions(tx),
@@ -30,14 +34,14 @@ export default async function SegmentPage({ params }: { params: Promise<{ tenant
   return (
     <>
       <PageHeader
-        eyebrow="Segment"
+        eyebrow={t('campaigns.segments.eyebrow')}
         title={data.segment.name}
-        description="Changes apply to campaigns you write from now on; queued campaigns keep their recipients."
+        description={t('campaigns.segments.editDescription')}
         actions={
           <>
             <Button variant="ghost" asChild>
               <Link href={appPath(`/${slug}/campaigns?tab=segments`)}>
-                <ArrowLeft className="rtl:rotate-180" /> Segments
+                <ArrowLeft className="rtl:rotate-180" /> {t('campaigns.segments.back')}
               </Link>
             </Button>
             <DeleteSegmentButton slug={slug} id={id} />

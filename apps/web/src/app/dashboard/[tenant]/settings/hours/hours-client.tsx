@@ -5,18 +5,11 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ActionForm, FieldError, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import { saveHoursAction } from './actions'
 
-const DAYS = [
-  ['mon', 'Monday'],
-  ['tue', 'Tuesday'],
-  ['wed', 'Wednesday'],
-  ['thu', 'Thursday'],
-  ['fri', 'Friday'],
-  ['sat', 'Saturday'],
-  ['sun', 'Sunday'],
-] as const
+const DAYS = [['mon'], ['tue'], ['wed'], ['thu'], ['fri'], ['sat'], ['sun']] as const
 type Day = (typeof DAYS)[number][0]
 type Interval = { key: number; open: string; close: string }
 type Hours = Partial<Record<Day, { open: string; close: string }[]>>
@@ -26,6 +19,7 @@ let seq = 0
 const norm = (t: string) => (t === '24:00' ? '00:00' : t)
 
 export function HoursForm({ slug, branchId, initial }: { slug: string; branchId: string; initial: Hours }) {
+  const t = useT()
   const [days, setDays] = useState<Record<Day, Interval[]>>(
     () =>
       Object.fromEntries(
@@ -52,7 +46,8 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
     <ActionForm action={saveHoursAction.bind(null, slug, branchId)} className="space-y-6">
       <input type="hidden" name="hours" value={payload} />
       <ul className="divide-y rounded-xl border">
-        {DAYS.map(([d, label]) => {
+        {DAYS.map(([d]) => {
+          const label = t(`settings.hours.days.${d}`)
           const list = days[d]
           const closed = list.length === 0
           return (
@@ -63,10 +58,14 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
             >
               <div className="flex min-h-10 items-center justify-between gap-3 sm:justify-start">
                 <span className={cn('text-sm font-medium', closed && 'text-muted')}>{label}</span>
-                {closed && <span className="text-sm text-muted sm:hidden">Closed</span>}
+                {closed && <span className="text-sm text-muted sm:hidden">{t('settings.hours.closed')}</span>}
               </div>
               <div className="space-y-2">
-                {closed && <p className="hidden min-h-10 items-center text-sm text-muted sm:flex">Closed</p>}
+                {closed && (
+                  <p className="hidden min-h-10 items-center text-sm text-muted sm:flex">
+                    {t('settings.hours.closed')}
+                  </p>
+                )}
                 <AnimatePresence initial={false}>
                   {list.map((i, idx) => {
                     const overnight = i.close <= i.open && i.close !== i.open
@@ -81,7 +80,7 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
                       >
                         <Input
                           type="time"
-                          aria-label={`${label} opens ${idx + 1}`}
+                          aria-label={t('settings.hours.opens', { day: label, n: idx + 1 })}
                           value={i.open}
                           onChange={(e) =>
                             update(d, (l) =>
@@ -93,7 +92,7 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
                         <span className="text-muted">–</span>
                         <Input
                           type="time"
-                          aria-label={`${label} closes ${idx + 1}`}
+                          aria-label={t('settings.hours.closes', { day: label, n: idx + 1 })}
                           value={i.close}
                           onChange={(e) =>
                             update(d, (l) =>
@@ -106,14 +105,14 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
                           type="button"
                           variant="ghost"
                           size="icon"
-                          aria-label={`Remove ${label} interval ${idx + 1}`}
+                          aria-label={t('settings.hours.removeInterval', { day: label, n: idx + 1 })}
                           onClick={() => update(d, (l) => l.filter((x) => x.key !== i.key))}
                         >
                           <X />
                         </Button>
                         {overnight && (
                           <span className="flex basis-full items-center gap-1 text-[13px] text-muted sm:basis-auto">
-                            <Moon className="size-3.5" /> closes after midnight
+                            <Moon className="size-3.5" /> {t('settings.hours.overnight')}
                           </span>
                         )}
                       </motion.div>
@@ -127,7 +126,7 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
                   type="button"
                   variant="ghost"
                   size="sm"
-                  aria-label={`Add hours on ${label}`}
+                  aria-label={t('settings.hours.addOn', { day: label })}
                   onClick={() =>
                     update(d, (l) => [
                       ...l,
@@ -138,17 +137,17 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
                   }
                   disabled={list.length >= 4}
                 >
-                  <Plus /> {closed ? 'Open' : 'Add'}
+                  <Plus /> {closed ? t('settings.hours.open') : t('settings.hours.add')}
                 </Button>
                 {!closed && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={`Copy ${label} to all days`}
+                    aria-label={t('settings.hours.copyAll', { day: label })}
                     onClick={() => copyToAll(d)}
                   >
-                    <Copy /> <span className="sm:hidden lg:inline">Copy to all</span>
+                    <Copy /> <span className="sm:hidden lg:inline">{t('settings.hours.copyAllShort')}</span>
                   </Button>
                 )}
               </div>
@@ -157,7 +156,7 @@ export function HoursForm({ slug, branchId, initial }: { slug: string; branchId:
         })}
       </ul>
       <div className="flex justify-end">
-        <SubmitButton size="lg">Save hours</SubmitButton>
+        <SubmitButton size="lg">{t('settings.hours.save')}</SubmitButton>
       </div>
     </ActionForm>
   )

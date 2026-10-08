@@ -7,6 +7,7 @@ import type { Locale, Messages } from './types'
 
 export { en } from './en'
 export * from './format'
+export * from './labels'
 export { th } from './th'
 export * from './translate'
 export * from './types'

@@ -31,17 +31,21 @@ export function Sheet({
         <Dialog.Content
           className={cn(
             // While it animates out a closed sheet ignores clicks, so a quick second click can't resubmit its form.
-            'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-2xl border bg-surface pb-safe shadow-pop data-[state=closed]:pointer-events-none data-[state=closed]:anim-sheet-down data-[state=open]:anim-sheet-up',
-            'md:inset-auto md:top-1/2 md:left-1/2 md:w-full md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:pb-0 md:data-[state=open]:anim-pop-in md:data-[state=closed]:anim-fade-out',
+            'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-[var(--ui-sheet-radius,1rem)] border bg-surface pb-safe shadow-pop data-[state=closed]:pointer-events-none data-[state=closed]:anim-sheet-down data-[state=open]:anim-sheet-up',
+            'md:inset-auto md:top-1/2 md:left-1/2 md:w-full md:max-w-lg md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[var(--ui-sheet-radius,1rem)] md:pb-0 md:data-[state=open]:anim-pop-in md:data-[state=closed]:anim-fade-out',
             className,
           )}
         >
           <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-border md:hidden" />
-          <div className="flex items-start justify-between gap-4 px-6 pt-5">
+          <div className="flex items-start justify-between gap-4 px-[var(--ui-sheet-px,1.5rem)] pt-[var(--ui-sheet-pt,1.25rem)]">
             <div className="space-y-1">
-              <Dialog.Title className="text-base font-semibold tracking-tight">{title}</Dialog.Title>
+              <Dialog.Title className="text-[length:var(--ui-sheet-title-fs,1rem)] font-semibold tracking-tight">
+                {title}
+              </Dialog.Title>
               {description ? (
-                <Dialog.Description className="text-sm text-muted">{description}</Dialog.Description>
+                <Dialog.Description className="text-[length:var(--ui-sheet-desc-fs,0.875rem)] text-muted">
+                  {description}
+                </Dialog.Description>
               ) : (
                 <Dialog.Description className="sr-only">{title}</Dialog.Description>
               )}
@@ -53,7 +57,9 @@ export function Sheet({
               <X className="size-4" strokeWidth={1.5} />
             </Dialog.Close>
           </div>
-          <div className="px-6 pt-4 pb-6">{children}</div>
+          <div className="px-[var(--ui-sheet-px,1.5rem)] pt-[var(--ui-sheet-gap,1rem)] pb-[var(--ui-sheet-pb,1.5rem)]">
+            {children}
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

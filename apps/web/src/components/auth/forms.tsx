@@ -6,31 +6,33 @@ import { Button } from '@/components/ui/button'
 import { Checkbox, Input, Label } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { appPath } from '@/lib/paths'
+import { authErrorText, useAuthT } from './errors'
 
 const go = (next: string) => {
   window.location.href = next
 }
 
 function useSubmit() {
+  const t = useAuthT()
   const [pending, setPending] = useState(false)
   const run = async (
-    fn: () => Promise<{ error?: { message?: string } | null } | undefined>,
+    fn: () => Promise<{ error?: { code?: string; message?: string; status?: number } | null } | undefined>,
     onOk: () => void,
   ) => {
     setPending(true)
     try {
       const res = await fn()
-      if (res?.error) toast.error(res.error.message ?? 'Something went wrong.')
+      if (res?.error) toast.error(authErrorText(t, res.error))
       else onOk()
     } finally {
       setPending(false)
     }
   }
-  return { pending, run }
+  return { pending, run, t }
 }
 
 export function LoginForm({ next, signupHref }: { next: string; signupHref?: string }) {
-  const { pending, run } = useSubmit()
+  const { pending, run, t } = useSubmit()
   return (
     <form
       className="space-y-5"
@@ -45,29 +47,29 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
       }}
     >
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t('auth.email')}</Label>
         <Input id="email" name="email" type="email" autoComplete="email" required autoFocus />
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t('auth.password')}</Label>
           <Link
             href={appPath('/forgot-password')}
             className="text-[13px] text-muted transition-colors hover:text-fg"
           >
-            Forgot password?
+            {t('auth.login.forgot')}
           </Link>
         </div>
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
       </div>
       <Button type="submit" size="lg" className="w-full" pending={pending}>
-        Sign in
+        {t('auth.login.submit')}
       </Button>
       {signupHref && (
         <p className="text-center text-sm text-muted">
-          New to spamanagement?{' '}
+          {t('auth.login.new')}{' '}
           <Link href={signupHref} className="font-medium text-fg underline-offset-4 hover:underline">
-            Create your spa
+            {t('auth.login.create')}
           </Link>
         </p>
       )}
@@ -76,7 +78,7 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
 }
 
 export function TwoFactorForm({ next }: { next: string }) {
-  const { pending, run } = useSubmit()
+  const { pending, run, t } = useSubmit()
   const [backup, setBackup] = useState(false)
   return (
     <form
@@ -96,7 +98,7 @@ export function TwoFactorForm({ next }: { next: string }) {
       }}
     >
       <div className="space-y-1.5">
-        <Label htmlFor="code">{backup ? 'Backup code' : '6-digit code'}</Label>
+        <Label htmlFor="code">{backup ? t('auth.twoFactor.backupCode') : t('auth.twoFactor.code')}</Label>
         <Input
           id="code"
           name="code"
@@ -108,31 +110,26 @@ export function TwoFactorForm({ next }: { next: string }) {
         />
       </div>
       <label className="flex items-center gap-2.5 text-sm text-muted">
-        <Checkbox name="trust" /> Trust this device for 30 days
+        <Checkbox name="trust" /> {t('auth.twoFactor.trust')}
       </label>
       <Button type="submit" size="lg" className="w-full" pending={pending}>
-        Verify
+        {t('auth.twoFactor.verify')}
       </Button>
       <button
         type="button"
         className="w-full text-sm text-muted hover:text-fg"
         onClick={() => setBackup((b) => !b)}
       >
-        {backup ? 'Use authenticator app instead' : 'Use a backup code'}
+        {backup ? t('auth.twoFactor.useApp') : t('auth.twoFactor.useBackup')}
       </button>
     </form>
   )
 }
 
 export function ForgotPasswordForm() {
-  const { pending, run } = useSubmit()
+  const { pending, run, t } = useSubmit()
   const [sent, setSent] = useState(false)
-  if (sent)
-    return (
-      <p className="anim-fade-in text-[15px] text-muted">
-        If that email has an account, a reset link is on its way.
-      </p>
-    )
+  if (sent) return <p className="anim-fade-in text-[15px] text-muted">{t('auth.forgot.sent')}</p>
   return (
     <form
       className="space-y-5"
@@ -146,18 +143,18 @@ export function ForgotPasswordForm() {
       }}
     >
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t('auth.email')}</Label>
         <Input id="email" name="email" type="email" required autoFocus />
       </div>
       <Button type="submit" size="lg" className="w-full" pending={pending}>
-        Send reset link
+        {t('auth.forgot.submit')}
       </Button>
     </form>
   )
 }
 
 export function ResetPasswordForm({ token }: { token: string }) {
-  const { pending, run } = useSubmit()
+  const { pending, run, t } = useSubmit()
   return (
     <form
       className="space-y-5"
@@ -167,14 +164,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
         run(
           () => authClient.resetPassword({ newPassword, token }),
           () => {
-            toast.success('Password updated. Please sign in.')
+            toast.success(t('auth.reset.done'))
             go(appPath('/login'))
           },
         )
       }}
     >
       <div className="space-y-1.5">
-        <Label htmlFor="password">New password</Label>
+        <Label htmlFor="password">{t('auth.reset.newPassword')}</Label>
         <Input
           id="password"
           name="password"
@@ -183,10 +180,10 @@ export function ResetPasswordForm({ token }: { token: string }) {
           autoComplete="new-password"
           required
         />
-        <p className="text-[13px] text-muted">At least 10 characters.</p>
+        <p className="text-[13px] text-muted">{t('auth.passwordHint')}</p>
       </div>
       <Button type="submit" size="lg" className="w-full" pending={pending}>
-        Set password
+        {t('auth.reset.submit')}
       </Button>
     </form>
   )

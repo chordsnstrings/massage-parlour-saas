@@ -3,6 +3,7 @@ import { FieldLabel } from '@puckeditor/core'
 import { ImageIcon, Images, X } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import { MediaPicker } from './media-picker'
 import { sized } from './types'
@@ -28,6 +29,7 @@ const usable = (v: string) => v === '' || /^\/(?!\/)/.test(v) || /^https?:\/\/[^
 export function ImageFieldControl({ field, id, value, onChange, readOnly }: Props) {
   const params = useParams<{ tenant?: string }>()
   const slug = typeof params?.tenant === 'string' ? params.tenant : null
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
   const [broken, setBroken] = useState(false)
@@ -57,7 +59,7 @@ export function ImageFieldControl({ field, id, value, onChange, readOnly }: Prop
             <div className="grid size-full place-items-center text-muted">
               <span className="flex flex-col items-center gap-1.5 text-xs">
                 <ImageIcon className="size-5" strokeWidth={1.5} />
-                {broken ? 'Image can’t be loaded' : 'No image'}
+                {broken ? t('ui.media.cantLoad') : t('ui.media.noImage')}
               </span>
             </div>
           )}
@@ -65,7 +67,7 @@ export function ImageFieldControl({ field, id, value, onChange, readOnly }: Prop
             <button
               type="button"
               onClick={() => onChange('')}
-              aria-label="Remove image"
+              aria-label={t('ui.media.removeImage')}
               className="absolute top-1.5 end-1.5 grid size-8 place-items-center rounded-full bg-surface/90 text-muted shadow-[0_1px_2px_rgb(0_0_0/0.08)] backdrop-blur transition-colors hover:text-fg"
             >
               <X className="size-4" strokeWidth={1.5} />
@@ -79,7 +81,7 @@ export function ImageFieldControl({ field, id, value, onChange, readOnly }: Prop
             className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border bg-surface px-3 text-[13px] font-medium transition-colors hover:border-accent/60 hover:text-accent"
           >
             <Images className="size-4" strokeWidth={1.5} />
-            {value ? 'Replace from library' : 'Choose from library'}
+            {value ? t('ui.media.replaceFromLibrary') : t('ui.media.chooseFromLibrary')}
           </button>
         )}
         <input
@@ -97,7 +99,7 @@ export function ImageFieldControl({ field, id, value, onChange, readOnly }: Prop
             }
           }}
           placeholder={slug ? 'or paste an image URL' : 'https://…'}
-          aria-label={`${field.label ?? 'Image'} URL`}
+          aria-label={t('ui.media.imageUrl', { label: field.label ?? t('ui.media.image') })}
           aria-invalid={!valid}
           className={cn(control, !valid && 'border-danger')}
         />

@@ -1,3 +1,4 @@
+import type { Translator } from '@spa/core/i18n'
 import { domainOrders, domains, withTenant } from '@spa/db'
 import {
   cloudflareConfig,
@@ -7,54 +8,37 @@ import {
   domainPairNote,
 } from '@spa/services'
 import { asc, desc, eq } from 'drizzle-orm'
-import { ArrowLeft, Info } from 'lucide-react'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, Note, Pill, Stack, type Tone } from '@/components/crm'
 import { CopyButton } from '@/components/ui/copy-button'
-import { PageBody, PageHeader } from '@/components/ui/page'
-import { appPath } from '@/lib/paths'
-import { cn, formatDate, formatDateTime } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
+import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { canonicalUrls } from '@/server/origin'
+import { SettingsTabs } from '../settings-tabs'
 import { BuyDomain, CancelOrderButton } from './buy-domain'
 import { AddDomainForm, DomainActions, SubdomainPrimaryButton } from './domains-client'
 
-export const metadata: Metadata = { title: 'Domains' }
+type Fmt = Awaited<ReturnType<typeof getI18n>>['fmt']
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('settings.domains.title') }
+}
 
 const STATUS = {
-  pending: {
-    label: 'Pending',
-    tone: 'warning',
-    dot: 'bg-warning',
-    text: 'Waiting for the DNS records. Add them below, then press Check now.',
-  },
-  verifying: {
-    label: 'Verifying',
-    tone: 'accent',
-    dot: 'bg-accent',
-    text: 'Ownership confirmed. Waiting for the domain to point at us and for its SSL certificate.',
-  },
-  active: {
-    label: 'Active',
-    tone: 'success',
-    dot: 'bg-success',
-    text: 'Connected — your website and online booking answer on this address.',
-  },
-  failed: {
-    label: 'Failed',
-    tone: 'danger',
-    dot: 'bg-danger',
-    text: 'Not connected. Fix the issue below, then press Check now.',
-  },
-} as const
+  pending: { tone: 'warn', dot: 'bg-warning' },
+  verifying: { tone: 'acc', dot: 'bg-accent' },
+  active: { tone: 'ok', dot: 'bg-success' },
+  failed: { tone: 'bad', dot: 'bg-danger' },
+} as const satisfies Record<string, { tone: Tone; dot: string }>
 
 export default async function DomainsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'settings.manage')) notFound()
   const slug = ctx.tenant.slug
+  const { t, fmt } = await getI18n()
   const [rows, orders] = await withTenant(ctx.tenant.id, (tx) =>
     Promise.all([
       tx.select().from(domains).where(eq(domains.kind, 'custom')).orderBy(asc(domains.createdAt)),
@@ -68,102 +52,71 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
 
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Link
-            href={appPath(`/${slug}/settings`)}
-            className="inline-flex items-center gap-1 transition-colors hover:text-fg"
+      <PageHeader title={t('settings.domains.title')} description={t('settings.domains.description')} />
+      <SettingsTabs ctx={ctx} value="domains" />
+      <Grid cols="col-2">
+        <Stack className="min-w-0">
+          {custom ? (
+            <DomainCard t={t} fmt={fmt} slug={slug} domain={custom} sslAuto={sslAuto} />
+          ) : (
+            <Card title={t('settings.domains.connect')} sub={t('settings.domains.connectSub')}>
+              <AddDomainForm slug={slug} />
+            </Card>
+          )}
+          {!custom && (
+            <Card title={t('settings.domains.buy')} sub={t('settings.domains.buySub')}>
+              <BuyDomain slug={slug} />
+            </Card>
+          )}
+          {orders.length > 0 && <OrdersCard t={t} fmt={fmt} slug={slug} orders={orders} />}
+        </Stack>
+        <Stack className="min-w-0">
+          <Card
+            title={t('settings.domains.free')}
+            sub={t('settings.domains.freeSub')}
+            actions={
+              customPrimary ? (
+                <SubdomainPrimaryButton slug={slug} />
+              ) : (
+                <Pill tone="acc">{t('settings.domains.primary')}</Pill>
+              )
+            }
           >
-            <ArrowLeft className="size-3.5" /> Settings
-          </Link>
-        }
-        title="Domains"
-        description="Where clients find your website. Your free address always works — connect a domain you own to use it instead."
-      />
-      <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-          <div className="min-w-0 space-y-6 lg:col-span-8">
-            {custom ? (
-              <DomainCard slug={slug} domain={custom} sslAuto={sslAuto} />
-            ) : (
-              <Card>
-                <CardHeader
-                  title="Connect your own domain"
-                  description="Use an address like www.yourspa.ae for your website and online booking."
-                />
-                <CardBody>
-                  <AddDomainForm slug={slug} />
-                </CardBody>
-              </Card>
-            )}
-            {!custom && (
-              <Card>
-                <CardHeader
-                  title="Buy a domain"
-                  description="Don’t have one yet? Find a name and we’ll buy it and connect it for you."
-                />
-                <CardBody>
-                  <BuyDomain slug={slug} />
-                </CardBody>
-              </Card>
-            )}
-            {orders.length > 0 && <OrdersCard slug={slug} orders={orders} />}
-          </div>
-          <aside className="min-w-0 space-y-6 lg:col-span-4">
-            <Card>
-              <CardHeader
-                title="Free address"
-                description="Always works, even with your own domain connected."
-                action={
-                  customPrimary ? (
-                    <SubdomainPrimaryButton slug={slug} />
-                  ) : (
-                    <Badge tone="accent">Primary</Badge>
-                  )
-                }
-              />
-              <CardBody className="space-y-3">
-                <a
-                  href={freeUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  dir="ltr"
-                  className="block break-all text-[15px] font-medium text-accent underline-offset-4 hover:underline"
-                >
-                  {freeUrl.replace(/^https?:\/\//, '')}
-                </a>
-                <div className="[&_button]:h-11 sm:[&_button]:h-8">
-                  <CopyButton value={freeUrl} label="Copy link" />
-                </div>
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader title="How it works" />
-              <CardBody>
-                <ol className="space-y-4">
-                  {(
-                    [
-                      ['pending', 'You add your domain and two DNS records.'],
-                      ['verifying', 'We confirm you own it and that it points to us.'],
-                      [
-                        'active',
-                        `Your site goes live on it${sslAuto ? ' with free SSL' : ''} and it becomes your primary address.`,
-                      ],
-                    ] as const
-                  ).map(([key, text]) => (
-                    <li key={key} className="flex items-start gap-3 text-sm">
-                      <Badge tone={STATUS[key].tone} className="mt-px w-[4.75rem] justify-center">
-                        {STATUS[key].label}
-                      </Badge>
-                      <span className="text-muted">{text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </CardBody>
-            </Card>
-          </aside>
-        </div>
-      </PageBody>
+            <div className="space-y-3">
+              <a
+                href={freeUrl}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+                className="block break-all text-[15px] font-medium text-accent underline-offset-4 hover:underline"
+              >
+                {freeUrl.replace(/^https?:\/\//, '')}
+              </a>
+              <div className="[&_button]:h-11 sm:[&_button]:h-8">
+                <CopyButton value={freeUrl} label={t('settings.domains.copyLink')} />
+              </div>
+            </div>
+          </Card>
+          <Card title={t('settings.domains.how')}>
+            <ol className="space-y-4">
+              {(
+                [
+                  ['pending', t('settings.domains.how1')],
+                  ['verifying', t('settings.domains.how2')],
+                  ['active', sslAuto ? t('settings.domains.how3Ssl') : t('settings.domains.how3')],
+                ] as const
+              ).map(([key, text]) => (
+                <li key={key} className="flex items-start gap-3 text-sm">
+                  <Pill tone={STATUS[key].tone} className="mt-px w-[5.5rem] shrink-0 justify-center">
+                    {t(`settings.domains.status.${key}`)}
+                  </Pill>
+                  <span className="crm-muted">{text}</span>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        </Stack>
+      </Grid>
     </>
   )
 }
@@ -171,35 +124,51 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
 const DAY_MS = 86_400_000
 
 /** When the worker looks at this domain next (see isDomainCheckDue): matches its schedule, or says nothing. */
-function autoCheckNote(d: DomainRow, now: number): string {
-  if (d.status === 'active') return ' · re-checked daily'
-  if (d.status === 'failed') return ''
+function autoCheckNote(t: Translator, d: DomainRow, now: number): string | null {
+  if (d.status === 'active') return t('settings.domains.autoDaily')
+  if (d.status === 'failed') return null
   const age = now - d.createdAt.getTime()
-  if (age < DAY_MS) return ' · we also check automatically every 10 minutes'
-  if (d.verifiedAt || age < 7 * DAY_MS) return ' · we also check automatically every hour'
-  return ''
+  if (age < DAY_MS) return t('settings.domains.autoTenMin')
+  if (d.verifiedAt || age < 7 * DAY_MS) return t('settings.domains.autoHourly')
+  return null
 }
 
-function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow; sslAuto: boolean }) {
+function DomainCard({
+  t,
+  fmt,
+  slug,
+  domain,
+  sslAuto,
+}: {
+  t: Translator
+  fmt: Fmt
+  slug: string
+  domain: DomainRow
+  sslAuto: boolean
+}) {
   const s = STATUS[domain.status]
   const waiting = domain.status === 'pending' || domain.status === 'verifying'
   const records = dnsRecordsFor(domain)
   const text =
     domain.status === 'active' && sslAuto
-      ? 'Connected — your website and online booking answer on this address with free SSL.'
-      : s.text
+      ? t('settings.domains.statusText.activeSsl')
+      : t(`settings.domains.statusText.${domain.status}`)
+  const auto = autoCheckNote(t, domain, Date.now())
+  const added = [
+    t('settings.domains.added', { date: fmt.date(domain.createdAt) }),
+    domain.isPrimary && domain.status === 'active' ? t('settings.domains.primaryAddress') : null,
+  ]
   return (
-    <Card>
-      <CardHeader
-        title={
-          <span className="break-all" dir="ltr">
-            {domain.hostname}
-          </span>
-        }
-        description={`Added ${formatDate(domain.createdAt)}${domain.isPrimary && domain.status === 'active' ? ' · Primary address' : ''}`}
-        action={<Badge tone={s.tone}>{s.label}</Badge>}
-      />
-      <CardBody className="space-y-5">
+    <Card
+      title={
+        <span className="break-all" dir="ltr">
+          {domain.hostname}
+        </span>
+      }
+      sub={added.filter(Boolean).join(' · ')}
+      actions={<Pill tone={s.tone}>{t(`settings.domains.status.${domain.status}`)}</Pill>}
+    >
+      <div className="space-y-5">
         <div className="flex items-start gap-3">
           <span className="relative mt-[7px] flex size-2.5 shrink-0" aria-hidden>
             {waiting && (
@@ -214,13 +183,19 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
           </span>
           <div className="min-w-0 space-y-1">
             <p className="text-[15px]">{text}</p>
-            <p className="text-[13px] text-muted">
-              {domain.checkedAt ? `Last checked ${formatDateTime(domain.checkedAt)}` : 'Not checked yet'}
-              {autoCheckNote(domain, Date.now())}
+            <p className="crm-muted text-[13px]">
+              {[
+                domain.checkedAt
+                  ? t('settings.domains.lastChecked', { time: fmt.dateTime(domain.checkedAt) })
+                  : t('settings.domains.notChecked'),
+                auto,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
             {sslAuto && domain.sslStatus && (
-              <p className="text-[13px] text-muted">
-                SSL certificate: {domain.sslStatus.replaceAll('_', ' ')}
+              <p className="crm-muted text-[13px]">
+                {t('settings.domains.ssl', { status: domain.sslStatus.replaceAll('_', ' ') })}
               </p>
             )}
           </div>
@@ -238,7 +213,7 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
             {domain.lastError}
           </div>
         )}
-        {domain.status === 'active' && !sslAuto && <SslNote />}
+        {domain.status === 'active' && !sslAuto && <SslNote t={t} />}
         <DomainActions
           slug={slug}
           id={domain.id}
@@ -247,20 +222,18 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
           isPrimary={domain.isPrimary}
           secure={sslAuto}
         />
-      </CardBody>
-      <div className="border-t">
+      </div>
+      <div className="mt-5 border-t pt-4">
         {domain.status === 'active' ? (
           <details className="group">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-medium sm:px-6 [&::-webkit-details-marker]:hidden">
-              DNS records
-              <span className="text-muted transition-transform duration-200 group-open:rotate-45">+</span>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
+              {t('settings.domains.dnsRecords')}
+              <span className="crm-muted transition-transform duration-200 group-open:rotate-45">+</span>
             </summary>
-            <CardBody className="pt-0">
-              <RecordsTable records={records} />
-            </CardBody>
+            <RecordsTable t={t} records={records} />
           </details>
         ) : (
-          <DnsInstructions hostname={domain.hostname} records={records} sslAuto={sslAuto} />
+          <DnsInstructions t={t} hostname={domain.hostname} records={records} sslAuto={sslAuto} />
         )}
       </div>
     </Card>
@@ -268,10 +241,12 @@ function DomainCard({ slug, domain, sslAuto }: { slug: string; domain: DomainRow
 }
 
 function DnsInstructions({
+  t,
   hostname,
   records,
   sslAuto,
 }: {
+  t: Translator
   hostname: string
   records: DnsRecord[]
   sslAuto: boolean
@@ -279,117 +254,106 @@ function DnsInstructions({
   const pair = domainPairNote(hostname)
   const target = records[1]!.value
   return (
-    <CardBody className="space-y-6">
+    <div className="space-y-6">
       <div className="space-y-1">
-        <h3 className="text-[15px] font-semibold tracking-tight">Set up DNS</h3>
-        <p className="text-sm text-muted">Three steps, about five minutes.</p>
+        <h3 className="text-[15px] font-semibold tracking-tight">{t('settings.domains.setup')}</h3>
+        <p className="crm-muted text-sm">{t('settings.domains.setupSub')}</p>
       </div>
       <ol className="space-y-6">
-        <Step n={1} title={`Open the DNS settings for ${pair.apex}`}>
-          Sign in where you bought the domain (your registrar) or wherever its DNS is managed, and look for
-          “DNS”, “Zone editor” or “Manage records”.
+        <Step n={1} title={t('settings.domains.step1', { apex: pair.apex })}>
+          {t('settings.domains.step1Body')}
         </Step>
-        <Step n={2} title="Add these two records">
-          <RecordsTable records={records} />
-          <p className="mt-3">
-            Most providers add <span dir="ltr">{pair.apex}</span> for you, so enter the short name shown.
-            Leave TTL on its default. DNS on Cloudflare? Set the CNAME to “DNS only” (grey cloud).
-          </p>
+        <Step n={2} title={t('settings.domains.step2')}>
+          <RecordsTable t={t} records={records} />
+          <p className="mt-3">{t('settings.domains.step2Body', { apex: pair.apex })}</p>
         </Step>
-        <Step n={3} title="Press Check now">
-          DNS changes usually show up within minutes but can take up to 48 hours. Keep both records in place
-          after your domain connects.
+        <Step n={3} title={t('settings.domains.step3')}>
+          {t('settings.domains.step3Body')}
         </Step>
       </ol>
       {pair.kind !== 'other' && (
-        <Note title={pair.kind === 'www' ? `Also want ${pair.apex} to work?` : 'Connecting a bare domain'}>
-          {pair.kind === 'www' ? (
-            <>
-              Set up domain forwarding (a redirect) from <b dir="ltr">{pair.apex}</b> to{' '}
-              <b dir="ltr">https://{hostname}</b> at your registrar — most .ae registrars offer it for free.
-              If your DNS host supports CNAME flattening or ALIAS records (Cloudflare does), you can instead
-              point {pair.apex} at <span dir="ltr">{target}</span>.
-            </>
-          ) : (
-            <>
-              Many DNS hosts can’t put a CNAME on the bare domain. Use CNAME flattening or an ALIAS/ANAME
-              record pointing at <span dir="ltr">{target}</span> (Cloudflare supports it). If yours can’t,
-              remove this domain, connect <b dir="ltr">www.{pair.apex}</b> instead and forward {pair.apex} to
-              it.
-            </>
-          )}
-        </Note>
+        <InfoNote
+          title={
+            pair.kind === 'www'
+              ? t('settings.domains.wwwTitle', { apex: pair.apex })
+              : t('settings.domains.apexTitle')
+          }
+        >
+          {pair.kind === 'www'
+            ? t('settings.domains.wwwBody', { apex: pair.apex, host: hostname, target })
+            : t('settings.domains.apexBody', { apex: pair.apex, target })}
+        </InfoNote>
       )}
-      {!sslAuto && <SslNote />}
-    </CardBody>
+      {!sslAuto && <SslNote t={t} />}
+    </div>
   )
 }
 
-function SslNote() {
-  return (
-    <Note title="Automatic SSL is not switched on yet">
-      We can verify and connect your domain now; HTTPS certificates for custom domains start as soon as our
-      team enables them for your account.
-    </Note>
-  )
+function SslNote({ t }: { t: Translator }) {
+  return <InfoNote title={t('settings.domains.sslTitle')}>{t('settings.domains.sslBody')}</InfoNote>
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="space-y-2">
       <div className="flex items-center gap-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full border text-[13px] font-medium text-muted">
+        <span className="crm-muted grid size-8 shrink-0 place-items-center rounded-full border text-[13px] font-medium">
           {n}
         </span>
         <p className="text-sm font-medium">{title}</p>
       </div>
-      <div className="min-w-0 text-sm text-muted sm:ps-11">{children}</div>
+      <div className="crm-muted min-w-0 text-sm sm:ps-11">{children}</div>
     </li>
   )
 }
 
-function Note({ title, children }: { title: string; children: React.ReactNode }) {
+function InfoNote({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 rounded-lg bg-subtle/70 px-4 py-3.5 text-sm">
-      <Info className="mt-0.5 size-4 shrink-0 text-muted" strokeWidth={1.5} />
-      <div className="min-w-0 space-y-1">
-        <p className="font-medium">{title}</p>
-        <p className="text-muted">{children}</p>
-      </div>
-    </div>
+    <Note>
+      <p className="font-medium">{title}</p>
+      <p className="crm-muted">{children}</p>
+    </Note>
   )
 }
 
-const PURPOSE = { TXT: 'Proves you own the domain', CNAME: 'Points the domain at your site' } as const
-
-function RecordsTable({ records }: { records: DnsRecord[] }) {
+function RecordsTable({ t, records }: { t: Translator; records: DnsRecord[] }) {
   return (
     <ul className="divide-y overflow-hidden rounded-lg border text-fg">
       {records.map((r) => (
         <li key={r.type} className="space-y-3 px-4 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="font-mono">{r.type}</Badge>
-            <span className="text-[13px] text-muted">{PURPOSE[r.type]}</span>
+            <Pill className="font-mono">{r.type}</Pill>
+            <span className="crm-muted text-[13px]">{t(`settings.domains.purpose.${r.type}`)}</span>
           </div>
-          <RecordLine label="Name" value={r.host} full={r.name} />
-          <RecordLine label="Value" value={r.value} />
+          <RecordLine t={t} label={t('settings.domains.recordName')} value={r.host} full={r.name} />
+          <RecordLine t={t} label={t('settings.domains.recordValue')} value={r.value} />
         </li>
       ))}
     </ul>
   )
 }
 
-function RecordLine({ label, value, full }: { label: string; value: string; full?: string }) {
+function RecordLine({
+  t,
+  label,
+  value,
+  full,
+}: {
+  t: Translator
+  label: string
+  value: string
+  full?: string
+}) {
   return (
     <div className="grid gap-2 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-      <span className="text-xs font-medium uppercase tracking-[0.06em] text-muted sm:pt-2">{label}</span>
+      <span className="crm-muted text-xs font-medium uppercase tracking-[0.06em] sm:pt-2">{label}</span>
       <div className="min-w-0 space-y-1">
         <code dir="ltr" className="block break-all rounded-md bg-subtle px-2.5 py-1.5 font-mono text-[13px]">
           {value}
         </code>
         {full && full !== value && (
-          <p className="break-all text-xs text-muted">
-            Full name: <span dir="ltr">{full}</span>
+          <p className="crm-muted break-all text-xs">
+            {t('settings.domains.fullName')}: <span dir="ltr">{full}</span>
           </p>
         )}
       </div>
@@ -400,42 +364,55 @@ function RecordLine({ label, value, full }: { label: string; value: string; full
   )
 }
 
-const ORDER = {
-  requested: { label: 'Awaiting approval', tone: 'warning' },
-  purchasing: { label: 'Buying', tone: 'accent' },
-  purchased: { label: 'Bought', tone: 'success' },
-  failed: { label: 'Needs attention', tone: 'danger' },
-  rejected: { label: 'Declined', tone: 'neutral' },
-  cancelled: { label: 'Cancelled', tone: 'neutral' },
-} as const
+const ORDER_TONE = {
+  requested: 'warn',
+  purchasing: 'acc',
+  purchased: 'ok',
+  failed: 'bad',
+  rejected: 'neutral',
+  cancelled: 'neutral',
+} as const satisfies Record<string, Tone>
 
-function OrdersCard({ slug, orders }: { slug: string; orders: (typeof domainOrders.$inferSelect)[] }) {
+function OrdersCard({
+  t,
+  fmt,
+  slug,
+  orders,
+}: {
+  t: Translator
+  fmt: Fmt
+  slug: string
+  orders: (typeof domainOrders.$inferSelect)[]
+}) {
   return (
-    <Card>
-      <CardHeader title="Domain requests" description="Domains you asked us to buy." />
+    <Card title={t('settings.domains.orders.title')} sub={t('settings.domains.orders.sub')} flush>
       <ul className="divide-y divide-border">
         {orders.map((o) => (
-          <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
             <div className="min-w-0 space-y-0.5">
               <p dir="ltr" className="break-all font-medium">
                 {o.domain}
               </p>
-              <p className="text-[13px] text-muted">
-                AED {Number(o.priceAed).toLocaleString('en-AE')} for {o.years} year{o.years > 1 ? 's' : ''} ·
-                requested {formatDate(o.createdAt)}
+              <p className="crm-muted text-[13px]">
+                {t('settings.domains.orders.price', {
+                  price: fmt.aed(o.priceAed),
+                  count: o.years,
+                  date: fmt.date(o.createdAt),
+                })}
               </p>
-              {o.status === 'rejected' && o.note && <p className="text-[13px] text-muted">“{o.note}”</p>}
+              {o.status === 'rejected' && o.note && <p className="crm-muted text-[13px]">“{o.note}”</p>}
               {o.status === 'purchased' && (
-                <p className="text-[13px] text-muted">
-                  Registered — it connects automatically within an hour{o.error ? `. ${o.error}` : '.'}
+                <p className="crm-muted text-[13px]">
+                  {t('settings.domains.orders.registered')}
+                  {o.error ? ` ${o.error}` : ''}
                 </p>
               )}
               {o.status === 'failed' && (
-                <p className="text-[13px] text-danger">We couldn’t buy it yet — we’re on it.</p>
+                <p className="text-[13px] text-danger">{t('settings.domains.orders.failed')}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Badge tone={ORDER[o.status].tone}>{ORDER[o.status].label}</Badge>
+              <Pill tone={ORDER_TONE[o.status]}>{t(`settings.domains.orders.status.${o.status}`)}</Pill>
               {o.status === 'requested' && <CancelOrderButton slug={slug} id={o.id} domain={o.domain} />}
             </div>
           </li>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/page'
 import { Sheet } from '@/components/ui/sheet'
+import { useT } from '@/i18n/client'
 import { ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { ACCEPT, type MediaItem, sized } from './types'
@@ -26,12 +27,13 @@ export function MediaPicker({
   onOpenChange: (open: boolean) => void
   onPick: (item: MediaItem) => void
 }) {
+  const t = useT()
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Choose an image"
-      description="From your media library — or upload a new one."
+      title={t('ui.media.pickerTitle')}
+      description={t('ui.media.pickerSub')}
       className="md:max-w-3xl"
     >
       {open && <PickerBody slug={slug} onPick={onPick} />}
@@ -40,6 +42,7 @@ export function MediaPicker({
 }
 
 function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) => void }) {
+  const t = useT()
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<Source>(undefined)
@@ -55,8 +58,8 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
   })
 
   useEffect(() => {
-    const t = setTimeout(() => setQuery(q.trim()), 250)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setQuery(q.trim()), 250)
+    return () => clearTimeout(timer)
   }, [q])
 
   useEffect(() => {
@@ -83,7 +86,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
 
   return (
     <section
-      aria-label="Media library"
+      aria-label={t('ui.media.library')}
       className="space-y-4"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -101,23 +104,23 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search images"
-            aria-label="Search images"
+            placeholder={t('ui.media.search')}
+            aria-label={t('ui.media.search')}
             className="h-11 ps-9 sm:h-10"
           />
         </div>
         <div className="flex gap-2">
           <fieldset className="m-0 flex flex-1 rounded-lg border-0 bg-subtle p-0.5 sm:flex-none">
-            <legend className="sr-only">Image source</legend>
+            <legend className="sr-only">{t('ui.media.source')}</legend>
             {(
               [
-                [undefined, 'All'],
-                ['upload', 'Uploads'],
-                ['ai', 'AI'],
+                [undefined, t('ui.media.all')],
+                ['upload', t('ui.media.uploads')],
+                ['ai', t('ui.media.ai')],
               ] as const
             ).map(([key, label]) => (
               <button
-                key={label}
+                key={key ?? 'all'}
                 type="button"
                 aria-pressed={source === key}
                 onClick={() => setSource(key)}
@@ -138,7 +141,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
             className="min-h-11 sm:min-h-10"
             onClick={() => input.current?.click()}
           >
-            <ImageUp /> Upload
+            <ImageUp /> {t('ui.media.upload')}
           </Button>
           <input
             ref={input}
@@ -147,7 +150,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
             multiple
             tabIndex={-1}
             className="sr-only"
-            aria-label="Upload images to the library"
+            aria-label={t('ui.media.uploadToLibrary')}
             onChange={(e) => {
               if (e.target.files?.length) add(e.target.files)
               e.target.value = ''
@@ -172,7 +175,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
             <ImageIcon className="size-5" strokeWidth={1.5} />
           </div>
           <p className="text-sm text-muted">
-            {query || source ? 'No images match.' : 'No images yet — upload one or drop it here.'}
+            {query || source ? t('ui.media.noMatch') : t('ui.media.empty')}
           </p>
         </div>
       ) : (
@@ -192,7 +195,9 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
               <button
                 type="button"
                 onClick={() => onPick(item)}
-                aria-label={`Use ${item.alt.en || item.filename || 'image'}`}
+                aria-label={t('ui.media.useNamed', {
+                  name: item.alt.en || item.filename || t('ui.media.image'),
+                })}
                 className="group relative block aspect-square w-full overflow-hidden rounded-lg border bg-subtle focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25"
               >
                 {/* biome-ignore lint/performance/noImgElement: library thumbnails */}
@@ -209,7 +214,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
                   </span>
                 )}
                 <span className="absolute inset-0 grid place-items-center bg-accent/0 text-xs font-medium text-white opacity-0 transition-[opacity,background-color] group-hover:bg-black/30 group-hover:opacity-100 group-focus-visible:bg-black/30 group-focus-visible:opacity-100">
-                  Use image
+                  {t('ui.media.useImage')}
                 </span>
               </button>
             </motion.li>
@@ -219,7 +224,7 @@ function PickerBody({ slug, onPick }: { slug: string; onPick: (item: MediaItem) 
       {more && (
         <div className="flex justify-center">
           <Button type="button" variant="ghost" onClick={loadMore} pending={loading}>
-            Show more
+            {t('ui.media.showMore')}
           </Button>
         </div>
       )}

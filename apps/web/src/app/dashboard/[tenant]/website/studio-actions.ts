@@ -31,7 +31,7 @@ function domainFail(e: unknown): ActionResult {
 }
 
 const requestSchema = z.object({
-  body: z.string().trim().min(3, 'Tell us what you would like changed').max(2000),
+  body: z.string().trim().min(3, 'website.tellUs').max(2000, 'website.tooLong'),
   pageId: z.union([z.string().uuid(), z.literal('')]).optional(),
 })
 
@@ -58,14 +58,14 @@ export async function requestChangeAction(
   }
   await auditAs(ctx, 'site.change_requested', id)
   revalidate(slug)
-  return ok('Sent to the studio')
+  return ok('website.sent')
 }
 
 /** Only the spa approves its own site — a super-admin can't approve on its behalf. */
 export async function approveSiteAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'site.publish')
   if (error) return fail(error)
-  if (await isStudio(ctx)) return fail('Only the spa can approve its website.')
+  if (await isStudio(ctx)) return fail('website.onlySpa')
   try {
     await withTenant(ctx.tenant.id, (tx) => setStudioStatus(tx, ctx.tenant.id, 'approved', 'spa'))
   } catch (e) {
@@ -73,7 +73,7 @@ export async function approveSiteAction(slug: string): Promise<ActionResult> {
   }
   await auditAs(ctx, 'site.approved')
   revalidate(slug)
-  return ok('Approved — the studio will publish it')
+  return ok('website.approved')
 }
 
 export async function setReviewAction(slug: string, review: boolean): Promise<ActionResult> {
@@ -88,13 +88,13 @@ export async function setReviewAction(slug: string, review: boolean): Promise<Ac
   }
   await auditAs(ctx, review ? 'site.sent_for_review' : 'site.review_withdrawn')
   revalidate(slug)
-  return ok(review ? 'Sent to the spa for review' : 'Back in the studio')
+  return ok(review ? 'website.sentForReview' : 'website.backInStudio')
 }
 
 const resolveSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['done', 'declined']),
-  response: z.string().trim().max(2000).optional(),
+  response: z.string().trim().max(2000, 'website.tooLong').optional(),
 })
 
 export async function resolveChangeAction(
@@ -115,5 +115,5 @@ export async function resolveChangeAction(
   }
   await auditAs(ctx, 'site.change_resolved', parsed.data.id, { status: parsed.data.status })
   revalidate(slug)
-  return ok(parsed.data.status === 'done' ? 'Marked done' : 'Declined')
+  return ok(parsed.data.status === 'done' ? 'website.markedDone' : 'website.declined')
 }

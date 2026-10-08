@@ -1,21 +1,21 @@
+import { enumLabel } from '@spa/core/i18n'
 import { payrollLines, payrollRuns, salaryAdvances, staff, tenants, withTenant } from '@spa/db'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { Banknote, Download, Landmark, Plus, Wallet } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, ListRow, Note, Pill, Stack, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Input, Select } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { StatCard } from '@/components/ui/stat-card'
 import { type Column, DataTable } from '@/components/ui/table'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatAed, formatDate, todayDubai } from '@/lib/utils'
+import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
-import { MonthNav, monthRange } from '../accounts/month'
+import { MonthNav, monthLabel, monthRange } from '../accounts/month'
 import {
   finaliseRunAction,
   prepareRunAction,
@@ -24,7 +24,9 @@ import {
   saveStaffPayAction,
 } from './actions'
 
-export const metadata: Metadata = { title: 'Payroll' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('payroll.title') }
+}
 
 type Person = typeof staff.$inferSelect
 type Line = typeof payrollLines.$inferSelect & { person: Person | undefined }
@@ -38,7 +40,9 @@ export default async function PayrollPage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'staff.manage')) notFound()
+  const { t, fmt } = await getI18n()
   const range = monthRange((await searchParams).month)
+  const day = (d: string | Date) => fmt.date(typeof d === 'string' && d.length === 10 ? `${d}T12:00:00Z` : d)
   const slug = ctx.tenant.slug
   const data = await withTenant(ctx.tenant.id, async (tx) => {
     const [run] = await tx
@@ -74,22 +78,22 @@ export default async function PayrollPage({
 
   const payDetails = (p: Person) => (
     <FormSheet
-      title={`Pay details · ${p.displayName}`}
-      description="Used for the WPS salary file. Staff without an IBAN are left out (pay them in cash)."
+      title={t('payroll.pay.title', { name: p.displayName })}
+      description={t('payroll.pay.description')}
       action={saveStaffPayAction.bind(null, slug, p.id)}
       trigger={
         <Button variant="ghost" size="sm">
-          {p.payroll.iban ? 'Pay details' : 'Add IBAN'}
+          {p.payroll.iban ? t('payroll.pay.details') : t('payroll.pay.addIban')}
         </Button>
       }
     >
-      <Field label="MOHRE person code" name="personId" hint="14 digits, from the labour card or work permit.">
+      <Field label={t('payroll.pay.personId')} name="personId" hint={t('payroll.pay.personIdHint')}>
         <Input id="personId" name="personId" inputMode="numeric" defaultValue={p.payroll.personId} />
       </Field>
-      <Field label="Labour card number" name="labourCardNo">
+      <Field label={t('payroll.pay.labourCard')} name="labourCardNo">
         <Input id="labourCardNo" name="labourCardNo" defaultValue={p.payroll.labourCardNo} />
       </Field>
-      <Field label="IBAN" name="iban">
+      <Field label={t('payroll.pay.iban')} name="iban">
         <Input
           id="iban"
           name="iban"
@@ -98,7 +102,7 @@ export default async function PayrollPage({
         />
       </Field>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Bank routing code" name="routingCode">
+        <Field label={t('payroll.pay.routing')} name="routingCode">
           <Input
             id="routingCode"
             name="routingCode"
@@ -106,7 +110,7 @@ export default async function PayrollPage({
             defaultValue={p.payroll.routingCode}
           />
         </Field>
-        <Field label="Bank / exchange house" name="bank">
+        <Field label={t('payroll.pay.bank')} name="bank">
           <Input id="bank" name="bank" defaultValue={p.payroll.bank} />
         </Field>
       </div>
@@ -116,44 +120,51 @@ export default async function PayrollPage({
   const columns: Column<Line>[] = [
     {
       key: 'who',
-      header: 'Team member',
+      header: t('payroll.col.member'),
       primary: true,
       cell: (l) => (
         <span className="flex flex-col">
-          <span className="font-medium">{l.person?.displayName ?? 'Former staff'}</span>
-          {!l.person?.payroll.iban && <span className="text-xs text-muted">Cash — no IBAN</span>}
+          <span className="font-medium">{l.person?.displayName ?? t('payroll.col.formerStaff')}</span>
+          {!l.person?.payroll.iban && (
+            <span className="crm-muted text-xs">{t('payroll.col.cashNoIban')}</span>
+          )}
         </span>
       ),
     },
     {
       key: 'base',
-      header: 'Salary',
-      className: 'text-right tabular-nums',
-      cell: (l) => formatAed(l.baseAed),
+      header: t('payroll.col.salary'),
+      className: 'text-end tabular-nums',
+      cell: (l) => fmt.aed(l.baseAed),
     },
     {
       key: 'comm',
-      header: 'Commission',
-      className: 'text-right tabular-nums',
-      cell: (l) => formatAed(l.commissionAed),
+      header: t('payroll.col.commission'),
+      className: 'text-end tabular-nums',
+      cell: (l) => fmt.aed(l.commissionAed),
     },
-    { key: 'tips', header: 'Tips', className: 'text-right tabular-nums', cell: (l) => formatAed(l.tipsAed) },
+    {
+      key: 'tips',
+      header: t('payroll.col.tips'),
+      className: 'text-end tabular-nums',
+      cell: (l) => fmt.aed(l.tipsAed),
+    },
     {
       key: 'adv',
-      header: 'Advances',
-      className: 'text-right tabular-nums',
-      cell: (l) => (Number(l.advancesAed) ? `− ${formatAed(l.advancesAed)}` : '—'),
+      header: t('payroll.col.advances'),
+      className: 'text-end tabular-nums',
+      cell: (l) => (Number(l.advancesAed) ? `− ${fmt.aed(l.advancesAed)}` : '—'),
     },
     {
       key: 'net',
-      header: 'Net pay',
-      className: 'text-right tabular-nums font-semibold',
-      cell: (l) => formatAed(l.netAed),
+      header: t('payroll.col.net'),
+      className: 'text-end tabular-nums font-semibold',
+      cell: (l) => fmt.aed(l.netAed),
     },
     {
       key: 'pay',
       header: '',
-      className: 'text-right',
+      className: 'text-end',
       cell: (l) => (l.person ? payDetails(l.person) : null),
     },
   ]
@@ -161,26 +172,26 @@ export default async function PayrollPage({
   return (
     <>
       <PageHeader
-        title="Payroll"
-        description="Salaries, commissions, tips and advances in one monthly run — with the WPS salary file for your bank."
+        title={t('payroll.title')}
+        description={t('payroll.description')}
         actions={
           <>
             <MonthNav base={base} range={range} />
             <FormSheet
-              title="Record a salary advance"
-              description="Advances are deducted automatically in the next payroll."
+              title={t('payroll.advance.title')}
+              description={t('payroll.advance.description')}
               action={recordAdvanceAction.bind(null, slug)}
-              submitLabel="Record advance"
+              submitLabel={t('payroll.advance.submit')}
               trigger={
                 <Button variant="secondary">
-                  <Banknote /> Advance
+                  <Banknote /> {t('payroll.advance.trigger')}
                 </Button>
               }
             >
-              <Field label="Team member" name="staffId">
+              <Field label={t('payroll.advance.member')} name="staffId">
                 <Select id="staffId" name="staffId" defaultValue="">
                   <option value="" disabled>
-                    Choose…
+                    {t('payroll.advance.choose')}
                   </option>
                   {data.people.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -190,20 +201,20 @@ export default async function PayrollPage({
                 </Select>
               </Field>
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="Amount (AED)" name="amountAed">
+                <Field label={t('payroll.advance.amount')} name="amountAed">
                   <Input id="amountAed" name="amountAed" inputMode="decimal" />
                 </Field>
-                <Field label="Date" name="date">
+                <Field label={t('payroll.advance.date')} name="date">
                   <Input id="date" name="date" type="date" defaultValue={todayDubai()} />
                 </Field>
               </div>
-              <Field label="Paid from" name="paidVia">
+              <Field label={t('payroll.advance.paidFrom')} name="paidVia">
                 <Select id="paidVia" name="paidVia" defaultValue="cash">
-                  <option value="cash">Cash drawer</option>
-                  <option value="bank">Bank</option>
+                  <option value="cash">{t('payroll.advance.cashDrawer')}</option>
+                  <option value="bank">{t('payroll.advance.bank')}</option>
                 </Select>
               </Field>
-              <Field label="Note" name="note">
+              <Field label={t('payroll.advance.note')} name="note">
                 <Input id="note" name="note" />
               </Field>
             </FormSheet>
@@ -211,178 +222,167 @@ export default async function PayrollPage({
         }
       />
       <PageBody>
-        {data.run && (
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-            <StatCard label="Salaries" value={total('baseAed')} format="aed" />
-            <StatCard label="Commission" value={total('commissionAed')} format="aed" />
-            <StatCard label="Tips" value={total('tipsAed')} format="aed" />
-            <StatCard
-              label="Net to pay"
-              value={total('netAed')}
-              format="aed"
-              hint={lines.length === 1 ? '1 person' : `${lines.length} people`}
-            />
-          </div>
-        )}
+        <Stack>
+          {data.run && (
+            <Grid cols="g4">
+              <Stat label={t('payroll.stat.salaries')} value={fmt.aed(total('baseAed'))} />
+              <Stat label={t('payroll.stat.commission')} value={fmt.aed(total('commissionAed'))} />
+              <Stat label={t('payroll.stat.tips')} value={fmt.aed(total('tipsAed'))} />
+              <Stat
+                label={t('payroll.stat.net')}
+                value={fmt.aed(total('netAed'))}
+                change={{ text: t('payroll.stat.people', { count: lines.length }) }}
+              />
+            </Grid>
+          )}
 
-        <Card>
-          <CardHeader
-            title={`Payroll · ${range.label}`}
-            description={
+          <Card
+            flush={Boolean(data.run)}
+            footer={
+              data.run &&
+              !finalised &&
+              lines.length > 0 && (
+                <ActionForm
+                  action={finaliseRunAction.bind(null, slug, data.run.id)}
+                  className="flex w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+                >
+                  <p className="crm-muted max-w-md text-sm">
+                    {t('payroll.run.finaliseNote', { amount: fmt.aed(total('netAed')) })}
+                  </p>
+                  <div className="flex items-end gap-3">
+                    <Field label={t('payroll.run.paidOn')} name="paidOn">
+                      <Input id="paidOn" name="paidOn" type="date" defaultValue={todayDubai()} />
+                    </Field>
+                    <SubmitButton>{t('payroll.run.finalise')}</SubmitButton>
+                  </div>
+                </ActionForm>
+              )
+            }
+            title={t('payroll.run.title', { month: monthLabel(fmt, range.month) })}
+            sub={
               data.run
                 ? finalised
-                  ? `Finalised ${data.run.finalisedAt ? formatDate(data.run.finalisedAt) : ''} — posted to the accounts.`
-                  : 'Draft — re-prepare after new sales, then finalise once paid.'
-                : 'Prepare the run to calculate salary, unpaid commission, tips and advances for every active team member.'
+                  ? t('payroll.run.finalisedOn', {
+                      date: data.run.finalisedAt ? day(data.run.finalisedAt) : '',
+                    })
+                  : t('payroll.run.draft')
+                : t('payroll.run.none')
             }
-            action={
-              <div className="flex flex-wrap items-center gap-2">
+            actions={
+              <>
                 {data.run && (
-                  <Badge tone={finalised ? 'success' : 'warning'}>{finalised ? 'Finalised' : 'Draft'}</Badge>
+                  <Pill tone={finalised ? 'ok' : 'warn'}>
+                    {enumLabel(t, 'payrollStatus', data.run.status)}
+                  </Pill>
                 )}
                 {data.run && wpsReady.length > 0 && (
                   <Button variant="secondary" size="sm" asChild>
                     <a href={`${base}/${data.run.id}/sif`} download>
-                      <Download /> WPS file
+                      <Download /> {t('payroll.run.wpsFile')}
                     </a>
                   </Button>
                 )}
                 {!finalised && (
                   <ActionForm action={prepareRunAction.bind(null, slug, range.from, range.to)}>
                     <SubmitButton variant={data.run ? 'secondary' : 'primary'} size="sm">
-                      <Wallet /> {data.run ? 'Re-prepare' : 'Prepare payroll'}
+                      <Wallet /> {data.run ? t('payroll.run.reprepare') : t('payroll.run.prepare')}
                     </SubmitButton>
                   </ActionForm>
                 )}
-              </div>
+              </>
             }
-          />
-          {data.run ? (
-            <div className="pt-4 pb-2">
+          >
+            {data.run ? (
               <DataTable
                 columns={columns}
                 rows={lines}
                 rowKey={(l) => l.id}
-                empty={
-                  <p className="px-6 pb-6 text-sm text-muted">
-                    Nobody to pay — set salaries or commission rates under Staff.
-                  </p>
+                empty={<p className="crm-muted px-6 pb-6 text-sm">{t('payroll.run.nobody')}</p>}
+              />
+            ) : (
+              <EmptyState
+                icon={<Wallet className="size-5" strokeWidth={1.5} />}
+                title={t('payroll.run.notPrepared')}
+                description={
+                  data.people.length === 0 ? t('payroll.run.addTeamFirst') : t('payroll.run.nothingPosted')
                 }
               />
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Wallet className="size-5" strokeWidth={1.5} />}
-              title="Not prepared yet"
-              description={
-                data.people.length === 0
-                  ? 'Add your team under Staff first.'
-                  : 'Nothing is posted until you finalise.'
-              }
-            />
-          )}
-          {data.run && !finalised && lines.length > 0 && (
-            <CardBody className="border-t">
-              <ActionForm
-                action={finaliseRunAction.bind(null, slug, data.run.id)}
-                className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
-              >
-                <p className="max-w-md text-sm text-muted">
-                  Finalising marks commissions and advances as settled and records{' '}
-                  {formatAed(total('netAed'))} paid from the bank.
-                </p>
-                <div className="flex items-end gap-3">
-                  <Field label="Paid on" name="paidOn">
-                    <Input id="paidOn" name="paidOn" type="date" defaultValue={todayDubai()} />
-                  </Field>
-                  <SubmitButton>Finalise</SubmitButton>
-                </div>
-              </ActionForm>
-            </CardBody>
-          )}
-        </Card>
+            )}
+          </Card>
 
-        <div className="grid gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-7">
-            <CardHeader title="Open advances" description="Deducted in the next finalised payroll." />
-            <CardBody className="pt-3">
+          <Grid cols="col-2">
+            <Card title={t('payroll.advances.title')} sub={t('payroll.advances.sub')}>
               {data.advances.length === 0 ? (
-                <p className="text-sm text-muted">No open advances.</p>
+                <p className="crm-muted text-sm">{t('payroll.advances.none')}</p>
               ) : (
-                <div className="divide-y">
+                <div>
                   {data.advances.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                      <span className="min-w-0">
-                        <span className="font-medium">{byId.get(a.staffId)?.displayName ?? '—'}</span>
-                        <span className="text-muted"> · {formatDate(a.advanceDate)}</span>
-                        {a.note && <span className="block truncate text-xs text-muted">{a.note}</span>}
-                      </span>
-                      <span className="tabular-nums">{formatAed(a.amountAed)}</span>
-                    </div>
+                    <ListRow
+                      key={a.id}
+                      title={byId.get(a.staffId)?.displayName ?? '—'}
+                      body={[day(a.advanceDate), a.note].filter(Boolean).join(' · ')}
+                      end={<span className="crm-num font-semibold">{fmt.aed(a.amountAed)}</span>}
+                    />
                   ))}
                 </div>
               )}
-            </CardBody>
-          </Card>
-          <Card className="lg:col-span-5">
-            <CardHeader
-              title="WPS employer details"
-              description="Needed for the salary information file (SIF) your bank or exchange house uploads."
-            />
-            <CardBody className="space-y-4 pt-3">
+            </Card>
+            <Card title={t('payroll.wps.title')} sub={t('payroll.wps.sub')}>
               <div className="flex items-center gap-3 text-sm">
-                <Landmark className="size-4 text-muted" strokeWidth={1.5} />
+                <Landmark className="crm-muted size-4 shrink-0" strokeWidth={1.5} />
                 {wps?.employerId ? (
-                  <span>
-                    Establishment <span className="font-mono">{wps.employerId}</span> · routing{' '}
-                    <span className="font-mono">{wps.routingCode}</span>
+                  <span className="font-mono text-[13px]">
+                    {t('payroll.wps.establishment', { id: wps.employerId, routing: wps.routingCode ?? '' })}
                   </span>
                 ) : (
-                  <span className="text-muted">Not set up yet.</span>
+                  <span className="crm-muted">{t('payroll.wps.notSet')}</span>
                 )}
               </div>
-              <FormSheet
-                title="WPS employer details"
-                action={saveEmployerAction.bind(null, slug)}
-                trigger={
-                  <Button variant="secondary" size="sm">
-                    {wps?.employerId ? (
-                      'Edit'
-                    ) : (
-                      <>
-                        <Plus /> Set up WPS
-                      </>
-                    )}
-                  </Button>
-                }
-              >
-                <Field label="MOHRE establishment ID" name="employerId">
-                  <Input
-                    id="employerId"
-                    name="employerId"
-                    inputMode="numeric"
-                    defaultValue={wps?.employerId}
-                  />
-                </Field>
-                <Field
-                  label="Employer bank routing code"
-                  name="routingCode"
-                  hint="9 digits — ask your bank or exchange house."
+              <div className="mt-4">
+                <FormSheet
+                  title={t('payroll.wps.title')}
+                  action={saveEmployerAction.bind(null, slug)}
+                  trigger={
+                    <Button variant="secondary" size="sm">
+                      {wps?.employerId ? (
+                        t('common.edit')
+                      ) : (
+                        <>
+                          <Plus /> {t('payroll.wps.setUp')}
+                        </>
+                      )}
+                    </Button>
+                  }
                 >
-                  <Input
-                    id="routingCode"
+                  <Field label={t('payroll.wps.employerId')} name="employerId">
+                    <Input
+                      id="employerId"
+                      name="employerId"
+                      inputMode="numeric"
+                      defaultValue={wps?.employerId}
+                    />
+                  </Field>
+                  <Field
+                    label={t('payroll.wps.routing')}
                     name="routingCode"
-                    inputMode="numeric"
-                    defaultValue={wps?.routingCode}
-                  />
-                </Field>
-                <Field label="Bank / exchange house" name="bank">
-                  <Input id="bank" name="bank" defaultValue={wps?.bank} />
-                </Field>
-              </FormSheet>
-            </CardBody>
-          </Card>
-        </div>
+                    hint={t('payroll.wps.routingHint')}
+                  >
+                    <Input
+                      id="routingCode"
+                      name="routingCode"
+                      inputMode="numeric"
+                      defaultValue={wps?.routingCode}
+                    />
+                  </Field>
+                  <Field label={t('payroll.wps.bank')} name="bank">
+                    <Input id="bank" name="bank" defaultValue={wps?.bank} />
+                  </Field>
+                </FormSheet>
+              </div>
+            </Card>
+          </Grid>
+          <Note tone="acc">{t('payroll.note')}</Note>
+        </Stack>
       </PageBody>
     </>
   )

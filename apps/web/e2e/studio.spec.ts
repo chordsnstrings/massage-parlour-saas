@@ -30,7 +30,7 @@ test('website studio: the spa asks, the super-admin builds and sends for review,
     await page.getByRole('button', { name: 'Request a change' }).click()
     await page.getByLabel('What should change?').fill(REQUEST)
     await page.getByRole('button', { name: 'Send to studio' }).click()
-    await expect(page.getByRole('cell', { name: new RegExp(REQUEST) })).toBeVisible()
+    await expect(page.getByText(REQUEST)).toBeVisible()
   })
 
   const studio = await (await browser.newContext()).newPage()

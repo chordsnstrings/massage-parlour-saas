@@ -2,12 +2,15 @@ import { CalendarOff } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { CalendarView } from '@/components/calendar/calendar-view'
-import { Card } from '@/components/ui/card'
+import { Card } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
 import { loadCalendar } from './data'
 
-export const metadata: Metadata = { title: 'Calendar' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('calendar.title') }
+}
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 
@@ -28,15 +31,16 @@ export default async function CalendarPage({
     cancelled: one(sp.cancelled),
   })
   if (!data) {
+    const t = await getT()
     return (
       <>
-        <PageHeader title="Calendar" />
+        <PageHeader title={t('calendar.title')} />
         <PageBody>
           <Card>
             <EmptyState
               icon={<CalendarOff className="size-5" />}
-              title="No branch to show"
-              description="You haven’t been given access to a branch yet. Ask the owner to add you to one."
+              title={t('calendar.noBranchTitle')}
+              description={t('calendar.noBranchText')}
             />
           </Card>
         </PageBody>

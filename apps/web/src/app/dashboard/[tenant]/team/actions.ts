@@ -11,8 +11,8 @@ import { canonicalUrls } from '@/server/origin'
 import { hashToken, newToken } from '@/server/token'
 
 const inviteSchema = z.object({
-  email: z.email('Enter a valid email').transform((e) => e.toLowerCase()),
-  roleId: z.uuid('Choose a role'),
+  email: z.email('validation.email').transform((e) => e.toLowerCase()),
+  roleId: z.uuid('team.validation.role'),
 })
 
 export async function inviteAction(
@@ -34,15 +34,15 @@ export async function inviteAction(
     ctx.tenant.id,
     async (tx): Promise<{ error: string } | { error: null; roleName: string }> => {
       const [role] = await tx.select().from(roles).where(eq(roles.id, roleId))
-      if (!role) return { error: 'Choose a role.' }
+      if (!role) return { error: 'team.result.chooseRole' }
       if (role.key === 'owner' && ctx.member?.roleKey !== 'owner' && !ctx.impersonating)
-        return { error: 'Only owners can invite owners.' }
+        return { error: 'team.result.ownersInviteOwners' }
       if (existingUser) {
         const [m] = await tx
           .select({ id: members.id })
           .from(members)
           .where(eq(members.userId, existingUser.id))
-        if (m) return { error: 'This person is already on your team.' }
+        if (m) return { error: 'team.result.alreadyOnTeam' }
       }
       await tx
         .update(invitations)
@@ -62,6 +62,7 @@ export async function inviteAction(
     },
   )
   if (result.error !== null) return fail(result.error, { email: result.error })
+  // Staff email stays English: the invitee's language isn't known until they join.
   const link = canonicalUrls().app(`/invite/${token}`)
   await sendStaffEmail({
     to: email,
@@ -75,7 +76,7 @@ export async function inviteAction(
     data: { email, role: result.roleName },
   })
   revalidatePath(`/dashboard/${slug}/team`)
-  return ok('Invitation created', { link, email, tenantName: ctx.tenant.name })
+  return ok('team.result.invited', { link, email, tenantName: ctx.tenant.name })
 }
 
 export async function revokeInviteAction(slug: string, inviteId: string): Promise<ActionResult> {
@@ -91,7 +92,7 @@ export async function revokeInviteAction(slug: string, inviteId: string): Promis
     entityId: inviteId,
   })
   revalidatePath(`/dashboard/${slug}/team`)
-  return ok('Invitation revoked')
+  return ok('team.result.revoked')
 }
 
 const memberSchema = z.object({
@@ -117,18 +118,18 @@ export async function updateMemberAction(
       .innerJoin(roles, eq(members.roleId, roles.id))
       .where(eq(members.id, memberId))
     const [role] = await tx.select().from(roles).where(eq(roles.id, roleId))
-    if (!target || !role) return 'Member or role not found.'
+    if (!target || !role) return 'team.result.notFound'
     const callerIsOwner = ctx.member?.roleKey === 'owner' || ctx.impersonating
     if ((target.roleKey === 'owner' || role.key === 'owner') && !callerIsOwner)
-      return 'Only owners can change owners.'
-    if (target.userId === ctx.user.id && status === 'disabled') return "You can't disable yourself."
+      return 'team.result.ownersChangeOwners'
+    if (target.userId === ctx.user.id && status === 'disabled') return 'team.result.cantDisableSelf'
     if (target.roleKey === 'owner' && (role.key !== 'owner' || status === 'disabled')) {
       const owners = await tx
         .select({ id: members.id })
         .from(members)
         .innerJoin(roles, eq(members.roleId, roles.id))
         .where(and(eq(roles.key, 'owner'), eq(members.status, 'active')))
-      if (owners.length <= 1) return 'Your spa needs at least one active owner.'
+      if (owners.length <= 1) return 'team.result.needOwner'
     }
     await tx.update(members).set({ roleId, status }).where(eq(members.id, memberId))
     return null
@@ -142,5 +143,5 @@ export async function updateMemberAction(
     data: { roleId, status },
   })
   revalidatePath(`/dashboard/${slug}/team`)
-  return ok('Member updated')
+  return ok('team.result.memberUpdated')
 }

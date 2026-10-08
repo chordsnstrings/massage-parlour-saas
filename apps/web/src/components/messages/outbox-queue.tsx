@@ -6,45 +6,30 @@ import {
   ExternalLink,
   Inbox,
   Keyboard,
-  Send,
+  MessageCircle,
   ShieldCheck,
   SkipForward,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { markMessageAction } from '@/app/dashboard/[tenant]/messages/actions'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, Pill, Seg, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { NumberTicker } from '@/components/ui/motion'
 import { EmptyState, PageBody } from '@/components/ui/page'
 import { toast } from '@/components/ui/toast'
-import { duration, ease, spring } from '@/lib/motion'
-import { cn, formatDateTime, initials } from '@/lib/utils'
+import { resultText, useI18n } from '@/i18n/client'
+import { duration, ease } from '@/lib/motion'
+import { cn } from '@/lib/utils'
 import { KIND_TONE, type OutboxRow, rowLabel, WA_MODE_KEY, WA_MODES, type WaMode } from './shared'
 
 type Tab = 'due' | 'scheduled' | 'sent'
 type Counts = { due: number; scheduled: number; sentToday: number; sentWeek: number }
 
-const TAB_LABEL: Record<Tab, string> = { due: 'Due now', scheduled: 'Scheduled', sent: 'Sent' }
-
-const EMPTY: Record<Tab, { title: string; description: string; icon: React.ReactNode }> = {
-  due: {
-    title: 'All caught up',
-    description: 'Nothing is waiting to be sent. Confirmations and reminders land here when they’re due.',
-    icon: <CheckCheck className="size-5" strokeWidth={1.5} />,
-  },
-  scheduled: {
-    title: 'Nothing scheduled',
-    description: 'Reminders for upcoming bookings wait here until it’s time to send them.',
-    icon: <Clock className="size-5" strokeWidth={1.5} />,
-  },
-  sent: {
-    title: 'No messages sent this week',
-    description: 'Everything you mark as sent shows up here for seven days.',
-    icon: <Inbox className="size-5" strokeWidth={1.5} />,
-  },
+const EMPTY_ICON: Record<Tab, React.ReactNode> = {
+  due: <CheckCheck className="size-5" strokeWidth={1.5} />,
+  scheduled: <Clock className="size-5" strokeWidth={1.5} />,
+  sent: <Inbox className="size-5" strokeWidth={1.5} />,
 }
 
 /** Reads the per-device send mode; phones default to the wa.me link. */
@@ -79,13 +64,17 @@ export function OutboxQueue({
   base,
   rows,
   counts,
+  aside,
 }: {
   slug: string
   tab: Tab
   base: string
   rows: OutboxRow[]
   counts: Counts
+  /** Server-rendered side cards (campaigns, AI receptionist). */
+  aside?: React.ReactNode
 }) {
+  const { t, fmt } = useI18n()
   const [mode, setMode] = useSendMode()
   // Optimistic state: rows handled here disappear at once; the server refresh then catches up.
   const [handled, setHandled] = useState<Map<string, 'sent' | 'skipped'>>(new Map())
@@ -133,11 +122,11 @@ export function OutboxQueue({
         setOpened((s) => new Set(s).add(row.id))
         startTransition(async () => {
           const res = await markMessageAction(slug, { id: row.id, status: 'opened' })
-          if (res && !res.ok) toast.error(res.error)
+          if (res && !res.ok) toast.error(resultText(t, res) ?? t('errors.generic'))
         })
       }
     },
-    [mode, opened, slug],
+    [mode, opened, slug, t],
   )
 
   const finish = useCallback(
@@ -149,9 +138,9 @@ export function OutboxQueue({
       startTransition(async () => {
         const res = await markMessageAction(slug, { id: row.id, status })
         if (res?.ok) {
-          if (res.message) toast.success(`${res.message} · ${row.clientName}`)
+          if (res.message) toast.success(`${resultText(t, res)} · ${row.clientName}`)
         } else {
-          toast.error(res?.error ?? 'Something went wrong')
+          toast.error((res && resultText(t, res)) || t('errors.generic'))
           setHandled((m) => {
             const copy = new Map(m)
             copy.delete(row.id)
@@ -160,7 +149,7 @@ export function OutboxQueue({
         }
       })
     },
-    [visible, selectedId, slug],
+    [visible, selectedId, slug, t],
   )
 
   useEffect(() => {
@@ -182,52 +171,83 @@ export function OutboxQueue({
     return () => window.removeEventListener('keydown', onKey)
   }, [readOnly, select, selectedIndex, selected, open, finish])
 
+  const tabCount = { due: live.due, scheduled: live.scheduled, sent: live.sentWeek }
+  const tabLabel = {
+    due: t('messages.tabs.due'),
+    scheduled: t('messages.tabs.scheduled'),
+    sent: t('messages.tabs.sent'),
+  }
+  const empty = {
+    due: [t('messages.empty.dueTitle'), t('messages.empty.dueBody')],
+    scheduled: [t('messages.empty.scheduledTitle'), t('messages.empty.scheduledBody')],
+    sent: [t('messages.empty.sentTitle'), t('messages.empty.sentBody')],
+  }[tab] as [string, string]
+  const keys: [string[], string][] = [
+    [['J', 'K'], t('messages.keyboard.nav')],
+    [['Enter'], t('messages.keyboard.open')],
+    [['S'], t('messages.keyboard.sent')],
+    [['X'], t('messages.keyboard.skip')],
+  ]
+
   return (
     <PageBody>
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <Counter label="Due now" value={live.due} highlight={live.due > 0} />
-        <Counter label="Scheduled" value={live.scheduled} />
-        <Counter label="Sent today" value={live.sentToday} />
-      </div>
+      <Grid cols="g3">
+        <Stat
+          label={t('messages.stats.due')}
+          value={
+            <span className={cn(live.due > 0 && 'text-[var(--crm-accent)]')}>
+              <NumberTicker value={live.due} />
+            </span>
+          }
+        />
+        <Stat label={t('messages.stats.scheduled')} value={<NumberTicker value={live.scheduled} />} />
+        <Stat label={t('messages.stats.sentToday')} value={<NumberTicker value={live.sentToday} />} />
+      </Grid>
 
-      <div className="flex flex-col-reverse gap-2 border-b sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <nav className="-mb-px flex gap-6 overflow-x-auto text-sm" aria-label="Messages">
-          {(['due', 'scheduled', 'sent'] as const).map((t) => {
-            const n = t === 'due' ? live.due : t === 'scheduled' ? live.scheduled : live.sentWeek
-            return (
-              <Link
-                key={t}
-                href={t === 'due' ? base : `${base}?tab=${t}`}
-                aria-current={tab === t ? 'page' : undefined}
-                className={cn(
-                  'relative flex h-11 shrink-0 items-center gap-2 transition-colors',
-                  tab === t ? 'font-medium text-fg' : 'text-muted hover:text-fg',
-                )}
-              >
-                {TAB_LABEL[t]}
-                <span className="tabular rounded-full bg-subtle px-2 py-0.5 text-xs text-muted">{n}</span>
-                {tab === t && (
-                  <motion.span
-                    layoutId="messages-tab"
-                    transition={spring}
-                    className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-fg"
-                  />
-                )}
-              </Link>
-            )
-          })}
-        </nav>
-        {!readOnly && <ModePicker mode={mode} onChange={setMode} />}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-        <div className="min-w-0 lg:col-span-8">
+      <Grid cols="col-2">
+        <Card
+          className="min-w-0"
+          title={t('messages.queue.title')}
+          sub={
+            tab === 'due'
+              ? t('messages.queue.sub')
+              : tab === 'scheduled'
+                ? t('messages.queue.scheduledSub')
+                : t('messages.queue.sentSub')
+          }
+          actions={
+            tab === 'due' && live.due > 0 ? (
+              <Pill tone="bad">{t('messages.queue.ready', { count: fmt.number(live.due) })}</Pill>
+            ) : undefined
+          }
+        >
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <Seg
+              label={t('messages.tabs.label')}
+              value={tab}
+              items={(['due', 'scheduled', 'sent'] as const).map((k) => ({
+                value: k,
+                href: k === 'due' ? base : `${base}?tab=${k}`,
+                label: (
+                  <>
+                    {tabLabel[k]} <span className="crm-num opacity-70">{fmt.number(tabCount[k])}</span>
+                  </>
+                ),
+              }))}
+            />
+            {!readOnly && (
+              <Seg
+                label={t('messages.mode.label')}
+                value={mode}
+                onChange={(v) => setMode(v as WaMode)}
+                items={WA_MODES.map((m) => ({ value: m, label: t(`messages.mode.${m}`) }))}
+              />
+            )}
+          </div>
           {visible.length === 0 ? (
-            <Card>
-              <EmptyState {...EMPTY[tab]} />
-            </Card>
+            <EmptyState icon={EMPTY_ICON[tab]} title={empty[0]} description={empty[1]} />
           ) : (
-            <ol ref={listRef} className="space-y-3" aria-label={TAB_LABEL[tab]}>
+            <ol ref={listRef} aria-label={tabLabel[tab]}>
               <AnimatePresence initial={false}>
                 {visible.map((row, i) => (
                   <motion.li
@@ -258,106 +278,61 @@ export function OutboxQueue({
               </AnimatePresence>
             </ol>
           )}
-        </div>
+        </Card>
 
-        <aside className="space-y-4 lg:col-span-4">
-          <Card className="p-5 sm:p-6">
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-accent">
-                <ShieldCheck className="size-4" strokeWidth={1.75} />
+        <div className="crm-stack min-w-0">
+          <Card
+            title={
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck className="size-4 text-[var(--crm-accent)]" strokeWidth={1.75} />
+                {t('messages.responsible.title')}
               </span>
-              <h2 className="text-[15px] font-semibold tracking-tight">Send responsibly</h2>
-            </div>
-            <ul className="mt-4 space-y-2.5 text-sm text-muted">
-              <li>Only message clients who have booked or visited.</li>
+            }
+          >
+            <ul className="crm-muted space-y-2 text-[length:var(--crm-fs-note)]">
+              <li>{t('messages.responsible.onlyBooked')}</li>
+              <li>{t('messages.responsible.noBots')}</li>
               <li>
-                Never use auto-senders, bulk tools or WhatsApp Web bots — WhatsApp bans numbers that do. A
-                person presses send, every time.
-              </li>
-              <li>
-                Keep a human pace. Sent today:{' '}
-                <span className="tabular font-medium text-fg">{live.sentToday}</span>
+                {t('messages.responsible.pace')}{' '}
+                <span className="crm-num font-semibold text-[var(--crm-text)]">
+                  {fmt.number(live.sentToday)}
+                </span>
               </li>
             </ul>
           </Card>
+          {aside}
           {!readOnly && (
-            <Card className="hidden p-5 sm:p-6 lg:block">
-              <div className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-                <Keyboard className="size-4 text-muted" strokeWidth={1.5} /> Keyboard
-              </div>
-              <dl className="mt-4 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
-                {[
-                  [['J', 'K'], 'Next / previous'],
-                  [['Enter'], 'Open in WhatsApp'],
-                  [['S'], 'Mark sent'],
-                  [['X'], 'Skip'],
-                ].map(([keys, label]) => (
-                  <div key={String(label)} className="contents">
+            <Card
+              className="hidden lg:block"
+              title={
+                <span className="inline-flex items-center gap-2">
+                  <Keyboard className="size-4 text-[var(--crm-muted)]" strokeWidth={1.5} />
+                  {t('messages.keyboard.title')}
+                </span>
+              }
+            >
+              <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-[length:var(--crm-fs-note)]">
+                {keys.map(([ks, label]) => (
+                  <div key={label} className="contents">
                     <dt className="flex gap-1">
-                      {(keys as string[]).map((k) => (
+                      {ks.map((k) => (
                         <kbd
                           key={k}
-                          className="min-w-6 rounded-md border bg-subtle px-1.5 py-0.5 text-center font-sans text-xs text-fg"
+                          className="min-w-6 rounded-md border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-1.5 py-0.5 text-center font-sans text-xs"
                         >
                           {k}
                         </kbd>
                       ))}
                     </dt>
-                    <dd className="text-muted">{label as string}</dd>
+                    <dd className="crm-muted">{label}</dd>
                   </div>
                 ))}
               </dl>
             </Card>
           )}
-        </aside>
-      </div>
+        </div>
+      </Grid>
     </PageBody>
-  )
-}
-
-function Counter({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <Card className="px-3.5 py-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-soft sm:p-6">
-      <p className="text-xs font-medium text-muted sm:uppercase sm:tracking-[0.06em]">{label}</p>
-      <p
-        className={cn(
-          'mt-2 text-xl font-semibold tracking-tight sm:mt-3 sm:text-[26px]',
-          highlight && 'text-accent',
-        )}
-      >
-        <NumberTicker value={value} />
-      </p>
-    </Card>
-  )
-}
-
-function ModePicker({ mode, onChange }: { mode: WaMode; onChange: (m: WaMode) => void }) {
-  return (
-    <fieldset className="grid grid-cols-3 rounded-lg border bg-subtle/60 p-0.5 sm:mb-3 sm:inline-flex">
-      <legend className="sr-only">Send with</legend>
-      {WA_MODES.map((m) => (
-        <button
-          key={m.key}
-          type="button"
-          aria-pressed={mode === m.key}
-          title={m.hint}
-          onClick={() => onChange(m.key)}
-          className={cn(
-            'relative h-10 whitespace-nowrap rounded-md px-2 text-[13px] transition-colors sm:h-9 sm:px-3',
-            mode === m.key ? 'text-fg' : 'text-muted hover:text-fg',
-          )}
-        >
-          {mode === m.key && (
-            <motion.span
-              layoutId="wa-mode"
-              transition={spring}
-              className="absolute inset-0 rounded-md border bg-surface shadow-[0_1px_0_rgb(0_0_0/0.04)]"
-            />
-          )}
-          <span className="relative">{m.label}</span>
-        </button>
-      ))}
-    </fieldset>
   )
 }
 
@@ -382,55 +357,46 @@ function MessageCard({
   onSent: () => void
   onSkip: () => void
 }) {
+  const { t, fmt } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const long = row.text.length > 160 || row.text.split('\n').length > 3
+  const label = rowLabel(t, row)
+  const when = fmt.dateTime(readOnly ? (row.sentAt ?? row.dueAt) : row.dueAt)
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard selection is handled globally (J/K)
     <article
       onClick={onSelect}
-      aria-label={`${rowLabel(row)} for ${row.clientName}`}
+      aria-label={t('messages.card.aria', { kind: label, name: row.clientName })}
       aria-current={selected ? 'true' : undefined}
       className={cn(
-        'rounded-xl border bg-surface transition-[border-color,box-shadow,transform] duration-200',
-        selected ? 'border-accent/50 ring-4 ring-accent/10' : 'hover:-translate-y-0.5 hover:shadow-soft',
+        'crm-q-item transition-[border-color,box-shadow] duration-200',
+        selected && 'border-[var(--crm-accent)] ring-4 ring-[var(--crm-glow)]',
       )}
     >
-      <div className="flex items-start gap-3 px-4 pt-4 sm:gap-4 sm:px-6 sm:pt-5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
-          {initials(row.clientName)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 className="truncate text-[15px] font-medium">{row.clientName}</h3>
-            <Badge tone={row.campaign ? 'accent' : KIND_TONE[row.kind]}>{rowLabel(row)}</Badge>
-            {opened && !readOnly && <Badge tone="warning">Opened</Badge>}
-          </div>
-          <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] text-muted">
-            <span className="tabular">{row.phone}</span>
-            {!readOnly && <span className="sm:hidden">Due {formatDateTime(row.dueAt)}</span>}
-            {row.bookingAt && (
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays className="size-3.5" strokeWidth={1.5} /> {formatDateTime(row.bookingAt)}
-              </span>
-            )}
-          </p>
-        </div>
-        <p className="hidden shrink-0 text-end text-xs text-muted sm:block">
-          {readOnly ? 'Sent' : 'Due'}
-          <span className="tabular block text-[13px] text-fg">
-            {formatDateTime(readOnly ? (row.sentAt ?? row.dueAt) : row.dueAt)}
+      <span className="crm-qi" aria-hidden>
+        <MessageCircle />
+      </span>
+      <div className="crm-qb">
+        <div className="crm-hd">
+          <b className="truncate">{row.clientName}</b>
+          <Pill tone={row.campaign ? 'acc' : KIND_TONE[row.kind]}>{label}</Pill>
+          {opened && !readOnly && <Pill tone="warn">{t('messages.card.opened')}</Pill>}
+          <span className="crm-muted ms-auto text-[length:var(--crm-fs-sub)]">
+            {readOnly ? t('messages.card.sentLabel') : t('messages.card.due')}{' '}
+            <span className="crm-num">{when}</span>
           </span>
-        </p>
-      </div>
-
-      <div className="px-4 pt-3 sm:ps-20 sm:pe-6">
-        <div
-          className={cn(
-            'whitespace-pre-wrap rounded-xl rounded-ss-sm bg-subtle px-4 py-3 text-sm leading-relaxed',
-            !expanded && long && 'line-clamp-3',
+        </div>
+        <p className="crm-muted mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[length:var(--crm-fs-sub)]">
+          <span className="crm-num" dir="ltr">
+            {row.phone}
+          </span>
+          {row.bookingAt && (
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="size-3.5" strokeWidth={1.5} /> {fmt.dateTime(row.bookingAt)}
+            </span>
           )}
-          dir="auto"
-        >
+        </p>
+        <div className={cn('crm-msg', !expanded && long && 'line-clamp-3')} dir="auto">
           {row.text}
         </div>
         {long && (
@@ -440,54 +406,58 @@ function MessageCard({
               e.stopPropagation()
               setExpanded((v) => !v)
             }}
-            className="mt-1.5 h-8 text-[13px] font-medium text-accent hover:underline"
+            className="mt-1 h-8 text-[length:var(--crm-fs-sub)] font-semibold text-[var(--crm-accent)] hover:underline"
           >
-            {expanded ? 'Show less' : 'Show full message'}
+            {expanded ? t('messages.card.showLess') : t('messages.card.showFull')}
           </button>
         )}
+        {readOnly ? (
+          <p className="crm-muted mt-2 text-[length:var(--crm-fs-sub)]">
+            <CheckCheck className="me-1.5 inline size-3.5" strokeWidth={1.5} />
+            {row.sentAt
+              ? row.sentBy
+                ? t('messages.card.sentBy', { time: fmt.dateTime(row.sentAt), name: row.sentBy })
+                : t('messages.card.sentAt', { time: fmt.dateTime(row.sentAt) })
+              : t('messages.card.sentLabel')}
+          </p>
+        ) : (
+          <div className="crm-qa">
+            <Button
+              size="sm"
+              variant={opened ? 'secondary' : 'primary'}
+              className="flex-1 sm:flex-none"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpen()
+              }}
+            >
+              <ExternalLink /> {opened ? t('messages.card.openAgain') : t('messages.card.open')}
+              <span className="sr-only"> ({t(`messages.mode.${mode}`)})</span>
+            </Button>
+            <Button
+              size="sm"
+              variant={opened ? 'primary' : 'secondary'}
+              className="flex-1 sm:flex-none"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSent()
+              }}
+            >
+              <CheckCheck /> {t('messages.card.markSent')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSkip()
+              }}
+            >
+              <SkipForward /> {t('messages.card.skip')}
+            </Button>
+          </div>
+        )}
       </div>
-
-      {readOnly ? (
-        <p className="px-4 pt-3 pb-4 text-[13px] text-muted sm:ps-20 sm:pe-6 sm:pb-5">
-          <Send className="me-1.5 inline size-3.5" strokeWidth={1.5} />
-          Sent {row.sentAt ? formatDateTime(row.sentAt) : ''}
-          {row.sentBy ? ` by ${row.sentBy}` : ''}
-        </p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-4 sm:ps-20 sm:pe-6 sm:pb-5">
-          <Button
-            variant={opened ? 'secondary' : 'primary'}
-            className="h-11 flex-1 sm:h-10 sm:flex-none"
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpen()
-            }}
-          >
-            <ExternalLink /> {opened ? 'Open again' : 'Open in WhatsApp'}
-            <span className="sr-only"> ({WA_MODES.find((m) => m.key === mode)?.label})</span>
-          </Button>
-          <Button
-            variant={opened ? 'primary' : 'secondary'}
-            className="h-11 flex-1 sm:h-10 sm:flex-none"
-            onClick={(e) => {
-              e.stopPropagation()
-              onSent()
-            }}
-          >
-            <CheckCheck /> Mark sent
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-11 sm:h-10"
-            onClick={(e) => {
-              e.stopPropagation()
-              onSkip()
-            }}
-          >
-            <SkipForward /> Skip
-          </Button>
-        </div>
-      )}
     </article>
   )
 }

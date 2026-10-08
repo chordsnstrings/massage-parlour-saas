@@ -22,7 +22,7 @@ const optText = (max: number) =>
 const bool = z.preprocess((v) => v === 'on' || v === 'true' || v === true, z.boolean())
 const color = z
   .string()
-  .regex(/^#[0-9a-fA-F]{6}$/, 'Pick a colour')
+  .regex(/^#[0-9a-fA-F]{6}$/, 'services.v.colour')
   .optional()
   .transform((v) => v ?? null)
 
@@ -59,7 +59,7 @@ const categorySchema = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  nameEn: z.string().trim().min(2, 'Enter a name').max(60),
+  nameEn: z.string().trim().min(2, 'services.v.name').max(60),
   nameAr: optText(60),
 })
 
@@ -90,21 +90,21 @@ export async function saveCategoryAction(
       .returning({ id: serviceCategories.id })
     return row?.id
   })
-  if (!id) return fail('Category not found.')
+  if (!id) return fail('services.category.notFound')
   await record(ctx, d.id ? 'category.updated' : 'category.created', 'service_category', id, name)
   refresh(slug)
-  return ok(d.id ? 'Category saved' : 'Category added')
+  return ok(d.id ? 'services.category.saved' : 'services.category.added')
 }
 
 export async function deleteCategoryAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, PERM)
   if (error) return fail(error)
-  if (!z.string().uuid().safeParse(id).success) return fail('Category not found.')
+  if (!z.string().uuid().safeParse(id).success) return fail('services.category.notFound')
   // Services in the category fall back to "Uncategorised" (FK on delete set null).
   await withTenant(ctx.tenant.id, (tx) => tx.delete(serviceCategories).where(eq(serviceCategories.id, id)))
   await record(ctx, 'category.deleted', 'service_category', id)
   refresh(slug)
-  return ok('Category removed')
+  return ok('services.category.removed')
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ const serviceSchema = z
       .uuid()
       .optional()
       .or(z.literal('').transform(() => undefined)),
-    nameEn: z.string().trim().min(2, 'Enter a name').max(80),
+    nameEn: z.string().trim().min(2, 'services.v.name').max(80),
     nameAr: optText(80),
     descriptionEn: optText(600),
     descriptionAr: optText(600),
@@ -131,11 +131,11 @@ const serviceSchema = z
       .string()
       .trim()
       .max(500)
-      .regex(IMAGE_URL_PATTERN, 'Choose an image from the library')
+      .regex(IMAGE_URL_PATTERN, 'services.v.image')
       .optional()
       .or(z.literal('').transform(() => undefined)),
-    bufferBeforeMin: z.coerce.number().int().min(0, 'Min 0').max(120, 'Max 120'),
-    bufferAfterMin: z.coerce.number().int().min(0, 'Min 0').max(120, 'Max 120'),
+    bufferBeforeMin: z.coerce.number().int().min(0, 'services.v.min0').max(120, 'services.v.max120'),
+    bufferAfterMin: z.coerce.number().int().min(0, 'services.v.min0').max(120, 'services.v.max120'),
     therapistsRequired: z.coerce.number().int().min(1).max(2),
     roomTypes: z.preprocess(asArray, z.array(z.enum(ROOM_TYPES))),
     onlineBookable: bool,
@@ -153,12 +153,12 @@ const serviceSchema = z
     }))
     variants.forEach((v, i) => {
       if (!Number.isInteger(v.durationMin) || v.durationMin < 10 || v.durationMin > 480)
-        zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'Duration 10–480 min' })
+        zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.duration' })
       else if (!Number.isFinite(v.priceAed) || v.priceAed < 0 || v.priceAed > 100_000)
-        zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'Enter a price in AED' })
+        zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.price' })
     })
     if (variants.length === 0)
-      zctx.addIssue({ code: 'custom', path: ['variants'], message: 'Add at least one duration' })
+      zctx.addIssue({ code: 'custom', path: ['variants'], message: 'services.v.noDurations' })
     return { ...d, variants }
   })
 
@@ -224,23 +224,23 @@ export async function saveServiceAction(
     }
     return serviceId
   })
-  if (!id) return fail('Service not found.')
+  if (!id) return fail('services.service.notFound')
   await record(ctx, d.id ? 'service.updated' : 'service.created', 'service', id, {
     ...values,
     variants: d.variants,
   })
   refresh(slug)
-  return ok(d.id ? 'Service saved' : 'Service added')
+  return ok(d.id ? 'services.service.saved' : 'services.service.added')
 }
 
 export async function deleteServiceAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, PERM)
   if (error) return fail(error)
-  if (!z.string().uuid().safeParse(id).success) return fail('Service not found.')
+  if (!z.string().uuid().safeParse(id).success) return fail('services.service.notFound')
   await withTenant(ctx.tenant.id, (tx) => tx.delete(services).where(eq(services.id, id)))
   await record(ctx, 'service.deleted', 'service', id)
   refresh(slug)
-  return ok('Service deleted')
+  return ok('services.service.deleted')
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +253,8 @@ const roomSchema = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  branchId: z.string().uuid('Pick a branch'),
-  name: z.string().trim().min(1, 'Enter a name').max(40),
+  branchId: z.string().uuid('services.v.branch'),
+  name: z.string().trim().min(1, 'services.v.name').max(40),
   type: z.enum(ROOM_TYPES),
   active: bool,
 })
@@ -286,20 +286,20 @@ export async function saveRoomAction(
       .returning({ id: rooms.id })
     return row!.id
   })
-  if (!id) return fail('Room or branch not found.')
+  if (!id) return fail('services.room.notFound')
   await record(ctx, roomId ? 'room.updated' : 'room.created', 'room', id, d)
   refresh(slug)
-  return ok(roomId ? 'Room saved' : 'Room added')
+  return ok(roomId ? 'services.room.saved' : 'services.room.added')
 }
 
 export async function deleteRoomAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, PERM)
   if (error) return fail(error)
-  if (!z.string().uuid().safeParse(id).success) return fail('Room not found.')
+  if (!z.string().uuid().safeParse(id).success) return fail('services.room.notFoundShort')
   await withTenant(ctx.tenant.id, (tx) => tx.delete(rooms).where(eq(rooms.id, id)))
   await record(ctx, 'room.deleted', 'room', id)
   refresh(slug)
-  return ok('Room deleted')
+  return ok('services.room.deleted')
 }
 
 // ---------------------------------------------------------------------------
@@ -470,8 +470,8 @@ export async function addSampleMenuAction(slug: string): Promise<ActionResult> {
     }
     return 'added' as const
   })
-  if (result === 'exists') return fail('You already have services — the sample menu is for empty spas.')
+  if (result === 'exists') return fail('services.sample.exists')
   await record(ctx, 'service.sample_menu_added', 'service')
   refresh(slug)
-  return ok('Sample menu added — edit prices to match yours')
+  return ok('services.sample.added')
 }

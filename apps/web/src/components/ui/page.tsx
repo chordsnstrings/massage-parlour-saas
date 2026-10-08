@@ -53,13 +53,15 @@ export function EmptyState({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-[var(--ui-empty-py,3.5rem)] text-center">
       {icon && (
         <div className="grid size-11 place-items-center rounded-full bg-subtle text-muted">{icon}</div>
       )}
       <div className="space-y-1">
-        <p className="text-[15px] font-medium">{title}</p>
-        {description && <p className="max-w-sm text-sm text-muted">{description}</p>}
+        <p className="text-[length:var(--ui-empty-title-fs,15px)] font-medium">{title}</p>
+        {description && (
+          <p className="max-w-sm text-[length:var(--ui-desc-fs,0.875rem)] text-muted">{description}</p>
+        )}
       </div>
       {action}
     </div>

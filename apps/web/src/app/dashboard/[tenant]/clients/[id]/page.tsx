@@ -1,4 +1,5 @@
 import { whatsappLink } from '@spa/core'
+import { enumLabel } from '@spa/core/i18n'
 import {
   bookingItems,
   bookings,
@@ -17,19 +18,20 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { z } from 'zod'
-import { formatPhone, STATUS_LABEL, STATUS_TONE } from '@/components/calendar/time'
-import { GENDER_LABEL, LANGUAGE_LABEL, maskClientPhone } from '@/components/clients/shared'
-import { StatStrip } from '@/components/clients/stat-strip'
-import { Badge } from '@/components/ui/badge'
+import { formatPhone } from '@/components/calendar/time'
+import { maskClientPhone } from '@/components/clients/shared'
+import { Avatar, Card, Grid, Note, Pill, Stack, Stat, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
-import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { EmptyState, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatAed, formatDate, formatDateTime, initials } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { BlocklistSheet, EditDetailsSheet, PreferencesSheet, TreatmentNoteForm } from './profile-client'
 
-export const metadata: Metadata = { title: 'Client' }
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT()
+  return { title: t('clients.profile.metaTitle') }
+}
 
 export default async function ClientPage({ params }: { params: Promise<{ tenant: string; id: string }> }) {
   const { tenant, id } = await params
@@ -40,6 +42,7 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
   const seePhone = can(ctx, 'clients.phone')
   const canManage = can(ctx, 'clients.manage')
   const canNote = can(ctx, 'calendar.view')
+  const { t, fmt } = await getI18n()
 
   const data = await withTenant(ctx.tenant.id, async (tx) => {
     const [client] = await tx.select().from(clients).where(eq(clients.id, id))
@@ -143,14 +146,34 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
   const latestIntake = intakes[0]
   const intakeStale = Boolean(template && latestIntake && latestIntake.version < template.version)
   const base = appPath(`/${slug}/clients/${client.id}`)
+  const langLabel =
+    client.language === 'en' || client.language === 'ar'
+      ? t(`clients.lang.${client.language}`)
+      : client.language
+  const pressure = prefs.pressure
+    ? (t.maybe(`clients.prefs.pressureOption.${prefs.pressure}`) ?? prefs.pressure)
+    : undefined
 
-  const prefRows: [string, string | undefined][] = [
-    ['Pressure', prefs.pressure],
-    ['Oils', prefs.oils],
-    ['Allergies', prefs.allergies],
-    ['Focus areas', prefs.focus],
-    ['Therapist gender', prefs.therapistGender ? GENDER_LABEL[prefs.therapistGender] : undefined],
-    ['Preferred therapist', prefs.preferredStaffId ? staffName.get(prefs.preferredStaffId) : undefined],
+  const prefRows: { key: string; label: string; value: string | undefined; highlight?: boolean }[] = [
+    { key: 'pressure', label: t('clients.prefs.pressure'), value: pressure },
+    { key: 'oils', label: t('clients.prefs.oils'), value: prefs.oils },
+    {
+      key: 'allergies',
+      label: t('clients.prefs.allergies'),
+      value: prefs.allergies,
+      highlight: Boolean(prefs.allergies),
+    },
+    { key: 'focus', label: t('clients.prefs.focus'), value: prefs.focus },
+    {
+      key: 'gender',
+      label: t('clients.prefs.therapistGender'),
+      value: prefs.therapistGender ? enumLabel(t, 'staffGender', prefs.therapistGender) : undefined,
+    },
+    {
+      key: 'staff',
+      label: t('clients.prefs.preferredTherapist'),
+      value: prefs.preferredStaffId ? staffName.get(prefs.preferredStaffId) : undefined,
+    },
   ]
 
   return (
@@ -161,25 +184,21 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
             href={appPath(`/${slug}/clients`)}
             className="inline-flex min-h-6 items-center gap-1 hover:text-fg"
           >
-            <ArrowLeft className="size-3.5 rtl:rotate-180" /> Clients
+            <ArrowLeft className="size-3.5 rtl:rotate-180" /> {t('clients.title')}
           </Link>
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span
-              className={`grid size-11 shrink-0 place-items-center rounded-full text-sm font-semibold ${client.blocklisted ? 'bg-danger-soft text-danger' : 'bg-accent-soft text-accent'}`}
-            >
-              {initials(client.name)}
-            </span>
+            <Avatar name={client.name} size="lg" />
             <span className="min-w-0 break-words">{client.name}</span>
-            {client.blocklisted && <Badge tone="danger">Blocklisted</Badge>}
+            {client.blocklisted && <Pill tone="bad">{t('clients.blocklisted')}</Pill>}
           </span>
         }
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {phoneLabel && <span className="tabular-nums">{phoneLabel}</span>}
-            <span>{LANGUAGE_LABEL[client.language] ?? client.language}</span>
-            <span>Client since {formatDate(client.createdAt)}</span>
+            <span>{langLabel}</span>
+            <span>{t('clients.profile.since', { date: fmt.date(client.createdAt) })}</span>
           </span>
         }
         actions={
@@ -187,14 +206,14 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
             {seePhone && phone && (
               <Button variant="secondary" asChild>
                 <a href={whatsappLink(phone, `Hi ${firstName}, `)} target="_blank" rel="noreferrer">
-                  <MessageCircle /> WhatsApp
+                  <MessageCircle /> {t('clients.profile.whatsapp')}
                 </a>
               </Button>
             )}
             {canManage && template && (
               <Button variant={latestIntake && !intakeStale ? 'secondary' : 'primary'} asChild>
                 <Link href={`${base}/intake`}>
-                  <FileSignature /> Sign intake
+                  <FileSignature /> {t('clients.profile.signIntake')}
                 </Link>
               </Button>
             )}
@@ -219,37 +238,35 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
           </>
         }
       />
-      <PageBody>
+      <Stack>
         {client.blocklisted && (
-          <div
-            role="status"
-            className="flex items-start gap-3 rounded-xl border border-danger/25 bg-danger-soft px-5 py-4 text-sm text-danger sm:px-6"
-          >
-            <ShieldAlert className="mt-0.5 size-4 shrink-0" />
-            <p>
-              <span className="font-medium">Blocklisted.</span> {client.blocklistReason}
-            </p>
+          <div role="status">
+            <Note tone="warn" icon={<ShieldAlert aria-hidden strokeWidth={1.8} />}>
+              <span className="font-semibold">{t('clients.profile.blocklistedBanner')}</span>{' '}
+              {client.blocklistReason}
+            </Note>
           </div>
         )}
-        <StatStrip
-          stats={[
-            { label: 'Visits', value: totals.visits },
-            { label: 'Spend', value: Number(totals.spend), format: 'aed' },
-            { label: 'No-shows', value: client.noShowCount },
-            { label: 'Last visit', value: client.lastVisitAt ? formatDate(client.lastVisitAt) : '—' },
-          ]}
-        />
-        <div className="grid gap-6 lg:grid-cols-12 sm:gap-8">
-          <div className="min-w-0 space-y-6 sm:space-y-8 lg:col-span-8">
-            <Card>
-              <CardHeader
-                title="Visit history"
-                description={`${visits.length} booking${visits.length === 1 ? '' : 's'}`}
-              />
+        <Grid cols="g4">
+          <Stat label={t('clients.profile.visits')} value={fmt.number(totals.visits)} />
+          <Stat label={t('clients.profile.spend')} value={fmt.aed(totals.spend)} />
+          <Stat label={t('clients.profile.noShows')} value={fmt.number(client.noShowCount)} />
+          <Stat
+            label={t('clients.profile.lastVisit')}
+            value={client.lastVisitAt ? fmt.date(client.lastVisitAt) : '—'}
+          />
+        </Grid>
+        <Grid cols="col-2">
+          <Stack>
+            <Card
+              flush
+              title={t('clients.visits.title')}
+              sub={t('clients.visits.count', { count: visits.length })}
+            >
               {visits.length === 0 ? (
-                <EmptyState icon={<CalendarX2 className="size-5" />} title="No bookings yet" />
+                <EmptyState icon={<CalendarX2 className="size-5" />} title={t('clients.visits.empty')} />
               ) : (
-                <ol className="mt-4 divide-y border-t" data-testid="visit-history">
+                <ol className="divide-y divide-[var(--crm-line)]" data-testid="visit-history">
                   {visits.map((v) => {
                     const lines = itemsBy.get(v.id) ?? []
                     const total = lines.reduce((s, l) => s + Number(l.price), 0)
@@ -259,21 +276,26 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
                     return (
                       <li
                         key={v.id}
-                        className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-5 py-4 sm:px-6"
+                        className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1.5 px-[var(--crm-pad-card)] py-3"
                       >
                         <div className="min-w-0 space-y-1">
-                          <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                            <span className="tabular-nums">{formatDateTime(v.startsAt)}</span>
-                            <Badge tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Badge>
+                          <p className="flex flex-wrap items-center gap-2 font-medium">
+                            <span className="tabular-nums">{fmt.dateTime(v.startsAt)}</span>
+                            <Pill tone={statusTone(v.status)} dot>
+                              {enumLabel(t, 'bookingStatus', v.status)}
+                            </Pill>
                           </p>
-                          <p className="text-sm text-muted">
-                            {lines.map((l) => `${l.name} · ${l.duration} min`).join(', ') || 'No services'}
-                            {people.length > 0 && ` · with ${people.join(', ')}`}
+                          <p className="crm-muted">
+                            {lines
+                              .map((l) => t('clients.visits.line', { name: l.name, min: l.duration }))
+                              .join(', ') || t('clients.visits.noServices')}
+                            {people.length > 0 &&
+                              ` · ${t('clients.visits.with', { names: people.join(', ') })}`}
                           </p>
                         </div>
-                        <div className="text-end text-sm">
-                          <p className="font-medium tabular-nums">{formatAed(total)}</p>
-                          <p className="font-mono text-xs text-muted">{v.ref}</p>
+                        <div className="text-end">
+                          <p className="font-semibold tabular-nums">{fmt.aed(total)}</p>
+                          <p className="crm-muted font-mono text-[length:var(--crm-fs-sub)]">{v.ref}</p>
                         </div>
                       </li>
                     )
@@ -282,165 +304,160 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
               )}
             </Card>
 
-            <Card>
-              <CardHeader title="Treatment notes" description="Written by therapists after each session." />
-              <CardBody className="space-y-5">
+            <Card title={t('clients.notes.title')} sub={t('clients.notes.sub')}>
+              <div className="space-y-4">
                 {canNote && (
                   <TreatmentNoteForm
                     slug={slug}
                     clientId={client.id}
                     visits={visits.slice(0, 10).map((v) => ({
                       id: v.id,
-                      label: `${formatDateTime(v.startsAt)} · ${v.ref}`,
+                      label: `${fmt.dateTime(v.startsAt)} · ${v.ref}`,
                     }))}
                   />
                 )}
                 {notes.length === 0 ? (
-                  <EmptyState icon={<NotebookPen className="size-5" />} title="No treatment notes yet" />
+                  <EmptyState icon={<NotebookPen className="size-5" />} title={t('clients.notes.empty')} />
                 ) : (
-                  <ol className="space-y-3" data-testid="treatment-notes">
+                  <ol className="space-y-2.5" data-testid="treatment-notes">
                     {notes.map((n) => (
-                      <li key={n.id} className="rounded-xl bg-subtle/60 px-4 py-3.5">
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed">{n.text}</p>
-                        <p className="mt-2 text-xs text-muted">
+                      <li
+                        key={n.id}
+                        className="rounded-[var(--crm-radius-sm,10px)] bg-[var(--crm-bg)] px-3.5 py-3"
+                      >
+                        <p className="whitespace-pre-wrap leading-relaxed">{n.text}</p>
+                        <p className="crm-muted mt-1.5 text-[length:var(--crm-fs-sub)]">
                           {(n.staffId && staffName.get(n.staffId)) ||
                             (n.createdBy && authors.get(n.createdBy)) ||
-                            'Team'}
+                            t('clients.notes.team')}
                           {' · '}
-                          {formatDateTime(n.createdAt)}
+                          {fmt.dateTime(n.createdAt)}
                           {n.bookingRef && ` · ${n.bookingRef}`}
                         </p>
                       </li>
                     ))}
                   </ol>
                 )}
-              </CardBody>
+              </div>
             </Card>
 
-            <Card>
-              <CardHeader
-                title="Intake & waiver"
-                description={
-                  template
-                    ? intakeStale
-                      ? 'The form has changed since the last signature — ask the client to sign again.'
-                      : 'Signed health questionnaires and consent.'
-                    : 'Set up an intake form in Settings to collect signatures.'
-                }
-                action={intakeStale ? <Badge tone="warning">Re-sign needed</Badge> : undefined}
-              />
+            <Card
+              flush
+              title={t('clients.intake.title')}
+              sub={
+                template
+                  ? intakeStale
+                    ? t('clients.intake.stale')
+                    : t('clients.intake.sub')
+                  : t('clients.intake.setupHint')
+              }
+              actions={intakeStale ? <Pill tone="warn">{t('clients.intake.resign')}</Pill> : undefined}
+            >
               {intakes.length === 0 ? (
-                <EmptyState icon={<FileSignature className="size-5" />} title="No signed forms yet" />
+                <EmptyState icon={<FileSignature className="size-5" />} title={t('clients.intake.empty')} />
               ) : (
-                <ul className="mt-4 divide-y border-t" data-testid="intake-list">
+                <ul className="divide-y divide-[var(--crm-line)]" data-testid="intake-list">
                   {intakes.map((s) => (
                     <li key={s.id}>
                       <Link
                         href={`${base}/intake/${s.id}`}
-                        className="flex min-h-14 items-center justify-between gap-4 px-5 py-3 text-sm transition-colors hover:bg-subtle/50 sm:px-6"
+                        className="flex min-h-12 items-center justify-between gap-4 px-[var(--crm-pad-card)] py-2.5 transition-colors hover:bg-[var(--crm-bg)]"
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-medium">
-                            {s.templateName ?? 'Intake form'}
+                            {s.templateName ?? t('clients.intake.fallbackName')}
                           </span>
-                          <span className="block text-xs text-muted">
-                            Signed {formatDateTime(s.signedAt)}
+                          <span className="crm-muted block text-[length:var(--crm-fs-sub)]">
+                            {t('clients.intake.signed', { date: fmt.dateTime(s.signedAt) })}
                           </span>
                         </span>
-                        <Badge tone={template && s.version < template.version ? 'warning' : 'accent'}>
-                          v{s.version}
-                        </Badge>
+                        <Pill tone={template && s.version < template.version ? 'warn' : 'acc'}>
+                          {t('clients.intake.version', { n: s.version })}
+                        </Pill>
                       </Link>
                     </li>
                   ))}
                 </ul>
               )}
             </Card>
-          </div>
+          </Stack>
 
-          <div className="min-w-0 space-y-6 sm:space-y-8 lg:col-span-4">
-            <Card>
-              <CardHeader title="Details" />
-              <CardBody>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-                  <Detail label="Gender">{client.gender ? GENDER_LABEL[client.gender] : null}</Detail>
-                  <Detail label="Birthday">{client.birthday ? formatDate(client.birthday) : null}</Detail>
-                  <Detail label="Email">{client.email}</Detail>
-                  <Detail label="Nationality">{client.nationality}</Detail>
-                  <Detail label="Source">{client.source}</Detail>
-                </dl>
-                {client.tags.length > 0 && (
-                  <div className="mt-5 flex flex-wrap gap-1.5">
-                    {client.tags.map((t) => (
-                      <Badge key={t} tone="accent">
-                        {t}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-                {client.notes && (
-                  <p className="mt-5 whitespace-pre-wrap rounded-lg bg-subtle/60 px-3.5 py-3 text-sm">
-                    {client.notes}
-                  </p>
-                )}
-              </CardBody>
+          <Stack>
+            <Card title={t('clients.profile.details')}>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5">
+                <Detail label={t('clients.field.gender')}>
+                  {client.gender ? enumLabel(t, 'staffGender', client.gender) : null}
+                </Detail>
+                <Detail label={t('clients.field.birthday')}>
+                  {client.birthday ? fmt.date(client.birthday) : null}
+                </Detail>
+                <Detail label={t('clients.field.email')}>{client.email}</Detail>
+                <Detail label={t('clients.field.nationality')}>{client.nationality}</Detail>
+                <Detail label={t('clients.field.source')}>
+                  {client.source ? enumLabel(t, 'bookingSource', client.source) : null}
+                </Detail>
+              </dl>
+              {client.tags.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {client.tags.map((x) => (
+                    <Pill key={x} tone="acc">
+                      {x}
+                    </Pill>
+                  ))}
+                </div>
+              )}
+              {client.notes && (
+                <p className="mt-4 whitespace-pre-wrap rounded-[var(--crm-radius-sm,10px)] bg-[var(--crm-bg)] px-3.5 py-3">
+                  {client.notes}
+                </p>
+              )}
             </Card>
 
-            <Card>
-              <CardHeader
-                title="Preferences"
-                action={
-                  canManage ? (
-                    <PreferencesSheet
-                      slug={slug}
-                      clientId={client.id}
-                      team={team}
-                      value={{
-                        pressure: prefs.pressure ?? '',
-                        oils: prefs.oils ?? '',
-                        allergies: prefs.allergies ?? '',
-                        focus: prefs.focus ?? '',
-                        therapistGender: prefs.therapistGender ?? '',
-                        preferredStaffId: prefs.preferredStaffId ?? '',
-                      }}
-                    />
-                  ) : undefined
-                }
-              />
-              <CardBody>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm" data-testid="preferences">
-                  {prefRows.map(([label, value]) => (
-                    <Detail key={label} label={label} highlight={label === 'Allergies' && Boolean(value)}>
-                      {value}
-                    </Detail>
-                  ))}
-                </dl>
-              </CardBody>
+            <Card
+              title={t('clients.prefs.title')}
+              actions={
+                canManage ? (
+                  <PreferencesSheet
+                    slug={slug}
+                    clientId={client.id}
+                    team={team}
+                    value={{
+                      pressure: prefs.pressure ?? '',
+                      oils: prefs.oils ?? '',
+                      allergies: prefs.allergies ?? '',
+                      focus: prefs.focus ?? '',
+                      therapistGender: prefs.therapistGender ?? '',
+                      preferredStaffId: prefs.preferredStaffId ?? '',
+                    }}
+                  />
+                ) : undefined
+              }
+            >
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5" data-testid="preferences">
+                {prefRows.map((r) => (
+                  <Detail key={r.key} label={r.label} highlight={r.highlight}>
+                    {r.value}
+                  </Detail>
+                ))}
+              </dl>
             </Card>
 
             {canManage && (
-              <Card>
-                <CardHeader
-                  title="Blocklist"
-                  description={
-                    client.blocklisted
-                      ? 'The team sees a warning whenever this client books.'
-                      : 'Flag a client the team should not book.'
-                  }
+              <Card
+                title={t('clients.blocklist.title')}
+                sub={client.blocklisted ? t('clients.blocklist.onSub') : t('clients.blocklist.offSub')}
+              >
+                <BlocklistSheet
+                  slug={slug}
+                  clientId={client.id}
+                  blocklisted={client.blocklisted}
+                  reason={client.blocklistReason ?? ''}
                 />
-                <CardBody>
-                  <BlocklistSheet
-                    slug={slug}
-                    clientId={client.id}
-                    blocklisted={client.blocklisted}
-                    reason={client.blocklistReason ?? ''}
-                  />
-                </CardBody>
               </Card>
             )}
-          </div>
-        </div>
-      </PageBody>
+          </Stack>
+        </Grid>
+      </Stack>
     </>
   )
 }
@@ -456,9 +473,9 @@ function Detail({
 }) {
   return (
     <>
-      <dt className="text-muted">{label}</dt>
-      <dd className={`min-w-0 break-words text-end ${highlight ? 'font-medium text-danger' : ''}`}>
-        {children || <span className="text-muted/70">—</span>}
+      <dt className="crm-muted">{label}</dt>
+      <dd className={`min-w-0 break-words text-end ${highlight ? 'font-medium text-[var(--crm-bad)]' : ''}`}>
+        {children || <span className="crm-muted">—</span>}
       </dd>
     </>
   )

@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { estimateAudienceAction, saveCampaignAction } from '@/app/dashboard/[tenant]/campaigns/actions'
-import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
+import { Card } from '@/components/crm'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { NumberTicker } from '@/components/ui/motion'
+import { useI18n } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import {
@@ -65,6 +66,7 @@ export function CampaignComposer({
   initial: ComposerInitial
 }) {
   const router = useRouter()
+  const { t } = useI18n()
   const [segmentId, setSegmentId] = useState(initial.segmentId)
   const [body, setBody] = useState<Record<Lang, string>>({ en: initial.bodyEn, ar: initial.bodyAr })
   const [promoId, setPromoId] = useState(initial.promoCodeId)
@@ -128,27 +130,30 @@ export function CampaignComposer({
       className="grid gap-6 lg:grid-cols-12 lg:gap-x-8"
     >
       {/* Phones: audience → message → preview → when. Desktop: preview sticks in the right column. */}
-      <Card className="min-w-0 lg:col-span-7">
-        <CardHeader title="Audience" description="Who receives this campaign." />
-        <CardBody className="space-y-5">
-          <Field label="Campaign name" name="name">
+      <Card
+        className="min-w-0 lg:col-span-7"
+        title={t('campaigns.composer.audienceTitle')}
+        sub={t('campaigns.composer.audienceSub')}
+      >
+        <div className="space-y-5">
+          <Field label={t('campaigns.composer.name')} name="name">
             <Input
               id="name"
               name="name"
               defaultValue={initial.name}
-              placeholder="e.g. October win-back"
+              placeholder={t('campaigns.composer.namePlaceholder')}
               maxLength={80}
             />
           </Field>
           <Field
-            label="Segment"
+            label={t('campaigns.composer.segment')}
             name="segmentId"
             hint={
               <Link
                 href={newSegmentHref}
                 className="inline-flex items-center gap-1 text-accent hover:underline"
               >
-                <Plus className="size-3.5" strokeWidth={1.75} /> New segment
+                <Plus className="size-3.5" strokeWidth={1.75} /> {t('campaigns.newSegment')}
               </Link>
             }
           >
@@ -158,7 +163,7 @@ export function CampaignComposer({
               value={segmentId}
               onChange={(e) => setSegmentId(e.target.value)}
             >
-              <option value="">Choose a segment…</option>
+              <option value="">{t('campaigns.composer.chooseSegment')}</option>
               {segments.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -170,29 +175,29 @@ export function CampaignComposer({
             <p className="text-[13px] text-muted">{segments.find((s) => s.id === segmentId)?.summary}</p>
           )}
           <AudienceSummary audience={audience} loading={loading} hasSegment={Boolean(segmentId)} />
-        </CardBody>
+        </div>
       </Card>
 
-      <Card className="min-w-0 lg:col-span-7 lg:col-start-1">
-        <CardHeader
-          title="Message"
-          description="Each client gets it in their language. Arabic speakers get English if you leave Arabic empty."
-        />
-        <CardBody className="space-y-6">
+      <Card
+        className="min-w-0 lg:col-span-7 lg:col-start-1"
+        title={t('campaigns.composer.messageTitle')}
+        sub={t('campaigns.composer.messageSub')}
+      >
+        <div className="space-y-6">
           <div>
-            <p className="text-[13px] font-medium">Insert a variable</p>
+            <p className="text-[13px] font-medium">{t('campaigns.composer.insertVariable')}</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               {CAMPAIGN_VARIABLES.map((v) => (
                 <button
-                  key={v.key}
+                  key={v}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => insert(v.key)}
-                  title={v.label}
+                  onClick={() => insert(v)}
+                  title={t(`campaigns.variables.${v}`)}
                   className="inline-flex h-11 items-center gap-1 rounded-full border bg-surface px-3.5 font-mono text-xs transition-[background-color,border-color,transform] duration-150 hover:-translate-y-px hover:border-accent/40 hover:bg-accent-soft active:scale-[0.97] sm:h-9"
                 >
                   <Plus className="size-3 text-accent" strokeWidth={2} />
-                  {`{${v.key}}`}
+                  {`{${v}}`}
                 </button>
               ))}
             </div>
@@ -202,11 +207,17 @@ export function CampaignComposer({
             return (
               <Field
                 key={lang}
-                label={lang === 'en' ? 'English message' : 'Arabic message (optional)'}
+                label={
+                  lang === 'en'
+                    ? t('campaigns.composer.englishMessage')
+                    : t('campaigns.composer.arabicMessage')
+                }
                 name={lang === 'en' ? 'bodyEn' : 'bodyAr'}
                 hint={
                   unknown.length ? (
-                    <span className="text-warning">Unknown: {unknown.map((u) => `{${u}}`).join(', ')}</span>
+                    <span className="text-warning">
+                      {t('campaigns.composer.unknown', { list: unknown.map((u) => `{${u}}`).join(', ') })}
+                    </span>
                   ) : (
                     `${body[lang].length} / ${MAX_MESSAGE}`
                   )
@@ -229,9 +240,9 @@ export function CampaignComposer({
             )
           })}
           <Field
-            label="Offer code"
+            label={t('campaigns.composer.offerCode')}
             name="promoCodeId"
-            hint="Optional. Fills {offer_code}. Create codes under Packages & gifts → Promo codes."
+            hint={t('campaigns.composer.offerHint', { variable: '{offer_code}' })}
           >
             <Select
               id="promoCodeId"
@@ -239,7 +250,7 @@ export function CampaignComposer({
               value={promoId}
               onChange={(e) => setPromoId(e.target.value)}
             >
-              <option value="">No offer code</option>
+              <option value="">{t('campaigns.composer.noOffer')}</option>
               {promos.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.code} · {p.label}
@@ -247,13 +258,17 @@ export function CampaignComposer({
               ))}
             </Select>
           </Field>
-        </CardBody>
+        </div>
       </Card>
 
       <aside className="min-w-0 lg:col-span-5 lg:col-start-8 lg:row-span-3 lg:row-start-1">
-        <Card aria-label="Message preview" className="lg:sticky lg:top-6">
-          <CardHeader title="Preview" description="How it reads in WhatsApp for a client in each language." />
-          <CardBody className="space-y-5">
+        <Card
+          aria-label={t('campaigns.composer.previewAria')}
+          className="lg:sticky lg:top-6"
+          title={t('campaigns.composer.previewTitle')}
+          sub={t('campaigns.composer.previewSub')}
+        >
+          <div className="space-y-5">
             {(['en', 'ar'] as const).map((lang) => {
               const text = render(lang)
               const tooLong = linkLength(text) > MAX_LINK
@@ -261,8 +276,9 @@ export function CampaignComposer({
               return (
                 <div key={lang}>
                   <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
-                    {lang === 'en' ? 'English' : 'Arabic'} · {sample(lang)}
-                    {n !== null && ` · ${n} ${n === 1 ? 'client' : 'clients'}`}
+                    {lang === 'en' ? t('campaigns.composer.english') : t('campaigns.composer.arabic')} ·{' '}
+                    {sample(lang)}
+                    {n !== null && ` · ${t('campaigns.composer.clients', { count: n })}`}
                   </p>
                   <div className="mt-2 rounded-xl bg-subtle/70 p-3 sm:p-4">
                     <div
@@ -270,37 +286,37 @@ export function CampaignComposer({
                       dir={lang === 'ar' && body.ar.trim() ? 'rtl' : 'ltr'}
                       className="ms-auto w-fit max-w-[92%] whitespace-pre-wrap break-words rounded-xl rounded-se-sm bg-accent-soft px-3.5 py-2.5 text-sm leading-relaxed"
                     >
-                      {text || <span className="text-muted">Nothing to send yet</span>}
+                      {text || <span className="text-muted">{t('campaigns.composer.nothing')}</span>}
                     </div>
                   </div>
                   {tooLong && (
                     <p className="mt-2 flex items-center gap-1.5 text-[13px] text-warning">
                       <AlertTriangle className="size-3.5" strokeWidth={1.75} />
-                      Long message — WhatsApp may not open it. Shorten it a little.
+                      {t('campaigns.composer.tooLong')}
                     </p>
                   )}
                 </div>
               )
             })}
-          </CardBody>
+          </div>
         </Card>
       </aside>
 
-      <Card className="min-w-0 lg:col-span-7 lg:col-start-1">
-        <CardHeader
-          title="When"
-          description="Messages appear in WhatsApp → Due at this time. Nothing is sent automatically — your team presses send for each one."
-        />
-        <CardBody className="space-y-4">
+      <Card
+        className="min-w-0 lg:col-span-7 lg:col-start-1"
+        title={t('campaigns.composer.whenTitle')}
+        sub={t('campaigns.composer.whenSub')}
+      >
+        <div className="space-y-4">
           <div
             role="radiogroup"
-            aria-label="When"
+            aria-label={t('campaigns.composer.whenTitle')}
             className="grid grid-cols-2 gap-1 rounded-xl bg-subtle p-1"
           >
             {(
               [
-                ['now', 'Now', Send],
-                ['later', 'Schedule', CalendarClock],
+                ['now', t('campaigns.composer.now'), Send],
+                ['later', t('campaigns.composer.schedule'), CalendarClock],
               ] as const
             ).map(([value, label, Icon]) => (
               <label
@@ -331,7 +347,7 @@ export function CampaignComposer({
             ))}
           </div>
           {when === 'later' && (
-            <Field label="Date and time (Dubai)" name="sendAt">
+            <Field label={t('campaigns.composer.sendAt')} name="sendAt">
               <Input
                 id="sendAt"
                 name="sendAt"
@@ -342,10 +358,10 @@ export function CampaignComposer({
               />
             </Field>
           )}
-        </CardBody>
-        <CardFooter>
+        </div>
+        <div className="mt-4 flex flex-col-reverse gap-2 border-t border-[var(--crm-line)] pt-4 sm:flex-row sm:justify-end">
           <SubmitButton variant="secondary" name="intent" value="draft" className="w-full sm:w-auto">
-            Save draft
+            {t('campaigns.composer.saveDraft')}
           </SubmitButton>
           <SubmitButton
             name="intent"
@@ -353,9 +369,12 @@ export function CampaignComposer({
             disabled={!segmentId || (audience !== null && recipients === 0)}
             className="w-full sm:w-auto"
           >
-            <Send /> Queue {recipients > 0 ? recipients : ''} {recipients === 1 ? 'message' : 'messages'}
+            <Send />{' '}
+            {recipients > 0
+              ? t('campaigns.composer.queue', { count: recipients })
+              : t('campaigns.composer.queueNone')}
           </SubmitButton>
-        </CardFooter>
+        </div>
       </Card>
     </ActionForm>
   )
@@ -370,26 +389,34 @@ function AudienceSummary({
   loading: boolean
   hasSegment: boolean
 }) {
+  const { t, fmt } = useI18n()
   if (!hasSegment) return null
   return (
-    <div className="rounded-xl border bg-subtle/40 px-4 py-4 sm:px-5" aria-live="polite">
+    <div
+      className="rounded-xl border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-4 py-4 sm:px-5"
+      aria-live="polite"
+    >
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm text-muted">Will receive it</p>
+        <p className="text-sm text-muted">{t('campaigns.composer.willReceive')}</p>
         {loading && <Loader2 className="size-4 animate-spin text-muted" strokeWidth={1.75} aria-hidden />}
       </div>
       <p className="mt-1 text-[28px] font-semibold tracking-tight" data-testid="campaign-recipients">
         {audience ? <NumberTicker value={audience.recipients} /> : '—'}
         <span className="ms-2 text-sm font-normal text-muted">
-          of {audience?.matched ?? '—'} in the segment
+          {t('campaigns.composer.ofSegment', {
+            count: audience ? fmt.number(audience.matched) : '—',
+          })}
         </span>
       </p>
       {audience && (audience.skippedRecent > 0 || audience.skippedOverLimit > 0) && (
         <ul className="mt-3 space-y-1 text-[13px] text-muted">
           {audience.skippedRecent > 0 && (
-            <li>{audience.skippedRecent} skipped — already messaged by another campaign within 7 days</li>
+            <li>{t('campaigns.detail.skippedRecent', { count: fmt.number(audience.skippedRecent) })}</li>
           )}
           {audience.skippedOverLimit > 0 && (
-            <li>{audience.skippedOverLimit} left out — a campaign reaches at most 500 clients</li>
+            <li>
+              {t('campaigns.detail.skippedOverLimit', { count: fmt.number(audience.skippedOverLimit) })}
+            </li>
           )}
         </ul>
       )}

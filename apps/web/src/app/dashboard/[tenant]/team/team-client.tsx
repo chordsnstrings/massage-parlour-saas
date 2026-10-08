@@ -8,11 +8,14 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import { inviteAction, revokeInviteAction, updateMemberAction } from './actions'
 
-type RoleOption = { id: string; name: string }
+/** `name` is already in the viewer's language (roleName on the server). */
+type RoleOption = { id: string; key: string; name: string }
 
 export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[] }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [created, setCreated] = useState<{ link: string; email: string; tenantName: string } | null>(null)
   return (
@@ -22,15 +25,13 @@ export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[]
         setOpen(o)
         if (!o) setCreated(null)
       }}
-      title={created ? 'Share the invitation' : 'Invite a team member'}
+      title={created ? t('team.invite.shareTitle') : t('team.invite.title')}
       description={
-        created
-          ? `We emailed ${created.email}. You can also send the link on WhatsApp.`
-          : 'They’ll get a link to join.'
+        created ? t('team.invite.shareDescription', { email: created.email }) : t('team.invite.description')
       }
       trigger={
         <Button>
-          <Plus /> Invite
+          <Plus /> {t('team.invite.button')}
         </Button>
       }
     >
@@ -44,14 +45,14 @@ export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[]
           >
             <p className="break-all rounded-lg bg-subtle px-3 py-2.5 font-mono text-[13px]">{created.link}</p>
             <div className="flex flex-wrap gap-2">
-              <CopyButton value={created.link} label="Copy link" />
+              <CopyButton value={created.link} label={t('team.invite.copy')} />
               <Button variant="secondary" size="sm" asChild>
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent(`You're invited to join ${created.tenantName} on spamanagement.ae: ${created.link}`)}`}
+                  href={`https://wa.me/?text=${encodeURIComponent(t('team.invite.message', { spa: created.tenantName, link: created.link }))}`}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  <MessageCircle /> Share on WhatsApp
+                  <MessageCircle /> {t('team.invite.whatsapp')}
                 </a>
               </Button>
             </div>
@@ -63,14 +64,14 @@ export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[]
               className="space-y-5"
               onSuccess={(r) => setCreated(r.data as { link: string; email: string; tenantName: string })}
             >
-              <Field label="Email" name="email">
+              <Field label={t('team.invite.email')} name="email">
                 <Input id="email" name="email" type="email" required autoFocus />
               </Field>
-              <Field label="Role" name="roleId">
+              <Field label={t('team.invite.role')} name="roleId">
                 <Select
                   id="roleId"
                   name="roleId"
-                  defaultValue={roles.find((r) => r.name === 'Receptionist')?.id}
+                  defaultValue={roles.find((r) => r.key === 'receptionist')?.id}
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -79,7 +80,7 @@ export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[]
                   ))}
                 </Select>
               </Field>
-              <SubmitButton className="w-full">Create invitation</SubmitButton>
+              <SubmitButton className="w-full">{t('team.invite.create')}</SubmitButton>
             </ActionForm>
           </motion.div>
         )}
@@ -97,16 +98,17 @@ export function EditMemberSheet({
   member: { id: string; name: string; roleId: string; status: 'active' | 'disabled' }
   roles: RoleOption[]
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
       title={member.name}
-      description="Change role or access."
+      description={t('team.edit.description')}
       trigger={
         <Button variant="ghost" size="sm">
-          Edit
+          {t('common.edit')}
         </Button>
       }
     >
@@ -116,7 +118,7 @@ export function EditMemberSheet({
         onSuccess={() => setOpen(false)}
       >
         <input type="hidden" name="memberId" value={member.id} />
-        <Field label="Role" name="roleId">
+        <Field label={t('team.invite.role')} name="roleId">
           <Select id="roleId" name="roleId" defaultValue={member.roleId}>
             {roles.map((r) => (
               <option key={r.id} value={r.id}>
@@ -125,19 +127,20 @@ export function EditMemberSheet({
             ))}
           </Select>
         </Field>
-        <Field label="Access" name="status">
+        <Field label={t('team.edit.access')} name="status">
           <Select id="status" name="status" defaultValue={member.status}>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled — can’t sign in to this spa</option>
+            <option value="active">{t('team.edit.active')}</option>
+            <option value="disabled">{t('team.edit.disabled')}</option>
           </Select>
         </Field>
-        <SubmitButton className="w-full">Save</SubmitButton>
+        <SubmitButton className="w-full">{t('common.save')}</SubmitButton>
       </ActionForm>
     </Sheet>
   )
 }
 
 export function RevokeButton({ slug, inviteId }: { slug: string; inviteId: string }) {
+  const t = useT()
   const [pending, start] = useTransition()
   return (
     <Button
@@ -147,12 +150,12 @@ export function RevokeButton({ slug, inviteId }: { slug: string; inviteId: strin
       onClick={() =>
         start(async () => {
           const r = await revokeInviteAction(slug, inviteId)
-          if (r?.ok) toast.success('Invitation revoked')
-          else if (r) toast.error(r.error)
+          if (r?.ok) toast.success(resultText(t, r) ?? '')
+          else if (r) toast.error(resultText(t, r) ?? t('errors.generic'))
         })
       }
     >
-      Revoke
+      {t('team.revoke')}
     </Button>
   )
 }

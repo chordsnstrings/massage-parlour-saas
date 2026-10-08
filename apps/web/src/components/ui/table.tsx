@@ -68,9 +68,12 @@ export function DataTable<T>({
       </div>
       <ul className="divide-y md:hidden">
         {rows.map((row) => (
-          <li key={rowKey(row)} className="space-y-2 px-5 py-4">
-            <div className="text-[15px] font-medium">{primary.cell(row)}</div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+          <li
+            key={rowKey(row)}
+            className="space-y-2 px-[var(--ui-mcard-px,1.25rem)] py-[var(--ui-mcard-py,1rem)]"
+          >
+            <div className="text-[length:var(--ui-mcard-title-fs,15px)] font-medium">{primary.cell(row)}</div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[length:var(--ui-mcard-fs,0.875rem)]">
               {rest.map((c) => (
                 <div key={c.key} className="contents">
                   <dt className="text-muted">{c.header}</dt>

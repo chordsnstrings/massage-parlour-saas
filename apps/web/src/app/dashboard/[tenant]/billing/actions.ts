@@ -7,7 +7,7 @@ import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { appUrl } from '@/server/origin'
 
-/** Starts a Stripe Checkout for one of the spa's open invoices and returns the hosted payment page URL. */
+/** Errors are i18n keys (or Stripe's own text); the button renders them via `t.maybe`. Starts a Stripe Checkout for one of the spa's open invoices and returns the hosted payment page URL. */
 export async function payInvoiceByCardAction(
   slug: string,
   invoiceId: string,
@@ -15,15 +15,14 @@ export async function payInvoiceByCardAction(
   const { ctx, error } = await guard(slug, 'billing.view')
   if (error) return { ok: false, error }
   const cfg = stripeConfig()
-  if (!cfg)
-    return { ok: false, error: 'Card payments aren’t switched on yet — pay by bank transfer or cash.' }
-  if (!z.uuid().safeParse(invoiceId).success) return { ok: false, error: 'Invoice not found' }
+  if (!cfg) return { ok: false, error: 'billing.error.cardsOff' }
+  if (!z.uuid().safeParse(invoiceId).success) return { ok: false, error: 'billing.error.notFound' }
   const db = platformDb()
   const [invoice] = await db
     .select()
     .from(platformInvoices)
     .where(and(eq(platformInvoices.id, invoiceId), eq(platformInvoices.tenantId, ctx.tenant.id)))
-  if (invoice?.status !== 'issued') return { ok: false, error: 'This invoice is not open for payment' }
+  if (invoice?.status !== 'issued') return { ok: false, error: 'billing.error.notOpen' }
   const back = await appUrl(`/${slug}/billing`)
   try {
     const session = await createInvoiceCheckout(cfg, {
@@ -32,7 +31,7 @@ export async function payInvoiceByCardAction(
       successUrl: `${back}?paid=${invoice.id}`,
       cancelUrl: back,
     })
-    if (!session.url) return { ok: false, error: 'Stripe did not return a payment page' }
+    if (!session.url) return { ok: false, error: 'billing.error.noPage' }
     await db
       .update(platformInvoices)
       .set({ stripeSessionId: session.id })

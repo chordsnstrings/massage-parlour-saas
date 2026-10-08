@@ -3,6 +3,7 @@ import { ArrowUp, Flag, Loader2, RotateCcw, Ticket, UserRound } from 'lucide-rea
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { type ChatTurn, tryDmAction } from '../actions'
@@ -12,6 +13,7 @@ type Bubble = ChatTurn & {
   note?: { kind: 'booking' | 'flag' | 'handoff' | 'error'; text: string }
 }
 
+// Sample client messages (what a client would type — kept in the clients' languages, not translated).
 const SUGGESTIONS = [
   'How much is a 60 minute massage?',
   'Do you have anything free tomorrow evening?',
@@ -20,6 +22,7 @@ const SUGGESTIONS = [
 ]
 
 export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: string }) {
+  const t = useT()
   const [items, setItems] = useState<Bubble[]>([])
   const [text, setText] = useState('')
   const [pending, start] = useTransition()
@@ -44,19 +47,24 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
       if (!r.ok) {
         setItems((x) => [
           ...x,
-          { id: ++id.current, from: 'spa', text: r.error, note: { kind: 'error', text: 'Not sent' } },
+          {
+            id: ++id.current,
+            from: 'spa',
+            text: t.maybe(r.error) ?? r.error,
+            note: { kind: 'error', text: t('ai.notSent') },
+          },
         ])
         return
       }
       const note = r.bookingRef
         ? {
             kind: 'booking' as const,
-            text: `Booking request ${r.bookingRef} created — confirm it in the calendar`,
+            text: t('ai.noteBooking', { ref: r.bookingRef }),
           }
         : r.flagged
-          ? { kind: 'flag' as const, text: 'Flagged for staff review' }
+          ? { kind: 'flag' as const, text: t('ai.noteFlag') }
           : r.handoff
-            ? { kind: 'handoff' as const, text: 'Handed to a person' }
+            ? { kind: 'handoff' as const, text: t('ai.noteHandoff') }
             : undefined
       setItems((x) => [...x, { id: ++id.current, from: 'spa', text: r.reply || '…', note }])
     })
@@ -70,19 +78,16 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{spaName}</p>
-          <p className="text-xs text-muted">AI receptionist · Instagram preview</p>
+          <p className="text-xs text-muted">{t('ai.chatSub')}</p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setItems([])} aria-label="Start over">
-          <RotateCcw /> Reset
+        <Button variant="ghost" size="sm" onClick={() => setItems([])} aria-label={t('ai.startOver')}>
+          <RotateCcw /> {t('ai.reset')}
         </Button>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6">
         {items.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-            <p className="max-w-sm text-sm text-muted">
-              Message your spa like a client would. The receptionist uses your live menu and real availability
-              — bookings it makes appear as pending in your calendar.
-            </p>
+            <p className="max-w-sm text-sm text-muted">{t('ai.chatIntro')}</p>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
                 <button
@@ -147,7 +152,7 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
             animate={{ opacity: 1 }}
             className="flex items-center gap-2 text-sm text-muted"
           >
-            <Loader2 className="size-4 animate-spin" /> typing…
+            <Loader2 className="size-4 animate-spin" /> {t('ai.typing')}
           </motion.div>
         )}
         <div ref={end} />
@@ -163,8 +168,8 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
           value={text}
           onChange={(e) => setText(e.target.value)}
           dir="auto"
-          placeholder="Message…"
-          aria-label="Message"
+          placeholder={t('ai.messagePh')}
+          aria-label={t('ai.message')}
           className="h-11 flex-1 rounded-full border bg-bg px-4 text-[15px] outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-4 focus:ring-accent/15"
         />
         <Button
@@ -172,7 +177,7 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
           size="icon"
           className="size-11 rounded-full"
           pending={pending}
-          aria-label="Send"
+          aria-label={t('ai.send')}
         >
           {!pending && <ArrowUp />}
         </Button>

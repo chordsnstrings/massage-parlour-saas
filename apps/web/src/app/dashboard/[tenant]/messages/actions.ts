@@ -26,8 +26,8 @@ export async function markMessageAction(
   const { id, status } = parsed.data
   const problem = await withTenant(ctx.tenant.id, async (tx) => {
     const [row] = await tx.select({ status: outbox.status }).from(outbox).where(eq(outbox.id, id))
-    if (!row) return 'Message not found.'
-    if (row.status === 'sent' || row.status === 'skipped') return 'This message was already handled.'
+    if (!row) return 'messages.results.notFound' as const
+    if (row.status === 'sent' || row.status === 'skipped') return 'messages.results.handled' as const
     // Opening twice is harmless; don't rewrite the row.
     if (status === 'opened' && row.status === 'opened') return null
     await markOutbox(tx, id, status, ctx.user.id)
@@ -44,16 +44,22 @@ export async function markMessageAction(
     })
   }
   revalidatePath(`/dashboard/${slug}/messages`)
-  return ok(status === 'sent' ? 'Marked as sent' : status === 'skipped' ? 'Skipped' : undefined)
+  return ok(
+    status === 'sent'
+      ? 'messages.results.markedSent'
+      : status === 'skipped'
+        ? 'messages.results.skipped'
+        : undefined,
+  )
 }
 
 const body = z
   .string()
   .trim()
-  .min(1, 'Write a message (or reset to the default)')
-  .max(1000, 'Keep it under 1,000 characters so the WhatsApp link works')
+  .min(1, 'messages.validation.bodyRequired')
+  .max(1000, 'messages.validation.bodyTooLong')
   .refine((v) => unknownVariables(v).length === 0, {
-    message: 'Unknown variable — use the chips above',
+    message: 'messages.validation.unknownVariable',
   })
 
 const templateSchema = z.object({
@@ -98,5 +104,5 @@ export async function saveTemplateAction(
     data: { kind },
   })
   revalidatePath(`/dashboard/${slug}/messages/templates`)
-  return ok('Template saved')
+  return ok('messages.results.templateSaved')
 }

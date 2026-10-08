@@ -8,19 +8,28 @@ export const isLocale = (value: unknown): value is Locale => value === 'en' || v
 
 /** Plural message: picked with Intl.PluralRules(locale) on `params.count` (`other` is required; Thai only has it). */
 export type Plural = { zero?: string; one?: string; two?: string; few?: string; many?: string; other: string }
+type PluralCategory = keyof Plural
+/** A plural object has `other` and only plural-category keys (so an enum group with an `other` value isn't one). */
+type IsPlural<T> = T extends { other: string }
+  ? Exclude<keyof T, PluralCategory> extends never
+    ? true
+    : false
+  : false
 export type Leaf = string | Plural
-export type Params = Record<string, string | number>
+/** A param is a plain value, or a nested message (`{ key }`) translated in the same language before interpolation. */
+export type Param = string | number | { key: MessageKey; params?: Params }
+export type Params = Record<string, Param>
 
 type Widen<T> = T extends string
   ? string
-  : T extends { other: string }
+  : IsPlural<T> extends true
     ? Plural
     : { [K in keyof T]: Widen<T[K]> }
 /** Shape every catalogue must have (EN is the source of truth): a missing or extra key in TH is a type error. */
 export type Messages = Widen<typeof en>
 
 type Paths<T> = {
-  [K in keyof T & string]: T[K] extends string | { other: string } ? K : `${K}.${Paths<T[K]>}`
+  [K in keyof T & string]: T[K] extends string ? K : IsPlural<T[K]> extends true ? K : `${K}.${Paths<T[K]>}`
 }[keyof T & string]
 /** Dotted key of any message, e.g. `nav.calendar`, `errors.forbidden`. */
 export type MessageKey = Paths<typeof en>

@@ -16,11 +16,5 @@ export async function pickBranch(tx: Tx, ctx: MemberContext, branchId?: string) 
 export const cutoffOf = (b: Pick<typeof branches.$inferSelect, 'businessDayCutoff'>) =>
   b.businessDayCutoff.slice(0, 5)
 
-export const dateLabel = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
+/** A business date (YYYY-MM-DD) as a Date at midday UTC — same calendar day in Asia/Dubai, for `fmt`. */
+export const dayDate = (date: string) => new Date(`${date}T12:00:00Z`)

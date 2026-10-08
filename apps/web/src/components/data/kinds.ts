@@ -7,9 +7,3 @@ export const IMPORT_PERMISSION: Record<ImportKind, Permission> = {
   menu: 'services.manage',
   products: 'inventory.manage',
 }
-
-export const IMPORT_LABEL: Record<ImportKind, string> = {
-  clients: 'Clients',
-  menu: 'Service menu',
-  products: 'Products',
-}

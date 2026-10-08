@@ -6,11 +6,14 @@ import { notFound } from 'next/navigation'
 import { MediaLibrary } from '@/components/media/media-library'
 import { formatBytes, toMediaItem } from '@/components/media/types'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { canonicalUrls } from '@/server/origin'
 
-export const metadata: Metadata = { title: 'Media' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('media.title') }
+}
 
 const PAGE = 60
 
@@ -24,6 +27,7 @@ export default async function MediaPage({
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'site.content')) notFound()
   const sp = await searchParams
+  const t = await getT()
   const filter = {
     source: sp.source === 'upload' || sp.source === 'ai' ? sp.source : undefined,
     tag: sp.tag?.trim().toLowerCase().slice(0, 32) || undefined,
@@ -50,11 +54,11 @@ export default async function MediaPage({
   return (
     <>
       <PageHeader
-        title="Media"
+        title={t('media.title')}
         description={
           n > 0
-            ? `${n} ${n === 1 ? 'image' : 'images'} · ${formatBytes(Number(data.totals?.bytes ?? 0))} — photos for your website and posts, served fast from your site.`
-            : 'Photos for your website and posts. Uploads are resized, stripped of location data and served fast from your site.'
+            ? t('media.descCount', { count: n, size: formatBytes(Number(data.totals?.bytes ?? 0)) })
+            : t('media.descEmpty')
         }
       />
       <PageBody>

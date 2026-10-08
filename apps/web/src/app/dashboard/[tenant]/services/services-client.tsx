@@ -8,6 +8,7 @@ import { ActionForm, Field, FieldError, SubmitButton } from '@/components/ui/for
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import {
   addSampleMenuAction,
@@ -18,21 +19,22 @@ import {
   saveRoomAction,
   saveServiceAction,
 } from './actions'
-import { ROOM_TYPE_LABEL, ROOM_TYPES, SWATCHES } from './constants'
+import { ROOM_TYPES, SWATCHES } from './constants'
 
 type Option = { id: string; name: string }
 
-/** Runs a server action from a button with a confirm prompt and toasts. */
+/** Optional confirm → run the action → toast its result in the viewer's language (shared by services + staff). */
 export function useConfirmAction() {
   const [pending, start] = useTransition()
+  const t = useT()
   const run = (question: string | null, fn: () => Promise<ActionResult>, after?: () => void) => {
     if (question && !window.confirm(question)) return
     start(async () => {
       const r = await fn()
       if (r?.ok) {
-        if (r.message) toast.success(r.message)
+        if (r.message || r.key) toast.success(resultText(t, r) ?? '')
         after?.()
-      } else if (r) toast.error(r.error)
+      } else if (r) toast.error(resultText(t, r) || t('errors.generic'))
     })
   }
   return { pending, run }
@@ -40,9 +42,10 @@ export function useConfirmAction() {
 
 export function SampleMenuButton({ slug }: { slug: string }) {
   const { pending, run } = useConfirmAction()
+  const t = useT()
   return (
     <Button pending={pending} onClick={() => run(null, () => addSampleMenuAction(slug))}>
-      <Sparkles /> Add a sample UAE spa menu
+      <Sparkles /> {t('services.sampleMenu')}
     </Button>
   )
 }
@@ -76,10 +79,12 @@ export function ChipCheckbox({
 }
 
 export function ColorPicker({ name, defaultValue }: { name: string; defaultValue?: string | null }) {
+  const t = useT()
   const initial = defaultValue ?? SWATCHES[0]
   return (
+    // The surrounding <fieldset><legend> names the group.
     <div className="flex flex-wrap gap-2" role="radiogroup">
-      {SWATCHES.map((c) => (
+      {SWATCHES.map((c, i) => (
         <label key={c} className="relative grid size-11 cursor-pointer place-items-center sm:size-9">
           <input
             type="radio"
@@ -87,7 +92,7 @@ export function ColorPicker({ name, defaultValue }: { name: string; defaultValue
             value={c}
             defaultChecked={c === initial}
             className="peer sr-only"
-            aria-label={c}
+            aria-label={t('common.colourSwatch', { n: i + 1, total: SWATCHES.length })}
           />
           <span
             className="size-7 rounded-full ring-offset-2 ring-offset-surface transition-transform peer-checked:ring-2 peer-checked:ring-fg/70 peer-focus-visible:ring-2 peer-focus-visible:ring-accent hover:scale-110 motion-reduce:transition-none"
@@ -134,20 +139,25 @@ export function CategorySheet({
 }) {
   const [open, setOpen] = useState(false)
   const { pending, run } = useConfirmAction()
+  const t = useT()
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={category ? 'Edit category' : 'New category'}
-      description="Groups services on your menu and website."
+      title={t(category ? 'services.category.edit' : 'services.category.new')}
+      description={t('services.category.sheetBody')}
       trigger={
         category ? (
-          <Button variant="ghost" size="sm" aria-label={`Edit category ${category.en}`}>
-            <Pencil /> <span className="hidden sm:inline">Edit</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t('services.category.editAria', { name: category.en })}
+          >
+            <Pencil /> <span className="hidden sm:inline">{t('common.edit')}</span>
           </Button>
         ) : (
           <Button variant="secondary">
-            <Plus /> Category
+            <Plus /> {t('services.category.add')}
           </Button>
         )
       }
@@ -159,10 +169,10 @@ export function CategorySheet({
       >
         <input type="hidden" name="id" value={category?.id ?? ''} />
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Name (English)" name="nameEn">
+          <Field label={t('services.form.nameEn')} name="nameEn">
             <Input id="nameEn" name="nameEn" defaultValue={category?.en} placeholder="Massage" required />
           </Field>
-          <Field label="Name (Arabic)" name="nameAr">
+          <Field label={t('services.form.nameAr')} name="nameAr">
             <Input
               id="nameAr"
               name="nameAr"
@@ -182,18 +192,18 @@ export function CategorySheet({
               pending={pending}
               onClick={() =>
                 run(
-                  'Delete this category? Its services stay, as uncategorised.',
+                  t('services.category.confirmDelete'),
                   () => deleteCategoryAction(slug, category.id),
                   () => setOpen(false),
                 )
               }
             >
-              <Trash2 /> Delete
+              <Trash2 /> {t('common.delete')}
             </Button>
           ) : (
             <span />
           )}
-          <SubmitButton>{category ? 'Save' : 'Add category'}</SubmitButton>
+          <SubmitButton>{t(category ? 'common.save' : 'services.category.submitAdd')}</SubmitButton>
         </div>
       </ActionForm>
     </Sheet>
@@ -240,21 +250,26 @@ export function ServiceSheet({
   variant?: 'primary' | 'secondary'
 }) {
   const [open, setOpen] = useState(false)
+  const t = useT()
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={service ? service.name.en : 'New service'}
-      description={service ? 'Edit details, durations and prices.' : 'Prices are VAT-inclusive, in AED.'}
+      title={service ? service.name.en : t('services.service.new')}
+      description={t(service ? 'services.service.editBody' : 'services.service.newBody')}
       className="md:max-w-2xl"
       trigger={
         service ? (
-          <Button variant="ghost" size="sm" aria-label={`Edit ${service.name.en}`}>
-            <Pencil /> <span className="hidden sm:inline">Edit</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t('services.service.editAria', { name: service.name.en })}
+          >
+            <Pencil /> <span className="hidden sm:inline">{t('common.edit')}</span>
           </Button>
         ) : (
           <Button variant={variant}>
-            <Plus /> Add service
+            <Plus /> {t('services.service.add')}
           </Button>
         )
       }
@@ -286,6 +301,7 @@ function ServiceForm({
       : [newRow('60'), newRow('90')],
   )
   const { pending, run } = useConfirmAction()
+  const t = useT()
   const set = (key: string, patch: Partial<VariantRow>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
 
@@ -293,7 +309,7 @@ function ServiceForm({
     <ActionForm action={saveServiceAction.bind(null, slug)} onSuccess={onDone} className="space-y-6">
       <input type="hidden" name="id" value={service?.id ?? ''} />
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name (English)" name="nameEn">
+        <Field label={t('services.form.nameEn')} name="nameEn">
           <Input
             id="nameEn"
             name="nameEn"
@@ -302,7 +318,7 @@ function ServiceForm({
             required
           />
         </Field>
-        <Field label="Name (Arabic)" name="nameAr">
+        <Field label={t('services.form.nameAr')} name="nameAr">
           <Input
             id="nameAr"
             name="nameAr"
@@ -312,7 +328,7 @@ function ServiceForm({
             placeholder="مساج سويدي"
           />
         </Field>
-        <Field label="Description (English)" name="descriptionEn">
+        <Field label={t('services.form.descriptionEn')} name="descriptionEn">
           <Textarea
             id="descriptionEn"
             name="descriptionEn"
@@ -320,7 +336,7 @@ function ServiceForm({
             defaultValue={service?.description?.en}
           />
         </Field>
-        <Field label="Description (Arabic)" name="descriptionAr">
+        <Field label={t('services.form.descriptionAr')} name="descriptionAr">
           <Textarea
             id="descriptionAr"
             name="descriptionAr"
@@ -334,18 +350,18 @@ function ServiceForm({
           <ImageInput
             slug={slug}
             name="imageUrl"
-            label="Photo"
-            hint="Shown on your booking page and website menu."
+            label={t('services.form.photo')}
+            hint={t('services.form.photoHint')}
             defaultValue={service?.imageUrl}
           />
         </div>
-        <Field label="Category" name="categoryId">
+        <Field label={t('services.form.category')} name="categoryId">
           <Select
             id="categoryId"
             name="categoryId"
             defaultValue={service?.categoryId ?? categories[0]?.id ?? ''}
           >
-            <option value="">Uncategorised</option>
+            <option value="">{t('services.uncategorised')}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -353,20 +369,20 @@ function ServiceForm({
             ))}
           </Select>
         </Field>
-        <Field label="Therapists" name="therapistsRequired">
+        <Field label={t('services.form.therapists')} name="therapistsRequired">
           <Select
             id="therapistsRequired"
             name="therapistsRequired"
             defaultValue={String(service?.therapistsRequired ?? 1)}
           >
-            <option value="1">1 therapist</option>
-            <option value="2">2 therapists (couples / four hands)</option>
+            <option value="1">{t('services.form.therapistsOne')}</option>
+            <option value="2">{t('services.form.therapistsTwo')}</option>
           </Select>
         </Field>
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="text-[13px] font-medium">Durations & prices</legend>
+        <legend className="text-[13px] font-medium">{t('services.form.durations')}</legend>
         <ul className="space-y-2">
           <AnimatePresence initial={false}>
             {rows.map((r, i) => (
@@ -382,7 +398,7 @@ function ServiceForm({
                   <input type="hidden" name="variantId" value={r.id ?? ''} />
                   <div className="relative flex-1">
                     <Input
-                      aria-label={`Duration ${i + 1} (minutes)`}
+                      aria-label={t('services.form.durationAria', { n: i + 1 })}
                       name="variantDuration"
                       inputMode="numeric"
                       value={r.durationMin}
@@ -390,7 +406,7 @@ function ServiceForm({
                       className="pe-12 tabular-nums"
                     />
                     <span className="pointer-events-none absolute inset-y-0 end-3 grid place-items-center text-sm text-muted">
-                      min
+                      {t('services.form.min')}
                     </span>
                   </div>
                   <div className="relative flex-1">
@@ -398,7 +414,7 @@ function ServiceForm({
                       AED
                     </span>
                     <Input
-                      aria-label={`Price ${i + 1} (AED)`}
+                      aria-label={t('services.form.priceAria', { n: i + 1 })}
                       name="variantPrice"
                       inputMode="decimal"
                       value={r.priceAed}
@@ -411,7 +427,7 @@ function ServiceForm({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    aria-label="Remove duration"
+                    aria-label={t('services.form.removeDuration')}
                     disabled={rows.length === 1}
                     onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
                   >
@@ -433,12 +449,16 @@ function ServiceForm({
             setRows((rs) => [...rs, newRow(String(last + 30))])
           }}
         >
-          <Plus /> Add duration
+          <Plus /> {t('services.form.addDuration')}
         </Button>
       </fieldset>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Buffer before" name="bufferBeforeMin" hint="Minutes to prepare the room.">
+        <Field
+          label={t('services.form.bufferBefore')}
+          name="bufferBeforeMin"
+          hint={t('services.form.bufferBeforeHint')}
+        >
           <Input
             id="bufferBeforeMin"
             name="bufferBeforeMin"
@@ -449,7 +469,11 @@ function ServiceForm({
             defaultValue={service?.bufferBeforeMin ?? 0}
           />
         </Field>
-        <Field label="Buffer after" name="bufferAfterMin" hint="Cleanup and change of linen.">
+        <Field
+          label={t('services.form.bufferAfter')}
+          name="bufferAfterMin"
+          hint={t('services.form.bufferAfterHint')}
+        >
           <Input
             id="bufferAfterMin"
             name="bufferAfterMin"
@@ -463,37 +487,37 @@ function ServiceForm({
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">Room types</legend>
-        <p className="text-[13px] text-muted">Leave all off to allow any room.</p>
+        <legend className="text-[13px] font-medium">{t('services.form.roomTypes')}</legend>
+        <p className="text-[13px] text-muted">{t('services.form.roomTypesHint')}</p>
         <div className="flex flex-wrap gap-2 pt-1">
-          {ROOM_TYPES.map((t) => (
+          {ROOM_TYPES.map((rt) => (
             <ChipCheckbox
-              key={t}
+              key={rt}
               name="roomTypes"
-              value={t}
-              label={ROOM_TYPE_LABEL[t]}
-              defaultChecked={service?.roomTypes.includes(t)}
+              value={rt}
+              label={t(`services.roomType.${rt}`)}
+              defaultChecked={service?.roomTypes.includes(rt)}
             />
           ))}
         </div>
       </fieldset>
 
       <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">Colour on the calendar</legend>
+        <legend className="text-[13px] font-medium">{t('services.form.colour')}</legend>
         <ColorPicker name="color" defaultValue={service?.color} />
       </fieldset>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Toggle
           name="onlineBookable"
-          label="Bookable online"
-          hint="Shown on your website booking page."
+          label={t('services.form.onlineBookable')}
+          hint={t('services.form.onlineBookableHint')}
           defaultChecked={service?.onlineBookable ?? true}
         />
         <Toggle
           name="active"
-          label="Active"
-          hint="Inactive services are hidden everywhere."
+          label={t('services.form.active')}
+          hint={t('services.form.activeHint')}
           defaultChecked={service?.active ?? true}
         />
       </div>
@@ -507,18 +531,18 @@ function ServiceForm({
             pending={pending}
             onClick={() =>
               run(
-                `Delete ${service.name.en}? Past bookings keep their details.`,
+                t('services.service.confirmDelete', { name: service.name.en }),
                 () => deleteServiceAction(slug, service.id),
                 onDone,
               )
             }
           >
-            <Trash2 /> Delete
+            <Trash2 /> {t('common.delete')}
           </Button>
         ) : (
           <span />
         )}
-        <SubmitButton>{service ? 'Save service' : 'Add service'}</SubmitButton>
+        <SubmitButton>{t(service ? 'services.service.save' : 'services.service.add')}</SubmitButton>
       </div>
     </ActionForm>
   )
@@ -539,20 +563,21 @@ export function RoomSheet({
 }) {
   const [open, setOpen] = useState(false)
   const { pending, run } = useConfirmAction()
+  const t = useT()
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={room ? `Edit ${room.name}` : 'New room'}
-      description="Room type decides which services can use it."
+      title={room ? t('services.room.edit', { name: room.name }) : t('services.room.new')}
+      description={t('services.room.sheetBody')}
       trigger={
         room ? (
-          <Button variant="ghost" size="sm" aria-label={`Edit room ${room.name}`}>
+          <Button variant="ghost" size="sm" aria-label={t('services.room.editAria', { name: room.name })}>
             <Pencil />
           </Button>
         ) : (
           <Button variant="secondary" size="sm">
-            <Plus /> Room
+            <Plus /> {t('services.room.add')}
           </Button>
         )
       }
@@ -564,7 +589,7 @@ export function RoomSheet({
       >
         <input type="hidden" name="id" value={room?.id ?? ''} />
         {branches.length > 1 ? (
-          <Field label="Branch" name="branchId">
+          <Field label={t('services.room.branch')} name="branchId">
             <Select id="branchId" name="branchId" defaultValue={room?.branchId ?? branches[0]?.id}>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -577,14 +602,20 @@ export function RoomSheet({
           <input type="hidden" name="branchId" value={room?.branchId ?? branches[0]?.id ?? ''} />
         )}
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Room name" name="name">
-            <Input id="name" name="name" defaultValue={room?.name} placeholder="Room 1" required />
+          <Field label={t('services.room.name')} name="name">
+            <Input
+              id="name"
+              name="name"
+              defaultValue={room?.name}
+              placeholder={t('services.room.namePlaceholder')}
+              required
+            />
           </Field>
-          <Field label="Type" name="type">
+          <Field label={t('services.room.type')} name="type">
             <Select id="type" name="type" defaultValue={room?.type ?? 'single'}>
-              {ROOM_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {ROOM_TYPE_LABEL[t]}
+              {ROOM_TYPES.map((rt) => (
+                <option key={rt} value={rt}>
+                  {t(`services.roomType.${rt}`)}
                 </option>
               ))}
             </Select>
@@ -592,8 +623,8 @@ export function RoomSheet({
         </div>
         <Toggle
           name="active"
-          label="Active"
-          hint="Inactive rooms can’t be booked."
+          label={t('services.form.active')}
+          hint={t('services.room.activeHint')}
           defaultChecked={room?.active ?? true}
         />
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
@@ -605,18 +636,18 @@ export function RoomSheet({
               pending={pending}
               onClick={() =>
                 run(
-                  `Delete ${room.name}?`,
+                  t('services.room.confirmDelete', { name: room.name }),
                   () => deleteRoomAction(slug, room.id),
                   () => setOpen(false),
                 )
               }
             >
-              <Trash2 /> Delete
+              <Trash2 /> {t('common.delete')}
             </Button>
           ) : (
             <span />
           )}
-          <SubmitButton>{room ? 'Save room' : 'Add room'}</SubmitButton>
+          <SubmitButton>{t(room ? 'services.room.save' : 'services.room.submitAdd')}</SubmitButton>
         </div>
       </ActionForm>
     </Sheet>

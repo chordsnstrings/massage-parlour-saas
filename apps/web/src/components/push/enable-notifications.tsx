@@ -12,18 +12,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 
 type State = 'loading' | 'unconfigured' | 'unsupported' | 'denied' | 'off' | 'on'
 
-const BADGE: Record<State, { label: string; tone: 'neutral' | 'success' | 'warning' }> = {
-  loading: { label: '…', tone: 'neutral' },
-  unconfigured: { label: 'Not set up', tone: 'neutral' },
-  unsupported: { label: 'Unavailable', tone: 'neutral' },
-  denied: { label: 'Blocked', tone: 'warning' },
-  off: { label: 'Off', tone: 'neutral' },
-  on: { label: 'On', tone: 'success' },
+const BADGE_TONE: Record<State, 'neutral' | 'success' | 'warning'> = {
+  loading: 'neutral',
+  unconfigured: 'neutral',
+  unsupported: 'neutral',
+  denied: 'warning',
+  off: 'neutral',
+  on: 'success',
 }
 
 /** Base64url VAPID key → bytes for PushManager.subscribe(). */
@@ -52,6 +53,7 @@ async function currentSubscription() {
 
 /** "Enable notifications on this device": permission prompt → push subscription → saved for this user. */
 export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
+  const t = useT()
   const [state, setState] = useState<State>(publicKey ? 'loading' : 'unconfigured')
   const [busy, setBusy] = useState<'enable' | 'disable' | 'test' | null>(null)
 
@@ -78,8 +80,8 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
   }, [publicKey])
 
   const report = (res: ActionResult) => {
-    if (res?.ok && res.message) toast.success(res.message)
-    else if (res && !res.ok) toast.error(res.error)
+    if (res?.ok && res.message) toast.success(resultText(t, res) ?? '')
+    else if (res && !res.ok) toast.error(resultText(t, res) ?? '')
     return Boolean(res?.ok)
   }
 
@@ -102,7 +104,7 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
         }))
       if (report(await subscribePushAction(sub.toJSON()))) setState('on')
     } catch {
-      toast.error("Couldn't turn on notifications in this browser.")
+      toast.error(t('account.push.failed'))
     } finally {
       setBusy(null)
     }
@@ -136,13 +138,12 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
     }
   }
 
-  const badge = BADGE[state]
   return (
     <Card>
       <CardHeader
-        title="Notifications on this device"
-        description="New online bookings, document expiry reminders and your weekly insights — on this phone or computer."
-        action={<Badge tone={badge.tone}>{badge.label}</Badge>}
+        title={t('account.push.title')}
+        description={t('account.push.sub')}
+        action={<Badge tone={BADGE_TONE[state]}>{t(`account.push.badge.${state}`)}</Badge>}
       />
       <CardBody className="pt-4 sm:pt-5">
         <motion.div
@@ -161,22 +162,12 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
                 <BellOff className="size-4" strokeWidth={1.5} />
               )}
             </span>
-            <span className="max-w-md">
-              {state === 'unconfigured' &&
-                "Push notifications aren't set up on this platform yet. They'll appear here once your provider switches them on."}
-              {state === 'unsupported' &&
-                'This browser can’t receive notifications. On iPhone, add the app to your Home Screen first (Share → Add to Home Screen), then open it from there.'}
-              {state === 'denied' &&
-                'Notifications are blocked for this site. Allow them in your browser’s site settings, then come back here.'}
-              {state === 'off' && 'Get a ping the moment something needs you. You can turn it off any time.'}
-              {state === 'on' && 'This device will be notified. Each phone or computer is set up separately.'}
-              {state === 'loading' && 'Checking this device…'}
-            </span>
+            <span className="max-w-md">{t(`account.push.text.${state}`)}</span>
           </p>
           <div className="flex shrink-0 flex-wrap gap-2">
             {state === 'off' && (
               <Button onClick={enable} pending={busy === 'enable'} className="min-h-11 sm:min-h-10">
-                <BellRing /> Enable notifications
+                <BellRing /> {t('account.push.enable')}
               </Button>
             )}
             {state === 'on' && (
@@ -187,7 +178,7 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
                   pending={busy === 'test'}
                   className="min-h-11 sm:min-h-10"
                 >
-                  Send a test
+                  {t('account.push.test')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -195,7 +186,7 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
                   pending={busy === 'disable'}
                   className="min-h-11 sm:min-h-10"
                 >
-                  Turn off
+                  {t('account.push.turnOff')}
                 </Button>
               </>
             )}

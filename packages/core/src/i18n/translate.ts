@@ -4,8 +4,14 @@ import type { Leaf, Locale, MessageKey, Params } from './types'
 
 type Tree = { readonly [key: string]: unknown }
 
-const isLeaf = (node: unknown): node is Leaf =>
-  typeof node === 'string' || (typeof node === 'object' && node !== null && 'other' in node)
+const CATEGORIES = new Set(['zero', 'one', 'two', 'few', 'many', 'other'])
+/** Strings, and plural objects (`other` + only plural-category keys — an enum group with an `other` value isn't one). */
+export const isLeaf = (node: unknown): node is Leaf =>
+  typeof node === 'string' ||
+  (typeof node === 'object' &&
+    node !== null &&
+    'other' in node &&
+    Object.keys(node).every((k) => CATEGORIES.has(k)))
 
 export function lookup(messages: Tree, key: string): Leaf | undefined {
   let node: unknown = messages
@@ -26,7 +32,7 @@ const pluralRules = (locale: Locale) => {
   return rules
 }
 
-export function render(locale: Locale, leaf: Leaf, params?: Params) {
+export function render(locale: Locale, leaf: Leaf, params?: Record<string, string | number>) {
   const text =
     typeof leaf === 'string'
       ? leaf
@@ -47,16 +53,22 @@ export type Translator = {
 /** `messages` = the locale's catalogue; `fallback` (usually EN) covers keys a partial catalogue lacks. */
 export function createTranslator(locale: Locale, messages: Tree, fallback?: Tree): Translator {
   const find = (key: string) => lookup(messages, key) ?? (fallback ? lookup(fallback, key) : undefined)
+  // Nested `{ key }` params (e.g. a status word inside a sentence) are translated first.
+  const flat = (params?: Params) =>
+    params &&
+    Object.fromEntries(
+      Object.entries(params).map(([name, v]) => [name, typeof v === 'object' ? t(v.key, v.params) : v]),
+    )
   const t = ((key: MessageKey, params?: Params) => {
     const leaf = find(key)
-    return leaf === undefined ? key : render(locale, leaf, params)
+    return leaf === undefined ? key : render(locale, leaf, flat(params))
   }) as Translator
   t.locale = locale
   t.has = (key: string): key is MessageKey => find(key) !== undefined
   t.maybe = (key, params) => {
     if (!key) return undefined
     const leaf = find(key)
-    return leaf === undefined ? undefined : render(locale, leaf, params)
+    return leaf === undefined ? undefined : render(locale, leaf, flat(params))
   }
   return t
 }

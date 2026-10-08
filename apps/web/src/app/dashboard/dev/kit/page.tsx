@@ -48,6 +48,7 @@ export default async function KitPage() {
         { href: appPath('/dev/kit'), label: 'Kit', icon: 'home' },
         { href: appPath('/dev/kit#forms'), label: 'Forms', icon: 'settings' },
         { href: appPath('/dev/kit#data'), label: 'Data', icon: 'billing' },
+        { href: appPath('/dev/kit/crm'), label: 'Spa page kit', icon: 'home' },
       ]}
     >
       <PageHeader

@@ -1,32 +1,23 @@
 import { withTenant } from '@spa/db'
 import { sql } from 'drizzle-orm'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, Legend, Meter, Pill, Seg, Stat } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { StatCard } from '@/components/ui/stat-card'
 import { type Column, DataTable } from '@/components/ui/table'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { Bars } from './bars'
 
-export const metadata: Metadata = { title: 'Website analytics' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('analytics.title') }
+}
 
 const RANGES = { '7': 7, '30': 30, '90': 90 } as const
 type Row = { key: string; views: number; clicks: number; sessions: number; conversions: number }
 
 const pct = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 10 : 0)
-const SOURCE_LABELS: Record<string, string> = {
-  direct: 'Direct',
-  google: 'Google search',
-  instagram: 'Instagram',
-  whatsapp: 'WhatsApp',
-  facebook: 'Facebook',
-  gbp: 'Google Business Profile',
-  referral: 'Other websites',
-}
 
 export default async function AnalyticsPage({
   params,
@@ -37,6 +28,8 @@ export default async function AnalyticsPage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'reports.view')) notFound()
+  const { t, fmt } = await getI18n()
+  const p = (n: number, d: number) => fmt.percent(pct(n, d) / 100)
   const { range: rangeParam } = await searchParams
   const days = RANGES[(rangeParam ?? '30') as keyof typeof RANGES] ?? 30
   const since = sql`(date_trunc('day', now() at time zone 'Asia/Dubai') - ${days - 1} * interval '1 day') at time zone 'Asia/Dubai'`
@@ -83,173 +76,155 @@ export default async function AnalyticsPage({
   const byDay = new Map(data.daily.map((d) => [d.key, d.sessions]))
   const chart = Array.from({ length: days }, (_, i) => {
     const d = new Date(Date.now() + 4 * 3600_000 - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10)
-    return { label: d.slice(5).replace('-', '/'), value: byDay.get(d) ?? 0 }
+    return { label: fmt.dateShort(`${d}T12:00:00Z`), value: byDay.get(d) ?? 0 }
   })
   const f = Object.fromEntries(data.funnel.map((r) => [r.key, r.sessions])) as Record<string, number>
   const visitors = data.totals.sessions
   const deviceTotal = data.devices.reduce((a, d) => a + d.sessions, 0)
   const base = appPath(`/${ctx.tenant.slug}/analytics`)
+  const num = 'text-right tabular-nums'
+  const sourceLabel = (k: string) => t.maybe(`analytics.source.${k}`) ?? k
+  const deviceLabel = (k: string) => t.maybe(`analytics.device.${k}`) ?? k
 
   const pageCols: Column<Row>[] = [
-    { key: 'path', header: 'Page', primary: true, cell: (r) => <span className="font-medium">{r.key}</span> },
-    { key: 'views', header: 'Views', className: 'text-right tabular-nums', cell: (r) => r.views },
-    { key: 'visitors', header: 'Visitors', className: 'text-right tabular-nums', cell: (r) => r.sessions },
-    { key: 'clicks', header: 'Clicks', className: 'text-right tabular-nums', cell: (r) => r.clicks },
-    { key: 'booked', header: 'Bookings', className: 'text-right tabular-nums', cell: (r) => r.conversions },
+    {
+      key: 'path',
+      header: t('analytics.colPage'),
+      primary: true,
+      cell: (r) => <span className="font-medium">{r.key}</span>,
+    },
+    { key: 'views', header: t('analytics.colViews'), className: num, cell: (r) => fmt.number(r.views) },
+    {
+      key: 'visitors',
+      header: t('analytics.colVisitors'),
+      className: num,
+      cell: (r) => fmt.number(r.sessions),
+    },
+    { key: 'clicks', header: t('analytics.colClicks'), className: num, cell: (r) => fmt.number(r.clicks) },
+    {
+      key: 'booked',
+      header: t('analytics.colBookings'),
+      className: num,
+      cell: (r) => fmt.number(r.conversions),
+    },
   ]
   const blockCols: Column<Row>[] = [
     {
       key: 'block',
-      header: 'Section',
+      header: t('analytics.colSection'),
       primary: true,
       cell: (r) => {
         const [id, type, path] = r.key.split('|')
         return (
           <span className="flex flex-col">
             <span className="font-medium">{type || id}</span>
-            <span className="text-xs text-muted">
+            <span className="crm-muted text-xs">
               {path} · {id}
             </span>
           </span>
         )
       },
     },
-    {
-      key: 'seen',
-      header: 'Seen by',
-      className: 'text-right tabular-nums',
-      cell: (r) => `${pct(r.views, visitors)}%`,
-    },
-    { key: 'clicks', header: 'Clicks', className: 'text-right tabular-nums', cell: (r) => r.clicks },
-    {
-      key: 'ctr',
-      header: 'Click rate',
-      className: 'text-right tabular-nums',
-      cell: (r) => `${pct(r.clicks, r.views)}%`,
-    },
+    { key: 'seen', header: t('analytics.colSeen'), className: num, cell: (r) => p(r.views, visitors) },
+    { key: 'clicks', header: t('analytics.colClicks'), className: num, cell: (r) => fmt.number(r.clicks) },
+    { key: 'ctr', header: t('analytics.colRate'), className: num, cell: (r) => p(r.clicks, r.views) },
+  ]
+  const steps = [
+    { label: t('analytics.stepVisited'), n: f.pageview ?? visitors },
+    { label: t('analytics.stepStarted'), n: f.booking_start ?? 0 },
+    { label: t('analytics.stepCompleted'), n: f.booking_complete ?? 0 },
+    { label: t('analytics.stepWhatsapp'), n: f.wa_click ?? 0 },
   ]
 
   return (
     <>
       <PageHeader
-        title="Website analytics"
-        description="Cookieless and private: no personal data is stored, visitors are counted with a daily rotating hash."
+        title={t('analytics.title')}
+        description={t('analytics.description')}
         actions={
-          <nav className="inline-flex rounded-full border bg-surface p-1 text-sm" aria-label="Date range">
-            {Object.keys(RANGES).map((r) => (
-              <Link
-                key={r}
-                href={`${base}?range=${r}`}
-                aria-current={String(days) === r ? 'page' : undefined}
-                className={cn(
-                  'rounded-full px-3.5 py-1.5 transition-colors',
-                  String(days) === r ? 'bg-fg text-bg' : 'text-muted hover:text-fg',
-                )}
-              >
-                {r} days
-              </Link>
-            ))}
-          </nav>
+          <Seg
+            label={t('analytics.rangeLabel')}
+            value={String(days)}
+            items={Object.keys(RANGES).map((r) => ({
+              value: r,
+              label: t('analytics.range', { n: r }),
+              href: `${base}?range=${r}`,
+            }))}
+          />
         }
       />
       <PageBody>
         {visitors === 0 ? (
           <Card>
-            <EmptyState
-              title="No visits yet"
-              description="Analytics start automatically once your website gets visitors. Share your site link on Instagram and WhatsApp to get going."
-            />
+            <EmptyState title={t('analytics.emptyTitle')} description={t('analytics.emptyBody')} />
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-              <StatCard label="Visitors" value={visitors} format="int" hint={`last ${days} days`} />
-              <StatCard label="Page views" value={data.totals.views} format="int" />
-              <StatCard
-                label="Online bookings"
-                value={data.totals.conversions}
-                format="int"
-                hint={`${pct(f.booking_complete ?? 0, visitors)}% of visitors`}
+            <Grid cols="g4">
+              <Stat
+                label={t('analytics.visitors')}
+                value={fmt.number(visitors)}
+                change={{ text: t('analytics.lastDays', { n: days }) }}
               />
-              <StatCard label="WhatsApp taps" value={data.totals.clicks} format="int" />
-            </div>
+              <Stat label={t('analytics.pageViews')} value={fmt.number(data.totals.views)} />
+              <Stat
+                label={t('analytics.onlineBookings')}
+                value={fmt.number(data.totals.conversions)}
+                change={{ text: t('analytics.ofVisitors', { pct: p(f.booking_complete ?? 0, visitors) }) }}
+              />
+              <Stat label={t('analytics.waTaps')} value={fmt.number(data.totals.clicks)} />
+            </Grid>
 
-            <Card>
-              <CardHeader title="Visitors per day" description="Unique visitors, Dubai time." />
-              <CardBody className="pt-8">
-                <Bars data={chart} />
-              </CardBody>
+            <Card title={t('analytics.perDay')} sub={t('analytics.perDaySub')}>
+              <Bars data={chart} label={t('analytics.perDay')} />
             </Card>
 
-            <div className="grid gap-6 lg:grid-cols-12">
-              <Card className="lg:col-span-7">
-                <CardHeader title="Booking funnel" description="How many visitors moved to each step." />
-                <CardBody className="space-y-4">
-                  {[
-                    { label: 'Visited the site', n: f.pageview ?? visitors },
-                    { label: 'Started a booking', n: f.booking_start ?? 0 },
-                    { label: 'Completed a booking', n: f.booking_complete ?? 0 },
-                    { label: 'Tapped WhatsApp', n: f.wa_click ?? 0 },
-                  ].map((s) => (
-                    <div key={s.label} className="space-y-1.5">
-                      <div className="flex items-baseline justify-between text-sm">
-                        <span>{s.label}</span>
-                        <span className="tabular-nums text-muted">
-                          {s.n} · {pct(s.n, visitors)}%
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-subtle">
-                        <div
-                          className="h-full rounded-full bg-accent transition-[width] duration-700"
-                          style={{ width: `${Math.max(1, pct(s.n, visitors))}%` }}
-                        />
-                      </div>
-                    </div>
+            <Grid cols="col-2">
+              <Card title={t('analytics.funnel')} sub={t('analytics.funnelSub')}>
+                <div className="crm-stack">
+                  {steps.map((s) => (
+                    <Meter
+                      key={s.label}
+                      showLabel
+                      label={s.label}
+                      value={s.n}
+                      max={Math.max(1, visitors)}
+                      valueText={`${fmt.number(s.n)} · ${p(s.n, visitors)}`}
+                    />
                   ))}
-                </CardBody>
+                </div>
               </Card>
-              <Card className="lg:col-span-5">
-                <CardHeader title="Where visitors come from" />
-                <CardBody className="space-y-3">
-                  {data.sources.map((s) => (
-                    <div key={s.key} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="truncate">{SOURCE_LABELS[s.key] ?? s.key}</span>
-                      <span className="shrink-0 tabular-nums text-muted">
-                        {s.sessions} visitors{s.conversions ? ` · ${s.conversions} booked` : ''}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="flex gap-2 border-t pt-4 text-xs text-muted">
-                    {data.devices.map((d) => (
-                      <span key={d.key} className="rounded-full bg-subtle px-2.5 py-1 capitalize">
-                        {d.key} {pct(d.sessions, deviceTotal)}%
-                      </span>
-                    ))}
-                  </div>
-                </CardBody>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader title="Top pages" />
-              <div className="pb-2">
-                <DataTable columns={pageCols} rows={data.pages} rowKey={(r) => r.key} />
-              </div>
-            </Card>
-
-            <Card>
-              <CardHeader
-                title="Sections"
-                description="Which parts of each page people actually see and tap — use it to move what works higher up."
-              />
-              <div className="pb-2">
-                <DataTable
-                  columns={blockCols}
-                  rows={data.blocks}
-                  rowKey={(r) => r.key}
-                  empty={<p className="px-6 pb-6 text-sm text-muted">No section data yet.</p>}
+              <Card title={t('analytics.sources')}>
+                <Legend
+                  items={data.sources.map((s) => ({
+                    label: sourceLabel(s.key),
+                    value: s.conversions
+                      ? t('analytics.sourceVisitorsBooked', { count: s.sessions, booked: s.conversions })
+                      : t('analytics.sourceVisitors', { count: s.sessions }),
+                  }))}
                 />
-              </div>
+                <p className="crm-ey mt-4">{t('analytics.devices')}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {data.devices.map((d) => (
+                    <Pill key={d.key}>
+                      {deviceLabel(d.key)} {p(d.sessions, deviceTotal)}
+                    </Pill>
+                  ))}
+                </div>
+              </Card>
+            </Grid>
+
+            <Card title={t('analytics.topPages')} flush>
+              <DataTable columns={pageCols} rows={data.pages} rowKey={(r) => r.key} />
+            </Card>
+
+            <Card title={t('analytics.sections')} sub={t('analytics.sectionsSub')} flush>
+              <DataTable
+                columns={blockCols}
+                rows={data.blocks}
+                rowKey={(r) => r.key}
+                empty={<p className="crm-muted px-6 pb-6 text-sm">{t('analytics.noSections')}</p>}
+              />
             </Card>
           </>
         )}

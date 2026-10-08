@@ -3,11 +3,11 @@ import { motion, useReducedMotion } from 'motion/react'
 import { ease } from '@/lib/motion'
 
 /** Daily bar chart with a staggered draw-in; values are labelled for screen readers. */
-export function Bars({ data }: { data: { label: string; value: number }[] }) {
+export function Bars({ data, label }: { data: { label: string; value: number }[]; label: string }) {
   const reduce = useReducedMotion()
   const max = Math.max(1, ...data.map((d) => d.value))
   return (
-    <div className="flex h-40 items-end gap-[3px] sm:h-48" role="img" aria-label="Visitors per day">
+    <div className="flex h-40 items-end gap-[3px] sm:h-48" role="img" aria-label={label}>
       {data.map((d, i) => (
         <div key={d.label} className="group relative flex h-full min-w-0 flex-1 items-end">
           <motion.div

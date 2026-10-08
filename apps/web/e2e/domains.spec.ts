@@ -102,7 +102,7 @@ test('domains: owner requests a domain to buy, cancels one, support declines the
   await page.reload()
   const requests = page.locator('section', { has: page.getByRole('heading', { name: 'Domain requests' }) })
   await expect(requests.getByText('Awaiting approval')).toHaveCount(2)
-  await expect(requests.getByText(/AED 42 for 1 year/).first()).toBeVisible()
+  await expect(requests.getByText(/AED\s42 for 1 year/).first()).toBeVisible()
   page.once('dialog', (d) => d.accept())
   await requests
     .locator('li', { hasText: `${slug}-one.com` })

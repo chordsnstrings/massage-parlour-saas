@@ -8,7 +8,6 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   return (
     <AppShell
       title="Platform console"
-      subtitle="spamanagement.ae"
       homeHref={adminPath()}
       user={user}
       accountHref={await appUrl('/account')}

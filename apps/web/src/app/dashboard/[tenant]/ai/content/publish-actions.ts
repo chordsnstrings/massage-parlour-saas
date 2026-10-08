@@ -11,7 +11,7 @@ export async function publishToInstagramAction(slug: string, postId: string): Pr
   const { ctx, error } = await guard(slug, 'ai.approve')
   if (error) return fail(error)
   const parsed = z.uuid().safeParse(postId)
-  if (!parsed.success) return fail('Unknown post')
+  if (!parsed.success) return fail('ai.unknownPost')
   const r = await publishInstagramPost(ctx.tenant.id, parsed.data)
   await audit({
     tenantId: ctx.tenant.id,
@@ -22,5 +22,5 @@ export async function publishToInstagramAction(slug: string, postId: string): Pr
     data: r.ok ? { externalId: r.externalId } : { error: r.error },
   })
   revalidatePath(`/dashboard/${slug}/ai/content`)
-  return r.ok ? ok('Published to Instagram') : fail(r.error)
+  return r.ok ? ok('ai.publishedIg') : fail(r.error)
 }
