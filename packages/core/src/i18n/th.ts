@@ -43,6 +43,7 @@ import { ui } from './th/ui'
 import { validation } from './th/validation'
 import { warehouse } from './th/warehouse'
 import { website } from './th/website'
+import { widget } from './th/widget'
 import type { Messages } from './types'
 
 export const th: Messages = {
@@ -76,6 +77,7 @@ export const th: Messages = {
   analytics,
   reviews,
   website,
+  widget,
   media,
   accounts,
   payroll,

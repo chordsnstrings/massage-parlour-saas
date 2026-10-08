@@ -1,6 +1,7 @@
 import { respondToInstagram } from '@spa/ai'
 import { constantTimeEqual, ingestInstagramWebhook, metaConfig, verifyMetaSignature } from '@spa/services'
 import { after, type NextRequest } from 'next/server'
+import { enqueueInstagramReplies } from '@/server/jobs'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * DM + comment events. The signature covers the raw body; storing the messages is quick and happens before we answer
- * (so Meta retries if the database is down); the AI turn runs after the 200 response.
+ * (so Meta retries if the database is down); each AI turn is queued as an `instagram-reply` pg-boss job.
  */
 export async function POST(req: NextRequest) {
   const cfg = metaConfig()
@@ -41,19 +42,29 @@ export async function POST(req: NextRequest) {
     return text('Try again', 500)
   }
   if (items.length) {
-    after(async () => {
-      for (const item of items) {
-        try {
-          await respondToInstagram(item)
-        } catch (e) {
-          // The message stays unread in the inbox for staff; no tokens are ever part of these errors.
-          console.error('instagram webhook: agent turn failed', {
-            tenantId: item.tenantId,
-            error: e instanceof Error ? e.message.slice(0, 200) : 'unknown error',
-          })
+    // Durable path: one pg-boss job per message (worker `instagram-reply`, retries with backoff, survives restarts).
+    try {
+      await enqueueInstagramReplies(items)
+    } catch (e) {
+      // Queue unreachable (worker never started on this database): answer in-process rather than drop the turn.
+      console.error(
+        'instagram webhook: enqueue failed, replying inline',
+        e instanceof Error ? e.message : 'unknown',
+      )
+      after(async () => {
+        for (const item of items) {
+          try {
+            await respondToInstagram(item)
+          } catch (err) {
+            // The message stays unread in the inbox for staff; no tokens are ever part of these errors.
+            console.error('instagram webhook: agent turn failed', {
+              tenantId: item.tenantId,
+              error: err instanceof Error ? err.message.slice(0, 200) : 'unknown error',
+            })
+          }
         }
-      }
-    })
+      })
+    }
   }
   return text('EVENT_RECEIVED', 200)
 }

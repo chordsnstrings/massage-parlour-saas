@@ -1,5 +1,6 @@
 // Instagram: connected account, DM/comment inbox, replies, publishing and token upkeep.
 // Platform lookups (webhook → tenant by IG account id, cross-tenant jobs) use platformDb; every tenant write runs in withTenant.
+import { createHash } from 'node:crypto'
 import {
   appDb,
   bookings,
@@ -14,7 +15,7 @@ import {
   tenants,
   withTenant,
 } from '@spa/db'
-import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
 import { findOrCreateClient } from './clients'
 import { DomainError } from './errors'
 import {
@@ -297,6 +298,52 @@ async function storeInbound(tx: Tx, tenantId: string, ev: InstagramEvent): Promi
 }
 
 /** What the agent needs for one inbound message: the thread state and prior turns (sent messages only). */
+/** pg-boss queue for Instagram AI turns (webhook enqueues, worker answers; PLAN §14.7 B6). */
+export const INSTAGRAM_REPLY_QUEUE = 'instagram-reply'
+/** Retries with exponential backoff (30 s, 1 min, 2 min …) so a ModelArk/Meta hiccup or a restart loses nothing. */
+export const INSTAGRAM_REPLY_RETRY = {
+  retryLimit: 5,
+  retryDelay: 30,
+  retryBackoff: true,
+  retryDelayMax: 1800,
+} as const
+
+/** Deterministic job id per inbound message (comment / DM id): enqueueing the same message twice is a no-op. */
+export function instagramReplyJobId(item: Pick<InboundItem, 'tenantId' | 'messageId'>) {
+  const h = createHash('sha256').update(`instagram-reply:${item.tenantId}:${item.messageId}`).digest('hex')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((Number.parseInt(h[16]!, 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`
+}
+
+/**
+ * True when the thread already has a spa-side message (bot, staff or AI draft) at or after this inbound message —
+ * the instagram-reply job's idempotency check, so a retried or duplicated job never answers twice.
+ */
+export async function inboundAnswered(item: InboundItem, o: SocialOpts = {}) {
+  return withTenant(
+    item.tenantId,
+    async (tx) => {
+      const [msg] = await tx
+        .select({ createdAt: conversationMessages.createdAt })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, item.messageId))
+      if (!msg) return true
+      const [later] = await tx
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, item.conversationId),
+            ne(conversationMessages.sender, 'customer'),
+            gte(conversationMessages.createdAt, msg.createdAt),
+          ),
+        )
+        .limit(1)
+      return Boolean(later)
+    },
+    appOf(o),
+  )
+}
+
 export async function loadAgentTurn(item: InboundItem, o: SocialOpts = {}) {
   return withTenant(
     item.tenantId,

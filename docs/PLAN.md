@@ -758,8 +758,8 @@ until `spamanagement.ae` is registered.
 ### 14.2 P2/P3 implementation decisions (recorded at integration)
 - **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
   `conversation_messages.error`; `conversations.read_at` drives the unread dot; the inbox polls every 20 s. Each comment is
-  its own conversation. Autopilot replies run in `after()` in the web process (not durable across a restart — move to a
-  pg-boss job if that matters). Approve mode creates *pending* bookings the spa confirms.
+  its own conversation. Autopilot replies run as the pg-boss job `instagram-reply` (B6, 2026-10-08: enqueued by the webhook, idempotent by
+  message id, retries with backoff; `after()` only as a fallback when the queue is unreachable). Approve mode creates *pending* bookings the spa confirms.
 - **Campaigns:** the 7-day cap counts other campaigns' messages within ±7 days of the send (skipped ones ignored); max 500
   recipients; result = non-cancelled bookings within 14 days of a sent/opened message; archiving withdraws unsent messages.
   Segments always exclude never-visited clients and clients tagged `no-marketing`. Campaign messages are outbox kind `custom`
@@ -885,7 +885,8 @@ until `spamanagement.ae` is registered.
 - Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch
   to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
   bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
-  clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.
+  clock + leave, embeddable booking widget (✅ X8: `public/widget.js` + `/book/embed`, CODEMAP "Online booking") · B6 restore
+  drill, Instagram autopilot as a pg-boss job (✅ X8: worker `restore-drill` + `instagram-reply`, migration 0022 `job_runs`).
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

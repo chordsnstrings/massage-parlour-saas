@@ -43,6 +43,7 @@ import { team } from './en/team'
 import { validation } from './en/validation'
 import { warehouse } from './en/warehouse'
 import { website } from './en/website'
+import { widget } from './en/widget'
 import { ui } from './en-ui'
 
 export const en = {
@@ -76,6 +77,7 @@ export const en = {
   analytics,
   reviews,
   website,
+  widget,
   media,
   accounts,
   payroll,

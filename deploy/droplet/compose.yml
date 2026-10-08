@@ -105,6 +105,8 @@ services:
     environment:
       <<: [*app-env, *db]
       DB_POOL_MAX: "4"
+      # Monthly restore drill: creates/drops a scratch database (needs CREATEDB; spa_owner has none).
+      RESTORE_DRILL_ADMIN_URL: postgres://postgres:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/postgres
     depends_on:
       migrate: { condition: service_completed_successfully }
     mem_limit: 512m

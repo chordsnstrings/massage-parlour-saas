@@ -1,4 +1,4 @@
-import { platformDb, platformInvoices, platformPayments, subscriptions, tenants } from '@spa/db'
+import { jobRuns, platformDb, platformInvoices, platformPayments, subscriptions, tenants } from '@spa/db'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -61,6 +61,14 @@ export default async function PlatformOverview() {
     )
     .groupBy(tenants.id)
     .orderBy(sql`min(${platformInvoices.dueDate})`)
+  // Monthly restore drill (worker `restore-drill`, PLAN §3.5): latest outcome; stale after 35 days.
+  const [drill] = await db
+    .select()
+    .from(jobRuns)
+    .where(eq(jobRuns.job, 'restore-drill'))
+    .orderBy(desc(jobRuns.finishedAt))
+    .limit(1)
+  const drillStale = !drill || Date.now() - drill.finishedAt.getTime() > 35 * 86_400_000
 
   return (
     <>
@@ -88,6 +96,39 @@ export default async function PlatformOverview() {
             />
           </StaggerItem>
         </Stagger>
+        <Card data-testid="restore-drill">
+          <CardHeader
+            title="Backup restore drill"
+            description={
+              drill
+                ? `Last run ${formatDate(drill.finishedAt.toISOString().slice(0, 10))}${
+                    drill.status === 'ok'
+                      ? ` · ${String(drill.details.key ?? '')} restored · ${Object.entries(
+                          (drill.details.counts as Record<string, number> | undefined) ?? {},
+                        )
+                          .map(([k, v]) => `${k} ${v}`)
+                          .join(', ')}`
+                      : drill.status === 'skipped'
+                        ? ' · skipped: R2 backups are not configured'
+                        : ` · ${String(drill.details.error ?? 'failed')}`
+                  }`
+                : 'No drill has run yet — the worker restores the latest R2 backup on the 2nd of each month.'
+            }
+            action={
+              <Badge
+                tone={
+                  drill?.status === 'ok' && !drillStale
+                    ? 'success'
+                    : drill?.status === 'failed'
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                {drill ? (drillStale ? `${drill.status} · overdue` : drill.status) : 'never run'}
+              </Badge>
+            }
+          />
+        </Card>
         {late.length > 0 && (
           <Card>
             <CardHeader

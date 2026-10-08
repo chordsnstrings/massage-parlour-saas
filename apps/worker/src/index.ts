@@ -22,7 +22,7 @@ boss.on('error', (error) => log('error', 'pg-boss error', { error: String(error)
 await boss.start()
 
 for (const job of jobs) {
-  await boss.createQueue(job.name)
+  await boss.createQueue(job.name, job.queue)
   await boss.work(job.name, async ([j]) => {
     const started = Date.now()
     try {

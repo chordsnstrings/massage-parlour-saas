@@ -53,6 +53,7 @@ export function BookingFlow({
   homeHref,
   langHref,
   initialServiceId,
+  embed = false,
 }: {
   site: SiteKey
   catalog: BookingCatalog
@@ -60,6 +61,8 @@ export function BookingFlow({
   homeHref: string
   langHref: string
   initialServiceId?: string
+  /** Chrome-less mode inside the embeddable widget's iframe (public/widget.js): no site link, posts resize + booked. */
+  embed?: boolean
 }) {
   const L = (key: Parameters<typeof t>[0]) => t(key, locale)
   const rtl = locale === 'ar'
@@ -91,6 +94,29 @@ export function BookingFlow({
     [catalog.therapists, service],
   )
   const therapist = catalog.therapists.find((p) => p.id === staffId) ?? null
+
+  // Widget iframe: report the content height so the host page can size the modal; forward Escape.
+  useEffect(() => {
+    if (!embed || window.parent === window) return
+    const post = () => {
+      window.parent.postMessage(
+        { type: 'spa-widget:resize', height: document.documentElement.scrollHeight },
+        '*',
+      )
+    }
+    // Escape inside the iframe closes the host page's modal too.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') window.parent.postMessage({ type: 'spa-widget:close' }, '*')
+    }
+    const ro = new ResizeObserver(post)
+    ro.observe(document.body)
+    document.addEventListener('keydown', onKey)
+    post()
+    return () => {
+      ro.disconnect()
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [embed])
 
   const go = useCallback(
     (next: Step) => {
@@ -145,6 +171,7 @@ export function BookingFlow({
       notes: String(fd.get('notes') ?? ''),
       website: String(fd.get('website') ?? ''),
       lang: locale,
+      via: embed ? 'widget' : undefined,
     })
     if (res && !res.ok && res.fieldErrors?.start) {
       // Someone else got there first: back to times with a fresh list.
@@ -185,17 +212,21 @@ export function BookingFlow({
   )
 
   return (
-    <div dir={rtl ? 'rtl' : 'ltr'} lang={locale} className="min-h-dvh bg-bg text-fg">
+    <div dir={rtl ? 'rtl' : 'ltr'} lang={locale} className={cn('bg-bg text-fg', !embed && 'min-h-dvh')}>
       <header className="sticky top-0 z-20 border-b bg-surface/85 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          <a
-            href={homeHref}
-            className="group -ms-2 inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-[15px] font-semibold tracking-tight"
-          >
-            <ArrowLeft className="size-4 shrink-0 text-muted transition-transform duration-150 group-hover:-translate-x-0.5 rtl:rotate-180 rtl:group-hover:translate-x-0.5" />
-            <span className="truncate">{catalog.spa}</span>
-            <span className="sr-only">— {L('backToSite')}</span>
-          </a>
+          {embed ? (
+            <span className="min-w-0 truncate text-[15px] font-semibold tracking-tight">{catalog.spa}</span>
+          ) : (
+            <a
+              href={homeHref}
+              className="group -ms-2 inline-flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2 text-[15px] font-semibold tracking-tight"
+            >
+              <ArrowLeft className="size-4 shrink-0 text-muted transition-transform duration-150 group-hover:-translate-x-0.5 rtl:rotate-180 rtl:group-hover:translate-x-0.5" />
+              <span className="truncate">{catalog.spa}</span>
+              <span className="sr-only">— {L('backToSite')}</span>
+            </a>
+          )}
           <a
             href={langHref}
             hrefLang={rtl ? 'en' : 'ar'}
@@ -207,7 +238,12 @@ export function BookingFlow({
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl grid-cols-12 gap-x-6 gap-y-8 px-4 py-8 sm:px-6 sm:py-12 lg:gap-x-12 lg:px-8 lg:py-16">
+      <main
+        className={cn(
+          'mx-auto grid max-w-6xl grid-cols-12 gap-x-6 gap-y-8 px-4 py-8 sm:px-6 lg:gap-x-12 lg:px-8',
+          !embed && 'sm:py-12 lg:py-16',
+        )}
+      >
         <div ref={topRef} className="col-span-12 scroll-mt-20 lg:col-span-8">
           {step !== 'done' && (
             <div className="space-y-6">
@@ -459,6 +495,13 @@ export function BookingFlow({
                     action={submit}
                     onSuccess={(r) => {
                       setDone(r.data?.booking as BookingDone)
+                      if (embed && window.parent !== window) {
+                        const b = r.data?.booking as BookingDone
+                        window.parent.postMessage(
+                          { type: 'spa-widget:booked', ref: b.ref, start: b.start, service: b.service },
+                          '*',
+                        )
+                      }
                       // Cookieless site analytics (public/t.js) — closes the booking funnel.
                       ;(window as { spaTrack?: (type: string, extra?: object) => void }).spaTrack?.(
                         'booking_complete',
