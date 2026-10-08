@@ -79,7 +79,7 @@ function Choice<T extends string>({
 }) {
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-2 text-[12px] font-medium tracking-[0.12em] text-[var(--mute)] uppercase">
+      <legend className="mb-2.5 text-[12px] font-bold tracking-[0.12em] text-[var(--mute)] uppercase">
         {label}
       </legend>
       <div className="flex flex-wrap gap-1.5">
@@ -89,7 +89,7 @@ function Choice<T extends string>({
             type="button"
             aria-pressed={value === k}
             onClick={() => onChange(k)}
-            className="rounded-full px-3.5 py-2 text-[14px] text-[var(--ink-2)] shadow-[inset_0_0_0_1px_var(--line)] transition-[background-color,color,box-shadow] duration-200 hover:bg-[var(--sand-soft)] aria-pressed:bg-[var(--ink)] aria-pressed:text-white aria-pressed:shadow-none"
+            className="min-h-10 rounded-[10px] bg-[var(--surface)] px-4 py-2 text-[14px] font-semibold text-[var(--ink)] shadow-[inset_0_0_0_1px_var(--line)] transition-[background-color,color,box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_var(--text)] aria-pressed:bg-[var(--text)] aria-pressed:text-white"
           >
             {options[k]}
           </button>
@@ -155,74 +155,74 @@ export function StudioDemo() {
         </p>
       </div>
 
-      <figure
-        className="overflow-hidden rounded-[1.25rem] border border-[var(--line)] bg-white shadow-[0_30px_80px_-40px_rgb(35_34_31/0.35)]"
-        aria-label="Example spa website"
-      >
-        <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-4 py-3">
-          <span className="size-2.5 rounded-full bg-[var(--clay)]" />
-          <span className="size-2.5 rounded-full bg-[var(--sand)]" />
-          <span className="size-2.5 rounded-full bg-[var(--sage)]" />
-          <span className="ms-3 truncate text-[12px] text-[var(--mute)]">alwahaspa.ae</span>
-        </div>
-        <div
-          dir={lang === 'ar' ? 'rtl' : 'ltr'}
-          lang={lang}
-          className="transition-colors duration-500"
-          style={{ background: s.bg, color: s.ink }}
-        >
-          <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-7">
-            <span className="text-[17px]" style={{ fontFamily: s.font }}>
-              {c.name}
-            </span>
-            <span className="hidden gap-5 text-[13px] sm:flex" style={{ color: s.mute }}>
-              {c.nav.map((n) => (
-                <span key={n}>{n}</span>
-              ))}
-            </span>
+      {/* C product frame (dark bezel); tilted back in 3D, straightens as it scrolls to the centre (MarketingMotion) */}
+      <div className="mkt-stage min-w-0">
+        <figure data-tilt className="mkt-tilt mkt-device" aria-label="Example spa website">
+          <div className="mkt-dots">
+            <span />
+            <span />
+            <span />
+            <span className="mkt-url">alwahaspa.ae</span>
           </div>
-          <div key={`${hero}-${lang}`} className="mkt-rise px-5 pb-8 sm:px-7">
-            {hero === 'photo' ? (
-              <div
-                className="flex min-h-64 items-end rounded-xl p-6 sm:p-8"
-                style={{
-                  background: `linear-gradient(to top, rgb(0 0 0 / 0.55), transparent 70%), radial-gradient(120% 90% at 75% 10%, ${s.soft}, transparent 55%), linear-gradient(160deg, ${s.accent}, ${s.ink})`,
-                }}
-              >
-                {text(true)}
-              </div>
-            ) : hero === 'split' ? (
-              <div className="grid items-center gap-6 sm:grid-cols-2">
-                {text()}
-                {photo}
-              </div>
-            ) : (
-              <div className="py-6">{text()}</div>
-            )}
-          </div>
-          <div className="px-5 pb-7 sm:px-7">
-            <p className="text-[12px] tracking-[0.12em] uppercase" style={{ color: s.mute }}>
-              {c.menu}
-            </p>
-            <ul className="mt-3 divide-y" style={{ borderColor: s.soft }}>
-              {c.items.map(([name, time, price]) => (
-                <li
-                  key={name}
-                  className="flex items-baseline justify-between gap-4 py-3 text-[14px]"
-                  style={{ borderColor: s.soft }}
+          <div
+            dir={lang === 'ar' ? 'rtl' : 'ltr'}
+            lang={lang}
+            className="mkt-screen transition-colors duration-500"
+            style={{ background: s.bg, color: s.ink }}
+          >
+            <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-7">
+              <span className="text-[17px]" style={{ fontFamily: s.font }}>
+                {c.name}
+              </span>
+              <span className="hidden gap-5 text-[13px] sm:flex" style={{ color: s.mute }}>
+                {c.nav.map((n) => (
+                  <span key={n}>{n}</span>
+                ))}
+              </span>
+            </div>
+            <div key={`${hero}-${lang}`} className="mkt-rise px-5 pb-8 sm:px-7">
+              {hero === 'photo' ? (
+                <div
+                  className="flex min-h-64 items-end rounded-xl p-6 sm:p-8"
+                  style={{
+                    background: `linear-gradient(to top, rgb(0 0 0 / 0.55), transparent 70%), radial-gradient(120% 90% at 75% 10%, ${s.soft}, transparent 55%), linear-gradient(160deg, ${s.accent}, ${s.ink})`,
+                  }}
                 >
-                  <span style={{ fontFamily: s.font }} className="text-[15px]">
-                    {name}
-                  </span>
-                  <span className="shrink-0 tabular-nums" style={{ color: s.mute }}>
-                    {time} · <span style={{ color: s.ink }}>{price}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+                  {text(true)}
+                </div>
+              ) : hero === 'split' ? (
+                <div className="grid items-center gap-6 sm:grid-cols-2">
+                  {text()}
+                  {photo}
+                </div>
+              ) : (
+                <div className="py-6">{text()}</div>
+              )}
+            </div>
+            <div className="px-5 pb-7 sm:px-7">
+              <p className="text-[12px] tracking-[0.12em] uppercase" style={{ color: s.mute }}>
+                {c.menu}
+              </p>
+              <ul className="mt-3 divide-y" style={{ borderColor: s.soft }}>
+                {c.items.map(([name, time, price]) => (
+                  <li
+                    key={name}
+                    className="flex items-baseline justify-between gap-4 py-3 text-[14px]"
+                    style={{ borderColor: s.soft }}
+                  >
+                    <span style={{ fontFamily: s.font }} className="text-[15px]">
+                      {name}
+                    </span>
+                    <span className="shrink-0 tabular-nums" style={{ color: s.mute }}>
+                      {time} · <span style={{ color: s.ink }}>{price}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
-      </figure>
+        </figure>
+      </div>
     </div>
   )
 }

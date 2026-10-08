@@ -1,7 +1,7 @@
 import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { CtaBand, MarketingShell } from '@/components/marketing/shell'
+import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { StudioDemo } from '@/components/marketing/studio-demo'
 import { appUrl } from '@/server/origin'
 
@@ -75,107 +75,96 @@ export default async function WebsiteStudioPage() {
   return (
     <MarketingShell active="website-builder">
       {/* Hero */}
-      <section data-scene="depart" data-mode="leave" className="relative overflow-x-clip">
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <div className="absolute top-12 left-[10%] size-72 rounded-full bg-[var(--mist-soft)] blur-3xl" />
-          <div className="absolute top-28 right-[8%] size-80 rounded-full bg-[var(--clay-soft)] blur-3xl" />
-        </div>
-        <div data-world className="mkt-wrap relative pt-20 pb-20 text-center sm:pt-28 sm:pb-24">
-          <p className="mkt-eyebrow mkt-rise">Website studio</p>
-          <h1
-            className="mkt-rise mx-auto mt-4 max-w-3xl text-[38px] leading-[1.06] font-semibold tracking-tight sm:text-[60px]"
-            style={css({ '--d': 1 })}
-          >
+      <section className="mkt-hero">
+        <HeroDepth />
+        <div className="mkt-wrap text-center">
+          <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+            Website studio
+          </p>
+          <h1 data-depth="0.06" className="mkt-h1 mkt-rise mx-auto mt-6 max-w-4xl" style={css({ '--d': 1 })}>
             A website handcrafted for your spa.
           </h1>
-          <p
-            className="mkt-rise mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-[var(--ink-2)]"
-            style={css({ '--d': 2 })}
-          >
+          <p data-depth="0.08" className="mkt-hsub mkt-rise mx-auto" style={css({ '--d': 2 })}>
             No templates to wrestle with. Our studio designs, writes and builds your site in English and
             Arabic — from your treatments, your team and your photos. You approve it. It takes bookings.
           </p>
-          <div className="mkt-rise mt-9 flex flex-wrap justify-center gap-3" style={css({ '--d': 3 })}>
+          <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={signup} className="mkt-btn mkt-btn-primary">
-              Start your spa <ArrowRight className="mkt-arrow size-4" />
+              Start your spa <ArrowRight />
             </a>
-            <a href="#make-it-yours" className="mkt-btn mkt-btn-ghost bg-white/70">
+            <a href="#make-it-yours" className="mkt-btn mkt-btn-ghost">
               Try the styles
             </a>
           </div>
-          <p className="mkt-rise mt-8 text-[13px] text-[var(--mute)]" style={css({ '--d': 4 })}>
+          <p data-depth="0.11" className="mkt-hnotes mkt-rise" style={css({ '--d': 4.5 })}>
             Included in your plan · Built by people, not a wizard · Changes on request
           </p>
         </div>
       </section>
 
       {/* Interactive: one spa, restyled */}
-      <section id="make-it-yours" className="tint-sand border-y border-[var(--line)]">
-        <div className="mkt-wrap py-20">
-          <p className="mkt-eyebrow">Make it yours</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-            One spa, many ways to tell its story.
-          </h2>
-          <p className="mt-4 max-w-xl text-[var(--ink-2)]">
-            Switch the style, the hero design and the language. Our studio makes choices like these for every
-            section of your site — so it looks like you, not like everyone else.
-          </p>
-          <div className="mt-12">
+      <section id="make-it-yours" className="mkt-band mkt-sec">
+        <div className="mkt-wrap">
+          <div data-rise className="mkt-shead">
+            <p className="mkt-eyebrow">Make it yours</p>
+            <h2 className="mkt-h2 max-w-2xl">One spa, many ways to tell its story.</h2>
+            <p className="mkt-lead">
+              Switch the style, the hero design and the language. Our studio makes choices like these for
+              every section of your site — so it looks like you, not like everyone else.
+            </p>
+          </div>
+          <div className="mt-[54px]">
             <StudioDemo />
           </div>
         </div>
       </section>
 
-      {/* How we build it — four steps build up in turn */}
-      <section data-scene="beats" data-pin="wide" style={css({ '--len': 360 })}>
-        <div data-stage>
-          <div className="mkt-wrap py-20">
+      {/* How we build it */}
+      <section className="mkt-sec">
+        <div className="mkt-wrap">
+          <div data-rise className="mkt-shead">
             <p className="mkt-eyebrow">How we build it</p>
-            <h2 className="mt-3 max-w-xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-              From a short brief to a site you’re proud of.
-            </h2>
-            <ol className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {STEPS.map((s, i) => (
-                <li
-                  key={s.n}
-                  data-beat={i + 1}
-                  data-from="y:28 rx:-14 o:0"
-                  className="flex flex-col rounded-2xl border border-[var(--line)] bg-white p-5"
-                >
-                  <span className="text-[13px] text-[var(--mute)] tabular-nums">{s.n}</span>
-                  <h3 className="mt-2 font-medium">{s.title}</h3>
-                  <p className="mt-1.5 flex-1 text-[14px] leading-relaxed text-[var(--ink-2)]">{s.text}</p>
-                  <ul className={`mt-5 space-y-1.5 rounded-xl px-3.5 py-3 text-[13px] ${s.tint}`}>
-                    {s.lines.map((l) => (
-                      <li key={l} className="truncate">
-                        {l}
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ol>
+            <h2 className="mkt-h2 max-w-2xl">From a short brief to a site you’re proud of.</h2>
           </div>
+          <ol className="mt-[54px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((s) => (
+              <li key={s.n} data-rise="card" className="mkt-tile flex flex-col">
+                <span className="mkt-num tabular-nums">{s.n}</span>
+                <h3 className="mt-2">{s.title}</h3>
+                <p className="flex-1">{s.text}</p>
+                <ul className={`mt-5 space-y-1.5 rounded-xl px-3.5 py-3 text-[13px] ${s.tint}`}>
+                  {s.lines.map((l) => (
+                    <li key={l} className="truncate">
+                      {l}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 
-      {/* Section library — cards fly into place */}
-      <section data-scene="assemble" className="border-t border-[var(--line)]">
-        <div className="mkt-wrap py-24">
-          <p className="mkt-eyebrow">Crafted, not templated</p>
-          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-            Every section has dozens of designs. We choose the right one for you.
-          </h2>
-          <p className="mt-4 max-w-xl text-[var(--ink-2)]">
-            Hundreds of hand-tuned section designs, each fully responsive and in both languages. Your site is
-            composed from them piece by piece — then refined by hand.
-          </p>
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Section library */}
+      <section className="mkt-sec mkt-dark">
+        <div className="mkt-wrap">
+          <div data-rise className="mkt-shead">
+            <p className="mkt-eyebrow">Crafted, not templated</p>
+            <h2 className="mkt-h2 max-w-3xl">
+              Every section has dozens of designs. We choose the right one for you.
+            </h2>
+            <p className="mkt-lead">
+              Hundreds of hand-tuned section designs, each fully responsive and in both languages. Your site
+              is composed from them piece by piece — then refined by hand.
+            </p>
+          </div>
+          <div className="mt-[54px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
             {SECTIONS.map((s) => (
-              <div key={s.name} data-beat className="mkt-card border border-[var(--line)] bg-white p-5">
-                <p className="text-[12px] tracking-[0.12em] text-[var(--mute)] uppercase">{s.name}</p>
-                <p className="mt-4 font-serif text-[18px] leading-snug">{s.sample}</p>
-                <p className="mt-1 text-[13px] text-[var(--ink-2)]">{s.meta}</p>
+              <div key={s.name} data-rise="card" className="mkt-card">
+                <span aria-hidden className="mkt-lbar" />
+                <p className="text-[12px] font-bold tracking-[0.12em] uppercase">{s.name}</p>
+                <p className="mt-4 font-serif text-[18px] leading-snug text-[var(--text)]">{s.sample}</p>
+                <p className="mt-1 text-[13px]">{s.meta}</p>
                 <p className="mt-5 border-t border-[var(--line)] pt-3 text-[12px] text-[var(--mute)]">
                   30 designs
                 </p>
@@ -186,19 +175,17 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* After launch */}
-      <section className="tint-mist border-y border-[var(--line)]">
-        <div className="mkt-wrap grid items-center gap-12 py-20 lg:grid-cols-2">
-          <div>
+      <section className="mkt-band mkt-sec">
+        <div className="mkt-wrap grid items-center gap-12 lg:grid-cols-2">
+          <div data-rise>
             <p className="mkt-eyebrow">After launch</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
-              Changes are a message away.
-            </h2>
-            <p className="mt-4 max-w-md text-[var(--ink-2)]">
+            <h2 className="mkt-h2">Changes are a message away.</h2>
+            <p className="mkt-lead max-w-md">
               New offer for Eid? Fresh photos? Ask from your dashboard and the studio takes care of it.
               Prices, team and opening hours update on their own — you never touch the website.
             </p>
           </div>
-          <ul data-scene="flip" className="space-y-3">
+          <ul className="space-y-3">
             {[
               { who: 'You', text: 'Can we add our Eid offer to the home page?', mine: true },
               { who: 'Studio', text: 'Done — it’s live, and in Arabic too.', mine: false },
@@ -207,8 +194,8 @@ export default async function WebsiteStudioPage() {
             ].map((m) => (
               <li
                 key={m.text}
-                data-beat
-                className={`max-w-sm rounded-2xl px-4 py-3 text-[14px] ${m.mine ? 'ms-auto bg-white' : 'bg-[var(--ink)] text-white'}`}
+                data-rise
+                className={`max-w-sm rounded-2xl px-4 py-3 text-[14px] ${m.mine ? 'ms-auto border border-[var(--line)] bg-[var(--surface)]' : 'bg-[var(--text)] text-white'}`}
               >
                 <span className={`block text-[11px] ${m.mine ? 'text-[var(--mute)]' : 'text-white/60'}`}>
                   {m.who}
@@ -221,18 +208,21 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* Included */}
-      <section>
-        <div data-scene="reveal" data-span=".45" className="mkt-wrap py-24">
+      <section className="mkt-sec">
+        <div data-rise className="mkt-wrap">
           <p className="mkt-eyebrow">Included in every site</p>
           <ul className="mt-8 grid gap-x-10 gap-y-4 sm:grid-cols-2">
             {INCLUDED.map((t) => (
               <li key={t} className="flex gap-3 text-[15px]">
-                <Check className="mt-0.5 size-4 shrink-0 text-[var(--sage-deep)]" /> {t}
+                <Check className="mkt-check mt-0.5 size-[18px] shrink-0" /> {t}
               </li>
             ))}
           </ul>
-          <Link href="/pricing" className="mkt-link mt-10 inline-flex items-center gap-1.5 font-medium">
-            Part of your plan — see pricing <ArrowRight className="mkt-arrow size-4" />
+          <Link
+            href="/pricing"
+            className="mkt-link mt-10 inline-flex items-center gap-1.5 font-semibold text-[var(--accent-ink)]"
+          >
+            Part of your plan — see pricing <ArrowRight className="size-4" />
           </Link>
         </div>
       </section>

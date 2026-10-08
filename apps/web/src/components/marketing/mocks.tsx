@@ -1,4 +1,4 @@
-// Lightweight product illustrations in HTML/CSS (no images). [data-beat] parts are built up by scroll scenes.
+// Lightweight product illustrations in HTML/CSS (no images).
 
 const STAFF = ['Aya', 'Mei', 'Noor', 'Ravi']
 const HOURS = ['10:00', '11:00', '12:00', '13:00', '14:00']
@@ -9,67 +9,63 @@ const BOOKINGS: {
   name: string
   what: string
   tint: string
-  beat: number
 }[] = [
-  { col: 0, start: 0, len: 1.5, name: 'Layla H.', what: 'Deep tissue · 90', tint: 'tint-mist', beat: 1 },
-  { col: 1, start: 0.5, len: 1, name: 'Sara K.', what: 'Swedish · 60', tint: 'tint-sage', beat: 1 },
-  { col: 2, start: 1, len: 2, name: 'Couples', what: 'Hot stone · 120', tint: 'tint-plum', beat: 2 },
-  { col: 3, start: 1, len: 2, name: 'Couples', what: 'Hot stone · 120', tint: 'tint-plum', beat: 2 },
-  { col: 0, start: 2, len: 1, name: 'Walk-in', what: 'Foot · 60', tint: 'tint-sand', beat: 3 },
-  { col: 1, start: 2.5, len: 1.5, name: 'Noura A.', what: 'Thai · 90', tint: 'tint-clay', beat: 3 },
+  { col: 0, start: 0, len: 1.5, name: 'Layla H.', what: 'Deep tissue · 90', tint: 'tint-mist' },
+  { col: 1, start: 0.5, len: 1, name: 'Sara K.', what: 'Swedish · 60', tint: 'tint-sage' },
+  { col: 2, start: 1, len: 2, name: 'Couples', what: 'Hot stone · 120', tint: 'tint-plum' },
+  { col: 3, start: 1, len: 2, name: 'Couples', what: 'Hot stone · 120', tint: 'tint-plum' },
+  { col: 0, start: 2, len: 1, name: 'Walk-in', what: 'Foot · 60', tint: 'tint-sand' },
+  { col: 1, start: 2.5, len: 1.5, name: 'Noura A.', what: 'Thai · 90', tint: 'tint-clay' },
 ]
 const ROW = 52 // px per hour
 
+/** Today's calendar in the C product frame: dark device bezel around a white screen. */
 export function CalendarMock() {
   return (
-    <div className="overflow-hidden rounded-[1.25rem] border border-[var(--line)] bg-white shadow-[0_30px_80px_-40px_rgb(35_34_31/0.35)]">
-      <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className="mkt-pulse size-2 rounded-full bg-[var(--sage)]" />
-          <span className="text-[13px] font-medium">Today · Jumeirah branch</span>
+    <div className="mkt-device">
+      <div className="mkt-screen">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-2.5">
+            <span className="mkt-pulse size-2 rounded-full bg-[var(--sage)]" />
+            <strong className="mkt-head text-[15px] sm:text-[17px]">Today · Jumeirah branch</strong>
+          </div>
+          <span className="rounded-full bg-[var(--lime)] px-3 py-1 text-[11px] font-semibold sm:text-[12px]">
+            14 bookings · 2 walk-ins
+          </span>
         </div>
-        <span className="rounded-full bg-[var(--sage-soft)] px-2.5 py-1 text-[11px] font-medium text-[var(--sage-deep)]">
-          14 bookings · 2 walk-ins
-        </span>
-      </div>
-      <div className="grid grid-cols-[3.25rem_repeat(4,minmax(0,1fr))] text-[11px]">
-        <div />
-        {STAFF.map((s) => (
-          <div key={s} className="border-l border-[var(--line)] px-2.5 py-2 font-medium text-[var(--ink-2)]">
-            {s}
-          </div>
-        ))}
-        <div className="relative col-span-5 grid grid-cols-[3.25rem_repeat(4,minmax(0,1fr))] border-t border-[var(--line)]">
-          <div>
-            {HOURS.map((h) => (
-              <div key={h} style={{ height: ROW }} className="px-2 pt-1 text-[var(--mute)] tabular-nums">
-                {h}
-              </div>
-            ))}
-          </div>
-          {STAFF.map((s, col) => (
-            <div key={s} className="relative border-l border-[var(--line)]">
+        <div className="grid grid-cols-[3.25rem_repeat(4,minmax(0,1fr))] text-[11px]">
+          <div />
+          {STAFF.map((s) => (
+            <div key={s} className="px-2 py-2 font-semibold">
+              {s}
+            </div>
+          ))}
+          <div className="relative col-span-5 grid grid-cols-[3.25rem_repeat(4,minmax(0,1fr))]">
+            <div>
               {HOURS.map((h) => (
-                <div
-                  key={h}
-                  style={{ height: ROW }}
-                  className="border-b border-dashed border-[var(--line)]"
-                />
-              ))}
-              {BOOKINGS.filter((b) => b.col === col).map((b) => (
-                <div
-                  key={`${b.name}-${b.start}`}
-                  data-beat={b.beat}
-                  data-from="y:-16 o:0 s:.96"
-                  style={{ top: b.start * ROW + 3, height: b.len * ROW - 6 }}
-                  className={`absolute inset-x-1.5 rounded-lg px-2 py-1.5 ${b.tint}`}
-                >
-                  <p className="truncate font-medium text-[var(--ink)]">{b.name}</p>
-                  <p className="truncate text-[10px] text-[var(--ink-2)]">{b.what}</p>
+                <div key={h} style={{ height: ROW }} className="px-2.5 pt-1 text-[var(--mute)] tabular-nums">
+                  {h}
                 </div>
               ))}
             </div>
-          ))}
+            {STAFF.map((s, col) => (
+              <div key={s} className="relative">
+                {HOURS.map((h) => (
+                  <div key={h} style={{ height: ROW }} className="border-t border-[var(--grey)]" />
+                ))}
+                {BOOKINGS.filter((b) => b.col === col).map((b) => (
+                  <div
+                    key={`${b.name}-${b.start}`}
+                    style={{ top: b.start * ROW + 3, height: b.len * ROW - 6 }}
+                    className={`absolute inset-x-1 rounded-[10px] px-2 py-1.5 ${b.tint}`}
+                  >
+                    <p className="truncate font-semibold text-[var(--ink)]">{b.name}</p>
+                    <p className="truncate text-[10px] text-[var(--ink-2)]">{b.what}</p>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -86,7 +82,7 @@ export function EditorMock() {
         <span className="size-2.5 rounded-full bg-[var(--sand)]" />
         <span className="size-2.5 rounded-full bg-[var(--sage)]" />
         <span className="ms-3 truncate rounded-full bg-[var(--sand-soft)] px-3 py-1 text-[11px] text-[var(--mute)]">
-          serenity.spamanagement.ae
+          serenity.spamanagement.co
         </span>
       </div>
       <div className="grid grid-cols-[8.5rem_1fr] text-[11px] sm:grid-cols-[10rem_1fr]">

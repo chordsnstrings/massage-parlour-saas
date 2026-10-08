@@ -22,7 +22,8 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
-- Brand domain: **spamanagement.co** (owner, 2026-10-08). Code, emails and env still say spamanagement.ae; switch pending.
+- Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Marketing, page titles and PWA name use it; auth/emails/env still say
+  spamanagement.ae (switch pending).
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.
@@ -52,6 +53,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Read only what's needed (grep / line ranges; relevant PLAN.md section only); don't re-read files just edited.
 - Parallel tool calls; subagents for broad search/research, keep only conclusions; small workflows only when they clearly pay off.
 - Record new decisions here or in `docs/PLAN.md` instead of re-deriving them later. Concise replies.
+- Owner rules (2026-10-08): no broad file searches/scans unless told (exact paths); never echo large code, minimal diffs only;
+  brief direct answers, no filler; one-line summary per finished task.
 
 ## Commands
 - `bash scripts/local-db.sh` — local Postgres 16 + roles + `spa` (dev) / `spa_test` DBs (SessionStart hook runs it, then migrate + seed).

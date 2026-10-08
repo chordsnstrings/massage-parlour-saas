@@ -1,7 +1,7 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/brand'
-import { ScrollScenes } from '@/components/scroll-scenes'
+import { MarketingMotion } from '@/components/marketing/motion'
 import { requestUrls } from '@/server/origin'
 
 export type MarketingPage = 'home' | 'features' | 'website-builder' | 'pricing' | 'contact'
@@ -16,46 +16,35 @@ const NAV: { key: MarketingPage; href: string; label: string }[] = [
 async function Header({ active }: { active: MarketingPage }) {
   const urls = await requestUrls()
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-white/85 backdrop-blur-md">
-      <div className="mkt-wrap flex h-16 items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-          <LogoMark className="size-7" />
-          <span>Spa Management</span>
+    <header data-mkt-nav className="mkt-nav">
+      <div className="mkt-wrap mkt-bar">
+        <Link href="/" className="mkt-logo">
+          <LogoMark className="size-8" />
+          <span>spamanagement.co</span>
         </Link>
-        <nav aria-label="Main" className="hidden items-center gap-7 text-[14px] text-[var(--ink-2)] md:flex">
+        <nav aria-label="Main" className="mkt-links hidden items-center md:flex">
           {NAV.map((n) => (
-            <Link
-              key={n.key}
-              href={n.href}
-              aria-current={active === n.key ? 'page' : undefined}
-              className="mkt-link py-1 hover:text-[var(--ink)] aria-[current=page]:text-[var(--ink)]"
-            >
+            <Link key={n.key} href={n.href} aria-current={active === n.key ? 'page' : undefined}>
               {n.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <a
-            href={urls.app('/login')}
-            className="mkt-link hidden px-2 text-[14px] text-[var(--ink-2)] sm:inline"
-          >
+        <div className="mkt-links ms-auto flex items-center gap-2">
+          <a href={urls.app('/login')} className="hidden px-2 sm:inline">
             Sign in
           </a>
-          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary h-10 px-4 text-[14px]">
+          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm">
             Start
           </a>
         </div>
       </div>
-      <nav
-        aria-label="Main (mobile)"
-        className="flex h-10 items-center gap-5 overflow-x-auto border-t border-[var(--line)] px-5 text-[13px] text-[var(--ink-2)] md:hidden"
-      >
+      <nav aria-label="Main (mobile)" className="mkt-subnav md:hidden">
         {NAV.map((n) => (
           <Link
             key={n.key}
             href={n.href}
             aria-current={active === n.key ? 'page' : undefined}
-            className="mkt-link shrink-0 aria-[current=page]:text-[var(--ink)]"
+            className="shrink-0"
           >
             {n.label}
           </Link>
@@ -65,31 +54,54 @@ async function Header({ active }: { active: MarketingPage }) {
   )
 }
 
+/** Hero depth layers: abstract product fragments that drift around the headline at their own depth
+ *  (`data-depth`, MarketingMotion). Decorative only. */
+export function HeroDepth() {
+  return (
+    <div aria-hidden className="mkt-deco">
+      <div data-depth="-0.22" className="mkt-frag f1">
+        <b />
+        <span className="mkt-lines">
+          <i className="w-24 bg-white/80" />
+          <i className="w-14 bg-white/30" />
+        </span>
+      </div>
+      <div data-depth="-0.34" className="mkt-frag f2">
+        <Check strokeWidth={2.6} />
+      </div>
+      <div data-depth="-0.2" className="mkt-frag f3">
+        <b />
+        <span className="mkt-lines">
+          <i className="w-20 bg-[var(--text)]/80" />
+          <i className="w-12 bg-[var(--line)]" />
+        </span>
+      </div>
+      <div data-depth="-0.12" className="mkt-frag f4">
+        <i />
+      </div>
+    </div>
+  )
+}
+
 export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: string }) {
   const urls = await requestUrls()
   return (
-    <section className="mkt-wrap py-24">
-      <div className="tint-sage relative overflow-hidden rounded-[2rem] px-6 py-16 text-center sm:px-12">
-        <div
-          aria-hidden
-          className="absolute -top-16 -left-10 size-56 rounded-full bg-[var(--mist-soft)] blur-2xl"
-        />
-        <div
-          aria-hidden
-          className="absolute -right-10 -bottom-20 size-64 rounded-full bg-[var(--clay-soft)] blur-2xl"
-        />
-        <div className="relative">
-          <h2 className="mx-auto max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h2>
-          <p className="mx-auto mt-4 max-w-md text-[var(--ink-2)]">
-            Set up in an afternoon. We help you import your clients and menu.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary">
-              Start your spa <ArrowRight className="mkt-arrow size-4" />
-            </a>
-            <Link href="/contact" className="mkt-btn mkt-btn-ghost bg-white/70">
-              Talk to us
-            </Link>
+    <section className="mkt-sec pt-5">
+      <div className="mkt-wrap">
+        <div className="mkt-demo text-center">
+          <div data-rise>
+            <h2 className="mkt-h2 mx-auto mt-0 max-w-2xl">{title}</h2>
+            <p className="mkt-lead mx-auto">
+              Set up in an afternoon. We help you import your clients and menu.
+            </p>
+            <div className="mkt-ctas justify-center">
+              <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary">
+                Start your spa <ArrowRight />
+              </a>
+              <Link href="/contact" className="mkt-btn mkt-btn-ghost">
+                Talk to us
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -100,51 +112,50 @@ export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: 
 async function Footer() {
   const urls = await requestUrls()
   return (
-    <footer className="border-t border-[var(--line)]">
-      <div className="mkt-wrap grid gap-10 py-14 text-[14px] sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2.5 font-semibold">
-            <LogoMark className="size-6" /> Spa Management
+    <footer className="mkt-foot">
+      <div className="mkt-wrap">
+        <div className="mkt-fgrid">
+          <div>
+            <div className="mkt-logo">
+              <LogoMark className="size-8" /> spamanagement.co
+            </div>
+            <p className="mt-3 max-w-[280px]">Software for massage spas in the UAE. Made in Dubai.</p>
           </div>
-          <p className="max-w-xs text-[var(--mute)]">Software for massage spas in the UAE. Made in Dubai.</p>
+          <div>
+            <b>Product</b>
+            {NAV.slice(0, 3).map((n) => (
+              <Link key={n.key} href={n.href}>
+                {n.label}
+              </Link>
+            ))}
+          </div>
+          <div>
+            <b>Company</b>
+            <Link href="/contact">Contact</Link>
+            <a href={urls.app('/login')}>Sign in</a>
+          </div>
+          <div>
+            <b>Built for the UAE</b>
+            <p>AED pricing · VAT ready · English & Arabic sites</p>
+          </div>
         </div>
-        <div className="space-y-2.5">
-          <p className="font-medium">Product</p>
-          {NAV.slice(0, 3).map((n) => (
-            <Link key={n.key} href={n.href} className="mkt-link block w-fit text-[var(--ink-2)]">
-              {n.label}
-            </Link>
-          ))}
+        <div className="mkt-fbot">
+          <span>© {new Date().getFullYear()} spamanagement.co</span>
         </div>
-        <div className="space-y-2.5">
-          <p className="font-medium">Company</p>
-          <Link href="/contact" className="mkt-link block w-fit text-[var(--ink-2)]">
-            Contact
-          </Link>
-          <a href={urls.app('/login')} className="mkt-link block w-fit text-[var(--ink-2)]">
-            Sign in
-          </a>
-        </div>
-        <div className="space-y-2.5">
-          <p className="font-medium">Built for the UAE</p>
-          <p className="text-[var(--ink-2)]">AED pricing · VAT ready · English & Arabic sites</p>
-        </div>
-      </div>
-      <div className="mkt-wrap border-t border-[var(--line)] py-6 text-[13px] text-[var(--mute)]">
-        © {new Date().getFullYear()} spamanagement.ae
       </div>
     </footer>
   )
 }
 
-/** Shared marketing page frame. ScrollScenes mounts last so it commits with the sections it drives. */
+/** Shared marketing page frame ("C · Bold product-led" look). MarketingMotion draws the fixed background (z-index keeps it
+ *  behind) and mounts last so it commits with the elements it drives. */
 export function MarketingShell({ active, children }: { active: MarketingPage; children: React.ReactNode }) {
   return (
     <div className="mkt min-h-dvh">
       <Header active={active} />
       <main>{children}</main>
       <Footer />
-      <ScrollScenes />
+      <MarketingMotion />
     </div>
   )
 }
