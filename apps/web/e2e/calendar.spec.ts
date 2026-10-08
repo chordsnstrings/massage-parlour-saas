@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
+import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
 
 test('reception works the day calendar: check in, then book a client into a free slot', async ({ page }) => {
   const { slug } = await signUpOwner(page)
@@ -91,7 +91,8 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
 }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  await seedBooking(seed)
+  // Clear of the walk-in (Maya must be free now) and on the business day the calendar shows.
+  await seedBooking(seed, hoursOnToday(2))
   await page.goto(`${app}/${slug}/calendar`)
   const panel = page.locator('section', { has: page.getByRole('heading', { name: 'Walk-ins' }) })
   await expect(panel.locator('[aria-current="true"]')).toContainText('Maya')
