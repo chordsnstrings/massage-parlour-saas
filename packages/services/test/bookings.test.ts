@@ -15,7 +15,7 @@ import {
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   availableSlots,
   createBooking,
@@ -25,6 +25,12 @@ import {
   setBookingStatus,
   takeTurn,
 } from '../src'
+
+const refCodes = vi.hoisted(() => [] as string[])
+vi.mock('@spa/core', async (orig) => {
+  const core = await orig<typeof import('@spa/core')>()
+  return { ...core, newRefCode: () => refCodes.shift() ?? core.newRefCode() }
+})
 
 const { platform, app } = testDbs()
 const D = '2026-10-06'
@@ -238,5 +244,25 @@ describe('booking service', () => {
     await tx((db) => takeTurn(db, ids.branch!, D, ids.maya!))
     const next = await tx((db) => rotationFor(db, ids.tenant!, ids.branch!, D))
     expect(next.map((r) => r.staffId)).toEqual([ids.ploy, ids.maya])
+  })
+
+  it('retries when the booking reference is already taken (F4)', async () => {
+    const book = (start: string) =>
+      tx((db) =>
+        createBooking(db, {
+          tenantId: ids.tenant!,
+          branchId: ids.branch!,
+          source: 'walk_in',
+          items: [{ serviceVariantId: ids.variant!, start: at(start) }],
+        }),
+      )
+    refCodes.push('F4AAA')
+    const first = await book('20:00')
+    expect(first.refCode).toBe('F4AAA')
+    refCodes.push('F4AAA', 'F4AAA', 'F4BBB')
+    const second = await book('20:00')
+    expect(second.refCode).toBe('F4BBB')
+    refCodes.push('F4AAA', 'F4AAA', 'F4AAA', 'F4AAA', 'F4AAA')
+    await expect(book('11:00')).rejects.toThrow(/booking reference/)
   })
 })

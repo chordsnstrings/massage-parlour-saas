@@ -2,7 +2,7 @@
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 ✅, Phase 2 (every screen) next (§14.6);
-fix backlog F1–F3 ✅, F4–F8 open (§17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
 - Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
@@ -17,7 +17,7 @@ fix backlog F1–F3 ✅, F4–F8 open (§17); production runs on one DO droplet 
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** while any item in PLAN §17 (F1–F8; F1–F3 done) is open, remind the owner in one line in the first
+- **Fix backlog reminder:** PLAN §17 F1–F8 are all fixed (backlog complete). If new items are added to §17, while any is open, remind the owner in one line in the first
   reply of every session and at the end of every task. Name the open items and the next one in order. Don't fix them
   until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /

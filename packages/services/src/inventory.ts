@@ -21,18 +21,21 @@ async function move(
     createdBy?: string | null
   },
 ) {
-  await tx.insert(stockMovements).values({
-    tenantId: m.tenantId,
-    branchId: m.branchId,
-    productId: m.productId,
-    kind: m.kind,
-    qty: m.qty.toString(),
-    unitCostAed: m.unitCostAed?.toFixed(2) ?? null,
-    refType: m.refType ?? null,
-    refId: m.refId ?? null,
-    note: m.note ?? null,
-    createdBy: m.createdBy ?? null,
-  })
+  const [row] = await tx
+    .insert(stockMovements)
+    .values({
+      tenantId: m.tenantId,
+      branchId: m.branchId,
+      productId: m.productId,
+      kind: m.kind,
+      qty: m.qty.toString(),
+      unitCostAed: m.unitCostAed?.toFixed(2) ?? null,
+      refType: m.refType ?? null,
+      refId: m.refId ?? null,
+      note: m.note ?? null,
+      createdBy: m.createdBy ?? null,
+    })
+    .returning({ id: stockMovements.id })
   await tx
     .insert(stockLevels)
     .values({ tenantId: m.tenantId, branchId: m.branchId, productId: m.productId, qty: m.qty.toString() })
@@ -40,6 +43,7 @@ async function move(
       target: [stockLevels.branchId, stockLevels.productId],
       set: { qty: sql`${stockLevels.qty} + ${m.qty}` },
     })
+  return row!.id
 }
 
 /** Goods received: stock up, inventory asset up, paid by cash or bank (VAT recoverable). */
@@ -58,7 +62,7 @@ export async function receiveStock(
   },
 ) {
   if (r.qty <= 0) throw new DomainError('Quantity must be positive')
-  await move(tx, { ...r, kind: 'purchase', refType: 'purchase' })
+  const movementId = await move(tx, { ...r, kind: 'purchase', refType: 'purchase' })
   await tx
     .update(products)
     .set({ costAed: r.unitCostAed.toFixed(2) })
@@ -70,6 +74,7 @@ export async function receiveStock(
     branchId: r.branchId,
     date: r.date,
     sourceType: 'stock_purchase',
+    sourceId: movementId,
     memo: 'Stock received',
     createdBy: r.createdBy,
     lines: [
@@ -78,6 +83,7 @@ export async function receiveStock(
       { code: r.paidVia === 'cash' ? '1000' : '1020', credit: r2(net + vat) },
     ],
   })
+  return movementId
 }
 
 /**
@@ -125,7 +131,7 @@ export async function adjustStock(
 ) {
   const [p] = await tx.select().from(products).where(eq(products.id, a.productId))
   if (!p) throw new DomainError('Product not found', 'not_found')
-  await move(tx, { ...a, kind: 'adjustment', unitCostAed: Number(p.costAed) })
+  const movementId = await move(tx, { ...a, kind: 'adjustment', unitCostAed: Number(p.costAed) })
   const value = r2(Math.abs(a.qty) * Number(p.costAed))
   if (value > 0) {
     await post(tx, {
@@ -133,6 +139,7 @@ export async function adjustStock(
       branchId: a.branchId,
       date: a.date,
       sourceType: 'stock_adjustment',
+      sourceId: movementId,
       memo: a.note ?? 'Stock adjustment',
       createdBy: a.createdBy,
       lines:
@@ -147,6 +154,7 @@ export async function adjustStock(
             ],
     })
   }
+  return movementId
 }
 
 /** Retail product sold: stock down and cost of goods sold at cost (revenue is posted by the sale). */
