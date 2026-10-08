@@ -56,7 +56,8 @@ export const requireMember = cache(async (slug: string): Promise<MemberContext> 
         ).map((b) => b.id)
     return { ...m, branchIds }
   })
-  if (row) {
+  // A deleted spa (soft delete, R12) is closed to its members; super-admins can still open it.
+  if (row && !tenant.deletedAt) {
     return {
       tenant,
       user,

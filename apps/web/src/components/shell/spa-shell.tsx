@@ -10,6 +10,7 @@ import {
   Calculator,
   CalendarDays,
   ChevronDown,
+  ClipboardList,
   Contact,
   CreditCard,
   HandHeart,
@@ -40,6 +41,7 @@ import { initials } from '@/lib/utils'
 const icons = {
   dashboard: House,
   calendar: CalendarDays,
+  bookings: ClipboardList,
   sales: Wallet,
   inbox: MessagesSquare,
   clients: Contact,
@@ -102,6 +104,7 @@ export function SpaShell({
   nav,
   plan,
   banner,
+  alert,
   accountHref,
   switchHref,
   children,
@@ -111,6 +114,8 @@ export function SpaShell({
   nav: ShellGroup[]
   plan: ShellPlan | null
   banner?: React.ReactNode
+  /** Full-width one-line bar above the whole CRM (e.g. overdue invoice, R11). */
+  alert?: React.ReactNode
   accountHref: string
   switchHref: string
   children: React.ReactNode
@@ -165,6 +170,7 @@ export function SpaShell({
         tabIndex={-1}
         onClick={() => setOpen(false)}
       />
+      {alert}
       <div className="crm-app">
         <aside className="crm-side" data-open={open} aria-label={spa.name}>
           <div className="crm-brand">
@@ -328,9 +334,15 @@ export function SpaShell({
   )
 }
 
-export function SpaBanner({ tone, children }: { tone: 'warning' | 'accent'; children: React.ReactNode }) {
+export function SpaBanner({
+  tone,
+  children,
+}: {
+  tone: 'warning' | 'accent' | 'danger'
+  children: React.ReactNode
+}) {
   return (
-    <div className="crm-banner" data-tone={tone}>
+    <div className="crm-banner" data-tone={tone} role={tone === 'danger' ? 'alert' : undefined}>
       {children}
     </div>
   )

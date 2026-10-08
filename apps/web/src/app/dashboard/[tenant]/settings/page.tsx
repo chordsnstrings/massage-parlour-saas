@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { Download, MessageCircle, ShieldCheck, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Card, Grid, ListRow, Pill, Stack } from '@/components/crm'
+import { Card, Grid, ListRow, Pill, Stack, Toggle } from '@/components/crm'
 import { IMPORT_PERMISSION } from '@/components/data/kinds'
 import { canExportAll } from '@/components/data/server'
 import { Button } from '@/components/ui/button'
@@ -103,6 +103,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
                     placeholder={t('settings.profile.whatsappPlaceholder')}
                   />
                 </Field>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{t('settings.profile.showPrices')}</p>
+                  <p className="crm-muted text-[13px]">{t('settings.profile.showPricesHint')}</p>
+                </div>
+                <Toggle
+                  name="showPrices"
+                  label={t('settings.profile.showPrices')}
+                  defaultChecked={!tenant.settings.hidePrices}
+                />
               </div>
               <div className="mt-4 flex justify-end">
                 <SubmitButton>{t('settings.profile.save')}</SubmitButton>

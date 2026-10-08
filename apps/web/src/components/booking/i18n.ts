@@ -55,6 +55,7 @@ const T = {
   summary: { en: 'Your booking', ar: 'حجزك' },
   nothingYet: { en: 'Pick a treatment to begin.', ar: 'اختر العلاج للبدء.' },
   total: { en: 'Total', ar: 'الإجمالي' },
+  priceOnRequest: { en: 'Price on request', ar: 'السعر عند الطلب' },
   payAtSpa: { en: 'Pay at the spa — no card needed now.', ar: 'الدفع في المركز — لا حاجة لبطاقة الآن.' },
   doneTitle: { en: 'Booking requested', ar: 'تم استلام طلب الحجز' },
   doneBody: {
@@ -91,6 +92,10 @@ export const fmtAed = (amount: number, locale: Locale) =>
   locale === 'ar'
     ? `${amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })} ${t('aed', locale)}`
     : `AED ${amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`
+
+/** A public price, or "Price on request" when there is none to show. */
+export const fmtPrice = (amount: number | null, locale: Locale) =>
+  amount == null ? t('priceOnRequest', locale) : fmtAed(amount, locale)
 
 /** "Tue 7 Oct" for a business date (YYYY-MM-DD). */
 export const fmtDate = (date: string, locale: Locale, opts: Intl.DateTimeFormatOptions = {}) =>

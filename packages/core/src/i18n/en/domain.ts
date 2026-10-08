@@ -17,6 +17,10 @@ export const domain = {
   },
   // Not found
   bookingNotFound: 'Booking not found',
+  bookingCheckedOutReopen: 'This booking was checked out — void or refund the sale first',
+  completeFirst: 'Mark the booking completed first',
+  commissionRange: 'Enter a commission between 0 and 100,000 AED',
+  commissionEveryone: 'Enter the commission for every therapist',
   branchNotFound: 'Branch not found',
   campaignNotFound: 'Campaign not found',
   conversationNotFound: 'Conversation not found',
@@ -58,6 +62,7 @@ export const domain = {
   itemOnce: 'Each item can be listed once',
   discountOverSubtotal: 'Discount is more than the subtotal',
   discountOverPrice: 'Discount on “{item}” is more than its price',
+  priceMissing: 'Type a price for “{item}”',
   coveredByPackage: '“{item}” is covered by a package — its price must be 0',
   choosePackageClient: 'Choose the client to sell a package to',
   packageSessionsNeedClient: 'Package sessions need a client and a treatment',
@@ -95,6 +100,13 @@ export const domain = {
   giftCardInvalid: 'This gift card is no longer valid',
   giftCardBalance: 'Only AED {amount} left on this gift card',
   // Inventory, payroll, ledger
+  // Purchases, warehouse
+  supplierNotFound: 'Supplier not found',
+  purchaseNotFound: 'Purchase not found',
+  purchaseVoided: 'This purchase was already voided',
+  vatOverSubtotal: 'VAT is more than the subtotal',
+  stockOnlyThere: 'Only {qty} of “{item}” in stock there',
+  twoLocations: 'Choose two different locations',
   quantityPositive: 'Quantity must be positive',
   alreadyFinalised: 'Already finalised',
   unbalancedEntry: 'Unbalanced entry ({debit} ≠ {credit})',
@@ -186,4 +198,12 @@ export const domain = {
     "That version has a different layout — restoring it needs the 'Edit design' permission.",
   globalLiveNeedsPublish:
     "This global section is on your live site — saving it needs the 'Publish' permission.",
+  // Platform billing (super-admin console; R3/R12)
+  subscriptionFirst: 'Save a subscription for this spa first',
+  otherPlanPaid:
+    'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
+  invoiceNotFound: 'Invoice not found',
+  invoiceVoid: 'This invoice is void',
+  nothingToRemind: 'Nothing to remind — this spa has no unpaid invoices',
+  typeSlugToConfirm: 'Type {slug} to confirm',
 } as const

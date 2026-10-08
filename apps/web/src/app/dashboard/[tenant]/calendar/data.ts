@@ -153,7 +153,7 @@ export async function loadCalendar(
       label: t('calendar.variant', {
         service: service.name.en,
         min: variant.durationMin,
-        price: fmt.aed(variant.priceAed),
+        price: variant.priceAed == null ? t('common.priceOnRequest') : fmt.aed(variant.priceAed),
       }),
       durationMin: variant.durationMin,
       priceAed: variant.priceAed,
@@ -207,6 +207,7 @@ export async function loadCalendar(
       canCheckout: can(ctx, 'pos.use'),
       ownOnly,
       checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
+      bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
     }
   })

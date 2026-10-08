@@ -67,7 +67,7 @@ export function dmSystemPrompt(ctx: SpaContext, now = new Date()) {
   const menu = ctx.menu
     .map(
       (m) =>
-        `- ${m.name}${m.nameAr ? ` / ${m.nameAr}` : ''}: ${m.durationMin} min, AED ${m.priceAed} (variant_id ${m.variantId})`,
+        `- ${m.name}${m.nameAr ? ` / ${m.nameAr}` : ''}: ${m.durationMin} min, ${m.priceAed == null ? 'price on request' : `AED ${m.priceAed}`} (variant_id ${m.variantId})`,
     )
     .join('\n')
   return `You reply to Instagram direct messages for ${ctx.name}, a massage & wellness spa in the UAE.

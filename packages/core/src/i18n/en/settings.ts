@@ -30,6 +30,9 @@ export const settings = {
     phone: 'Phone',
     whatsapp: 'WhatsApp number',
     whatsappHint: 'Clients message this number.',
+    showPrices: 'Show prices on the website',
+    showPricesHint:
+      'Default for every service; a service can override it. Hidden prices show “Price on request”.',
     whatsappPlaceholder: '050 123 4567',
     save: 'Save changes',
     saved: 'Settings saved',

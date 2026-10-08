@@ -8,12 +8,7 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Select, Textarea } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { resultText, useI18n, useT } from '@/i18n/client'
-import {
-  approveSiteAction,
-  requestChangeAction,
-  resolveChangeAction,
-  setReviewAction,
-} from './studio-actions'
+import { requestChangeAction, resolveChangeAction, setStudioStatusAction } from './studio-actions'
 
 /** Spa → studio: "please change …", optionally about one page. */
 export function RequestChangeSheet({
@@ -64,6 +59,7 @@ export function RequestChangeSheet({
   )
 }
 
+/** Studio only: approve the site once it is final (spas can't approve — R1). */
 export function ApproveSiteSheet({ slug }: { slug: string }) {
   const t = useT()
   return (
@@ -75,7 +71,7 @@ export function ApproveSiteSheet({ slug }: { slug: string }) {
           <CheckCircle2 /> {t('website.approve')}
         </Button>
       }
-      action={() => approveSiteAction(slug)}
+      action={() => setStudioStatusAction(slug, 'approved')}
       submitLabel={t('website.approveWebsite')}
     >
       <p className="text-sm text-muted">{t('website.approveNote')}</p>
@@ -83,23 +79,33 @@ export function ApproveSiteSheet({ slug }: { slug: string }) {
   )
 }
 
-/** Studio: hand the site to the spa for review, or pull it back. */
-export function ReviewButton({ slug, review }: { slug: string; review: boolean }) {
+/** Studio: hand the site to the spa for review, pull it back, or reopen an approved site. */
+export function StudioStatusButton({
+  slug,
+  to,
+  reopen = false,
+}: {
+  slug: string
+  to: 'review' | 'building'
+  reopen?: boolean
+}) {
   const t = useT()
   const [pending, start] = useTransition()
+  const review = to === 'review'
   return (
     <Button
       variant={review ? 'primary' : 'secondary'}
       disabled={pending}
       onClick={() =>
         start(async () => {
-          const r = await setReviewAction(slug, review)
+          const r = await setStudioStatusAction(slug, to)
           if (r?.ok) toast.success(resultText(t, r) ?? t('common.saved'))
           else if (r) toast.error(resultText(t, r) ?? '')
         })
       }
     >
-      {review ? <Send /> : <Undo2 />} {review ? t('website.sendReview') : t('website.withdrawReview')}
+      {review ? <Send /> : <Undo2 />}{' '}
+      {review ? t('website.sendReview') : reopen ? t('website.reopen') : t('website.withdrawReview')}
     </Button>
   )
 }

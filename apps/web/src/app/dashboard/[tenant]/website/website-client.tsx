@@ -3,7 +3,7 @@ import type { SiteCopy } from '@spa/services'
 import { ArrowRight, FilePlus2, History, Paintbrush, Rocket, Sparkles, Undo2 } from 'lucide-react'
 import { useOptimistic, useState, useTransition } from 'react'
 import { ScaledFrame } from '@/components/site/scaled-frame'
-import type { SiteTheme } from '@/components/site/theme'
+import { BACKDROPS, EMBLEMS, type SiteTheme } from '@/components/site/theme'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -569,6 +569,24 @@ export function ThemeSheet({ slug, theme }: { slug: string; theme: SiteTheme }) 
             <option value="compact">Compact</option>
             <option value="comfortable">Comfortable</option>
             <option value="airy">Airy</option>
+          </Select>
+        </Field>
+        <Field label="Hero art" name="backdrop">
+          <Select id="backdrop" name="backdrop" defaultValue={theme.backdrop ?? 'none'}>
+            {BACKDROPS.map((b) => (
+              <option key={b} value={b} className="capitalize">
+                {b === 'none' ? 'None' : b}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Hero emblem" name="emblem">
+          <Select id="emblem" name="emblem" defaultValue={theme.emblem ?? 'none'}>
+            {EMBLEMS.map((e) => (
+              <option key={e} value={e}>
+                {e === 'none' ? 'None (photo)' : e}
+              </option>
+            ))}
           </Select>
         </Field>
         <div className="space-y-2 sm:col-span-2">

@@ -190,7 +190,12 @@ export default async function PlatformDomainsPage({
                 header: 'Price',
                 cell: (r) => (
                   <div className="min-w-0 whitespace-nowrap">
-                    <span className="block">USD {r.order.priceUsd}</span>
+                    <span className="block">
+                      USD {r.order.priceUsd}
+                      {Number(r.order.markupUsd) > 0 && (
+                        <span className="text-muted"> (incl. {r.order.markupUsd} markup)</span>
+                      )}
+                    </span>
                     <span className="block text-xs text-muted">
                       AED {r.order.priceAed} · {r.order.years}y{r.order.premium ? ' · premium' : ''}
                       {r.order.chargedUsd ? ` · charged ${r.order.chargedUsd}` : ''}
@@ -232,7 +237,7 @@ export default async function PlatformDomainsPage({
                       id={r.order.id}
                       domain={r.order.domain}
                       spa={r.spa}
-                      priceUsd={r.order.priceUsd}
+                      priceUsd={(Number(r.order.priceUsd) - Number(r.order.markupUsd)).toFixed(2)}
                       retry={r.order.status === 'failed'}
                     />
                   ) : null,

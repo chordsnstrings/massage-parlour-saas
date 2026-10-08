@@ -1,5 +1,6 @@
 import { enumLabel } from '@spa/core/i18n'
 import { payrollLines, payrollRuns, salaryAdvances, staff, tenants, withTenant } from '@spa/db'
+import { therapistTipsAdvances } from '@spa/services'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { Banknote, Download, Landmark, Plus, Wallet } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -20,6 +21,7 @@ import {
   finaliseRunAction,
   prepareRunAction,
   recordAdvanceAction,
+  saveBookingFeeAction,
   saveEmployerAction,
   saveStaffPayAction,
 } from './actions'
@@ -65,12 +67,16 @@ export default async function PayrollPage({
         .where(isNull(salaryAdvances.payrollRunId))
         .orderBy(desc(salaryAdvances.advanceDate)),
       settings: (await tx.select({ s: tenants.settings }).from(tenants).limit(1))[0]?.s ?? {},
+      tipsAdvances: await therapistTipsAdvances(tx, { periodStart: range.from, periodEnd: range.to }),
     }
   })
   const byId = new Map(data.people.map((p) => [p.id, p]))
   const lines: Line[] = data.lines.map((l) => ({ ...l, person: byId.get(l.staffId) }))
-  const total = (k: 'baseAed' | 'commissionAed' | 'tipsAed' | 'advancesAed' | 'netAed') =>
+  const total = (k: 'baseAed' | 'commissionAed' | 'feeAed' | 'tipsAed' | 'advancesAed' | 'netAed') =>
     lines.reduce((s, l) => s + Number(l[k]), 0)
+  // Therapists' advances settle in the Tips & advances payout, not here.
+  const openAdvances = data.advances.filter((a) => byId.get(a.staffId)?.payType !== 'booking_commission')
+  const fee = data.settings.receptionistBookingFee
   const wps = data.settings.wps
   const wpsReady = lines.filter((l) => l.person?.payroll.iban && l.person.payroll.personId)
   const base = appPath(`/${slug}/payroll`)
@@ -141,7 +147,7 @@ export default async function PayrollPage({
       key: 'comm',
       header: t('payroll.col.commission'),
       className: 'text-end tabular-nums',
-      cell: (l) => fmt.aed(l.commissionAed),
+      cell: (l) => fmt.aed(Number(l.commissionAed) + Number(l.feeAed)),
     },
     {
       key: 'tips',
@@ -226,7 +232,10 @@ export default async function PayrollPage({
           {data.run && (
             <Grid cols="g4">
               <Stat label={t('payroll.stat.salaries')} value={fmt.aed(total('baseAed'))} />
-              <Stat label={t('payroll.stat.commission')} value={fmt.aed(total('commissionAed'))} />
+              <Stat
+                label={t('payroll.stat.commission')}
+                value={fmt.aed(total('commissionAed') + total('feeAed'))}
+              />
               <Stat label={t('payroll.stat.tips')} value={fmt.aed(total('tipsAed'))} />
               <Stat
                 label={t('payroll.stat.net')}
@@ -310,13 +319,34 @@ export default async function PayrollPage({
             )}
           </Card>
 
+          <Card title={t('payroll.tipsAdv.title')} sub={t('payroll.tipsAdv.sub')}>
+            {data.tipsAdvances.length === 0 ? (
+              <p className="crm-muted text-sm">{t('payroll.tipsAdv.none')}</p>
+            ) : (
+              <div>
+                {data.tipsAdvances.map((r) => (
+                  <ListRow
+                    key={r.staffId}
+                    title={r.name}
+                    body={`${t('payroll.tipsAdv.tips')} ${fmt.aed(r.tipsAed)} · ${t('payroll.tipsAdv.advances')} − ${fmt.aed(r.advancesAed)}`}
+                    end={
+                      <span className="crm-num font-semibold">
+                        {t('payroll.tipsAdv.net')} {fmt.aed(r.netAed)}
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+
           <Grid cols="col-2">
             <Card title={t('payroll.advances.title')} sub={t('payroll.advances.sub')}>
-              {data.advances.length === 0 ? (
+              {openAdvances.length === 0 ? (
                 <p className="crm-muted text-sm">{t('payroll.advances.none')}</p>
               ) : (
                 <div>
-                  {data.advances.map((a) => (
+                  {openAdvances.map((a) => (
                     <ListRow
                       key={a.id}
                       title={byId.get(a.staffId)?.displayName ?? '—'}
@@ -376,6 +406,34 @@ export default async function PayrollPage({
                   </Field>
                   <Field label={t('payroll.wps.bank')} name="bank">
                     <Input id="bank" name="bank" defaultValue={wps?.bank} />
+                  </Field>
+                </FormSheet>
+              </div>
+            </Card>
+            <Card title={t('payroll.fee.title')} sub={t('payroll.fee.sub')}>
+              <p className={Number(fee ?? 0) > 0 ? 'text-sm' : 'crm-muted text-sm'}>
+                {Number(fee ?? 0) > 0
+                  ? t('payroll.fee.current', { amount: fmt.number(Number(fee)) })
+                  : t('payroll.fee.notSet')}
+              </p>
+              <div className="mt-4">
+                <FormSheet
+                  title={t('payroll.fee.title')}
+                  description={t('payroll.fee.sub')}
+                  action={saveBookingFeeAction.bind(null, slug)}
+                  trigger={
+                    <Button variant="secondary" size="sm">
+                      {t('common.edit')}
+                    </Button>
+                  }
+                >
+                  <Field label={t('payroll.fee.amount')} name="receptionistBookingFee">
+                    <Input
+                      id="receptionistBookingFee"
+                      name="receptionistBookingFee"
+                      inputMode="decimal"
+                      defaultValue={fee ?? ''}
+                    />
                   </Field>
                 </FormSheet>
               </div>

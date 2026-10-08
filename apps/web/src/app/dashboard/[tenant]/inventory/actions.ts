@@ -89,7 +89,7 @@ export async function receiveStockAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'inventory.manage')
+  const { ctx, error } = await guard(slug, 'inventory.adjust')
   if (error) return fail(error)
   const parsed = z
     .object({
@@ -132,7 +132,7 @@ export async function adjustStockAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'inventory.manage')
+  const { ctx, error } = await guard(slug, 'inventory.adjust')
   if (error) return fail(error)
   const parsed = z
     .object({

@@ -1,5 +1,5 @@
 import { members, platformDb, roles, tenants } from '@spa/db'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import { ArrowRight, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -19,7 +19,7 @@ export default async function DashboardIndex() {
     .from(members)
     .innerJoin(tenants, eq(members.tenantId, tenants.id))
     .innerJoin(roles, eq(members.roleId, roles.id))
-    .where(and(eq(members.userId, session.user.id), eq(members.status, 'active')))
+    .where(and(eq(members.userId, session.user.id), eq(members.status, 'active'), isNull(tenants.deletedAt)))
     .orderBy(asc(tenants.name))
   const admin = await isPlatformAdmin(session.user.id)
   if (spas.length === 1 && !admin) redirect(appPath(`/${spas[0]!.slug}`))

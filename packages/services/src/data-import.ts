@@ -266,7 +266,7 @@ async function importMenu(
           tenantId,
           serviceId: s.id,
           durationMin: m.durationMin,
-          priceAed: m.priceAed.toFixed(2),
+          priceAed: m.priceAed?.toFixed(2) ?? null,
           sort: s.variants.size,
         })
         .returning({ id: serviceVariants.id })
@@ -280,7 +280,7 @@ async function importMenu(
     }
     await tx
       .update(serviceVariants)
-      .set({ priceAed: m.priceAed.toFixed(2), active: true })
+      .set({ priceAed: m.priceAed?.toFixed(2) ?? null, active: true })
       .where(eq(serviceVariants.id, variantId))
     const [current] = await tx.select({ name: services.name }).from(services).where(eq(services.id, s.id))
     await tx
@@ -342,7 +342,7 @@ async function importProducts(
           .insert(stockLevels)
           .values({ tenantId, branchId: ctx.branchId, productId: made!.id, qty: p.stock.toString() })
           .onConflictDoUpdate({
-            target: [stockLevels.branchId, stockLevels.productId],
+            target: [stockLevels.tenantId, stockLevels.branchId, stockLevels.productId],
             set: { qty: sql`${stockLevels.qty} + ${p.stock}` },
           })
         openingValue += p.stock * (p.costAed ?? 0)

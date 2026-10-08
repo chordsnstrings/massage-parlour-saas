@@ -64,6 +64,21 @@ export const payroll = {
     bank: 'Bank',
     note: 'Note',
   },
+  fee: {
+    title: 'Receptionist booking fee',
+    sub: 'Receptionists on "Fee per booking created" earn this for each booking they created that ended completed in the month.',
+    current: 'AED {amount} per completed booking',
+    notSet: 'Not set — receptionists on a booking fee earn nothing yet.',
+    amount: 'Fee per completed booking (AED)',
+  },
+  tipsAdv: {
+    title: 'Tips & advances payout',
+    sub: 'Therapists are paid booking commission in payroll; tips and advances are settled here. Net = tips received − advances taken this month.',
+    none: 'No therapist tips or advances this month.',
+    tips: 'Tips',
+    advances: 'Advances',
+    net: 'Net',
+  },
   advances: {
     title: 'Open advances',
     sub: 'Deducted in the next finalised payroll.',
@@ -87,6 +102,7 @@ export const payroll = {
     finalised: 'Payroll finalised and posted to the accounts',
     advanceRecorded: 'Advance recorded — it will be deducted in the next payroll',
     wpsSaved: 'WPS details saved',
+    feeSaved: 'Booking fee saved',
     paySaved: 'Pay details saved',
     memberNotFound: 'Team member not found',
     alreadyFinalised: 'This month is already finalised.',
@@ -100,5 +116,6 @@ export const payroll = {
     employerId: 'The 13-digit MOHRE establishment ID',
     personId: 'The 14-digit MOHRE person code',
     routing: '9-digit routing code',
+    fee: 'Enter a fee from 0 to 10,000',
   },
 } as const

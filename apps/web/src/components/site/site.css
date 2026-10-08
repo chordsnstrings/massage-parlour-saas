@@ -1,3 +1,5 @@
+@import "./site-designs.css";
+
 /* Public tenant site — theme-bound primitives (docs/PLAN.md §11.5, §11.8). Variables come from themeVars(). */
 
 .site-root {

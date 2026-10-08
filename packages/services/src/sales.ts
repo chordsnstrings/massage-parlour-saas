@@ -129,6 +129,7 @@ export async function createSale(tx: Tx, input: NewSale) {
   // Lines → net amounts in fils.
   const priced = input.lines.map((l) => {
     if (!Number.isInteger(l.qty) || l.qty < 1) throw new DomainError('Quantity must be at least 1')
+    if (!Number.isFinite(l.unitPriceAed)) throw new DomainError(`Type a price for “${l.description}”`)
     if (l.unitPriceAed < 0) throw new DomainError('Prices cannot be negative')
     const gross = fils(l.unitPriceAed) * l.qty
     const discount = fils(l.discountAed ?? 0)
@@ -363,9 +364,11 @@ export async function createSale(tx: Tx, input: NewSale) {
       // The line is priced at 0, so commission is earned on the session's redeemed value instead.
       if (l.staffId) {
         const [person] = await tx
-          .select({ rate: staff.commissionPct })
+          .select({ rate: staff.commissionPct, payType: staff.payType })
           .from(staff)
           .where(eq(staff.id, l.staffId))
+        // Therapists are paid per booking (PLAN §14.8 R2); only `sales_commission` people earn a %.
+        if (person?.payType !== 'sales_commission') continue
         const baseAed = valueAed - includedVat(valueAed, VAT_RATE_PCT)
         const amount = Math.round(baseAed * num(person?.rate)) / 100
         if (amount > 0) {

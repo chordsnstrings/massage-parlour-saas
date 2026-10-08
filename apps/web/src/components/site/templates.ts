@@ -1,4 +1,5 @@
 import type { SiteTemplate } from '@spa/services'
+import { designTemplates } from './templates-designs'
 import type { SiteTheme } from './theme'
 import type { Bi } from './types'
 
@@ -1925,7 +1926,42 @@ function hotel(): SiteTemplate {
 
 /* ------------------------------------------------------------------ Catalogue */
 
-type BuiltIn = SiteTemplate & { feel: string }
+/** The block helpers and shared pages, handed to the design templates (templates-designs.ts) without a cycle. */
+const kit = {
+  builder,
+  page,
+  pages,
+  heading,
+  para,
+  buttons,
+  section,
+  columns,
+  image,
+  uspRow,
+  services,
+  team,
+  testimonials,
+  faq,
+  cta,
+  hours,
+  gallery,
+  footer,
+  whatsapp,
+  servicesPage,
+  contactPage,
+  aboutPage,
+  galleryPage,
+  SEO,
+  BOOK,
+  SEE_MENU,
+  WHATSAPP,
+  ABOUT_LINK,
+  FAQ_BASICS,
+  FAQ_VISIT,
+  QUOTES,
+}
+export type TemplateKit = typeof kit
+export type BuiltIn = SiteTemplate & { feel: string }
 export const TEMPLATES = {
   zen: { ...zen(), feel: 'Stone and off-white, serif headings, slow fades.' },
   luxury: { ...luxury(), feel: 'Black and gold, editorial, expressive motion.' },
@@ -1935,6 +1971,8 @@ export const TEMPLATES = {
   bali: { ...bali(), feel: 'Garden greens, organic shapes, soft and slow.' },
   express: { ...express(), feel: 'Bold, price-forward, made for walk-ins.' },
   hotel: { ...hotel(), feel: 'Premium long-form with rich galleries.' },
+  // R5: rebuilt from the owner's designs, each with its own 3D scroll motion.
+  ...designTemplates(kit),
 } satisfies Record<string, BuiltIn>
 export type TemplateKey = keyof typeof TEMPLATES
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[]

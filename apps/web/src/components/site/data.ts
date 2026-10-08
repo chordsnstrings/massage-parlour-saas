@@ -1,6 +1,6 @@
 import { businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
 import { branches, serviceCategories, services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
-import { getSite, listPages, type SiteRow } from '@spa/services'
+import { getSite, listPages, publicPrice, type SiteRow, spaHidesPrices } from '@spa/services'
 import { and, asc, eq } from 'drizzle-orm'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
@@ -17,6 +17,7 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
       description: services.description,
       category: serviceCategories.name,
       categorySort: serviceCategories.sort,
+      showPrice: services.showPrice,
       sort: services.sort,
     })
     .from(services)
@@ -32,6 +33,7 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
     .from(serviceVariants)
     .where(eq(serviceVariants.active, true))
     .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+  const spaHides = await spaHidesPrices(tx, tenant.id)
   const people = await tx
     .select({ id: staff.id, name: staff.displayName, photoUrl: staff.photoUrl, bio: staff.bio })
     .from(staff)
@@ -57,7 +59,10 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
         category: s.category ?? null,
         variants: variants
           .filter((v) => v.serviceId === s.id)
-          .map((v) => ({ durationMin: v.durationMin, priceAed: v.priceAed })),
+          .map((v) => ({
+            durationMin: v.durationMin,
+            priceAed: publicPrice(v.priceAed, s.showPrice, spaHides),
+          })),
       }))
       .filter((s) => s.variants.length > 0),
     staff: people.map((p) => ({ ...p, bio: p.bio ?? null })),

@@ -16,7 +16,7 @@ async function signInOnApp(page: Page, path: string) {
   await page.waitForURL(target)
 }
 
-test('website studio: the spa asks, the super-admin builds and sends for review, the spa approves', async ({
+test('website studio: the spa asks, the super-admin builds, sends for review and approves', async ({
   page,
   browser,
 }) => {
@@ -56,14 +56,22 @@ test('website studio: the spa asks, the super-admin builds and sends for review,
     })
   })
 
-  await test.step('spa: no editing, approves the review', async () => {
+  await test.step('spa: no editing and no approving — it can only ask for changes', async () => {
     await page.reload()
     await expect(page.getByTestId('studio-status').getByText('Ready for review')).toBeVisible()
     await expect(page.getByRole('link', { name: 'Edit Home' })).toHaveCount(0)
-    await page.getByRole('button', { name: 'Approve', exact: true }).click()
-    await page.getByRole('button', { name: 'Approve website' }).click()
-    await expect(page.getByTestId('studio-status').getByText('Approved', { exact: true })).toBeVisible({
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Request a change' })).toBeVisible()
+  })
+
+  await test.step('super-admin: approves the site', async () => {
+    await studio.reload()
+    await studio.getByRole('button', { name: 'Approve', exact: true }).click()
+    await studio.getByRole('button', { name: 'Approve website' }).click()
+    await expect(studio.getByTestId('studio-status').getByText('Approved', { exact: true })).toBeVisible({
       timeout: 30_000,
     })
+    await page.reload()
+    await expect(page.getByTestId('studio-status').getByText('Approved', { exact: true })).toBeVisible()
   })
 })

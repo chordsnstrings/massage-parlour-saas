@@ -32,6 +32,8 @@ export const settings: Messages['settings'] = {
     phone: 'โทรศัพท์',
     whatsapp: 'เบอร์ WhatsApp',
     whatsappHint: 'ลูกค้าจะส่งข้อความมาที่เบอร์นี้',
+    showPrices: 'แสดงราคาบนเว็บไซต์',
+    showPricesHint: 'ค่าเริ่มต้นของทุกบริการ แต่ละบริการตั้งค่าแยกได้ ราคาที่ซ่อนจะแสดงเป็น “ราคาตามตกลง”',
     whatsappPlaceholder: '050 123 4567',
     save: 'บันทึกการเปลี่ยนแปลง',
     saved: 'บันทึกการตั้งค่าแล้ว',

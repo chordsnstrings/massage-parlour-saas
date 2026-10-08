@@ -3,7 +3,11 @@ export const PERMISSION_GROUPS = {
   dashboard: { label: 'Dashboard', actions: { view: 'View dashboard', revenue: 'See revenue figures' } },
   calendar: {
     label: 'Calendar & bookings',
-    actions: { view: 'View calendar', manage: 'Create and edit bookings' },
+    actions: {
+      view: 'View calendar',
+      manage: 'Create and edit bookings',
+      commission: 'Enter therapist commission',
+    },
   },
   clients: {
     label: 'Clients',
@@ -20,7 +24,14 @@ export const PERMISSION_GROUPS = {
   },
   services: { label: 'Services & rooms', actions: { manage: 'Manage services, rooms and resources' } },
   staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
-  inventory: { label: 'Inventory', actions: { manage: 'Manage stock' } },
+  inventory: {
+    label: 'Inventory',
+    actions: {
+      manage: 'Manage stock and the warehouse',
+      adjust: 'Restock and adjust stock counts',
+      purchase: 'Record purchases',
+    },
+  },
   marketing: {
     label: 'WhatsApp & marketing',
     actions: { send: 'Send WhatsApp messages', campaigns: 'Create campaigns' },
@@ -82,12 +93,14 @@ export const SYSTEM_ROLES: Record<
       'dashboard.view',
       'calendar.view',
       'calendar.manage',
+      'calendar.commission',
       'clients.view',
       'clients.manage',
       'clients.phone',
       'pos.use',
       'pos.close',
       'staff.view',
+      'inventory.adjust',
       'marketing.send',
       'ai.approve',
     ],
@@ -106,6 +119,8 @@ export const SYSTEM_ROLES: Record<
       'reports.view',
       'accounting.view',
       'accounting.manage',
+      'inventory.adjust',
+      'inventory.purchase',
     ],
   },
   content_editor: {

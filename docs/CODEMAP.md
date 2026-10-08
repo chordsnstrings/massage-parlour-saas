@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0016` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0021` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
@@ -32,7 +32,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`. `tenants` adds a `tenant_self` policy so a spa
   sees its own row.
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
-  `audit_log`, `ai_usage`, `domain_orders`.
+  `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
+  reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
+  = soft delete (`requireMember` 404s members).
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
     `staff | room` only (no equipment yet).
@@ -93,7 +95,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
   - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
-  - People: Clients, Services & menu (services · packages · inventory), Team & roles (staff · team · documents).
+  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
   - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
@@ -130,11 +132,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
   - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
   - `advanced` holds the schedule and scoped custom CSS.
-- **Themes and templates**: theme tokens in `sites.theme`; 8 built-in templates (`templates.ts`); 24 section presets
-  and 7 page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
+- **Themes and templates**: theme tokens in `sites.theme`; 23 built-in templates — 8 classic (`templates.ts`) + 15
+  design templates (R5, `templates-designs.ts`); 24 section presets + one "3D motion" preset per design scene, and 7
+  page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
+- **Design templates (R5)**: look = theme tokens `headingFace` (self-hosted @fontsource faces, `site-designs.css`),
+  `backdrop` (CSS-drawn hero art), `emblem` (hero art built from the spa name + live hours/prices, shown when the
+  hero has no photo; `blocks/hero-art.tsx`), `emphasis` (`*word*` in headings). Motion = per-band `scene` props set by
+  `applyMotion` (fan, cube, doors, coverflow, road, pages, prism, slabs, layers, blocks, brochure, turn — pose scenes
+  in `lib/scenes.ts`, all ending at rest). Scroll scenes are off in the editor; ambient hero loops stop in the editor
+  and under OS reduced motion. Gallery thumbnails: `public/site-templates/{key}.webp`, regenerated with
+  `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
-  - The spa can request a change (`site.content`), or approve (`site.publish`) while `studio_status = 'review'`.
+  - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,
+    approve, reopen) is `setStudioStatusAction` behind `studioGuard(…, 'site.publish')` (R1).
   - The editor route 404s for non-studio users.
 - **Saving and publishing**:
   - Draft JSON is capped at 512 KB.
@@ -169,6 +180,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `23P01` becomes `DomainError('slot_taken')`.
   - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
   - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
+  - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
+    internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
+    cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
+  - Commission (R2): `completeBooking` = complete + `recordBookingCommissions` (AED per item + therapist, every
+    pair required, 0 allowed). `booking_commissions` is append-only (trigger): edits insert the delta, leaving
+    `completed` inserts the negative; each change posts 6010/2300 (`booking_commission[_reversal]`) on the
+    branch's current business date; row `business_date` = the booking's. POS checkout completes without
+    commission → list filter "Commission missing". Calendar can't complete/re-open (booking page only);
+    entering/re-opening needs `calendar.commission` (owner, manager, receptionist).
 - **Ledger**:
   - `post` only inserts; `reverseSource` posts a mirror entry with source type `<type>_reversal`.
   - `DEFAULT_CHART` codes:
@@ -193,6 +213,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     | 4300 | Breakage |
     | 5000 | COGS |
     | 5100 | Consumables |
+    | 6150 / 6160 / 6170 | Cleaning supplies / Spa materials & supplies / Small equipment (purchases) |
     | 6xxx | Expenses |
 
   - Payment method maps to an account via `PAYMENT_ACCOUNT`.
@@ -212,6 +233,34 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
+- **Stock locations + purchases (R8/R9, migration 0017)**:
+  - A location is a branch or the spa's central warehouse = `branch_id IS NULL` on `stock_levels` /
+    `stock_movements` (unique `stock_levels_location` NULLS NOT DISTINCT on tenant+branch+product; PK dropped).
+    `stock_levels.low_stock_at` overrides the product threshold per location (`lowStock(tx, branchId|null)`).
+  - `inventory.stockIn`/`stockOut` = movement only (no ledger); `receiveStock` = stockIn + its own entry.
+    `transferStock` writes `transfer_out`/`transfer_in` with one shared `ref_id`, no ledger, locks the source level
+    (`FOR UPDATE`) and never goes below zero. `countStock` = adjustStock by the difference.
+  - `purchases` + `purchase_lines` + `suppliers` (`supplierByName` dedupes case-insensitively). `recordPurchase` posts
+    one `purchase` entry: Dr 1200 (product lines, via stockIn with `ref_id` = purchase) / Dr `PURCHASE_ACCOUNT[category]`
+    (non-stock lines) / Dr 1300 / Cr `EXPENSE_CREDIT[paidVia]` (cash 1000, card+bank 1020). `voidPurchase` takes the
+    stock back out (blocked if it was used/moved), `reverseSource('purchase')`, row kept with `status = 'void'`.
+  - Permission `inventory.purchase` (accountant has it); warehouse = `inventory.manage`. Receipt scan shared via
+    `server/receipt-scan.ts` (expenses + purchases routes) and `accounts/expenses/receipt-scan.tsx`.
+  - Purchases are not in Expenses list / data export yet (the ledger, P&L and VAT include them).
+- **Payroll / pay types (R2)**: `staff.pay_type` = `booking_commission` (therapists: only their unpaid
+  `booking_commissions`), `salary` (base_salary_aed), `sales_commission` (commission_pct of the net POS lines
+  credited to them via `accrueCommissions`; package-session accrual too). Every line = base (salary only) +
+  unpaid booking commissions + unpaid `commission_entries` (older accruals still paid) + tips − advances;
+  `finalisePayroll` links both commission tables. A correction after a finalised run is a new unpaid row → next run.
+  Owner decisions (migration 0021): `booking_fee` = `tenants.settings.receptionistBookingFee` × bookings whose
+  `created_by` is the person's member user and that are `completed` with business date in the period
+  (`completedBookingsCreated`; `payroll_lines.fee_aed`, expensed Dr 6010 at finalise). Therapist lines carry no
+  tips/advances (their advances are not linked/recovered by payroll); `therapistTipsAdvances` = the separate
+  "Tips & advances payout" card (tips − advances in the month, a report, no posting). "% of sales" is only shown
+  in the staff form for people already on it. Re-opening a completed booking never restocks consumables
+  (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
+  manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
+  monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.
