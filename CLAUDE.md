@@ -64,7 +64,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
-- Deploys: the droplet's `spa-update` timer pulls the deploy branch every 2 min and rebuilds; check
+- Deploys: the droplet's `spa-update` timer pulls the deploy branch **`claude/intelligent-heisenberg-g9e81o`** (also the
+  GitHub default; every push there reaches production) every 2 min and rebuilds; check
   `https://<host>/_status/deploy.json` (basic auth `ops`). Secrets without SSH: commit `deploy/droplet/secrets.env.enc`
   (see deploy/droplet/README.md). The worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
 - React effects must use block bodies (`useEffect(() => { … })`): newer Chromium returns a value from `scrollIntoView`,

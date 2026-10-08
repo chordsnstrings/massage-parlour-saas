@@ -226,8 +226,9 @@ Integration jobs do nothing until their credentials are configured.
   - The systemd timer runs it every 2 minutes. It fetches `BRANCH`, rebuilds on the droplet and health-checks
     `/api/health`.
   - It applies the `secrets.env.enc` overlay (AES-256-CBC, pbkdf2 200k).
-- **Deploy branch**: `BRANCH` in the droplet secrets; it is not in the repo. The GitHub default branch is
-  `claude/intelligent-heisenberg-g9e81o`.
+- **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
+  `BRANCH` in the droplet secrets and is also the GitHub default branch, so every push to it reaches production
+  within about 2 minutes.
 - **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main`: bootstrap `spa_test` → lint → typecheck →
   test → web build → Playwright e2e.
 - **e2e**:
