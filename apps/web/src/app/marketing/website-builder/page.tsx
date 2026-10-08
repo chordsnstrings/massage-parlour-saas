@@ -1,7 +1,7 @@
 import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { CtaBand, MarketingShell } from '@/components/marketing/shell'
+import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { StudioDemo } from '@/components/marketing/studio-demo'
 import { appUrl } from '@/server/origin'
 
@@ -76,16 +76,19 @@ export default async function WebsiteStudioPage() {
     <MarketingShell active="website-builder">
       {/* Hero */}
       <section className="mkt-hero">
+        <HeroDepth />
         <div className="mkt-wrap text-center">
-          <p className="mkt-eyebrow mkt-rise">Website studio</p>
-          <h1 className="mkt-h1 mkt-rise mx-auto mt-3 max-w-3xl" style={css({ '--d': 1 })}>
+          <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+            Website studio
+          </p>
+          <h1 data-depth="0.06" className="mkt-h1 mkt-rise mx-auto mt-6 max-w-4xl" style={css({ '--d': 1 })}>
             A website handcrafted for your spa.
           </h1>
-          <p className="mkt-hsub mkt-rise mx-auto" style={css({ '--d': 2 })}>
+          <p data-depth="0.08" className="mkt-hsub mkt-rise mx-auto" style={css({ '--d': 2 })}>
             No templates to wrestle with. Our studio designs, writes and builds your site in English and
             Arabic — from your treatments, your team and your photos. You approve it. It takes bookings.
           </p>
-          <div className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
+          <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={signup} className="mkt-btn mkt-btn-primary">
               Start your spa <ArrowRight />
             </a>
@@ -93,7 +96,7 @@ export default async function WebsiteStudioPage() {
               Try the styles
             </a>
           </div>
-          <p className="mkt-hnotes mkt-rise" style={css({ '--d': 4.5 })}>
+          <p data-depth="0.11" className="mkt-hnotes mkt-rise" style={css({ '--d': 4.5 })}>
             Included in your plan · Built by people, not a wizard · Changes on request
           </p>
         </div>
@@ -143,7 +146,7 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* Section library */}
-      <section className="mkt-sec pt-0">
+      <section className="mkt-sec mkt-dark">
         <div className="mkt-wrap">
           <div data-rise className="mkt-shead">
             <p className="mkt-eyebrow">Crafted, not templated</p>
@@ -158,6 +161,7 @@ export default async function WebsiteStudioPage() {
           <div className="mt-[54px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
             {SECTIONS.map((s) => (
               <div key={s.name} data-rise="card" className="mkt-card">
+                <span aria-hidden className="mkt-lbar" />
                 <p className="text-[12px] font-bold tracking-[0.12em] uppercase">{s.name}</p>
                 <p className="mt-4 font-serif text-[18px] leading-snug text-[var(--text)]">{s.sample}</p>
                 <p className="mt-1 text-[13px]">{s.meta}</p>

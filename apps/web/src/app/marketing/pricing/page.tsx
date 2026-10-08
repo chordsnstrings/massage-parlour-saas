@@ -40,8 +40,14 @@ export default async function PricingPage() {
   return (
     <MarketingShell active="pricing">
       <section className="mkt-wrap pt-20 pb-12 text-center sm:pt-28">
-        <p className="mkt-eyebrow mkt-rise">Pricing</p>
-        <h1 className="mkt-h1 mkt-rise mx-auto mt-3 max-w-2xl" style={{ '--d': 1 } as React.CSSProperties}>
+        <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+          Pricing
+        </p>
+        <h1
+          data-depth="0.06"
+          className="mkt-h1 mkt-rise mx-auto mt-6 max-w-4xl"
+          style={{ '--d': 1 } as React.CSSProperties}
+        >
           One price. Everything automated.
         </h1>
       </section>
@@ -56,7 +62,7 @@ export default async function PricingPage() {
               <p className="mkt-head text-[24px] font-bold">{p.name}</p>
               <p className="mkt-head mt-4 text-[48px] leading-none font-bold tabular-nums">
                 {formatAed(p.priceAed)}
-                <span className="font-sans text-lg font-normal tracking-normal text-[var(--mute)]">
+                <span className="text-lg font-medium tracking-normal text-[var(--mute)]">
                   {' '}
                   / {p.billingInterval}
                 </span>

@@ -79,7 +79,7 @@ function Choice<T extends string>({
 }) {
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-2 text-[12px] font-bold tracking-[0.12em] text-[var(--accent-ink)] uppercase">
+      <legend className="mb-2.5 text-[12px] font-bold tracking-[0.12em] text-[var(--mute)] uppercase">
         {label}
       </legend>
       <div className="flex flex-wrap gap-1.5">
@@ -89,7 +89,7 @@ function Choice<T extends string>({
             type="button"
             aria-pressed={value === k}
             onClick={() => onChange(k)}
-            className="rounded-full border border-[var(--line2)] bg-[var(--surface)]/60 px-3.5 py-2 text-[14px] text-[var(--ink-2)] transition-[background-color,color,border-color] duration-200 hover:border-[var(--accent)] aria-pressed:border-[var(--accent)] aria-pressed:bg-[var(--accent)] aria-pressed:text-[var(--on-accent)]"
+            className="min-h-10 rounded-[10px] bg-[var(--surface)] px-4 py-2 text-[14px] font-semibold text-[var(--ink)] shadow-[inset_0_0_0_1px_var(--line)] transition-[background-color,color,box-shadow] duration-200 hover:shadow-[inset_0_0_0_1px_var(--text)] aria-pressed:bg-[var(--text)] aria-pressed:text-white"
           >
             {options[k]}
           </button>
@@ -155,23 +155,19 @@ export function StudioDemo() {
         </p>
       </div>
 
-      {/* tilted in 3D; straightens as it scrolls in and follows the mouse (MarketingMotion) */}
+      {/* C product frame (dark bezel); tilted back in 3D, straightens as it scrolls to the centre (MarketingMotion) */}
       <div className="mkt-stage min-w-0">
-        <figure
-          data-tilt
-          className="mkt-tilt mkt-shot overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--surface)]"
-          aria-label="Example spa website"
-        >
-          <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-4 py-3">
-            <span className="size-2.5 rounded-full bg-[#f2706a]" />
-            <span className="size-2.5 rounded-full bg-[#f6c04f]" />
-            <span className="size-2.5 rounded-full bg-[#4cc37a]" />
-            <span className="ms-3 truncate text-[12px] text-[var(--mute)]">alwahaspa.ae</span>
+        <figure data-tilt className="mkt-tilt mkt-device" aria-label="Example spa website">
+          <div className="mkt-dots">
+            <span />
+            <span />
+            <span />
+            <span className="mkt-url">alwahaspa.ae</span>
           </div>
           <div
             dir={lang === 'ar' ? 'rtl' : 'ltr'}
             lang={lang}
-            className="transition-colors duration-500"
+            className="mkt-screen transition-colors duration-500"
             style={{ background: s.bg, color: s.ink }}
           >
             <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-7">

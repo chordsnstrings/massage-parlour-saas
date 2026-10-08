@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { AREAS, DAY } from '@/components/marketing/content'
 import { CalendarMock } from '@/components/marketing/mocks'
 import { activePlans } from '@/components/marketing/plans'
-import { CtaBand, MarketingShell } from '@/components/marketing/shell'
+import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
@@ -21,16 +21,19 @@ export default async function MarketingPage() {
     <MarketingShell active="home">
       {/* Hero */}
       <section className="mkt-hero">
+        <HeroDepth />
         <div className="mkt-wrap text-center">
-          <p className="mkt-eyebrow mkt-rise">Automation for UAE spas</p>
-          <h1 className="mkt-h1 mkt-rise mx-auto mt-3 max-w-3xl" style={css({ '--d': 1 })}>
+          <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+            Automation for UAE spas
+          </p>
+          <h1 data-depth="0.06" className="mkt-h1 mkt-rise mx-auto mt-6 max-w-4xl" style={css({ '--d': 1 })}>
             More bookings. Less work.
           </h1>
-          <p className="mkt-hsub mkt-rise mx-auto" style={css({ '--d': 2 })}>
+          <p data-depth="0.08" className="mkt-hsub mkt-rise mx-auto" style={css({ '--d': 2 })}>
             Clients book themselves around the clock. Reminders, follow-ups, offers and your accounts take
             care of themselves. Your team just looks after guests.
           </p>
-          <div className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
+          <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={await appUrl('/signup')} className="mkt-btn mkt-btn-primary">
               Start your spa <ArrowRight />
             </a>
@@ -38,7 +41,7 @@ export default async function MarketingPage() {
               See every feature
             </Link>
           </div>
-          <p className="mkt-hnotes mkt-rise" style={css({ '--d': 4.5 })}>
+          <p data-depth="0.11" className="mkt-hnotes mkt-rise" style={css({ '--d': 4.5 })}>
             Bookings 24/7 · Reminders queued for you · Accounts & VAT done · English & Arabic
           </p>
         </div>
@@ -100,7 +103,7 @@ export default async function MarketingPage() {
       </section>
 
       {/* Everything in one place */}
-      <section className="mkt-sec">
+      <section className="mkt-sec mkt-dark">
         <div className="mkt-wrap">
           <div data-rise className="mkt-shead">
             <p className="mkt-eyebrow">Everything automated</p>
@@ -109,6 +112,7 @@ export default async function MarketingPage() {
           <div className="mt-[54px] grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
             {AREAS.map((a) => (
               <Link key={a.key} href={`/features#${a.key}`} data-rise="card" className="mkt-card block">
+                <span aria-hidden className="mkt-lbar" />
                 <h3 className="flex items-center justify-between">
                   {a.title} <ArrowRight className="size-[18px] text-[var(--accent-ink)]" />
                 </h3>
@@ -124,9 +128,9 @@ export default async function MarketingPage() {
       <section className="mkt-sec">
         <div data-rise className="mkt-wrap text-center">
           <p className="mkt-eyebrow">One simple price</p>
-          <p className="mkt-head mt-4 text-[44px] font-bold tabular-nums sm:text-[56px]">
+          <p className="mkt-head mt-5 text-[44px] leading-none font-bold tabular-nums sm:text-[66px]">
             {plan ? formatAed(plan.priceAed) : 'AED 24,000'}
-            <span className="font-sans text-lg font-normal text-[var(--mute)]"> / year</span>
+            <span className="text-lg font-medium tracking-normal text-[var(--mute)]"> / year</span>
           </p>
           <p className="mkt-lead mx-auto">
             Every automation and feature, unlimited staff and bookings, your website and domain.

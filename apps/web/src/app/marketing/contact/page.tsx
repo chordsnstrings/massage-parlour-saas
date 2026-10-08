@@ -49,11 +49,17 @@ export default async function ContactPage() {
   return (
     <MarketingShell active="contact">
       <section className="mkt-wrap pt-20 pb-24 sm:pt-28">
-        <p className="mkt-eyebrow mkt-rise">Contact</p>
-        <h1 className="mkt-h1 mkt-rise mt-3 max-w-2xl" style={{ '--d': 1 } as React.CSSProperties}>
+        <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+          Contact
+        </p>
+        <h1
+          data-depth="0.06"
+          className="mkt-h1 mkt-rise mt-6 max-w-3xl"
+          style={{ '--d': 1 } as React.CSSProperties}
+        >
           Talk to a real person.
         </h1>
-        <p className="mkt-hsub mkt-rise" style={{ '--d': 2 } as React.CSSProperties}>
+        <p data-depth="0.08" className="mkt-hsub mkt-rise" style={{ '--d': 2 } as React.CSSProperties}>
           We set up your spa with you — menu, staff, website and your first import — usually in one visit.
         </p>
         <div className="mt-14 grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">

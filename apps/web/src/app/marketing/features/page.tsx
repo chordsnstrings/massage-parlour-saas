@@ -24,12 +24,15 @@ export default function FeaturesPage() {
   return (
     <MarketingShell active="features">
       <section className="mkt-wrap pt-20 pb-12 sm:pt-28">
-        <p className="mkt-eyebrow mkt-rise">Features</p>
-        <h1 className="mkt-h1 mkt-rise mt-3 max-w-3xl" style={css({ '--d': 1 })}>
+        <p data-depth="0.03" className="mkt-eyebrow mkt-rise">
+          Features
+        </p>
+        <h1 data-depth="0.06" className="mkt-h1 mkt-rise mt-6 max-w-4xl" style={css({ '--d': 1 })}>
           Everything that runs itself.
         </h1>
         <nav
           aria-label="Feature areas"
+          data-depth="0.09"
           className="mkt-rise mt-10 flex flex-wrap gap-2"
           style={css({ '--d': 2 })}
         >
@@ -46,7 +49,7 @@ export default function FeaturesPage() {
           <div className="mkt-wrap grid gap-8 py-16 lg:grid-cols-[1fr_1.6fr] lg:gap-16">
             <div data-rise>
               <span className="mkt-num tabular-nums">0{i + 1}</span>
-              <h2 className="mt-2 text-[28px] sm:text-[32px]">{a.title}</h2>
+              <h2 className="mt-4 text-[30px] sm:text-[38px]">{a.title}</h2>
               <p className="mt-3 max-w-sm text-[var(--muted)]">{a.blurb}</p>
             </div>
             <ul data-rise="card" className="mkt-tile grid gap-x-8 gap-y-3.5 sm:grid-cols-2 sm:p-8">
@@ -62,7 +65,7 @@ export default function FeaturesPage() {
       ))}
 
       {/* Included in every plan */}
-      <section className="mkt-sec">
+      <section className="mkt-sec mkt-dark">
         <div className="mkt-wrap grid gap-10 lg:grid-cols-2">
           <div data-rise>
             <p className="mkt-eyebrow">Runs on its own</p>

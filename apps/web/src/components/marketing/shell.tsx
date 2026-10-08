@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
 import { LogoMark } from '@/components/brand'
 import { MarketingMotion } from '@/components/marketing/motion'
@@ -30,10 +30,10 @@ async function Header({ active }: { active: MarketingPage }) {
           ))}
         </nav>
         <div className="mkt-links ms-auto flex items-center gap-2">
-          <a href={urls.app('/login')} className="hidden px-2 hover:text-[var(--text)] sm:inline">
+          <a href={urls.app('/login')} className="hidden px-2 sm:inline">
             Sign in
           </a>
-          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary mkt-btn-sm">
+          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm">
             Start
           </a>
         </div>
@@ -54,6 +54,35 @@ async function Header({ active }: { active: MarketingPage }) {
   )
 }
 
+/** Hero depth layers: abstract product fragments that drift around the headline at their own depth
+ *  (`data-depth`, MarketingMotion). Decorative only. */
+export function HeroDepth() {
+  return (
+    <div aria-hidden className="mkt-deco">
+      <div data-depth="-0.22" className="mkt-frag f1">
+        <b />
+        <span className="mkt-lines">
+          <i className="w-24 bg-white/80" />
+          <i className="w-14 bg-white/30" />
+        </span>
+      </div>
+      <div data-depth="-0.34" className="mkt-frag f2">
+        <Check strokeWidth={2.6} />
+      </div>
+      <div data-depth="-0.2" className="mkt-frag f3">
+        <b />
+        <span className="mkt-lines">
+          <i className="w-20 bg-[var(--text)]/80" />
+          <i className="w-12 bg-[var(--line)]" />
+        </span>
+      </div>
+      <div data-depth="-0.12" className="mkt-frag f4">
+        <i />
+      </div>
+    </div>
+  )
+}
+
 export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: string }) {
   const urls = await requestUrls()
   return (
@@ -61,7 +90,7 @@ export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: 
       <div className="mkt-wrap">
         <div className="mkt-demo text-center">
           <div data-rise>
-            <h2 className="mkt-h2 mx-auto max-w-2xl">{title}</h2>
+            <h2 className="mkt-h2 mx-auto mt-0 max-w-2xl">{title}</h2>
             <p className="mkt-lead mx-auto">
               Set up in an afternoon. We help you import your clients and menu.
             </p>
@@ -118,7 +147,7 @@ async function Footer() {
   )
 }
 
-/** Shared marketing page frame (Mint Cloud theme). MarketingMotion draws the fixed background (z-index keeps it
+/** Shared marketing page frame ("C · Bold product-led" look). MarketingMotion draws the fixed background (z-index keeps it
  *  behind) and mounts last so it commits with the elements it drives. */
 export function MarketingShell({ active, children }: { active: MarketingPage; children: React.ReactNode }) {
   return (
