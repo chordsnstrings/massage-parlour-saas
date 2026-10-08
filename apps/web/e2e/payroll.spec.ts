@@ -25,6 +25,9 @@ test('payroll: advance, prepare, WPS file, finalise', async ({ page }) => {
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('WPS details saved')).toBeVisible()
 
+  await expect(page.getByText('Tips & advances payout')).toBeVisible()
+  await expect(page.getByText('Not set — receptionists on a booking fee earn nothing yet.')).toBeVisible()
+
   await page.getByRole('button', { name: 'Prepare payroll' }).click()
   await expect(page.getByText(/Payroll prepared/)).toBeVisible()
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()

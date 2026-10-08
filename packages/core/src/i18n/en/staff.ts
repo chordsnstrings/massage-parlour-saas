@@ -66,7 +66,7 @@ export const staff = {
     notLinked: 'Not linked',
     payType: 'Pay type',
     payTypeHint:
-      'Therapists: the AED commission entered for each completed booking (no base, no %). Others: a fixed salary or a % of sales.',
+      'Therapists: the AED commission entered for each completed booking (no base, no %). Receptionists: a fixed salary, or the booking fee (set on the payroll page) for each booking they created that ended completed.',
     commission: 'Commission',
     commissionHint: 'For “% of sales” pay: percent of the POS lines credited to them, net of VAT.',
     baseSalary: 'Base salary',

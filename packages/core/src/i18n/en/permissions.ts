@@ -29,7 +29,11 @@ export const permissions = {
     staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
     inventory: {
       label: 'Inventory',
-      actions: { manage: 'Manage stock and the warehouse', purchase: 'Record purchases' },
+      actions: {
+        manage: 'Manage stock and the warehouse',
+        adjust: 'Restock and adjust stock counts',
+        purchase: 'Record purchases',
+      },
     },
     marketing: {
       label: 'WhatsApp & marketing',

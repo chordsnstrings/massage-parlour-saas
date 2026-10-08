@@ -27,6 +27,7 @@ export const enums: Messages['enums'] = {
     booking_commission: 'ค่าคอมมิชชันต่อการจอง',
     salary: 'เงินเดือนคงที่',
     sales_commission: '% ของยอดขาย',
+    booking_fee: 'ค่าธรรมเนียมต่อการจองที่สร้าง',
   },
   saleStatus: { open: 'ค้างชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก', refunded: 'คืนเงินแล้ว' },
   saleLineKind: {

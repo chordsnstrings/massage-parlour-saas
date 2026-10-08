@@ -27,6 +27,7 @@ export const enums = {
     booking_commission: 'Commission per booking',
     salary: 'Fixed monthly salary',
     sales_commission: '% of sales',
+    booking_fee: 'Fee per booking created',
   },
   saleStatus: { open: 'Open', paid: 'Paid', void: 'Void', refunded: 'Refunded' },
   saleLineKind: {

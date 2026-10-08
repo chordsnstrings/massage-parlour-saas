@@ -381,3 +381,18 @@ export async function deleteTenant(db: DbOrTx, tenantId: string, confirmSlug: st
     .returning()
   return row!
 }
+
+/**
+ * One-off data fix (owner decision 2026-10-08, also in migration 0021): subscriptions stored as a monthly price
+ * (12-month plan, or ≈ the plan's yearly price / 12) become the yearly price × 12 on the 12-month plan; yearly
+ * ones are unchanged. Idempotent: a converted price is no longer below half the plan's yearly price.
+ */
+export async function convertMonthlySubscriptions(db: DbOrTx) {
+  const rows = await db.execute<{ id: string }>(sql`
+    UPDATE subscriptions s SET price_aed = round(s.price_aed * 12, 2), billing_interval = 'month', updated_at = now()
+    FROM plans p
+    WHERE p.id = s.plan_id AND s.price_aed > 0 AND s.price_aed * 2 < p.price_aed
+      AND (s.billing_interval = 'month' OR abs(s.price_aed * 12 - p.price_aed) <= p.price_aed * 0.05)
+    RETURNING s.id`)
+  return rows.rows.map((r) => r.id)
+}

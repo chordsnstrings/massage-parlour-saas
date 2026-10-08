@@ -20,7 +20,11 @@ export const permissions: Messages['permissions'] = {
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },
     inventory: {
       label: 'คลังสินค้า',
-      actions: { manage: 'จัดการสต็อกและคลังกลาง', purchase: 'บันทึกการซื้อ' },
+      actions: {
+        manage: 'จัดการสต็อกและคลังกลาง',
+        adjust: 'เติมสต็อกและปรับยอดสต็อก',
+        purchase: 'บันทึกการซื้อ',
+      },
     },
     marketing: {
       label: 'WhatsApp และการตลาด',

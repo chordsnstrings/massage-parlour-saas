@@ -906,6 +906,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   view shows Net = tips received − advances taken. (3) Consumables are never auto-restocked when a booking is
   re-opened; manual stock adjustment/restock allowed for Accountant, Manager and Receptionist. (4) Migration converts
   existing monthly subscriptions (e.g. AED 2,000/month) to the yearly price (× 12) on the 12-month plan; yearly stay.
+  *Built (integration): migration 0021_payroll_owner_decisions; pay type `booking_fee`, fee set on the payroll
+  page, Tips & advances payout card, permission `inventory.adjust`. Details: CODEMAP Payroll / pay types.*
 - **R3 Subscription:** AED 24,000/yr = 12 monthly invoices of AED 2,000, or one-time annual; setup fee is separate
   from the plan and set per spa by the super-admin.
 - **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide

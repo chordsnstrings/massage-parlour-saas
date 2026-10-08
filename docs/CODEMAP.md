@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0020` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0021` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
@@ -252,6 +252,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   credited to them via `accrueCommissions`; package-session accrual too). Every line = base (salary only) +
   unpaid booking commissions + unpaid `commission_entries` (older accruals still paid) + tips − advances;
   `finalisePayroll` links both commission tables. A correction after a finalised run is a new unpaid row → next run.
+  Owner decisions (migration 0021): `booking_fee` = `tenants.settings.receptionistBookingFee` × bookings whose
+  `created_by` is the person's member user and that are `completed` with business date in the period
+  (`completedBookingsCreated`; `payroll_lines.fee_aed`, expensed Dr 6010 at finalise). Therapist lines carry no
+  tips/advances (their advances are not linked/recovered by payroll); `therapistTipsAdvances` = the separate
+  "Tips & advances payout" card (tips − advances in the month, a report, no posting). "% of sales" is only shown
+  in the staff form for people already on it. Re-opening a completed booking never restocks consumables
+  (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
+  manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
+  monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.

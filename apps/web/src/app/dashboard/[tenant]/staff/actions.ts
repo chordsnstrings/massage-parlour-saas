@@ -49,7 +49,9 @@ const staffSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'staff.validation.colour'),
   bookable: bool,
   active: bool,
-  payType: z.enum(['booking_commission', 'salary', 'sales_commission']).default('booking_commission'),
+  payType: z
+    .enum(['booking_commission', 'salary', 'sales_commission', 'booking_fee'])
+    .default('booking_commission'),
   commissionPct: z.coerce
     .number()
     .min(0, 'staff.validation.commission')

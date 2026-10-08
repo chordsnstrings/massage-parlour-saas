@@ -110,6 +110,8 @@ export type TenantSettings = {
   wps?: { employerId?: string; routingCode?: string; bank?: string }
   /** Spa-wide default: hide service prices on the public website (each service can override — R4). */
   hidePrices?: boolean
+  /** AED per completed booking a receptionist created (`booking_fee` pay type; owner's receptionist_booking_fee). */
+  receptionistBookingFee?: string
 }
 
 export const tenants = pgTable(

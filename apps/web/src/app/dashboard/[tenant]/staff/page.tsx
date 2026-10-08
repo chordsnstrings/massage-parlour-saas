@@ -152,7 +152,9 @@ export default async function StaffPage({ params }: { params: Promise<{ tenant: 
                             ? `${fmt.number(Number(p.commissionPct))}%`
                             : p.payType === 'salary'
                               ? fmt.aed(p.baseSalaryAed)
-                              : t('staff.card.perBooking'),
+                              : p.payType === 'booking_fee'
+                                ? enumLabel(t, 'staffPayType', p.payType)
+                                : t('staff.card.perBooking'),
                       },
                     ]}
                   >

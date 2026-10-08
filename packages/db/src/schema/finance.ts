@@ -402,6 +402,8 @@ export const payrollLines = pgTable(
       .references(() => staff.id),
     baseAed: aed('base_aed').notNull().default('0'),
     commissionAed: aed('commission_aed').notNull().default('0'),
+    /** Receptionist booking fees for the period (`booking_fee` pay type); expensed at finalise (6010). */
+    feeAed: aed('fee_aed').notNull().default('0'),
     tipsAed: aed('tips_aed').notNull().default('0'),
     advancesAed: aed('advances_aed').notNull().default('0'),
     deductionsAed: aed('deductions_aed').notNull().default('0'),

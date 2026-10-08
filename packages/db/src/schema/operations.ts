@@ -110,9 +110,16 @@ export const staffGender = pgEnum('staff_gender', ['female', 'male', 'other'])
 /**
  * How a person is paid (PLAN §14.8 R2): `booking_commission` = the AED amounts entered per completed booking
  * (therapists; no base, no % accrual); `salary` = fixed monthly base; `sales_commission` = commission_pct of the
- * net POS lines attributed to them.
+ * net POS lines attributed to them (not offered to receptionists); `booking_fee` = the spa's fixed
+ * `tenants.settings.receptionistBookingFee` × bookings they created that ended completed in the period (R2 owner
+ * decision, receptionists).
  */
-export const staffPayType = pgEnum('staff_pay_type', ['booking_commission', 'salary', 'sales_commission'])
+export const staffPayType = pgEnum('staff_pay_type', [
+  'booking_commission',
+  'salary',
+  'sales_commission',
+  'booking_fee',
+])
 
 export const staff = pgTable(
   'staff',

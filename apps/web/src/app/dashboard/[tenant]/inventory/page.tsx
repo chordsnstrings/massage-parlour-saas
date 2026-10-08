@@ -36,7 +36,9 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function InventoryPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
-  if (!can(ctx, 'inventory.manage')) notFound()
+  // Restock + counts: `inventory.adjust` (manager, accountant, receptionist); products and usage: `inventory.manage`.
+  const manage = can(ctx, 'inventory.manage')
+  if (!manage && !can(ctx, 'inventory.adjust')) notFound()
   const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const data = await withTenant(ctx.tenant.id, async (tx) => {
@@ -182,17 +184,19 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
           <Input id="note" name="note" placeholder={t('inventory.count.reasonPlaceholder')} />
         </Field>
       </FormSheet>
-      <FormSheet
-        title={t('inventory.editProduct')}
-        action={saveProductAction.bind(null, slug, r.id)}
-        trigger={
-          <Button variant="ghost" size="sm" aria-label={t('inventory.editAria', { name: r.name.en })}>
-            <Pencil />
-          </Button>
-        }
-      >
-        {productForm(r)}
-      </FormSheet>
+      {manage && (
+        <FormSheet
+          title={t('inventory.editProduct')}
+          action={saveProductAction.bind(null, slug, r.id)}
+          trigger={
+            <Button variant="ghost" size="sm" aria-label={t('inventory.editAria', { name: r.name.en })}>
+              <Pencil />
+            </Button>
+          }
+        >
+          {productForm(r)}
+        </FormSheet>
+      )}
     </div>
   )
 
@@ -202,18 +206,20 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
         title={t('inventory.title')}
         description={t('inventory.description')}
         actions={
-          <FormSheet
-            title={t('inventory.addProduct')}
-            action={saveProductAction.bind(null, slug, null)}
-            submitLabel={t('inventory.addProduct')}
-            trigger={
-              <Button>
-                <Plus /> {t('inventory.addProduct')}
-              </Button>
-            }
-          >
-            {productForm()}
-          </FormSheet>
+          manage && (
+            <FormSheet
+              title={t('inventory.addProduct')}
+              action={saveProductAction.bind(null, slug, null)}
+              submitLabel={t('inventory.addProduct')}
+              trigger={
+                <Button>
+                  <Plus /> {t('inventory.addProduct')}
+                </Button>
+              }
+            >
+              {productForm()}
+            </FormSheet>
+          )
         }
       />
       <PageBody>
@@ -304,45 +310,47 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
               title={t('inventory.usage.title')}
               sub={t('inventory.usage.sub')}
               actions={
-                <FormSheet
-                  title={t('inventory.usage.add')}
-                  action={saveUsageAction.bind(null, slug)}
-                  trigger={
-                    <Button variant="secondary" size="sm" disabled={!data.variants.length || !rows.length}>
-                      <Plus /> {t('inventory.usage.addShort')}
-                    </Button>
-                  }
-                >
-                  <Field label={t('inventory.usage.treatment')} name="serviceVariantId">
-                    <Select id="serviceVariantId" name="serviceVariantId" defaultValue="">
-                      <option value="" disabled>
-                        {t('inventory.usage.choose')}
-                      </option>
-                      {data.variants.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {variantName.get(v.id)}
+                manage && (
+                  <FormSheet
+                    title={t('inventory.usage.add')}
+                    action={saveUsageAction.bind(null, slug)}
+                    trigger={
+                      <Button variant="secondary" size="sm" disabled={!data.variants.length || !rows.length}>
+                        <Plus /> {t('inventory.usage.addShort')}
+                      </Button>
+                    }
+                  >
+                    <Field label={t('inventory.usage.treatment')} name="serviceVariantId">
+                      <Select id="serviceVariantId" name="serviceVariantId" defaultValue="">
+                        <option value="" disabled>
+                          {t('inventory.usage.choose')}
                         </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field label={t('inventory.usage.product')} name="productId">
-                    <Select id="productId" name="productId" defaultValue="">
-                      <option value="" disabled>
-                        {t('inventory.usage.choose')}
-                      </option>
-                      {rows
-                        .filter((r) => r.kind === 'consumable')
-                        .map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name.en} ({r.unit})
+                        {data.variants.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {variantName.get(v.id)}
                           </option>
                         ))}
-                    </Select>
-                  </Field>
-                  <Field label={t('inventory.usage.amount')} name="qty">
-                    <Input id="qty" name="qty" inputMode="decimal" placeholder="30" />
-                  </Field>
-                </FormSheet>
+                      </Select>
+                    </Field>
+                    <Field label={t('inventory.usage.product')} name="productId">
+                      <Select id="productId" name="productId" defaultValue="">
+                        <option value="" disabled>
+                          {t('inventory.usage.choose')}
+                        </option>
+                        {rows
+                          .filter((r) => r.kind === 'consumable')
+                          .map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name.en} ({r.unit})
+                            </option>
+                          ))}
+                      </Select>
+                    </Field>
+                    <Field label={t('inventory.usage.amount')} name="qty">
+                      <Input id="qty" name="qty" inputMode="decimal" placeholder="30" />
+                    </Field>
+                  </FormSheet>
+                )
               }
             >
               {data.usage.length === 0 ? (
@@ -360,16 +368,18 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
                         name: p?.name.en ?? '',
                       })}
                       end={
-                        <form action={removeUsageAction.bind(null, slug, u.serviceVariantId, u.productId)}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            type="submit"
-                            aria-label={t('inventory.usage.remove')}
-                          >
-                            <X />
-                          </Button>
-                        </form>
+                        manage && (
+                          <form action={removeUsageAction.bind(null, slug, u.serviceVariantId, u.productId)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              type="submit"
+                              aria-label={t('inventory.usage.remove')}
+                            >
+                              <X />
+                            </Button>
+                          </form>
+                        )
                       }
                     />
                   )

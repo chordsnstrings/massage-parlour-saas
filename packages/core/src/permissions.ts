@@ -26,7 +26,11 @@ export const PERMISSION_GROUPS = {
   staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
   inventory: {
     label: 'Inventory',
-    actions: { manage: 'Manage stock and the warehouse', purchase: 'Record purchases' },
+    actions: {
+      manage: 'Manage stock and the warehouse',
+      adjust: 'Restock and adjust stock counts',
+      purchase: 'Record purchases',
+    },
   },
   marketing: {
     label: 'WhatsApp & marketing',
@@ -96,6 +100,7 @@ export const SYSTEM_ROLES: Record<
       'pos.use',
       'pos.close',
       'staff.view',
+      'inventory.adjust',
       'marketing.send',
       'ai.approve',
     ],
@@ -114,6 +119,7 @@ export const SYSTEM_ROLES: Record<
       'reports.view',
       'accounting.view',
       'accounting.manage',
+      'inventory.adjust',
       'inventory.purchase',
     ],
   },
