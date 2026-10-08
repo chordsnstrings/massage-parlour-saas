@@ -29,6 +29,7 @@ export const marketing: Messages['marketing'] = {
   posts: 'โพสต์',
   publishing: 'กำลังโพสต์',
   google: 'Google',
+  facebook: 'Facebook',
   scheduledAt: 'ตั้งเวลา {when}',
   publishedIg: 'โพสต์ลง Instagram แล้ว',
   autoPublish: 'จะโพสต์อัตโนมัติตามเวลาที่ตั้งไว้',

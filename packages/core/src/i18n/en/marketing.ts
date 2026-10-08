@@ -28,6 +28,7 @@ export const marketing = {
   posts: 'Posts',
   publishing: 'Publishing',
   google: 'Google',
+  facebook: 'Facebook',
   scheduledAt: 'Scheduled {when}',
   publishedIg: 'Published to Instagram',
   autoPublish: 'Publishes automatically at the scheduled time.',

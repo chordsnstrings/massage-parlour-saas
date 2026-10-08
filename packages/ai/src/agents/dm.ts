@@ -2,8 +2,9 @@ import { addDays, businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
 import { conversationMessages, conversations, type Tx, withTenant } from '@spa/db'
 import { availableSlots, createBooking, DomainError, findOrCreateClient } from '@spa/services'
 import { eq } from 'drizzle-orm'
-import { runChat } from '../gateway'
+import { metaMcpSources } from '../mcp/client'
 import type { ChatMessage, ModelArkClient, ToolDef } from '../modelark'
+import { type LocalTool, runToolLoop } from '../tool-loop'
 import { hoursText, loadSpaContext, nowLine, SAFETY, type SpaContext } from './context'
 
 const MAX_DM_BYTES = 1000
@@ -103,6 +104,8 @@ export async function runDmTurn(opts: {
   source?: 'instagram' | 'whatsapp'
   client?: ModelArkClient
   now?: Date
+  /** Also offer the Meta MCP tools allowed for dm_agent (R7). */
+  mcp?: boolean
 }): Promise<DmResult> {
   const now = opts.now ?? new Date()
   const ctx = await withTenant(opts.tenantId, (tx) => loadSpaContext(tx, opts.tenantId, 'dm_agent'))
@@ -115,35 +118,27 @@ export async function runDmTurn(opts: {
     { role: 'user', content: opts.incoming },
   ]
   const result: DmResult = { reply: '', costUsd: 0 }
-  for (let step = 0; step < 6; step++) {
-    const res = await runChat({
+  const source = opts.source ?? 'instagram'
+  const localTools: LocalTool[] = tools.map((def) => ({
+    def,
+    run: (args) => runTool(opts.tenantId, def.function.name, args, ctx, source, now, result),
+  }))
+  // R7: Meta MCP tools on the dm_agent allow-list, only when the caller asks for them.
+  const sources = opts.mcp ? await metaMcpSources({ tenantId: opts.tenantId, agentKey: 'dm_agent' }) : []
+  try {
+    const loop = await runToolLoop({
       tenantId: opts.tenantId,
       agentKey: 'dm_agent',
       messages,
-      tools,
+      localTools,
+      sources,
       temperature: 0.4,
       client: opts.client,
     })
-    result.costUsd += res.costUsd
-    const calls = res.message.tool_calls ?? []
-    if (!calls.length) {
-      result.reply = truncateBytes((res.message.content ?? '').trim(), MAX_DM_BYTES)
-      break
-    }
-    messages.push(res.message)
-    for (const call of calls) {
-      const args = safeJson(call.function.arguments)
-      const output = await runTool(
-        opts.tenantId,
-        call.function.name,
-        args,
-        ctx,
-        opts.source ?? 'instagram',
-        now,
-        result,
-      )
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) })
-    }
+    result.costUsd += loop.costUsd
+    result.reply = truncateBytes(loop.content, MAX_DM_BYTES)
+  } finally {
+    await Promise.all(sources.map((s) => s.close().catch(() => undefined)))
   }
   if (opts.conversationId) {
     await withTenant(opts.tenantId, async (tx) => {
@@ -253,14 +248,6 @@ async function runTool(
     return { error: `unknown tool ${name}` }
   } catch (e) {
     return { error: e instanceof DomainError ? e.message : 'Something went wrong' }
-  }
-}
-
-const safeJson = (s: string): Record<string, string> => {
-  try {
-    return JSON.parse(s) as Record<string, string>
-  } catch {
-    return {}
   }
 }
 

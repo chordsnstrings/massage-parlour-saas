@@ -65,6 +65,15 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
     priceCachedInPerM: '0.10',
   },
   {
+    // R7: "AI tools via Meta MCP" assistant (Instagram / Facebook Page / WhatsApp drafts through MCP tools).
+    agentKey: 'meta_agent',
+    label: 'Meta tools assistant (MCP)',
+    modelId: 'seed-2-0-pro-260328',
+    priceInPerM: '0.50',
+    priceOutPerM: '3.00',
+    priceCachedInPerM: '0.10',
+  },
+  {
     agentKey: 'insights_agent',
     label: 'Weekly insights',
     modelId: 'seed-2-0-pro-260328',

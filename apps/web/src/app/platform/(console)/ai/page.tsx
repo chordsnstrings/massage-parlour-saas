@@ -1,15 +1,15 @@
-import { aiModelConfig, platformDb } from '@spa/db'
-import { asc } from 'drizzle-orm'
+import { aiModelConfig, platformDb, platformSettings } from '@spa/db'
+import { asc, eq, sql } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Field } from '@/components/ui/form'
+import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
-import { Checkbox, Input } from '@/components/ui/input'
+import { Checkbox, Input, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { saveAiModelAction } from '../actions'
+import { saveAiModelAction, saveMetaMcpConfigAction } from '../actions'
 
 export const metadata: Metadata = { title: 'AI models' }
 
@@ -18,6 +18,15 @@ export default async function AiModelsPage() {
     .select()
     .from(aiModelConfig)
     .orderBy(asc(aiModelConfig.kind), asc(aiModelConfig.agentKey))
+  const [mcp] = await platformDb()
+    .select({
+      enabled: platformSettings.metaMcpEnabled,
+      url: platformSettings.metaMcpUrl,
+      hasKey: sql<boolean>`${platformSettings.metaMcpKeyEnc} is not null`,
+      tools: platformSettings.metaMcpTools,
+    })
+    .from(platformSettings)
+    .where(eq(platformSettings.id, 1))
   return (
     <>
       <PageHeader
@@ -129,6 +138,51 @@ export default async function AiModelsPage() {
               },
             ]}
           />
+        </Card>
+        <Card className="mt-6" data-testid="meta-mcp-config">
+          <CardHeader
+            title="External Meta MCP server"
+            description="Optional (R7): an official or third-party Meta MCP server (Streamable HTTP) for the meta_agent. Our own Meta tools need no setup. Only the tool names listed here are offered, and any WhatsApp send-like tool is always dropped — WhatsApp stays click-to-send."
+          />
+          <CardBody>
+            <ActionForm action={saveMetaMcpConfigAction} className="grid gap-5 sm:grid-cols-2">
+              <Field label="Server URL" name="url" className="sm:col-span-2">
+                <Input
+                  id="url"
+                  name="url"
+                  type="url"
+                  placeholder="https://mcp.example.com/mcp"
+                  defaultValue={mcp?.url ?? ''}
+                  className="font-mono"
+                />
+              </Field>
+              <Field
+                label="API key"
+                name="key"
+                hint={
+                  mcp?.hasKey
+                    ? 'A key is stored (encrypted). Leave blank to keep it.'
+                    : 'Sent as a Bearer token.'
+                }
+              >
+                <Input id="key" name="key" type="password" autoComplete="off" />
+              </Field>
+              <Field label="Allowed tool names" name="tools" hint="Space, comma or newline separated.">
+                <Textarea id="tools" name="tools" rows={3} defaultValue={(mcp?.tools ?? []).join('\n')} />
+              </Field>
+              <label className="flex items-center gap-2.5 text-sm">
+                <Checkbox name="enabled" defaultChecked={mcp?.enabled ?? false} /> Enabled
+              </label>
+              {mcp?.hasKey && (
+                <label className="flex items-center gap-2.5 text-sm">
+                  <Checkbox name="clearKey" /> Remove the stored key
+                </label>
+              )}
+              <div className="sm:col-span-2">
+                <SubmitButton>Save</SubmitButton>
+              </div>
+            </ActionForm>
+          </CardBody>
         </Card>
       </PageBody>
     </>
