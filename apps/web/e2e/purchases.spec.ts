@@ -43,6 +43,9 @@ test('purchases + warehouse: record a mixed purchase into the warehouse, transfe
   // The received stock has moved on, so the purchase can't be voided until it's back.
   await page.goto(`${app}/${slug}/purchases`)
   await page.getByRole('button', { name: 'Void' }).first().click()
-  await page.getByRole('button', { name: /confirm/i }).first().click()
+  await page
+    .getByRole('button', { name: /confirm/i })
+    .first()
+    .click()
   await expect(page.getByText(/in stock there/)).toBeVisible()
 })
