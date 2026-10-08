@@ -13,7 +13,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** while any item in PLAN §17 (F1–F7) is open, remind the owner in one line in the first
+- **Fix backlog reminder:** while any item in PLAN §17 (F1–F8) is open, remind the owner in one line in the first
   reply of every session and at the end of every task. Name the open items and the next one in order. Don't fix them
   until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
@@ -22,6 +22,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
+- Brand domain: **spamanagement.co** (owner, 2026-10-08). Code, emails and env still say spamanagement.ae; switch pending.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.

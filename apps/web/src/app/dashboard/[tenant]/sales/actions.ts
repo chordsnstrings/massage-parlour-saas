@@ -176,16 +176,36 @@ export async function voidSaleAction(slug: string, saleId: string, _p: ActionRes
   }
 }
 
+const refundInput = z.object({
+  method,
+  reason,
+  lines: z
+    .array(
+      z.object({ saleLineId: z.uuid(), qty: z.coerce.number().int('Whole numbers only').min(0).max(1000) }),
+    )
+    .transform((lines) => lines.filter((l) => l.qty > 0))
+    .refine((lines) => lines.length > 0, 'Choose what to refund'),
+})
+
+/** Line-level refund: the form sends `qty.<saleLineId>` per line (0 = not refunded). */
 export async function refundSaleAction(slug: string, saleId: string, _p: ActionResult, formData: FormData) {
   const { ctx, error } = await guard(slug, 'pos.refund')
   if (error) return fail(error)
-  const parsed = z
-    .object({ amountAed: money.refine((n) => n > 0, 'Enter an amount'), method, reason })
-    .safeParse(formObject(formData))
+  const form = formObject(formData)
+  const lines = Object.entries(form)
+    .filter(([key]) => key.startsWith('qty.'))
+    .map(([key, qty]) => ({ saleLineId: key.slice(4), qty: String(qty || 0) }))
+  const parsed = refundInput.safeParse({ ...form, lines })
   if (!parsed.success) return fromZod(parsed.error)
   try {
     const refund = await withTenant(ctx.tenant.id, (tx) =>
-      refundSale(tx, { saleId, ...parsed.data, createdBy: ctx.user.id }),
+      refundSale(tx, {
+        saleId,
+        lines: parsed.data.lines,
+        method: parsed.data.method,
+        reason: parsed.data.reason,
+        createdBy: ctx.user.id,
+      }),
     )
     await audit({
       tenantId: ctx.tenant.id,
@@ -193,10 +213,15 @@ export async function refundSaleAction(slug: string, saleId: string, _p: ActionR
       action: 'sale.refunded',
       entity: 'sale',
       entityId: saleId,
-      data: { amount: refund.amountAed, method: refund.method, reason: refund.reason },
+      data: {
+        amount: refund.amountAed,
+        method: refund.method,
+        reason: refund.reason,
+        lines: parsed.data.lines,
+      },
     })
     revalidate(slug)
-    return ok('Refund recorded')
+    return ok(`Refund of AED ${refund.amountAed} recorded`)
   } catch (e) {
     return handle(e)
   }

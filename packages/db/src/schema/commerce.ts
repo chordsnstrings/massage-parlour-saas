@@ -165,6 +165,36 @@ export const refunds = pgTable(
   () => tenantPolicies(),
 )
 
+/**
+ * What a refund gave back, per sale line (F2). Prepaid lines get one row per gift card / package refunded
+ * (`ref_id`, qty 1). Refunds recorded before line-level refunds have no rows here.
+ */
+export const refundLines = pgTable(
+  'refund_lines',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    refundId: uuid('refund_id')
+      .notNull()
+      .references(() => refunds.id, { onDelete: 'cascade' }),
+    saleLineId: uuid('sale_line_id')
+      .notNull()
+      .references(() => saleLines.id, { onDelete: 'cascade' }),
+    qty: integer('qty').notNull(),
+    /** VAT-inclusive amount given back for this line. */
+    amountAed: aed('amount_aed').notNull(),
+    vatAed: aed('vat_aed').notNull().default('0'),
+    /** Gift card or client package voided by this refund. */
+    refId: uuid('ref_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('refund_lines_sale_line').on(t.saleLineId),
+    index('refund_lines_refund').on(t.refundId),
+    ...tenantPolicies(),
+  ],
+)
+
 export const dayCloses = pgTable(
   'day_closes',
   {

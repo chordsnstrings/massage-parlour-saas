@@ -139,36 +139,21 @@ describe('ledger', () => {
   })
 })
 
-describe('refund postings (F1)', () => {
+describe('refund postings (F1/F2)', () => {
   const D2 = '2026-10-07' // after the period locked above
   let n = 100
   const id = () => `00000000-0000-4000-8000-${String(n++).padStart(12, '0')}`
-  const sale = (lines: { kind: 'service' | 'product' | 'package' | 'gift_card'; lineTotalAed: number }[]) => {
-    const saleId = id()
-    const total = lines.reduce((s, l) => s + l.lineTotalAed, 0)
-    return tx((db) =>
-      postSale(db, {
-        id: saleId,
-        tenantId,
-        branchId: null as unknown as string,
-        businessDate: D2,
-        lines,
-        payments: [{ method: 'card_terminal', amountAed: total }],
-        tips: [{ method: 'cash', amountAed: 10 }],
-      }),
-    ).then(() => saleId)
-  }
+  type Line = Parameters<typeof postRefund>[1]['lines'][number]
   /** Posts a refund and returns its lines as code → debit − credit (AED); asserts the entry balances. */
-  const refund = async (saleId: string, amountAed: number, method = 'cash') => {
+  const refund = async (lines: Line[], method = 'cash') => {
     const entry = await tx((db) =>
       postRefund(db, {
         tenantId,
         branchId: null as unknown as string,
-        saleId,
+        saleId: id(),
         date: D2,
-        amountAed,
         method,
-        vatRatePct: 5,
+        lines,
       }),
     )
     const rows = await tx((db) =>
@@ -185,40 +170,36 @@ describe('refund postings (F1)', () => {
     return net
   }
 
-  it('refunds a retail-only sale against retail revenue (4100), leaving tips owed', async () => {
-    const s = await sale([{ kind: 'product', lineTotalAed: 105 }])
-    expect(await refund(s, 105)).toEqual({ '4100': 100, '2000': 5, '1000': -105 })
+  it('refunds retail against retail revenue (4100) net of VAT', async () => {
+    expect(await refund([{ kind: 'product', amountAed: 105, vatAed: 5 }])).toEqual({
+      '4100': 100,
+      '2000': 5,
+      '1000': -105,
+    })
   })
 
-  it('prorates a partial refund of a mixed service + product sale', async () => {
-    // Sale credits: 4000 200, 4100 100, 2000 15 (of 315).
-    const s = await sale([
-      { kind: 'service', lineTotalAed: 210 },
-      { kind: 'product', lineTotalAed: 105 },
-    ])
-    expect(await refund(s, 100, 'card_terminal')).toEqual({
-      '4000': 63.49,
-      '4100': 31.75,
-      '2000': 4.76,
-      '1010': -100,
-    })
-    // Every share of 1 fils rounds to 0; the remainder lands on the largest line (4000 100.95).
-    const t = await sale([
-      { kind: 'service', lineTotalAed: 106 },
-      { kind: 'product', lineTotalAed: 105 },
-    ])
-    expect(await refund(t, 0.01)).toEqual({ '4000': 0.01, '1000': -0.01 })
+  it('refunds mixed lines to their own accounts, out of the refund method', async () => {
+    expect(
+      await refund(
+        [
+          { kind: 'service', amountAed: 210, vatAed: 10 },
+          { kind: 'product', amountAed: 52.5, vatAed: 2.5 },
+          { kind: 'other', amountAed: 21, vatAed: 1 },
+        ],
+        'card_terminal',
+      ),
+    ).toEqual({ '4000': 220, '4100': 50, '2000': 13.5, '1010': -283.5 })
   })
 
   it('refunds prepaid lines to their liabilities (2100/2110) with no VAT', async () => {
-    const s = await sale([
-      { kind: 'gift_card', lineTotalAed: 500 },
-      { kind: 'package', lineTotalAed: 1000 },
-    ])
-    expect(await refund(s, 1500, 'card_terminal')).toEqual({ '2100': 500, '2110': 1000, '1010': -1500 })
-  })
-
-  it('falls back to treatment revenue + VAT for sales without a ledger entry', async () => {
-    expect(await refund(id(), 105)).toEqual({ '4000': 100, '2000': 5, '1000': -105 })
+    expect(
+      await refund(
+        [
+          { kind: 'gift_card', amountAed: 150, vatAed: 0 },
+          { kind: 'package', amountAed: 1200, vatAed: 0 },
+        ],
+        'bank_transfer',
+      ),
+    ).toEqual({ '2100': 150, '2110': 1200, '1020': -1350 })
   })
 })

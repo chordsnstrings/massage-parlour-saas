@@ -17,7 +17,14 @@ const r2 = (n: number) => Math.round(n * 100) / 100
 /** Creates the client's package after it was sold (the sale line already credited 2110). */
 export async function issuePackage(
   tx: Tx,
-  p: { tenantId: string; clientId: string; definitionId: string; saleId?: string | null; now?: Date },
+  p: {
+    tenantId: string
+    clientId: string
+    definitionId: string
+    saleId?: string | null
+    saleLineId?: string | null
+    now?: Date
+  },
 ) {
   const [def] = await tx.select().from(packageDefinitions).where(eq(packageDefinitions.id, p.definitionId))
   if (!def?.active) throw new DomainError('Package not available', 'not_found')
@@ -29,6 +36,7 @@ export async function issuePackage(
       clientId: p.clientId,
       definitionId: def.id,
       saleId: p.saleId ?? null,
+      saleLineId: p.saleLineId ?? null,
       name: def.name.en,
       pricePaidAed: def.priceAed,
       balances: Object.fromEntries(def.items.map((i) => [i.serviceId, i.quantity])),
@@ -142,6 +150,7 @@ export async function issueGiftCard(
     tenantId: string
     amountAed: number
     saleId?: string | null
+    saleLineId?: string | null
     purchaserClientId?: string | null
     recipientName?: string
     recipientPhone?: string
@@ -175,6 +184,7 @@ export async function issueGiftCard(
       recipientPhone: g.recipientPhone ?? null,
       message: g.message ?? null,
       saleId: g.saleId ?? null,
+      saleLineId: g.saleLineId ?? null,
       expiresAt: new Date(`${expiresDate}T20:00:00Z`),
     })
     .returning()
