@@ -180,7 +180,7 @@ export async function createBooking(tx: Tx, input: NewBooking) {
     item: NewBookingItem
     name: string
     duration: number
-    price: string
+    price: string | null
     hold: Interval
     staffIds: string[]
     roomId: string

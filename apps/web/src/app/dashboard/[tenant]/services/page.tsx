@@ -83,7 +83,11 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
   const list = data.services.map((s) => {
     const variants = data.variants
       .filter((v) => v.serviceId === s.id)
-      .map((v) => ({ id: v.id, durationMin: v.durationMin, priceAed: Number(v.priceAed) }))
+      .map((v) => ({
+        id: v.id,
+        durationMin: v.durationMin,
+        priceAed: v.priceAed == null ? null : Number(v.priceAed),
+      }))
     const ids = new Set(variants.map((v) => v.id))
     return {
       ...s,
@@ -225,7 +229,8 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                   <span key={v.id} className="whitespace-nowrap">
                                     {t('services.variant', {
                                       min: v.durationMin,
-                                      price: fmt.aed(v.priceAed),
+                                      price:
+                                        v.priceAed == null ? t('common.priceOnRequest') : fmt.aed(v.priceAed),
                                     })}
                                   </span>
                                 ))}
@@ -264,6 +269,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                   therapistsRequired: s.therapistsRequired,
                                   roomTypes: s.roomTypes,
                                   onlineBookable: s.onlineBookable,
+                                  showPrice: s.showPrice,
                                   active: s.active,
                                   color: s.color,
                                   imageUrl: s.imageUrl,

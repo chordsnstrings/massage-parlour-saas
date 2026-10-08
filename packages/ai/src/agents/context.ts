@@ -23,6 +23,7 @@ export async function loadSpaContext(tx: Tx, tenantId: string, agentKey: string)
       variantId: serviceVariants.id,
       durationMin: serviceVariants.durationMin,
       priceAed: serviceVariants.priceAed,
+      showPrice: services.showPrice,
     })
     .from(serviceVariants)
     .innerJoin(services, eq(services.id, serviceVariants.serviceId))
@@ -45,7 +46,9 @@ export async function loadSpaContext(tx: Tx, tenantId: string, agentKey: string)
       name: m.name.en,
       nameAr: m.name.ar,
       durationMin: m.durationMin,
-      priceAed: Number(m.priceAed),
+      // Public agents never quote a hidden or missing price (R4): null = price on request.
+      priceAed:
+        m.priceAed != null && (m.showPrice ?? !tenant?.settings.hidePrices) ? Number(m.priceAed) : null,
     })),
     voice: brand?.voice ?? 'Warm, calm and welcoming. Short sentences. No medical claims.',
     tone: settings?.tone ?? 'warm, calm and professional',

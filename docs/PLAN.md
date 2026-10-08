@@ -894,6 +894,10 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   from the plan and set per spa by the super-admin.
 - **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide
   prices on the public website.
+  Built: `service_variants.price_aed` + `booking_items.price_aed` nullable (null = "Price on request"); POS lines
+  for such services must have a typed price (≥ 0; client + zod + `createSale`). `services.show_price` (null = spa
+  default) + `tenants.settings.hidePrices` (Settings → profile); public site, online booking and AI agents use
+  `publicPrice()` (services/sites.ts) so hidden prices never leave the server. Migration 0017_optional_prices.
 - **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
   designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.

@@ -53,6 +53,7 @@ export const domain: Messages['errors']['domain'] = {
   itemOnce: 'แต่ละรายการใส่ได้ครั้งเดียว',
   discountOverSubtotal: 'ส่วนลดมากกว่ายอดรวมย่อย',
   discountOverPrice: 'ส่วนลดของ “{item}” มากกว่าราคา',
+  priceMissing: 'กรอกราคาของ “{item}”',
   coveredByPackage: '“{item}” ใช้สิทธิ์จากแพ็กเกจ — ราคาต้องเป็น 0',
   choosePackageClient: 'เลือกลูกค้าที่จะขายแพ็กเกจให้',
   packageSessionsNeedClient: 'การใช้สิทธิ์แพ็กเกจต้องมีลูกค้าและทรีตเมนต์',

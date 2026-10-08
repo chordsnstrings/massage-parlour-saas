@@ -104,6 +104,8 @@ export const plans = pgTable(
 
 export type TenantSettings = {
   wps?: { employerId?: string; routingCode?: string; bank?: string }
+  /** Spa-wide default: hide service prices on the public website (each service can override — R4). */
+  hidePrices?: boolean
 }
 
 export const tenants = pgTable(

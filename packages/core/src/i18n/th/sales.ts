@@ -76,6 +76,8 @@ export const sales: Messages['sales'] = {
     therapist: 'พนักงานนวด',
     therapistFor: 'พนักงานนวดของรายการที่ {n}',
     price: 'ราคา',
+    pricePh: 'กรอกราคา',
+    priceMissing: 'กรอกราคาให้ทุกรายการที่เป็น “ราคาตามตกลง”',
     discount: 'ส่วนลด',
     discountFor: 'ส่วนลดของรายการที่ {n}',
     removeItem: 'ลบรายการที่ {n}',
@@ -207,6 +209,7 @@ export const sales: Messages['sales'] = {
   },
   v: {
     amount: 'กรอกจำนวนเงิน',
+    priceRequired: 'กรอกราคาของรายการนี้',
     negative: 'ติดลบไม่ได้',
     tooLarge: 'จำนวนมากเกินไป',
     name: 'กรอกชื่อ',

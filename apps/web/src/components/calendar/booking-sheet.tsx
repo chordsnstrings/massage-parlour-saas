@@ -126,7 +126,9 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
                   : ''}
               </p>
             </div>
-            <p className="shrink-0 text-sm font-medium tabular">{fmt.aed(it.priceAed)}</p>
+            <p className="shrink-0 text-sm font-medium tabular">
+              {it.priceAed == null ? t('common.priceOnRequest') : fmt.aed(it.priceAed)}
+            </p>
           </li>
         ))}
       </ul>

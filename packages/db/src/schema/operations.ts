@@ -59,6 +59,8 @@ export const services = pgTable(
     roomTypes: text('room_types').array().notNull().default([]),
     therapistsRequired: integer('therapists_required').notNull().default(1),
     onlineBookable: boolean('online_bookable').notNull().default(true),
+    /** Show prices on the public website: null = the spa default (`tenants.settings.hidePrices`), else override (R4). */
+    showPrice: boolean('show_price'),
     color: text('color'),
     imageUrl: text('image_url'),
     active: boolean('active').notNull().default(true),
@@ -78,8 +80,8 @@ export const serviceVariants = pgTable(
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
     durationMin: integer('duration_min').notNull(),
-    /** VAT-inclusive price. */
-    priceAed: aed('price_aed').notNull(),
+    /** VAT-inclusive price; null = "price on request", typed at checkout (R4). */
+    priceAed: aed('price_aed'),
     active: boolean('active').notNull().default(true),
     sort: integer('sort').notNull().default(0),
   },
@@ -301,7 +303,8 @@ export const bookingItems = pgTable(
     }),
     serviceName: text('service_name').notNull(),
     durationMin: integer('duration_min').notNull(),
-    priceAed: aed('price_aed').notNull(),
+    /** Copied from the variant; null = price on request (typed at checkout). */
+    priceAed: aed('price_aed'),
     startsAt: ts('starts_at').notNull(),
     endsAt: ts('ends_at').notNull(),
     roomId: uuid('room_id').references(() => rooms.id, { onDelete: 'set null' }),

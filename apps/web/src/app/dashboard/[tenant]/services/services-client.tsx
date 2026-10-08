@@ -224,10 +224,11 @@ export type ServiceInput = {
   therapistsRequired: number
   roomTypes: string[]
   onlineBookable: boolean
+  showPrice: boolean | null
   active: boolean
   color: string | null
   imageUrl?: string | null
-  variants: { id: string; durationMin: number; priceAed: number }[]
+  variants: { id: string; durationMin: number; priceAed: number | null }[]
 }
 
 type VariantRow = { key: string; id?: string; durationMin: string; priceAed: string }
@@ -296,7 +297,7 @@ function ServiceForm({
           key: v.id,
           id: v.id,
           durationMin: String(v.durationMin),
-          priceAed: String(v.priceAed),
+          priceAed: v.priceAed == null ? '' : String(v.priceAed),
         }))
       : [newRow('60'), newRow('90')],
   )
@@ -418,7 +419,7 @@ function ServiceForm({
                       name="variantPrice"
                       inputMode="decimal"
                       value={r.priceAed}
-                      placeholder="350"
+                      placeholder={t('services.form.pricePh')}
                       onChange={(e) => set(r.key, { priceAed: e.target.value })}
                       className="ps-12 tabular-nums"
                     />
@@ -520,6 +521,17 @@ function ServiceForm({
           hint={t('services.form.activeHint')}
           defaultChecked={service?.active ?? true}
         />
+        <Field label={t('services.form.showPrice')} name="showPrice" hint={t('services.form.showPriceHint')}>
+          <Select
+            id="showPrice"
+            name="showPrice"
+            defaultValue={service?.showPrice == null ? '' : service.showPrice ? 'show' : 'hide'}
+          >
+            <option value="">{t('services.form.showPriceDefault')}</option>
+            <option value="show">{t('services.form.showPriceShow')}</option>
+            <option value="hide">{t('services.form.showPriceHide')}</option>
+          </Select>
+        </Field>
       </div>
 
       <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-between">

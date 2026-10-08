@@ -3,7 +3,8 @@ import type { Bi } from './i18n'
 /** Public site identity used by the booking actions (subdomain slug or verified custom domain). */
 export type SiteKey = { slug: string } | { hostname: string }
 
-export type BookingVariant = { id: string; durationMin: number; priceAed: number }
+/** `priceAed` null = price on request (none set, or hidden on the website — R4). */
+export type BookingVariant = { id: string; durationMin: number; priceAed: number | null }
 export type BookingService = {
   id: string
   name: Bi
@@ -32,7 +33,7 @@ export type BookingDone = {
   end: string
   service: string
   durationMin: number
-  priceAed: number
+  priceAed: number | null
   therapist: string | null
   whatsappUrl: string | null
   spa: string

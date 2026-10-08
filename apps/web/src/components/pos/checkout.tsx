@@ -28,6 +28,8 @@ export type CheckoutLine = {
   /** Service covered by a session from this client package (price goes to 0). */
   clientPackageId?: string | null
   listPriceAed?: number | string
+  /** The service has no list price ("price on request", R4): the receptionist must type one. */
+  priceRequired?: boolean
 }
 type Method = 'cash' | 'card_terminal' | 'bank_transfer' | 'other'
 type PayMethod = Method | 'gift_card'
@@ -66,7 +68,7 @@ export function Checkout({
   bookingId: string | null
   client: ClientHit | null
   initialLines: CheckoutLine[]
-  menu: { variantId: string; serviceId?: string; label: string; priceAed: number }[]
+  menu: { variantId: string; serviceId?: string; label: string; priceAed: number | null }[]
   products?: { id: string; label: string; priceAed: number; stock: string }[]
   packages?: { id: string; label: string; priceAed: number }[]
   staff: { id: string; name: string }[]
@@ -152,7 +154,8 @@ export function Checkout({
         refId: item.variantId,
         description: item.label,
         qty: 1,
-        unitPriceAed: item.priceAed,
+        unitPriceAed: item.priceAed ?? '',
+        priceRequired: item.priceAed == null,
         discountAed: 0,
         staffId: ls.at(-1)?.staffId ?? null,
       },
@@ -218,8 +221,17 @@ export function Checkout({
 
   const canSubmit = lines.length > 0 && remaining === 0 && !pending
 
+  const blankPrice = (l: CheckoutLine) =>
+    !l.clientPackageId && String(l.unitPriceAed).replace(/,/g, '').trim() === ''
+
   const submit = () => {
     setErrors({})
+    const missing = lines.flatMap((l, i) => (blankPrice(l) ? [i] : []))
+    if (missing.length) {
+      setErrors(Object.fromEntries(missing.map((i) => [`lines.${i}.unitPriceAed`, 'sales.v.priceRequired'])))
+      toast.error(t('sales.checkout.priceMissing'))
+      return
+    }
     start(async () => {
       const r = await createSaleAction(slug, {
         branchId,
@@ -232,7 +244,7 @@ export function Checkout({
           clientPackageId: l.clientPackageId ?? null,
           description: l.description,
           qty: l.qty,
-          unitPriceAed: f(l.unitPriceAed) / 100,
+          unitPriceAed: blankPrice(l) ? null : f(l.unitPriceAed) / 100,
           discountAed: f(l.discountAed) / 100,
           staffId: l.staffId,
         })),
@@ -423,10 +435,16 @@ export function Checkout({
                         id={`price-${l.key}`}
                         inputMode="decimal"
                         value={String(l.unitPriceAed)}
+                        placeholder={l.priceRequired ? t('sales.checkout.pricePh') : undefined}
+                        required={l.priceRequired}
+                        aria-invalid={Boolean(fieldError(`lines.${i}.unitPriceAed`)) || undefined}
                         disabled={Boolean(l.clientPackageId)}
                         onChange={(e) => patchLine(l.key, { unitPriceAed: e.target.value })}
                         className="h-11 tabular"
                       />
+                      {fieldError(`lines.${i}.unitPriceAed`) && (
+                        <p className="text-[13px] text-danger">{fieldError(`lines.${i}.unitPriceAed`)}</p>
+                      )}
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
                       <Label htmlFor={`disc-${l.key}`}>{t('sales.checkout.discount')}</Label>
@@ -465,7 +483,10 @@ export function Checkout({
               <option value="">{t('sales.checkout.addServiceOption')}</option>
               {menu.map((m) => (
                 <option key={m.variantId} value={m.variantId}>
-                  {t('sales.checkout.optionPrice', { name: m.label, price: formatAed(m.priceAed) })}
+                  {t('sales.checkout.optionPrice', {
+                    name: m.label,
+                    price: m.priceAed == null ? t('common.priceOnRequest') : formatAed(m.priceAed),
+                  })}
                 </option>
               ))}
             </Select>

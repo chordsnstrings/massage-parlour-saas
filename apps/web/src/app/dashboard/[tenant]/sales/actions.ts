@@ -91,7 +91,14 @@ const saleSchema = z.object({
         clientPackageId: optionalUuid,
         description: z.string().trim().min(1, 'sales.v.describe').max(200),
         qty: z.coerce.number().int().min(1).max(99),
-        unitPriceAed: money,
+        // No coercion: a blank price (service with "price on request", R4) arrives as null and must be typed.
+        unitPriceAed: z.preprocess(
+          (v: number | null) => v,
+          z
+            .number({ error: 'sales.v.priceRequired' })
+            .min(0, 'sales.v.negative')
+            .max(1_000_000, 'sales.v.tooLarge'),
+        ),
         discountAed: money.default(0),
         staffId: optionalUuid,
       }),

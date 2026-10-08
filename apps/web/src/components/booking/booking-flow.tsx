@@ -25,7 +25,7 @@ import type { ActionResult } from '@/lib/action'
 import { duration, ease, spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { bookOnline, getSlots } from './actions'
-import { fmtAed, fmtDate, fmtTime, type Locale, pick, t } from './i18n'
+import { fmtDate, fmtPrice, fmtTime, type Locale, pick, t } from './i18n'
 import { icsDataUrl } from './ics'
 import type {
   BookingCatalog,
@@ -617,7 +617,7 @@ function ServiceStep({
                           <span className="text-muted" aria-hidden>
                             ·
                           </span>
-                          <span className="tabular-nums">{fmtAed(v.priceAed, locale)}</span>
+                          <span className="tabular-nums">{fmtPrice(v.priceAed, locale)}</span>
                         </button>
                       ))}
                     </div>
@@ -667,7 +667,7 @@ function Summary({
                   {variant.durationMin} {L('min')}
                 </span>
               </dd>
-              <dd className="font-medium tabular-nums">{fmtAed(variant.priceAed, locale)}</dd>
+              <dd className="font-medium tabular-nums">{fmtPrice(variant.priceAed, locale)}</dd>
             </div>
             {date && (
               <div className="flex items-center gap-2 text-muted">
@@ -719,7 +719,7 @@ function DoneView({ done, locale, onAgain }: { done: BookingDone; locale: Locale
     [L('stepService'), done.service],
     [L('stepWhen'), `${day} · ${fmtTime(done.start, locale)}`],
     ...(done.therapist ? ([[L('therapist'), done.therapist]] as [string, string][]) : []),
-    [L('total'), fmtAed(done.priceAed, locale)],
+    [L('total'), fmtPrice(done.priceAed, locale)],
   ]
   return (
     <section className="mx-auto max-w-xl space-y-8 py-4 text-center sm:py-8" aria-live="polite">

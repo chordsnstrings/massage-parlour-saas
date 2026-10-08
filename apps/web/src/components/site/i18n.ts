@@ -19,6 +19,7 @@ const UI = {
   visit: { en: 'Visit us', ar: 'زورونا' },
   contact: { en: 'Contact', ar: 'تواصل معنا' },
   from: { en: 'from', ar: 'من' },
+  priceOnRequest: { en: 'Price on request', ar: 'السعر عند الطلب' },
   noServices: { en: 'Our menu is being updated.', ar: 'قائمتنا قيد التحديث.' },
   noTeam: { en: 'Meet our therapists soon.', ar: 'تعرّفوا على فريقنا قريبًا.' },
   rights: { en: 'All rights reserved.', ar: 'جميع الحقوق محفوظة.' },
@@ -53,6 +54,10 @@ const DAY_NAMES: Record<Locale, Record<(typeof WEEKDAYS)[number], string>> = {
 export const dayName = (day: (typeof WEEKDAYS)[number], locale: Locale) => DAY_NAMES[locale][day]
 
 /** VAT-inclusive AED price; Latin digits in both languages (common UAE practice). */
+/** A variant's price label — "Price on request" when it has none to show (R4). */
+export const variantPrice = (aed: string | number | null, locale: Locale) =>
+  aed == null ? UI.priceOnRequest[locale] : price(aed, locale)
+
 export function price(aed: string | number, locale: Locale) {
   const n = Number(aed)
   const text = n.toLocaleString('en-AE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
