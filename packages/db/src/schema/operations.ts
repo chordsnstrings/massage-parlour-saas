@@ -408,3 +408,43 @@ export const rotationEntries = pgTable(
   },
   (t) => [unique('rotation_unique').on(t.branchId, t.businessDate, t.staffId), ...tenantPolicies()],
 )
+
+export const waitlistStatus = pgEnum('waitlist_status', ['waiting', 'notified', 'booked', 'cancelled'])
+
+/**
+ * Waitlist (B5.1): a client who wants a service on a business date, optionally within a time window
+ * (`from_at`/`until_at`, null = any time that day). When a matching slot frees (cancel / no-show / reschedule)
+ * the entry is set `notified` and a `waitlist_slot` WhatsApp message is queued (click-to-send).
+ */
+export const waitlistEntries = pgTable(
+  'waitlist_entries',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    branchId: uuid('branch_id')
+      .notNull()
+      .references(() => branches.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+    serviceVariantId: uuid('service_variant_id').references(() => serviceVariants.id, {
+      onDelete: 'set null',
+    }),
+    businessDate: date('business_date').notNull(),
+    fromAt: ts('from_at'),
+    untilAt: ts('until_at'),
+    notes: text('notes'),
+    status: waitlistStatus('status').notNull().default('waiting'),
+    notifiedAt: ts('notified_at'),
+    bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => user.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('waitlist_branch_day').on(t.branchId, t.businessDate, t.status),
+    index('waitlist_client').on(t.clientId),
+    ...tenantPolicies(),
+  ],
+)

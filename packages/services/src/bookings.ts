@@ -37,6 +37,7 @@ import {
 } from './booking-commissions'
 import { DomainError, pgCode, pgConstraint } from './errors'
 import { consumeForBooking } from './inventory'
+import { notifyWaitlistForFreedSlot } from './waitlist'
 
 const DAY = 24 * 3600_000
 
@@ -326,6 +327,7 @@ export async function rescheduleItem(
   tx: Tx,
   itemId: string,
   to: { start: Date; staffIds?: string[]; roomId?: string },
+  opts: { now?: Date; notifyWaitlist?: boolean } = {},
 ) {
   const [item] = await tx.select().from(bookingItems).where(eq(bookingItems.id, itemId))
   if (!item) throw new DomainError('Booking not found', 'not_found')
@@ -387,6 +389,20 @@ export async function rescheduleItem(
     if (pgCode(e) === '23P01') throw new DomainError('That time clashes with another booking', 'slot_taken')
     throw e
   }
+  // The old time is free now: offer it to the waitlist (B5.1).
+  if (opts.notifyWaitlist !== false && to.start.getTime() !== item.startsAt.getTime())
+    await notifyWaitlistForFreedSlot(
+      tx,
+      {
+        tenantId: item.tenantId,
+        branchId: booking.branchId,
+        businessDate: booking.businessDate,
+        startsAt: item.startsAt,
+        endsAt: item.endsAt,
+        serviceIds: svc ? [svc.service.id] : [],
+      },
+      opts.now,
+    )
 }
 
 /**
@@ -398,7 +414,7 @@ export async function setBookingStatus(
   bookingId: string,
   to: (typeof bookings.$inferSelect)['status'],
   reason?: string,
-  opts: { userId?: string | null; now?: Date } = {},
+  opts: { userId?: string | null; now?: Date; notifyWaitlist?: boolean } = {},
 ) {
   const [b] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).for('update')
   if (!b) throw new DomainError('Booking not found', 'not_found')
@@ -415,8 +431,9 @@ export async function setBookingStatus(
   }
   if (to === 'cancelled' || to === 'no_show') {
     const items = await tx
-      .select({ id: bookingItems.id })
+      .select({ id: bookingItems.id, serviceId: serviceVariants.serviceId })
       .from(bookingItems)
+      .leftJoin(serviceVariants, eq(serviceVariants.id, bookingItems.serviceVariantId))
       .where(eq(bookingItems.bookingId, bookingId))
     if (items.length)
       await tx.delete(reservations).where(
@@ -424,6 +441,20 @@ export async function setBookingStatus(
           reservations.bookingItemId,
           items.map((i) => i.id),
         ),
+      )
+    // The freed time goes to the waitlist (B5.1) unless the booking had already released it.
+    if (opts.notifyWaitlist !== false && b.status !== 'cancelled' && b.status !== 'no_show')
+      await notifyWaitlistForFreedSlot(
+        tx,
+        {
+          tenantId: b.tenantId,
+          branchId: b.branchId,
+          businessDate: b.businessDate,
+          startsAt: b.startsAt,
+          endsAt: b.endsAt,
+          serviceIds: [...new Set(items.map((i) => i.serviceId).filter((x): x is string => Boolean(x)))],
+        },
+        opts.now,
       )
   }
   if ((b.status === 'cancelled' || b.status === 'no_show') && to === 'confirmed') {

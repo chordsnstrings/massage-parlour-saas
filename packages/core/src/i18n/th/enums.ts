@@ -54,8 +54,10 @@ export const enums: Messages['enums'] = {
     birthday: 'วันเกิด',
     winback: 'ชวนกลับมา',
     slot_offer: 'เสนอช่วงเวลาว่าง',
+    waitlist_slot: 'คิวรอ: มีช่วงว่าง',
     custom: 'กำหนดเอง',
   },
+  waitlistStatus: { waiting: 'รอคิว', notified: 'แจ้งแล้ว', booked: 'จองแล้ว', cancelled: 'นำออกแล้ว' },
   outboxStatus: { queued: 'อยู่ในคิว', opened: 'เปิดแล้ว', sent: 'ส่งแล้ว', skipped: 'ข้าม' },
   accountType: {
     asset: 'สินทรัพย์',

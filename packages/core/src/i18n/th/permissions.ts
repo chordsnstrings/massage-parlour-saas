@@ -10,7 +10,13 @@ export const permissions: Messages['permissions'] = {
     },
     clients: {
       label: 'ลูกค้า',
-      actions: { view: 'ดูข้อมูลลูกค้า', manage: 'แก้ไขข้อมูลลูกค้า', phone: 'ดูเบอร์โทรศัพท์', export: 'ส่งออกรายชื่อลูกค้า' },
+      actions: {
+        view: 'ดูข้อมูลลูกค้า',
+        manage: 'แก้ไขข้อมูลลูกค้า',
+        phone: 'ดูเบอร์โทรศัพท์',
+        export: 'ส่งออกรายชื่อลูกค้า',
+        merge: 'รวมรายชื่อลูกค้าที่ซ้ำกัน',
+      },
     },
     pos: {
       label: 'จุดขาย (POS)',
