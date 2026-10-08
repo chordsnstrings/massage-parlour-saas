@@ -17,19 +17,27 @@ import {
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { domainErrorRef } from '@/i18n/domain-errors'
+import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { invalidateSiteHost } from '@/server/sites'
 
+/** A service message as a field error: its `errors.domain.*` key when it has no parameters, else the text. */
+const fieldText = (message: string) => {
+  const ref = domainErrorRef(message)
+  return ref && !ref.params ? ref.key : message
+}
+
 const hostnameField = z
   .string()
-  .max(300, 'That domain is too long')
+  .max(300, 'settings.domains.result.tooLong')
   .transform((value, zctx) => {
     try {
       return normaliseHostname(value)
     } catch (error) {
-      zctx.addIssue({ code: 'custom', message: (error as Error).message })
+      zctx.addIssue({ code: 'custom', message: fieldText((error as Error).message) })
       return z.NEVER
     }
   })
@@ -85,9 +93,9 @@ export async function addDomainAction(
     )
     await record(ctx, 'domain.added', d.id, { hostname: d.hostname })
     refresh(slug)
-    return ok(`${d.hostname} added — now add the two DNS records`)
+    return ok({ key: 'settings.domains.result.added', params: { host: d.hostname } })
   } catch (e) {
-    if (e instanceof DomainError) return failDomain(e, { hostname: e.message })
+    if (e instanceof DomainError) return failDomain(e, { hostname: e.i18n?.key ?? fieldText(e.message) })
     throw e
   }
 }
@@ -95,7 +103,7 @@ export async function addDomainAction(
 export async function checkDomainAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
-  if (!domainId.safeParse(id).success) return fail('Domain not found')
+  if (!domainId.safeParse(id).success) return fail('settings.domains.result.notFound')
   try {
     const run = tenantDomainRun(ctx.tenant.id)
     const before = await run((db) => db.query.domains.findFirst({ where: (d, { eq }) => eq(d.id, id) }))
@@ -108,8 +116,10 @@ export async function checkDomainAction(slug: string, id: string): Promise<Actio
         to: d.status,
       })
     refresh(slug)
-    if (d.status === 'active') return ok(`${d.hostname} is connected`)
-    return fail(d.lastError ?? 'Not connected yet — check the DNS records below.')
+    if (d.status === 'active') return ok({ key: 'settings.domains.result.connected', params: { host: d.hostname } })
+    return d.lastError
+      ? failDomain({ message: d.lastError })
+      : fail('settings.domains.result.notConnected')
   } catch (e) {
     return domainFail(e)
   }
@@ -118,12 +128,12 @@ export async function checkDomainAction(slug: string, id: string): Promise<Actio
 export async function setPrimaryDomainAction(slug: string, id: string | null): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
-  if (id !== null && !domainId.safeParse(id).success) return fail('Domain not found')
+  if (id !== null && !domainId.safeParse(id).success) return fail('settings.domains.result.notFound')
   try {
     await setPrimaryDomain(tenantDomainRun(ctx.tenant.id), ctx.tenant.id, id)
     await record(ctx, 'domain.primary_set', id ?? ctx.tenant.id, { domainId: id, subdomain: id === null })
     refresh(slug)
-    return ok(id ? 'Primary address updated' : 'Your free address is primary again')
+    return ok(id ? 'settings.domains.result.primaryUpdated' : 'settings.domains.result.freePrimary')
   } catch (e) {
     return domainFail(e)
   }
@@ -132,13 +142,13 @@ export async function setPrimaryDomainAction(slug: string, id: string | null): P
 export async function removeDomainAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
-  if (!domainId.safeParse(id).success) return fail('Domain not found')
+  if (!domainId.safeParse(id).success) return fail('settings.domains.result.notFound')
   try {
     const d = await removeDomain(tenantDomainRun(ctx.tenant.id), id)
     invalidateSiteHost(d.hostname)
     await record(ctx, 'domain.removed', d.id, { hostname: d.hostname, cfHostnameId: d.cfHostnameId })
     refresh(slug)
-    return ok(`${d.hostname} removed`)
+    return ok({ key: 'settings.domains.result.removed', params: { host: d.hostname } })
   } catch (e) {
     return domainFail(e)
   }
@@ -164,13 +174,17 @@ export async function searchDomainsAction(slug: string, query: string): Promise<
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return { ok: false, error }
   const q = String(query ?? '').trim()
-  if (q.length < 2 || q.length > 80) return { ok: false, error: 'Type a name, e.g. “serenity spa”' }
-  if (!searchAllowed(ctx.tenant.id))
-    return { ok: false, error: 'Too many searches — try again in a few minutes.' }
+  const t = await getT()
+  if (q.length < 2 || q.length > 80) return { ok: false, error: t('settings.domains.result.searchShort') }
+  if (!searchAllowed(ctx.tenant.id)) return { ok: false, error: t('settings.domains.result.searchLimit') }
   try {
     return { ok: true, ...(await searchDomains(q)) }
   } catch (e) {
-    if (e instanceof DomainError || e instanceof NamecheapError) return { ok: false, error: e.message }
+    if (e instanceof DomainError) {
+      const ref = e.i18n ?? domainErrorRef(e.message)
+      return { ok: false, error: ref ? t(ref.key, ref.params) : e.message }
+    }
+    if (e instanceof NamecheapError) return { ok: false, error: e.message }
     throw e
   }
 }
@@ -178,7 +192,7 @@ export async function searchDomainsAction(slug: string, query: string): Promise<
 export async function requestDomainAction(slug: string, domain: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
-  if (typeof domain !== 'string' || domain.length > 253) return fail('Pick a domain from the list')
+  if (typeof domain !== 'string' || domain.length > 253) return fail('settings.domains.result.pick')
   try {
     const order = await requestDomain(tenantDomainRun(ctx.tenant.id), {
       tenantId: ctx.tenant.id,
@@ -195,9 +209,10 @@ export async function requestDomainAction(slug: string, domain: string): Promise
       data: { domain: order.domain, priceAed: order.priceAed },
     })
     refresh(slug)
-    return ok(`Requested ${order.domain} — we’ll buy and connect it once approved`)
+    return ok({ key: 'settings.domains.result.requested', params: { domain: order.domain } })
   } catch (e) {
-    if (e instanceof DomainError || e instanceof NamecheapError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
+    if (e instanceof NamecheapError) return fail(e.message)
     throw e
   }
 }
@@ -205,7 +220,7 @@ export async function requestDomainAction(slug: string, domain: string): Promise
 export async function cancelDomainOrderAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
-  if (!domainId.safeParse(id).success) return fail('Request not found')
+  if (!domainId.safeParse(id).success) return fail('settings.domains.result.requestNotFound')
   try {
     const order = await withTenant(ctx.tenant.id, (tx) => cancelDomainOrder(tx, id))
     await audit({
@@ -218,7 +233,7 @@ export async function cancelDomainOrderAction(slug: string, id: string): Promise
       data: { domain: order.domain },
     })
     refresh(slug)
-    return ok(`Request for ${order.domain} cancelled`)
+    return ok({ key: 'settings.domains.result.cancelled', params: { domain: order.domain } })
   } catch (e) {
     return domainFail(e)
   }

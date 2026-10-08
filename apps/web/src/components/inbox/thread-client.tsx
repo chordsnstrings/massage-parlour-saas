@@ -51,11 +51,11 @@ function useReport() {
   return (r: ActionResult) => {
     if (!r) return false
     if (!r.ok) {
-      toast.error(resultText(t, r))
+      toast.error(resultText(t, r) ?? t('errors.generic'))
       return false
     }
-    if (r.data?.sent === false) toast.error(r.message ? resultText(t, r) : t('inbox.results.savedNotSent'))
-    else if (r.message) toast.success(resultText(t, r))
+    if (r.data?.sent === false) toast.error(resultText(t, r) ?? t('inbox.results.savedNotSent'))
+    else if (r.message) toast.success(resultText(t, r) ?? r.message)
     return true
   }
 }

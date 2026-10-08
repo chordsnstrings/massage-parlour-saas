@@ -5,27 +5,30 @@ import { Button } from '@/components/ui/button'
 import { ActionForm, FieldError, SubmitButton } from '@/components/ui/form'
 import { Input, Label } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { addDomainAction, checkDomainAction, removeDomainAction, setPrimaryDomainAction } from './actions'
 
 function useRun() {
+  const t = useT()
   const [pending, start] = useTransition()
   const run = (fn: () => Promise<ActionResult>, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return
     start(async () => {
       const r = await fn()
       if (r?.ok) {
-        if (r.message) toast.success(r.message)
-      } else if (r) toast.error(r.error)
+        if (r.message) toast.success(resultText(t, r))
+      } else if (r) toast.error(resultText(t, r))
     })
   }
-  return { pending, run }
+  return { pending, run, t }
 }
 
 export function AddDomainForm({ slug }: { slug: string }) {
+  const t = useT()
   return (
     <ActionForm action={addDomainAction.bind(null, slug)} resetOnSuccess className="space-y-1.5">
-      <Label htmlFor="hostname">Your domain</Label>
+      <Label htmlFor="hostname">{t('settings.domains.yourDomain')}</Label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input
           id="hostname"
@@ -39,13 +42,11 @@ export function AddDomainForm({ slug }: { slug: string }) {
           className="h-11 sm:flex-1"
         />
         <SubmitButton size="lg" className="sm:w-auto">
-          Add domain
+          {t('settings.domains.addDomain')}
         </SubmitButton>
       </div>
       <FieldError name="hostname" />
-      <p className="text-[13px] text-muted">
-        A domain you already own. We recommend the www version — you can forward the bare domain to it.
-      </p>
+      <p className="text-[13px] text-muted">{t('settings.domains.addHint')}</p>
     </ActionForm>
   )
 }
@@ -66,7 +67,7 @@ export function DomainActions({
   /** Certificates are issued automatically; without them the plain http address is the one that works. */
   secure: boolean
 }) {
-  const { pending, run } = useRun()
+  const { pending, run, t } = useRun()
   const active = status === 'active'
   return (
     <div className="flex flex-wrap gap-2 [&_button]:h-11 [&_a]:h-11 sm:[&_button]:h-10 sm:[&_a]:h-10">
@@ -75,7 +76,7 @@ export function DomainActions({
         pending={pending}
         onClick={() => run(() => checkDomainAction(slug, id))}
       >
-        {!pending && <RefreshCw />} Check now
+        {!pending && <RefreshCw />} {t('settings.domains.checkNow')}
       </Button>
       {active && !isPrimary && (
         <Button
@@ -83,13 +84,13 @@ export function DomainActions({
           disabled={pending}
           onClick={() => run(() => setPrimaryDomainAction(slug, id))}
         >
-          <Star /> Make primary
+          <Star /> {t('settings.domains.makePrimary')}
         </Button>
       )}
       {active && (
         <Button variant="ghost" asChild>
           <a href={`${secure ? 'https' : 'http'}://${hostname}`} target="_blank" rel="noreferrer">
-            <ExternalLink /> Open site
+            <ExternalLink /> {t('settings.domains.openSite')}
           </a>
         </Button>
       )}
@@ -100,18 +101,18 @@ export function DomainActions({
         onClick={() =>
           run(
             () => removeDomainAction(slug, id),
-            `Remove ${hostname}? Your site will stop answering on this address. You can add it again later.`,
+            t('settings.domains.removeConfirm', { host: hostname }),
           )
         }
       >
-        <Trash2 /> Remove
+        <Trash2 /> {t('settings.domains.remove')}
       </Button>
     </div>
   )
 }
 
 export function SubdomainPrimaryButton({ slug }: { slug: string }) {
-  const { pending, run } = useRun()
+  const { pending, run, t } = useRun()
   return (
     <Button
       variant="secondary"
@@ -120,7 +121,7 @@ export function SubdomainPrimaryButton({ slug }: { slug: string }) {
       pending={pending}
       onClick={() => run(() => setPrimaryDomainAction(slug, null))}
     >
-      Make primary
+      {t('settings.domains.makePrimary')}
     </Button>
   )
 }

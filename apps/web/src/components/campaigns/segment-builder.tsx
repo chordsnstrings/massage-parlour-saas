@@ -74,7 +74,7 @@ export function SegmentBuilder({
         if (res?.ok) {
           setPreview(res.data as Preview)
           setPreviewError(null)
-        } else setPreviewError(res ? resultText(t, res) : t('campaigns.builder.previewUnavailable'))
+        } else setPreviewError((res && resultText(t, res)) || t('campaigns.builder.previewUnavailable'))
       })
     }, 300)
     return () => {

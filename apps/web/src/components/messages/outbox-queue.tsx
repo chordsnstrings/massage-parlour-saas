@@ -112,7 +112,7 @@ export function OutboxQueue({
         setOpened((s) => new Set(s).add(row.id))
         startTransition(async () => {
           const res = await markMessageAction(slug, { id: row.id, status: 'opened' })
-          if (res && !res.ok) toast.error(resultText(t, res))
+          if (res && !res.ok) toast.error(resultText(t, res) ?? t('errors.generic'))
         })
       }
     },
@@ -130,7 +130,7 @@ export function OutboxQueue({
         if (res?.ok) {
           if (res.message) toast.success(`${resultText(t, res)} · ${row.clientName}`)
         } else {
-          toast.error(res ? resultText(t, res) : t('errors.generic'))
+          toast.error((res && resultText(t, res)) || t('errors.generic'))
           setHandled((m) => {
             const copy = new Map(m)
             copy.delete(row.id)
@@ -171,7 +171,7 @@ export function OutboxQueue({
     due: [t('messages.empty.dueTitle'), t('messages.empty.dueBody')],
     scheduled: [t('messages.empty.scheduledTitle'), t('messages.empty.scheduledBody')],
     sent: [t('messages.empty.sentTitle'), t('messages.empty.sentBody')],
-  }[tab]
+  }[tab] as [string, string]
   const keys: [string[], string][] = [
     [['J', 'K'], t('messages.keyboard.nav')],
     [['Enter'], t('messages.keyboard.open')],

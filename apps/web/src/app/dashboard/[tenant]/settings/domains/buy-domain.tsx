@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input, Label } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { resultText, useI18n } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import {
   cancelDomainOrderAction,
@@ -15,9 +16,9 @@ import {
 } from './actions'
 
 type Offers = Extract<DomainSearchResult, { ok: true }>['offers']
-const aed = (n: number) => `AED ${n.toLocaleString('en-AE')}`
 
 export function BuyDomain({ slug }: { slug: string }) {
+  const { t, fmt } = useI18n()
   const [query, setQuery] = useState('')
   const [offers, setOffers] = useState<Offers | null>(null)
   const [unconfigured, setUnconfigured] = useState(false)
@@ -39,19 +40,17 @@ export function BuyDomain({ slug }: { slug: string }) {
   }
   const request = (domain: string, price: number) => {
     if (
-      !window.confirm(
-        `Request ${domain} for ${aed(price)} / year? It’s added to your next invoice once we buy it.`,
-      )
+      !window.confirm(t('settings.domains.search.confirm', { domain, price: fmt.aed(price) }))
     )
       return
     setPicked(domain)
     startRequest(async () => {
       const r = await requestDomainAction(slug, domain)
       if (r?.ok) {
-        toast.success(r.message ?? 'Requested')
+        toast.success(resultText(t, r) ?? '')
         setOffers(null)
         setQuery('')
-      } else if (r) toast.error(r.error)
+      } else if (r) toast.error(resultText(t, r))
       setPicked(null)
     })
   }
@@ -59,7 +58,7 @@ export function BuyDomain({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       <form onSubmit={search} className="space-y-1.5">
-        <Label htmlFor="domain-search">Search for a name</Label>
+        <Label htmlFor="domain-search">{t('settings.domains.search.label')}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             id="domain-search"
@@ -73,13 +72,13 @@ export function BuyDomain({ slug }: { slug: string }) {
             className="h-11 sm:flex-1"
           />
           <Button type="submit" size="lg" variant="secondary" pending={searching} className="sm:w-auto">
-            {!searching && <Search />} Search
+            {!searching && <Search />} {t('settings.domains.search.button')}
           </Button>
         </div>
       </form>
       {unconfigured && (
         <p role="status" className="rounded-lg border border-warning/25 bg-warning-soft px-4 py-3 text-sm">
-          Buying domains isn’t switched on yet — contact support, or connect a domain you already own.
+          {t('settings.domains.search.unconfigured')}
         </p>
       )}
       <AnimatePresence initial={false}>
@@ -89,7 +88,7 @@ export function BuyDomain({ slug }: { slug: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            aria-label="Search results"
+            aria-label={t('settings.domains.search.results')}
             className="divide-y divide-border overflow-hidden rounded-xl border"
           >
             {offers.map((o) => (
@@ -103,8 +102,10 @@ export function BuyDomain({ slug }: { slug: string }) {
                   </p>
                   <p className="text-[13px] text-muted">
                     {o.available && o.priceAed
-                      ? `${aed(o.priceAed)} / year${o.premium ? ' · premium name' : ''}`
-                      : (o.note ?? 'Taken')}
+                      ? t(o.premium ? 'settings.domains.search.premium' : 'settings.domains.search.perYear', {
+                          price: fmt.aed(o.priceAed),
+                        })
+                      : (o.note ?? t('settings.domains.search.taken'))}
                   </p>
                 </div>
                 {o.available && o.priceAed ? (
@@ -115,26 +116,23 @@ export function BuyDomain({ slug }: { slug: string }) {
                     disabled={requesting}
                     onClick={() => request(o.domain, o.priceAed!)}
                   >
-                    {!(requesting && picked === o.domain) && <ShoppingBag />} Request
+                    {!(requesting && picked === o.domain) && <ShoppingBag />} {t('settings.domains.search.request')}
                   </Button>
                 ) : (
-                  <Badge>Unavailable</Badge>
+                  <Badge>{t('settings.domains.search.unavailable')}</Badge>
                 )}
               </li>
             ))}
           </motion.ul>
         )}
       </AnimatePresence>
-      <p className="text-[13px] text-muted">
-        We register it in your spa’s name, point it at your website and switch on SSL. The yearly registrar
-        price is added to your next invoice. .ae names aren’t available here — buy those from a UAE registrar
-        and connect them above.
-      </p>
+      <p className="text-[13px] text-muted">{t('settings.domains.search.note')}</p>
     </div>
   )
 }
 
 export function CancelOrderButton({ slug, id, domain }: { slug: string; id: string; domain: string }) {
+  const { t } = useI18n()
   const [pending, start] = useTransition()
   return (
     <Button
@@ -143,15 +141,15 @@ export function CancelOrderButton({ slug, id, domain }: { slug: string; id: stri
       pending={pending}
       className="h-11 text-danger hover:bg-danger-soft hover:text-danger sm:h-8"
       onClick={() => {
-        if (!window.confirm(`Cancel the request for ${domain}?`)) return
+        if (!window.confirm(t('settings.domains.orders.cancelConfirm', { domain }))) return
         start(async () => {
           const r = await cancelDomainOrderAction(slug, id)
-          if (r?.ok) toast.success(r.message ?? 'Cancelled')
-          else if (r) toast.error(r.error)
+          if (r?.ok) toast.success(resultText(t, r) ?? '')
+          else if (r) toast.error(resultText(t, r))
         })
       }}
     >
-      {!pending && <X />} Cancel
+      {!pending && <X />} {t('settings.domains.orders.cancel')}
     </Button>
   )
 }
