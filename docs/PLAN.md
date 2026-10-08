@@ -830,3 +830,73 @@ until `spamanagement.ae` is registered.
 1. **Price details:** is AED 24,000/year VAT-inclusive, and is there a one-time setup fee?
 2. **Platform company details** for Meta Business Verification and the .ae registrant (name must match company/trademark).
 3. **Pilot specifics** (coming later): emirate, branches, walk-in vs booked ratio, reception device, home/hotel visits.
+
+## 17. Fix backlog (verified 2026-10-08)
+
+The owner decided on 2026-10-08 to keep these for now and fix them later. **Remind the owner every session** (see
+CLAUDE.md). Rules for the work:
+- Order: F1–F3 first, because they affect the books or let money be double-counted.
+- One PR per item, with service tests plus the named e2e spec.
+- Existing ledger rows are never edited; corrections are new entries.
+- When an item ships, mark it ✅ here.
+
+**F1. Refunds post to the wrong accounts.**
+- Where: `packages/services/src/ledger.ts` `postRefund`, called from `sales.ts` `refundSale`.
+- Problem: it always debits 4000 + 2000. Retail refunds belong in 4100. Prepaid lines (2100/2110) carried no VAT.
+- Planned fix:
+  - Build the refund debits from the sale's own `sale` journal entry.
+  - Prorate its revenue/liability credit lines (4000/4100/2100/2110 + 2000) by refund ÷ sale total.
+  - Put the rounding remainder on the largest line.
+  - Leave tips (2200) out.
+- Tests: services tests for retail-only, mixed and prepaid sales, checking that each account nets out correctly;
+  e2e `pos.spec`, `pos-prepaid.spec`.
+
+**F2. Refunds don't return stock, reverse COGS or reverse commissions.**
+- Where: `packages/services/src/sales.ts` `refundSale`.
+- Problem: void does all three; refund does none of them.
+- Planned fix:
+  - When a refund brings the remaining balance to 0, run the same reversals as void: `returnSoldStock`, reverse
+    `cogs`, offset commissions.
+  - Also void or reduce gift cards and packages that were sold on the sale.
+  - Partial refunds: **owner decision**, see below.
+- Tests: services `sales` and `p2` tests; e2e `pos-prepaid.spec`.
+
+**F3. A booking can be checked out twice.**
+- Where: `packages/services/src/sales.ts` `createSale` (check-then-insert); schema `commerce.ts`.
+- Planned fix:
+  - Lock the booking row (`FOR UPDATE`) before the earlier-sale check.
+  - Add a partial unique index on `sales(booking_id) WHERE booking_id IS NOT NULL AND status <> 'void'` in a new
+    migration. Before adding it, check production for existing duplicates.
+  - Map `23505` to a `DomainError`.
+- Tests: a concurrent checkout test in services `sales`; e2e `pos.spec`.
+
+**F4. Two bookings taking the same reference code at once surface a raw `23505`.**
+- Where: `packages/services/src/bookings.ts` `createBooking`.
+- Planned fix: catch `bookings_tenant_ref` `23505` inside the savepoint and retry with a new code, up to 5 times.
+- Tests: services `bookings` test with a forced collision.
+
+**F5. Package redemption and expiry ignore the branch cutoff.**
+- Where: `packages/services/src/loyalty.ts` lines 92 and 117 (`businessDateOf(now)`).
+- Planned fix:
+  - Redemption: take the sale's business date from the caller.
+  - Expiry job: use the default branch's `business_day_cutoff`.
+- Tests: services `p2` test with a cutoff other than 05:00.
+
+**F6. Stock receipt and adjustment entries can't be reversed.**
+- Where: `packages/services/src/inventory.ts` `receiveStock`/`adjustStock`.
+- Problem: their ledger entries carry no `sourceId`, so `reverseSource` can't target them.
+- Planned fix: have `move()` return the inserted `stock_movements` id and post with it as `sourceId`. Existing rows
+  stay as they are.
+- Tests: services inventory tests; e2e `inventory.spec`.
+
+**F7. The slot filler reads tenant tables through the platform role.**
+- Where: `apps/worker/src/jobs/tenant-jobs.ts` `runSlotFiller`.
+- Planned fix: keep finding the enabled spas through `platformDb`; move the per-spa `outbox`/`branches` reads into
+  `withTenant`.
+- Tests: `apps/worker/test/jobs.test.ts`.
+
+**Owner decisions needed before F1/F2:**
+- **Past refunds:** should already-misposted refunds get one-off correcting entries?
+- **Partial refunds:** pick one.
+  - Line-level: choose lines and quantities; stock, COGS and commission are handled per line. Recommended.
+  - Amount-only: prorate commission; no stock return.

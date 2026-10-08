@@ -12,6 +12,14 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
   tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `fail`.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, double checkout race, …).
 
+## Standing owner instructions (2026-10-08)
+- **Fix backlog reminder:** while any item in PLAN §17 (F1–F7) is open, remind the owner in one line in the first
+  reply of every session and at the end of every task. Name the open items and the next one in order. Don't fix them
+  until the owner says so.
+- **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
+  `docs/CODEMAP.md` / `docs/PLAN.md` in the same session, commit, and merge the docs into the deploy branch
+  `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path).
+
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.

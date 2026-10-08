@@ -240,7 +240,8 @@ Integration jobs do nothing until their credentials are configured.
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 
-Check these before touching POS, ledger, loyalty or inventory code.
+Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
+in **PLAN §17** (items F1–F7 match the numbers below).
 
 1. **Refund postings**: `ledger.postRefund` (`packages/services/src/ledger.ts`) always debits 4000 + 2000.
    Retail refunds belong in 4100, and prepaid lines (2100/2110, no VAT) are misposted.
