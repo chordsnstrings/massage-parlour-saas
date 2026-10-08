@@ -59,18 +59,26 @@ export function Logo({ className, tone = 'auto' }: { className?: string; tone?: 
   )
 }
 
-/** Compact square mark ("s" + orange dot) for favicon-size spots; same art as public/icon.svg. */
+/** Compact square mark (bold "spa", underline, one orange dot) for favicon-size spots; same art as public/icon.svg. */
 export function LogoMark({ className, tone = 'dark' }: { className?: string; tone?: 'dark' | 'light' }) {
   const [bg, ink] = tone === 'dark' ? ['#18191B', '#F7F3EA'] : ['#F7F3EA', '#18191B']
   return (
     <svg viewBox="0 0 32 32" className={cn('size-7 shrink-0', className)} aria-hidden="true">
       <rect width="32" height="32" rx="8" fill={bg} />
-      <text x="7.2" y="21" fill={ink} fontFamily={FONT} fontWeight="600" fontSize="21" letterSpacing="-1">
-        s
+      <text
+        x="4.6"
+        y="19"
+        fill={ink}
+        fontFamily={FONT}
+        fontWeight="700"
+        fontSize="13.5"
+        textLength="21"
+        lengthAdjust="spacingAndGlyphs"
+      >
+        spa
       </text>
-      <path d="M8 25.2 H19.5" stroke={ink} strokeWidth="1.4" strokeLinecap="round" />
-      <circle cx="22" cy="19" r="2.1" fill={DOT} />
-      <circle cx="22" cy="25.2" r="1.4" fill={DOT} />
+      <path d="M5 23.4 H23" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="26.4" cy="23.4" r="1.9" fill={DOT} />
     </svg>
   )
 }
