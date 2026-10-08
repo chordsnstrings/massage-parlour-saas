@@ -886,6 +886,10 @@ until `spamanagement.ae` is registered.
   to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
   bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
   clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.
+- **B3 ✅ (2026-10-08):** 9 switches in `tenants.settings.automations` (missing = on; no new switches table), Automations
+  page in the System menu (`settings.manage`; backups + domains/SSL shown "Always on"), tenant `job_runs` log (migration
+  0022) shown as "Last 24 hours". Switches only stop QUEUEING (outbox) / pushes — click-to-send unchanged. Details: CODEMAP
+  "Automation switches".
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

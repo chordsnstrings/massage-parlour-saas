@@ -1,3 +1,4 @@
+export * from './automations'
 export * from './booking-commissions'
 export * from './bookings'
 export * from './bookings-list'

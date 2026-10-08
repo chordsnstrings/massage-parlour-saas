@@ -120,3 +120,23 @@ export const invitations = pgTable(
   },
   () => tenantPolicies(),
 )
+
+export const jobRunStatus = pgEnum('job_run_status', ['ok', 'skipped', 'failed'])
+
+/**
+ * Per-spa background job log (B3): one row per job run that touched the spa, written by the worker, shown on the
+ * Automations page ("last 24 hours"). `summary` holds counts only (rendered through i18n). The writer prunes rows
+ * older than 7 days.
+ */
+export const jobRuns = pgTable(
+  'job_runs',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    job: text('job').notNull(),
+    status: jobRunStatus('status').notNull().default('ok'),
+    summary: jsonb('summary').$type<Record<string, number>>().notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [index('job_runs_tenant_at').on(t.tenantId, t.createdAt), ...tenantPolicies()],
+)

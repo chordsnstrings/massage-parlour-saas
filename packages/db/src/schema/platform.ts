@@ -112,6 +112,8 @@ export type TenantSettings = {
   hidePrices?: boolean
   /** AED per completed booking a receptionist created (`booking_fee` pay type; owner's receptionist_booking_fee). */
   receptionistBookingFee?: string
+  /** Automation switches (B3): keys = `AUTOMATIONS` in @spa/core; missing = on. Written via setAutomation(). */
+  automations?: Record<string, boolean>
 }
 
 export const tenants = pgTable(

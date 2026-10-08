@@ -1,28 +1,28 @@
 import { queueSlotOffers } from '@spa/ai'
 import { aiAgentSettings, branches, outbox, platformDb, tenants, withTenant } from '@spa/db'
-import { expirePackages } from '@spa/services'
-import { and, eq, gte, inArray, ne } from 'drizzle-orm'
+import { automationOnSql, expirePackages } from '@spa/services'
+import { and, eq, gte, ne } from 'drizzle-orm'
 import { log } from '../log'
+import { activeTenants, recordRun } from './runs'
 
-const activeTenants = () =>
-  platformDb()
-    .select({ id: tenants.id, slug: tenants.slug })
-    .from(tenants)
-    .where(inArray(tenants.status, ['trial', 'active', 'past_due']))
-
-/** Daily: expire packages past their validity and book the unused value as breakage. */
+/** Daily: expire packages past their validity and book the unused value as breakage (spas with the switch on). */
 export async function expireAllPackages() {
-  for (const t of await activeTenants()) {
+  for (const t of await activeTenants('packageExpiry')) {
     try {
       const n = await withTenant(t.id, (tx) => expirePackages(tx, t.id))
       if (n) log('info', 'packages expired', { tenant: t.slug, n })
+      await recordRun(t.id, 'packages-expire', 'ok', { count: n })
     } catch (error) {
       log('error', 'package expiry failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'packages-expire', 'failed')
     }
   }
 }
 
-/** Twice a day: for spas with the slot filler switched on, queue WhatsApp offers for quiet hours (max once per day). */
+/**
+ * Twice a day: for spas with the quiet-slot automation on (B3 switch) and the slot-filler agent enabled, queue
+ * WhatsApp offers for quiet hours (max once per day). Offers wait in /messages for staff to click-to-send.
+ */
 export async function runSlotFiller() {
   const enabled = await platformDb()
     .select({ tenantId: aiAgentSettings.tenantId })
@@ -33,6 +33,7 @@ export async function runSlotFiller() {
         eq(aiAgentSettings.agentKey, 'slot_filler'),
         eq(aiAgentSettings.enabled, true),
         ne(tenants.status, 'cancelled'),
+        automationOnSql('slotFiller'),
       ),
     )
   const startOfDay = new Date(Date.now() - ((Date.now() + 4 * 3600_000) % 86_400_000))
@@ -52,8 +53,10 @@ export async function runSlotFiller() {
       if (!branch) continue
       const n = await queueSlotOffers({ tenantId, branchId: branch.id })
       if (n) log('info', 'slot offers queued', { tenantId, n })
+      await recordRun(tenantId, 'slot-filler', 'ok', { count: n })
     } catch (error) {
       log('error', 'slot filler failed', { tenantId, error: String(error) })
+      await recordRun(tenantId, 'slot-filler', 'failed')
     }
   }
 }

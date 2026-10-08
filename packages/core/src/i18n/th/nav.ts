@@ -22,6 +22,7 @@ export const nav: Messages['nav'] = {
   accounts: 'บัญชี',
   vatPayroll: 'ภาษีและเงินเดือน',
   billing: 'ค่าบริการระบบ',
+  automations: 'ระบบอัตโนมัติ',
   settings: 'ตั้งค่า',
   whatsapp: 'WhatsApp',
   instagram: 'Instagram',
