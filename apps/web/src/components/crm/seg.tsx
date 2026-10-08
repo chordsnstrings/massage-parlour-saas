@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export type SegItem = { value: string; label: React.ReactNode; href?: string }
+export type SegItem = { value: string; label: React.ReactNode; href?: string; title?: string }
 
 /**
  * Segmented control (`.seg`): links when items have `href` (server-safe; e.g. ?status= filters, Day/Week/Month),
@@ -32,13 +32,19 @@ export function Seg({
     >
       {items.map((item) =>
         item.href ? (
-          <Link key={item.value} href={item.href} aria-current={item.value === value ? 'page' : undefined}>
+          <Link
+            key={item.value}
+            href={item.href}
+            title={item.title}
+            aria-current={item.value === value ? 'page' : undefined}
+          >
             {item.label}
           </Link>
         ) : (
           <button
             key={item.value}
             type="button"
+            title={item.title}
             aria-pressed={item.value === value}
             onClick={() => onChange?.(item.value)}
           >

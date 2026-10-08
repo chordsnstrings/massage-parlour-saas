@@ -62,6 +62,20 @@
   :where(:root:has(.crm)) .crm-card[data-flush="true"] > .crm-card-h {
     padding: var(--crm-pad-card) var(--crm-pad-card) 0;
   }
+  :where(:root:has(.crm)) .crm-card-f {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: var(--crm-pad-card);
+    padding-top: 12px;
+    border-top: 1px solid var(--crm-line);
+  }
+  :where(:root:has(.crm)) .crm-card[data-flush="true"] > .crm-card-f {
+    margin-top: 0;
+    padding: 12px var(--crm-pad-card);
+  }
   :where(:root:has(.crm)) .crm-card-h {
     display: flex;
     align-items: center;
@@ -96,6 +110,9 @@
   }
   :where(:root:has(.crm)) .crm-grid > * {
     min-width: 0;
+  }
+  :where(:root:has(.crm)) .crm-g1 {
+    grid-template-columns: minmax(0, 1fr);
   }
   :where(:root:has(.crm)) .crm-g2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -147,16 +164,15 @@
     :where(:root:has(.crm)) .crm-g2 {
       grid-template-columns: minmax(0, 1fr);
     }
+    /* 4-tile stat/KPI rows stay 2 × 2 on phones (tiles are short; 1 col wastes the screen). */
+    :where(:root:has(.crm)) .crm-g4:has(> .crm-stat, > .crm-kpi) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     :where(:root:has(.crm)) .crm-card-h {
       flex-wrap: wrap;
     }
     :where(:root:has(.crm)) .crm-card-h .crm-act {
       margin-top: 4px;
-    }
-  }
-  @media (max-width: 480px) {
-    :where(:root:has(.crm)) .crm-kgrid {
-      grid-template-columns: minmax(0, 1fr);
     }
   }
 
@@ -180,6 +196,9 @@
     border-radius: var(--crm-rp);
     background: color-mix(in srgb, var(--crm-accent) 8%, transparent);
     pointer-events: none;
+  }
+  :where(:root:has(.crm)) .crm-stat:not([data-icon])::after {
+    content: none;
   }
   :where(:root:has(.crm)) .crm-stat .crm-lab {
     position: relative;
@@ -253,6 +272,9 @@
     border-radius: 6px;
     background: var(--crm-surface2);
     color: var(--crm-accent);
+  }
+  :where(:root:has(.crm)) .crm-kpi .crm-ic:empty {
+    display: none;
   }
   :where(:root:has(.crm)) .crm-kpi .crm-ic svg {
     width: 13px;

@@ -13,10 +13,13 @@ export function Avatar({
   name,
   src,
   size = 'md',
+  color,
   className,
 }: {
   name: string
   src?: string | null
+  /** Fixed background (e.g. the staff calendar colour); defaults to a colour picked from the name. */
+  color?: string | null
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }) {
@@ -24,7 +27,7 @@ export function Avatar({
     <span
       className={cn('crm-tav', className)}
       data-size={size === 'md' ? undefined : size}
-      style={{ background: colourFor(name) }}
+      style={{ background: color || colourFor(name) }}
       aria-hidden
     >
       {/* biome-ignore lint/performance/noImgElement: tiny avatars, any host */}

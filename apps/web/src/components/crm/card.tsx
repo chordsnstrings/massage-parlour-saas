@@ -33,6 +33,7 @@ export function Card({
   headingAs,
   arch,
   flush,
+  footer,
   as: Tag = 'section',
   className,
   children,
@@ -44,6 +45,8 @@ export function Card({
   headingAs?: 'h2' | 'h3'
   arch?: boolean
   flush?: boolean
+  /** Footer bar under the body (hairline above; e.g. totals + a primary action). */
+  footer?: React.ReactNode
   as?: 'section' | 'div' | 'article'
   className?: string
   children?: React.ReactNode
@@ -57,11 +60,12 @@ export function Card({
     >
       {title !== undefined && <CardHeader title={title} sub={sub} actions={actions} as={headingAs} />}
       {children}
+      {footer && <div className="crm-card-f">{footer}</div>}
     </Tag>
   )
 }
 
-export type GridCols = 'g2' | 'g3' | 'g4' | 'col-2' | 'col-2b' | 'kgrid'
+export type GridCols = 'g1' | 'g2' | 'g3' | 'g4' | 'col-2' | 'col-2b' | 'kgrid'
 
 /** Responsive grid (crm-spec §1.7): g4/g3 → 2 cols ≤1080, col-2(b) → 1 col ≤1080, all → 1 col ≤680; kgrid 5/3/2/1. */
 export function Grid({

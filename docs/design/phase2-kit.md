@@ -9,22 +9,22 @@ via `--ui-*` hooks inside `.crm` only — keep using `Button`, `Input`/`Select`/
 ## Components (`import { … } from '@/components/crm'`; server-safe unless noted; never contain English)
 | Component | Props | Classes |
 |---|---|---|
-| `Card` | `title? sub? actions? headingAs? arch? flush? as?` + HTML attrs | `.crm-card` `.crm-card-h` `.crm-sub` `.crm-act` |
+| `Card` | `title? sub? actions? footer? headingAs? arch? flush? as?` + HTML attrs | `.crm-card` `.crm-card-h` `.crm-sub` `.crm-act` `.crm-card-f` |
 | `CardHeader` | `title sub? actions? as?` | `.crm-card-h` |
-| `Grid` / `Stack` | `cols: g2·g3·g4·col-2·col-2b·kgrid` / – | `.crm-grid .crm-g4 …` (§1.7 collapse) `.crm-stack` |
-| `Stat` | `label value unit? change?{text,dir} icon?` | `.crm-stat .crm-lab .crm-n .crm-chg[data-dir]` |
+| `Grid` / `Stack` | `cols: g1·g2·g3·g4·col-2·col-2b·kgrid` (g4 of Stat/Kpi + kgrid stay 2 cols on phones) / – | `.crm-grid .crm-g4 …` (§1.7 collapse) `.crm-stack` |
+| `Stat` | `label value unit? change?{text,dir} icon?` (corner deco only with icon) | `.crm-stat .crm-lab .crm-n .crm-chg[data-dir]` |
 | `Kpi` / `Delta` | `label value icon? delta?{text,dir} sub? href? linkLabel?` / `dir` | `.crm-kpi … .crm-vd` `.crm-delta[data-dir=up·down·flat]` |
 | `Pill` | `tone?: neutral·ok·warn·bad·info·acc` `dot?`; `statusTone(status)` | `.crm-pill[data-tone]` `.crm-dotc` |
-| `Avatar` / `TName` | `name src? size?: sm·md·lg` / `name sub? src?` | `.crm-tav` `.crm-tname` |
+| `Avatar` / `TName` | `name src? color? size?: sm·md·lg` / `name sub? src?` | `.crm-tav` `.crm-tname` |
 | `ListRow` | `icon? title body? time? end? href?` | `.crm-row .crm-ricon .crm-rbody .crm-rtime .crm-rend` |
 | `Toggle` (client) | `label checked?/defaultChecked? onChange? name? disabled?` — `role="switch"` | `.crm-toggle[aria-checked]` |
-| `Seg` | `items[{value,label,href?}] value label onChange? fill?` (links = server; buttons = from client) | `.crm-segctl` |
+| `Seg` | `items[{value,label,href?,title?}] value label onChange? fill?` (links = server; buttons = from client) | `.crm-segctl` |
 | `SectionTabs` | `items[{value,label,href}] value label` | `.crm-tabs .crm-tab` |
 | `Meter` | `value max? label valueText? showLabel? tone?` (role=progressbar) | `.crm-bar[data-tone] i` |
 | `BarChart` | `data[{label,value,hi?,title?}] label max? height?` | `.crm-barchart .crm-bc[data-hi]` |
 | `Legend` / `SegBar` | `items[{label,value?,color?}]` / `items[{value,color,title?}] label`; `CHART_COLOURS` | `.crm-legend …` `.crm-segbar` |
 | `Note` / `Eyebrow` / `Hairline` | `tone?: info·acc·warn icon?` / – / – | `.crm-note[data-tone]` `.crm-ey` `.crm-hairline` |
-| `TeamCard` | `name subtitle? src? stats?[{label,value}]` | `.crm-team-card` |
+| `TeamCard` | `name subtitle? src? color? stats?[{label,value}]` | `.crm-team-card` |
 | `Chat` / `Bubble` | `label` / `from: them·us time?` | `.crm-chat .crm-bub[data-from]` |
 | `QueueItem` | `header message? actions?` (Send = wa.me link) | `.crm-q-item .crm-qi .crm-qb .crm-hd .crm-msg` |
 | `GiftCardVisual` / `SiteFrame` / `ComingItem` | `top value bottom?` / `url children` / `icon? pill?` | `.crm-gift` `.crm-wstudio` `.crm-coming` |
@@ -52,9 +52,12 @@ Raw tables: `.crm-tbl-wrap` > `table.crm-tbl[data-stack=true]` (sticky th; ≤76
   via `errors.domain.word.*`). New service message → copy its exact text into `en/domain.ts` + Thai; unknown → English.
 - **Zod**: write keys as messages — `z.string().min(1, 'validation.required')`; `fromZod(err)` passes them through
   and `FieldError` renders `t.maybe(key) ?? text`. Field errors carry no params (use a fixed key).
+- **Shared pieces used outside the dashboard provider** (Puck editor, signup, platform) put their strings in `ui`
+  (`en-ui.ts` + `th/ui.ts`, e.g. `ui.media.*`): `useT()` outside the provider falls back to English `ui` only.
+- Confirm-then-run buttons: `useConfirmAction()` from `services/services-client` (toasts `resultText`).
 - **Never translate typed names** (clients, staff, services, products, rooms, custom roles, spa name, messages).
-- **Formatting**: dates/times/numbers/money via `fmt` (`date dateShort weekdayDate dateTime time monthYear number
-  percent aed`). `lib/utils` `formatAed/formatDate/formatDateTime` are English-only legacy: converted screens use `fmt`.
+- **Formatting**: dates/times/numbers/money via `fmt` (`date dateShort weekdayDate dateTime time monthYear monthShort
+  number percent aed`) — strings are built from our own name tables, so server and browser output match (hydration-safe). `lib/utils` `formatAed/formatDate/formatDateTime` are English-only legacy: converted screens use `fmt`.
 
 ## Per-screen conversion checklist
 1. Layout per crm-spec §5 for the page: `PageHeader` → `Grid`/`Card`/`Stat`/`Kpi`… from this kit; no new ad-hoc CSS

@@ -29,7 +29,7 @@ export const nav: Messages['nav'] = {
   packages: 'แพ็กเกจและบัตรของขวัญ',
   inventory: 'สินค้าคงคลัง',
   staff: 'พนักงาน',
-  access: 'สิทธิ์การเข้าถึงของทีม',
+  access: 'ทีม',
   documents: 'เอกสาร',
   socialPosts: 'โพสต์โซเชียล',
   analytics: 'การวิเคราะห์',

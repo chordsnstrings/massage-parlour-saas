@@ -30,4 +30,5 @@ export const common: Messages['common'] = {
   yesterday: 'เมื่อวาน',
   upload: 'อัปโหลด',
   replace: 'เปลี่ยน',
+  colourSwatch: 'สีที่ {n} จาก {total}',
 }

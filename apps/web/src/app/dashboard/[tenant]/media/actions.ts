@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { toMediaItem } from '@/components/media/types'
+import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -40,7 +41,7 @@ export async function listMediaAction(slug: string, filter: z.input<typeof Filte
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return { ok: false as const, error }
   const f = Filter.safeParse(filter)
-  if (!f.success) return { ok: false as const, error: 'Invalid filter' }
+  if (!f.success) return { ok: false as const, error: (await getT())('errors.generic') }
   const rows = await withTenant(ctx.tenant.id, (tx) =>
     listAssets(tx, { ...f.data, storedOnly: true, limit: 49 }),
   )

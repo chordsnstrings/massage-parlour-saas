@@ -2,6 +2,7 @@
 import { ImageIcon, Images, X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/i18n/client'
 import { MediaPicker } from './media-picker'
 import { sized } from './types'
 
@@ -22,6 +23,7 @@ export function ImageInput({
   hint?: string
   defaultValue?: string | null
 }) {
+  const t = useT()
   const [value, setValue] = useState(defaultValue ?? '')
   const [open, setOpen] = useState(false)
   return (
@@ -44,11 +46,11 @@ export function ImageInput({
             className="min-h-10"
             onClick={() => setOpen(true)}
           >
-            <Images /> {value ? 'Replace' : 'Choose from library'}
+            <Images /> {value ? t('ui.media.replace') : t('ui.media.chooseFromLibrary')}
           </Button>
           {value && (
             <Button type="button" variant="ghost" size="sm" className="min-h-10" onClick={() => setValue('')}>
-              <X /> Remove
+              <X /> {t('ui.media.remove')}
             </Button>
           )}
         </div>

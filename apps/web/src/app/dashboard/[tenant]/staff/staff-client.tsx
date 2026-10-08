@@ -3,36 +3,17 @@ import { enumLabel } from '@spa/core/i18n/labels'
 import { CalendarPlus, Moon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
-import { Fragment, useEffect, useRef, useState, useTransition } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { ImageInput } from '@/components/media/image-input'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, FieldError, SubmitButton, useFormCtx } from '@/components/ui/form'
 import { Checkbox, Input, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
-import { toast } from '@/components/ui/toast'
-import { resultText, useT } from '@/i18n/client'
-import type { ActionResult } from '@/lib/action'
+import { useT } from '@/i18n/client'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
-import { ChipCheckbox, ColorPicker, Toggle } from '../services/services-client'
+import { ChipCheckbox, ColorPicker, Toggle, useConfirmAction } from '../services/services-client'
 import { deleteShiftAction, deleteStaffAction, generateShiftsAction, saveStaffAction } from './actions'
-
-/** Optional confirm → run the action → toast its result in the viewer's language. */
-function useConfirmAction() {
-  const t = useT()
-  const [pending, start] = useTransition()
-  const run = (question: string | null, fn: () => Promise<ActionResult>, after?: () => void) => {
-    if (question && !window.confirm(question)) return
-    start(async () => {
-      const r = await fn()
-      if (r?.ok) {
-        if (r.message || r.key) toast.success(resultText(t, r) ?? '')
-        after?.()
-      } else if (r) toast.error(resultText(t, r) ?? t('errors.generic'))
-    })
-  }
-  return { pending, run }
-}
 
 type MemberOption = { id: string; name: string; email: string }
 type ServiceOption = { id: string; name: string; active: boolean }

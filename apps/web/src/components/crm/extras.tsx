@@ -7,6 +7,7 @@ export function TeamCard({
   name,
   subtitle,
   src,
+  color,
   stats,
   className,
   children,
@@ -14,13 +15,15 @@ export function TeamCard({
   name: string
   subtitle?: React.ReactNode
   src?: string | null
+  /** Avatar background (e.g. the staff calendar colour). */
+  color?: string | null
   stats?: { label: React.ReactNode; value: React.ReactNode }[]
   className?: string
   children?: React.ReactNode
 }) {
   return (
     <div className={cn('crm-card crm-team-card', className)}>
-      <Avatar name={name} src={src} size="lg" />
+      <Avatar name={name} src={src} color={color} size="lg" />
       <h4>{name}</h4>
       {subtitle && <div className="crm-role">{subtitle}</div>}
       {stats && stats.length > 0 && (

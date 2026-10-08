@@ -238,6 +238,26 @@ export default async function PayrollPage({
 
           <Card
             flush={Boolean(data.run)}
+            footer={
+              data.run &&
+              !finalised &&
+              lines.length > 0 && (
+                <ActionForm
+                  action={finaliseRunAction.bind(null, slug, data.run.id)}
+                  className="flex w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+                >
+                  <p className="crm-muted max-w-md text-sm">
+                    {t('payroll.run.finaliseNote', { amount: fmt.aed(total('netAed')) })}
+                  </p>
+                  <div className="flex items-end gap-3">
+                    <Field label={t('payroll.run.paidOn')} name="paidOn">
+                      <Input id="paidOn" name="paidOn" type="date" defaultValue={todayDubai()} />
+                    </Field>
+                    <SubmitButton>{t('payroll.run.finalise')}</SubmitButton>
+                  </div>
+                </ActionForm>
+              )
+            }
             title={t('payroll.run.title', { month: monthLabel(fmt, range.month) })}
             sub={
               data.run
@@ -287,24 +307,6 @@ export default async function PayrollPage({
                   data.people.length === 0 ? t('payroll.run.addTeamFirst') : t('payroll.run.nothingPosted')
                 }
               />
-            )}
-            {data.run && !finalised && lines.length > 0 && (
-              <div className="border-t px-[var(--crm-pad-card)] py-4">
-                <ActionForm
-                  action={finaliseRunAction.bind(null, slug, data.run.id)}
-                  className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
-                >
-                  <p className="crm-muted max-w-md text-sm">
-                    {t('payroll.run.finaliseNote', { amount: fmt.aed(total('netAed')) })}
-                  </p>
-                  <div className="flex items-end gap-3">
-                    <Field label={t('payroll.run.paidOn')} name="paidOn">
-                      <Input id="paidOn" name="paidOn" type="date" defaultValue={todayDubai()} />
-                    </Field>
-                    <SubmitButton>{t('payroll.run.finalise')}</SubmitButton>
-                  </div>
-                </ActionForm>
-              </div>
             )}
           </Card>
 

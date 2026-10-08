@@ -1,5 +1,5 @@
-import { bookingItems, bookings, clientPackages, clients, withTenant } from '@spa/db'
-import { and, arrayContains, asc, eq, gt, ilike, or, type SQL, sql } from 'drizzle-orm'
+import { bookings, clientPackages, clients, refunds, sales, withTenant } from '@spa/db'
+import { and, arrayContains, asc, eq, gt, ilike, inArray, or, type SQL, sql } from 'drizzle-orm'
 import { ClipboardList, Contact, EyeOff, SearchX } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -61,15 +61,24 @@ export default async function ClientsPage({
       .from(bookings)
       .groupBy(bookings.clientId)
       .as('v')
+    // Lifetime spend = completed (paid / refunded) sales minus their refunds — what the client actually paid.
+    const refunded = tx
+      .select({
+        saleId: refunds.saleId,
+        amount: sql<string>`sum(${refunds.amountAed})`.as('refunded'),
+      })
+      .from(refunds)
+      .groupBy(refunds.saleId)
+      .as('r')
     const spend = tx
       .select({
-        clientId: sql<string>`${bookings.clientId}`.as('spend_client'),
-        spend: sql<string>`sum(${bookingItems.priceAed})`.as('spend'),
+        clientId: sql<string>`${sales.clientId}`.as('spend_client'),
+        spend: sql<string>`sum(${sales.totalAed} - coalesce(${refunded.amount}, 0))`.as('spend'),
       })
-      .from(bookings)
-      .innerJoin(bookingItems, eq(bookingItems.bookingId, bookings.id))
-      .where(eq(bookings.status, 'completed'))
-      .groupBy(bookings.clientId)
+      .from(sales)
+      .leftJoin(refunded, eq(refunded.saleId, sales.id))
+      .where(inArray(sales.status, ['paid', 'refunded']))
+      .groupBy(sales.clientId)
       .as('s')
     const activePkg = and(eq(clientPackages.status, 'active'), gt(clientPackages.expiresAt, sql`now()`))
     const pkgs = tx

@@ -129,6 +129,7 @@ export default async function StaffPage({ params }: { params: Promise<{ tenant: 
                     className="h-full transition-[transform,border-color] duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                     name={p.displayName}
                     src={p.photoUrl}
+                    color={p.color}
                     subtitle={`${gender} · ${t('staff.servicesCount', { count: n })}`}
                     stats={[
                       {

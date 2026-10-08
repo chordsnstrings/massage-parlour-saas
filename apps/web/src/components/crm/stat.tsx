@@ -21,7 +21,7 @@ export function Stat({
   className?: string
 }) {
   return (
-    <div className={cn('crm-stat', className)}>
+    <div className={cn('crm-stat', className)} data-icon={icon ? true : undefined}>
       <div className="crm-lab">
         {icon}
         {label}
@@ -72,7 +72,7 @@ export function Kpi({
   return (
     <div className={cn('crm-kpi', className)}>
       <div className="crm-top">
-        {icon && <span className="crm-ic">{icon}</span>}
+        {icon ? <span className="crm-ic">{icon}</span> : null}
         {label}
       </div>
       <div className="crm-row1">

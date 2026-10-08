@@ -1,4 +1,6 @@
 // apps/web has no unit runner, so the web-side DomainError lookup is tested here (it only imports @spa/core/i18n).
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { domainErrorRef } from '../../../apps/web/src/i18n/domain-errors'
 import { translator } from '../src/i18n'
@@ -23,7 +25,33 @@ const SAMPLES = [
   'serenityspa.ae is no longer available',
   'Too long for an Instagram DM (1200/1000 bytes; Arabic letters count as 2) — shorten it a little.',
   'Unbalanced entry (10 ≠ 12)',
+  'Branch not found',
+  'That business day has not started yet',
+  'Maya is not free right now',
 ]
+
+// Every literal `new DomainError('…')` / template in services + web (`${…}` filled with a sample) must be mapped.
+// Messages built elsewhere (variables, plural ternaries) are covered by SAMPLES above.
+function thrownLiterals(): string[] {
+  const found: string[] = []
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (/\.tsx?$/.test(p) && !p.endsWith('.test.ts')) {
+        const src = readFileSync(p, 'utf8')
+        for (const m of src.matchAll(/new DomainError\(\s*(['"`])((?:\\.|(?!\1)[\s\S])*?)\1\s*[,)]/g)) {
+          const raw = m[2] as string
+          if (m[1] === '`' && /\$\{[^}]*\?/.test(raw)) continue // ternary inside: plural form, sampled above
+          found.push(raw.replace(/\$\{[^}]*\}/g, '3').replace(/\\(.)/g, '$1'))
+        }
+      }
+    }
+  }
+  walk(join(__dirname, '../../services/src'))
+  walk(join(__dirname, '../../../apps/web/src'))
+  return found
+}
 
 describe('DomainError → catalogue key', () => {
   const en = translator('en')
@@ -36,6 +64,12 @@ describe('DomainError → catalogue key', () => {
     expect(th.has(ref.key)).toBe(true)
     expect(en(ref.key, ref.params)).toBe(message)
     expect(th(ref.key, ref.params)).not.toBe(message)
+  })
+
+  it('maps every literal DomainError thrown by services and web actions', () => {
+    const literals = thrownLiterals()
+    expect(literals.length).toBeGreaterThan(100)
+    expect(literals.filter((m) => !domainErrorRef(m))).toEqual([])
   })
 
   it('translates status words inside sentences', () => {

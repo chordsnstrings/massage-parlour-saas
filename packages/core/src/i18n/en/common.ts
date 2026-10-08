@@ -28,4 +28,5 @@ export const common = {
   yesterday: 'Yesterday',
   upload: 'Upload',
   replace: 'Replace',
+  colourSwatch: 'Colour {n} of {total}',
 } as const

@@ -3,6 +3,7 @@ import { CheckCircle2, CircleAlert, ImageUp, Loader2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/i18n/client'
 import { ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { ACCEPT, formatBytes, MAX_UPLOAD_MB, type MediaItem } from './types'
@@ -21,7 +22,12 @@ const OK_TYPES = new Set(ACCEPT.split(','))
 const CONCURRENCY = 2
 
 /** One file → POST /files/upload with progress (fetch can't report upload progress; XHR can). */
-function send(slug: string, file: File, onProgress: (p: number) => void) {
+function send(
+  slug: string,
+  file: File,
+  onProgress: (p: number) => void,
+  text: { failed: string; network: string },
+) {
   return new Promise<MediaItem>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     // The tenant goes in the query so the server checks access before reading the body.
@@ -33,9 +39,9 @@ function send(slug: string, file: File, onProgress: (p: number) => void) {
     xhr.onload = () => {
       const body = xhr.response as { ok?: boolean; error?: string; asset?: MediaItem } | null
       if (xhr.status === 200 && body?.ok && body.asset) resolve(body.asset)
-      else reject(new Error(body?.error ?? 'Upload failed — please try again.'))
+      else reject(new Error(body?.error ?? text.failed))
     }
-    xhr.onerror = () => reject(new Error('Network error — check your connection.'))
+    xhr.onerror = () => reject(new Error(text.network))
     const fd = new FormData()
     fd.set('file', file)
     xhr.send(fd)
@@ -47,12 +53,15 @@ export function useUploads(
   slug: string,
   opts: { onUploaded?: (asset: MediaItem) => void; onDrained?: () => void } = {},
 ) {
+  const t = useT()
   const [uploads, setUploads] = useState<Upload[]>([])
   const queue = useRef<{ key: string; file: File }[]>([])
   const active = useRef(0)
   const handlers = useRef(opts)
+  const text = useRef({ failed: '', network: '' })
   useEffect(() => {
     handlers.current = opts
+    text.current = { failed: t('ui.media.uploadFailed'), network: t('ui.media.networkError') }
   })
 
   const patch = useCallback((key: string, p: Partial<Upload>) => {
@@ -64,7 +73,7 @@ export function useUploads(
       const job = queue.current.shift()!
       active.current++
       patch(job.key, { status: 'uploading' })
-      send(slug, job.file, (progress) => patch(job.key, { progress }))
+      send(slug, job.file, (progress) => patch(job.key, { progress }), text.current)
         .then((asset) => {
           patch(job.key, { status: 'done', progress: 1, asset })
           handlers.current.onUploaded?.(asset)
@@ -86,10 +95,11 @@ export function useUploads(
         const base = { key, name: file.name, size: file.size, progress: 0 }
         // An empty type (unknown to the OS) still goes up — the server sniffs the real format.
         if (file.type && !OK_TYPES.has(file.type)) {
-          const error = file.type === 'image/svg+xml' ? 'SVG isn’t supported' : 'Not a supported image'
+          const error =
+            file.type === 'image/svg+xml' ? t('ui.media.svgUnsupported') : t('ui.media.notSupported')
           next.push({ ...base, status: 'error', error })
         } else if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
-          next.push({ ...base, status: 'error', error: `Larger than ${MAX_UPLOAD_MB} MB` })
+          next.push({ ...base, status: 'error', error: t('ui.media.tooLarge', { size: MAX_UPLOAD_MB }) })
         } else {
           next.push({ ...base, status: 'queued' })
           queue.current.push({ key, file })
@@ -98,7 +108,7 @@ export function useUploads(
       setUploads((list) => [...list.filter((u) => u.status !== 'done'), ...next].slice(-24))
       pump()
     },
-    [pump],
+    [pump, t],
   )
 
   const dismiss = useCallback((key: string) => {
@@ -119,11 +129,12 @@ export function Dropzone({
   compact?: boolean
   className?: string
 }) {
+  const t = useT()
   const [over, setOver] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   return (
     <section
-      aria-label="Drop zone"
+      aria-label={t('ui.media.dropZone')}
       onDragOver={(e) => {
         e.preventDefault()
         setOver(true)
@@ -157,11 +168,10 @@ export function Dropzone({
         <ImageUp className="size-5" strokeWidth={1.5} />
       </motion.div>
       <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-[15px] font-medium">{over ? 'Drop to upload' : 'Drop images here'}</p>
-        <p className="text-sm text-muted">
-          JPG, PNG, WebP, AVIF or GIF up to {MAX_UPLOAD_MB} MB — resized and optimised for the web
-          automatically.
+        <p className="text-[15px] font-medium">
+          {over ? t('ui.media.dropToUpload') : t('ui.media.dropHere')}
         </p>
+        <p className="text-sm text-muted">{t('ui.media.formats', { size: MAX_UPLOAD_MB })}</p>
       </div>
       <Button
         type="button"
@@ -169,7 +179,7 @@ export function Dropzone({
         className="min-h-11 sm:min-h-10"
         onClick={() => input.current?.click()}
       >
-        Choose files
+        {t('ui.media.chooseFiles')}
       </Button>
       <input
         ref={input}
@@ -178,7 +188,7 @@ export function Dropzone({
         multiple
         tabIndex={-1}
         className="sr-only"
-        aria-label="Upload images"
+        aria-label={t('ui.media.uploadImages')}
         onChange={(e) => {
           if (e.target.files?.length) onFiles(e.target.files)
           e.target.value = ''
@@ -190,8 +200,9 @@ export function Dropzone({
 
 /** Per-file progress rows. */
 export function UploadList({ uploads, onDismiss }: { uploads: Upload[]; onDismiss: (key: string) => void }) {
+  const t = useT()
   return (
-    <ul className="space-y-2" aria-label="Uploads">
+    <ul className="space-y-2" aria-label={t('ui.media.uploads')}>
       <AnimatePresence initial={false}>
         {uploads.map((u) => (
           <motion.li
@@ -219,12 +230,15 @@ export function UploadList({ uploads, onDismiss }: { uploads: Upload[]; onDismis
                   {u.status === 'error'
                     ? u.error
                     : u.status === 'done'
-                      ? `Uploaded · ${formatBytes(u.asset?.bytes)} WebP`
+                      ? t('ui.media.uploaded', { size: formatBytes(u.asset?.bytes) })
                       : u.status === 'queued'
-                        ? 'Waiting…'
+                        ? t('ui.media.waiting')
                         : u.progress >= 0.97
-                          ? 'Optimising…'
-                          : `${Math.round(u.progress * 100)}% of ${formatBytes(u.size)}`}
+                          ? t('ui.media.optimising')
+                          : t('ui.media.progress', {
+                              percent: `${Math.round(u.progress * 100)}%`,
+                              size: formatBytes(u.size),
+                            })}
                 </p>
               </div>
               {u.status !== 'uploading' && u.status !== 'queued' && (
@@ -232,7 +246,7 @@ export function UploadList({ uploads, onDismiss }: { uploads: Upload[]; onDismis
                   type="button"
                   onClick={() => onDismiss(u.key)}
                   className="grid size-9 place-items-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-fg"
-                  aria-label={`Dismiss ${u.name}`}
+                  aria-label={t('ui.media.dismissFile', { name: u.name })}
                 >
                   <X className="size-4" strokeWidth={1.5} />
                 </button>

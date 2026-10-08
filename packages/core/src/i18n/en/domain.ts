@@ -165,4 +165,25 @@ export const domain = {
   orderTooMany: 'You already have three open requests — wait for them first.',
   orderNotAvailable: '{domain} is not available',
   orderNoLongerAvailable: '{domain} is no longer available',
+  // Web actions (apps/web throws these directly)
+  expenseNotFound: 'Expense not found',
+  roomNotFound: 'Room not found',
+  clientNotFound: 'Client not found',
+  clientNotFoundDot: 'Client not found.',
+  globalSectionNotFound: 'Global section not found',
+  segmentGone: 'That segment no longer exists',
+  therapistNotFreeNow: '{name} is not free right now',
+  noTherapistFreeNow: 'No therapist is free for this service right now',
+  onlyDraftsEditable: 'Only drafts can be edited',
+  segmentNobody:
+    'Nobody in this segment can be messaged right now (opted out, or already messaged this week).',
+  intakeFormFirst: 'Set up an intake form in Settings first.',
+  branchFirst: 'Set up a branch first',
+  monthFinalised: 'This month is already finalised.',
+  businessDayNotStarted: 'That business day has not started yet',
+  layoutNeedsDesign: "You can edit text and images, but layout changes need the 'Edit design' permission.",
+  restoreNeedsDesign:
+    "That version has a different layout — restoring it needs the 'Edit design' permission.",
+  globalLiveNeedsPublish:
+    "This global section is on your live site — saving it needs the 'Publish' permission.",
 } as const

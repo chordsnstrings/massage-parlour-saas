@@ -28,7 +28,7 @@ export const nav = {
   packages: 'Packages & gifts',
   inventory: 'Inventory',
   staff: 'Staff',
-  access: 'Team access',
+  access: 'Team',
   documents: 'Documents',
   socialPosts: 'Social posts',
   analytics: 'Analytics',

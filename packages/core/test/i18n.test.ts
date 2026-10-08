@@ -123,5 +123,22 @@ describe('format', () => {
     expect(f.time(at)).toBe('14:05')
     expect(f.percent(0.62)).toBe('62%')
     expect(f.aed(24000)).toMatch(/^AED\s24,000$/)
+    expect(f.weekdayDate(at)).toBe('พฤ. 8 ต.ค.')
+    expect(f.dateTime(at)).toBe('8 ต.ค. 14:05')
+    expect(f.monthShort(at)).toBe('ต.ค.')
+  })
+  it('builds every string itself (same output in Node and browsers, whatever their ICU data)', () => {
+    const f = createFormat('en')
+    expect(f.weekdayDate(at)).toBe('Thu 8 Oct')
+    expect(f.dateShort('2026-09-30T21:00:00Z')).toBe('1 Oct') // Dubai is UTC+4
+    expect(f.date('2026-09-15T08:00:00Z')).toBe('15 Sep 2026') // not ICU's "Sept"
+    expect(f.monthShort(at)).toBe('Oct')
+    expect(f.monthYear(at)).toBe('October 2026')
+    expect(f.time('2026-10-07T20:00:00Z')).toBe('00:00')
+    expect(f.dateTime('2026-10-07T20:30:00Z')).toBe('8 Oct, 00:30')
+    expect(f.number(12345.5)).toBe('12,345.5')
+    expect(f.aed(-50)).toBe('-AED\u00a050')
+    expect(f.aed(0.1)).toBe('AED\u00a00.10')
+    expect(f.aed(-0.001)).toBe('AED\u00a00')
   })
 })

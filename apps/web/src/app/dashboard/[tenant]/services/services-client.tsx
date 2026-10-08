@@ -23,7 +23,7 @@ import { ROOM_TYPES, SWATCHES } from './constants'
 
 type Option = { id: string; name: string }
 
-/** Runs a server action from a button with a confirm prompt and toasts. */
+/** Optional confirm → run the action → toast its result in the viewer's language (shared by services + staff). */
 export function useConfirmAction() {
   const [pending, start] = useTransition()
   const t = useT()
@@ -32,9 +32,9 @@ export function useConfirmAction() {
     start(async () => {
       const r = await fn()
       if (r?.ok) {
-        if (r.message) toast.success(resultText(t, r) ?? r.message)
+        if (r.message || r.key) toast.success(resultText(t, r) ?? '')
         after?.()
-      } else if (r) toast.error(resultText(t, r) ?? r.error)
+      } else if (r) toast.error(resultText(t, r) || t('errors.generic'))
     })
   }
   return { pending, run }
@@ -79,10 +79,12 @@ export function ChipCheckbox({
 }
 
 export function ColorPicker({ name, defaultValue }: { name: string; defaultValue?: string | null }) {
+  const t = useT()
   const initial = defaultValue ?? SWATCHES[0]
   return (
+    // The surrounding <fieldset><legend> names the group.
     <div className="flex flex-wrap gap-2" role="radiogroup">
-      {SWATCHES.map((c) => (
+      {SWATCHES.map((c, i) => (
         <label key={c} className="relative grid size-11 cursor-pointer place-items-center sm:size-9">
           <input
             type="radio"
@@ -90,7 +92,7 @@ export function ColorPicker({ name, defaultValue }: { name: string; defaultValue
             value={c}
             defaultChecked={c === initial}
             className="peer sr-only"
-            aria-label={c}
+            aria-label={t('common.colourSwatch', { n: i + 1, total: SWATCHES.length })}
           />
           <span
             className="size-7 rounded-full ring-offset-2 ring-offset-surface transition-transform peer-checked:ring-2 peer-checked:ring-fg/70 peer-focus-visible:ring-2 peer-focus-visible:ring-accent hover:scale-110 motion-reduce:transition-none"
