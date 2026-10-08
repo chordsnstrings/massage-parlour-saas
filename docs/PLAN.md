@@ -871,6 +871,13 @@ until `spamanagement.ae` is registered.
   - **Logo**: `tenants.logo_file_id` → public `stored_files` (purpose `logo`, 512 px WebP), optional at sign-up and in
     Settings; sidebar falls back to initials on the accent gradient.
   - **Thai copy** is written to read naturally but needs a native Thai speaker's review before launch.
+- **Phase 2 ✅ (2026-10-08)** — every spa-dashboard screen on the crm kit (`components/crm`, `crm-kit.css`, guide
+  `docs/design/phase2-kit.md`) and translated EN + TH (per-namespace catalogue `packages/core/src/i18n/{en,th}/<ns>.ts`;
+  enum/permission labels; services' English DomainErrors mapped web-side in `apps/web/src/i18n/domain-errors.ts`, test fails
+  on unmapped messages; deterministic `fmt` for hydration safety). Design elements without a data source were omitted,
+  not faked (activity timeline, journey stages, week/month calendar, ratings, deposits, IG followers, AI chat stats,
+  FTA export, 2FA policy, mask-phones toggle, audit viewer) — they need services (Phase 3 / §14.7–14.8). Verified: full
+  e2e 36/36 on the production build. Thai copy still needs native review.
 
 ### 14.7 Work split (owner, 2026-10-08)
 - Track A (Claude): spa dashboard UI (`apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,

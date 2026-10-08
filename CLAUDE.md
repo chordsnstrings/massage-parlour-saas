@@ -1,7 +1,7 @@
 # spamanagement.ae — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 ✅, Phase 2 (every screen) next (§14.6);
+Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
 fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
