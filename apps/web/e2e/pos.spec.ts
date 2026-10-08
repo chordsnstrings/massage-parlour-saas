@@ -48,6 +48,24 @@ test('reception checks out a booking with split payment + tip, then closes the d
     )
   })
 
+  await test.step('refund by line: pick the quantity, see the total, record it', async () => {
+    await page.getByRole('button', { name: 'Refund', exact: true }).click()
+    const sheet = page.getByRole('dialog', { name: 'Record a refund' })
+    const qty = sheet.getByLabel(/^Refund quantity for Swedish massage/)
+    await expect(sheet.getByText(/1 of 1 refundable · AED\s*350 each/)).toBeVisible()
+    await expect(sheet.getByTestId('refund-total')).toHaveText(/AED\s*0/)
+    await qty.fill('1')
+    await expect(sheet.getByTestId('refund-total')).toHaveText(/AED\s*350/)
+    // Card back to the terminal so the cash count below is unchanged.
+    await sheet.getByLabel('Paid back by').selectOption('card_terminal')
+    await sheet.getByLabel('Reason').fill('Client felt unwell')
+    await sheet.getByRole('button', { name: 'Record refund' }).click()
+    const receipt = page.locator('#receipt')
+    await expect(receipt.getByText(/Card terminal · Client felt unwell/)).toBeVisible()
+    await expect(receipt.getByText('Refunded', { exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Refund', exact: true })).toHaveCount(0)
+  })
+
   await test.step('sales list shows today’s totals', async () => {
     await page.goto(`${app}/${slug}/sales`)
     await expect(page.getByRole('heading', { name: 'Sales', level: 1 })).toBeVisible()

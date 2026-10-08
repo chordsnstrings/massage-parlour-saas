@@ -355,7 +355,7 @@ packages/config   tsconfig, eslint, prettier
 - `sales` (branch, client?, booking?, number (sequential per tenant/year), invoice_kind simplified|full, subtotal, vat, total, status, business_date)
 - `sale_lines` (kind service|product|package|gift_card|membership, ref_id, qty, unit_price, vat_rate, discount, staff)
 - `payments` (sale, method cash|card_terminal|bank_transfer|gift_card|package_credit|other, amount, reference)
-- `tips` (staff, sale, amount, method) · `refunds` · `promo_codes`
+- `tips` (staff, sale, amount, method) · `refunds` + `refund_lines` (per sale line; prepaid: per card/package) · `promo_codes`
 - `packages` (definition) · `client_packages` (balances, expires_at) · `package_redemptions`
 - `gift_cards` (code, value, balance, expires_at) · `gift_card_txns`
 - `membership_plans` · `client_memberships`
@@ -840,7 +840,8 @@ CLAUDE.md). Rules for the work:
 - Existing ledger rows are never edited; corrections are new entries.
 - When an item ships, mark it ✅ here.
 
-**F1. Refunds post to the wrong accounts.** ✅ Fixed (prorated from the sale entry; legacy fallback 4000/2000; no historical corrections).
+**F1. Refunds post to the wrong accounts.** ✅ Fixed (prorated from the sale entry; no historical corrections).
+  Superseded by F2's line-level postings (each refunded line debits the accounts its sale line credited).
 - Where: `packages/services/src/ledger.ts` `postRefund`, called from `sales.ts` `refundSale`.
 - Problem: it always debits 4000 + 2000. Retail refunds belong in 4100. Prepaid lines (2100/2110) carried no VAT.
 - Planned fix:
@@ -851,15 +852,23 @@ CLAUDE.md). Rules for the work:
 - Tests: services tests for retail-only, mixed and prepaid sales, checking that each account nets out correctly;
   e2e `pos.spec`, `pos-prepaid.spec`.
 
-**F2. Refunds don't return stock, reverse COGS or reverse commissions.**
-- Where: `packages/services/src/sales.ts` `refundSale`.
-- Problem: void does all three; refund does none of them.
-- Planned fix:
-  - When a refund brings the remaining balance to 0, run the same reversals as void: `returnSoldStock`, reverse
-    `cogs`, offset commissions.
-  - Also void or reduce gift cards and packages that were sold on the sale.
-  - Partial refunds: **owner decision**, see below.
-- Tests: services `sales` and `p2` tests; e2e `pos-prepaid.spec`.
+**F2. Refunds don't return stock, reverse COGS or reverse commissions.** ✅ Fixed (line-level refunds, migration 0015).
+- Where: `packages/services/src/sales.ts` `refundSale` / `refundOptions`; `ledger.ts` `postRefund`; schema
+  `refund_lines`; sale page refund sheet.
+- Shipped:
+  - Staff pick sale lines + quantities (max = line qty − already refunded). Each unit's amount is its share of the
+    line's net paid amount (`line_total_aed`, which already carries line + sale-level discounts), in fils, with
+    cumulative rounding so a full line refund adds up exactly. VAT, COGS and commission use the same shares.
+  - Ledger per line, mirroring `postSale`: 4000/4100 net + 2000 VAT, 2100/2110 no VAT; credit the refund method's
+    account. Retail goes back on the shelf (`returnSoldStock`, ref `refund`) and a `refund_cogs` entry
+    (1200 Dr / 5000 Cr) reverses its cost; commissions get negative `commission_entries` dated the refund day plus a
+    `refund_commission` entry (2300 Dr / 6010 Cr). Tips are never refunded.
+  - Prepaid lines: one unit per gift card / package (linked by new `sale_line_id`; older ones match by sale and
+    package definition). Only the unused value is refundable (card balance, or package remaining value, as a
+    share of what was paid); the card is voided (`gift_card_txns` `refund`) or the package set `refunded`.
+    Fully used ones can't be refunded.
+  - The sale becomes `refunded` when nothing refundable is left. The sale row is locked during a refund.
+- Tests: services `sales` (F2 block) and `ledger`; e2e `pos.spec`, `pos-prepaid.spec`.
 
 **F3. A booking can be checked out twice.** ✅ Fixed (booking lock + `sales_booking_once`, migration 0014).
 - Where: `packages/services/src/sales.ts` `createSale` (check-then-insert); schema `commerce.ts`.
@@ -895,8 +904,10 @@ CLAUDE.md). Rules for the work:
   `withTenant`.
 - Tests: `apps/worker/test/jobs.test.ts`.
 
-**Owner decisions needed before F1/F2:**
-- **Past refunds:** should already-misposted refunds get one-off correcting entries?
-- **Partial refunds:** pick one.
-  - Line-level: choose lines and quantities; stock, COGS and commission are handled per line. Recommended.
-  - Amount-only: prorate commission; no stock return.
+**Owner decisions for F1/F2 (2026-10-08):**
+- **Partial refunds are line-level:** staff pick sale lines and quantities; stock, COGS and commission are reversed
+  for exactly those lines and quantities. The amount-only flow is gone.
+- **Prepaid sold on the sale:** only the unused value of a gift card / package is refundable, then it is voided /
+  cancelled. Refunding a used one's full price is blocked.
+- **Past refunds** posted before F1 stay as they are (no correcting entries). Amount-only refunds recorded before
+  F2 have no `refund_lines`; they still count against the sale total.

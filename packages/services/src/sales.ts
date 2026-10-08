@@ -8,14 +8,18 @@ import {
   commissionEntries,
   counters,
   dayCloses,
+  giftCards,
+  giftCardTxns,
   packageRedemptions,
   payments,
   products,
+  refundLines,
   refunds,
   saleLines,
   sales,
   serviceVariants,
   staff,
+  stockMovements,
   type Tx,
   tips,
 } from '@spa/db'
@@ -323,6 +327,7 @@ export async function createSale(tx: Tx, input: NewSale) {
           clientId,
           definitionId: l.refId,
           saleId: sale!.id,
+          saleLineId: line.id,
         })
     if (l.kind === 'gift_card')
       for (let n = 0; n < l.qty; n++)
@@ -330,6 +335,7 @@ export async function createSale(tx: Tx, input: NewSale) {
           tenantId: input.tenantId,
           amountAed: num(line.lineTotalAed) / l.qty,
           saleId: sale!.id,
+          saleLineId: line.id,
           purchaserClientId: clientId,
           recipientName: l.description.replace(/^Gift card\s*[—-]?\s*/i, '') || undefined,
           createdBy: input.createdBy,
@@ -492,12 +498,147 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string; 
   return updated!
 }
 
-/** Records money given back (partial or full) on today's business date and posts the reversal to the ledger. */
+/** Fils share of `total` for `count` of `qty` units; unit amounts are differences, so a full refund adds up exactly. */
+const shareOf = (total: number, count: number, qty: number) => Math.round((total * count) / qty)
+
+type PrepaidUnit = {
+  type: 'gift_card' | 'package'
+  id: string
+  /** Liability still owed on it (balance / remaining value), fils. */
+  remaining: number
+  /** What it was issued for (initial balance / price), fils. */
+  initial: number
+}
+
+/** Another line on the sale that legacy (unlinked) cards/packages could belong to. */
+const hasOtherLine = (lines: (typeof saleLines.$inferSelect)[], line: typeof saleLines.$inferSelect) =>
+  lines.some(
+    (l) => l.id !== line.id && l.kind === line.kind && (l.kind === 'gift_card' || l.refId === line.refId),
+  )
+
+type RefundPlanLine = {
+  line: typeof saleLines.$inferSelect
+  refundedQty: number
+  /** Fils of the next units that can still be refunded, in refund order. */
+  units: { fils: number; prepaid?: PrepaidUnit }[]
+}
+
+/**
+ * What can still be refunded on each line of a sale. Ordinary lines: each unit's share of the line's net paid
+ * amount (line + sale-level discounts are already spread into `line_total_aed`). Prepaid lines: one unit per
+ * gift card / package still active, worth its unused share of what was paid, most unused first; used-up ones
+ * are left out. `lock` row-locks the cards and packages for a refund.
+ */
+async function refundPlan(tx: Tx, sale: typeof sales.$inferSelect, lock = false) {
+  const lines = await tx.select().from(saleLines).where(eq(saleLines.saleId, sale.id))
+  const done = lines.length
+    ? await tx
+        .select({ lineId: refundLines.saleLineId, qty: sql<number>`sum(${refundLines.qty})::int` })
+        .from(refundLines)
+        .where(
+          inArray(
+            refundLines.saleLineId,
+            lines.map((l) => l.id),
+          ),
+        )
+        .groupBy(refundLines.saleLineId)
+    : []
+  const refundedQty = new Map(done.map((d) => [d.lineId, d.qty]))
+  const hasPrepaid = lines.some((l) => PREPAID.has(l.kind))
+  const cardQuery = tx.select().from(giftCards).where(eq(giftCards.saleId, sale.id))
+  const pkgQuery = tx.select().from(clientPackages).where(eq(clientPackages.saleId, sale.id))
+  // Sequential: one transaction connection runs one query at a time.
+  const cards = hasPrepaid ? await (lock ? cardQuery.for('update') : cardQuery) : []
+  const pkgs = hasPrepaid ? await (lock ? pkgQuery.for('update') : pkgQuery) : []
+
+  return lines.map((line): RefundPlanLine => {
+    const refunded = refundedQty.get(line.id) ?? 0
+    const paid = fils(num(line.lineTotalAed))
+    const left = Math.max(0, line.qty - refunded)
+    if (paid <= 0 || left === 0) return { line, refundedQty: refunded, units: [] }
+    if (!PREPAID.has(line.kind)) {
+      const units = Array.from({ length: left }, (_, i) => ({
+        fils: shareOf(paid, refunded + i + 1, line.qty) - shareOf(paid, refunded + i, line.qty),
+      }))
+      return { line, refundedQty: refunded, units }
+    }
+    // Cards/packages sold before `sale_line_id` existed match by sale (and package definition).
+    const instruments: PrepaidUnit[] =
+      line.kind === 'gift_card'
+        ? cards
+            .filter((c) => c.saleLineId === line.id || (!c.saleLineId && !hasOtherLine(lines, line)))
+            .filter((c) => c.status === 'active')
+            .map((c) => ({
+              type: 'gift_card' as const,
+              id: c.id,
+              remaining: fils(num(c.balanceAed)),
+              initial: fils(num(c.initialAed)),
+            }))
+        : pkgs
+            .filter(
+              (p) =>
+                p.saleLineId === line.id ||
+                (!p.saleLineId && p.definitionId === line.refId && !hasOtherLine(lines, line)),
+            )
+            .filter((p) => p.status === 'active')
+            .map((p) => ({
+              type: 'package' as const,
+              id: p.id,
+              remaining: fils(num(p.remainingValueAed)),
+              initial: fils(num(p.pricePaidAed)),
+            }))
+    const ratio = (u: PrepaidUnit) => (u.initial > 0 ? Math.min(1, u.remaining / u.initial) : 0)
+    const units = instruments
+      .filter((u) => ratio(u) > 0)
+      .sort((a, b) => ratio(b) - ratio(a))
+      .slice(0, left)
+      .map((u, i) => {
+        const unitPaid = shareOf(paid, refunded + i + 1, line.qty) - shareOf(paid, refunded + i, line.qty)
+        return { fils: Math.min(unitPaid, Math.round(unitPaid * ratio(u))), prepaid: u }
+      })
+      .filter((u) => u.fils > 0)
+    return { line, refundedQty: refunded, units }
+  })
+}
+
+export type RefundOptions = Awaited<ReturnType<typeof refundOptions>>
+
+/**
+ * For the refund sheet: per line, how many units can still be refunded and what each would give back (AED,
+ * in refund order), plus the sale-wide amount still refundable (refunds recorded before line-level refunds
+ * count against it).
+ */
+export async function refundOptions(tx: Tx, saleId: string) {
+  const sale = await saleRow(tx, saleId)
+  const closed = sale.status === 'void' || sale.status === 'refunded'
+  const plan = await refundPlan(tx, sale)
+  const remaining = closed ? 0 : fils(num(sale.totalAed)) - (await refundedFils(tx, sale.id))
+  return {
+    remainingAed: Math.max(0, remaining) / 100,
+    lines: plan.map((p) => ({
+      saleLineId: p.line.id,
+      kind: p.line.kind,
+      description: p.line.description,
+      qty: p.line.qty,
+      refundedQty: p.refundedQty,
+      prepaid: PREPAID.has(p.line.kind),
+      unitsAed: closed ? [] : p.units.map((u) => u.fils / 100),
+    })),
+  }
+}
+
+/**
+ * Records money given back for chosen sale lines and quantities, on today's business date. Ordinary lines
+ * give back their net paid share (VAT included); retail goes back on the shelf with its cost of sales
+ * reversed; commissions on the lines are offset pro rata. Prepaid lines give back only the unused value of
+ * each gift card / package, which is then voided / cancelled. Tips are not refunded. The sale becomes
+ * `refunded` once nothing is left to refund.
+ */
 export async function refundSale(
   tx: Tx,
   input: {
     saleId: string
-    amountAed: number
+    lines: { saleLineId: string; qty: number }[]
     method: PosMethod
     reason: string
     createdBy?: string | null
@@ -508,13 +649,43 @@ export async function refundSale(
   if (reason.length < 3) throw new DomainError('Give a reason for the refund')
   if (!(POS_METHODS as readonly string[]).includes(input.method))
     throw new DomainError('Unknown refund method')
-  const sale = await saleRow(tx, input.saleId)
+  // Lock the sale so concurrent refunds of it serialise on what is left.
+  const [sale] = await tx.select().from(sales).where(eq(sales.id, input.saleId)).for('update')
+  if (!sale) throw new DomainError('Sale not found', 'not_found')
   if (sale.status === 'void') throw new DomainError('This sale was voided')
-  const amount = fils(input.amountAed)
-  if (amount <= 0) throw new DomainError('Refund amount must be more than zero')
-  const already = await refundedFils(tx, sale.id)
-  const remaining = fils(num(sale.totalAed)) - already
-  if (amount > remaining) throw new DomainError(`At most AED ${aed(remaining)} can be refunded`)
+  if (sale.status === 'refunded') throw new DomainError('This sale has already been refunded')
+  const wanted = input.lines.filter((l) => l.qty !== 0)
+  if (!wanted.length) throw new DomainError('Choose what to refund')
+  if (new Set(wanted.map((l) => l.saleLineId)).size !== wanted.length)
+    throw new DomainError('Each item can be listed once')
+  const plan = await refundPlan(tx, sale, true)
+  const byId = new Map(plan.map((p) => [p.line.id, p]))
+
+  const picked = wanted.map((w) => {
+    const p = byId.get(w.saleLineId)
+    if (!p) throw new DomainError('That item is not on this sale', 'not_found')
+    if (!Number.isInteger(w.qty) || w.qty < 1) throw new DomainError('Quantity must be at least 1')
+    if (w.qty > p.units.length)
+      throw new DomainError(
+        p.units.length === 0
+          ? PREPAID.has(p.line.kind) && p.refundedQty < p.line.qty && num(p.line.lineTotalAed) > 0
+            ? `“${p.line.description}” has been used — nothing unused is left to refund`
+            : `Nothing is left to refund on “${p.line.description}”`
+          : `At most ${p.units.length} of “${p.line.description}” can be refunded`,
+      )
+    const units = p.units.slice(0, w.qty)
+    const amount = units.reduce((s, u) => s + u.fils, 0)
+    const lineVat = PREPAID.has(p.line.kind) ? 0 : fils(includedVat(num(p.line.lineTotalAed), VAT_RATE_PCT))
+    const vat = PREPAID.has(p.line.kind)
+      ? 0
+      : shareOf(lineVat, p.refundedQty + w.qty, p.line.qty) - shareOf(lineVat, p.refundedQty, p.line.qty)
+    return { ...p, qty: w.qty, units, amount, vat }
+  })
+  const amount = picked.reduce((s, p) => s + p.amount, 0)
+  // Refunds recorded before line-level refunds have no lines; the sale total still caps everything.
+  const remaining = fils(num(sale.totalAed)) - (await refundedFils(tx, sale.id))
+  if (amount > remaining) throw new DomainError(`At most AED ${aed(Math.max(0, remaining))} can be refunded`)
+
   const date = await branchBusinessDate(tx, sale.branchId, input.now)
   const [refund] = await tx
     .insert(refunds)
@@ -529,17 +700,179 @@ export async function refundSale(
       createdBy: input.createdBy ?? null,
     })
     .returning()
+  await tx.insert(refundLines).values(
+    picked.flatMap((p) =>
+      PREPAID.has(p.line.kind)
+        ? p.units.map((u) => ({
+            tenantId: sale.tenantId,
+            refundId: refund!.id,
+            saleLineId: p.line.id,
+            qty: 1,
+            amountAed: aed(u.fils),
+            vatAed: '0.00',
+            refId: u.prepaid?.id ?? null,
+          }))
+        : [
+            {
+              tenantId: sale.tenantId,
+              refundId: refund!.id,
+              saleLineId: p.line.id,
+              qty: p.qty,
+              amountAed: aed(p.amount),
+              vatAed: aed(p.vat),
+            },
+          ],
+    ),
+  )
   await postRefund(tx, {
     tenantId: sale.tenantId,
     branchId: sale.branchId,
     saleId: sale.id,
     date,
-    amountAed: amount / 100,
     method: input.method,
-    vatRatePct: VAT_RATE_PCT,
     createdBy: input.createdBy,
+    lines: picked.map((p) => ({
+      kind: p.line.kind,
+      amountAed: p.amount / 100,
+      vatAed: p.vat / 100,
+      description: p.line.description,
+    })),
   })
-  if (amount === remaining) await tx.update(sales).set({ status: 'refunded' }).where(eq(sales.id, sale.id))
+
+  // Prepaid: the unused value was given back, so the card / package is closed.
+  for (const p of picked)
+    for (const u of p.units) {
+      if (u.prepaid?.type === 'gift_card') {
+        await tx
+          .update(giftCards)
+          .set({ balanceAed: '0.00', status: 'void' })
+          .where(eq(giftCards.id, u.prepaid.id))
+        await tx.insert(giftCardTxns).values({
+          tenantId: sale.tenantId,
+          giftCardId: u.prepaid.id,
+          kind: 'refund',
+          amountAed: aed(-u.prepaid.remaining),
+          saleId: sale.id,
+          createdBy: input.createdBy ?? null,
+        })
+      } else if (u.prepaid?.type === 'package')
+        await tx
+          .update(clientPackages)
+          .set({ status: 'refunded', remainingValueAed: '0.00' })
+          .where(eq(clientPackages.id, u.prepaid.id))
+    }
+
+  // Retail: goods back on the shelf and their cost of sales reversed for exactly the refunded quantity.
+  let cogs = 0
+  for (const p of picked) {
+    if (p.line.kind !== 'product' || !p.line.refId) continue
+    await returnSoldStock(tx, {
+      tenantId: sale.tenantId,
+      branchId: sale.branchId,
+      productId: p.line.refId,
+      qty: p.qty,
+      saleId: sale.id,
+      refundId: refund!.id,
+      date,
+      createdBy: input.createdBy,
+    })
+    const [sold] = await tx
+      .select({ unitCost: stockMovements.unitCostAed })
+      .from(stockMovements)
+      .where(
+        and(
+          eq(stockMovements.refType, 'sale'),
+          eq(stockMovements.refId, sale.id),
+          eq(stockMovements.productId, p.line.refId),
+        ),
+      )
+    // Same rounding as `sellStock`, then this refund's share of it.
+    const lineCost = fils(p.line.qty * num(sold?.unitCost))
+    cogs +=
+      shareOf(lineCost, p.refundedQty + p.qty, p.line.qty) - shareOf(lineCost, p.refundedQty, p.line.qty)
+  }
+  if (cogs > 0)
+    await post(tx, {
+      tenantId: sale.tenantId,
+      branchId: sale.branchId,
+      date,
+      sourceType: 'refund_cogs',
+      sourceId: sale.id,
+      memo: 'Refunded goods back in stock',
+      createdBy: input.createdBy,
+      lines: [
+        { code: '1200', debit: cogs / 100 },
+        { code: '5000', credit: cogs / 100 },
+      ],
+    })
+
+  // Commission accruals are append-only: offset each therapist's share of the refunded quantity.
+  const accrued = await tx
+    .select()
+    .from(commissionEntries)
+    .where(
+      inArray(
+        commissionEntries.saleLineId,
+        picked.map((p) => p.line.id),
+      ),
+    )
+  let commission = 0
+  const offsets: (typeof commissionEntries.$inferInsert)[] = []
+  for (const p of picked) {
+    const perStaff = new Map<
+      string,
+      { earned: number; base: number; undone: number; undoneBase: number; rate: string }
+    >()
+    for (const c of accrued.filter((c) => c.saleLineId === p.line.id)) {
+      const row = perStaff.get(c.staffId) ?? { earned: 0, base: 0, undone: 0, undoneBase: 0, rate: c.ratePct }
+      const amount = fils(num(c.amountAed))
+      if (amount > 0) {
+        row.earned += amount
+        row.base += fils(num(c.baseAed))
+        row.rate = c.ratePct
+      } else {
+        row.undone -= amount
+        row.undoneBase -= fils(num(c.baseAed))
+      }
+      perStaff.set(c.staffId, row)
+    }
+    const upTo = p.refundedQty + p.qty
+    for (const [staffId, c] of perStaff) {
+      const amount = shareOf(c.earned, upTo, p.line.qty) - c.undone
+      if (amount <= 0) continue
+      commission += amount
+      offsets.push({
+        tenantId: sale.tenantId,
+        staffId,
+        saleLineId: p.line.id,
+        businessDate: date,
+        baseAed: aed(-(shareOf(c.base, upTo, p.line.qty) - c.undoneBase)),
+        ratePct: c.rate,
+        amountAed: aed(-amount),
+      })
+    }
+  }
+  if (offsets.length) {
+    await tx.insert(commissionEntries).values(offsets)
+    await post(tx, {
+      tenantId: sale.tenantId,
+      branchId: sale.branchId,
+      date,
+      sourceType: 'refund_commission',
+      sourceId: sale.id,
+      memo: 'Commission offset (refund)',
+      createdBy: input.createdBy,
+      lines: [
+        { code: '2300', debit: commission / 100 },
+        { code: '6010', credit: commission / 100 },
+      ],
+    })
+  }
+
+  const taken = new Map(picked.map((p) => [p.line.id, p.qty]))
+  const nothingLeft = plan.every((p) => p.units.length - (taken.get(p.line.id) ?? 0) <= 0)
+  if (nothingLeft || amount === remaining)
+    await tx.update(sales).set({ status: 'refunded' }).where(eq(sales.id, sale.id))
   return refund!
 }
 

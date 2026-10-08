@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0013` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0015` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
@@ -178,9 +178,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The business date comes from the branch cutoff.
   - Void is allowed only on the same open day, with no refunds and nothing prepaid. It reverses the sale,
     commission and COGS entries and returns stock.
-  - A refund posts a new `refund` entry. Its debits mirror the sale entry's 4000/4100/2100/2110/2000 credit lines,
-    prorated in fils (remainder on the largest line; tips stay in 2200). Sales without a ledger entry fall back to
-    4000 + 2000.
+  - Refunds are line-level (`refundSale` takes `lines: [{saleLineId, qty}]`; `refundOptions` feeds the sheet).
+    Unit amount = share of the line's net paid `line_total_aed`, cumulative rounding in fils; VAT, COGS and
+    commission use the same shares. `refund_lines` records each line (prepaid: one row per card/package, `ref_id`).
+  - Refund ledger mirrors `postSale` per line (4000/4100 + 2000; 2100/2110 no VAT; credit the method's account),
+    plus `refund_cogs` (1200/5000, stock back via `returnSoldStock`) and `refund_commission` (2300/6010, negative
+    `commission_entries` on the refund date). Tips stay in 2200.
+  - Prepaid lines refund only the unused value (card balance / package remaining value as a share of what was
+    paid), then void the card / set the package `refunded`; used-up ones are blocked. Cards/packages carry
+    `sale_line_id` (older ones match by sale + definition).
+  - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
+    The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
@@ -247,8 +255,9 @@ in **PLAN §17** (items F1–F7 match the numbers below).
 
 1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
    before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
-2. **Refund side effects**: `refundSale` (`packages/services/src/sales.ts`) does not return stock or reverse COGS or
-   commissions. Void does all three.
+2. ✅ **Refund side effects** (fixed, F2): refunds are line-level; they return stock, reverse COGS and offset
+   commissions for exactly the refunded quantity, and refund only the unused value of prepaid items (then void
+   them). Migration 0015 adds `refund_lines` and `sale_line_id` on `gift_cards`/`client_packages`.
 3. ✅ **Double checkout** (fixed, F3): `createSale` locks the booking row (`FOR UPDATE`) before the earlier-sale check;
    partial unique index `sales_booking_once` (one non-void sale per booking, migration 0014) backs it up and its
    `23505` maps to a `DomainError`. Migration 0014 skips the index with a WARNING if duplicates already exist.
