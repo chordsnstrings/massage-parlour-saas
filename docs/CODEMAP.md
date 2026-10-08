@@ -142,6 +142,13 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   in `lib/scenes.ts`, all ending at rest). Scroll scenes are off in the editor; ambient hero loops stop in the editor
   and under OS reduced motion. Gallery thumbnails: `public/site-templates/{key}.webp`, regenerated with
   `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
+- **HTML designs (R17)**: `/platform/templates` "Upload HTML" (`uploadHtmlTemplateAction`) saves a studio template
+  whose home page is one hidden `HtmlDesign` block (`components/site/blocks/html-design.tsx`, category `design`,
+  `visible: false` ⇒ out of the AI schema) with the raw file in `props.html`; root prop `htmlDesign: true` makes the root
+  render skip `SiteFrame`. Render = `<iframe srcdoc sandbox="allow-scripts allow-forms allow-popups…">` (no
+  `allow-same-origin`: design scripts can't touch platform cookies/APIs); `{{placeholders}}` filled + HTML-escaped from
+  `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
+  when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
   - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,

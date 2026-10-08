@@ -1,8 +1,9 @@
 import { platformDb, sites, tenants } from '@spa/db'
 import { listStudioTemplates, type StudioTemplateRow } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
-import { Download, Eye, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
+import { Download, Eye, FileCode, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
+import { HTML_DESIGN_PLACEHOLDERS } from '@/components/site/blocks/html-design'
 import { TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,12 @@ import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
-import { importTemplateAction, saveSiteAsTemplateAction, updateTemplateAction } from './actions'
+import {
+  importTemplateAction,
+  saveSiteAsTemplateAction,
+  updateTemplateAction,
+  uploadHtmlTemplateAction,
+} from './actions'
 
 export const metadata: Metadata = { title: 'Site templates' }
 
@@ -94,6 +100,62 @@ export default async function TemplatesStudioPage() {
         description="Templates spas can pick next to the 8 built-ins. A studio template with a built-in key replaces it."
         actions={
           <>
+            <FormSheet
+              title="Upload an HTML design"
+              description="A one-page design shown on the spa's site exactly as built: its styles, fonts, motion and scripts, full screen and isolated from the platform. It can't be changed in the drag-and-drop editor; upload a new file to update it."
+              trigger={
+                <Button variant="secondary">
+                  <FileCode /> Upload HTML
+                </Button>
+              }
+              action={uploadHtmlTemplateAction}
+              submitLabel="Upload"
+            >
+              <Field label="Template name" name="name">
+                <Input id="name" name="name" required minLength={2} maxLength={60} />
+              </Field>
+              <Field label="Description" name="description" hint="Shown to spas under the template name.">
+                <Textarea id="description" name="description" maxLength={300} />
+              </Field>
+              <Field
+                label="HTML file"
+                name="file"
+                hint="One .html file up to about 500 KB. Fonts and images load from their URLs (links to files on your computer won't work)."
+              >
+                <Input
+                  id="file"
+                  name="file"
+                  type="file"
+                  accept="text/html,.html,.htm"
+                  className="h-auto py-2.5"
+                />
+              </Field>
+              <div className="space-y-2 rounded-xl border p-4 text-sm">
+                <p className="font-medium">Each spa's details (optional)</p>
+                <p className="text-muted">
+                  Put these anywhere in the file, e.g. <code>{'<a href="{{book_url}}">'}</code>:
+                </p>
+                <p className="flex flex-wrap gap-1.5">
+                  {HTML_DESIGN_PLACEHOLDERS.map((p) => (
+                    <code key={p} className="rounded-md border px-1.5 py-0.5 text-xs">
+                      {`{{${p}}}`}
+                    </code>
+                  ))}
+                </p>
+              </div>
+              <label className="flex items-start gap-3 rounded-xl border p-4 text-sm">
+                <Checkbox name="replace" className="mt-0.5" />
+                <span className="space-y-1">
+                  <span className="block font-medium">Replace a template with the same key</span>
+                  <span className="block text-muted">
+                    Updates an earlier upload with this name. Spas already using it keep their own copy.
+                  </span>
+                </span>
+              </label>
+              <label className="flex min-h-11 items-center gap-2.5 text-sm">
+                <Checkbox name="active" /> Spas can pick it right away (otherwise check the preview first)
+              </label>
+            </FormSheet>
             <FormSheet
               title="Import a template"
               description="Upload a template exported from this or another environment."
