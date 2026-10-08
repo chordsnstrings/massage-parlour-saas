@@ -8,8 +8,10 @@ import {
   resolvePermissions,
   resolveSurface,
   SYSTEM_ROLES,
+  therapistPhonesMasked,
   toUaeE164,
   whatsappLink,
+  withTherapistPhones,
 } from '../src'
 
 describe('resolveSurface', () => {
@@ -86,6 +88,22 @@ describe('permissions', () => {
   })
   it('therapists never see client phones', () => {
     expect(SYSTEM_ROLES.therapist.permissions).not.toContain('clients.phone')
+  })
+  it('tenant overrides tweak system roles (never the owner) and drive the mask-phones toggle', () => {
+    const unmasked = withTherapistPhones({ manager: { revoke: ['billing.view'] } }, false)
+    expect(therapistPhonesMasked(unmasked)).toBe(false)
+    expect(therapistPhonesMasked(undefined)).toBe(true)
+    expect(resolvePermissions({ key: 'therapist', permissions: [] }, unmasked)).toEqual(
+      new Set(['calendar.view', 'clients.phone']),
+    )
+    const masked = withTherapistPhones(unmasked, true)
+    expect(masked.manager).toEqual({ revoke: ['billing.view'] })
+    expect(resolvePermissions({ key: 'therapist', permissions: [] }, masked)).toEqual(
+      new Set(['calendar.view']),
+    )
+    const o = { owner: { revoke: ['audit.view'] }, custom_x: { grant: ['pos.use'] } }
+    expect(resolvePermissions({ key: 'owner', permissions: [] }, o).has('audit.view')).toBe(true)
+    expect(resolvePermissions({ key: 'custom_x', permissions: [] }, o).size).toBe(0)
   })
 })
 

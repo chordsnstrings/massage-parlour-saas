@@ -1,7 +1,7 @@
 'use client'
 // Spa dashboard shell ("Be Relax CRM" design, docs/design/crm-spec.md §2): framed window with the spa's sidebar
 // (logo + name, profile menu, grouped nav, plan card) and a top bar (crumb + title, EN | ไทย). Styles: crm.css.
-// Super-admin keeps AppShell. Search, notifications and Ask AI arrive in Phase 3.
+// Super-admin keeps AppShell. Global search = the `search` slot (components/search); notifications and Ask AI later.
 import { authClient } from '@spa/auth/client'
 import type { Locale } from '@spa/core/i18n/types'
 import {
@@ -105,6 +105,7 @@ export function SpaShell({
   plan,
   banner,
   alert,
+  search,
   accountHref,
   switchHref,
   children,
@@ -116,6 +117,8 @@ export function SpaShell({
   banner?: React.ReactNode
   /** Full-width one-line bar above the whole CRM (e.g. overdue invoice, R11). */
   alert?: React.ReactNode
+  /** Top-bar global search (⌘K palette), between the title and the language switch. */
+  search?: React.ReactNode
   accountHref: string
   switchHref: string
   children: React.ReactNode
@@ -298,6 +301,7 @@ export function SpaShell({
               <small>{active?.group.label ?? ''}</small>
               <b suppressHydrationWarning>{title}</b>
             </div>
+            {search}
             <fieldset className="crm-seg" aria-label={t('shell.language')} aria-busy={switching}>
               {LANGS.map((l) => (
                 <button

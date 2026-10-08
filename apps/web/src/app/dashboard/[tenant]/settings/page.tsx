@@ -1,7 +1,8 @@
+import { therapistPhonesMasked } from '@spa/core'
 import { branches, withTenant } from '@spa/db'
-import { IMPORT_KINDS, logoUrl } from '@spa/services'
+import { IMPORT_KINDS, listAuditLog, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
-import { Download, MessageCircle, ShieldCheck, Upload } from 'lucide-react'
+import { Download, History, MessageCircle, ShieldCheck, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Card, Grid, ListRow, Pill, Stack, Toggle } from '@/components/crm'
@@ -11,10 +12,11 @@ import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { PageHeader } from '@/components/ui/page'
-import { getT } from '@/i18n/server'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { saveSettingsAction } from './actions'
+import { saveSecurityAction, saveSettingsAction } from './actions'
+import { actorLabel } from './audit/labels'
 import { LogoForm } from './logo-form'
 import { SettingsTabs } from './settings-tabs'
 
@@ -25,15 +27,18 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SettingsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'settings.manage')) notFound()
-  const t = await getT()
-  const [branch] = await withTenant(ctx.tenant.id, (tx) =>
-    tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1),
-  )
+  const { t, fmt } = await getI18n()
+  const canAudit = can(ctx, 'audit.view')
+  const [[branch], recent] = await withTenant(ctx.tenant.id, async (tx) => [
+    await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1),
+    canAudit ? (await listAuditLog(tx, { pageSize: 5 })).entries : [],
+  ])
   const tenant = ctx.tenant
   const base = `/${tenant.slug}`
   const canImport = IMPORT_KINDS.some((k) => can(ctx, IMPORT_PERMISSION[k]))
   const canExport = canExportAll(ctx)
-  const twoFactor = Boolean((ctx.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled)
+  const twoFactor = ctx.user.twoFactorEnabled
+  const canTeam = can(ctx, 'team.manage')
   return (
     <>
       <PageHeader title={t('settings.profile.title')} description={t('settings.profile.description')} />
@@ -160,11 +165,58 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
               }
               href={appPath('/account')}
             />
-            <ListRow
-              title={t('settings.profile.security.audit')}
-              body={t('settings.profile.security.auditSub')}
-              end={<Pill tone="ok">{t('settings.profile.security.on')}</Pill>}
-            />
+            <ActionForm action={saveSecurityAction.bind(null, tenant.slug)} className="mt-3 border-t pt-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{t('audit.security.require2fa')}</p>
+                  <p className="crm-muted text-[13px]">{t('audit.security.require2faSub')}</p>
+                </div>
+                <Toggle
+                  name="require2fa"
+                  label={t('audit.security.require2fa')}
+                  defaultChecked={Boolean(tenant.settings.require2fa)}
+                />
+              </div>
+              {canTeam && (
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{t('audit.security.maskPhones')}</p>
+                    <p className="crm-muted text-[13px]">{t('audit.security.maskPhonesSub')}</p>
+                  </div>
+                  <Toggle
+                    name="maskPhones"
+                    label={t('audit.security.maskPhones')}
+                    defaultChecked={therapistPhonesMasked(tenant.settings.roleOverrides)}
+                  />
+                </div>
+              )}
+              <div className="mt-3 flex justify-end">
+                <SubmitButton>{t('audit.security.save')}</SubmitButton>
+              </div>
+            </ActionForm>
+            {canAudit && (
+              <div className="mt-3 border-t pt-3">
+                <p className="crm-muted mb-1 text-[12px] font-semibold uppercase tracking-wide">
+                  {t('audit.recent')}
+                </p>
+                {recent.length === 0 ? (
+                  <p className="crm-muted text-[13px]">{t('audit.none')}</p>
+                ) : (
+                  recent.map((e) => (
+                    <ListRow
+                      key={e.id}
+                      icon={<History aria-hidden />}
+                      title={e.action}
+                      body={actorLabel(t, e)}
+                      time={fmt.dateTime(e.at)}
+                    />
+                  ))
+                )}
+                <Button asChild variant="secondary" className="mt-2 w-full">
+                  <a href={appPath(`${base}/settings/audit`)}>{t('audit.viewAll')}</a>
+                </Button>
+              </div>
+            )}
           </Card>
           <Card title={t('settings.profile.messages.title')}>
             <ListRow

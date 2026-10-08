@@ -49,6 +49,7 @@ export const PERMISSION_GROUPS = {
   team: { label: 'Team & roles', actions: { manage: 'Invite members and edit roles' } },
   settings: { label: 'Business settings', actions: { manage: 'Edit business details and branches' } },
   billing: { label: 'Subscription', actions: { view: 'View invoices and payments' } },
+  audit: { label: 'Audit log', actions: { view: 'View the audit log' } },
 } as const
 
 type Groups = typeof PERMISSION_GROUPS
@@ -132,9 +133,36 @@ export const SYSTEM_ROLES: Record<
 
 export const isSystemRole = (key: string): key is SystemRoleKey => key in SYSTEM_ROLES
 
-export function resolvePermissions(role: { key: string; permissions: readonly string[] }): Set<Permission> {
-  const list = isSystemRole(role.key)
-    ? SYSTEM_ROLES[role.key].permissions
-    : role.permissions.filter(isPermission)
-  return new Set(list)
+/** Per-tenant tweaks of system roles (`tenants.settings.roleOverrides`); the owner role is never changed. */
+export type RoleOverrides = Record<string, { grant?: readonly string[]; revoke?: readonly string[] }>
+
+export function resolvePermissions(
+  role: { key: string; permissions: readonly string[] },
+  overrides?: RoleOverrides | null,
+): Set<Permission> {
+  if (!isSystemRole(role.key)) return new Set(role.permissions.filter(isPermission))
+  const set = new Set<Permission>(SYSTEM_ROLES[role.key].permissions)
+  const o = role.key === 'owner' ? undefined : overrides?.[role.key]
+  for (const p of o?.grant ?? []) if (isPermission(p)) set.add(p)
+  for (const p of o?.revoke ?? []) if (isPermission(p)) set.delete(p)
+  return set
 }
+
+/** "Mask client phones for therapists" (Settings → Security): on unless the tenant grants therapists `clients.phone`. */
+export const therapistPhonesMasked = (overrides?: RoleOverrides | null) =>
+  !overrides?.therapist?.grant?.includes('clients.phone')
+
+/** Overrides with the therapist phone toggle applied (other entries kept). */
+export function withTherapistPhones(
+  overrides: RoleOverrides | null | undefined,
+  masked: boolean,
+): RoleOverrides {
+  const next: RoleOverrides = { ...(overrides ?? {}) }
+  const cur = next.therapist ?? {}
+  const grant = (cur.grant ?? []).filter((p) => p !== 'clients.phone')
+  next.therapist = { ...cur, grant: masked ? grant : [...grant, 'clients.phone'] }
+  return next
+}
+
+/** Roles that must use TOTP 2FA when the tenant turns on "Require 2FA for owner & managers". */
+export const TWO_FACTOR_POLICY_ROLES: readonly string[] = ['owner', 'manager']

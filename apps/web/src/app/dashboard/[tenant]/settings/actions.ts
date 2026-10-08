@@ -1,12 +1,12 @@
 'use server'
-import { toUaeE164 } from '@spa/core'
-import { branches, tenants, withTenant } from '@spa/db'
+import { therapistPhonesMasked, toUaeE164, withTherapistPhones } from '@spa/core'
+import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
 import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
-import { guard } from '@/server/access'
+import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
 const opt = z
@@ -113,4 +113,68 @@ export async function saveLogoAction(
   })
   revalidatePath(`/dashboard/${slug}`, 'layout')
   return ok(remove ? 'logo.removed' : 'logo.saved')
+}
+
+const securitySchema = z.object({
+  require2fa: z.enum(['on', 'off']).optional(),
+  maskPhones: z.enum(['on', 'off']).optional(),
+})
+
+/**
+ * Settings → Security (X5): "Require 2FA for owner & managers" (enforced in requireMember) and "Mask client phones
+ * for therapists" (a tenant override of the therapist system role's `clients.phone`; changing it needs team.manage).
+ */
+export async function saveSecurityAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'settings.manage')
+  if (error) return fail(error)
+  const parsed = securitySchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const settings = ctx.tenant.settings
+  const require2fa = parsed.data.require2fa ? parsed.data.require2fa === 'on' : Boolean(settings.require2fa)
+  const masked = parsed.data.maskPhones
+    ? parsed.data.maskPhones === 'on'
+    : therapistPhonesMasked(settings.roleOverrides)
+  const phonesChanged = masked !== therapistPhonesMasked(settings.roleOverrides)
+  if (phonesChanged && !can(ctx, 'team.manage')) return fail('errors.forbidden')
+  // Turning the policy on would lock the actor out at once: they must have 2FA themselves (fresh row, not the
+  // cached session). A super-admin acting on the spa is exempt (the policy applies to the spa's own members).
+  if (require2fa && !settings.require2fa && !ctx.impersonating) {
+    const [me] = await platformDb()
+      .select({ on: user.twoFactorEnabled })
+      .from(user)
+      .where(eq(user.id, ctx.user.id))
+    if (!me?.on) return fail('audit.security.require2faOwn')
+  }
+  await withTenant(ctx.tenant.id, async (tx) => {
+    const [cur] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+    const base = cur?.settings ?? {}
+    await tx
+      .update(tenants)
+      .set({
+        settings: {
+          ...base,
+          require2fa,
+          roleOverrides: withTherapistPhones(base.roleOverrides, masked),
+        },
+      })
+      .where(eq(tenants.id, ctx.tenant.id))
+  })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+    action: 'settings.security.updated',
+    entity: 'tenant',
+    entityId: ctx.tenant.id,
+    data: { require2fa, maskTherapistPhones: masked },
+  })
+  revalidatePath(`/dashboard/${slug}`, 'layout')
+  return ok('audit.security.saved')
 }

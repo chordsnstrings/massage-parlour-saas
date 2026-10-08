@@ -40,6 +40,7 @@ export const permissions: Messages['permissions'] = {
     team: { label: 'ทีมและบทบาท', actions: { manage: 'เชิญสมาชิกและแก้ไขบทบาท' } },
     settings: { label: 'ตั้งค่าธุรกิจ', actions: { manage: 'แก้ไขข้อมูลธุรกิจและสาขา' } },
     billing: { label: 'การสมัครใช้งาน', actions: { view: 'ดูใบแจ้งหนี้และการชำระเงิน' } },
+    audit: { label: 'บันทึกการตรวจสอบ', actions: { view: 'ดูบันทึกการตรวจสอบ' } },
   },
   roleDescription: {
     owner: 'เข้าถึงได้ทั้งหมด รวมถึงการสมัครใช้งานและบทบาท',

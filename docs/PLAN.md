@@ -969,6 +969,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   price; search offers and `domain_orders.price_usd/price_aed` include it, `markup_usd` records it; the console
   approve prompt shows the registrar cost (price − markup).
 
+### 14.9 X5 — B4 global search + audit viewer + Settings → Security (as built, worktree branch)
+- **Search** (services `search.ts` `globalSearch(tx, q, scope, {kind,page,limit})`): clients (name; phone only with
+  `clients.phone` — never matched or returned without it; local `05x` matches stored `9715x`), bookings (ref code,
+  client; allowed branches; members without `calendar.manage` only their own), receipts (`sales.number`, client;
+  needs `pos.use`), staff (`staff.view`), services (EN/AR name; `services.manage`). Rank: exact 3 > prefix 2 >
+  substring 1 + `word_similarity`; typos via `<%` (threshold 0.5, tx-local). Indexes: pg_trgm GIN (migration 0022,
+  hand-written; pg_trgm is trusted so `spa_owner` creates it; also in bootstrap.sql). UI: top-bar field + ⌘K/Ctrl+K
+  palette (`components/search`, server action builds the scope), grouped, ↑↓/Enter/Esc, "Show more" per group.
+- **Audit viewer**: permission `audit.view` (new; owner + manager via code). Services `audit-log.ts`
+  (`listAuditLog`, `auditFilterOptions`) read `audit_log` through `withTenant` (tenant policy); actor names from the
+  platform `user` table for ids in those rows only. Settings → Security card shows the last 5; `/settings/audit` =
+  filters (person, action, Dubai dates) + pages; Settings tab "Audit log". Action codes shown as stored.
+- **Security toggles** (`saveSecurityAction`, audited `settings.security.updated`): `tenants.settings.require2fa` —
+  `requireMember` redirects owner/manager members without TOTP (fresh `user` row, not the cached session) to
+  `/account?require2fa=<slug>`; super-admins exempt; can't be turned on without your own 2FA.
+  "Mask client phones for therapists" = `tenants.settings.roleOverrides.therapist.grant` ∋ `clients.phone` when
+  unmasked (system roles still resolve from code; `resolvePermissions(role, overrides)`, owner never overridden);
+  needs `team.manage` too. Default: masked.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

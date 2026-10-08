@@ -43,7 +43,7 @@ export default async function RolesPage({ params }: { params: Promise<{ tenant: 
       ...r,
       name: roleName(t, r),
       description: roleDescription(t, r) || null,
-      permissions: [...resolvePermissions(r)] as string[],
+      permissions: [...resolvePermissions(r, ctx.tenant.settings.roleOverrides)] as string[],
     }))
     .sort((a, b) => Number(b.isSystem) - Number(a.isSystem))
   return (

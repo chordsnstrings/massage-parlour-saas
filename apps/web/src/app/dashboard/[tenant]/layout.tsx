@@ -6,6 +6,7 @@ import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
+import { SearchPalette } from '@/components/search/search-palette'
 import {
   type ShellGroup,
   type ShellItem,
@@ -215,6 +216,7 @@ export default async function TenantLayout({
           plan={plan}
           banner={notice}
           alert={alert}
+          search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
         >

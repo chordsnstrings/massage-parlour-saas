@@ -112,6 +112,13 @@ export type TenantSettings = {
   hidePrices?: boolean
   /** AED per completed booking a receptionist created (`booking_fee` pay type; owner's receptionist_booking_fee). */
   receptionistBookingFee?: string
+  /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
+  require2fa?: boolean
+  /**
+   * Tenant overrides of system-role permissions (system roles otherwise resolve from code). Today only the
+   * "Mask client phones for therapists" toggle writes it: therapist + `clients.phone` granted when unmasked.
+   */
+  roleOverrides?: Record<string, { grant?: readonly string[]; revoke?: readonly string[] }>
 }
 
 export const tenants = pgTable(
@@ -280,7 +287,11 @@ export const auditLog = pgTable(
     ip: text('ip'),
     createdAt: createdAt(),
   },
-  () => tenantPolicies(),
+  // Owner-facing audit viewer (X5): newest first per tenant.
+  (t) => [
+    index('audit_log_tenant_created').on(t.tenantId, t.createdAt.desc(), t.id.desc()),
+    ...tenantPolicies(),
+  ],
 )
 
 /** Model per AI agent, chosen by super-admin. Model IDs never live in code. */
