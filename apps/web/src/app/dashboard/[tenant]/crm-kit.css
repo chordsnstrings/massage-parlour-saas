@@ -138,6 +138,23 @@
     gap: var(--crm-grid-gap);
     min-width: 0;
   }
+  /* Wide monitors (R6): 3/4-col card lists with more items than columns gain a column; full rows keep theirs. */
+  @media (min-width: 1600px) {
+    :where(:root:has(.crm)) .crm-g3:has(> :nth-child(4)) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    :where(:root:has(.crm)) .crm-g4:has(> :nth-child(5)) {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 2200px) {
+    :where(:root:has(.crm)) .crm-g3:has(> :nth-child(5)) {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    :where(:root:has(.crm)) .crm-g4:has(> :nth-child(6)) {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
   @media (max-width: 1200px) {
     :where(:root:has(.crm)) .crm-kgrid {
       grid-template-columns: repeat(3, minmax(0, 1fr));

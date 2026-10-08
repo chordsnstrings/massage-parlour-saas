@@ -626,9 +626,9 @@
   border-radius: 2px;
   background: var(--crm-accent);
 }
+/* Fills the screen on wide monitors (R6): no max-width; grids add a column ≥ 1600 px (crm-kit.css). */
 .crm-view {
   width: 100%;
-  max-width: 1260px;
   padding: var(--crm-view-pad);
 }
 
