@@ -12,7 +12,7 @@ export function icsDataUrl(e: {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//spamanagement.ae//online booking//EN',
+    'PRODID:-//spamanagement.co//online booking//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

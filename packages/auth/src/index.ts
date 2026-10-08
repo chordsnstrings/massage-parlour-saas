@@ -15,7 +15,7 @@ function createAuth() {
   const pathRouting = process.env.NEXT_PUBLIC_ROUTING === 'path'
   const canonical = new URL(process.env.APP_URL ?? 'http://app.localhost:3000').origin
   return betterAuth({
-    appName: 'spamanagement.ae',
+    appName: 'spamanagement.co',
     baseURL: {
       allowedHosts: pathRouting ? roots : roots.flatMap((r) => [`app.${r}`, `admin.${r}`]),
       fallback: canonical,
@@ -53,7 +53,7 @@ function createAuth() {
       sendResetPassword: async ({ user: u, url }) => {
         await sendStaffEmail({
           to: u.email,
-          subject: 'Reset your spamanagement.ae password',
+          subject: 'Reset your spamanagement.co password',
           text: `Hi ${u.name},\n\nReset your password here: ${url}\n\nIf you didn't ask for this, ignore this email.`,
         })
       },
@@ -82,7 +82,7 @@ function createAuth() {
         '/two-factor/verify-backup-code': { window: 60, max: 5 },
       },
     },
-    plugins: [twoFactorPlugin({ issuer: 'spamanagement.ae' }), nextCookies()],
+    plugins: [twoFactorPlugin({ issuer: 'spamanagement.co' }), nextCookies()],
   })
 }
 

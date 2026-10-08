@@ -1,4 +1,4 @@
-# spamanagement.ae — Product & Technical Plan
+# spamanagement.co — Product & Technical Plan
 
 B2B SaaS for massage parlours in the UAE: booking, rooms & therapists, clients, POS (cash), basic accounting,
 site builder with block-level analytics, and AI agents (Instagram, Google Business Profile, SEO).
@@ -16,7 +16,7 @@ official docs on 2026-10-06; re-check anything marked *(verify)* when its phase 
 | Market | UAE only. Currency AED, timezone Asia/Dubai (UTC+4, no DST; store UTC). |
 | Customer | B2B — massage parlours / spas. One pilot spa. |
 | Team | Owner + Claude. |
-| Domain | `spamanagement.ae` (tenant sites at `{slug}.spamanagement.ae`, optional custom domain). |
+| Domain | `spamanagement.co` (tenant sites at `{slug}.spamanagement.co`, optional custom domain). |
 | Customer payments | Recorded only (cash, card on the parlour's own terminal, bank transfer). Platform processes nothing. Stripe later. |
 | SaaS price | **AED 24,000 per spa per year** (setup fee / VAT treatment: open item), paid by cash or bank transfer, recorded manually by super-admin. |
 | Customer comms | **WhatsApp only**, receptionist click-to-send (no SMS, no email to customers, no unofficial automation). |
@@ -35,7 +35,7 @@ official docs on 2026-10-06; re-check anything marked *(verify)* when its phase 
 Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see §13).
 
 ### 1.1 Tenancy, onboarding, domains
-- Self-serve signup → pick subdomain (`{slug}.spamanagement.ae`) → business info → theme → services/rooms/staff wizard → publish. **MVP**
+- Self-serve signup → pick subdomain (`{slug}.spamanagement.co`) → business info → theme → services/rooms/staff wizard → publish. **MVP**
 - Reserved slugs: `www app admin api mail customers status cdn assets help docs blog`. Rename = old slug 301-redirects. **MVP**
 - **AI onboarding:** paste Instagram handle / Google Maps link → AI drafts services, copy, photos, hours, colours → site ready to tweak. **P3**
 - CSV import: clients, services, products (Fresha-style exports). **P2**
@@ -133,12 +133,12 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 ### 1.15 AI agents (§7) — **P3** (gateway + metering in P0)
 
 ### 1.16 "Book" button everywhere
-- Site booking widget + standalone page `{slug}.spamanagement.ae/book`. **MVP**
+- Site booking widget + standalone page `{slug}.spamanagement.co/book`. **MVP**
 - Embeddable script for parlours keeping an old site. **P2**
 - Instagram bio link (`?src=ig`), GBP "Book" button set via Place Actions API (`?src=gbp`). **P3**
 - QR poster for reception / hotel concierge partners. **P2**
 
-### 1.17 Platform super-admin (`admin.spamanagement.ae`)
+### 1.17 Platform super-admin (`admin.spamanagement.co`)
 - Tenants (status, plan, usage, last activity), impersonation (audited, banner shown). **MVP**
 - Plans: launch plan **AED 24,000/year** (optional one-time setup fee), limits (branches, staff, AI budget, custom domain); more plans later. **MVP**
 - Platform invoices, **manual payment recording** (cash/bank transfer, reference, proof upload), due/overdue list,
@@ -159,7 +159,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 ## 2. Key flows
 
 **Online booking → confirmation**
-1. Visitor on `{slug}.spamanagement.ae` opens booking widget (event `booking_start`, block id recorded).
+1. Visitor on `{slug}.spamanagement.co` opens booking widget (event `booking_start`, block id recorded).
 2. Picks service/duration → slots computed server-side → picks slot → enters name + mobile.
 3. Server creates booking `pending` inside a transaction that inserts `reservations` (EXCLUDE constraint guarantees no clash).
 4. Confirmation screen: "Confirm on WhatsApp" → opens chat with parlour, prefilled `Hi, confirming booking #K7Q2 …`.
@@ -170,7 +170,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 Reception → "Walk-in" → service → "next in rotation" therapist + free room suggested → start → checkout → daily close.
 
 **Custom domain**
-Tenant enters `www.theirspa.ae` → API creates Cloudflare custom hostname → UI shows `CNAME www → customers.spamanagement.ae`
+Tenant enters `www.theirspa.ae` → API creates Cloudflare custom hostname → UI shows `CNAME www → customers.spamanagement.co`
 + ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
 (many .ae registrars lack CNAME flattening). On the droplet (no Cloudflare for SaaS) Caddy issues certificates on demand,
 asking `/api/domains/allowed` first; in path-routing mode any non-platform host is served as `/domain/{host}`.
@@ -198,9 +198,9 @@ Inappropriate messages: brief, neutral reply, no engagement, flagged in inbox.
 
 ### 3.1 Topology
 ```
-Visitors (tenant subdomains + custom domains)        Staff / owners (app.spamanagement.ae)
+Visitors (tenant subdomains + custom domains)        Staff / owners (app.spamanagement.co)
                     │                                           │
-         Cloudflare (Free): DNS, proxy, Universal SSL (*.spamanagement.ae),
+         Cloudflare (Free): DNS, proxy, Universal SSL (*.spamanagement.co),
          Cloudflare for SaaS (custom hostnames), edge cache (Dubai PoP), WAF basics
                     │  Cloudflare Tunnel (no open inbound ports)
          ┌──────────┴────────── DO Droplet (Premium AMD 4 GB / 2 vCPU) ───────────┐
@@ -225,7 +225,7 @@ Visitors (tenant subdomains + custom domains)        Staff / owners (app.spamana
 - AI calls go to Johor regardless; they're async/background so the extra latency is irrelevant.
 
 ### 3.3 Domains & TLS
-- `spamanagement.ae` (marketing), `app.` (dashboard), `admin.` (super-admin), `{slug}.` (tenant sites),
+- `spamanagement.co` (marketing), `app.` (dashboard), `admin.` (super-admin), `{slug}.` (tenant sites),
   `customers.` (CNAME target for custom domains). Nameservers delegated to Cloudflare.
 - Universal SSL covers apex + first-level wildcard → no wildcard cert work on the server.
 - Custom domains: Cloudflare for SaaS — **100 hostnames free**, then USD 0.10/hostname/month. No Let's Encrypt rate-limit concerns.
@@ -462,7 +462,7 @@ packages/config   tsconfig, eslint, prettier
 - "Book" button: Place Actions API (`placeActionLinks`, type `APPOINTMENT`).
 - **Gone:** GBP chat (shut down July 2024), Q&A API (discontinued Nov 2025) → out of scope.
 - Until approved: AI drafts the review reply, receptionist copies it into GBP (manual fallback).
-- Search Console API: verify `spamanagement.ae` once as a Domain property (covers all subdomains); custom domains need a per-tenant DNS TXT.
+- Search Console API: verify `spamanagement.co` once as a Domain property (covers all subdomains); custom domains need a per-tenant DNS TXT.
 - Reserve with Google: UAE supported for Appointments Redirect, but it's a partner integration → P4.
 
 **WhatsApp**
@@ -681,7 +681,7 @@ Applies to every non-public screen: owner/manager/receptionist/therapist/account
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| **P0 Foundations** | Repo, CI/CD, infra, tenancy + RLS, auth + ULM, host routing, signup → subdomain, super-admin skeleton, AI gateway stub, admin design system + responsive role shells, spikes. **Start Meta + Google applications.** | Pilot owner signs up, gets `pilot.spamanagement.ae`, invites a receptionist with a role. |
+| **P0 Foundations** | Repo, CI/CD, infra, tenancy + RLS, auth + ULM, host routing, signup → subdomain, super-admin skeleton, AI gateway stub, admin design system + responsive role shells, spikes. **Start Meta + Google applications.** | Pilot owner signs up, gets `pilot.spamanagement.co`, invites a receptionist with a role. |
 | **P1 MVP** | Branch/rooms/services/staff/shifts, booking engine + calendar + walk-ins + rotation, online booking + WhatsApp confirm, clients + intake/waiver e-sign + notes, POS (recorded payments, tips, refunds), daily close, WhatsApp outbox (confirm/remind), business KPIs, site builder MVP (primitives, 15 core blocks, 3 templates, responsive overrides, EN/AR, template studio), super-admin billing (manual payments), PWA + push. | Pilot runs every booking, walk-in and cash close on the platform for 2 weeks. |
 | **P2 Money & growth** | Ledger + accounting screens + VAT, packages/gift cards/memberships, commissions/advances/payroll summary, inventory, document expiry tracker, custom domains, block analytics + funnels + attribution, reviews, segments + campaigns, CSV import, all 8 templates + section presets + saved/global sections + template switching + preflight, data export. | Owner reads monthly P&L and block analytics without help. |
 | **P3 AI** | Site generator onboarding, SEO agent, IG content + publishing (Seedream), IG DM agent + DM-to-booking + human inbox, IG comments, GBP reviews/posts/Book link, slot-filler, insights digest, receipt OCR, AI assists in the site editor. | Bookings attributed to AI/IG/GBP sources appear in reports. |
@@ -694,13 +694,13 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 ## 14. Phase 0 task list
 
 **You (accounts & approvals — start now, they have lead time)**
-1. `spamanagement.ae` registered via an accredited .ae registrar; nameservers → Cloudflare.
+1. `spamanagement.co` (canonical since B1) and the old `spamanagement.ae` (kept via `EXTRA_ROOT_DOMAINS`); nameservers → Cloudflare.
 2. DigitalOcean account; run the region ping test from the pilot spa (command provided in P0).
 3. Cloudflare account (Free); later enable Cloudflare for SaaS on the zone.
 4. Meta: business portfolio for the platform company → **Business Verification** (trade licence) → developer app with Instagram API (Instagram Login); add the pilot's IG (professional, public) as tester.
 5. Google: Cloud project; get **Manager** on the pilot's GBP; submit the GBP API Basic Access form.
 6. BytePlus ModelArk (ap-southeast): enable Seed 2.0 lite/pro/mini + Seedream; create `ARK_API_KEY`.
-7. Resend account (verify `spamanagement.ae` for staff email).
+7. Resend account (verify `spamanagement.co` for staff email).
 8. Pilot data: services & prices, rooms, staff list & shifts, hours, logo/photos, client list if any.
 
 **Claude (code)** — status 2026-10-06
@@ -753,7 +753,7 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 | Still open | Meta + Google API approvals (code ready; set META_* / GOOGLE_*), Reserve with Google, notification centre, low-stock pushes |
 
 Deployed on one DigitalOcean droplet (blr1, Compose + Caddy) with path routing (`/app`, `/admin`, `/s/{slug}`) on an sslip.io hostname
-until `spamanagement.ae` is registered.
+until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept via `EXTRA_ROOT_DOMAINS`) is the owner checklist in deploy/droplet/README.md (B1).
 
 ### 14.2 P2/P3 implementation decisions (recorded at integration)
 - **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
@@ -882,7 +882,7 @@ until `spamanagement.ae` is registered.
 ### 14.7 Work split (owner, 2026-10-08)
 - Track A (Claude): spa dashboard UI (`apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,
   `packages/core/src/i18n/**`) — §14.6 Phase 2, then Phase 3 screens on Track B's services.
-- Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch
+- Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch ✅ (code + checklist in deploy/droplet/README.md; owner runs DNS/env steps)
   to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
   bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
   clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.

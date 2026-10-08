@@ -1,4 +1,4 @@
-# spamanagement.ae — Claude notes
+# spamanagement.co — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
@@ -32,8 +32,9 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
-- Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Marketing, page titles and PWA name use it; auth/emails/env still say
-  spamanagement.ae (switch pending).
+- Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Everything uses it (copy, auth appName/TOTP issuer,
+  `PLATFORM_NAME`/`DEFAULT_EMAIL_FROM` in core/email.ts, env examples); old spamanagement.ae stays live via `EXTRA_ROOT_DOMAINS`
+  (B1 done; owner DNS/env checklist: deploy/droplet/README.md "Move to a new domain").
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.

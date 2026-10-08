@@ -5,7 +5,7 @@ Every integration is optional. Each feature switches itself on once its environm
 Until then, the UI shows a "not configured yet" state.
 
 `APP_URL` below is the app origin, without a path. Today that is `https://spamanagement-6g3mi.ondigitalocean.app`;
-later it becomes `https://app.spamanagement.ae`. API routes live at `/api/...` on that origin.
+later it becomes `https://app.spamanagement.co`. API routes live at `/api/...` on that origin.
 OAuth redirect URIs are built from it, so register exactly what the app shows on the integration card.
 
 ## 0. Token encryption
@@ -81,7 +81,7 @@ The spa owner (or a Manager on the profile) connects from *Settings → Instagra
 
 Production design: spa domains point at a Cloudflare for SaaS **fallback origin** (our Tunnel/App), and Cloudflare issues SSL per hostname.
 
-1. In the `spamanagement.ae` zone, enable **SSL for SaaS** and set the fallback origin (e.g. `customers.spamanagement.ae`, proxied).
+1. In the `spamanagement.co` zone, enable **SSL for SaaS** and set the fallback origin (e.g. `customers.spamanagement.co`, proxied).
 2. Create an API token with **Zone → SSL and Certificates: Edit** and **Zone → Custom Hostnames: Edit** for that zone.
 3. Env:
 
@@ -89,7 +89,7 @@ Production design: spa domains point at a Cloudflare for SaaS **fallback origin*
 |---|---|
 | `CF_API_TOKEN` | the token |
 | `CF_ZONE_ID` | zone ID |
-| `CF_CNAME_TARGET` | `customers.spamanagement.ae` |
+| `CF_CNAME_TARGET` | `customers.spamanagement.co` |
 
 The spa adds two DNS records, shown on *Settings → Custom domain*:
 - `TXT _spamanagement.<their host>` = token
@@ -131,7 +131,7 @@ npx web-push generate-vapid-keys
 |---|---|
 | `VAPID_PUBLIC_KEY` | public key |
 | `VAPID_PRIVATE_KEY` | private key |
-| `VAPID_SUBJECT` | `mailto:support@spamanagement.ae` |
+| `VAPID_SUBJECT` | `mailto:support@spamanagement.co` |
 
 Staff enable notifications per device on their *Account* page. Who gets what: new online bookings → members with
 `calendar.manage`; document expiry (60/30/7/0 days, daily 09:00) → `staff.manage`; weekly insights (Mon 08:00) →

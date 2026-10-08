@@ -708,7 +708,7 @@ function DoneView({ done, locale, onAgain }: { done: BookingDone; locale: Locale
     timeZone: 'Asia/Dubai',
   }).format(new Date(done.start))
   const ics = icsDataUrl({
-    uid: `${done.ref}@spamanagement.ae`,
+    uid: `${done.ref}@spamanagement.co`,
     start: done.start,
     end: done.end,
     title: `${done.service} — ${done.spa}`,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ALL_PERMISSIONS,
   checkSlug,
+  DEFAULT_EMAIL_FROM,
   matchRoot,
   normalizeSlug,
   parseRoots,
@@ -47,6 +48,19 @@ describe('platform roots', () => {
     expect(matchRoot('app.localhost:3100', roots)).toBe('localhost:3100')
     expect(matchRoot('evilspamanagement.ae', ['spamanagement.ae'])).toBeNull()
     expect(matchRoot('www.serenityspa.ae', roots)).toBeNull()
+  })
+
+  it('serves spamanagement.co (canonical) and the old spamanagement.ae side by side', () => {
+    const roots = parseRoots('spamanagement.co', 'spamanagement.ae')
+    expect(roots).toEqual(['spamanagement.co', 'spamanagement.ae'])
+    for (const root of roots) {
+      expect(resolveSurface(root, roots)).toEqual({ kind: 'marketing' })
+      expect(resolveSurface(`app.${root}`, roots)).toEqual({ kind: 'app' })
+      expect(resolveSurface(`admin.${root}`, roots)).toEqual({ kind: 'admin' })
+      expect(resolveSurface(`pilot.${root}`, roots)).toEqual({ kind: 'site', slug: 'pilot' })
+    }
+    expect(matchRoot('spamanagement.com', roots)).toBeNull()
+    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.co <no-reply@spamanagement.co>')
   })
 
   it('resolves surfaces on every platform domain', () => {
