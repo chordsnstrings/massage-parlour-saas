@@ -11,7 +11,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0021` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
-| `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
+| `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`), `meta` (R7 Meta tools assistant). `tool-loop.ts` `runToolLoop` = the shared OpenAI-style tool loop (local tools + MCP sources, every step through `runChat`, so budget + `ai_usage` per step; the DM agent uses it). `mcp/`: Meta MCP (see "Meta MCP" below). |
 | `@spa/web` (apps/web) | Next.js 16; one app serves every surface. |
 | `@spa/worker` (apps/worker) | pg-boss 12 on `DATABASE_URL_OWNER`; job registry `src/jobs/index.ts`. |
 
@@ -137,6 +137,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `collect`: analytics beacon; inserts into `web_events` via platformDb.
   - `domains/allowed`: Caddy's on-demand TLS "ask".
   - `integrations/meta|google`: OAuth, Meta webhook, deauthorize, data deletion.
+  - `mcp/meta`: first-party Meta MCP server (R7, `handleMetaMcpRequest`; bearer = 5-minute signed tenant token).
 
 ## Site builder
 
@@ -427,6 +428,32 @@ i18n namespace `automations`.
   - Host routing by default; set `E2E_ROUTING=path` for path routing.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin.
+
+## Meta MCP (R7, AI tools)
+
+- **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.30.1, JSON
+  responses), one McpServer per request. Auth = `signMcpToken` (`mcp/token.ts`: HMAC of `META_MCP_SECRET` or
+  `BETTER_AUTH_SECRET`, domain-separated; claims tenant, agent, acting user; ≤ 5 min). Live tenants only.
+  Served at `/api/mcp/meta`; agents call it **in-process** through the same handler (`metaMcpSources`, real MCP client
+  + token) unless `META_MCP_URL` is set.
+- **Tools** (`mcp/tools.ts` registry, domain code in `@spa/services` `meta-mcp.ts` on the existing Graph client +
+  stored tokens): `instagram.list_comments|reply_comment|list_dms|draft_dm_reply|create_post_draft|publish_approved_post`,
+  `facebook_page.list_comments|reply_comment|create_post_draft|publish_approved_post` (only with a connected
+  `social_accounts` platform `facebook` row = Page id + Page token; **no Page connect flow yet**), `whatsapp.read_inbox_summary`,
+  `whatsapp.draft_message` (outbox row `custom`/`queued` for tap-send). **No WhatsApp send tool**; `isForbiddenTool`
+  drops any WhatsApp send-like tool from every server (name rules + description/schema mentioning WhatsApp).
+- **Exposure** = agent allow-list (`AGENT_META_TOOLS`: dm_agent, comment_agent, content_agent, slot_filler, meta_agent)
+  ∩ spa toggles (`tenants.settings.metaMcp.groups`: instagram_inbox, instagram_posts, facebook_page, whatsapp on by
+  default; external off) ∩ connections (publish needs Meta configured + IG connected). `instagram.reply_comment` sends
+  only when `metaMcp.autopilot` (else an `ai_draft` in the inbox); `facebook_page.reply_comment` only exists on autopilot.
+  Publish tools only publish `scheduled` (approved) posts whose time has come. Model function names map `.` → `__`.
+- **Audit**: every write tool inserts `audit_log` `ai.mcp.<tool>` (tenant, acting user, agent, clipped args, outcome);
+  the run itself `ai.mcp.run`; settings `ai.mcp.settings.updated`; console `platform.meta_mcp.updated`.
+- **External server** (super-admin AI page): `platform_settings.meta_mcp_enabled|url|key_enc (AES-GCM)|tools` — only
+  listed names, prefixed `ext__`, only for agents allowing `external` (meta_agent) and spas with the group on.
+- **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
+  autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
+  `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0022_meta_mcp (also `social_platform` += `facebook`).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

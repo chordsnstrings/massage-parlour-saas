@@ -80,6 +80,12 @@ export const platformSettings = pgTable(
     pricesIncludeVat: boolean('prices_include_vat').notNull().default(false),
     /** Added once per domain order on top of the registrar price (USD), PLAN §14.8 R14. */
     domainMarkupUsd: numeric('domain_markup_usd', { precision: 10, scale: 2 }).notNull().default('10'),
+    /** R7: optional external Meta MCP server (future official servers); key AES-GCM encrypted. */
+    metaMcpEnabled: boolean('meta_mcp_enabled').notNull().default(false),
+    metaMcpUrl: text('meta_mcp_url'),
+    metaMcpKeyEnc: text('meta_mcp_key_enc'),
+    /** External tool names the agents may use (still filtered: WhatsApp send-like tools are never exposed). */
+    metaMcpTools: text('meta_mcp_tools').array().notNull().default([]),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -116,6 +122,8 @@ export type TenantSettings = {
   automations?: Record<string, boolean>
   /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
   require2fa?: boolean
+  /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
+  metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
 }
 
 export const tenants = pgTable(

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { Grid } from '@/components/crm'
 import { GbpCard } from '@/components/integrations/gbp-card'
 import { InstagramCard } from '@/components/integrations/instagram-card'
+import { MetaMcpCard } from '@/components/integrations/meta-mcp-card'
 import { PageHeader } from '@/components/ui/page'
 import { getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
@@ -34,6 +35,7 @@ export default async function IntegrationsPage({
       <Grid cols="col-2">
         <InstagramCard ctx={ctx} searchParams={sp} />
         <GbpCard ctx={ctx} searchParams={sp} />
+        <MetaMcpCard ctx={ctx} />
       </Grid>
     </>
   )

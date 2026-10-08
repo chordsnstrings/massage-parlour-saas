@@ -952,6 +952,11 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).
 - **R7 decision (owner, 2026-10-08):** WhatsApp stays click-to-send — the AI may read and draft WhatsApp messages
   through Meta MCP but never sends; staff tap to send. Instagram/Facebook via Meta MCP: read, draft, publish approved posts.
+  *Built (X9, 2026-10-08):* first-party Meta MCP server `/api/mcp/meta` (per-tenant 5-minute token) + MCP client in
+  `@spa/ai` wired into the shared tool loop with per-agent allow-lists; Instagram / Facebook Page / WhatsApp-draft tools,
+  no WhatsApp send tool (also filtered from any external server); optional external server in super-admin AI settings;
+  Settings → Integrations "AI tools via Meta MCP" card (groups, autopilot for public replies, Ask the AI); write tools
+  audit-logged. Gap: no Facebook Page connect flow yet (Page tools appear once a Page token is stored). Details: CODEMAP "Meta MCP".
 - **B1 decision (2026-10-08):** staff emails (invites, password reset, 2FA) keep sending from spamanagement.ae
   (`EMAIL_FROM`) until spamanagement.co is verified in Resend; then switch the env value.
 - **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):

@@ -184,7 +184,7 @@ export const savedSections = pgTable(
 )
 
 // ── Social accounts, posts, conversations, AI agents (Phase 3) ───────────────
-export const socialPlatform = pgEnum('social_platform', ['instagram', 'gbp'])
+export const socialPlatform = pgEnum('social_platform', ['instagram', 'gbp', 'facebook'])
 
 export const socialAccounts = pgTable(
   'social_accounts',

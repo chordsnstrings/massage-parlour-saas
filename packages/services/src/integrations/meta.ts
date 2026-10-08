@@ -407,6 +407,58 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
   }
 }
 
+const FB_GRAPH = 'https://graph.facebook.com'
+
+export type FacebookPageClient = ReturnType<typeof facebookPageClient>
+
+/** Facebook Page Graph calls (R7 Meta MCP tools) with a stored Page access token. */
+export function facebookPageClient(fetchImpl: FetchFn = fetch) {
+  const graph = (path: string) => `${FB_GRAPH}/${GRAPH_VERSION}${path}`
+  return {
+    /** Recent Page posts with their latest comments. */
+    async recentComments(o: { pageId: string; accessToken: string; limit?: number }) {
+      const fields = 'id,message,created_time,comments.limit(10){id,message,created_time,from{name}}'
+      const q = new URLSearchParams({ fields, limit: String(Math.min(o.limit ?? 10, 25)) })
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/feed?${q}`), {
+        token: o.accessToken,
+      })
+      return arr(data.data).flatMap((p) => {
+        const post = obj(p) ?? {}
+        return arr(obj(post.comments)?.data).map((c) => {
+          const cm = obj(c) ?? {}
+          return {
+            commentId: str(cm.id) ?? '',
+            postId: str(post.id) ?? '',
+            post: (str(post.message) ?? '').slice(0, 140),
+            from: str(obj(cm.from)?.name) ?? null,
+            text: (str(cm.message) ?? '').slice(0, 1000),
+            at: str(cm.created_time) ?? null,
+          }
+        })
+      })
+    },
+    async replyToComment(o: { commentId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.commentId)}/comments`), {
+        ...json({ message: o.text }),
+        token: o.accessToken,
+      })
+      return { id: str(data.id) }
+    },
+    /** Photo post when an image URL is given, else a text post. */
+    async publish(o: { pageId: string; caption: string; imageUrl?: string | null; accessToken: string }) {
+      const path = o.imageUrl ? 'photos' : 'feed'
+      const body = o.imageUrl ? { url: o.imageUrl, caption: o.caption } : { message: o.caption }
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/${path}`), {
+        ...json(body),
+        token: o.accessToken,
+      })
+      const id = str(data.post_id) ?? str(data.id)
+      if (!id) throw new MetaApiError(502, 'Facebook did not return the post id')
+      return { id }
+    },
+  }
+}
+
 /** Why staff DM text can't go out as written (Instagram counts UTF-8 bytes: Arabic letters take 2); null = it fits. */
 export function dmTooLong(text: string, max = MAX_DM_BYTES) {
   const bytes = new TextEncoder().encode(text).length
