@@ -1,7 +1,10 @@
 import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 const PORT = Number(process.env.E2E_PORT ?? 3100)
+const aiFixtureDir = path.join(tmpdir(), `spa-e2e-ai-${PORT}`)
 const local = (role: string) =>
   `postgres://${role}:${role}_dev@localhost:5432/${process.env.TEST_DB_NAME ?? 'spa_test'}`
 // Use a preinstalled Chromium when present (cloud sandbox); CI installs its own.
@@ -50,6 +53,8 @@ export default defineConfig({
       RESEND_API_KEY: '',
       // The suite signs up dozens of owners from one IP; a production build would otherwise rate-limit them.
       AUTH_RATE_LIMIT: 'off',
+      // Canned AI replies per spa slug (ai-edit.spec): the gateway still meters and validates; no ModelArk call.
+      AI_E2E_FIXTURE_DIR: aiFixtureDir,
     },
   },
 })

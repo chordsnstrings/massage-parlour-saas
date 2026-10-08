@@ -16,23 +16,30 @@ type FieldProps<V> = {
 
 // biome-ignore lint/suspicious/noExplicitAny: Puck types field values per prop; ours are checked in the renderers
 type Loose = any
+/** What a custom field holds, for AI editing (R16): Puck only knows them as `custom`. See `ai-schema.ts`. */
+export type AiFieldMeta = { kind: 'bi' } | { kind: 'image' } | { kind: 'responsive'; options: string[] }
 const custom = <V,>(
   label: string,
   render: (props: FieldProps<V | undefined>) => React.ReactElement,
-): Field => ({
-  type: 'custom',
-  label,
-  render: render as CustomFieldRender<Loose>,
-})
+  ai?: AiFieldMeta,
+): Field =>
+  ({
+    type: 'custom',
+    label,
+    render: render as CustomFieldRender<Loose>,
+    ai,
+  }) as Field
 
 /** Field builders shared by the blocks. Content fields are bilingual; style fields are responsive. */
 export const biField = (label: string, opts: { multiline?: boolean } = {}) =>
-  custom<Bi>(label, (props) => <BilingualField {...props} multiline={opts.multiline} />)
+  custom<Bi>(label, (props) => <BilingualField {...props} multiline={opts.multiline} />, { kind: 'bi' })
 
 const responsive = <T extends string>(label: string, options: { value: T; label: string }[], fallback: T) =>
-  custom<Responsive<T>>(label, (props) => (
-    <ResponsiveField<T> {...props} options={options} fallback={fallback} />
-  ))
+  custom<Responsive<T>>(
+    label,
+    (props) => <ResponsiveField<T> {...props} options={options} fallback={fallback} />,
+    { kind: 'responsive', options: options.map((o) => o.value) },
+  )
 
 export const padField = (label = 'Padding') =>
   responsive<PadStep>(
@@ -90,11 +97,15 @@ const ImageFieldControl = lazy(() =>
   import('@/components/media/image-field').then((m) => ({ default: m.ImageFieldControl })),
 )
 export const imageField = (label = 'Image'): Field =>
-  custom<string>(label, (props) => (
-    <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-subtle" />}>
-      <ImageFieldControl {...props} />
-    </Suspense>
-  ))
+  custom<string>(
+    label,
+    (props) => (
+      <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-subtle" />}>
+        <ImageFieldControl {...props} />
+      </Suspense>
+    ),
+    { kind: 'image' },
+  )
 
 export const buttonsField = (): Field => ({
   type: 'array',

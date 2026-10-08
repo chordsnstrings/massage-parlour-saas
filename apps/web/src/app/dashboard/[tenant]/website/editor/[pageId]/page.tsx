@@ -7,6 +7,7 @@ import { buildMeta, loadSite } from '@/components/site/data'
 import type { SavedSection } from '@/components/site/editor/context'
 import { appPath, PATH_ROUTING } from '@/lib/paths'
 import { can, isStudio, requireMember } from '@/server/access'
+import { aiFixturesOn } from '@/server/ai-fixture'
 import { publicSiteUrl } from '@/server/sites'
 import { SiteEditor } from './editor'
 
@@ -64,6 +65,7 @@ export default async function EditorPage({
       canPublish={can(ctx, 'site.publish')}
       canInsights={can(ctx, 'reports.view')}
       aiReady={Boolean(process.env.ARK_API_KEY)}
+      aiEditReady={Boolean(process.env.ARK_API_KEY) || aiFixturesOn()}
       sections={sections}
       pages={loaded.pages.map((p) => ({
         slug: p.slug,
