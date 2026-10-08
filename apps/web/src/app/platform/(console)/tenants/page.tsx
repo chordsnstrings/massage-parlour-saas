@@ -21,6 +21,7 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
       name: tenants.name,
       slug: tenants.slug,
       status: tenants.status,
+      deletedAt: tenants.deletedAt,
       plan: plans.name,
       periodEnd: subscriptions.currentPeriodEnd,
       createdAt: tenants.createdAt,
@@ -64,7 +65,14 @@ export default async function TenantsPage({ searchParams }: { searchParams: Prom
               {
                 key: 'status',
                 header: 'Status',
-                cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge>,
+                cell: (r) =>
+                  r.deletedAt ? (
+                    <Badge tone="danger">deleted</Badge>
+                  ) : (
+                    <Badge tone={statusTone(r.status)}>
+                      {r.status === 'read_only' ? 'paused' : r.status}
+                    </Badge>
+                  ),
               },
               { key: 'plan', header: 'Plan', cell: (r) => r.plan ?? '—' },
               {

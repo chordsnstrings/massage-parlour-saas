@@ -26,6 +26,7 @@ export type StaffInput = {
   color: string
   bookable: boolean
   active: boolean
+  payType: 'booking_commission' | 'salary' | 'sales_commission' | 'booking_fee'
   commissionPct: number
   baseSalaryAed: number
   memberId: string | null
@@ -122,6 +123,23 @@ export function StaffSheet({
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.email})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('staff.form.payType')} name="payType" hint={t('staff.form.payTypeHint')}>
+            <Select id="payType" name="payType" defaultValue={person?.payType ?? 'booking_commission'}>
+              {/* "% of sales" is no longer offered (R2 owner decision); kept only for people already on it. */}
+              {(
+                [
+                  'booking_commission',
+                  'salary',
+                  'booking_fee',
+                  ...(person?.payType === 'sales_commission' ? (['sales_commission'] as const) : []),
+                ] as const
+              ).map((v) => (
+                <option key={v} value={v}>
+                  {enumLabel(t, 'staffPayType', v)}
                 </option>
               ))}
             </Select>

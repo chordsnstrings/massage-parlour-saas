@@ -24,7 +24,12 @@ import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
 import { requestChangeAction } from './studio-actions'
-import { ApproveSiteSheet, RequestChangeSheet, ResolveRequestSheet, ReviewButton } from './studio-client'
+import {
+  ApproveSiteSheet,
+  RequestChangeSheet,
+  ResolveRequestSheet,
+  StudioStatusButton,
+} from './studio-client'
 import {
   AddPageSheet,
   AiWriterSheet,
@@ -72,13 +77,13 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     },
   )
   const catalog = await templateCatalog()
-  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits; the spa reviews and asks.
+  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits, approves and publishes; the spa
+  // previews and requests changes (R1).
   const studio = await isStudio(ctx)
   const canDesign = studio && can(ctx, 'site.design')
   const canPublish = studio && can(ctx, 'site.publish')
   const canEdit = studio && can(ctx, 'site.content')
   const canRequest = !studio && can(ctx, 'site.content')
-  const canApprove = !studio && can(ctx, 'site.publish') && site?.studioStatus === 'review'
   const studioStatus = site?.studioStatus ?? 'building'
   const openRequests = requests.filter((r) => r.status === 'open').length
   const pageOptions = pages.map((p) => ({ id: p.id, title: p.title.en }))
@@ -109,11 +114,25 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               aria-label={tpl.name}
               className="crm-card group flex h-full flex-col overflow-hidden !p-0 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
             >
-              <ScaledFrame
-                src={preview(`template=${tpl.key}&starter=1`)}
-                title={t('website.templatePreview', { name: tpl.name })}
-                className="aspect-[4/3] border-b"
-              />
+              {tpl.source === 'builtin' ? (
+                // Built-ins ship a static thumbnail (public/site-templates, rendered by the
+                // e2e/template-thumbs.spec.ts with THUMBS=1) so a gallery of 20+ templates doesn't boot a live page each.
+                // biome-ignore lint/performance/noImgElement: static public asset, fixed size
+                <img
+                  src={`/site-templates/${tpl.key}.webp`}
+                  alt={t('website.templatePreview', { name: tpl.name })}
+                  loading="lazy"
+                  width={640}
+                  height={480}
+                  className="aspect-[4/3] w-full border-b bg-subtle object-cover object-top"
+                />
+              ) : (
+                <ScaledFrame
+                  src={preview(`template=${tpl.key}&starter=1`)}
+                  title={t('website.templatePreview', { name: tpl.name })}
+                  className="aspect-[4/3] border-b"
+                />
+              )}
               <div className="flex flex-1 flex-col gap-3 p-4">
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between gap-3">
@@ -340,9 +359,14 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
         actions={
           <>
             {writer}
-            {studio && site && site.studioStatus !== 'approved' && (
-              <ReviewButton slug={slug} review={site.studioStatus === 'building'} />
+            {canPublish && site && (
+              <StudioStatusButton
+                slug={slug}
+                to={site.studioStatus === 'building' ? 'review' : 'building'}
+                reopen={site.studioStatus === 'approved'}
+              />
             )}
+            {canPublish && site && site.studioStatus !== 'approved' && <ApproveSiteSheet slug={slug} />}
             {!studio && site && (
               <Button variant="secondary" asChild>
                 <a href={preview()} target="_blank" rel="noreferrer">
@@ -351,7 +375,6 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               </Button>
             )}
             {canRequest && <RequestChangeSheet slug={slug} pages={pageOptions} />}
-            {canApprove && <ApproveSiteSheet slug={slug} />}
             {site && (
               <Button variant="secondary" asChild>
                 <a href={publicUrl} target="_blank" rel="noreferrer">

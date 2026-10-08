@@ -97,8 +97,13 @@ export default async function StaffDetailPage({
   const details: [string, React.ReactNode][] = [
     [t('staff.detail.gender'), person.gender ? enumLabel(t, 'staffGender', person.gender) : '—'],
     [t('staff.detail.mobile'), person.phoneE164 ? `+${person.phoneE164}` : '—'],
-    [t('staff.detail.commission'), `${fmt.number(Number(person.commissionPct))}%`],
-    [t('staff.detail.baseSalary'), fmt.aed(person.baseSalaryAed)],
+    [t('staff.detail.payType'), enumLabel(t, 'staffPayType', person.payType)],
+    ...(person.payType === 'sales_commission'
+      ? [[t('staff.detail.commission'), `${fmt.number(Number(person.commissionPct))}%`] as [string, string]]
+      : []),
+    ...(person.payType === 'salary'
+      ? [[t('staff.detail.baseSalary'), fmt.aed(person.baseSalaryAed)] as [string, string]]
+      : []),
     [t('staff.detail.login'), linkedUser?.name ?? t('staff.detail.notLinked')],
   ]
 
@@ -133,6 +138,7 @@ export default async function StaffDetailPage({
                 color: person.color,
                 bookable: person.bookable,
                 active: person.active,
+                payType: person.payType,
                 commissionPct: Number(person.commissionPct),
                 baseSalaryAed: Number(person.baseSalaryAed),
                 memberId: person.memberId,

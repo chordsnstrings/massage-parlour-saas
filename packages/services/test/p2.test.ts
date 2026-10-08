@@ -79,7 +79,13 @@ beforeAll(async () => {
     ids.variant = v!.id
     const [st] = await db
       .insert(staff)
-      .values({ tenantId: ids.tenant!, displayName: 'Maya', commissionPct: '10', baseSalaryAed: '3000' })
+      .values({
+        tenantId: ids.tenant!,
+        displayName: 'Maya',
+        payType: 'sales_commission',
+        commissionPct: '10',
+        baseSalaryAed: '3000',
+      })
       .returning()
     ids.staff = st!.id
     const [c] = await db
@@ -264,10 +270,10 @@ describe('commissions and payroll', () => {
       commission: line!.commissionAed,
       tips: line!.tipsAed,
       net: line!.netAed,
-    }).toEqual({ base: '3000.00', commission: '33.33', tips: '20.00', net: '3053.33' })
+    }).toEqual({ base: '0.00', commission: '33.33', tips: '20.00', net: '53.33' }) // % pay: no base salary
     await tx((db) => finalisePayroll(db, run.id, '2026-10-31'))
     expect(await bal('2300')).toBe(0)
-    expect(await bal('6000')).toBe(3000)
+    expect(await bal('6000')).toBe(0)
   })
 
   it('formats a WPS salary information file', () => {

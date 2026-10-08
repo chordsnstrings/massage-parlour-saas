@@ -521,6 +521,17 @@
   background: var(--crm-warn-bg);
   color: #7a5408;
 }
+.crm-banner[data-tone="danger"] {
+  background: var(--crm-bad);
+  border-bottom: 0;
+  color: #fff;
+  font-weight: 600;
+}
+.crm-banner[data-tone="danger"] a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .crm-top {
   position: sticky;
   top: 0;
@@ -626,9 +637,9 @@
   border-radius: 2px;
   background: var(--crm-accent);
 }
+/* Fills the screen on wide monitors (R6): no max-width; grids add a column ≥ 1600 px (crm-kit.css). */
 .crm-view {
   width: 100%;
-  max-width: 1260px;
   padding: var(--crm-view-pad);
 }
 

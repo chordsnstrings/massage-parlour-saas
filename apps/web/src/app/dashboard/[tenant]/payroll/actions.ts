@@ -199,3 +199,40 @@ export async function saveStaffPayAction(
   })
   return done(slug, 'payroll.result.paySaved')
 }
+
+/** The owner's fixed receptionist fee per completed booking they created (R2 owner decision). */
+export async function saveBookingFeeAction(
+  slug: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'staff.manage')
+  if (error) return fail(error)
+  const parsed = z
+    .object({
+      receptionistBookingFee: z.coerce
+        .number({ message: 'payroll.validation.fee' })
+        .min(0, 'payroll.validation.fee')
+        .max(10_000, 'payroll.validation.fee'),
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const fee = parsed.data.receptionistBookingFee.toFixed(2)
+  await withTenant(ctx.tenant.id, async (tx) => {
+    const [t] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+    await tx
+      .update(tenants)
+      .set({ settings: { ...(t?.settings ?? {}), receptionistBookingFee: fee } })
+      .where(eq(tenants.id, ctx.tenant.id))
+  })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'payroll.booking_fee.updated',
+    data: { fee },
+  })
+  return done(slug, 'payroll.result.feeSaved')
+}

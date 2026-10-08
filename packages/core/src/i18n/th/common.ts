@@ -3,6 +3,7 @@ import type { Messages } from '../types'
 export const common: Messages['common'] = {
   save: 'บันทึก',
   cancel: 'ยกเลิก',
+  priceOnRequest: 'ราคาตามตกลง',
   edit: 'แก้ไข',
   delete: 'ลบ',
   remove: 'นำออก',

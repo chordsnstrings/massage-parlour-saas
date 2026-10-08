@@ -4,7 +4,10 @@ import type { Messages } from '../types'
 export const permissions: Messages['permissions'] = {
   groups: {
     dashboard: { label: 'แดชบอร์ด', actions: { view: 'ดูแดชบอร์ด', revenue: 'ดูตัวเลขรายได้' } },
-    calendar: { label: 'ปฏิทินและการจอง', actions: { view: 'ดูปฏิทิน', manage: 'สร้างและแก้ไขการจอง' } },
+    calendar: {
+      label: 'ปฏิทินและการจอง',
+      actions: { view: 'ดูปฏิทิน', manage: 'สร้างและแก้ไขการจอง', commission: 'บันทึกค่าคอมมิชชันนักบำบัด' },
+    },
     clients: {
       label: 'ลูกค้า',
       actions: { view: 'ดูข้อมูลลูกค้า', manage: 'แก้ไขข้อมูลลูกค้า', phone: 'ดูเบอร์โทรศัพท์', export: 'ส่งออกรายชื่อลูกค้า' },
@@ -15,7 +18,14 @@ export const permissions: Messages['permissions'] = {
     },
     services: { label: 'บริการและห้อง', actions: { manage: 'จัดการบริการ ห้อง และทรัพยากร' } },
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },
-    inventory: { label: 'คลังสินค้า', actions: { manage: 'จัดการสต็อก' } },
+    inventory: {
+      label: 'คลังสินค้า',
+      actions: {
+        manage: 'จัดการสต็อกและคลังกลาง',
+        adjust: 'เติมสต็อกและปรับยอดสต็อก',
+        purchase: 'บันทึกการซื้อ',
+      },
+    },
     marketing: {
       label: 'WhatsApp และการตลาด',
       actions: { send: 'ส่งข้อความ WhatsApp', campaigns: 'สร้างแคมเปญ' },

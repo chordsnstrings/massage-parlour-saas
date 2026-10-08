@@ -3,7 +3,7 @@ import { platformDb, platformInvoices } from '@spa/db'
 import { createInvoiceCheckout, StripeError, stripeConfig } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { guard } from '@/server/access'
+import { can, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
 import { appUrl } from '@/server/origin'
 
@@ -12,8 +12,10 @@ export async function payInvoiceByCardAction(
   slug: string,
   invoiceId: string,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const { ctx, error } = await guard(slug, 'billing.view')
-  if (error) return { ok: false, error }
+  // Not `guard`: a paused (read-only) spa must still be able to pay its invoices.
+  const ctx = await requireMember(slug)
+  if (!can(ctx, 'billing.view')) return { ok: false, error: 'errors.forbidden' }
+  if (ctx.tenant.deletedAt) return { ok: false, error: 'errors.readOnly' }
   const cfg = stripeConfig()
   if (!cfg) return { ok: false, error: 'billing.error.cardsOff' }
   if (!z.uuid().safeParse(invoiceId).success) return { ok: false, error: 'billing.error.notFound' }

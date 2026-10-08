@@ -29,6 +29,8 @@ const schema = z.object({
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),
+  // Spa-wide default for prices on the website; each service may override it (R4).
+  showPrices: z.enum(['on', 'off']).optional(),
 })
 
 export async function saveSettingsAction(
@@ -45,9 +47,16 @@ export async function saveSettingsAction(
   if (d.whatsapp && !whatsapp)
     return fail('settings.profile.errors.whatsapp', { whatsapp: 'validation.uaeMobile' })
   await withTenant(ctx.tenant.id, async (tx) => {
+    const [cur] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+    const settings = d.showPrices
+      ? { ...(cur?.settings ?? {}), hidePrices: d.showPrices === 'off' }
+      : (cur?.settings ?? {})
     await tx
       .update(tenants)
-      .set({ name: d.name, legalName: d.legalName, trn: d.trn })
+      .set({ name: d.name, legalName: d.legalName, trn: d.trn, settings })
       .where(eq(tenants.id, ctx.tenant.id))
     await tx
       .update(branches)

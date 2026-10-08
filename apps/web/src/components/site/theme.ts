@@ -26,23 +26,79 @@ export type SiteTheme = {
   /** Subtle background pattern on tinted bands (P2 templates). */
   pattern: 'none' | 'lattice' | 'arabesque' | 'leaf'
   /** Arabic heading face used in RTL: Naskh (classic), Kufi (geometric display) or plain sans. */
-  arabicFont: 'naskh' | 'kufi' | 'sans'
+  arabicFont: 'naskh' | 'kufi' | 'sans' | 'amiri'
   /** Image block corners: theme radius, Arabic arch, or soft organic shape. */
   imageShape: 'theme' | 'arch' | 'organic'
+  /** Named Latin heading face (R5 design templates); 'theme' uses the serif/sans stack of `headingFont`. */
+  headingFace?: HeadingFace
+  /** Decorative hero background drawn in CSS (no images): hairlines, rings, marble, rays, skyline… */
+  backdrop?: Backdrop
+  /** Hero emblem built from the spa name (seal, numeral, flap board…); shown where the hero has no photo. */
+  emblem?: Emblem
+  /** How `*words*` in headlines are set off: italic accent, muted second tone, or underline. */
+  emphasis?: 'italic' | 'muted' | 'underline'
 }
+
+export const HEADING_FACES = {
+  theme: '',
+  cormorant: '"Cormorant Garamond Variable", "Cormorant Garamond"',
+  playfair: '"Playfair Display Variable", "Playfair Display"',
+  bodoni: '"Bodoni Moda Variable", "Bodoni Moda"',
+  marcellus: 'Marcellus',
+  dmserif: '"DM Serif Display"',
+  baskerville: '"Libre Baskerville"',
+  fraunces: '"Fraunces Variable", Fraunces',
+  manrope: '"Manrope Variable", Manrope',
+  sora: '"Sora Variable", Sora',
+  intertight: '"Inter Tight Variable", "Inter Tight"',
+  jakarta: '"Plus Jakarta Sans Variable", "Plus Jakarta Sans"',
+  nunito: '"Nunito Variable", Nunito',
+  grotesk: '"Space Grotesk Variable", "Space Grotesk"',
+} as const
+export type HeadingFace = keyof typeof HEADING_FACES
+export const BACKDROPS = [
+  'none',
+  'hairlines',
+  'rings',
+  'marble',
+  'sheen',
+  'rays',
+  'skyline',
+  'monogram',
+  'glow',
+  'strata',
+  'aurora',
+  'grid',
+  'dunes',
+  'blobs',
+] as const
+export type Backdrop = (typeof BACKDROPS)[number]
+export const EMBLEMS = [
+  'none',
+  'seal',
+  'numeral',
+  'tile',
+  'glass',
+  'arch',
+  'flap',
+  'bento',
+  'monogram',
+] as const
+export type Emblem = (typeof EMBLEMS)[number]
 
 /** Latin + Arabic-capable stacks (system fonts; Inter is already self-hosted by the app). */
 export const FONT_STACKS = {
-  sans: '"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", "Geeza Pro", Tahoma, sans-serif',
+  sans: '"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Geeza Pro", Tahoma, sans-serif',
   serif:
-    '"Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Noto Naskh Arabic", "Amiri", "Times New Roman", serif',
+    '"Cormorant Garamond Variable", "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Noto Naskh Arabic", "Amiri", "Times New Roman", serif',
 } as const
 
 /** Arabic heading stacks (system fonts; Latin glyphs fall through to the Latin stack's fonts). */
 export const ARABIC_STACKS = {
-  naskh: '"Noto Naskh Arabic", "Amiri", "Geeza Pro", "Times New Roman", serif',
-  kufi: '"Noto Kufi Arabic", "Reem Kufi", "Al Bayan", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
-  sans: '"Noto Sans Arabic", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
+  naskh: '"Noto Naskh Arabic Variable", "Noto Naskh Arabic", "Amiri", "Geeza Pro", "Times New Roman", serif',
+  kufi: '"Noto Kufi Arabic Variable", "Noto Kufi Arabic", "Reem Kufi", "Al Bayan", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
+  sans: '"IBM Plex Sans Arabic", "Noto Sans Arabic", "Geeza Pro", "Segoe UI", Tahoma, sans-serif',
+  amiri: 'Amiri, "Noto Naskh Arabic Variable", "Geeza Pro", "Times New Roman", serif',
 } as const
 
 export const DEFAULT_THEME: SiteTheme = {
@@ -69,6 +125,10 @@ export const DEFAULT_THEME: SiteTheme = {
   pattern: 'none',
   arabicFont: 'sans',
   imageShape: 'theme',
+  headingFace: 'theme',
+  backdrop: 'none',
+  emblem: 'none',
+  emphasis: 'italic',
 }
 
 const HEX = /^#[0-9a-f]{3,8}$/i
@@ -107,8 +167,16 @@ export function normalizeTheme(tokens: Record<string, unknown> | null | undefine
     motion: pick(t.motion, ['none', 'subtle', 'expressive'], DEFAULT_THEME.motion),
     pattern: pick(t.pattern, ['none', 'lattice', 'arabesque', 'leaf'], DEFAULT_THEME.pattern),
     // Themes saved before the token existed keep the face that matches their Latin headings.
-    arabicFont: pick(t.arabicFont, ['naskh', 'kufi', 'sans'], t.headingFont === 'serif' ? 'naskh' : 'sans'),
+    arabicFont: pick(
+      t.arabicFont,
+      ['naskh', 'kufi', 'sans', 'amiri'],
+      t.headingFont === 'serif' ? 'naskh' : 'sans',
+    ),
     imageShape: pick(t.imageShape, ['theme', 'arch', 'organic'], DEFAULT_THEME.imageShape),
+    headingFace: pick(t.headingFace, Object.keys(HEADING_FACES) as HeadingFace[], 'theme'),
+    backdrop: pick(t.backdrop, BACKDROPS, 'none'),
+    emblem: pick(t.emblem, EMBLEMS, 'none'),
+    emphasis: pick(t.emphasis, ['italic', 'muted', 'underline'] as const, 'italic'),
   }
 }
 
@@ -155,7 +223,10 @@ export function themeVars(theme: SiteTheme): CSSProperties {
     '--brand-fg': theme.accentFg,
     '--inverse-bg': theme.inverseBg,
     '--inverse-fg': theme.inverseFg,
-    '--font-heading': FONT_STACKS[theme.headingFont],
+    '--font-heading':
+      theme.headingFace && theme.headingFace !== 'theme'
+        ? `${HEADING_FACES[theme.headingFace]}, ${FONT_STACKS[theme.headingFont]}`
+        : FONT_STACKS[theme.headingFont],
     '--font-body': FONT_STACKS[theme.bodyFont],
     '--heading-weight': String(theme.headingWeight),
     '--heading-case': theme.headingCase,

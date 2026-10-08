@@ -62,10 +62,7 @@ export default async function PricingPage() {
               <p className="mkt-head text-[24px] font-bold">{p.name}</p>
               <p className="mkt-head mt-4 text-[48px] leading-none font-bold tabular-nums">
                 {formatAed(p.priceAed)}
-                <span className="text-lg font-medium tracking-normal text-[var(--mute)]">
-                  {' '}
-                  / {p.billingInterval}
-                </span>
+                <span className="text-lg font-medium tracking-normal text-[var(--mute)]"> / year</span>
               </p>
               <p className="mt-3 text-[14.5px] text-[var(--muted)]">
                 Excl. VAT. Pay by card, bank transfer or cash.

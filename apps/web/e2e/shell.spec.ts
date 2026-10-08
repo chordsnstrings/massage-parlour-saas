@@ -55,7 +55,7 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     ])
       await expect(menu.getByRole('link', { name: label, exact: true })).toBeVisible()
     // Pages Phase 3 builds stay out of the menu until they exist.
-    for (const label of ['Bookings', 'Automations', 'Coming next'])
+    for (const label of ['Automations', 'Coming next'])
       await expect(menu.getByRole('link', { name: label })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
     await expect(page.getByText('AI allowance · 0% used this month')).toBeVisible()

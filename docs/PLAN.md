@@ -806,10 +806,10 @@ until `spamanagement.ae` is registered.
 
 ### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
 - **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
-  page: live link, preview, status, **Request a change** (`site_change_requests`) and **Approve** while a review is
-  pending. Editing = `studioGuard`/`isStudio` (platform admin acting on the spa, or a platform admin who is also a
-  member). Flow: `sites.studio_status` building → review (studio sends) → approved (spa only); a request made during
-  review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
+  page: live link, preview, status and **Request a change** (`site_change_requests`) — no approving (R1, 2026-10-08).
+  Editing, approving and publishing = `studioGuard`/`isStudio` (platform admin acting on the spa, or a platform admin
+  who is also a member). Flow: `sites.studio_status` building → review (studio sends) → approved (studio only); the
+  studio can withdraw or reopen; a request made during review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
   the spa's existing editor. Live data blocks (prices, team, hours) keep the site current without edits.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
@@ -897,23 +897,40 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   When marking Completed the receptionist enters the therapist's commission in AED for that booking. A therapist's pay =
   the sum of these commissions only (no base, no % accrual). Receptionists (and other non-therapists): fixed salary or
   commission, chosen per person by the owner. Payroll + WPS build from this.
+  *Built (W2, branch worktree-agent-a97b77d5b8dd6e500): migration 0019_booking_commissions; "% commission" for
+  non-therapists = % of net POS lines credited to them (existing `commission_pct`); superseded by the owner decisions below
+  (fixed AED per booking). Details: CODEMAP Service invariants (Bookings marks/commission, Payroll / pay types).*
 - **R2 owner decisions (2026-10-08):** (1) receptionists on commission get a fixed AED fee set by the owner in the
   commission settings (`receptionist_booking_fee`) × the bookings they created that ended Completed in the period; no %
   option for receptionists. (2) Therapist payroll pays booking commissions only; a separate "Tips & advances" payout
   view shows Net = tips received − advances taken. (3) Consumables are never auto-restocked when a booking is
   re-opened; manual stock adjustment/restock allowed for Accountant, Manager and Receptionist. (4) Migration converts
   existing monthly subscriptions (e.g. AED 2,000/month) to the yearly price (× 12) on the 12-month plan; yearly stay.
+  *Built (integration): migration 0021_payroll_owner_decisions; pay type `booking_fee`, fee set on the payroll
+  page, Tips & advances payout card, permission `inventory.adjust`. Details: CODEMAP Payroll / pay types.*
 - **R3 Subscription:** AED 24,000/yr = 12 monthly invoices of AED 2,000, or one-time annual; setup fee is separate
   from the plan and set per spa by the super-admin.
 - **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide
   prices on the public website.
+  Built: `service_variants.price_aed` + `booking_items.price_aed` nullable (null = "Price on request"); POS lines
+  for such services must have a typed price (≥ 0; client + zod + `createSale`). `services.show_price` (null = spa
+  default) + `tenants.settings.hidePrices` (Settings → profile); public site, online booking and AI agents use
+  `publicPrice()` (services/sites.ts) so hidden prices never leave the server. Migration 0018_optional_prices.
 - **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
   designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
+  *Built:* 15 design templates — Signature (final compilation), Noir Gold, Ivory Marble, Navy Official, Emerald
+  Prestige, Platinum Minimal, Desert Night, Monogram Atelier, Obsidian Glass, Sandstone Bronze, Split Flap (I–R) and
+  Aurora Glass, Blueprint, Sahara, Clay (B, C, E, H). Skipped as too tech/agency for spas: A Signal (phone demo),
+  D Orbit, G Tunnel; F Bento lives inside Signature. Each keeps the design's default light/dark mode (tenant sites have
+  no visitor theme switch). No agency branding, copy or numbers were carried over. Arabic copy needs native review.
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
 - **R7 Meta MCP for AI:** AI agents reach Instagram / WhatsApp through a Meta MCP server. Customer WhatsApp stays
   click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).
-- **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt.
-- **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases.
+- **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):
+  Services & menu → Purchases; one ledger entry per purchase (stock → 1200, rest → 6150/6160/6170/6900 by category,
+  input VAT 1300); void = reversal + stock back out (CODEMAP "Stock locations + purchases").
+- **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases. Built (W3):
+  warehouse = `branch_id NULL` stock location; transfers move quantity only (no ledger); per-location low-stock + counts.
 - **R10 Exports:** every CSV export becomes Excel (.xlsx) in an official/clean format. Exception: WPS SIF keeps its
   mandated bank format.
 - **R11 Billing page (spa):** price + the 12-month schedule, each month Paid (green dot) / Must pay (red dot). Overdue →
@@ -924,6 +941,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R14 Domain orders:** price shown/charged = current price + USD 10.
 - **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
+
+**R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
+- `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
+  invoices (price ÷ 12, cents rounding on the last), `year` = one invoice (one-time annual). Plans' interval = default.
+- "Generate payment schedule" issues the current period's plan invoices (`platform_invoices.kind='plan'`,
+  `period_start`, `installment`/`installments`; partial unique index → idempotent) + the setup fee as its own invoice
+  (`kind='setup'`, one live per spa). Switching plan voids the other plan's unpaid invoices; refuses if any is paid.
+- Paid / Must pay is set by the super-admin only ("Mark paid" records a payment for the open balance; "Mark unpaid"
+  records a reversing negative payment). Stripe Checkout still settles platform invoices on its own.
+- Red bar (full width above the CRM, every member): any `issued` invoice past due, or an open
+  `platform_reminders` row while an invoice is unpaid. Reminders resolve when the last overdue invoice is marked paid.
+- Reminder = row the spa sees (bar + Billing note) + EN message for a wa.me click-to-send link / copy (no sending).
+- Pause = `tenants.status='read_only'` (PLAN §1.17: dashboard read-only, public site live); **online booking stays
+  open** while paused (no rule against it); paying by card still works. Resume → `active` (`trial` while trialing).
+- Delete = soft: `status='cancelled'` + `tenants.deleted_at`; members get 404, spa picker hides it, site/booking off,
+  data kept; super-admin "Restore" = resume. Confirm by typing the slug.
+- R14: `platform_settings.domain_markup_usd` (default 10) is added **once per order** (not per year) to the registrar
+  price; search offers and `domain_orders.price_usd/price_aed` include it, `markup_usd` records it; the console
+  approve prompt shows the registrar cost (price − markup).
 
 ## 15. Working agreement (token-efficient, still thorough)
 

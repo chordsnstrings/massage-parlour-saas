@@ -135,7 +135,9 @@ export default async function NewSalePage({
         // One line per therapist so tips and commission land with the right person.
         lines: items.flatMap((it) => {
           const people = it.staffIds.length ? it.staffIds : [null]
-          const total = Math.round(Number(it.priceAed) * 100)
+          // "Price on request" (R4): no list price — every therapist's line is typed at checkout.
+          const priceless = it.priceAed == null
+          const total = Math.round(Number(it.priceAed ?? 0) * 100)
           const share = Math.floor(total / people.length)
           return people.map((sid, i) => ({
             key: `${it.id}-${i}`,
@@ -143,7 +145,10 @@ export default async function NewSalePage({
             refId: it.serviceVariantId,
             description: `${it.serviceName} · ${it.durationMin} min`,
             qty: 1,
-            unitPriceAed: (i === people.length - 1 ? total - share * (people.length - 1) : share) / 100,
+            unitPriceAed: priceless
+              ? ''
+              : (i === people.length - 1 ? total - share * (people.length - 1) : share) / 100,
+            priceRequired: priceless,
             discountAed: 0,
             staffId: sid,
           }))
@@ -163,7 +168,7 @@ export default async function NewSalePage({
         variantId: m.variantId,
         serviceId: m.serviceId,
         label: `${m.name.en ?? Object.values(m.name)[0] ?? 'Service'} · ${m.durationMin} min`,
-        priceAed: Number(m.price),
+        priceAed: m.price == null ? null : Number(m.price),
       })),
       staff: staffRows
         .filter((s) => !s.branchIds.length || s.branchIds.includes(picked.branch.id))

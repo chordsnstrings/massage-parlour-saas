@@ -29,6 +29,7 @@ import { overview } from './th/overview'
 import { packages } from './th/packages'
 import { payroll } from './th/payroll'
 import { permissions } from './th/permissions'
+import { purchases } from './th/purchases'
 import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
@@ -40,6 +41,7 @@ import { staff } from './th/staff'
 import { team } from './th/team'
 import { ui } from './th/ui'
 import { validation } from './th/validation'
+import { warehouse } from './th/warehouse'
 import { website } from './th/website'
 import type { Messages } from './types'
 
@@ -60,6 +62,8 @@ export const th: Messages = {
   services,
   packages,
   inventory,
+  purchases,
+  warehouse,
   team,
   staff,
   documents,

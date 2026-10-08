@@ -4,7 +4,7 @@ import './crm-kit.css'
 import { dubaiMonthStart } from '@spa/ai'
 import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { logoUrl } from '@spa/services'
+import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import {
   type ShellGroup,
@@ -16,6 +16,7 @@ import {
 import { I18nProvider } from '@/i18n/client'
 import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
+import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
@@ -32,7 +33,14 @@ async function shellData(ctx: MemberContext) {
         .select({ usd: sql<string>`coalesce(sum(${aiUsage.costUsd}), 0)` })
         .from(aiUsage)
         .where(and(eq(aiUsage.tenantId, ctx.tenant.id), gte(aiUsage.createdAt, dubaiMonthStart())))
-      return { branch, sub, aiSpendUsd: Number(spend?.usd ?? 0) }
+      // Overdue platform invoices or an open payment reminder → the red bar (R11).
+      const alert = await billingAlert(tx, ctx.tenant.id, todayDubai())
+      return {
+        branch,
+        sub,
+        aiSpendUsd: Number(spend?.usd ?? 0),
+        pastDue: alert.overdue.length > 0 || !!alert.reminder,
+      }
     }),
     // The plan catalogue is platform data (same lookup as the Billing page).
     can(ctx, 'billing.view') && ctx.tenant.planId
@@ -65,7 +73,7 @@ export default async function TenantLayout({
   const base = appPath(`/${ctx.tenant.slug}`)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
-  // Bookings list, Automations and Coming next stay hidden until Phase 3 builds them.
+  // Automations and Coming next stay hidden until Phase 3 builds them.
   const allowed = (perm: Permission | Permission[] | null) =>
     perm === null || (Array.isArray(perm) ? perm.some((p) => can(ctx, p)) : can(ctx, perm))
   const page = (
@@ -86,6 +94,7 @@ export default async function TenantLayout({
     ...group(t('nav.group.workspace'), [
       { href: base, label: t('nav.dashboard'), icon: 'dashboard', exact: true },
       ...single('calendar', 'calendar.view', '/calendar', t('nav.calendar')),
+      ...single('bookings', 'calendar.view', '/bookings', t('nav.bookings')),
       ...single('sales', 'pos.use', '/sales', t('nav.sales')),
       ...item('inbox', t('nav.inbox'), [
         ...page('marketing.send', '/messages', t('nav.whatsapp')),
@@ -98,7 +107,9 @@ export default async function TenantLayout({
       ...item('services', t('nav.services'), [
         ...page('services.manage', '/services', t('nav.servicesRooms')),
         ...page('services.manage', '/packages', t('nav.packages')),
-        ...page('inventory.manage', '/inventory', t('nav.inventory')),
+        ...page(['inventory.manage', 'inventory.adjust'], '/inventory', t('nav.inventory')),
+        ...page('inventory.purchase', '/purchases', t('nav.purchases')),
+        ...page('inventory.manage', '/warehouse', t('nav.warehouse')),
       ]),
       ...item('team', t('nav.team'), [
         ...page('staff.view', '/staff', t('nav.staff')),
@@ -143,7 +154,7 @@ export default async function TenantLayout({
       : t('shell.plan.renews', {
           date: fmt.date(sub.currentPeriodEnd),
           price: fmt.aed(sub.priceAed),
-          interval: t(`shell.plan.interval.${sub.billingInterval}`),
+          interval: t('shell.plan.interval.year'), // subscription price is annual (R3)
         })
     : null
   const plan =
@@ -170,10 +181,23 @@ export default async function TenantLayout({
       ? t(`role.${roleKey}`)
       : ctx.member.roleName // custom roles stay as typed
 
-  const banner = ctx.impersonating ? (
+  const notice = ctx.impersonating ? (
     <SpaBanner tone="accent">{t('shell.banner.impersonating')}</SpaBanner>
+  ) : ctx.tenant.status === 'read_only' ? (
+    <SpaBanner tone="warning">{t('shell.banner.paused')}</SpaBanner>
   ) : !isWritable(ctx.tenant) ? (
     <SpaBanner tone="warning">{t('shell.banner.readOnly')}</SpaBanner>
+  ) : null
+  const alert = data.pastDue ? (
+    <SpaBanner tone="danger">
+      {t('shell.banner.overdue')}
+      {can(ctx, 'billing.view') && (
+        <>
+          {' '}
+          <a href={`${base}/billing`}>{t('shell.banner.payNow')}</a>
+        </>
+      )}
+    </SpaBanner>
   ) : null
 
   return (
@@ -189,7 +213,8 @@ export default async function TenantLayout({
           user={{ name: ctx.user.name, role }}
           nav={nav}
           plan={plan}
-          banner={banner}
+          banner={notice}
+          alert={alert}
           accountHref={appPath('/account')}
           switchHref={appPath()}
         >

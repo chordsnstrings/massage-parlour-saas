@@ -8,6 +8,7 @@ import {
   type TemplateUndo,
   type ThemeTokens,
   type Tx,
+  tenants,
 } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
@@ -662,4 +663,22 @@ export function verifyPreviewToken(token: unknown, secret: string, now = new Dat
   } catch {
     return null
   }
+}
+
+/** Spa-wide default for public prices (`tenants.settings.hidePrices`, R4). */
+export async function spaHidesPrices(tx: Tx, tenantId: string) {
+  const [row] = await tx.select({ s: tenants.settings }).from(tenants).where(eq(tenants.id, tenantId))
+  return !!row?.s.hidePrices
+}
+
+/**
+ * The price a public page (website, online booking) may show: null = "price on request", either because the
+ * variant has no price or because the service (else the spa default) hides prices.
+ */
+export function publicPrice(
+  priceAed: string | null,
+  serviceShowPrice: boolean | null,
+  spaHides: boolean,
+): string | null {
+  return (serviceShowPrice ?? !spaHides) ? priceAed : null
 }

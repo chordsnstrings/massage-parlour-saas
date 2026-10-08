@@ -26,5 +26,9 @@ export const shell = {
   banner: {
     impersonating: 'Viewing as super-admin — every change is recorded in the audit log.',
     readOnly: 'This account is read-only. Contact support to restore full access.',
+    overdue: 'Please pay your invoice to avoid your account being paused.',
+    paused:
+      'Your account is paused for late payment — the dashboard is read-only until your invoice is paid. Your website and online booking keep working.',
+    payNow: 'Pay now',
   },
 } as const

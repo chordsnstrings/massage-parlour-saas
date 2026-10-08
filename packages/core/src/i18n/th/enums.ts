@@ -23,6 +23,12 @@ export const enums: Messages['enums'] = {
   rotationStatus: { available: 'ว่าง', busy: 'ไม่ว่าง', break: 'พัก', off: 'หยุด' },
   resourceKind: { staff: 'พนักงาน', room: 'ห้อง' },
   staffGender: { female: 'หญิง', male: 'ชาย', other: 'อื่น ๆ' },
+  staffPayType: {
+    booking_commission: 'ค่าคอมมิชชันต่อการจอง',
+    salary: 'เงินเดือนคงที่',
+    sales_commission: '% ของยอดขาย',
+    booking_fee: 'ค่าธรรมเนียมต่อการจองที่สร้าง',
+  },
   saleStatus: { open: 'ค้างชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิก', refunded: 'คืนเงินแล้ว' },
   saleLineKind: {
     service: 'บริการ',
@@ -90,6 +96,14 @@ export const enums: Messages['enums'] = {
     executed: 'เสร็จสิ้น',
     failed: 'ไม่สำเร็จ',
   },
+  purchaseCategory: {
+    materials: 'วัสดุ',
+    cleaning: 'อุปกรณ์ทำความสะอาด',
+    consumables: 'ของสิ้นเปลือง',
+    equipment: 'อุปกรณ์',
+    other: 'อื่น ๆ',
+  },
+  purchaseStatus: { recorded: 'บันทึกแล้ว', void: 'ยกเลิก' },
   productKind: { retail: 'สินค้าขาย', consumable: 'วัสดุสิ้นเปลือง' },
   stockMovementKind: {
     purchase: 'รับเข้า',

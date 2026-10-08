@@ -8,7 +8,7 @@ test('payroll: advance, prepare, WPS file, finalise', async ({ page }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
   const [maya] = seed.staffIds
-  await testDb().update(staff).set({ baseSalaryAed: '3000.00' }).where(eq(staff.id, maya!))
+  await testDb().update(staff).set({ payType: 'salary', baseSalaryAed: '3000.00' }).where(eq(staff.id, maya!))
 
   await page.goto(`${app}/${slug}/payroll`)
   await expect(page.getByRole('heading', { name: 'Payroll', exact: true })).toBeVisible()
@@ -24,6 +24,9 @@ test('payroll: advance, prepare, WPS file, finalise', async ({ page }) => {
   await page.getByLabel('Employer bank routing code').fill('803320101')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('WPS details saved')).toBeVisible()
+
+  await expect(page.getByText('Tips & advances payout')).toBeVisible()
+  await expect(page.getByText('Not set — receptionists on a booking fee earn nothing yet.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Prepare payroll' }).click()
   await expect(page.getByText(/Payroll prepared/)).toBeVisible()

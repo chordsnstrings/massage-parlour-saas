@@ -16,7 +16,12 @@ import { runDmTurn } from './dm'
 const MAX_COMMENT_CHARS = 300
 
 export function commentSystemPrompt(ctx: SpaContext, now = new Date()) {
-  const menu = ctx.menu.map((m) => `- ${m.name}: ${m.durationMin} min, AED ${m.priceAed}`).join('\n')
+  const menu = ctx.menu
+    .map(
+      (m) =>
+        `- ${m.name}: ${m.durationMin} min, ${m.priceAed == null ? 'price on request' : `AED ${m.priceAed}`}`,
+    )
+    .join('\n')
   return `You write short public replies to Instagram comments for ${ctx.name}, a massage & wellness spa in the UAE.
 Voice: ${ctx.voice} Tone: ${ctx.tone}.
 ${nowLine(now)}

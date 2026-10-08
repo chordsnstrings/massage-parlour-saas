@@ -76,6 +76,8 @@ export const sales = {
     therapist: 'Therapist',
     therapistFor: 'Therapist for item {n}',
     price: 'Price',
+    pricePh: 'Type price',
+    priceMissing: 'Type a price for every item marked “Price on request”',
     discount: 'Discount',
     discountFor: 'Discount for item {n}',
     removeItem: 'Remove item {n}',
@@ -208,6 +210,7 @@ export const sales = {
   },
   v: {
     amount: 'Enter an amount',
+    priceRequired: 'Type the price for this item',
     negative: 'Cannot be negative',
     tooLarge: 'Too large',
     name: 'Enter a name',

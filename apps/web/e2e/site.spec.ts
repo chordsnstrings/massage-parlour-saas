@@ -18,7 +18,7 @@ test('owner picks a template, publishes from the editor and the public site rend
   await test.step('website overview: choose Nordic Clean', async () => {
     await page.goto(`${app}/${slug}/website`)
     await expect(page.getByRole('heading', { name: 'Choose a template' })).toBeVisible()
-    await expect(page.locator('iframe[title="Nordic Clean preview"]')).toBeAttached()
+    await expect(page.getByRole('img', { name: 'Nordic Clean preview' })).toBeAttached()
     await page.getByRole('button', { name: 'Use Nordic Clean' }).click()
     await expect(page.getByRole('link', { name: 'Edit Home' })).toBeVisible()
     await expect(page.getByText('Not published').first()).toBeVisible()

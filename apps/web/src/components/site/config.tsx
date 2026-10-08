@@ -74,6 +74,7 @@ export const siteConfig: Config = {
             dir={meta.locale === 'ar' ? 'rtl' : 'ltr'}
             lang={meta.locale}
             data-motion="none"
+            data-emphasis={meta.theme.emphasis ?? 'italic'}
             style={themeVars(meta.theme)}
           >
             {children}
