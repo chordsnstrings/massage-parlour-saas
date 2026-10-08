@@ -40,7 +40,9 @@ function Line({
   muted?: boolean
 }) {
   return (
-    <div className={cn('flex items-baseline justify-between gap-4 py-1.5 text-sm', strong && 'font-semibold')}>
+    <div
+      className={cn('flex items-baseline justify-between gap-4 py-1.5 text-sm', strong && 'font-semibold')}
+    >
       <span className={cn(muted && 'crm-muted')}>{label}</span>
       <span className="crm-num">{fmt.aed(value)}</span>
     </div>

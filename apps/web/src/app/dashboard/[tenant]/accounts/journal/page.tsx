@@ -5,8 +5,8 @@ import { notFound } from 'next/navigation'
 import { Card, Pill, Stack } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { appPath } from '@/lib/paths'
 import { getI18n, getT } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { journal } from '../journal-data'
 import { accountName, sourceLabel } from '../labels'
@@ -67,7 +67,9 @@ export default async function JournalPage({
                     <Pill tone={e.reversesId ? 'warn' : 'neutral'}>{sourceLabel(t, e.sourceType)}</Pill>
                     <span className="truncate text-sm font-medium">{e.memo}</span>
                   </div>
-                  <span className="crm-muted crm-num text-[13px]">{fmt.date(`${e.entryDate}T12:00:00Z`)}</span>
+                  <span className="crm-muted crm-num text-[13px]">
+                    {fmt.date(`${e.entryDate}T12:00:00Z`)}
+                  </span>
                 </div>
                 <div className="mt-3 divide-y text-[13px]">
                   <div className="crm-muted grid grid-cols-[3rem_1fr_5.5rem_5.5rem] gap-2 pb-1 text-[11.5px]">
@@ -78,18 +80,12 @@ export default async function JournalPage({
                   </div>
                   {e.lines.map((l) => (
                     <div key={l.id} className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem] gap-2 py-1.5">
-                      <span className="crm-muted crm-num">
-                        {l.code}
-                      </span>
+                      <span className="crm-muted crm-num">{l.code}</span>
                       <span className={Number(l.credit) ? 'crm-muted ps-4 sm:ps-6' : ''}>
                         {accountName(t, l.code, l.name)}
                       </span>
-                      <span className="crm-num text-end">
-                        {Number(l.debit) ? fmt.aed(l.debit) : ''}
-                      </span>
-                      <span className="crm-num text-end">
-                        {Number(l.credit) ? fmt.aed(l.credit) : ''}
-                      </span>
+                      <span className="crm-num text-end">{Number(l.debit) ? fmt.aed(l.debit) : ''}</span>
+                      <span className="crm-num text-end">{Number(l.credit) ? fmt.aed(l.credit) : ''}</span>
                     </div>
                   ))}
                 </div>

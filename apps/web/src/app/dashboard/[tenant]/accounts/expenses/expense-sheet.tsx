@@ -220,7 +220,12 @@ export function ExpenseSheet({
             </Select>
           </Field>
           <Field label={t('accounts.sheet.supplier')} name="vendor">
-            <Input id="vendor" name="vendor" placeholder={t('accounts.sheet.supplierPh')} defaultValue={f?.vendor ?? undefined} />
+            <Input
+              id="vendor"
+              name="vendor"
+              placeholder={t('accounts.sheet.supplierPh')}
+              defaultValue={f?.vendor ?? undefined}
+            />
           </Field>
           <Field label={t('accounts.sheet.note')} name="description">
             <Input id="description" name="description" placeholder={t('common.optional')} />
@@ -235,7 +240,8 @@ export function ExpenseSheet({
             </Select>
           </Field>
           <Label className="flex items-center gap-2.5 text-sm font-normal">
-            <Checkbox name="hasVat" defaultChecked={f ? (f.vatAed ?? 0) > 0 : true} /> {t('accounts.sheet.hasVat')}
+            <Checkbox name="hasVat" defaultChecked={f ? (f.vatAed ?? 0) > 0 : true} />{' '}
+            {t('accounts.sheet.hasVat')}
           </Label>
         </div>
         <SubmitButton className="w-full sm:w-auto">{t('accounts.sheet.submit')}</SubmitButton>

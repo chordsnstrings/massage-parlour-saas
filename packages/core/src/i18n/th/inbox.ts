@@ -39,7 +39,6 @@ export const inbox: Messages['inbox'] = {
   stats: { open: 'เปิดอยู่', unread: 'ยังไม่อ่าน', flagged: 'ติดธง' },
   filters: { label: 'กรองบทสนทนา', open: 'เปิดอยู่', flagged: 'ติดธง', closed: 'ปิดแล้ว', all: 'ทั้งหมด' },
   list: {
-    title: 'บทสนทนา',
     noMessages: 'ยังไม่มีข้อความ',
     ai: 'AI: {text}',
     you: 'คุณ: {text}',

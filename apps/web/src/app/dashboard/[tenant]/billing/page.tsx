@@ -1,3 +1,4 @@
+import { enumLabel } from '@spa/core/i18n'
 import {
   plans,
   platformDb,
@@ -9,7 +10,6 @@ import {
 } from '@spa/db'
 import { getCheckoutSession, StripeError, settleCheckoutSession, stripeConfig } from '@spa/services'
 import { and, desc, eq, isNotNull } from 'drizzle-orm'
-import { enumLabel } from '@spa/core/i18n'
 import { Check, MessageCircle, ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -157,7 +157,10 @@ export default async function BillingPage({
                   rows={invoices}
                   rowKey={(r) => r.id}
                   empty={
-                    <EmptyState icon={<ReceiptText className="size-5" />} title={t('billing.invoices.empty')} />
+                    <EmptyState
+                      icon={<ReceiptText className="size-5" />}
+                      title={t('billing.invoices.empty')}
+                    />
                   }
                   columns={[
                     {

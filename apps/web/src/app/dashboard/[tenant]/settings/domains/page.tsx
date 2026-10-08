@@ -1,3 +1,4 @@
+import type { Translator } from '@spa/core/i18n'
 import { domainOrders, domains, withTenant } from '@spa/db'
 import {
   cloudflareConfig,
@@ -7,54 +8,37 @@ import {
   domainPairNote,
 } from '@spa/services'
 import { asc, desc, eq } from 'drizzle-orm'
-import { ArrowLeft, Info } from 'lucide-react'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, Note, Pill, Stack, type Tone } from '@/components/crm'
 import { CopyButton } from '@/components/ui/copy-button'
-import { PageBody, PageHeader } from '@/components/ui/page'
-import { appPath } from '@/lib/paths'
-import { cn, formatDate, formatDateTime } from '@/lib/utils'
+import { PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
+import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { canonicalUrls } from '@/server/origin'
+import { SettingsTabs } from '../settings-tabs'
 import { BuyDomain, CancelOrderButton } from './buy-domain'
 import { AddDomainForm, DomainActions, SubdomainPrimaryButton } from './domains-client'
 
-export const metadata: Metadata = { title: 'Domains' }
+type Fmt = Awaited<ReturnType<typeof getI18n>>['fmt']
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('settings.domains.title') }
+}
 
 const STATUS = {
-  pending: {
-    label: 'Pending',
-    tone: 'warning',
-    dot: 'bg-warning',
-    text: 'Waiting for the DNS records. Add them below, then press Check now.',
-  },
-  verifying: {
-    label: 'Verifying',
-    tone: 'accent',
-    dot: 'bg-accent',
-    text: 'Ownership confirmed. Waiting for the domain to point at us and for its SSL certificate.',
-  },
-  active: {
-    label: 'Active',
-    tone: 'success',
-    dot: 'bg-success',
-    text: 'Connected — your website and online booking answer on this address.',
-  },
-  failed: {
-    label: 'Failed',
-    tone: 'danger',
-    dot: 'bg-danger',
-    text: 'Not connected. Fix the issue below, then press Check now.',
-  },
-} as const
+  pending: { tone: 'warn', dot: 'bg-warning' },
+  verifying: { tone: 'acc', dot: 'bg-accent' },
+  active: { tone: 'ok', dot: 'bg-success' },
+  failed: { tone: 'bad', dot: 'bg-danger' },
+} as const satisfies Record<string, { tone: Tone; dot: string }>
 
 export default async function DomainsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'settings.manage')) notFound()
   const slug = ctx.tenant.slug
+  const { t, fmt } = await getI18n()
   const [rows, orders] = await withTenant(ctx.tenant.id, (tx) =>
     Promise.all([
       tx.select().from(domains).where(eq(domains.kind, 'custom')).orderBy(asc(domains.createdAt)),
@@ -68,102 +52,71 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
 
   return (
     <>
-      <PageHeader
-        eyebrow={
-          <Link
-            href={appPath(`/${slug}/settings`)}
-            className="inline-flex items-center gap-1 transition-colors hover:text-fg"
+      <PageHeader title={t('settings.domains.title')} description={t('settings.domains.description')} />
+      <SettingsTabs ctx={ctx} value="domains" />
+      <Grid cols="col-2">
+        <Stack className="min-w-0">
+          {custom ? (
+            <DomainCard t={t} fmt={fmt} slug={slug} domain={custom} sslAuto={sslAuto} />
+          ) : (
+            <Card title={t('settings.domains.connect')} sub={t('settings.domains.connectSub')}>
+              <AddDomainForm slug={slug} />
+            </Card>
+          )}
+          {!custom && (
+            <Card title={t('settings.domains.buy')} sub={t('settings.domains.buySub')}>
+              <BuyDomain slug={slug} />
+            </Card>
+          )}
+          {orders.length > 0 && <OrdersCard t={t} fmt={fmt} slug={slug} orders={orders} />}
+        </Stack>
+        <Stack className="min-w-0">
+          <Card
+            title={t('settings.domains.free')}
+            sub={t('settings.domains.freeSub')}
+            actions={
+              customPrimary ? (
+                <SubdomainPrimaryButton slug={slug} />
+              ) : (
+                <Pill tone="acc">{t('settings.domains.primary')}</Pill>
+              )
+            }
           >
-            <ArrowLeft className="size-3.5" /> Settings
-          </Link>
-        }
-        title="Domains"
-        description="Where clients find your website. Your free address always works — connect a domain you own to use it instead."
-      />
-      <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-          <div className="min-w-0 space-y-6 lg:col-span-8">
-            {custom ? (
-              <DomainCard slug={slug} domain={custom} sslAuto={sslAuto} />
-            ) : (
-              <Card>
-                <CardHeader
-                  title="Connect your own domain"
-                  description="Use an address like www.yourspa.ae for your website and online booking."
-                />
-                <CardBody>
-                  <AddDomainForm slug={slug} />
-                </CardBody>
-              </Card>
-            )}
-            {!custom && (
-              <Card>
-                <CardHeader
-                  title="Buy a domain"
-                  description="Don’t have one yet? Find a name and we’ll buy it and connect it for you."
-                />
-                <CardBody>
-                  <BuyDomain slug={slug} />
-                </CardBody>
-              </Card>
-            )}
-            {orders.length > 0 && <OrdersCard slug={slug} orders={orders} />}
-          </div>
-          <aside className="min-w-0 space-y-6 lg:col-span-4">
-            <Card>
-              <CardHeader
-                title="Free address"
-                description="Always works, even with your own domain connected."
-                action={
-                  customPrimary ? (
-                    <SubdomainPrimaryButton slug={slug} />
-                  ) : (
-                    <Badge tone="accent">Primary</Badge>
-                  )
-                }
-              />
-              <CardBody className="space-y-3">
-                <a
-                  href={freeUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  dir="ltr"
-                  className="block break-all text-[15px] font-medium text-accent underline-offset-4 hover:underline"
-                >
-                  {freeUrl.replace(/^https?:\/\//, '')}
-                </a>
-                <div className="[&_button]:h-11 sm:[&_button]:h-8">
-                  <CopyButton value={freeUrl} label="Copy link" />
-                </div>
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader title="How it works" />
-              <CardBody>
-                <ol className="space-y-4">
-                  {(
-                    [
-                      ['pending', 'You add your domain and two DNS records.'],
-                      ['verifying', 'We confirm you own it and that it points to us.'],
-                      [
-                        'active',
-                        `Your site goes live on it${sslAuto ? ' with free SSL' : ''} and it becomes your primary address.`,
-                      ],
-                    ] as const
-                  ).map(([key, text]) => (
-                    <li key={key} className="flex items-start gap-3 text-sm">
-                      <Badge tone={STATUS[key].tone} className="mt-px w-[4.75rem] justify-center">
-                        {STATUS[key].label}
-                      </Badge>
-                      <span className="text-muted">{text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </CardBody>
-            </Card>
-          </aside>
-        </div>
-      </PageBody>
+            <div className="space-y-3">
+              <a
+                href={freeUrl}
+                target="_blank"
+                rel="noreferrer"
+                dir="ltr"
+                className="block break-all text-[15px] font-medium text-accent underline-offset-4 hover:underline"
+              >
+                {freeUrl.replace(/^https?:\/\//, '')}
+              </a>
+              <div className="[&_button]:h-11 sm:[&_button]:h-8">
+                <CopyButton value={freeUrl} label={t('settings.domains.copyLink')} />
+              </div>
+            </div>
+          </Card>
+          <Card title={t('settings.domains.how')}>
+            <ol className="space-y-4">
+              {(
+                [
+                  ['pending', t('settings.domains.how1')],
+                  ['verifying', t('settings.domains.how2')],
+                  ['active', sslAuto ? t('settings.domains.how3Ssl') : t('settings.domains.how3')],
+                ] as const
+              ).map(([key, text]) => (
+                <li key={key} className="flex items-start gap-3 text-sm">
+                  <Pill tone={STATUS[key].tone} className="mt-px w-[5.5rem] shrink-0 justify-center">
+                    {t(`settings.domains.status.${key}`)}
+                  </Pill>
+                  <span className="crm-muted">{text}</span>
+                </li>
+              ))}
+            </ol>
+          </Card>
+        </Stack>
+      </Grid>
     </>
   )
 }

@@ -73,7 +73,8 @@ export const accounts = {
   },
   expenses: {
     title: 'Expenses',
-    description: 'Rent, DEWA, visas, supplies — every expense lands in your P&L and VAT return automatically.',
+    description:
+      'Rent, DEWA, visas, supplies — every expense lands in your P&L and VAT return automatically.',
     emptyTitle: 'No expenses in {month}',
     emptyBody: 'Record rent, utilities, supplies and visa costs to see your real profit.',
     expense: 'Expense',
@@ -140,7 +141,8 @@ export const accounts = {
   },
   journal: {
     title: 'Journal',
-    description: 'Every double-entry posting. Entries are never edited — mistakes are corrected with a reversal.',
+    description:
+      'Every double-entry posting. Entries are never edited — mistakes are corrected with a reversal.',
     export: 'Export CSV',
     emptyTitle: 'No entries in {month}',
     emptyBody: 'Sales, refunds and expenses appear here as they are recorded.',

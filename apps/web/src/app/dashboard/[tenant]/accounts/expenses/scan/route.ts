@@ -46,10 +46,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
   })
 
   const attached = (status: string, message: string) => json(200, { ok: true, file, status, message })
-  if (!aiConfigured())
-    return attached('unavailable', t('accounts.scan.unavailable'))
-  if (!upload.contentType.startsWith('image/'))
-    return attached('pdf', t('accounts.scan.pdf'))
+  if (!aiConfigured()) return attached('unavailable', t('accounts.scan.unavailable'))
+  if (!upload.contentType.startsWith('image/')) return attached('pdf', t('accounts.scan.pdf'))
 
   try {
     // Downscale before sending: receipts read fine at 1600px and it keeps tokens (and cost) low.
@@ -79,10 +77,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
       ocr: { ...res.fields, model: res.modelKey },
     })
   } catch (e) {
-    if (e instanceof AiBudgetExceededError)
-      return attached('budget', t('accounts.scan.budget'))
-    if (e instanceof AiDisabledError)
-      return attached('unavailable', t('accounts.scan.disabled'))
+    if (e instanceof AiBudgetExceededError) return attached('budget', t('accounts.scan.budget'))
+    if (e instanceof AiDisabledError) return attached('unavailable', t('accounts.scan.disabled'))
     console.error('receipt scan failed', e)
     return attached('failed', t('accounts.scan.failed'))
   }

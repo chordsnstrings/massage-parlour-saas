@@ -38,10 +38,8 @@ export async function refreshInsightsAction(
       entityId: run.id,
     })
   } catch (e) {
-    if (e instanceof NotEnoughDataError)
-      return fail('overview.insights.errors.notEnoughData')
-    if (e instanceof AiBudgetExceededError)
-      return fail('overview.insights.errors.budget')
+    if (e instanceof NotEnoughDataError) return fail('overview.insights.errors.notEnoughData')
+    if (e instanceof AiBudgetExceededError) return fail('overview.insights.errors.budget')
     if (e instanceof AiDisabledError) return fail('overview.insights.errors.disabled')
     console.error('insights refresh failed', e)
     return fail('overview.insights.errors.busy')

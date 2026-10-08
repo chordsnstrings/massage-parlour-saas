@@ -154,7 +154,9 @@ export function NewBookingSheet({
 
               <Field label={t('calendar.fields.service')} name="variantId">
                 <Select id="variantId" name="variantId" defaultValue={data.variants[0]?.id}>
-                  {data.variants.length === 0 && <option value="">{t('calendar.create.addServicesFirst')}</option>}
+                  {data.variants.length === 0 && (
+                    <option value="">{t('calendar.create.addServicesFirst')}</option>
+                  )}
                   {data.variants.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.label}

@@ -39,7 +39,6 @@ export const inbox = {
   stats: { open: 'Open', unread: 'Unread', flagged: 'Flagged' },
   filters: { label: 'Filter conversations', open: 'Open', flagged: 'Flagged', closed: 'Closed', all: 'All' },
   list: {
-    title: 'Conversations',
     noMessages: 'No messages yet',
     ai: 'AI: {text}',
     you: 'You: {text}',

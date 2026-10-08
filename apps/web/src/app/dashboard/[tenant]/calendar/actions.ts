@@ -154,7 +154,8 @@ export async function createBookingAction(
       let clientId = v.clientId
       if (clientId) {
         const [c] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId))
-        if (!c) throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
+        if (!c)
+          throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
       } else {
         clientId = (
           await findOrCreateClient(tx, ctx.tenant.id, {
@@ -200,11 +201,14 @@ export async function createBookingAction(
       data: { ref: result.booking.refCode, source: v.source },
     })
     revalidate(slug)
-    return ok({ key: 'calendar.results.created', params: { ref: result.booking.refCode } }, {
-      ref: result.booking.refCode,
-      whatsapp: result.confirmation ? outboxLink(result.confirmation, 'mobile') : null,
-      whatsappWeb: result.confirmation ? outboxLink(result.confirmation, 'web') : null,
-    })
+    return ok(
+      { key: 'calendar.results.created', params: { ref: result.booking.refCode } },
+      {
+        ref: result.booking.refCode,
+        whatsapp: result.confirmation ? outboxLink(result.confirmation, 'mobile') : null,
+        whatsappWeb: result.confirmation ? outboxLink(result.confirmation, 'web') : null,
+      },
+    )
   } catch (e) {
     return handle(e)
   }
@@ -407,7 +411,8 @@ export async function walkInAction(
       if (v.staffId) {
         therapist = day.staff.find((s) => s.id === v.staffId)
         if (!therapist) throw new DomainError('Therapist not found', 'not_found')
-        if (!free(therapist)) throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
+        if (!free(therapist))
+          throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
             key: 'calendar.errors.notFree',
             params: { name: therapist.name },
           })
@@ -420,7 +425,8 @@ export async function walkInAction(
           day.staff.find((s) => onShift(s) && free(s)) ??
           day.staff.find(free)
       }
-      if (!therapist) throw new DomainError('No therapist is free for this service right now', 'no_staff', {
+      if (!therapist)
+        throw new DomainError('No therapist is free for this service right now', 'no_staff', {
           key: 'calendar.errors.noneFree',
         })
       const client =

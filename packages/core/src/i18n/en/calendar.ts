@@ -17,7 +17,8 @@ export const calendar = {
   rooms: 'Rooms',
   showCancelled: 'Show cancelled',
   showCancelledCount: 'Show cancelled ({count})',
-  reservedNote: 'Therapist and room are reserved together. The system blocks any double booking automatically.',
+  reservedNote:
+    'Therapist and room are reserved together. The system blocks any double booking automatically.',
   moved: 'Booking moved',
   moveFailed: 'Could not move the booking',
   updated: 'Updated',

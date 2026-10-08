@@ -1,9 +1,9 @@
+import { enumLabel } from '@spa/core/i18n'
 import { payrollLines, payrollRuns, salaryAdvances, staff, tenants, withTenant } from '@spa/db'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { Banknote, Download, Landmark, Plus, Wallet } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { enumLabel } from '@spa/core/i18n'
 import { Card, Grid, ListRow, Note, Pill, Stack, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -11,8 +11,8 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Input, Select } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
-import { appPath } from '@/lib/paths'
 import { getI18n, getT } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { MonthNav, monthLabel, monthRange } from '../accounts/month'
@@ -125,7 +125,9 @@ export default async function PayrollPage({
       cell: (l) => (
         <span className="flex flex-col">
           <span className="font-medium">{l.person?.displayName ?? t('payroll.col.formerStaff')}</span>
-          {!l.person?.payroll.iban && <span className="crm-muted text-xs">{t('payroll.col.cashNoIban')}</span>}
+          {!l.person?.payroll.iban && (
+            <span className="crm-muted text-xs">{t('payroll.col.cashNoIban')}</span>
+          )}
         </span>
       ),
     },
@@ -249,7 +251,9 @@ export default async function PayrollPage({
             actions={
               <>
                 {data.run && (
-                  <Pill tone={finalised ? 'ok' : 'warn'}>{enumLabel(t, 'payrollStatus', data.run.status)}</Pill>
+                  <Pill tone={finalised ? 'ok' : 'warn'}>
+                    {enumLabel(t, 'payrollStatus', data.run.status)}
+                  </Pill>
                 )}
                 {data.run && wpsReady.length > 0 && (
                   <Button variant="secondary" size="sm" asChild>
@@ -349,9 +353,18 @@ export default async function PayrollPage({
                   }
                 >
                   <Field label={t('payroll.wps.employerId')} name="employerId">
-                    <Input id="employerId" name="employerId" inputMode="numeric" defaultValue={wps?.employerId} />
+                    <Input
+                      id="employerId"
+                      name="employerId"
+                      inputMode="numeric"
+                      defaultValue={wps?.employerId}
+                    />
                   </Field>
-                  <Field label={t('payroll.wps.routing')} name="routingCode" hint={t('payroll.wps.routingHint')}>
+                  <Field
+                    label={t('payroll.wps.routing')}
+                    name="routingCode"
+                    hint={t('payroll.wps.routingHint')}
+                  >
                     <Input
                       id="routingCode"
                       name="routingCode"

@@ -134,13 +134,17 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
       {(first.notes || first.cancelReason) && (
         <div className="space-y-1 rounded-xl bg-subtle/60 px-4 py-3 text-sm">
           {first.notes && <p>{first.notes}</p>}
-          {first.cancelReason && <p className="text-muted">{t('calendar.details.cancelled', { reason: first.cancelReason })}</p>}
+          {first.cancelReason && (
+            <p className="text-muted">{t('calendar.details.cancelled', { reason: first.cancelReason })}</p>
+          )}
         </div>
       )}
 
       {actions.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">{t('calendar.details.status')}</p>
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">
+            {t('calendar.details.status')}
+          </p>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {actions.map((a) => (
               <Button

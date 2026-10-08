@@ -30,8 +30,8 @@ import {
   Gauge,
   MessageSquare,
   Sparkles,
-  UserX,
   Users,
+  UserX,
 } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -44,8 +44,8 @@ import {
   Legend,
   Meter,
   Pill,
-  SegBar,
   Seg,
+  SegBar,
   Stack,
   Stat,
   statusTone,
@@ -309,9 +309,7 @@ export default async function TenantHome({
       <PageHeader
         title={tenant.name}
         description={
-          period === 'today'
-            ? t('overview.description.today')
-            : t('overview.description.period', { days })
+          period === 'today' ? t('overview.description.today') : t('overview.description.period', { days })
         }
         actions={
           <>
@@ -370,7 +368,9 @@ export default async function TenantHome({
                 label={t('overview.kpi.clients')}
                 value={fmt.number(data.clients)}
                 delta={
-                  k.newClients ? { text: t('overview.kpi.newCount', { count: k.newClients }), dir: 'up' } : undefined
+                  k.newClients
+                    ? { text: t('overview.kpi.newCount', { count: k.newClients }), dir: 'up' }
+                    : undefined
                 }
                 sub={t('overview.kpi.clientsSub')}
                 href={appPath(`/${slug}/clients`)}

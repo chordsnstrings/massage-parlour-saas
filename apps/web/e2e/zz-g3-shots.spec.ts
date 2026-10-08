@@ -25,7 +25,7 @@ test('g3 shots', async ({ page }) => {
   await page.getByRole('button', { name: /Complete sale/ }).click()
   await page.waitForURL(/sales\/[0-9a-f-]{36}/)
   const receipt = page.url()
-  const next = await seedBooking(seed, { startsInHours: 3 }).catch(() => seedBooking(seed))
+  const next = await seedBooking(seed, 5)
   const pages: [string, string][] = [
     ['list', `${app}/${slug}/sales`],
     ['checkout', `${app}/${slug}/sales/new?booking=${next.id}`],

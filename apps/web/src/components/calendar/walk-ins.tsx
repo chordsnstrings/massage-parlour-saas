@@ -14,7 +14,12 @@ import { cn } from '@/lib/utils'
 import { minuteLabel } from './time'
 import type { CalendarData, RotationRow } from './types'
 
-const TONE: Record<RotationRow['status'], Tone> = { free: 'ok', busy: 'warn', break: 'neutral', off: 'neutral' }
+const TONE: Record<RotationRow['status'], Tone> = {
+  free: 'ok',
+  busy: 'warn',
+  break: 'neutral',
+  off: 'neutral',
+}
 
 export function WalkInsPanel({ rotation, onWalkIn }: { rotation: RotationRow[]; onWalkIn: () => void }) {
   const t = useT()
@@ -118,9 +123,11 @@ export function WalkInSheet({
         </Field>
         <Field label={t('calendar.fields.therapist')} name="staffId">
           <Select id="staffId" name="staffId" defaultValue="">
-            <option value="">{next
+            <option value="">
+              {next
                 ? t('calendar.walkIns.nextInRotation', { name: next.name })
-                : t('calendar.walkIns.firstFree')}</option>
+                : t('calendar.walkIns.firstFree')}
+            </option>
             {data.staff.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

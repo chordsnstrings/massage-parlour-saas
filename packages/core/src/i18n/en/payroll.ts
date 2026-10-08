@@ -23,7 +23,8 @@ export const payroll = {
     notPrepared: 'Not prepared yet',
     addTeamFirst: 'Add your team under Staff first.',
     nothingPosted: 'Nothing is posted until you finalise.',
-    finaliseNote: 'Finalising marks commissions and advances as settled and records {amount} paid from the bank.',
+    finaliseNote:
+      'Finalising marks commissions and advances as settled and records {amount} paid from the bank.',
     paidOn: 'Paid on',
     finalise: 'Finalise',
   },

@@ -9,9 +9,9 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
+import { enumLabel } from '@spa/core/i18n'
 import { CheckCircle2, Clock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { enumLabel } from '@spa/core/i18n'
 import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import { minuteLabel } from './time'
@@ -478,7 +478,9 @@ function Block({
               {subtitle ? ` · ${subtitle}` : ''}
             </span>
             {item.status !== 'confirmed' && height > 80 && (
-              <span className="mt-auto text-[11px] font-medium text-muted">{enumLabel(t, 'bookingStatus', item.status)}</span>
+              <span className="mt-auto text-[11px] font-medium text-muted">
+                {enumLabel(t, 'bookingStatus', item.status)}
+              </span>
             )}
           </>
         )}

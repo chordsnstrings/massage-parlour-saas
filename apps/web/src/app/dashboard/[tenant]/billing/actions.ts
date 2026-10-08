@@ -15,8 +15,7 @@ export async function payInvoiceByCardAction(
   const { ctx, error } = await guard(slug, 'billing.view')
   if (error) return { ok: false, error }
   const cfg = stripeConfig()
-  if (!cfg)
-    return { ok: false, error: 'billing.error.cardsOff' }
+  if (!cfg) return { ok: false, error: 'billing.error.cardsOff' }
   if (!z.uuid().safeParse(invoiceId).success) return { ok: false, error: 'billing.error.notFound' }
   const db = platformDb()
   const [invoice] = await db

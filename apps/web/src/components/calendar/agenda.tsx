@@ -1,8 +1,8 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n'
 import { CalendarX2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
-import { enumLabel } from '@spa/core/i18n'
 import { Pill, statusTone } from '@/components/crm'
 import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
@@ -113,7 +113,9 @@ export function Agenda({
         })}
         {tab === 'all' && unassigned.length > 0 && (
           <section className="overflow-hidden rounded-xl border bg-surface">
-            <header className="border-b px-4 py-3 text-[15px] font-medium">{t('calendar.agenda.unassigned')}</header>
+            <header className="border-b px-4 py-3 text-[15px] font-medium">
+              {t('calendar.agenda.unassigned')}
+            </header>
             <ul className="divide-y">
               {unassigned.map((it) => (
                 <AgendaRow key={it.id} item={it} color="var(--accent)" data={data} onOpen={onOpen} />

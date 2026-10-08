@@ -1,9 +1,9 @@
 'use server'
+import type { MessageKey } from '@spa/core/i18n'
 import { payrollLines, payrollRuns, staff, tenants, withTenant } from '@spa/db'
 import { buildPayroll, DomainError, finalisePayroll, recordAdvance } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import type { MessageKey } from '@spa/core/i18n'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
@@ -38,7 +38,9 @@ export async function prepareRunAction(
         .from(payrollRuns)
         .where(and(eq(payrollRuns.periodStart, from), eq(payrollRuns.periodEnd, to)))
       if (existing.some((r) => r.status === 'finalised'))
-        throw new DomainError('This month is already finalised.', 'invalid', { key: 'payroll.result.alreadyFinalised' })
+        throw new DomainError('This month is already finalised.', 'invalid', {
+          key: 'payroll.result.alreadyFinalised',
+        })
       for (const r of existing) {
         await tx.delete(payrollLines).where(eq(payrollLines.runId, r.id))
         await tx.delete(payrollRuns).where(eq(payrollRuns.id, r.id))

@@ -168,7 +168,11 @@ export function CalendarView({ data }: { data: CalendarData }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
           <div className="flex items-center gap-1 rounded-xl border bg-surface p-1">
             <Button variant="ghost" size="icon" className="size-9" asChild>
-              <Link href={href({ date: addDays(data.date, -1) })} aria-label={t('calendar.prevDay')} scroll={false}>
+              <Link
+                href={href({ date: addDays(data.date, -1) })}
+                aria-label={t('calendar.prevDay')}
+                scroll={false}
+              >
                 <ChevronLeft className="rtl:-scale-x-100" />
               </Link>
             </Button>
@@ -178,7 +182,11 @@ export function CalendarView({ data }: { data: CalendarData }) {
               </Link>
             </Button>
             <Button variant="ghost" size="icon" className="size-9" asChild>
-              <Link href={href({ date: addDays(data.date, 1) })} aria-label={t('calendar.nextDay')} scroll={false}>
+              <Link
+                href={href({ date: addDays(data.date, 1) })}
+                aria-label={t('calendar.nextDay')}
+                scroll={false}
+              >
                 <ChevronRight className="rtl:-scale-x-100" />
               </Link>
             </Button>
@@ -205,7 +213,9 @@ export function CalendarView({ data }: { data: CalendarData }) {
               ))}
             </Select>
           )}
-          {navPending && <Loader2 className="size-4 animate-spin text-muted" aria-label={t('calendar.loading')} />}
+          {navPending && (
+            <Loader2 className="size-4 animate-spin text-muted" aria-label={t('calendar.loading')} />
+          )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ms-auto">
             {!data.ownOnly && (
               <Seg

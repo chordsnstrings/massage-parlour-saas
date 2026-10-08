@@ -92,8 +92,7 @@ export async function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number
       <p className="crm-muted text-sm">
         {peak.n ? (
           <>
-            {t('overview.peak.busiest')}{' '}
-            <span className="text-fg">{`${day(peak.d)} ${hh(peak.h)}`}</span> ·{' '}
+            {t('overview.peak.busiest')} <span className="text-fg">{`${day(peak.d)} ${hh(peak.h)}`}</span> ·{' '}
             {t('overview.peak.busiestCount', { count: peak.n })}
           </>
         ) : (

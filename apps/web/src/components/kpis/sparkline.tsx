@@ -1,8 +1,8 @@
 'use client'
 import { motion, useReducedMotion } from 'motion/react'
 import { useId, useState } from 'react'
-import { ease } from '@/lib/motion'
 import { useI18n } from '@/i18n/client'
+import { ease } from '@/lib/motion'
 
 const W = 600
 const H = 140

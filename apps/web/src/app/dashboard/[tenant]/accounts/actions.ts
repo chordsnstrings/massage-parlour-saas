@@ -77,7 +77,8 @@ export async function addExpenseAction(slug: string, _p: ActionResult, fd: FormD
       })
     })
   } catch (e) {
-    if (lockedMessage(e)) return fail('accounts.result.lockedDate', { expenseDate: 'accounts.result.lockedDate' })
+    if (lockedMessage(e))
+      return fail('accounts.result.lockedDate', { expenseDate: 'accounts.result.lockedDate' })
     throw e
   }
   revalidatePath(`/dashboard/${slug}/accounts`, 'layout')

@@ -1,16 +1,16 @@
 import { aiConfigured } from '@spa/ai'
+import { enumLabel } from '@spa/core/i18n'
 import { expenses, withTenant } from '@spa/db'
 import { EXPENSE_CODES } from '@spa/services'
 import { and, desc, gte, lte } from 'drizzle-orm'
 import { ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { enumLabel } from '@spa/core/i18n'
 import { Card, Grid, Meter, Pill } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
-import { appPath } from '@/lib/paths'
 import { getI18n, getT } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { addExpenseAction, voidExpenseAction } from '../actions'
@@ -123,7 +123,10 @@ export default async function ExpensesPage({
               <ExpenseSheet
                 action={addExpenseAction.bind(null, slug)}
                 scanUrl={appPath(`/${slug}/accounts/expenses/scan`)}
-                categories={EXPENSE_CODES.map((a) => ({ code: a.code, name: accountName(t, a.code, a.name) }))}
+                categories={EXPENSE_CODES.map((a) => ({
+                  code: a.code,
+                  name: accountName(t, a.code, a.name),
+                }))}
                 today={todayDubai()}
                 aiReady={aiConfigured()}
               />
