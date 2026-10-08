@@ -113,7 +113,9 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
                         : t('bookings.noTherapist')}
                     </p>
                   </div>
-                  <span className="crm-num shrink-0">{fmt.aed(i.priceAed)}</span>
+                  <span className="crm-num shrink-0">
+                    {i.priceAed == null ? t('common.priceOnRequest') : fmt.aed(i.priceAed)}
+                  </span>
                 </li>
               ))}
             </ul>
