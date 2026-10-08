@@ -163,6 +163,8 @@ export const clientPackages = pgTable(
       .references(() => clients.id, { onDelete: 'cascade' }),
     definitionId: uuid('definition_id').references(() => packageDefinitions.id, { onDelete: 'set null' }),
     saleId: uuid('sale_id').references(() => sales.id, { onDelete: 'set null' }),
+    /** The sale line it was sold on (null for packages sold before line-level refunds). */
+    saleLineId: uuid('sale_line_id').references(() => saleLines.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     pricePaidAed: aed('price_paid_aed').notNull(),
     /** Remaining sessions per service id. */
@@ -210,6 +212,8 @@ export const giftCards = pgTable(
     recipientPhone: text('recipient_phone'),
     message: text('message'),
     saleId: uuid('sale_id').references(() => sales.id, { onDelete: 'set null' }),
+    /** The sale line it was sold on (null for cards sold before line-level refunds). */
+    saleLineId: uuid('sale_line_id').references(() => saleLines.id, { onDelete: 'set null' }),
     expiresAt: ts('expires_at'),
     status: giftCardStatus('status').notNull().default('active'),
     createdAt: createdAt(),

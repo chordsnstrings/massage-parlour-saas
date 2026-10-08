@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { giftCards, packageDefinitions, services, tenants } from '@spa/db'
+import { clientPackages, giftCards, packageDefinitions, services, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { app, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
@@ -32,6 +32,7 @@ test('POS: sell a gift card and a package, then pay with the card and use a pack
     await page.getByRole('button', { name: /Complete sale/ }).click()
     await page.waitForURL(/\/sales\/[0-9a-f-]{36}$/)
   })
+  const prepaidSale = page.url()
 
   const [card] = await db.select().from(giftCards).where(eq(giftCards.tenantId, tenant!.id))
   expect(card).toMatchObject({ balanceAed: '500.00', recipientName: 'Sara' })
@@ -57,4 +58,23 @@ test('POS: sell a gift card and a package, then pay with the card and use a pack
   expect(after!.balanceAed).toBe('150.00')
   await page.goto(`${app}/${slug}/packages?tab=gift-cards`)
   await expect(page.getByText(card!.code).first()).toBeVisible()
+
+  await test.step('refunding the prepaid sale gives back only the unused value', async () => {
+    await page.goto(prepaidSale)
+    await page.getByRole('button', { name: 'Refund', exact: true }).click()
+    const sheet = page.getByRole('dialog', { name: 'Record a refund' })
+    await expect(sheet.getByText(/^Unused AED\s*150$/)).toBeVisible()
+    await expect(sheet.getByText(/^Unused AED\s*1,200$/)).toBeVisible()
+    await sheet.getByRole('button', { name: 'Refund everything' }).click()
+    await expect(sheet.getByTestId('refund-total')).toHaveText(/AED\s*1,350/)
+    await sheet.getByLabel('Paid back by').selectOption('cash')
+    await sheet.getByLabel('Reason').fill('Client moving abroad')
+    await sheet.getByRole('button', { name: 'Record refund' }).click()
+    await expect(page.locator('#receipt').getByText(/Cash · Client moving abroad/)).toBeVisible()
+  })
+
+  const [voided] = await db.select().from(giftCards).where(eq(giftCards.id, card!.id))
+  expect(voided).toMatchObject({ status: 'void', balanceAed: '0.00' })
+  const [pkg] = await db.select().from(clientPackages).where(eq(clientPackages.tenantId, tenant!.id))
+  expect(pkg).toMatchObject({ status: 'refunded', remainingValueAed: '0.00' })
 })

@@ -80,7 +80,10 @@ export async function receiveStock(
   })
 }
 
-/** A voided retail sale: goods go back on the shelf and the cost-of-sales entry is reversed. */
+/**
+ * Sold goods back on the shelf (voided sale, or a refund when `refundId` is given). The caller reverses the
+ * cost of sales: void via `reverseSource('cogs')`, refunds pro rata.
+ */
 export async function returnSoldStock(
   tx: Tx,
   r: {
@@ -89,6 +92,7 @@ export async function returnSoldStock(
     productId: string
     qty: number
     saleId: string
+    refundId?: string
     date: string
     createdBy?: string | null
   },
@@ -99,9 +103,9 @@ export async function returnSoldStock(
     productId: r.productId,
     kind: 'adjustment',
     qty: r.qty,
-    refType: 'sale_void',
-    refId: r.saleId,
-    note: 'Sale voided',
+    refType: r.refundId ? 'refund' : 'sale_void',
+    refId: r.refundId ?? r.saleId,
+    note: r.refundId ? 'Refunded' : 'Sale voided',
     createdBy: r.createdBy,
   })
 }

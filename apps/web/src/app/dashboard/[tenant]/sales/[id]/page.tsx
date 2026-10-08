@@ -11,7 +11,7 @@ import {
   tips,
   withTenant,
 } from '@spa/db'
-import { METHOD_LABEL } from '@spa/services'
+import { METHOD_LABEL, refundOptions } from '@spa/services'
 import { and, asc, eq } from 'drizzle-orm'
 import { ArrowLeft, MessageCircle, Plus } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -77,14 +77,16 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
           and(eq(dayCloses.branchId, row.sale.branchId), eq(dayCloses.businessDate, row.sale.businessDate)),
         ),
     ])
-    return { ...row, lines, payRows, tipRows, refundRows, dayClosed: closed.length > 0 }
+    const refundable = await refundOptions(tx, id)
+    return { ...row, lines, payRows, tipRows, refundRows, refundable, dayClosed: closed.length > 0 }
   })
   if (!data) notFound()
 
-  const { sale, branch, client, lines, payRows, tipRows, refundRows } = data
+  const { sale, branch, client, lines, payRows, tipRows, refundRows, refundable } = data
   const tenant = ctx.tenant
   const refunded = refundRows.reduce((s, r) => s + n(r.amountAed), 0)
-  const refundable = Math.round((n(sale.totalAed) - refunded) * 100) / 100
+  const refundedQty = new Map(refundable.lines.map((l) => [l.saleLineId, l.refundedQty]))
+  const canRefundLines = refundable.remainingAed > 0 && refundable.lines.some((l) => l.unitsAed.length > 0)
   const lineGross = (l: (typeof lines)[number]['line']) => n(l.unitPriceAed) * l.qty - n(l.discountAed)
   const issued = formatDateTime(sale.createdAt)
 
@@ -183,6 +185,13 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
                         {n(line.discountAed) > 0 && ` · −${formatAed(line.discountAed)}`}
                         {therapist && ` · ${therapist}`}
                       </p>
+                      {(refundedQty.get(line.id) ?? 0) > 0 && (
+                        <p className="text-[13px] text-danger tabular">
+                          {refundedQty.get(line.id) === line.qty
+                            ? 'Refunded'
+                            : `${refundedQty.get(line.id)} of ${line.qty} refunded`}
+                        </p>
+                      )}
                     </div>
                     <p className="shrink-0 text-sm tabular">{formatAed(lineGross(line))}</p>
                   </li>
@@ -271,23 +280,26 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
                 </Button>
               </div>
             </Card>
-            {canRefund && sale.status !== 'void' && (sale.status === 'paid' || refundable > 0) && (
-              <Card>
-                <CardHeader title="Corrections" description="Needs a reason; every change is logged." />
-                <div className="space-y-1 px-3 pt-3 pb-3 sm:px-4">
-                  {refundable > 0 && (
-                    <RefundSheet
-                      action={refundSaleAction.bind(null, slug, sale.id)}
-                      maxAed={refundable}
-                      defaultMethod={payRows[0]?.method === 'card_terminal' ? 'card_terminal' : 'cash'}
-                    />
-                  )}
-                  {sale.status === 'paid' && refunded === 0 && !data.dayClosed && (
-                    <VoidSheet action={voidSaleAction.bind(null, slug, sale.id)} number={sale.number} />
-                  )}
-                </div>
-              </Card>
-            )}
+            {canRefund &&
+              sale.status === 'paid' &&
+              (canRefundLines || (refunded === 0 && !data.dayClosed)) && (
+                <Card>
+                  <CardHeader title="Corrections" description="Needs a reason; every change is logged." />
+                  <div className="space-y-1 px-3 pt-3 pb-3 sm:px-4">
+                    {canRefundLines && (
+                      <RefundSheet
+                        action={refundSaleAction.bind(null, slug, sale.id)}
+                        lines={refundable.lines}
+                        maxAed={refundable.remainingAed}
+                        defaultMethod={payRows[0]?.method === 'card_terminal' ? 'card_terminal' : 'cash'}
+                      />
+                    )}
+                    {sale.status === 'paid' && refunded === 0 && !data.dayClosed && (
+                      <VoidSheet action={voidSaleAction.bind(null, slug, sale.id)} number={sale.number} />
+                    )}
+                  </div>
+                </Card>
+              )}
           </div>
         </div>
       </PageBody>

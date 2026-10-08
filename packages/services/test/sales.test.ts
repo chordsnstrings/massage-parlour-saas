@@ -8,10 +8,14 @@ import {
   commissionEntries,
   counters,
   giftCards,
+  giftCardTxns,
+  journalEntries,
   journalLines,
+  ledgerAccounts,
   outbox,
   packageDefinitions,
   products,
+  refundLines,
   rooms,
   sales,
   services,
@@ -33,6 +37,7 @@ import {
   nextCounter,
   profitAndLoss,
   receiveStock,
+  refundOptions,
   refundSale,
   voidSale,
 } from '../src'
@@ -211,52 +216,45 @@ describe('sales', () => {
       /already void/,
     )
 
-    const { sale: refunded } = await tx((db) =>
+    const { sale: refunded, lines: soldLines } = await tx((db) =>
       createSale(db, {
         ...base(),
-        lines: [swedish()],
-        payments: [{ method: 'cash', amountAed: 350 }],
+        lines: [swedish(), { kind: 'other', description: 'Hot stones add-on', qty: 1, unitPriceAed: 50 }],
+        payments: [{ method: 'cash', amountAed: 400 }],
         now: NOON,
       }),
     )
-    await tx((db) =>
-      refundSale(db, {
-        saleId: refunded.id,
-        amountAed: 50,
-        method: 'cash',
-        reason: 'Short session',
-        now: NOON,
-      }),
-    )
-    await expect(
+    const addOn = soldLines.find((l) => l.kind === 'other')!.id
+    const refundAddOn = () =>
       tx((db) =>
         refundSale(db, {
           saleId: refunded.id,
-          amountAed: 301,
+          lines: [{ saleLineId: addOn, qty: 1 }],
           method: 'cash',
-          reason: 'Too much',
+          reason: 'No hot stones today',
           now: NOON,
         }),
-      ),
-    ).rejects.toThrow(/At most AED 300.00/)
+      )
+    expect((await refundAddOn()).amountAed).toBe('50.00')
+    await expect(refundAddOn()).rejects.toThrow(/Nothing is left to refund on “Hot stones add-on”/)
 
     const s = await tx((db) => daySummary(db, ids.branch!, D, 100))
     expect(s.salesCount).toBe(3) // split sale + booking checkout + refunded sale (void excluded)
     expect(s.voidCount).toBe(1)
-    expect(s.revenueAed).toBe(1100)
-    expect(s.paymentsByMethod).toEqual({ cash: 550, card_terminal: 550 })
+    expect(s.revenueAed).toBe(1150)
+    expect(s.paymentsByMethod).toEqual({ cash: 600, card_terminal: 550 })
     expect(s.tipsByStaff).toEqual([{ staffId: ids.maya, name: 'Maya', amountAed: 20 }])
     expect(s.refundsAed).toBe(50)
-    // 100 float + 550 cash + 20 cash tips − 50 cash refund
-    expect(s.expectedCashAed).toBe(620)
+    // 100 float + 600 cash + 20 cash tips − 50 cash refund
+    expect(s.expectedCashAed).toBe(670)
 
     const close = await tx((db) =>
-      closeDay(db, { ...base(), date: D, openingFloatAed: 100, countedCashAed: 615, notes: 'short 5' }),
+      closeDay(db, { ...base(), date: D, openingFloatAed: 100, countedCashAed: 665, notes: 'short 5' }),
     )
     expect(close.varianceAed).toBe('-5.00')
-    expect(close.totals.pay_cash).toBe('550.00')
+    expect(close.totals.pay_cash).toBe('600.00')
     await expect(
-      tx((db) => closeDay(db, { ...base(), date: D, openingFloatAed: 100, countedCashAed: 620 })),
+      tx((db) => closeDay(db, { ...base(), date: D, openingFloatAed: 100, countedCashAed: 670 })),
     ).rejects.toThrow(/already closed/)
     // Closed day: void no longer allowed, a refund is.
     await expect(tx((db) => voidSale(db, { saleId: refunded.id, reason: 'late' }))).rejects.toThrow()
@@ -483,5 +481,265 @@ describe('a booking is checked out once (F3)', () => {
         }),
       ),
     ).rejects.toMatchObject({ cause: { code: '23505', constraint: 'sales_booking_once' } })
+  })
+})
+
+describe('line-level refunds (F2)', () => {
+  const D3 = '2026-10-25'
+  const at = dubaiInstant(D3, 12 * 60)
+  /** Debit − credit per account over every journal entry of the given sources (AED). */
+  const ledgerNet = async (sourceId: string) => {
+    const rows = await tx((db) =>
+      db
+        .select({
+          code: ledgerAccounts.code,
+          v: sql<string>`sum(${journalLines.debitAed} - ${journalLines.creditAed})`,
+        })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+        .innerJoin(ledgerAccounts, eq(ledgerAccounts.id, journalLines.accountId))
+        .where(eq(journalEntries.sourceId, sourceId))
+        .groupBy(ledgerAccounts.code),
+    )
+    return Object.fromEntries(rows.map((r) => [r.code, Number(r.v)]).filter(([, v]) => v !== 0))
+  }
+  const commissionOn = async (saleLineId: string) =>
+    Number(
+      (
+        await tx((db) =>
+          db
+            .select({ v: sql<string>`coalesce(sum(${commissionEntries.amountAed}), 0)` })
+            .from(commissionEntries)
+            .where(eq(commissionEntries.saleLineId, saleLineId)),
+        )
+      )[0]!.v,
+    )
+  const status = async (saleId: string) =>
+    (await tx((db) => db.select().from(sales).where(eq(sales.id, saleId))))[0]!.status
+
+  it('refunds part of a discounted retail line: stock back, COGS and commission reversed pro rata', async () => {
+    const productId = await tx(async (db) => {
+      const [p] = await db
+        .insert(products)
+        .values({ tenantId: ids.tenant!, kind: 'retail', name: { en: 'Face cream' }, priceAed: '105' })
+        .returning()
+      await receiveStock(db, {
+        ...base(),
+        productId: p!.id,
+        qty: 10,
+        unitCostAed: 40,
+        paidVia: 'cash',
+        date: D3,
+      })
+      return p!.id
+    })
+    const stock = async () =>
+      Number(
+        (await tx((db) => db.select().from(stockLevels).where(eq(stockLevels.productId, productId))))[0]!.qty,
+      )
+    // 3 × 105 + 350, less a 66.50 sale discount spread pro rata: cream 283.50 (VAT 13.50), massage 315.
+    const { sale, lines } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [
+          {
+            kind: 'product',
+            refId: productId,
+            description: 'Face cream',
+            qty: 3,
+            unitPriceAed: 105,
+            staffId: ids.maya,
+          },
+          swedish(ids.maya),
+        ],
+        discountAed: 66.5,
+        payments: [{ method: 'card_terminal', amountAed: 598.5 }],
+        now: at,
+      }),
+    )
+    const cream = lines.find((l) => l.kind === 'product')!
+    const massage = lines.find((l) => l.kind === 'service')!
+    expect(cream.lineTotalAed).toBe('283.50')
+    expect(await stock()).toBe(7)
+    expect(await commissionOn(cream.id)).toBe(27) // 10% of 270 net of VAT
+
+    const options = await tx((db) => refundOptions(db, sale.id))
+    expect(options.lines.find((l) => l.saleLineId === cream.id)?.unitsAed).toEqual([94.5, 94.5, 94.5])
+    const refund = (saleLineId: string, qty: number, method: 'cash' | 'card_terminal' = 'cash') =>
+      tx((db) =>
+        refundSale(db, {
+          saleId: sale.id,
+          lines: [{ saleLineId, qty }],
+          method,
+          reason: 'Allergic',
+          now: at,
+        }),
+      )
+    await expect(refund(cream.id, 4)).rejects.toThrow(/At most 3 of “Face cream” can be refunded/)
+
+    expect((await refund(cream.id, 1)).amountAed).toBe('94.50')
+    expect(await stock()).toBe(8)
+    expect(await commissionOn(cream.id)).toBe(18)
+    expect(await status(sale.id)).toBe('paid')
+    expect(await ledgerNet(sale.id)).toEqual({
+      '1010': 598.5,
+      '1000': -94.5,
+      '4000': -300,
+      '4100': -180, // 270 − 90
+      '2000': -24, // 13.50 + 15 − 4.50
+      '5000': 80, // 120 − 40
+      '1200': -80,
+      '6010': 48, // 27 + 30 − 9
+      '2300': -48,
+    })
+
+    expect((await refund(cream.id, 2)).amountAed).toBe('189.00')
+    expect(await stock()).toBe(10)
+    expect(await commissionOn(cream.id)).toBe(0)
+    await expect(refund(cream.id, 1)).rejects.toThrow(/Nothing is left to refund on “Face cream”/)
+
+    expect((await refund(massage.id, 1, 'card_terminal')).amountAed).toBe('315.00')
+    expect(await commissionOn(massage.id)).toBe(0)
+    expect(await status(sale.id)).toBe('refunded')
+    // Every revenue, VAT, stock and commission account is back to zero; the money went back out.
+    expect(await ledgerNet(sale.id)).toEqual({ '1010': 283.5, '1000': -283.5 })
+    await expect(refund(massage.id, 1)).rejects.toThrow(/already been refunded/)
+  })
+
+  it('refunds one of two treatments, splitting VAT so both halves add up', async () => {
+    const { sale, lines } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ ...swedish(ids.maya), qty: 2 }],
+        payments: [{ method: 'cash', amountAed: 700 }],
+        now: at,
+      }),
+    )
+    const line = lines[0]!
+    const refund = () =>
+      tx((db) =>
+        refundSale(db, {
+          saleId: sale.id,
+          lines: [{ saleLineId: line.id, qty: 1 }],
+          method: 'cash',
+          reason: 'Second guest left',
+          now: at,
+        }),
+      )
+    const first = await refund()
+    expect(first.amountAed).toBe('350.00')
+    const [row] = await tx((db) => db.select().from(refundLines).where(eq(refundLines.refundId, first.id)))
+    expect(row).toMatchObject({ qty: 1, amountAed: '350.00', vatAed: '16.67' })
+    expect(await status(sale.id)).toBe('paid')
+    expect(await commissionOn(line.id)).toBe(33.33) // 66.67 earned on 666.67 net, half offset
+    await refund()
+    expect(await status(sale.id)).toBe('refunded')
+    expect(await commissionOn(line.id)).toBe(0)
+    expect(await ledgerNet(sale.id)).toEqual({})
+  })
+
+  it('refunds only the unused value of gift cards and packages, then voids them; used ones are blocked', async () => {
+    const defId = await tx(async (db) => {
+      const [svc] = await db.select().from(serviceVariants).where(eq(serviceVariants.id, ids.variant!))
+      const [d] = await db
+        .insert(packageDefinitions)
+        .values({
+          tenantId: ids.tenant!,
+          name: { en: '5 × Swedish (F2)' },
+          priceAed: '1500',
+          items: [{ serviceId: svc!.serviceId, quantity: 5 }],
+        })
+        .returning()
+      return d!.id
+    })
+    const { sale, lines } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        clientId: ids.client,
+        lines: [
+          { kind: 'gift_card', description: 'Gift card — Noor', qty: 1, unitPriceAed: 500 },
+          { kind: 'package', refId: defId, description: '5 × Swedish', qty: 1, unitPriceAed: 1500 },
+        ],
+        payments: [{ method: 'card_terminal', amountAed: 2000 }],
+        now: at,
+      }),
+    )
+    const [card] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.saleId, sale.id)))
+    const [pkg] = await tx((db) => db.select().from(clientPackages).where(eq(clientPackages.saleId, sale.id)))
+    // Spend 350 of the card and one package session.
+    await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [swedish()],
+        payments: [{ method: 'gift_card', amountAed: 350, reference: card!.code }],
+        now: at,
+      }),
+    )
+    await tx((db) =>
+      createSale(db, {
+        ...base(),
+        clientId: ids.client,
+        lines: [{ ...swedish(), refId: ids.variant, unitPriceAed: 0, clientPackageId: pkg!.id }],
+        payments: [],
+        now: at,
+      }),
+    )
+    const options = await tx((db) => refundOptions(db, sale.id))
+    expect(options.lines.map((l) => [l.kind, l.unitsAed])).toEqual([
+      ['gift_card', [150]],
+      ['package', [1200]],
+    ])
+    const refund = await tx((db) =>
+      refundSale(db, {
+        saleId: sale.id,
+        lines: lines.map((l) => ({ saleLineId: l.id, qty: 1 })),
+        method: 'card_terminal',
+        reason: 'Client moving abroad',
+        now: at,
+      }),
+    )
+    expect(refund.amountAed).toBe('1350.00')
+    const [voided] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.id, card!.id)))
+    expect(voided).toMatchObject({ status: 'void', balanceAed: '0.00' })
+    const txns = await tx((db) => db.select().from(giftCardTxns).where(eq(giftCardTxns.giftCardId, card!.id)))
+    expect(txns.find((t) => t.kind === 'refund')?.amountAed).toBe('-150.00')
+    const [cancelled] = await tx((db) =>
+      db.select().from(clientPackages).where(eq(clientPackages.id, pkg!.id)),
+    )
+    expect(cancelled).toMatchObject({ status: 'refunded', remainingValueAed: '0.00' })
+    expect(await status(sale.id)).toBe('refunded')
+    // The sale's own entries: 2000 in, 500 + 1500 owed; the refund takes back 150 + 1200 with no VAT.
+    expect(await ledgerNet(sale.id)).toEqual({ '1010': 650, '2100': -350, '2110': -300 })
+
+    // A fully used gift card cannot be refunded at its full price.
+    const { sale: spent, lines: spentLines } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ kind: 'gift_card', description: 'Gift card — Lina', qty: 1, unitPriceAed: 200 }],
+        payments: [{ method: 'cash', amountAed: 200 }],
+        now: at,
+      }),
+    )
+    const [used] = await tx((db) => db.select().from(giftCards).where(eq(giftCards.saleId, spent.id)))
+    await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ kind: 'other', description: 'Scrub', qty: 1, unitPriceAed: 200 }],
+        payments: [{ method: 'gift_card', amountAed: 200, reference: used!.code }],
+        now: at,
+      }),
+    )
+    expect((await tx((db) => refundOptions(db, spent.id))).lines[0]?.unitsAed).toEqual([])
+    await expect(
+      tx((db) =>
+        refundSale(db, {
+          saleId: spent.id,
+          lines: [{ saleLineId: spentLines[0]!.id, qty: 1 }],
+          method: 'cash',
+          reason: 'Changed mind',
+          now: at,
+        }),
+      ),
+    ).rejects.toThrow(/has been used — nothing unused is left to refund/)
   })
 })
