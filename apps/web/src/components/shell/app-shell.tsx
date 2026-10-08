@@ -38,7 +38,7 @@ export function AppShell({
         >
           <LogoMark className="lg:hidden" />
           <span className="min-w-0 md:hidden lg:block">
-            <Logo className="mb-1 hidden h-6 lg:block" />
+            <Logo className="mb-1 hidden h-5 lg:block" />
             <span className="block truncate text-sm font-semibold tracking-tight">{title}</span>
             {subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}
           </span>

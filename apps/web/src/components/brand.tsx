@@ -12,15 +12,15 @@ const TONES: Record<Tone, { ink: string; cut: string }> = {
   light: { ink: '#F7F3EA', cut: 'var(--brand-cut, #18191B)' },
 }
 
-/** Full wordmark (aspect ≈ 3.8:1); size by height, e.g. `h-7`. */
+/** Full wordmark, viewBox cropped to the ink (≈ 7.7:1, the source file pads to 3.8:1); size by height, e.g. `h-6`. */
 export function Logo({ className, tone = 'auto' }: { className?: string; tone?: Tone }) {
   const t = TONES[tone]
   return (
     <svg
-      viewBox="0 0 1600 420"
+      viewBox="64 132 1476 192"
       role="img"
       aria-label="spamanagement.co"
-      className={cn('h-7 w-auto shrink-0', className)}
+      className={cn('h-6 w-auto shrink-0', className)}
     >
       <g fill={t.ink} fontFamily={FONT} fontWeight="500">
         <text
