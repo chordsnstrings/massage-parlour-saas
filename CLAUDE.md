@@ -3,6 +3,15 @@
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
+## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
+- Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
+  `withTenant`) · `auth` · `services` (all DB domain logic; takes the caller's `tx`; no permission/audit checks inside)
+  · `ai` (ModelArk gateway + agents) · `apps/web` (every surface) · `apps/worker` (pg-boss jobs). PLAN §4's
+  blocks/ui/config packages don't exist: site blocks + UI kit live in `apps/web/src/components/{site,ui}`.
+- Write path: `proxy.ts` rewrite → server action → `guard`/`studioGuard` (server/access.ts) → zod → `withTenant(ctx.tenant.id,
+  tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `fail`.
+- Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, double checkout race, …).
+
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.

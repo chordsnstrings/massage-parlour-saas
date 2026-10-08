@@ -287,6 +287,8 @@ packages/ai       ModelArk gateway, agents, tools, metering, prompts (EN/AR)
 packages/ui       shared components
 packages/config   tsconfig, eslint, prettier
 ```
+*As built (2026-10-08):* `packages/{core,db,auth,services,ai}` + `apps/{web,worker}`; blocks and UI kit live in
+`apps/web/src/components/{site,ui}`, tool config at the root (Biome). See `docs/CODEMAP.md`.
 
 ---
 
