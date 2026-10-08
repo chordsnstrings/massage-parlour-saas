@@ -35,10 +35,7 @@ export function AppShell({
   return (
     <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="mkt-app-dark sticky top-0 hidden h-dvh flex-col md:flex">
-        <Link
-          href={homeHref}
-          className="flex min-h-16 items-center gap-3 px-5 py-5 md:justify-center"
-        >
+        <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-5 py-5 md:justify-center">
           <LogoMark tone="light" className="lg:hidden" />
           <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
             <Logo className="mb-4 hidden h-7 lg:block" />
