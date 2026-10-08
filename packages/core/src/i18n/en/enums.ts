@@ -90,6 +90,14 @@ export const enums = {
     executed: 'Done',
     failed: 'Failed',
   },
+  purchaseCategory: {
+    materials: 'Materials',
+    cleaning: 'Cleaning supplies',
+    consumables: 'Consumables',
+    equipment: 'Equipment',
+    other: 'Other',
+  },
+  purchaseStatus: { recorded: 'Recorded', void: 'Void' },
   productKind: { retail: 'Retail', consumable: 'Consumable' },
   stockMovementKind: {
     purchase: 'Received',

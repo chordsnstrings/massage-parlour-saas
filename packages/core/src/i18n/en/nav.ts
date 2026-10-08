@@ -27,6 +27,8 @@ export const nav = {
   servicesRooms: 'Services & rooms',
   packages: 'Packages & gifts',
   inventory: 'Inventory',
+  purchases: 'Purchases',
+  warehouse: 'Warehouse',
   staff: 'Staff',
   access: 'Team',
   documents: 'Documents',

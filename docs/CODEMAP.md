@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0016` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0017` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
@@ -93,7 +93,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
   - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
-  - People: Clients, Services & menu (services · packages · inventory), Team & roles (staff · team · documents).
+  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
   - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
@@ -193,6 +193,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     | 4300 | Breakage |
     | 5000 | COGS |
     | 5100 | Consumables |
+    | 6150 / 6160 / 6170 | Cleaning supplies / Spa materials & supplies / Small equipment (purchases) |
     | 6xxx | Expenses |
 
   - Payment method maps to an account via `PAYMENT_ACCOUNT`.
@@ -212,6 +213,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
+- **Stock locations + purchases (R8/R9, migration 0017)**:
+  - A location is a branch or the spa's central warehouse = `branch_id IS NULL` on `stock_levels` /
+    `stock_movements` (unique `stock_levels_location` NULLS NOT DISTINCT on tenant+branch+product; PK dropped).
+    `stock_levels.low_stock_at` overrides the product threshold per location (`lowStock(tx, branchId|null)`).
+  - `inventory.stockIn`/`stockOut` = movement only (no ledger); `receiveStock` = stockIn + its own entry.
+    `transferStock` writes `transfer_out`/`transfer_in` with one shared `ref_id`, no ledger, locks the source level
+    (`FOR UPDATE`) and never goes below zero. `countStock` = adjustStock by the difference.
+  - `purchases` + `purchase_lines` + `suppliers` (`supplierByName` dedupes case-insensitively). `recordPurchase` posts
+    one `purchase` entry: Dr 1200 (product lines, via stockIn with `ref_id` = purchase) / Dr `PURCHASE_ACCOUNT[category]`
+    (non-stock lines) / Dr 1300 / Cr `EXPENSE_CREDIT[paidVia]` (cash 1000, card+bank 1020). `voidPurchase` takes the
+    stock back out (blocked if it was used/moved), `reverseSource('purchase')`, row kept with `status = 'void'`.
+  - Permission `inventory.purchase` (accountant has it); warehouse = `inventory.manage`. Receipt scan shared via
+    `server/receipt-scan.ts` (expenses + purchases routes) and `accounts/expenses/receipt-scan.tsx`.
+  - Purchases are not in Expenses list / data export yet (the ledger, P&L and VAT include them).
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.

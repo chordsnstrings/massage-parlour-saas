@@ -90,6 +90,14 @@ export const enums: Messages['enums'] = {
     executed: 'เสร็จสิ้น',
     failed: 'ไม่สำเร็จ',
   },
+  purchaseCategory: {
+    materials: 'วัสดุ',
+    cleaning: 'อุปกรณ์ทำความสะอาด',
+    consumables: 'ของสิ้นเปลือง',
+    equipment: 'อุปกรณ์',
+    other: 'อื่น ๆ',
+  },
+  purchaseStatus: { recorded: 'บันทึกแล้ว', void: 'ยกเลิก' },
   productKind: { retail: 'สินค้าขาย', consumable: 'วัสดุสิ้นเปลือง' },
   stockMovementKind: {
     purchase: 'รับเข้า',

@@ -20,7 +20,10 @@ export const PERMISSION_GROUPS = {
   },
   services: { label: 'Services & rooms', actions: { manage: 'Manage services, rooms and resources' } },
   staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
-  inventory: { label: 'Inventory', actions: { manage: 'Manage stock' } },
+  inventory: {
+    label: 'Inventory',
+    actions: { manage: 'Manage stock and the warehouse', purchase: 'Record purchases' },
+  },
   marketing: {
     label: 'WhatsApp & marketing',
     actions: { send: 'Send WhatsApp messages', campaigns: 'Create campaigns' },
@@ -106,6 +109,7 @@ export const SYSTEM_ROLES: Record<
       'reports.view',
       'accounting.view',
       'accounting.manage',
+      'inventory.purchase',
     ],
   },
   content_editor: {

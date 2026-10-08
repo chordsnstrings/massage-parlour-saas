@@ -28,6 +28,8 @@ export const nav: Messages['nav'] = {
   servicesRooms: 'บริการและห้อง',
   packages: 'แพ็กเกจและบัตรของขวัญ',
   inventory: 'สินค้าคงคลัง',
+  purchases: 'การซื้อ',
+  warehouse: 'คลังกลาง',
   staff: 'พนักงาน',
   access: 'ทีม',
   documents: 'เอกสาร',

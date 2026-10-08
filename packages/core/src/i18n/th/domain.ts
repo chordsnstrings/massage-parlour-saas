@@ -88,6 +88,13 @@ export const domain: Messages['errors']['domain'] = {
   packageInactive: 'แพ็กเกจนี้ไม่ได้ใช้งานแล้ว',
   giftCardInvalid: 'บัตรของขวัญนี้ใช้ไม่ได้แล้ว',
   giftCardBalance: 'บัตรของขวัญนี้เหลือเพียง AED {amount}',
+  // Purchases, warehouse
+  supplierNotFound: 'ไม่พบผู้จำหน่าย',
+  purchaseNotFound: 'ไม่พบรายการซื้อ',
+  purchaseVoided: 'รายการซื้อนี้ถูกยกเลิกไปแล้ว',
+  vatOverSubtotal: 'VAT มากกว่ายอดก่อนภาษี',
+  stockOnlyThere: 'ที่นั่นมี “{item}” ในสต็อกเพียง {qty}',
+  twoLocations: 'เลือกสองตำแหน่งที่ต่างกัน',
   quantityPositive: 'จำนวนต้องมากกว่าศูนย์',
   alreadyFinalised: 'ยืนยันไปแล้ว',
   unbalancedEntry: 'รายการบัญชีไม่สมดุล ({debit} ≠ {credit})',

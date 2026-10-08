@@ -99,6 +99,8 @@ export default async function TenantLayout({
         ...page('services.manage', '/services', t('nav.servicesRooms')),
         ...page('services.manage', '/packages', t('nav.packages')),
         ...page('inventory.manage', '/inventory', t('nav.inventory')),
+        ...page('inventory.purchase', '/purchases', t('nav.purchases')),
+        ...page('inventory.manage', '/warehouse', t('nav.warehouse')),
       ]),
       ...item('team', t('nav.team'), [
         ...page('staff.view', '/staff', t('nav.staff')),

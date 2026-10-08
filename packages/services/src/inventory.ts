@@ -1,16 +1,24 @@
 // Stock: purchases, adjustments, retail sales and consumables used per treatment, with ledger postings at cost.
+// Locations: a branch (`branchId`) or the spa's central warehouse (`branchId: null`, R9). Transfers between
+// locations move quantity only (no ledger entry: inventory value is spa-wide).
 import { bookingItems, products, serviceConsumables, stockLevels, stockMovements, type Tx } from '@spa/db'
-import { and, eq, inArray, isNotNull, lte, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { post } from './ledger'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
+const r3 = (n: number) => Math.round(n * 1000) / 1000
+
+/** `null` = the central warehouse. */
+export type StockLocation = string | null
+const atLocation = (branchId: StockLocation) =>
+  branchId ? eq(stockLevels.branchId, branchId) : isNull(stockLevels.branchId)
 
 async function move(
   tx: Tx,
   m: {
     tenantId: string
-    branchId: string
+    branchId: StockLocation
     productId: string
     kind: (typeof stockMovements.$inferInsert)['kind']
     qty: number
@@ -40,10 +48,54 @@ async function move(
     .insert(stockLevels)
     .values({ tenantId: m.tenantId, branchId: m.branchId, productId: m.productId, qty: m.qty.toString() })
     .onConflictDoUpdate({
-      target: [stockLevels.branchId, stockLevels.productId],
+      target: [stockLevels.tenantId, stockLevels.branchId, stockLevels.productId],
       set: { qty: sql`${stockLevels.qty} + ${m.qty}` },
     })
   return row!.id
+}
+
+/**
+ * Stock in at a location (no ledger entry): the movement + the product's latest cost. Shared by `receiveStock`
+ * and purchase records (which post one entry for the whole purchase and pass `refId` = the purchase).
+ */
+export async function stockIn(
+  tx: Tx,
+  r: {
+    tenantId: string
+    branchId: StockLocation
+    productId: string
+    qty: number
+    unitCostAed: number
+    refType?: string
+    refId?: string
+    createdBy?: string | null
+  },
+) {
+  if (!(r.qty > 0)) throw new DomainError('Quantity must be positive')
+  const movementId = await move(tx, { refType: 'purchase', ...r, kind: 'purchase' })
+  await tx
+    .update(products)
+    .set({ costAed: r.unitCostAed.toFixed(2) })
+    .where(eq(products.id, r.productId))
+  return movementId
+}
+
+/** Stock out at a location without a ledger entry (the caller posts or reverses the value, e.g. a voided purchase). */
+export async function stockOut(
+  tx: Tx,
+  r: {
+    tenantId: string
+    branchId: StockLocation
+    productId: string
+    qty: number
+    refType: string
+    refId: string
+    note?: string
+    createdBy?: string | null
+  },
+) {
+  if (!(r.qty > 0)) throw new DomainError('Quantity must be positive')
+  return move(tx, { ...r, kind: 'adjustment', qty: -r.qty })
 }
 
 /** Goods received: stock up, inventory asset up, paid by cash or bank (VAT recoverable). */
@@ -51,7 +103,7 @@ export async function receiveStock(
   tx: Tx,
   r: {
     tenantId: string
-    branchId: string
+    branchId: StockLocation
     productId: string
     qty: number
     unitCostAed: number
@@ -61,12 +113,7 @@ export async function receiveStock(
     createdBy?: string | null
   },
 ) {
-  if (r.qty <= 0) throw new DomainError('Quantity must be positive')
-  const movementId = await move(tx, { ...r, kind: 'purchase', refType: 'purchase' })
-  await tx
-    .update(products)
-    .set({ costAed: r.unitCostAed.toFixed(2) })
-    .where(eq(products.id, r.productId))
+  const movementId = await stockIn(tx, r)
   const net = r2(r.qty * r.unitCostAed)
   const vat = r.vatAed ?? 0
   await post(tx, {
@@ -121,7 +168,7 @@ export async function adjustStock(
   tx: Tx,
   a: {
     tenantId: string
-    branchId: string
+    branchId: StockLocation
     productId: string
     qty: number
     note?: string
@@ -252,23 +299,113 @@ export async function consumeForBooking(
   return value
 }
 
-/** Products at or below their low-stock threshold in a branch. */
-export async function lowStock(tx: Tx, branchId: string) {
+const threshold = sql<string | null>`coalesce(${stockLevels.lowStockAt}, ${products.lowStockAt})`
+
+/** Products at or below their low-stock threshold at a location (its own threshold, else the product's). */
+export async function lowStock(tx: Tx, branchId: StockLocation) {
   return tx
     .select({
       productId: products.id,
       name: products.name,
       unit: products.unit,
       qty: stockLevels.qty,
-      lowStockAt: products.lowStockAt,
+      lowStockAt: threshold,
     })
     .from(stockLevels)
     .innerJoin(products, eq(products.id, stockLevels.productId))
-    .where(
-      and(
-        eq(stockLevels.branchId, branchId),
-        isNotNull(products.lowStockAt),
-        lte(stockLevels.qty, products.lowStockAt),
-      ),
-    )
+    .where(and(atLocation(branchId), isNotNull(threshold), lte(stockLevels.qty, threshold)))
+}
+
+/** Quantity on hand at a location, locking the level row (`FOR UPDATE`) so concurrent moves queue behind. */
+export async function lockedStock(tx: Tx, branchId: StockLocation, productId: string) {
+  const [row] = await tx
+    .select({ qty: stockLevels.qty })
+    .from(stockLevels)
+    .where(and(atLocation(branchId), eq(stockLevels.productId, productId)))
+    .for('update')
+  return Number(row?.qty ?? 0)
+}
+
+/** Location-specific low-stock threshold (`null` clears it, so the product's own threshold applies). */
+export async function setLocationLowStock(
+  tx: Tx,
+  l: { tenantId: string; branchId: StockLocation; productId: string; lowStockAt: number | null },
+) {
+  const value = l.lowStockAt == null ? null : String(l.lowStockAt)
+  await tx
+    .insert(stockLevels)
+    .values({ tenantId: l.tenantId, branchId: l.branchId, productId: l.productId, lowStockAt: value })
+    .onConflictDoUpdate({
+      target: [stockLevels.tenantId, stockLevels.branchId, stockLevels.productId],
+      set: { lowStockAt: value },
+    })
+}
+
+/**
+ * Moves stock between two locations (warehouse ↔ branch, or branch → branch). Both sides are recorded
+ * (`transfer_out` / `transfer_in`, same `ref_id`); no ledger entry since inventory value doesn't change.
+ * The source can't go below zero. Returns the transfer id shared by both movements.
+ */
+export async function transferStock(
+  tx: Tx,
+  t: {
+    tenantId: string
+    from: StockLocation
+    to: StockLocation
+    productId: string
+    qty: number
+    note?: string
+    createdBy?: string | null
+  },
+) {
+  const qty = r3(t.qty)
+  if (!(qty > 0)) throw new DomainError('Quantity must be positive')
+  if (t.from === t.to) throw new DomainError('Choose two different locations')
+  const [p] = await tx.select().from(products).where(eq(products.id, t.productId))
+  if (!p) throw new DomainError('Product not found', 'not_found')
+  const onHand = await lockedStock(tx, t.from, t.productId)
+  if (onHand < qty) {
+    throw new DomainError(`Only ${r3(onHand)} of “${p.name.en}” in stock there`)
+  }
+  const transferId = crypto.randomUUID()
+  const common = {
+    tenantId: t.tenantId,
+    productId: t.productId,
+    unitCostAed: Number(p.costAed),
+    refType: 'transfer',
+    refId: transferId,
+    note: t.note,
+    createdBy: t.createdBy,
+  }
+  await move(tx, { ...common, branchId: t.from, kind: 'transfer_out', qty: -qty })
+  await move(tx, { ...common, branchId: t.to, kind: 'transfer_in', qty })
+  return transferId
+}
+
+/** Stock count at a location: records the difference against what the system holds (valued at cost). */
+export async function countStock(
+  tx: Tx,
+  c: {
+    tenantId: string
+    branchId: StockLocation
+    productId: string
+    counted: number
+    note?: string
+    date: string
+    createdBy?: string | null
+  },
+) {
+  if (!(c.counted >= 0)) throw new DomainError('Amounts cannot be negative')
+  const diff = r3(c.counted - (await lockedStock(tx, c.branchId, c.productId)))
+  if (diff === 0) return { diff, movementId: null }
+  const movementId = await adjustStock(tx, {
+    tenantId: c.tenantId,
+    branchId: c.branchId,
+    productId: c.productId,
+    qty: diff,
+    note: c.note || 'Stock count',
+    date: c.date,
+    createdBy: c.createdBy,
+  })
+  return { diff, movementId }
 }
