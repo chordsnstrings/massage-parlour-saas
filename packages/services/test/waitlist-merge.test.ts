@@ -304,15 +304,13 @@ describe('merge duplicate clients', () => {
         currentPeriodStart: D,
         currentPeriodEnd: '2026-11-06',
       })
-      await db
-        .insert(giftCards)
-        .values({
-          tenantId: t,
-          code: 'GIFT1',
-          initialAed: '100',
-          balanceAed: '100',
-          purchaserClientId: dup.id,
-        })
+      await db.insert(giftCards).values({
+        tenantId: t,
+        code: 'GIFT1',
+        initialAed: '100',
+        balanceAed: '100',
+        purchaserClientId: dup.id,
+      })
       await db
         .insert(conversations)
         .values({ tenantId: t, channel: 'instagram', externalThreadId: 'th1', clientId: dup.id })
