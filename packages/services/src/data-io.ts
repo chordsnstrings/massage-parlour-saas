@@ -1,6 +1,6 @@
-// CSV import/export helpers (pure): decoding, delimiter + date detection, column auto-mapping,
-// row validation/normalisation and formula-safe CSV output. Parsing itself (papaparse) and zipping
-// (fflate) happen in the web app; the database side lives in data-import.ts / data-export.ts.
+// Import/export helpers (pure): decoding, delimiter + date detection, header-row detection, column auto-mapping and
+// row validation/normalisation. CSV parsing (papaparse) happens in the web app; .xlsx output/input lives in
+// xlsx.ts (server-only subpath); the database side lives in data-import.ts / data-export.ts.
 import { toUaeE164 } from '@spa/core'
 
 export const IMPORT_KINDS = ['clients', 'menu', 'products'] as const
@@ -198,6 +198,35 @@ export const IMPORT_FIELDS: Record<ImportKind, ImportField[]> = {
     },
   ],
 }
+
+/**
+ * Thai headers of our own .xlsx exports (TH `sheets.columns`, checked by data-io.test) so an export made in Thai
+ * re-imports without manual mapping. Kept literal here: this module is in client bundles, the catalogue is not.
+ */
+export const TH_EXPORT_ALIASES: Partial<Record<ImportKind, Record<string, string[]>>> = {
+  clients: {
+    name: ['ชื่อ'],
+    phone: ['มือถือ'],
+    gender: ['เพศ'],
+    birthday: ['วันเกิด'],
+    tags: ['แท็ก'],
+    notes: ['หมายเหตุ'],
+    language: ['ภาษา'],
+    source: ['ที่มา'],
+  },
+  products: {
+    name: ['ชื่อ'],
+    nameAr: ['ชื่อ (อาหรับ)', 'name (arabic)'],
+    kind: ['ชนิด'],
+    unit: ['หน่วย'],
+    cost: ['ต้นทุน aed', 'cost aed'],
+    stock: ['สต็อก'],
+    price: ['ราคา aed'],
+  },
+}
+for (const [kind, fields] of Object.entries(TH_EXPORT_ALIASES))
+  for (const f of IMPORT_FIELDS[kind as ImportKind])
+    if (fields[f.key]) f.aliases.push(...(fields[f.key] as string[]))
 
 /** Example files offered as downloadable templates. */
 export const IMPORT_TEMPLATES: Record<ImportKind, string[][]> = {
@@ -789,6 +818,19 @@ function validateProduct(get: (k: string) => string) {
 
 export const isBlankRow = (r: string[]) => r.every((c) => !c?.trim())
 
+/**
+ * Index of the header row: the first non-blank row, unless a title block sits above the table (our own .xlsx
+ * exports and templates: one-cell title/subtitle rows) — then the first of the next rows with 2+ filled cells.
+ */
+export function headerRowIndex(rows: string[][]): number {
+  const first = rows.findIndex((r) => !isBlankRow(r ?? []))
+  if (first < 0) return 0
+  const filled = (r: string[] | undefined) => (r ?? []).filter((c) => c?.trim()).length
+  if (filled(rows[first]) > 1) return first
+  for (let i = first + 1; i < Math.min(rows.length, first + 6); i++) if (filled(rows[i]) > 1) return i
+  return first
+}
+
 /** Row error without the cell values quoted in it (for the audit log, which outlives the upload). */
 export const withoutValues = (message: string) => message.replace(/“[^”]*”/g, '“…”')
 
@@ -839,25 +881,3 @@ export function validateRows(
     ]
   })
 }
-
-// ---------------------------------------------------------------------------
-// CSV output
-// ---------------------------------------------------------------------------
-
-const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/
-
-/** One quoted CSV cell; text that a spreadsheet would run as a formula is prefixed with an apostrophe. */
-export function csvCell(value: unknown): string {
-  let s: string
-  if (value == null) s = ''
-  else if (value instanceof Date) s = value.toISOString()
-  else if (Array.isArray(value))
-    s = value.every((v) => typeof v !== 'object') ? value.join('; ') : JSON.stringify(value)
-  else if (typeof value === 'object') s = JSON.stringify(value)
-  else s = String(value)
-  if (/^[=+\-@\t\r]/.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`
-  return `"${s.replaceAll('"', '""')}"`
-}
-
-/** Rows → Excel-friendly CSV (UTF-8 BOM so Arabic opens correctly, CRLF line endings). */
-export const toCsv = (rows: unknown[][]) => `﻿${rows.map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`

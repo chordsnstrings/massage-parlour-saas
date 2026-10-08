@@ -1,12 +1,13 @@
 import { auditLog, withTenant } from '@spa/db'
-import { type ImportError, isImportKind, toCsv } from '@spa/services'
+import { type ImportError, isImportKind } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { IMPORT_PERMISSION } from '@/components/data/kinds'
-import { csvDownload } from '@/components/data/server'
+import { xlsxDownload } from '@/components/data/server'
+import { getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
 
-/** Row errors of a past import (from its audit-log summary) as CSV. */
+/** Row errors of a past import (from its audit-log summary) as .xlsx in the viewer's language. */
 export async function GET(req: Request, { params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   const id = Number(new URL(req.url).searchParams.get('id'))
@@ -22,8 +23,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
   const errors = ((entry.data as { errors?: ImportError[] } | null)?.errors ?? []).filter(
     (e) => typeof e?.row === 'number',
   )
-  return csvDownload(
-    `${kind}-import-errors-${id}.csv`,
-    toCsv([['Row', 'Error'], ...errors.map((e) => [e.row, String(e.message ?? '')])]),
-  )
+  const t = await getT()
+  const file = String((entry.data as { file?: string } | null)?.file ?? '')
+  return xlsxDownload(`${kind}-import-errors-${id}.xlsx`, {
+    sheets: [
+      {
+        name: t('sheets.importErrors'),
+        title: `${ctx.tenant.name} — ${t('sheets.importErrors')}`,
+        subtitle: t('sheets.importErrorsSub', { file, count: errors.length }),
+        rows: [
+          [t('sheets.columns.row'), t('sheets.columns.error')],
+          ...errors.map((e) => [e.row, String(e.message ?? '')]),
+        ],
+      },
+    ],
+  })
 }

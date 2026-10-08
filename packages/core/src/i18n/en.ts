@@ -37,6 +37,7 @@ import { roles } from './en/roles'
 import { sales } from './en/sales'
 import { services } from './en/services'
 import { settings } from './en/settings'
+import { sheets } from './en/sheets'
 import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
@@ -81,6 +82,7 @@ export const en = {
   payroll,
   billing,
   settings,
+  sheets,
   account,
   auth,
   enums,

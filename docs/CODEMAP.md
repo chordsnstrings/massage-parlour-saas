@@ -185,6 +185,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 ## Service invariants (`packages/services`)
 
+- **Spreadsheets (R10)**: every export is .xlsx via `@spa/services/xlsx` (server-only subpath, exceljs, external in
+  next.config; the main entry stays client-safe). `toXlsx` = streaming writer, title + subtitle rows, bold frozen
+  header + autofilter, kinds inferred (`*AED` money, ISO dates/`YYYY-MM-DD HH:MM` → date cells, Date → Dubai wall
+  time, code/phone/SKU headers stay text); text > 32,767 chars is cut and kept whole on a `long_values` sheet.
+  Routes: data export (headers TH via `sheets.columns` when the viewer is th), full export = one workbook (README +
+  sheet per table, raw column names), import template (EN), import errors (upload reply base64 + past-import
+  route), accounts journal (EN audit file). WPS SIF keeps its bank format. Import takes CSV **or** .xlsx (first
+  visible sheet; `headerRowIndex` skips one-cell title rows, so our own files re-import; TH export headers are
+  autoMap aliases `TH_EXPORT_ALIASES`). Legacy .xls is refused. CSV writer (`toCsv`) removed.
 - **Errors**: `DomainError(message, code)` with codes `slot_taken | not_found | invalid | no_room | no_staff`;
   `pgCode(e)` unwraps drizzle-wrapped errors.
 - **Bookings**:

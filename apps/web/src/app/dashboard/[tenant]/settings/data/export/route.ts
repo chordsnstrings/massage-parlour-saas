@@ -1,16 +1,16 @@
 import { withTenant } from '@spa/db'
 import {
+  dubaiStamp,
   EXPORT_DATASETS,
   exportRows,
   fullExportReadme,
   fullExportTables,
   isExportDataset,
   parseDate,
-  toCsv,
 } from '@spa/services'
-import { strToU8, zipSync } from 'fflate'
 import { notFound } from 'next/navigation'
-import { canExportAll, csvDownload } from '@/components/data/server'
+import { canExportAll, localHeader, xlsxDownload } from '@/components/data/server'
+import { getLocale, getT } from '@/i18n/server'
 import { todayDubai } from '@/lib/utils'
 import { can, type MemberContext, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -23,8 +23,9 @@ const isoDate = (s: string | null) => (s && DATE.test(s) && parseDate(s) === s ?
 const fullRunning = new Set<string>()
 
 /**
- * `?type=<dataset>&from=YYYY-MM-DD&to=YYYY-MM-DD` → one CSV; `?type=full` → zip of every tenant table + README
- * (owner level: every permission). Phone numbers only for roles with clients.phone.
+ * `?type=<dataset>&from=YYYY-MM-DD&to=YYYY-MM-DD` → one .xlsx (headers in the viewer's language); `?type=full` →
+ * one .xlsx with a README sheet + a sheet per tenant table (owner level: every permission; English column names).
+ * Phone numbers only for roles with clients.phone.
  */
 export async function GET(req: Request, { params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
@@ -67,7 +68,25 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
     data: { ...range, rows: rows.length - 1, phones },
   })
   const span = meta.dated && (from || to) ? `-${from ?? 'start'}-to-${to ?? stamp}` : `-${stamp}`
-  return csvDownload(`${type.replace('_', '-')}-${ctx.tenant.slug}${span}.csv`, toCsv(rows))
+  const [t, locale] = await Promise.all([getT(), getLocale()])
+  const label = t(`settings.data.export.datasets.${type}`)
+  const period = !meta.dated
+    ? t('sheets.asOf', { date: stamp })
+    : from || to
+      ? t('sheets.period', { from: from ?? '…', to: to ?? stamp })
+      : t('sheets.allDates')
+  const header = localHeader(locale)
+  return xlsxDownload(`${type.replace('_', '-')}-${ctx.tenant.slug}${span}.xlsx`, {
+    title: `${ctx.tenant.name} — ${label}`,
+    sheets: [
+      {
+        name: label,
+        title: `${ctx.tenant.name} — ${label}`,
+        subtitle: `${period} · ${t('sheets.generated', { date: dubaiStamp(new Date()) })}`,
+        rows: [(rows[0] ?? []).map((h) => header(String(h))), ...rows.slice(1)],
+      },
+    ],
+  })
 }
 
 async function fullExport(
@@ -78,24 +97,26 @@ async function fullExport(
 ) {
   const generatedAt = new Date()
   const tables = await withTenant(ctx.tenant.id, (tx) => fullExportTables(tx, { phones }))
-  const counts = tables.map((t) => ({ file: t.file, count: t.rows.length - 1 }))
-  const files: Record<string, Uint8Array> = {
-    'README.txt': strToU8(
-      fullExportReadme({
-        spa: ctx.tenant.name,
-        slug: ctx.tenant.slug,
-        generatedAt,
-        tables: counts,
-        phones,
-      }),
-    ),
-  }
-  for (const t of tables) files[t.file] = strToU8(toCsv(t.rows))
-  const zip = zipSync(files, { level: 6 })
+  const counts = tables.map((t) => ({ table: t.table, count: t.rows.length - 1 }))
+  const readme = fullExportReadme({
+    spa: ctx.tenant.name,
+    slug: ctx.tenant.slug,
+    generatedAt,
+    tables: counts,
+    phones,
+  })
+  const subtitle = `${ctx.tenant.name} · ${dubaiStamp(generatedAt)} Asia/Dubai`
+  const res = await xlsxDownload(`${ctx.tenant.slug}-export-${stamp}.xlsx`, {
+    title: `${ctx.tenant.name} — full export`,
+    sheets: [
+      { name: 'README', notes: true, rows: readme.split('\r\n').map((line) => [line]) },
+      ...tables.map((t) => ({ name: t.table, title: t.table, subtitle, rows: t.rows })),
+    ],
+  })
   await audit({
     ...base,
     action: 'data.export_full',
     data: { tables: counts.length, rows: counts.reduce((s, c) => s + c.count, 0), phones },
   })
-  return csvDownload(`${ctx.tenant.slug}-export-${stamp}.zip`, new Blob([zip as BlobPart]), 'application/zip')
+  return res
 }
