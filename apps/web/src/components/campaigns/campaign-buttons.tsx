@@ -7,6 +7,7 @@ import {
   duplicateCampaignAction,
 } from '@/app/dashboard/[tenant]/campaigns/actions'
 import { ActionForm, SubmitButton } from '@/components/ui/form'
+import { useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 
 type Action = (prev: ActionResult, fd: FormData) => Promise<ActionResult>
@@ -36,7 +37,7 @@ function ActionButton({
         else router.refresh()
       }}
     >
-      <SubmitButton variant={variant} size="sm" className="h-11 sm:h-9">
+      <SubmitButton variant={variant} size="sm">
         {children}
       </SubmitButton>
     </ActionForm>
@@ -44,9 +45,10 @@ function ActionButton({
 }
 
 export function DuplicateButton({ slug, id }: { slug: string; id: string }) {
+  const t = useT()
   return (
     <ActionButton action={duplicateCampaignAction.bind(null, slug, id)}>
-      <Copy /> Duplicate
+      <Copy /> {t('campaigns.buttons.duplicate')}
     </ActionButton>
   )
 }
@@ -62,33 +64,33 @@ export function ArchiveButton({
   archived: boolean
   pending: number
 }) {
+  const t = useT()
   return archived ? (
     <ActionButton action={archiveCampaignAction.bind(null, slug, id, false)} variant="ghost">
-      <ArchiveRestore /> Restore
+      <ArchiveRestore /> {t('campaigns.buttons.restore')}
     </ActionButton>
   ) : (
     <ActionButton
       action={archiveCampaignAction.bind(null, slug, id, true)}
       variant="ghost"
       confirm={
-        pending > 0
-          ? `Archive this campaign? Its ${pending} unsent ${pending === 1 ? 'message' : 'messages'} will be removed from the WhatsApp queue.`
-          : undefined
+        pending > 0 ? t('campaigns.buttons.archiveConfirm', { count: pending }) : undefined
       }
     >
-      <Archive /> Archive
+      <Archive /> {t('campaigns.buttons.archive')}
     </ActionButton>
   )
 }
 
 export function DeleteSegmentButton({ slug, id }: { slug: string; id: string }) {
+  const t = useT()
   return (
     <ActionButton
       action={deleteSegmentAction.bind(null, slug, id)}
       variant="ghost"
-      confirm="Delete this segment? Campaigns that used it keep their recipients."
+      confirm={t('campaigns.buttons.deleteSegmentConfirm')}
     >
-      <Trash2 /> Delete
+      <Trash2 /> {t('common.delete')}
     </ActionButton>
   )
 }

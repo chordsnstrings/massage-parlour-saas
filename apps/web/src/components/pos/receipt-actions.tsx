@@ -1,38 +1,42 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n/labels'
+import type { Translator } from '@spa/core/i18n/translate'
 import { Ban, Printer, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Input, Select, Textarea } from '@/components/ui/input'
+import { useI18n } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
-import { formatAed } from '@/lib/utils'
 
 type FormAction = (prev: ActionResult, formData: FormData) => Promise<ActionResult>
 
 export function PrintButton() {
+  const { t } = useI18n()
   return (
-    <Button variant="secondary" size="lg" className="w-full" onClick={() => window.print()}>
-      <Printer /> Print
+    <Button variant="secondary" className="w-full" onClick={() => window.print()}>
+      <Printer /> {t('sales.receipt.print')}
     </Button>
   )
 }
 
 export function VoidSheet({ action, number }: { action: FormAction; number: number }) {
+  const { t } = useI18n()
   return (
     <FormSheet
-      title={`Void sale #${number}`}
-      description="Use this for mistakes on a day that is still open. The sale drops out of today’s totals."
-      submitLabel="Void sale"
+      title={t('sales.void.title', { number })}
+      description={t('sales.void.description')}
+      submitLabel={t('sales.void.submit')}
       action={action}
       trigger={
-        <Button variant="ghost" size="lg" className="w-full justify-start text-danger hover:text-danger">
-          <Ban /> Void sale
+        <Button variant="ghost" className="w-full justify-start text-danger hover:text-danger">
+          <Ban /> {t('sales.void.submit')}
         </Button>
       }
     >
-      <Field label="Reason" name="reason">
-        <Textarea id="reason" name="reason" rows={3} placeholder="e.g. Rang up the wrong client" />
+      <Field label={t('sales.void.reason')} name="reason">
+        <Textarea id="reason" name="reason" rows={3} placeholder={t('sales.void.reasonPlaceholder')} />
       </Field>
     </FormSheet>
   )
@@ -52,19 +56,21 @@ const sumFils = (units: number[], qty: number) =>
   units.slice(0, qty).reduce((s, v) => s + Math.round(v * 100), 0)
 
 /** Why a line can't be refunded (any more), or what each unit gives back. */
-function lineHint(l: RefundLineOption) {
+function lineHint(t: Translator, aed: (v: number) => string, l: RefundLineOption) {
   const left = l.unitsAed.length
   if (left === 0) {
-    if (l.refundedQty >= l.qty) return 'Refunded'
-    return l.prepaid ? 'Used — nothing unused to refund' : 'Nothing paid to refund'
+    if (l.refundedQty >= l.qty) return t('sales.refund.refunded')
+    return l.prepaid ? t('sales.refund.usedUp') : t('sales.refund.nothingPaid')
   }
   if (l.prepaid)
     return left === 1
-      ? `Unused ${formatAed(l.unitsAed[0]!)}`
-      : `${left} unused · ${l.unitsAed.map(formatAed).join(', ')}`
+      ? t('sales.refund.unusedOne', { amount: aed(l.unitsAed[0]!) })
+      : t('sales.refund.unusedMany', { count: left, amounts: l.unitsAed.map(aed).join(', ') })
   const each = l.unitsAed[0]!
   const same = l.unitsAed.every((v) => Math.abs(v - each) < 0.02)
-  return `${left} of ${l.qty} refundable · ${same ? `${formatAed(each)} each` : formatAed(sumFils(l.unitsAed, left) / 100)}`
+  return same
+    ? t('sales.refund.refundableEach', { left, qty: l.qty, amount: aed(each) })
+    : t('sales.refund.refundableSum', { left, qty: l.qty, amount: aed(sumFils(l.unitsAed, left) / 100) })
 }
 
 export function RefundSheet({
@@ -79,6 +85,7 @@ export function RefundSheet({
   maxAed: number
   defaultMethod: string
 }) {
+  const { t, fmt } = useI18n()
   const [qty, setQty] = useState<Record<string, number>>({})
   const refundable = lines.filter((l) => l.unitsAed.length > 0)
   const totalFils = refundable.reduce((s, l) => s + sumFils(l.unitsAed, qty[l.saleLineId] ?? 0), 0)
@@ -92,29 +99,29 @@ export function RefundSheet({
   const all = () => setQty(Object.fromEntries(refundable.map((l) => [l.saleLineId, l.unitsAed.length])))
   return (
     <FormSheet
-      title="Record a refund"
-      description="Pick what is coming back, give the money back first (cash, terminal or transfer), then record it here."
-      submitLabel="Record refund"
+      title={t('sales.refund.title')}
+      description={t('sales.refund.description')}
+      submitLabel={t('sales.refund.submit')}
       action={action}
       trigger={
-        <Button variant="ghost" size="lg" className="w-full justify-start">
-          <Undo2 /> Refund
+        <Button variant="ghost" className="w-full justify-start">
+          <Undo2 /> {t('sales.refund.trigger')}
         </Button>
       }
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm font-medium">Items</p>
+          <p className="text-sm font-medium">{t('sales.refund.items')}</p>
           {refundable.length > 0 && (
             <Button type="button" variant="ghost" size="sm" onClick={all}>
-              Refund everything
+              {t('sales.refund.everything')}
             </Button>
           )}
         </div>
         <ul className="divide-y rounded-xl border">
           {lines.map((l) => {
             const max = l.unitsAed.length
-            const label = `Refund quantity for ${l.description}`
+            const label = t('sales.refund.qtyFor', { name: l.description })
             return (
               <li key={l.saleLineId} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
@@ -122,7 +129,7 @@ export function RefundSheet({
                     {l.qty > 1 && <span className="tabular">{l.qty} × </span>}
                     {l.description}
                   </p>
-                  <p className="text-[13px] text-muted tabular">{lineHint(l)}</p>
+                  <p className="text-[13px] text-muted tabular">{lineHint(t, fmt.aed, l)}</p>
                 </div>
                 {max > 0 && (
                   <Input
@@ -145,26 +152,25 @@ export function RefundSheet({
         <FieldError name="lines" />
       </div>
       <div className="flex items-baseline justify-between gap-4 rounded-xl bg-subtle px-4 py-3">
-        <span className="text-sm text-muted">To give back</span>
+        <span className="text-sm text-muted">{t('sales.refund.toGiveBack')}</span>
         <span className="text-lg font-semibold tracking-tight tabular" data-testid="refund-total">
-          {formatAed(totalFils / 100)}
+          {fmt.aed(totalFils / 100)}
         </span>
       </div>
       {totalFils > Math.round(maxAed * 100) && (
-        <p className="text-[13px] text-danger">
-          At most {formatAed(maxAed)} can still be refunded on this sale.
-        </p>
+        <p className="text-[13px] text-danger">{t('sales.refund.atMost', { amount: fmt.aed(maxAed) })}</p>
       )}
-      <Field label="Paid back by" name="method">
-        <Select id="method" name="method" defaultValue={defaultMethod} className="h-11">
-          <option value="cash">Cash</option>
-          <option value="card_terminal">Card terminal</option>
-          <option value="bank_transfer">Bank transfer</option>
-          <option value="other">Other</option>
+      <Field label={t('sales.refund.paidBackBy')} name="method">
+        <Select id="method" name="method" defaultValue={defaultMethod}>
+          {(['cash', 'card_terminal', 'bank_transfer', 'other'] as const).map((m) => (
+            <option key={m} value={m}>
+              {enumLabel(t, 'paymentMethodKind', m)}
+            </option>
+          ))}
         </Select>
       </Field>
-      <Field label="Reason" name="reason">
-        <Textarea id="reason" name="reason" rows={3} placeholder="e.g. Session cut short" />
+      <Field label={t('sales.refund.reason')} name="reason">
+        <Textarea id="reason" name="reason" rows={3} placeholder={t('sales.refund.reasonPlaceholder')} />
       </Field>
     </FormSheet>
   )

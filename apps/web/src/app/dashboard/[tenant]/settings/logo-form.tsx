@@ -1,6 +1,6 @@
 'use client'
 import { LogoInput } from '@/components/media/logo-input'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card } from '@/components/crm'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { useT } from '@/i18n/client'
 import { saveLogoAction } from './actions'
@@ -9,9 +9,7 @@ import { saveLogoAction } from './actions'
 export function LogoForm({ slug, current }: { slug: string; current: string | null }) {
   const t = useT()
   return (
-    <Card>
-      <CardHeader title={t('logo.title')} description={current ? t('logo.description') : t('logo.none')} />
-      <CardBody>
+    <Card title={t('logo.title')} sub={current ? t('logo.description') : t('logo.none')}>
         <ActionForm
           action={saveLogoAction.bind(null, slug)}
           resetOnSuccess
@@ -29,7 +27,6 @@ export function LogoForm({ slug, current }: { slug: string; current: string | nu
             )}
           </div>
         </ActionForm>
-      </CardBody>
     </Card>
   )
 }

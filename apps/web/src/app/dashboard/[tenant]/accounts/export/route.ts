@@ -1,9 +1,13 @@
+import { createTranslator, en } from '@spa/core/i18n'
 import { withTenant } from '@spa/db'
 import { notFound } from 'next/navigation'
 import { can, requireMember } from '@/server/access'
-import { journal, SOURCE_LABELS } from '../journal-data'
+import { journal } from '../journal-data'
+import { sourceLabel } from '../labels'
 import { monthRange } from '../month'
 
+// The audit file keeps fixed English headers and labels whatever the viewer's language.
+const english = createTranslator('en', en)
 const csv = (v: unknown) => {
   const s = v == null ? '' : String(v)
   // Quote everything and neutralise spreadsheet formulas.
@@ -22,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
       rows.push([
         e.entryDate,
         e.id,
-        SOURCE_LABELS[e.sourceType] ?? e.sourceType,
+        sourceLabel(english, e.sourceType),
         e.memo ?? '',
         l.code,
         l.name,

@@ -1,9 +1,11 @@
 'use server'
+import type { MessageKey } from '@spa/core/i18n'
 import { type IntakeField, intakeTemplates, type Tx, withTenant } from '@spa/db'
 import { desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type IntakeTemplateInput, RECOMMENDED_INTAKE } from '@/components/clients/shared'
+import { getT } from '@/i18n/server'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -12,9 +14,9 @@ const fieldSchema = z.object({
   key: z
     .string()
     .trim()
-    .regex(/^[a-z][a-z0-9_]{0,39}$/, 'Keys use lowercase letters, numbers and _'),
+    .regex(/^[a-z][a-z0-9_]{0,39}$/, 'settings.intake.errors.key'),
   label: z.object({
-    en: z.string().trim().min(1, 'Every question needs an English label').max(300),
+    en: z.string().trim().min(1, 'settings.intake.errors.labelEn').max(300),
     ar: z.string().trim().max(300).optional(),
   }),
   type: z.enum(['text', 'textarea', 'yesno', 'select']),
@@ -23,33 +25,38 @@ const fieldSchema = z.object({
 })
 
 const templateSchema = z.object({
-  name: z.string().trim().min(2, 'Name the form').max(120),
+  name: z.string().trim().min(2, 'settings.intake.errors.name').max(120),
   fields: z
     .string()
     .transform((s, c) => {
       try {
         return JSON.parse(s) as unknown
       } catch {
-        c.addIssue({ code: 'custom', message: 'Invalid questions' })
+        c.addIssue({ code: 'custom', message: 'settings.intake.errors.invalid' })
         return z.NEVER
       }
     })
     .pipe(
       z
         .array(fieldSchema)
-        .min(1, 'Add at least one question')
+        .min(1, 'settings.intake.errors.min')
         .max(40)
         .superRefine((fields, c) => {
           const seen = new Set<string>()
           for (const f of fields) {
-            if (seen.has(f.key)) c.addIssue({ code: 'custom', message: `Duplicate key “${f.key}”` })
+            if (seen.has(f.key))
+              c.addIssue({ code: 'custom', message: 'settings.intake.errors.duplicate', params: { key: f.key } })
             seen.add(f.key)
             if (f.type === 'select' && !f.options?.length)
-              c.addIssue({ code: 'custom', message: `Add options for “${f.label.en}”` })
+              c.addIssue({
+                code: 'custom',
+                message: 'settings.intake.errors.options',
+                params: { label: f.label.en },
+              })
           }
         }),
     ),
-  waiverEn: z.string().trim().min(20, 'Write the waiver in English').max(6000),
+  waiverEn: z.string().trim().min(20, 'settings.intake.errors.waiver').max(6000),
   waiverAr: z.string().trim().max(6000).optional(),
 })
 
@@ -87,9 +94,15 @@ export async function saveIntakeTemplateAction(
   const { ctx, error } = await guard(slug, 'settings.manage')
   if (error) return fail(error)
   const parsed = templateSchema.safeParse(formObject(formData))
+  const t = await getT()
   if (!parsed.success) {
     const fieldIssue = parsed.error.issues.find((i) => i.path[0] === 'fields')
-    if (fieldIssue) return fail(fieldIssue.message, { fields: fieldIssue.message })
+    if (fieldIssue) {
+      // Question-list errors may carry the offending key/label: the field error is rendered here, server side.
+      const params = (fieldIssue as { params?: Record<string, string> }).params
+      const ref = { key: fieldIssue.message as MessageKey, params }
+      return t.has(fieldIssue.message) ? fail(ref, { fields: t(ref.key, params) }) : fail(fieldIssue.message)
+    }
     return fromZod(parsed.error)
   }
   const { name, fields, waiverEn, waiverAr } = parsed.data
@@ -110,7 +123,7 @@ export async function saveIntakeTemplateAction(
   })
   revalidatePath(`/dashboard/${slug}/settings/intake`)
   revalidatePath(`/dashboard/${slug}/clients`, 'layout')
-  return ok(`Saved as version ${saved.version}`)
+  return ok({ key: 'settings.intake.saved', params: { version: saved.version } })
 }
 
 export async function applyRecommendedIntakeAction(slug: string): Promise<ActionResult> {
@@ -127,5 +140,5 @@ export async function applyRecommendedIntakeAction(slug: string): Promise<Action
   })
   revalidatePath(`/dashboard/${slug}/settings/intake`)
   revalidatePath(`/dashboard/${slug}/clients`, 'layout')
-  return ok(`Recommended form saved as version ${saved.version}`)
+  return ok({ key: 'settings.intake.recommendedSaved', params: { version: saved.version } })
 }

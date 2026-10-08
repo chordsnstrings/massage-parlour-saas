@@ -4,10 +4,12 @@ import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { Seg } from '@/components/crm'
 import { Input } from '@/components/ui/input'
+import { useT } from '@/i18n/client'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState } from '@/components/ui/page'
-import { ease, spring } from '@/lib/motion'
+import { ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { AssetSheet } from './asset-sheet'
 import { isStored, type MediaItem, sized } from './types'
@@ -16,9 +18,9 @@ import { Dropzone, UploadList, useUploads } from './uploads'
 type Filter = { source?: 'upload' | 'ai'; tag?: string; q?: string }
 
 const SOURCES = [
-  { key: undefined, label: 'All' },
-  { key: 'upload', label: 'Uploads' },
-  { key: 'ai', label: 'AI images' },
+  { key: undefined, label: 'media.sourceAll' },
+  { key: 'upload', label: 'media.sourceUploads' },
+  { key: 'ai', label: 'media.sourceAi' },
 ] as const
 
 /** The /media page body: drop zone + progress, filters, masonry grid and the details sheet. */
@@ -39,6 +41,7 @@ export function MediaLibrary({
   filter: Filter
   moreHref: string | null
 }) {
+  const t = useT()
   const router = useRouter()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = items.find((i) => i.id === selectedId) ?? null
@@ -100,31 +103,15 @@ export function MediaLibrary({
 
       <div className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <nav aria-label="Image source" className="flex w-full rounded-lg bg-subtle p-0.5 md:w-auto">
-            {SOURCES.map((s) => {
-              const active = filter.source === s.key
-              return (
-                <Link
-                  key={s.label}
-                  href={href({ ...filter, source: s.key })}
-                  aria-current={active ? 'page' : undefined}
-                  className={cn(
-                    'relative grid min-h-10 flex-1 place-items-center rounded-md px-4 text-[13px] font-medium transition-colors md:flex-none',
-                    active ? 'text-fg' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="media-source"
-                      transition={spring}
-                      className="absolute inset-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.08)]"
-                    />
-                  )}
-                  <span className="relative">{s.label}</span>
-                </Link>
-              )
-            })}
-          </nav>
+          <Seg
+            label={t('media.sourceLabel')}
+            value={filter.source ?? 'all'}
+            items={SOURCES.map((src) => ({
+              value: src.key ?? 'all',
+              label: t(src.label),
+              href: href({ ...filter, source: src.key }),
+            }))}
+          />
           <form
             className="relative w-full md:max-w-xs"
             onSubmit={(e) => {
@@ -140,21 +127,21 @@ export function MediaLibrary({
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name, alt text or tag"
-              aria-label="Search images"
+              placeholder={t('media.searchPh')}
+              aria-label={t('media.search')}
               className="h-11 ps-9 md:h-10"
             />
           </form>
         </div>
 
         {tags.length > 0 && (
-          <nav className="flex flex-wrap items-center gap-1.5" aria-label="Tags">
-            {tags.map((t) => {
-              const on = filter.tag === t
+          <nav className="flex flex-wrap items-center gap-1.5" aria-label={t('media.tags')}>
+            {tags.map((tag) => {
+              const on = filter.tag === tag
               return (
                 <Link
-                  key={t}
-                  href={href({ ...filter, tag: on ? undefined : t })}
+                  key={tag}
+                  href={href({ ...filter, tag: on ? undefined : tag })}
                   aria-pressed={on}
                   className={cn(
                     'inline-flex min-h-9 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
@@ -163,7 +150,7 @@ export function MediaLibrary({
                       : 'text-muted hover:border-fg/25 hover:text-fg',
                   )}
                 >
-                  #{t}
+                  #{tag}
                   {on && <X className="size-3" />}
                 </Link>
               )
@@ -173,7 +160,7 @@ export function MediaLibrary({
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border bg-surface">
+        <div className="crm-card">
           <EmptyState
             icon={
               filtered ? (
@@ -182,16 +169,16 @@ export function MediaLibrary({
                 <ImageIcon className="size-5" strokeWidth={1.5} />
               )
             }
-            title={filtered ? 'No images match' : 'Your library is empty'}
+            title={filtered ? t('media.noMatch') : t('media.emptyTitle')}
             description={
               filtered
-                ? 'Try another filter or search.'
-                : 'Upload photos of your rooms, team and treatments — they’re optimised automatically and ready for your website.'
+                ? t('media.noMatchBody')
+                : t('media.emptyBody')
             }
             action={
               filtered ? (
                 <Link href={base} className="text-sm font-medium text-accent hover:underline">
-                  Clear filters
+                  {t('media.clearFilters')}
                 </Link>
               ) : undefined
             }
@@ -214,7 +201,7 @@ export function MediaLibrary({
             scroll={false}
             className="inline-flex min-h-11 items-center rounded-lg border bg-surface px-5 text-sm font-medium transition-colors hover:bg-subtle"
           >
-            Show more
+            {t('media.showMore')}
           </Link>
         </div>
       )}
@@ -238,8 +225,8 @@ export function MediaLibrary({
             className="pointer-events-none fixed inset-0 z-[60] grid place-items-center bg-accent/10 p-6 backdrop-blur-[2px]"
           >
             <div className="rounded-2xl border-2 border-dashed border-accent bg-surface/95 px-10 py-8 text-center shadow-pop">
-              <p className="text-base font-semibold">Drop to upload</p>
-              <p className="text-sm text-muted">Images are added to your library</p>
+              <p className="text-base font-semibold">{t('media.dropTitle')}</p>
+              <p className="text-sm text-muted">{t('media.dropBody')}</p>
             </div>
           </motion.div>
         )}
@@ -249,13 +236,14 @@ export function MediaLibrary({
 }
 
 function Tile({ item, onOpen }: { item: MediaItem; onOpen: () => void }) {
+  const t = useT()
   const ratio = item.width && item.height ? `${item.width} / ${item.height}` : '4 / 3'
-  const name = item.alt.en || item.filename || (item.source === 'ai' ? 'AI image' : 'Image')
+  const name = item.alt.en || item.filename || (item.source === 'ai' ? t('media.aiImage') : t('media.image'))
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Edit ${name}`}
+      aria-label={t('media.edit', { name })}
       className="group relative block w-full overflow-hidden rounded-xl border bg-subtle text-start transition-shadow hover:shadow-pop focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25"
       style={{ aspectRatio: ratio }}
     >
@@ -270,17 +258,17 @@ function Tile({ item, onOpen }: { item: MediaItem; onOpen: () => void }) {
       <span className="absolute top-2 start-2 flex flex-wrap gap-1">
         {item.source === 'ai' && (
           <span className="inline-flex items-center gap-1 rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-accent backdrop-blur">
-            <Sparkles className="size-3" /> AI
+            <Sparkles className="size-3" /> {t('media.ai')}
           </span>
         )}
         {!item.alt.en && (
           <span className="rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-warning backdrop-blur">
-            No alt text
+            {t('media.noAlt')}
           </span>
         )}
         {!isStored(item.url) && (
           <span className="rounded-full bg-surface/90 px-2 py-0.5 text-[11px] font-medium text-danger backdrop-blur">
-            Temporary
+            {t('media.temporary')}
           </span>
         )}
       </span>

@@ -1,24 +1,27 @@
 import { addDays } from '@spa/core'
+import { enumLabel, type Translator } from '@spa/core/i18n'
 import { dayCloses, withTenant } from '@spa/db'
-import { daySummary, METHOD_LABEL } from '@spa/services'
+import { daySummary } from '@spa/services'
 import { desc, eq } from 'drizzle-orm'
-import { ArrowLeft, ChevronLeft, ChevronRight, Lock, Store } from 'lucide-react'
+import { ArrowLeft, Lock, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Card, Grid, Hairline, Note, Pill, Stack } from '@/components/crm'
 import { CloseForm } from '@/components/pos/close-form'
-import { Badge } from '@/components/ui/badge'
+import { DayNav } from '@/components/pos/day-nav'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader } from '@/components/ui/card'
-import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { DataTable } from '@/components/ui/table'
+import { EmptyState, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn, formatAed, formatDateTime } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { closeDayAction } from '../actions'
-import { DATE, dateLabel, pickBranch } from '../data'
+import { DATE, dayDate, pickBranch } from '../data'
 
-export const metadata: Metadata = { title: 'Daily close' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('sales.close.title') }
+}
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 
@@ -31,6 +34,7 @@ export default async function ClosePage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'pos.close')) notFound()
+  const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const sp = await searchParams
   const data = await withTenant(ctx.tenant.id, async (tx) => {
@@ -51,19 +55,17 @@ export default async function ClosePage({
   const back = (
     <Button variant="ghost" asChild>
       <Link href={appPath(`/${slug}/sales`)}>
-        <ArrowLeft /> Sales
+        <ArrowLeft /> {t('sales.back')}
       </Link>
     </Button>
   )
   if (!data) {
     return (
       <>
-        <PageHeader title="Daily close" actions={back} />
-        <PageBody>
-          <Card>
-            <EmptyState icon={<Store className="size-5" />} title="No branch to close" />
-          </Card>
-        </PageBody>
+        <PageHeader title={t('sales.close.title')} actions={back} />
+        <Card>
+          <EmptyState icon={<Store className="size-5" />} title={t('sales.close.noBranch')} />
+        </Card>
       </>
     )
   }
@@ -80,170 +82,163 @@ export default async function ClosePage({
   const cashMovement = cash(s.paymentsByMethod) + cash(s.tipsByMethod) - cash(s.refundsByMethod)
   const methods = Object.keys({ ...s.paymentsByMethod, ...s.refundsByMethod })
   const prevFloat = past.find((p) => p.businessDate < date)?.openingFloatAed
+  const method = (m: string) => enumLabel(t, 'paymentMethodKind', m)
+  const aed = (v: number) => (v < 0 ? `−${fmt.aed(-v)}` : fmt.aed(v))
+  const salesText = t('sales.close.salesCount', { count: s.salesCount })
 
   return (
     <>
       <PageHeader
-        eyebrow={multi ? branch.name : 'Z-report'}
-        title="Daily close"
-        description="Count the drawer, compare it with what the till expects, and lock in the day."
+        eyebrow={multi ? branch.name : t('sales.close.eyebrow')}
+        title={t('sales.close.title')}
+        description={t('sales.close.description')}
         actions={back}
       />
-      <PageBody>
+      <Stack>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-xl border bg-surface p-1">
-            <Link
-              href={href(addDays(date, -1))}
-              aria-label="Previous day"
-              className="grid size-10 place-items-center rounded-lg text-muted transition-colors hover:bg-subtle hover:text-fg"
-            >
-              <ChevronLeft className="size-4" />
-            </Link>
-            <span className="min-w-40 px-2 text-center text-sm font-medium tabular">
-              {date === today ? 'Today' : dateLabel(date)}
-            </span>
-            {date === today ? (
-              <span className="size-10" />
-            ) : (
-              <Link
-                href={href(addDays(date, 1))}
-                aria-label="Next day"
-                className="grid size-10 place-items-center rounded-lg text-muted transition-colors hover:bg-subtle hover:text-fg"
-              >
-                <ChevronRight className="size-4" />
-              </Link>
-            )}
-          </div>
-          <span className="text-[13px] text-muted">
-            Business day {dateLabel(date)} · ends {branch.businessDayCutoff.slice(0, 5)}
+          <DayNav
+            label={date === today ? t('sales.today') : fmt.weekdayDate(dayDate(date))}
+            prevHref={href(addDays(date, -1))}
+            nextHref={date === today ? null : href(addDays(date, 1))}
+            prevLabel={t('sales.prevDay')}
+            nextLabel={t('sales.nextDay')}
+          />
+          <span className="crm-muted text-[length:var(--crm-fs-sub)]">
+            {t('sales.businessDayEnds', {
+              date: fmt.date(dayDate(date)),
+              time: branch.businessDayCutoff.slice(0, 5),
+            })}
           </span>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-          <Card className="h-fit lg:col-span-5">
-            <CardHeader
-              title="Takings"
-              description={`${s.salesCount} ${s.salesCount === 1 ? 'sale' : 'sales'}${s.voidCount ? ` · ${s.voidCount} voided` : ''}`}
-            />
-            <dl className="mt-5 space-y-2.5 px-5 pb-5 text-sm sm:px-6 sm:pb-6">
-              <Line label="Revenue (VAT incl.)" value={s.revenueAed} strong />
-              <Line label="VAT included" value={s.vatAed} muted />
-              {s.discountAed > 0 && <Line label="Discounts given" value={s.discountAed} muted />}
-              <div className="space-y-2.5 border-t pt-3">
-                {methods.length === 0 && <p className="text-muted">No payments recorded.</p>}
-                {methods.map((m) => (
-                  <Line key={m} label={METHOD_LABEL[m] ?? m} value={s.paymentsByMethod[m] ?? 0} />
-                ))}
-              </div>
-              {s.refundsAed > 0 && (
-                <div className="space-y-2.5 border-t pt-3">
-                  {Object.entries(s.refundsByMethod).map(([m, v]) => (
-                    <Line key={m} label={`Refunds · ${METHOD_LABEL[m] ?? m}`} value={-v} danger />
-                  ))}
-                </div>
+        <Grid cols="col-2b">
+          <Card
+            className="h-fit"
+            title={t('sales.close.takings')}
+            sub={
+              s.voidCount ? t('sales.close.salesVoided', { sales: salesText, count: s.voidCount }) : salesText
+            }
+          >
+            <dl className="space-y-2.5 text-[length:var(--crm-fs-td)]">
+              <Line label={t('sales.close.revenue')} value={aed(s.revenueAed)} strong />
+              <Line label={t('sales.close.vatIncluded')} value={aed(s.vatAed)} muted />
+              {s.discountAed > 0 && (
+                <Line label={t('sales.close.discounts')} value={aed(s.discountAed)} muted />
               )}
-              <div className="space-y-2.5 border-t pt-3">
-                <Line label="Tips" value={s.tipsAed} />
-                {s.tipsByStaff.map((t) => (
-                  <Line key={t.staffId} label={`· ${t.name}`} value={t.amountAed} muted />
-                ))}
-              </div>
-              <div className="border-t pt-3">
-                <Line label="Cash in (sales + tips − refunds)" value={cashMovement} strong />
-              </div>
+              <Hairline />
+              {methods.length === 0 && <p className="crm-muted">{t('sales.close.noPayments')}</p>}
+              {methods.map((m) => (
+                <Line key={m} label={method(m)} value={aed(s.paymentsByMethod[m] ?? 0)} />
+              ))}
+              {s.refundsAed > 0 && (
+                <>
+                  <Hairline />
+                  {Object.entries(s.refundsByMethod).map(([m, v]) => (
+                    <Line
+                      key={m}
+                      label={t('sales.close.refundsBy', { method: method(m) })}
+                      value={aed(-v)}
+                      danger
+                    />
+                  ))}
+                </>
+              )}
+              <Hairline />
+              <Line label={t('sales.close.tips')} value={aed(s.tipsAed)} />
+              {s.tipsByStaff.map((tip) => (
+                <Line key={tip.staffId} label={`· ${tip.name}`} value={aed(tip.amountAed)} muted />
+              ))}
+              <Hairline />
+              <Line label={t('sales.close.cashIn')} value={aed(cashMovement)} strong />
             </dl>
           </Card>
 
-          <Card className="h-fit lg:col-span-7">
-            {s.close ? (
-              <>
-                <CardHeader
-                  title="Day closed"
-                  description={`Closed ${formatDateTime(s.close.closedAt)}`}
-                  action={
-                    <Badge tone="accent">
-                      <Lock className="size-3" /> Locked
-                    </Badge>
-                  }
+          {s.close ? (
+            <Card
+              className="h-fit"
+              title={t('sales.dayClosed')}
+              sub={t('sales.close.closedAt', { time: fmt.dateTime(s.close.closedAt) })}
+              actions={
+                <Pill tone="acc">
+                  <Lock className="size-3" aria-hidden /> {t('sales.close.locked')}
+                </Pill>
+              }
+            >
+              <dl className="space-y-2.5 text-[length:var(--crm-fs-td)]">
+                <Line label={t('sales.close.openingFloat')} value={aed(Number(s.close.openingFloatAed))} />
+                <Line label={t('sales.close.expectedCash')} value={aed(Number(s.close.expectedCashAed))} />
+                <Line
+                  label={t('sales.close.countedCash')}
+                  value={aed(Number(s.close.countedCashAed))}
+                  strong
                 />
-                <dl className="mt-5 space-y-2.5 px-5 pb-5 text-sm sm:px-6 sm:pb-6">
-                  <Line label="Opening float" value={Number(s.close.openingFloatAed)} />
-                  <Line label="Expected cash" value={Number(s.close.expectedCashAed)} />
-                  <Line label="Counted cash" value={Number(s.close.countedCashAed)} strong />
-                  <div className="flex justify-between gap-4 border-t pt-3">
-                    <dt className="font-medium">Variance</dt>
-                    <dd>
-                      <VarianceBadge value={Number(s.close.varianceAed)} />
-                    </dd>
-                  </div>
-                  {s.close.notes && (
-                    <p className="rounded-lg bg-subtle px-3 py-2.5 text-muted">{s.close.notes}</p>
-                  )}
-                </dl>
-              </>
-            ) : (
-              <>
-                <CardHeader
-                  title="Count the drawer"
-                  description="Enter the float you started with and the cash you count now."
-                />
-                <div className="px-5 pt-5 pb-5 sm:px-6 sm:pb-6">
-                  <CloseForm
-                    action={closeDayAction.bind(null, slug, branch.id, date)}
-                    cashMovementAed={cashMovement}
-                    defaultFloat={prevFloat ? Number(prevFloat) : 0}
-                  />
+                <Hairline />
+                <div className="flex justify-between gap-4">
+                  <dt className="font-semibold">{t('sales.close.variance')}</dt>
+                  <dd>
+                    <VariancePill t={t} aed={fmt.aed} value={Number(s.close.varianceAed)} />
+                  </dd>
                 </div>
-              </>
-            )}
-          </Card>
-        </div>
+              </dl>
+              {s.close.notes && <Note className="mt-3">{s.close.notes}</Note>}
+            </Card>
+          ) : (
+            <Card className="h-fit" title={t('sales.close.countTitle')} sub={t('sales.close.countHint')}>
+              <CloseForm
+                action={closeDayAction.bind(null, slug, branch.id, date)}
+                cashMovementAed={cashMovement}
+                defaultFloat={prevFloat ? Number(prevFloat) : 0}
+              />
+            </Card>
+          )}
+        </Grid>
 
-        <Card>
-          <CardHeader title="Past closes" description={multi ? branch.name : 'Most recent first'} />
-          <div className="mt-4 border-t">
-            <DataTable
-              rows={past}
-              rowKey={(r) => r.id}
-              empty={<EmptyState icon={<Lock className="size-5" />} title="No days closed yet" />}
-              columns={[
-                {
-                  key: 'date',
-                  header: 'Business day',
-                  primary: true,
-                  cell: (r) => (
-                    <Link href={href(r.businessDate)} className="font-medium hover:text-accent">
-                      {dateLabel(r.businessDate)}
-                    </Link>
-                  ),
-                },
-                {
-                  key: 'revenue',
-                  header: 'Revenue',
-                  cell: (r) => <span className="tabular">{formatAed(r.totals.revenue ?? 0)}</span>,
-                  hideOnMobile: true,
-                },
-                {
-                  key: 'expected',
-                  header: 'Expected',
-                  cell: (r) => <span className="tabular text-muted">{formatAed(r.expectedCashAed)}</span>,
-                },
-                {
-                  key: 'counted',
-                  header: 'Counted',
-                  cell: (r) => <span className="tabular">{formatAed(r.countedCashAed)}</span>,
-                },
-                {
-                  key: 'variance',
-                  header: 'Variance',
-                  className: 'text-end',
-                  cell: (r) => <VarianceBadge value={Number(r.varianceAed)} />,
-                },
-              ]}
-            />
-          </div>
+        <Card title={t('sales.close.past')} sub={multi ? branch.name : t('sales.close.recentFirst')}>
+          {past.length === 0 ? (
+            <EmptyState icon={<Lock className="size-5" />} title={t('sales.close.noneYet')} />
+          ) : (
+            <div className="crm-tbl-wrap">
+              <table className="crm-tbl" data-stack="true">
+                <thead>
+                  <tr>
+                    <th>{t('sales.close.businessDay')}</th>
+                    <th className="crm-num-c">{t('sales.stat.revenue')}</th>
+                    <th className="crm-num-c">{t('sales.close.expected')}</th>
+                    <th className="crm-num-c">{t('sales.close.counted')}</th>
+                    <th className="crm-num-c">{t('sales.close.variance')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {past.map((r) => (
+                    <tr key={r.id}>
+                      <td data-label={t('sales.close.businessDay')}>
+                        <Link
+                          href={href(r.businessDate)}
+                          className="font-semibold hover:text-[var(--crm-accent)]"
+                        >
+                          {fmt.weekdayDate(dayDate(r.businessDate))}
+                        </Link>
+                      </td>
+                      <td data-label={t('sales.stat.revenue')} className="crm-num-c">
+                        {fmt.aed(r.totals.revenue ?? 0)}
+                      </td>
+                      <td data-label={t('sales.close.expected')} className="crm-num-c crm-muted">
+                        {fmt.aed(r.expectedCashAed)}
+                      </td>
+                      <td data-label={t('sales.close.counted')} className="crm-num-c">
+                        {fmt.aed(r.countedCashAed)}
+                      </td>
+                      <td data-label={t('sales.close.variance')} className="crm-num-c">
+                        <VariancePill t={t} aed={fmt.aed} value={Number(r.varianceAed)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
-      </PageBody>
+      </Stack>
     </>
   )
 }
@@ -256,23 +251,21 @@ function Line({
   danger,
 }: {
   label: string
-  value: number
+  value: string
   strong?: boolean
   muted?: boolean
   danger?: boolean
 }) {
   return (
-    <div className={cn('flex justify-between gap-4', muted && 'text-muted', danger && 'text-danger')}>
-      <dt className={cn('min-w-0', strong && 'font-medium')}>{label}</dt>
-      <dd className={cn('shrink-0 tabular', strong && 'font-semibold')}>
-        {value < 0 ? `−${formatAed(-value)}` : formatAed(value)}
-      </dd>
+    <div className={cn('flex justify-between gap-4', muted && 'crm-muted', danger && 'text-danger')}>
+      <dt className={cn('min-w-0', strong && 'font-semibold')}>{label}</dt>
+      <dd className={cn('shrink-0 tabular-nums', strong && 'font-semibold')}>{value}</dd>
     </div>
   )
 }
 
-function VarianceBadge({ value }: { value: number }) {
-  if (value === 0) return <Badge tone="success">Balanced</Badge>
-  const text = `${value > 0 ? '+' : '−'}${formatAed(Math.abs(value))}`
-  return <Badge tone={Math.abs(value) <= 10 ? 'warning' : 'danger'}>{text}</Badge>
+function VariancePill({ t, aed, value }: { t: Translator; aed: (v: number) => string; value: number }) {
+  if (value === 0) return <Pill tone="ok">{t('sales.close.balanced')}</Pill>
+  const text = `${value > 0 ? '+' : '−'}${aed(Math.abs(value))}`
+  return <Pill tone={Math.abs(value) <= 10 ? 'warn' : 'bad'}>{text}</Pill>
 }

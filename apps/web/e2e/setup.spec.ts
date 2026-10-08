@@ -72,7 +72,7 @@ test('owner sets up menu, rooms, a therapist with shifts and opening hours', asy
     expect(await list.getByRole('listitem').count()).toBeGreaterThanOrEqual(11)
     await expect(list.getByText('16:00–02:00').first()).toBeVisible()
     await expect(list.getByText('+1 day').first()).toBeVisible()
-    await expect(list.getByText(/^Fri /)).toHaveCount(0)
+    await expect(list.getByText(/^Fri\b/)).toHaveCount(0)
 
     // Same pattern again: every shift overlaps → friendly error from the EXCLUDE constraint.
     await page.getByRole('button', { name: 'Generate shifts' }).click()

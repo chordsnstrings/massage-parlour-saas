@@ -4,6 +4,7 @@ import { APIError } from 'better-auth/api'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
+import { getT } from '@/i18n/server'
 import { type ActionResult, fail, formObject, fromZod } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { audit } from '@/server/audit'
@@ -13,9 +14,9 @@ import { getSession } from '@/server/session'
 export async function acceptInviteAction(token: string): Promise<ActionResult> {
   const session = await getSession()
   const invite = await findInvitation(token)
-  if (!session || !invite) return fail('This invitation is no longer valid.')
+  if (!session || !invite) return fail('auth.invite.invalid')
   if (session.user.email.toLowerCase() !== invite.email.toLowerCase())
-    return fail(`This invitation is for ${invite.email}.`)
+    return fail({ key: 'auth.invite.forEmail', params: { email: invite.email } })
   await acceptInvitation(invite, session.user.id)
   await audit({
     tenantId: invite.tenantId,
@@ -28,8 +29,8 @@ export async function acceptInviteAction(token: string): Promise<ActionResult> {
 }
 
 const schema = z.object({
-  name: z.string().trim().min(2, 'Enter your name').max(80),
-  password: z.string().min(10, 'Use at least 10 characters').max(128),
+  name: z.string().trim().min(2, 'auth.signup.errors.name').max(80),
+  password: z.string().min(10, 'auth.signup.errors.password').max(128),
 })
 
 export async function signupAndAcceptAction(
@@ -38,7 +39,7 @@ export async function signupAndAcceptAction(
   formData: FormData,
 ): Promise<ActionResult> {
   const invite = await findInvitation(token)
-  if (!invite) return fail('This invitation is no longer valid.')
+  if (!invite) return fail('auth.invite.invalid')
   const parsed = schema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   try {
@@ -55,8 +56,12 @@ export async function signupAndAcceptAction(
       entityId: invite.id,
     })
   } catch (e) {
-    if (e instanceof APIError)
-      return fail(/exist/i.test(e.message) ? 'You already have an account — sign in to accept.' : e.message)
+    if (e instanceof APIError) {
+      if (/exist/i.test(e.message)) return fail('auth.invite.exists')
+      const code = (e.body as { code?: string } | undefined)?.code
+      const t = await getT()
+      return fail((code && t.maybe(`auth.errors.${code}`)) || e.message)
+    }
     throw e
   }
   redirect(appPath(`/${invite.tenantSlug}`))

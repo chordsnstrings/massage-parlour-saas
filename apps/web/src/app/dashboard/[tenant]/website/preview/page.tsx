@@ -3,6 +3,7 @@ import { type Data, Render } from '@puckeditor/core'
 import { withTenant } from '@spa/db'
 import { getDraftBySlug, globalSectionsFor, PAGE_SLUG } from '@spa/services'
 import type { Metadata } from 'next'
+import { getT } from '@/i18n/server'
 import { notFound } from 'next/navigation'
 import { siteConfig } from '@/components/site/config'
 import { buildMeta, loadSite, localeOf } from '@/components/site/data'
@@ -11,7 +12,9 @@ import { PATH_ROUTING } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { resolveTemplate } from '@/server/site-templates'
 
-export const metadata: Metadata = { title: 'Preview', robots: { index: false } }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('website.previewMeta'), robots: { index: false } }
+}
 
 type Props = {
   params: Promise<{ tenant: string }>

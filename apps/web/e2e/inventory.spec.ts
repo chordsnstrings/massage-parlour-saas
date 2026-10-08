@@ -20,7 +20,7 @@ test('inventory: add a consumable, receive stock, link it to a treatment, count 
   await page.getByLabel('Total paid (AED)').fill('210')
   await page.getByRole('button', { name: 'Receive stock' }).click()
   await expect(page.getByText('Received 2000')).toBeVisible()
-  await expect(page.getByText('2000 ml').first()).toBeVisible()
+  await expect(page.getByText('2,000 ml').first()).toBeVisible()
 
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await page.getByLabel('Treatment', { exact: true }).selectOption({ index: 1 })

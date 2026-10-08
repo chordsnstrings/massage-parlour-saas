@@ -1,29 +1,30 @@
 'use client'
 import { canTransition } from '@spa/core'
+import { enumLabel } from '@spa/core/i18n'
 import { ArrowRightLeft, MessageCircle, Phone, Receipt } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
 import { rescheduleFormAction, setStatusAction } from '@/app/dashboard/[tenant]/calendar/actions'
-import { Badge } from '@/components/ui/badge'
+import { Pill, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
-import { formatAed } from '@/lib/utils'
-import { minuteLabel, SOURCE_LABEL, STATUS_LABEL, STATUS_TONE } from './time'
+import { resultText, useI18n, useT } from '@/i18n/client'
+import { minuteLabel } from './time'
 import type { BookingStatus, CalendarData, CalItem } from './types'
 
 type Target = Exclude<BookingStatus, 'pending'>
 
-const ACTIONS: { to: Target; label: string; variant: 'primary' | 'secondary' | 'danger' }[] = [
-  { to: 'confirmed', label: 'Confirm', variant: 'primary' },
-  { to: 'checked_in', label: 'Check in', variant: 'primary' },
-  { to: 'in_service', label: 'Start service', variant: 'secondary' },
-  { to: 'completed', label: 'Complete', variant: 'secondary' },
-  { to: 'no_show', label: 'No-show', variant: 'secondary' },
-  { to: 'cancelled', label: 'Cancel…', variant: 'danger' },
+const ACTIONS: { to: Target; variant: 'primary' | 'secondary' | 'danger' }[] = [
+  { to: 'confirmed', variant: 'primary' },
+  { to: 'checked_in', variant: 'primary' },
+  { to: 'in_service', variant: 'secondary' },
+  { to: 'completed', variant: 'secondary' },
+  { to: 'no_show', variant: 'secondary' },
+  { to: 'cancelled', variant: 'danger' },
 ]
 
 export function BookingSheet({
@@ -37,6 +38,7 @@ export function BookingSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useT()
   // Keep the last booking on screen while the sheet animates closed.
   const last = useRef<CalItem[]>([])
   if (items.length) last.current = items
@@ -46,8 +48,15 @@ export function BookingSheet({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={first?.clientName ?? 'Walk-in'}
-      description={first ? `Ref ${first.refCode} · ${SOURCE_LABEL[first.source] ?? first.source}` : undefined}
+      title={first?.clientName ?? t('calendar.walkIn')}
+      description={
+        first
+          ? t('calendar.details.ref', {
+              ref: first.refCode,
+              source: enumLabel(t, 'bookingSource', first.source),
+            })
+          : undefined
+      }
     >
       {first && <Details key={first.bookingId} data={data} items={shown} />}
     </Sheet>
@@ -55,6 +64,7 @@ export function BookingSheet({
 }
 
 function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
+  const { t, fmt } = useI18n()
   const first = items[0]!
   const status = first.status
   const [pending, start] = useTransition()
@@ -71,16 +81,16 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
       const r = await setStatusAction(data.slug, { bookingId: first.bookingId, status: to, reason: why })
       setBusy(null)
       if (r?.ok) {
-        toast.success(r.message ?? 'Updated')
+        toast.success(resultText(t, r) ?? t('calendar.updated'))
         setCancelling(false)
-      } else if (r) toast.error(r.error)
+      } else if (r) toast.error(resultText(t, r) ?? r.error ?? '')
     })
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
+        <Pill tone={statusTone(status)}>{enumLabel(t, 'bookingStatus', status)}</Pill>
         {first.clientPhone && (
           <span className="inline-flex items-center gap-1.5 text-sm text-muted tabular">
             <Phone className="size-3.5" strokeWidth={1.5} /> {first.clientPhone}
@@ -93,7 +103,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
             rel="noreferrer"
             className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-accent hover:underline"
           >
-            <MessageCircle className="size-3.5" /> Chat
+            <MessageCircle className="size-3.5" /> {t('calendar.details.chat')}
           </a>
         )}
       </div>
@@ -104,15 +114,19 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
             <div className="min-w-0 space-y-0.5">
               <p className="text-sm font-medium">{it.serviceName}</p>
               <p className="text-[13px] text-muted tabular">
-                {minuteLabel(it.startMin)}–{minuteLabel(it.endMin)} · {it.durationMin} min
+                {minuteLabel(it.startMin)}–{minuteLabel(it.endMin)} ·{' '}
+                {t('calendar.minutes', { min: it.durationMin })}
               </p>
               <p className="text-[13px] text-muted">
-                {it.staffIds.map((id) => data.staffNames[id]?.name ?? 'Therapist').join(' & ') ||
-                  'No therapist'}
-                {it.roomId ? ` · ${data.rooms.find((r) => r.id === it.roomId)?.name ?? 'Room'}` : ''}
+                {it.staffIds
+                  .map((id) => data.staffNames[id]?.name ?? t('calendar.details.therapist'))
+                  .join(' & ') || t('calendar.details.noTherapist')}
+                {it.roomId
+                  ? ` · ${data.rooms.find((r) => r.id === it.roomId)?.name ?? t('calendar.details.room')}`
+                  : ''}
               </p>
             </div>
-            <p className="shrink-0 text-sm font-medium tabular">{formatAed(it.priceAed)}</p>
+            <p className="shrink-0 text-sm font-medium tabular">{fmt.aed(it.priceAed)}</p>
           </li>
         ))}
       </ul>
@@ -120,13 +134,13 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
       {(first.notes || first.cancelReason) && (
         <div className="space-y-1 rounded-xl bg-subtle/60 px-4 py-3 text-sm">
           {first.notes && <p>{first.notes}</p>}
-          {first.cancelReason && <p className="text-muted">Cancelled: {first.cancelReason}</p>}
+          {first.cancelReason && <p className="text-muted">{t('calendar.details.cancelled', { reason: first.cancelReason })}</p>}
         </div>
       )}
 
       {actions.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">Status</p>
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">{t('calendar.details.status')}</p>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {actions.map((a) => (
               <Button
@@ -138,7 +152,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
                 disabled={pending}
                 onClick={() => (a.to === 'cancelled' ? setCancelling((c) => !c) : change(a.to))}
               >
-                {a.label}
+                {t(`calendar.details.actions.${a.to}`)}
               </Button>
             ))}
           </div>
@@ -152,8 +166,8 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
               >
                 <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                   <Input
-                    aria-label="Cancellation reason"
-                    placeholder="Reason, e.g. client asked to cancel"
+                    aria-label={t('calendar.details.reasonLabel')}
+                    placeholder={t('calendar.details.reasonPlaceholder')}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     autoFocus
@@ -164,7 +178,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
                     pending={pending && busy === 'cancelled'}
                     onClick={() => change('cancelled', reason.trim())}
                   >
-                    Cancel booking
+                    {t('calendar.details.cancelBooking')}
                   </Button>
                 </div>
               </motion.div>
@@ -181,7 +195,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
             aria-expanded={moving}
             className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-accent hover:underline"
           >
-            <ArrowRightLeft className="size-4" strokeWidth={1.5} /> Reschedule
+            <ArrowRightLeft className="size-4" strokeWidth={1.5} /> {t('calendar.details.reschedule')}
           </button>
           <AnimatePresence initial={false}>
             {moving && (
@@ -206,7 +220,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
           className="w-full"
         >
           <Link href={`${data.checkoutBase}?booking=${first.bookingId}`}>
-            <Receipt /> Check out
+            <Receipt /> {t('calendar.details.checkOut')}
           </Link>
         </Button>
       )}
@@ -215,6 +229,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
 }
 
 function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[]; onDone: () => void }) {
+  const t = useT()
   const [itemId, setItemId] = useState(items[0]!.id)
   const item = items.find((i) => i.id === itemId) ?? items[0]!
   const mainStaff = item.staffIds[0] ?? ''
@@ -228,7 +243,7 @@ function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[
       <input type="hidden" name="itemId" value={item.id} />
       <input type="hidden" name="keepStaff" value={item.staffIds.slice(1).join(',')} />
       {items.length > 1 && (
-        <Field label="Service" name="item">
+        <Field label={t('calendar.fields.service')} name="item">
           <Select id="item" value={itemId} onChange={(e) => setItemId(e.target.value)}>
             {items.map((i) => (
               <option key={i.id} value={i.id}>
@@ -239,10 +254,10 @@ function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[
         </Field>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Date" name="date">
+        <Field label={t('calendar.fields.date')} name="date">
           <Input id="date" name="date" type="date" defaultValue={data.date} className="tabular" />
         </Field>
-        <Field label="Time" name="time">
+        <Field label={t('calendar.fields.time')} name="time">
           <Input
             id="time"
             name="time"
@@ -252,7 +267,7 @@ function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[
             className="tabular"
           />
         </Field>
-        <Field label="Therapist" name="staffId">
+        <Field label={t('calendar.fields.therapist')} name="staffId">
           <Select id="staffId" name="staffId" defaultValue={mainStaff}>
             {data.staff.map((s) => (
               <option key={s.id} value={s.id}>
@@ -261,7 +276,7 @@ function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[
             ))}
           </Select>
         </Field>
-        <Field label="Room" name="roomId">
+        <Field label={t('calendar.fields.room')} name="roomId">
           <Select id="roomId" name="roomId" defaultValue={item.roomId ?? ''}>
             {data.rooms.map((r) => (
               <option key={r.id} value={r.id}>
@@ -271,7 +286,7 @@ function MoveForm({ data, items, onDone }: { data: CalendarData; items: CalItem[
           </Select>
         </Field>
       </div>
-      <SubmitButton className="w-full sm:w-auto">Move booking</SubmitButton>
+      <SubmitButton className="w-full sm:w-auto">{t('calendar.details.move')}</SubmitButton>
     </ActionForm>
   )
 }

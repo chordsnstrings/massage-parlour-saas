@@ -23,10 +23,10 @@ export async function refreshInsightsAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'reports.view')
   if (error) return fail(error)
-  if (!aiConfigured()) return fail('AI insights aren’t switched on yet.')
+  if (!aiConfigured()) return fail('overview.insights.errors.off')
   const last = await withTenant(ctx.tenant.id, (tx) => latestInsights(tx))
   if (last && Date.now() - last.createdAt.getTime() < COOLDOWN_MS)
-    return fail('Insights were just refreshed — try again in a few minutes.')
+    return fail('overview.insights.errors.cooldown')
   try {
     const run = await generateInsights({ tenantId: ctx.tenant.id, trigger: 'manual' })
     await audit({
@@ -39,13 +39,13 @@ export async function refreshInsightsAction(
     })
   } catch (e) {
     if (e instanceof NotEnoughDataError)
-      return fail('Not enough activity in the last two weeks yet — insights start once bookings come in.')
+      return fail('overview.insights.errors.notEnoughData')
     if (e instanceof AiBudgetExceededError)
-      return fail('Your monthly AI budget is used up. Ask your account manager to raise it.')
-    if (e instanceof AiDisabledError) return fail('Weekly insights are switched off by the platform.')
+      return fail('overview.insights.errors.budget')
+    if (e instanceof AiDisabledError) return fail('overview.insights.errors.disabled')
     console.error('insights refresh failed', e)
-    return fail('The AI service is busy — please try again in a moment.')
+    return fail('overview.insights.errors.busy')
   }
   revalidatePath(`/dashboard/${slug}`)
-  return ok('Insights updated')
+  return ok('overview.insights.updated')
 }

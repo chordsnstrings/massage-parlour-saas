@@ -10,7 +10,7 @@ import { audit } from '@/server/audit'
 
 const date = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'documents.validation.date')
   .optional()
   .or(z.literal('').transform(() => undefined))
 const text = (max: number) =>
@@ -35,7 +35,7 @@ const documentSchema = z
       .uuid()
       .optional()
       .or(z.literal('').transform(() => undefined)),
-    type: z.string().trim().min(1, 'Choose the document type').max(80),
+    type: z.string().trim().min(1, 'documents.validation.type').max(80),
     number: text(60),
     issuedOn: date,
     expiresOn: date,
@@ -48,13 +48,17 @@ const documentSchema = z
   })
   .superRefine((d, issue) => {
     if (d.scope === 'staff' && !d.staffId)
-      issue.addIssue({ code: 'custom', path: ['staffId'], message: 'Choose the staff member' })
+      issue.addIssue({ code: 'custom', path: ['staffId'], message: 'documents.validation.staff' })
     const known = d.scope === 'staff' ? STAFF_TYPES : BUSINESS_TYPES
     // Older rows may carry a free-text type; new ones pick from the list.
     if (!d.id && !known.includes(d.type))
-      issue.addIssue({ code: 'custom', path: ['type'], message: 'Choose the document type' })
+      issue.addIssue({ code: 'custom', path: ['type'], message: 'documents.validation.type' })
     if (d.issuedOn && d.expiresOn && d.expiresOn < d.issuedOn)
-      issue.addIssue({ code: 'custom', path: ['expiresOn'], message: 'Expiry is before the issue date' })
+      issue.addIssue({
+        code: 'custom',
+        path: ['expiresOn'],
+        message: 'documents.validation.expiryBeforeIssue',
+      })
   })
 
 /** The uploaded scan must be this tenant's (RLS) and uploaded as a document. */
@@ -81,15 +85,15 @@ export async function saveDocumentAction(
   const result = await withTenant(tenantId, async (tx) => {
     if (d.scope === 'staff') {
       const [person] = await tx.select({ id: staff.id }).from(staff).where(eq(staff.id, d.staffId!))
-      if (!person) return { error: 'That staff member no longer exists.' }
+      if (!person) return { error: 'documents.result.staffGone' }
     }
-    if (d.fileId && !(await ownedScan(tx, d.fileId))) return { error: 'Upload the file again.' }
+    if (d.fileId && !(await ownedScan(tx, d.fileId))) return { error: 'documents.result.uploadAgain' }
 
     const table = d.scope === 'staff' ? staffDocuments : businessDocuments
     const [existing] = d.id
       ? await tx.select({ id: table.id, fileUrl: table.fileUrl }).from(table).where(eq(table.id, d.id))
       : [undefined]
-    if (d.id && !existing) return { error: 'That document was removed.' }
+    if (d.id && !existing) return { error: 'documents.result.removed' }
 
     const fileUrl = d.fileId ? fileLink(d.fileId) : d.removeFile ? null : (existing?.fileUrl ?? null)
     const values = {
@@ -128,7 +132,7 @@ export async function saveDocumentAction(
     if (oldFile && existing?.fileUrl !== fileUrl) await deleteFile(tx, oldFile)
     return { id: id!, created: !d.id }
   })
-  if ('error' in result) return fail(result.error ?? 'Something went wrong.')
+  if ('error' in result) return fail(result.error ?? 'errors.generic')
 
   await audit({
     tenantId,
@@ -140,7 +144,7 @@ export async function saveDocumentAction(
     data: { type: d.type, expiresOn: d.expiresOn ?? null, staffId: d.staffId ?? null },
   })
   revalidatePath(`/dashboard/${slug}/documents`)
-  return ok(result.created ? 'Document added' : 'Document updated')
+  return ok(result.created ? 'documents.result.added' : 'documents.result.updated')
 }
 
 export async function deleteDocumentAction(
@@ -151,7 +155,7 @@ export async function deleteDocumentAction(
   const { ctx, error } = await guard(slug, 'staff.manage')
   if (error) return fail(error)
   const parsed = z.object({ scope: z.enum(['staff', 'business']), id: z.uuid() }).safeParse({ scope, id })
-  if (!parsed.success) return fail('Unknown document')
+  if (!parsed.success) return fail('documents.result.unknown')
   const removed = await withTenant(ctx.tenant.id, async (tx) => {
     const table = parsed.data.scope === 'staff' ? staffDocuments : businessDocuments
     const [row] = await tx
@@ -162,7 +166,7 @@ export async function deleteDocumentAction(
     if (fileId) await deleteFile(tx, fileId)
     return row
   })
-  if (!removed) return fail('That document was already removed.')
+  if (!removed) return fail('documents.result.alreadyRemoved')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -173,5 +177,5 @@ export async function deleteDocumentAction(
     data: { type: removed.type },
   })
   revalidatePath(`/dashboard/${slug}/documents`)
-  return ok('Document deleted')
+  return ok('documents.result.deleted')
 }

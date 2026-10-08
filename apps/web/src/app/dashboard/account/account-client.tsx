@@ -8,18 +8,21 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input, Label } from '@/components/ui/input'
+import { authErrorText } from '@/components/auth/errors'
 import { toast } from '@/components/ui/toast'
+import { useT } from '@/i18n/client'
 
 function useBusy() {
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const run = async (
-    fn: () => Promise<{ data?: unknown; error?: { message?: string } | null }>,
+    fn: () => Promise<{ data?: unknown; error?: { code?: string; message?: string; status?: number } | null }>,
   ): Promise<unknown> => {
     setBusy(true)
     try {
       const res = await fn()
       if (res.error) {
-        toast.error(res.error.message ?? 'Something went wrong.')
+        toast.error(authErrorText(t, res.error))
         return null
       }
       return res.data ?? {}
@@ -27,28 +30,28 @@ function useBusy() {
       setBusy(false)
     }
   }
-  return { busy, run }
+  return { busy, run, t }
 }
 
 export function ProfileCard({ name }: { name: string }) {
-  const { busy, run } = useBusy()
+  const { busy, run, t } = useBusy()
   return (
     <Card>
       <form
         onSubmit={async (e) => {
           e.preventDefault()
           const value = String(new FormData(e.currentTarget).get('name')).trim()
-          if (await run(() => authClient.updateUser({ name: value }))) toast.success('Profile updated')
+          if (await run(() => authClient.updateUser({ name: value }))) toast.success(t('account.profile.saved'))
         }}
       >
-        <CardHeader title="Profile" />
+        <CardHeader title={t('account.profile.title')} />
         <CardBody className="space-y-1.5">
-          <Label htmlFor="name">Name</Label>
+          <Label htmlFor="name">{t('account.profile.name')}</Label>
           <Input id="name" name="name" defaultValue={name} required />
         </CardBody>
         <CardFooter>
           <Button type="submit" pending={busy}>
-            Save
+            {t('account.profile.save')}
           </Button>
         </CardFooter>
       </form>
@@ -57,7 +60,7 @@ export function ProfileCard({ name }: { name: string }) {
 }
 
 export function PasswordCard() {
-  const { busy, run } = useBusy()
+  const { busy, run, t } = useBusy()
   return (
     <Card>
       <form
@@ -73,19 +76,19 @@ export function PasswordCard() {
             }),
           )
           if (ok) {
-            toast.success('Password changed. Other devices were signed out.')
+            toast.success(t('account.password.changed'))
             form.reset()
           }
         }}
       >
-        <CardHeader title="Password" description="Changing it signs you out on other devices." />
+        <CardHeader title={t('account.password.title')} description={t('account.password.sub')} />
         <CardBody className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="current">Current password</Label>
+            <Label htmlFor="current">{t('account.password.current')}</Label>
             <Input id="current" name="current" type="password" autoComplete="current-password" required />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="next">New password</Label>
+            <Label htmlFor="next">{t('account.password.next')}</Label>
             <Input
               id="next"
               name="next"
@@ -98,7 +101,7 @@ export function PasswordCard() {
         </CardBody>
         <CardFooter>
           <Button type="submit" pending={busy}>
-            Update password
+            {t('account.password.update')}
           </Button>
         </CardFooter>
       </form>
@@ -107,7 +110,7 @@ export function PasswordCard() {
 }
 
 export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
-  const { busy, run } = useBusy()
+  const { busy, run, t } = useBusy()
   const [enabled, setEnabled] = useState(initial)
   const [setup, setSetup] = useState<{ qr: string; backupCodes: string[] } | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
@@ -115,21 +118,21 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
   return (
     <Card>
       <CardHeader
-        title="Two-step verification"
-        description="Protect your account with an authenticator app (Google Authenticator, 1Password, Authy)."
-        action={<Badge tone={enabled ? 'success' : 'neutral'}>{enabled ? 'On' : 'Off'}</Badge>}
+        title={t('account.twoFactor.title')}
+        description={t('account.twoFactor.sub')}
+        action={<Badge tone={enabled ? 'success' : 'neutral'}>{enabled ? t('account.twoFactor.on') : t('account.twoFactor.off')}</Badge>}
       />
       <CardBody>
         {codes ? (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-            <p className="text-sm text-muted">Save these backup codes somewhere safe. Each works once.</p>
+            <p className="text-sm text-muted">{t('account.twoFactor.backup')}</p>
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-subtle p-4 font-mono text-[13px] sm:grid-cols-5">
               {codes.map((c) => (
                 <span key={c}>{c}</span>
               ))}
             </div>
             <Button variant="secondary" size="sm" onClick={() => setCodes(null)}>
-              Done
+              {t('account.twoFactor.done')}
             </Button>
           </motion.div>
         ) : setup ? (
@@ -144,27 +147,28 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
                 setEnabled(true)
                 setCodes(setup.backupCodes)
                 setSetup(null)
-                toast.success('Two-step verification is on')
+                toast.success(t('account.twoFactor.enabled'))
               }
             }}
           >
             {/* biome-ignore lint/performance/noImgElement: data URL QR code */}
             <img
               src={setup.qr}
-              alt="Scan with your authenticator app"
+              alt={t('account.twoFactor.qrAlt')}
               className="size-40 rounded-lg border bg-white p-2"
             />
             <div className="space-y-3">
-              <p className="text-sm text-muted">Scan the code, then enter the 6-digit code from the app.</p>
+              <p className="text-sm text-muted">{t('account.twoFactor.scan')}</p>
               <Input
                 name="code"
+                aria-label={t('account.twoFactor.code')}
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 className="tabular max-w-40 tracking-[0.3em]"
                 required
               />
               <Button type="submit" pending={busy}>
-                Verify & turn on
+                {t('account.twoFactor.verify')}
               </Button>
             </div>
           </motion.form>
@@ -178,7 +182,7 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
               if (enabled) {
                 if (await run(() => authClient.twoFactor.disable({ password }))) {
                   setEnabled(false)
-                  toast.success('Two-step verification is off')
+                  toast.success(t('account.twoFactor.disabled'))
                   form.reset()
                 }
                 return
@@ -195,7 +199,7 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
             }}
           >
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="tfa-password">Confirm your password</Label>
+              <Label htmlFor="tfa-password">{t('account.twoFactor.confirm')}</Label>
               <Input
                 id="tfa-password"
                 name="password"
@@ -205,7 +209,7 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
               />
             </div>
             <Button type="submit" variant={enabled ? 'danger' : 'primary'} pending={busy}>
-              <ShieldCheck /> {enabled ? 'Turn off' : 'Set up'}
+              <ShieldCheck /> {enabled ? t('account.twoFactor.turnOff') : t('account.twoFactor.setUp')}
             </Button>
           </form>
         )}

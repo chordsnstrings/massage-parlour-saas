@@ -3,6 +3,7 @@ import { withTenant } from '@spa/db'
 import { dubaiToday, fileLink, putFile } from '@spa/services'
 import sharp from 'sharp'
 import { json, readScanUpload } from '@/components/documents/upload-request'
+import { getT } from '@/i18n/server'
 import { audit } from '@/server/audit'
 
 /**
@@ -14,6 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
   const upload = await readScanUpload(req, (await params).tenant, 'accounting.manage')
   if (upload instanceof Response) return upload
   const { ctx } = upload
+  const t = await getT()
   const tenantId = ctx.tenant.id
 
   const stored = await withTenant(tenantId, (tx) =>
@@ -45,12 +47,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
 
   const attached = (status: string, message: string) => json(200, { ok: true, file, status, message })
   if (!aiConfigured())
-    return attached(
-      'unavailable',
-      'Receipt attached. Automatic reading isn’t switched on yet — please fill in the details.',
-    )
+    return attached('unavailable', t('accounts.scan.unavailable'))
   if (!upload.contentType.startsWith('image/'))
-    return attached('pdf', 'PDF attached. Scanning reads photos — please fill in the details from the PDF.')
+    return attached('pdf', t('accounts.scan.pdf'))
 
   try {
     // Downscale before sending: receipts read fine at 1600px and it keeps tokens (and cost) low.
@@ -72,25 +71,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
       file,
       status: foreign ? 'currency' : 'read',
       message: foreign
-        ? `Receipt is in ${foreign} — enter the AED amount you paid.`
+        ? t('accounts.scan.currency', { currency: foreign })
         : res.fields.totalAed
-          ? 'Receipt read — check the details before saving.'
-          : 'Receipt attached, but the total wasn’t readable — please fill it in.',
+          ? t('accounts.scan.read')
+          : t('accounts.scan.noTotal'),
       fields: foreign ? { ...res.fields, totalAed: null, vatAed: null } : res.fields,
       ocr: { ...res.fields, model: res.modelKey },
     })
   } catch (e) {
     if (e instanceof AiBudgetExceededError)
-      return attached(
-        'budget',
-        'Receipt attached. Your monthly AI budget is used up — please fill in the details.',
-      )
+      return attached('budget', t('accounts.scan.budget'))
     if (e instanceof AiDisabledError)
-      return attached(
-        'unavailable',
-        'Receipt attached. Scanning is switched off — please fill in the details.',
-      )
+      return attached('unavailable', t('accounts.scan.disabled'))
     console.error('receipt scan failed', e)
-    return attached('failed', 'Receipt attached, but it couldn’t be read. Please fill in the details.')
+    return attached('failed', t('accounts.scan.failed'))
   }
 }

@@ -2,10 +2,12 @@
 import { CalendarX2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { enumLabel } from '@spa/core/i18n'
+import { Pill, statusTone } from '@/components/crm'
+import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import { minuteLabel, STATUS_LABEL, STATUS_TONE } from './time'
+import { minuteLabel } from './time'
 import type { CalendarData, CalItem } from './types'
 
 /** Phone view: an agenda per therapist, tabs to filter, swipe left/right to change day. */
@@ -22,6 +24,7 @@ export function Agenda({
   onPrev: () => void
   onNext: () => void
 }) {
+  const t = useT()
   const [tab, setTab] = useState<string>('all')
   const people = data.staff
   const shown = tab === 'all' ? people : people.filter((p) => p.id === tab)
@@ -31,8 +34,8 @@ export function Agenda({
     <div className="space-y-4">
       {people.length > 1 && (
         <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none]">
-          <div className="flex w-max gap-1.5" role="tablist" aria-label="Therapists">
-            {[{ id: 'all', name: 'Everyone', color: '' }, ...people].map((p) => (
+          <div className="flex w-max gap-1.5" role="tablist" aria-label={t('calendar.therapists')}>
+            {[{ id: 'all', name: t('calendar.agenda.everyone'), color: '' }, ...people].map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -75,9 +78,7 @@ export function Agenda({
       >
         {shown.length === 0 && (
           <div className="rounded-xl border bg-surface px-6 py-12 text-center text-sm text-muted">
-            {data.ownOnly
-              ? 'Your login isn’t linked to a staff profile yet. Ask a manager to link it.'
-              : 'No therapists to show.'}
+            {data.ownOnly ? t('calendar.grid.notLinked') : t('calendar.agenda.noTherapists')}
           </div>
         )}
         {shown.map((p) => {
@@ -93,12 +94,12 @@ export function Agenda({
                 <span className="text-xs text-muted tabular">
                   {onShift.length
                     ? onShift.map((s) => `${minuteLabel(s.start)}–${minuteLabel(s.end)}`).join(', ')
-                    : 'Off'}
+                    : t('calendar.agenda.off')}
                 </span>
               </header>
               {list.length === 0 ? (
                 <p className="flex items-center gap-2 px-4 py-5 text-sm text-muted">
-                  <CalendarX2 className="size-4" strokeWidth={1.5} /> No bookings
+                  <CalendarX2 className="size-4" strokeWidth={1.5} /> {t('calendar.agenda.noBookings')}
                 </p>
               ) : (
                 <ul className="divide-y">
@@ -112,7 +113,7 @@ export function Agenda({
         })}
         {tab === 'all' && unassigned.length > 0 && (
           <section className="overflow-hidden rounded-xl border bg-surface">
-            <header className="border-b px-4 py-3 text-[15px] font-medium">Unassigned</header>
+            <header className="border-b px-4 py-3 text-[15px] font-medium">{t('calendar.agenda.unassigned')}</header>
             <ul className="divide-y">
               {unassigned.map((it) => (
                 <AgendaRow key={it.id} item={it} color="var(--accent)" data={data} onOpen={onOpen} />
@@ -120,7 +121,7 @@ export function Agenda({
             </ul>
           </section>
         )}
-        <p className="text-center text-xs text-muted">Swipe sideways to change day</p>
+        <p className="text-center text-xs text-muted">{t('calendar.agenda.swipe')}</p>
       </motion.div>
     </div>
   )
@@ -137,6 +138,7 @@ function AgendaRow({
   data: CalendarData
   onOpen: (bookingId: string) => void
 }) {
+  const t = useT()
   const room = data.rooms.find((r) => r.id === item.roomId)?.name
   return (
     <li>
@@ -168,7 +170,7 @@ function AgendaRow({
               (item.status === 'cancelled' || item.status === 'no_show') && 'text-muted line-through',
             )}
           >
-            {item.clientName ?? 'Walk-in'}
+            {item.clientName ?? t('calendar.walkIn')}
           </span>
           <span className="block truncate text-sm text-muted">
             {item.serviceName}
@@ -176,9 +178,9 @@ function AgendaRow({
           </span>
         </span>
         {item.status !== 'confirmed' && (
-          <Badge tone={STATUS_TONE[item.status]} className="self-center">
-            {STATUS_LABEL[item.status]}
-          </Badge>
+          <Pill tone={statusTone(item.status)} className="self-center">
+            {enumLabel(t, 'bookingStatus', item.status)}
+          </Pill>
         )}
       </button>
     </li>

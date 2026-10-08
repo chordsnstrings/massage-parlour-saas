@@ -11,6 +11,7 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import {
   addPageFromTemplateAction,
@@ -468,6 +469,7 @@ export function VisibilityToggle({
   disabled?: boolean
   label: string
 }) {
+  const t = useT()
   const [pending, start] = useTransition()
   const [optimistic, setOptimistic] = useOptimistic(visible)
   return (
@@ -475,7 +477,7 @@ export function VisibilityToggle({
       type="button"
       role="switch"
       aria-checked={optimistic}
-      aria-label={`${label} visible`}
+      aria-label={t('website.visibleLabel', { name: label })}
       disabled={disabled || pending}
       onClick={() =>
         start(async () => {
@@ -499,7 +501,7 @@ export function VisibilityToggle({
           )}
         />
       </span>
-      <span className="text-muted">{optimistic ? 'Visible' : 'Hidden'}</span>
+      <span className="text-muted">{optimistic ? t('website.visible') : t('website.hidden')}</span>
     </button>
   )
 }

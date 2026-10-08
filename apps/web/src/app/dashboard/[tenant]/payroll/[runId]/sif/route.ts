@@ -4,6 +4,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { can, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
+import { getT } from '@/i18n/server'
 
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1
 
@@ -35,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tenant:
   })
   if (!data) notFound()
   if (!data.wps?.employerId || !data.wps.routingCode)
-    return new Response('Set up the WPS employer details on the payroll page first.', { status: 422 })
+    return new Response((await getT())('payroll.wps.missing'), { status: 422 })
   const byId = new Map(data.people.map((p) => [p.id, p]))
   const period = days(data.run.periodStart, data.run.periodEnd)
   const rows = data.lines.flatMap((l) => {

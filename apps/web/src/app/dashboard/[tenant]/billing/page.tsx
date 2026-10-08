@@ -9,19 +9,23 @@ import {
 } from '@spa/db'
 import { getCheckoutSession, StripeError, settleCheckoutSession, stripeConfig } from '@spa/services'
 import { and, desc, eq, isNotNull } from 'drizzle-orm'
-import { MessageCircle, ReceiptText } from 'lucide-react'
+import { enumLabel } from '@spa/core/i18n'
+import { Check, MessageCircle, ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Badge, statusTone } from '@/components/ui/badge'
+import { Card, Eyebrow, Grid, Hairline, Note, Pill, Stack, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { formatAed, formatDate } from '@/lib/utils'
+import { getI18n, getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
 import { PayByCardButton } from './pay-button'
 
-export const metadata: Metadata = { title: 'Subscription' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('billing.title') }
+}
+
+const FEATURES = ['f1', 'f3', 'f4', 'f5'] as const
 
 /** Card payments started on Stripe Checkout are confirmed by asking Stripe, never by trusting the return URL. */
 async function settlePendingCardPayments(tenantId: string) {
@@ -56,6 +60,7 @@ export default async function BillingPage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'billing.view')) notFound()
+  const { t, fmt } = await getI18n()
   const justPaid = Boolean((await searchParams).paid)
   await settlePendingCardPayments(ctx.tenant.id)
   const cardsOn = stripeConfig() !== null
@@ -68,154 +73,191 @@ export default async function BillingPage({
     sub ? platformDb().query.plans.findFirst({ where: eq(plans.id, sub.planId) }) : undefined,
     platformDb().query.platformSettings.findFirst({ where: eq(platformSettings.id, 1) }),
   ])
+  const day = (d: string | Date) => fmt.date(typeof d === 'string' && d.length === 10 ? `${d}T12:00:00Z` : d)
   const bank = [
-    ['Bank', company?.bankName],
-    ['Account name', company?.bankAccountName],
-    ['IBAN', company?.iban],
-    ['SWIFT', company?.swift],
+    [t('billing.pay.bank'), company?.bankName],
+    [t('billing.pay.accountName'), company?.bankAccountName],
+    [t('billing.pay.iban'), company?.iban],
+    [t('billing.pay.swift'), company?.swift],
   ].filter(([, v]) => v)
+  const open = invoices.find((i) => i.status === 'issued')
+  const interval = sub?.billingInterval === 'month' ? 'month' : 'year'
 
   return (
     <>
       <PageHeader
-        title="Subscription"
-        description={
-          cardsOn
-            ? 'Your plan, invoices and payments. Pay by card, bank transfer or cash.'
-            : 'Your plan, invoices and payments. Pay by bank transfer or cash.'
-        }
+        title={t('billing.title')}
+        description={cardsOn ? t('billing.descriptionCards') : t('billing.description')}
       />
       <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-7">
-            <CardHeader
-              title={plan?.name ?? 'Plan'}
-              action={sub && <Badge tone={statusTone(sub.status)}>{sub.status}</Badge>}
-            />
-            <CardBody className="grid gap-6 sm:grid-cols-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.06em] text-muted">Price</p>
-                <p className="tabular mt-1 text-xl font-semibold tracking-tight">
-                  {sub ? formatAed(sub.priceAed) : '—'}
-                </p>
-                <p className="text-xs text-muted">per {sub?.billingInterval ?? 'year'}</p>
+        <Stack>
+          {justPaid && (
+            <Note tone="acc">
+              <span role="status">
+                {invoices.some((i) => i.status === 'issued' && i.stripeSessionId)
+                  ? t('billing.paid.processing')
+                  : t('billing.paid.received')}
+              </span>
+            </Note>
+          )}
+          <Grid cols="col-2b">
+            <Card arch>
+              <div className="flex items-start justify-between gap-3">
+                <Eyebrow>{t('billing.plan.eyebrow')}</Eyebrow>
+                {sub && (
+                  <Pill tone={statusTone(sub.status)}>{enumLabel(t, 'subscriptionStatus', sub.status)}</Pill>
+                )}
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.06em] text-muted">Current period</p>
-                <p className="mt-1 text-sm">
-                  {sub ? `${formatDate(sub.currentPeriodStart)} – ${formatDate(sub.currentPeriodEnd)}` : '—'}
-                </p>
+              <h2 className="mt-2 text-[26px] leading-tight">{plan?.name ?? t('billing.plan.fallback')}</h2>
+              <div className="mt-1.5 flex items-baseline gap-1.5">
+                <span className="crm-num text-[34px] font-semibold">{sub ? fmt.aed(sub.priceAed) : '—'}</span>
+                <span className="crm-muted">/ {t(`billing.plan.per.${interval}`)}</span>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.06em] text-muted">
-                  {sub?.status === 'trialing' ? 'Trial ends' : 'Next payment due'}
+              {sub && (
+                <p className="crm-muted mt-1 text-[13px]">
+                  {company?.pricesIncludeVat ? t('billing.plan.inclVat') : t('billing.plan.exclVat')} ·{' '}
+                  {sub.status === 'trialing'
+                    ? t('billing.plan.trialEnds', { date: day(sub.currentPeriodEnd) })
+                    : t('billing.plan.renews', { date: day(sub.currentPeriodEnd) })}
                 </p>
-                <p className="mt-1 text-sm">{sub ? formatDate(sub.currentPeriodEnd) : '—'}</p>
-              </div>
-            </CardBody>
-          </Card>
-          <Card className="lg:col-span-5">
-            <CardHeader title="How to pay" description="Bank transfer or cash to your account manager." />
-            <CardBody className="space-y-4">
-              {bank.length > 0 ? (
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-                  {bank.map(([k, v]) => (
-                    <div key={k} className="contents">
-                      <dt className="text-muted">{k}</dt>
-                      <dd className="break-all font-medium">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="text-sm text-muted">Bank details will appear here.</p>
               )}
-              {company?.whatsapp && (
-                <Button variant="secondary" size="sm" asChild>
-                  <a
-                    href={`https://wa.me/${company.whatsapp.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <MessageCircle /> Message us on WhatsApp
-                  </a>
-                </Button>
+              {sub && (
+                <p className="crm-muted text-[12.5px]">
+                  {t('billing.plan.period', {
+                    from: day(sub.currentPeriodStart),
+                    to: day(sub.currentPeriodEnd),
+                  })}
+                </p>
               )}
-            </CardBody>
-          </Card>
-        </div>
-        {justPaid && (
-          <p
-            role="status"
-            className="anim-fade-in rounded-xl border border-success/25 bg-accent-soft px-5 py-4 text-sm"
-          >
-            {invoices.some((i) => i.status === 'issued' && i.stripeSessionId)
-              ? 'Thanks — your card payment is processing. This page updates once Stripe confirms it.'
-              : 'Thank you — your card payment was received and the invoice is marked paid.'}
-          </p>
-        )}
-        <Card>
-          <CardHeader title="Invoices" />
-          <div className="mt-4 border-t">
-            <DataTable
-              rows={invoices}
-              rowKey={(r) => r.id}
-              empty={<EmptyState icon={<ReceiptText className="size-5" />} title="No invoices yet" />}
-              columns={[
-                {
-                  key: 'number',
-                  header: 'Number',
-                  primary: true,
-                  cell: (r) => <span className="font-medium">{r.number}</span>,
-                },
-                { key: 'desc', header: 'Description', cell: (r) => r.description, hideOnMobile: true },
-                { key: 'issued', header: 'Issued', cell: (r) => formatDate(r.issueDate) },
-                { key: 'due', header: 'Due', cell: (r) => formatDate(r.dueDate) },
-                {
-                  key: 'total',
-                  header: 'Total',
-                  className: 'text-end',
-                  cell: (r) => <span className="tabular">{formatAed(r.totalAed)}</span>,
-                },
-                {
-                  key: 'status',
-                  header: 'Status',
-                  className: 'text-end',
-                  cell: (r) =>
-                    cardsOn && r.status === 'issued' ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Badge tone={statusTone(r.status)}>{r.status}</Badge>
-                        <PayByCardButton slug={ctx.tenant.slug} invoiceId={r.id} />
-                      </span>
-                    ) : (
-                      <Badge tone={statusTone(r.status)}>{r.status}</Badge>
-                    ),
-                },
-              ]}
-            />
-          </div>
-        </Card>
-        {payments.length > 0 && (
-          <Card>
-            <CardHeader title="Payments received" />
-            <div className="mt-4 border-t">
+              <Hairline />
+              <ul className="flex flex-col gap-2 text-[13px]">
+                {FEATURES.map((f) => (
+                  <li key={f} className="flex gap-2">
+                    <Check className="size-4 shrink-0 text-[var(--crm-accent)]" aria-hidden />
+                    {t(`billing.plan.${f}`)}
+                  </li>
+                ))}
+              </ul>
+              {cardsOn && open && (
+                <div className="mt-4 flex flex-col items-stretch gap-2">
+                  <PayByCardButton
+                    slug={ctx.tenant.slug}
+                    invoiceId={open.id}
+                    label={t('billing.pay.invoiceByCard')}
+                    wide
+                  />
+                  <p className="crm-muted text-center text-[11.5px]">{t('billing.plan.payHint')}</p>
+                </div>
+              )}
+            </Card>
+
+            <Stack>
+              <Card title={t('billing.invoices.title')} flush>
+                <DataTable
+                  rows={invoices}
+                  rowKey={(r) => r.id}
+                  empty={
+                    <EmptyState icon={<ReceiptText className="size-5" />} title={t('billing.invoices.empty')} />
+                  }
+                  columns={[
+                    {
+                      key: 'number',
+                      header: t('billing.invoices.number'),
+                      primary: true,
+                      cell: (r) => <span className="font-medium">{r.number}</span>,
+                    },
+                    {
+                      key: 'desc',
+                      header: t('billing.invoices.description'),
+                      cell: (r) => r.description,
+                      hideOnMobile: true,
+                    },
+                    { key: 'issued', header: t('billing.invoices.issued'), cell: (r) => day(r.issueDate) },
+                    { key: 'due', header: t('billing.invoices.due'), cell: (r) => day(r.dueDate) },
+                    {
+                      key: 'total',
+                      header: t('billing.invoices.total'),
+                      className: 'text-end',
+                      cell: (r) => <span className="crm-num">{fmt.aed(r.totalAed)}</span>,
+                    },
+                    {
+                      key: 'status',
+                      header: t('billing.invoices.status'),
+                      className: 'text-end',
+                      cell: (r) =>
+                        cardsOn && r.status === 'issued' ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Pill tone={statusTone(r.status)}>{enumLabel(t, 'invoiceStatus', r.status)}</Pill>
+                            <PayByCardButton
+                              slug={ctx.tenant.slug}
+                              invoiceId={r.id}
+                              label={t('billing.pay.byCard')}
+                            />
+                          </span>
+                        ) : (
+                          <Pill tone={statusTone(r.status)}>{enumLabel(t, 'invoiceStatus', r.status)}</Pill>
+                        ),
+                    },
+                  ]}
+                />
+              </Card>
+              <Card title={t('billing.pay.title')} sub={t('billing.pay.sub')}>
+                {bank.length > 0 ? (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                    {bank.map(([k, v]) => (
+                      <div key={k} className="contents">
+                        <dt className="crm-muted">{k}</dt>
+                        <dd className="break-all font-medium">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="crm-muted text-sm">{t('billing.pay.soon')}</p>
+                )}
+                {company?.whatsapp && (
+                  <Button variant="secondary" size="sm" className="mt-4" asChild>
+                    <a
+                      href={`https://wa.me/${company.whatsapp.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <MessageCircle /> {t('billing.pay.whatsapp')}
+                    </a>
+                  </Button>
+                )}
+              </Card>
+            </Stack>
+          </Grid>
+
+          {payments.length > 0 && (
+            <Card title={t('billing.payments.title')} flush>
               <DataTable
                 rows={payments}
                 rowKey={(r) => r.id}
                 columns={[
-                  { key: 'date', header: 'Date', primary: true, cell: (r) => formatDate(r.receivedAt) },
-                  { key: 'method', header: 'Method', cell: (r) => r.method.replace('_', ' ') },
-                  { key: 'ref', header: 'Reference', cell: (r) => r.reference ?? '—' },
+                  {
+                    key: 'date',
+                    header: t('billing.payments.date'),
+                    primary: true,
+                    cell: (r) => day(r.receivedAt),
+                  },
+                  {
+                    key: 'method',
+                    header: t('billing.payments.method'),
+                    cell: (r) => enumLabel(t, 'paymentMethod', r.method),
+                  },
+                  { key: 'ref', header: t('billing.payments.reference'), cell: (r) => r.reference ?? '—' },
                   {
                     key: 'amount',
-                    header: 'Amount',
+                    header: t('billing.payments.amount'),
                     className: 'text-end',
-                    cell: (r) => <span className="tabular">{formatAed(r.amountAed)}</span>,
+                    cell: (r) => <span className="crm-num">{fmt.aed(r.amountAed)}</span>,
                   },
                 ]}
               />
-            </div>
-          </Card>
-        )}
+            </Card>
+          )}
+        </Stack>
       </PageBody>
     </>
   )

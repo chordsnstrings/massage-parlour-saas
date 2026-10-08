@@ -1,3 +1,4 @@
+import { enumLabel } from '@spa/core/i18n'
 import {
   branches,
   products,
@@ -9,19 +10,17 @@ import {
   withTenant,
 } from '@spa/db'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { Boxes, PackagePlus, Pencil, Plus, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Boxes, PackagePlus, Pencil, Plus, X } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, ListRow, Pill, Stack, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Field } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select } from '@/components/ui/input'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { StatCard } from '@/components/ui/stat-card'
-import { type Column, DataTable } from '@/components/ui/table'
-import { cn, formatAed, formatDateTime, todayDubai } from '@/lib/utils'
+import { getI18n, getT } from '@/i18n/server'
+import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import {
   adjustStockAction,
@@ -31,21 +30,14 @@ import {
   saveUsageAction,
 } from './actions'
 
-export const metadata: Metadata = { title: 'Inventory' }
-
-const MOVE_LABEL = {
-  purchase: 'Received',
-  sale: 'Sold',
-  consumption: 'Used in treatment',
-  adjustment: 'Count adjustment',
-  transfer_in: 'Transfer in',
-  transfer_out: 'Transfer out',
-} as const
-const qtyText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, ''))
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('inventory.title') }
+}
 
 export default async function InventoryPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'inventory.manage')) notFound()
+  const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const data = await withTenant(ctx.tenant.id, async (tx) => {
     const [branch] = await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1)
@@ -76,35 +68,44 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
   const rows = data.products.map((r) => ({ ...r.p, qty: Number(r.qty ?? 0) }))
   const low = rows.filter((r) => r.lowStockAt != null && r.qty <= Number(r.lowStockAt))
   const stockValue = rows.reduce((s, r) => s + Math.max(0, r.qty) * Number(r.costAed), 0)
-  const variantName = new Map(data.variants.map((v) => [v.id, `${v.name.en} · ${v.durationMin} min`]))
+  const variantName = new Map(
+    data.variants.map((v) => [v.id, t('inventory.usage.variant', { name: v.name.en, min: v.durationMin })]),
+  )
   const productById = new Map(rows.map((r) => [r.id, r]))
+  const qty = (n: number, unit?: string | null) =>
+    t('inventory.qty', { qty: fmt.number(n), unit: unit ?? '' }).trim()
   type Row = (typeof rows)[number]
 
   const productForm = (p?: Row) => (
     <>
-      <Field label="Type" name="kind">
+      <Field label={t('inventory.form.type')} name="kind">
         <Select id="kind" name="kind" defaultValue={p?.kind ?? 'consumable'}>
-          <option value="consumable">Consumable (oils, towels, linen)</option>
-          <option value="retail">Retail (sold to clients)</option>
+          <option value="consumable">{t('inventory.form.consumable')}</option>
+          <option value="retail">{t('inventory.form.retail')}</option>
         </Select>
       </Field>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name" name="nameEn">
-          <Input id="nameEn" name="nameEn" defaultValue={p?.name.en} placeholder="Sweet almond oil" />
+        <Field label={t('inventory.form.name')} name="nameEn">
+          <Input
+            id="nameEn"
+            name="nameEn"
+            defaultValue={p?.name.en}
+            placeholder={t('inventory.form.namePlaceholder')}
+          />
         </Field>
-        <Field label="Name (Arabic)" name="nameAr">
+        <Field label={t('inventory.form.nameAr')} name="nameAr">
           <Input id="nameAr" name="nameAr" dir="rtl" defaultValue={p?.name.ar} />
         </Field>
-        <Field label="Unit" name="unit" hint="ml, pcs, bottle…">
+        <Field label={t('inventory.form.unit')} name="unit" hint={t('inventory.form.unitHint')}>
           <Input id="unit" name="unit" defaultValue={p?.unit ?? 'ml'} />
         </Field>
-        <Field label="SKU / barcode" name="sku">
+        <Field label={t('inventory.form.sku')} name="sku">
           <Input id="sku" name="sku" defaultValue={p?.sku ?? ''} />
         </Field>
-        <Field label="Cost per unit (AED, excl. VAT)" name="costAed">
+        <Field label={t('inventory.form.cost')} name="costAed">
           <Input id="costAed" name="costAed" inputMode="decimal" defaultValue={p ? Number(p.costAed) : ''} />
         </Field>
-        <Field label="Selling price (AED, retail only)" name="priceAed">
+        <Field label={t('inventory.form.price')} name="priceAed">
           <Input
             id="priceAed"
             name="priceAed"
@@ -113,137 +114,96 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
           />
         </Field>
       </div>
-      <Field label="Warn me when stock falls to" name="lowStockAt">
+      <Field label={t('inventory.form.lowAt')} name="lowStockAt">
         <Input id="lowStockAt" name="lowStockAt" inputMode="decimal" defaultValue={p?.lowStockAt ?? ''} />
       </Field>
     </>
   )
 
-  const columns: Column<Row>[] = [
-    {
-      key: 'name',
-      header: 'Product',
-      primary: true,
-      cell: (r) => (
-        <span className="flex flex-col">
-          <span className="font-medium">{r.name.en}</span>
-          <span className="text-xs text-muted">
-            {[r.kind === 'retail' ? 'Retail' : 'Consumable', r.sku].filter(Boolean).join(' · ')}
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: 'stock',
-      header: 'In stock',
-      className: 'tabular-nums',
-      cell: (r) => {
-        const isLow = r.lowStockAt != null && r.qty <= Number(r.lowStockAt)
-        return (
-          <span className={cn('inline-flex items-center gap-2', isLow && 'text-danger')}>
-            {qtyText(r.qty)} {r.unit}
-            {isLow && <Badge tone="danger">Low</Badge>}
-          </span>
-        )
-      },
-    },
-    { key: 'cost', header: 'Cost', className: 'text-right tabular-nums', cell: (r) => formatAed(r.costAed) },
-    {
-      key: 'price',
-      header: 'Price',
-      className: 'text-right tabular-nums',
-      cell: (r) => (r.priceAed ? formatAed(r.priceAed) : '—'),
-    },
-    {
-      key: 'actions',
-      header: '',
-      className: 'text-right',
-      cell: (r) => (
-        <div className="flex justify-end gap-1">
-          <FormSheet
-            title={`Receive · ${r.name.en}`}
-            description="Records the purchase in your accounts and adds to stock."
-            action={receiveStockAction.bind(null, slug, r.id)}
-            submitLabel="Receive stock"
-            trigger={
-              <Button variant="secondary" size="sm">
-                <PackagePlus /> Receive
-              </Button>
-            }
-          >
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label={`Quantity (${r.unit})`} name="qty">
-                <Input id="qty" name="qty" inputMode="decimal" />
-              </Field>
-              <Field label="Total paid (AED)" name="totalAed">
-                <Input id="totalAed" name="totalAed" inputMode="decimal" />
-              </Field>
-              <Field label="Date" name="date">
-                <Input id="date" name="date" type="date" defaultValue={todayDubai()} />
-              </Field>
-              <Field label="Paid from" name="paidVia">
-                <Select id="paidVia" name="paidVia" defaultValue="cash">
-                  <option value="cash">Cash</option>
-                  <option value="bank">Bank</option>
-                </Select>
-              </Field>
-            </div>
-            <Label className="flex items-center gap-2.5 text-sm font-normal">
-              <Checkbox name="hasVat" defaultChecked /> Includes 5% VAT (on a tax invoice)
-            </Label>
-          </FormSheet>
-          <FormSheet
-            title={`Count · ${r.name.en}`}
-            description="Enter what's actually on the shelf; the difference is posted as an adjustment at cost."
-            action={adjustStockAction.bind(null, slug, r.id)}
-            submitLabel="Save count"
-            trigger={
-              <Button variant="ghost" size="sm">
-                Count
-              </Button>
-            }
-          >
-            <input type="hidden" name="current" value={r.qty} />
-            <Field
-              label={`Counted (${r.unit})`}
-              name="counted"
-              hint={`System says ${qtyText(r.qty)} ${r.unit}.`}
-            >
-              <Input id="counted" name="counted" inputMode="decimal" defaultValue={r.qty} />
-            </Field>
-            <Field label="Reason" name="note">
-              <Input id="note" name="note" placeholder="Monthly count, damaged, expired…" />
-            </Field>
-          </FormSheet>
-          <FormSheet
-            title="Edit product"
-            action={saveProductAction.bind(null, slug, r.id)}
-            trigger={
-              <Button variant="ghost" size="sm" aria-label={`Edit ${r.name.en}`}>
-                <Pencil />
-              </Button>
-            }
-          >
-            {productForm(r)}
-          </FormSheet>
+  const rowActions = (r: Row) => (
+    <div className="flex justify-end gap-1">
+      <FormSheet
+        title={t('inventory.receive.title', { name: r.name.en })}
+        description={t('inventory.receive.body')}
+        action={receiveStockAction.bind(null, slug, r.id)}
+        submitLabel={t('inventory.receive.submit')}
+        trigger={
+          <Button variant="secondary" size="sm">
+            <PackagePlus /> {t('inventory.receive.button')}
+          </Button>
+        }
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label={t('inventory.receive.qty', { unit: r.unit })} name="qty">
+            <Input id="qty" name="qty" inputMode="decimal" />
+          </Field>
+          <Field label={t('inventory.receive.total')} name="totalAed">
+            <Input id="totalAed" name="totalAed" inputMode="decimal" />
+          </Field>
+          <Field label={t('inventory.receive.date')} name="date">
+            <Input id="date" name="date" type="date" defaultValue={todayDubai()} />
+          </Field>
+          <Field label={t('inventory.receive.paidFrom')} name="paidVia">
+            <Select id="paidVia" name="paidVia" defaultValue="cash">
+              <option value="cash">{t('inventory.receive.cash')}</option>
+              <option value="bank">{t('inventory.receive.bank')}</option>
+            </Select>
+          </Field>
         </div>
-      ),
-    },
-  ]
+        <Label className="flex items-center gap-2.5 text-sm font-normal">
+          <Checkbox name="hasVat" defaultChecked /> {t('inventory.receive.vat')}
+        </Label>
+      </FormSheet>
+      <FormSheet
+        title={t('inventory.count.title', { name: r.name.en })}
+        description={t('inventory.count.body')}
+        action={adjustStockAction.bind(null, slug, r.id)}
+        submitLabel={t('inventory.count.submit')}
+        trigger={
+          <Button variant="ghost" size="sm">
+            {t('inventory.count.button')}
+          </Button>
+        }
+      >
+        <input type="hidden" name="current" value={r.qty} />
+        <Field
+          label={t('inventory.count.counted', { unit: r.unit })}
+          name="counted"
+          hint={t('inventory.count.systemSays', { qty: fmt.number(r.qty), unit: r.unit })}
+        >
+          <Input id="counted" name="counted" inputMode="decimal" defaultValue={r.qty} />
+        </Field>
+        <Field label={t('inventory.count.reason')} name="note">
+          <Input id="note" name="note" placeholder={t('inventory.count.reasonPlaceholder')} />
+        </Field>
+      </FormSheet>
+      <FormSheet
+        title={t('inventory.editProduct')}
+        action={saveProductAction.bind(null, slug, r.id)}
+        trigger={
+          <Button variant="ghost" size="sm" aria-label={t('inventory.editAria', { name: r.name.en })}>
+            <Pencil />
+          </Button>
+        }
+      >
+        {productForm(r)}
+      </FormSheet>
+    </div>
+  )
 
   return (
     <>
       <PageHeader
-        title="Inventory"
-        description="Oils, linen and retail products. Treatments use up consumables automatically; purchases and counts flow into your accounts."
+        title={t('inventory.title')}
+        description={t('inventory.description')}
         actions={
           <FormSheet
-            title="Add product"
+            title={t('inventory.addProduct')}
             action={saveProductAction.bind(null, slug, null)}
-            submitLabel="Add product"
+            submitLabel={t('inventory.addProduct')}
             trigger={
               <Button>
-                <Plus /> Add product
+                <Plus /> {t('inventory.addProduct')}
               </Button>
             }
           >
@@ -252,56 +212,106 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
         }
       />
       <PageBody>
-        <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
-          <StatCard label="Products" value={rows.length} format="int" />
-          <StatCard
-            label="Running low"
-            value={low.length}
-            format="int"
-            hint={
-              low
-                .map((l) => l.name.en)
-                .slice(0, 2)
-                .join(', ') || 'All good'
-            }
-          />
-          <StatCard label="Stock value" value={Math.round(stockValue)} format="aed" hint="at cost" />
-        </div>
+        <Stack>
+          <Grid cols="g3">
+            <Stat label={t('inventory.stat.products')} value={fmt.number(rows.length)} />
+            <Stat
+              label={t('inventory.stat.low')}
+              value={fmt.number(low.length)}
+              change={{
+                text:
+                  low
+                    .map((l) => l.name.en)
+                    .slice(0, 2)
+                    .join(', ') || t('inventory.stat.allGood'),
+                dir: low.length ? 'down' : 'up',
+              }}
+            />
+            <Stat
+              label={t('inventory.stat.value')}
+              value={fmt.aed(Math.round(stockValue))}
+              change={{ text: t('inventory.stat.atCost'), dir: 'flat' }}
+            />
+          </Grid>
 
-        <Card className="py-2">
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.id}
-            empty={
+          <Card flush>
+            {rows.length === 0 ? (
               <EmptyState
                 icon={<Boxes className="size-5" strokeWidth={1.5} />}
-                title="No products yet"
-                description="Add massage oils, towels and anything you sell to clients."
+                title={t('inventory.empty.title')}
+                description={t('inventory.empty.body')}
               />
-            }
-          />
-        </Card>
+            ) : (
+              <div className="crm-tbl-wrap p-[var(--crm-pad-card)] pb-2">
+                <table className="crm-tbl" data-stack="true">
+                  <thead>
+                    <tr>
+                      <th>{t('inventory.col.product')}</th>
+                      <th>{t('inventory.col.stock')}</th>
+                      <th className="crm-num-c">{t('inventory.col.cost')}</th>
+                      <th className="crm-num-c">{t('inventory.col.price')}</th>
+                      <th>
+                        <span className="sr-only">{t('common.edit')}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => {
+                      const isLow = r.lowStockAt != null && r.qty <= Number(r.lowStockAt)
+                      return (
+                        <tr key={r.id}>
+                          <td data-label={t('inventory.col.product')}>
+                            <span className="flex flex-col">
+                              <span className="font-semibold">{r.name.en}</span>
+                              <span className="crm-muted text-xs">
+                                {[enumLabel(t, 'productKind', r.kind), r.sku].filter(Boolean).join(' · ')}
+                              </span>
+                            </span>
+                          </td>
+                          <td data-label={t('inventory.col.stock')} className="crm-num">
+                            <span className="inline-flex items-center gap-2">
+                              {qty(r.qty, r.unit)}
+                              {isLow && (
+                                <Pill tone="bad" dot>
+                                  {t('inventory.low')}
+                                </Pill>
+                              )}
+                            </span>
+                          </td>
+                          <td data-label={t('inventory.col.cost')} className="crm-num-c">
+                            {fmt.aed(r.costAed)}
+                          </td>
+                          <td data-label={t('inventory.col.price')} className="crm-num-c">
+                            {r.priceAed ? fmt.aed(r.priceAed) : '—'}
+                          </td>
+                          <td className="text-end">{rowActions(r)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
-        <div className="grid gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-7">
-            <CardHeader
-              title="Used per treatment"
-              description="Deducted from stock when a booking is completed."
-              action={
+          <Grid cols="col-2">
+            <Card
+              title={t('inventory.usage.title')}
+              sub={t('inventory.usage.sub')}
+              actions={
                 <FormSheet
-                  title="Add usage"
+                  title={t('inventory.usage.add')}
                   action={saveUsageAction.bind(null, slug)}
                   trigger={
                     <Button variant="secondary" size="sm" disabled={!data.variants.length || !rows.length}>
-                      <Plus /> Add
+                      <Plus /> {t('inventory.usage.addShort')}
                     </Button>
                   }
                 >
-                  <Field label="Treatment" name="serviceVariantId">
+                  <Field label={t('inventory.usage.treatment')} name="serviceVariantId">
                     <Select id="serviceVariantId" name="serviceVariantId" defaultValue="">
                       <option value="" disabled>
-                        Choose…
+                        {t('inventory.usage.choose')}
                       </option>
                       {data.variants.map((v) => (
                         <option key={v.id} value={v.id}>
@@ -310,10 +320,10 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Product" name="productId">
+                  <Field label={t('inventory.usage.product')} name="productId">
                     <Select id="productId" name="productId" defaultValue="">
                       <option value="" disabled>
-                        Choose…
+                        {t('inventory.usage.choose')}
                       </option>
                       {rows
                         .filter((r) => r.kind === 'consumable')
@@ -324,73 +334,69 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
                         ))}
                     </Select>
                   </Field>
-                  <Field label="Amount per treatment" name="qty">
+                  <Field label={t('inventory.usage.amount')} name="qty">
                     <Input id="qty" name="qty" inputMode="decimal" placeholder="30" />
                   </Field>
                 </FormSheet>
               }
-            />
-            <CardBody className="pt-3">
+            >
               {data.usage.length === 0 ? (
-                <p className="text-sm text-muted">e.g. 60 min Swedish uses 30 ml oil and 2 towels.</p>
+                <p className="crm-muted text-sm">{t('inventory.usage.example')}</p>
               ) : (
-                <div className="divide-y">
-                  {data.usage.map((u) => {
-                    const p = productById.get(u.productId)
-                    return (
-                      <div
-                        key={`${u.serviceVariantId}-${u.productId}`}
-                        className="flex items-center justify-between gap-3 py-2 text-sm"
-                      >
-                        <span className="min-w-0 truncate">
-                          {variantName.get(u.serviceVariantId) ?? 'Treatment'}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-2 text-muted">
-                          {qtyText(Number(u.qty))} {p?.unit} {p?.name.en}
-                          <form action={removeUsageAction.bind(null, slug, u.serviceVariantId, u.productId)}>
-                            <Button variant="ghost" size="sm" type="submit" aria-label="Remove">
-                              <X />
-                            </Button>
-                          </form>
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
+                data.usage.map((u) => {
+                  const p = productById.get(u.productId)
+                  return (
+                    <ListRow
+                      key={`${u.serviceVariantId}-${u.productId}`}
+                      title={variantName.get(u.serviceVariantId) ?? t('inventory.usage.fallback')}
+                      body={t('inventory.usage.line', {
+                        qty: fmt.number(Number(u.qty)),
+                        unit: p?.unit ?? '',
+                        name: p?.name.en ?? '',
+                      })}
+                      end={
+                        <form action={removeUsageAction.bind(null, slug, u.serviceVariantId, u.productId)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="submit"
+                            aria-label={t('inventory.usage.remove')}
+                          >
+                            <X />
+                          </Button>
+                        </form>
+                      }
+                    />
+                  )
+                })
               )}
-            </CardBody>
-          </Card>
-          <Card className="lg:col-span-5">
-            <CardHeader title="Recent movements" />
-            <CardBody className="pt-3">
+            </Card>
+            <Card title={t('inventory.moves.title')}>
               {data.moves.length === 0 ? (
-                <p className="text-sm text-muted">Nothing yet.</p>
+                <p className="crm-muted text-sm">{t('inventory.moves.empty')}</p>
               ) : (
-                <div className="divide-y">
-                  {data.moves.map(({ m, name, unit }) => (
-                    <div key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0">
-                        <span className="block truncate">{name.en}</span>
-                        <span className="text-xs text-muted">
-                          {MOVE_LABEL[m.kind]} · {formatDateTime(m.createdAt)}
+                data.moves.map(({ m, name, unit }) => {
+                  const n = Number(m.qty)
+                  return (
+                    <ListRow
+                      key={m.id}
+                      icon={n < 0 ? <ArrowUpRight /> : <ArrowDownLeft />}
+                      title={name.en}
+                      body={enumLabel(t, 'stockMovementKind', m.kind)}
+                      time={fmt.dateTime(m.createdAt)}
+                      end={
+                        <span className={n < 0 ? 'crm-muted crm-num' : 'crm-num text-success'}>
+                          {n > 0 ? '+' : ''}
+                          {qty(n, unit)}
                         </span>
-                      </span>
-                      <span
-                        className={cn(
-                          'shrink-0 tabular-nums',
-                          Number(m.qty) < 0 ? 'text-muted' : 'text-success',
-                        )}
-                      >
-                        {Number(m.qty) > 0 ? '+' : ''}
-                        {qtyText(Number(m.qty))} {unit}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      }
+                    />
+                  )
+                })
               )}
-            </CardBody>
-          </Card>
-        </div>
+            </Card>
+          </Grid>
+        </Stack>
       </PageBody>
     </>
   )

@@ -10,17 +10,18 @@ import {
   UserRound,
 } from 'lucide-react'
 import Link from 'next/link'
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
 import { linkClientAction } from '@/app/dashboard/[tenant]/inbox/actions'
-import { Badge } from '@/components/ui/badge'
+import { Card, Pill } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Input } from '@/components/ui/input'
 import { appPath } from '@/lib/paths'
-import { cn, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { inboxHref } from './conversation-list'
-import { CHANNEL_LABEL, clockTime, dayKey, dayLabel, displayName, MODE_LABEL, windowLeft } from './format'
+import { channelLabel, dayKey, dayLabel, displayName, modeLabel, windowLeft } from './format'
 import { InstagramGlyph } from './icons'
 import { Composer, DraftCard, MarkRead, MessageScroller, RetryButton, ThreadActions } from './thread-client'
 
@@ -33,6 +34,8 @@ export function ThreadView({
   sendNotice,
   canLinkClient,
   canViewClients,
+  t,
+  fmt,
 }: {
   slug: string
   thread: Thread
@@ -41,29 +44,29 @@ export function ThreadView({
   sendNotice: string | null
   canLinkClient: boolean
   canViewClients: boolean
+  t: Translator
+  fmt: Format
 }) {
   const c = thread.conversation
   const isComment = c.channel === 'instagram_comment'
-  const name = displayName({ ...c, clientName: thread.clientName })
+  const name = displayName(t, { ...c, clientName: thread.clientName })
   const now = new Date()
-  const left = isComment ? null : windowLeft(dmWindowLeftMs(c.lastCustomerMsgAt, now))
+  const left = isComment ? null : windowLeft(t, dmWindowLeftMs(c.lastCustomerMsgAt, now))
   const windowNotice =
-    !isComment && !left
-      ? 'More than 24 hours since their last message — Instagram only allows replies from the Instagram app now.'
-      : null
+    !isComment && !left ? t('inbox.notice.window') : null
   const sent = thread.messages.filter((m) => m.sender !== 'ai_draft')
   const drafts = thread.messages.filter((m) => m.sender === 'ai_draft')
   const unread = Boolean(c.lastCustomerMsgAt && (!c.readAt || c.lastCustomerMsgAt > c.readAt))
 
   return (
-    <Card className="flex flex-col overflow-hidden" data-testid="thread">
+    <Card flush className="flex flex-col overflow-hidden" data-testid="thread">
       {unread && <MarkRead slug={slug} id={c.id} />}
-      <header className="space-y-4 border-b px-4 py-4 sm:px-6">
+      <header className="space-y-4 border-b border-[var(--crm-line)] px-4 py-4 sm:px-5">
         <div className="flex items-start gap-3">
           <Link
             href={inboxHref(slug, { f: filter })}
             className="-ms-2 grid size-11 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-subtle hover:text-fg lg:hidden"
-            aria-label="Back to conversations"
+            aria-label={t('inbox.thread.back')}
           >
             <ArrowLeft className="size-5 rtl:-scale-x-100" strokeWidth={1.5} />
           </Link>
@@ -76,22 +79,22 @@ export function ThreadView({
                 ) : (
                   <InstagramGlyph className="size-3.5" />
                 )}
-                {CHANNEL_LABEL[c.channel] ?? c.channel}
+                {channelLabel(t, c.channel)}
               </span>
               <span aria-hidden>·</span>
-              <span>{MODE_LABEL[c.mode]}</span>
+              <span>{modeLabel(t, c.mode)}</span>
               {left && (
                 <>
                   <span aria-hidden>·</span>
-                  <span>Reply window {left}</span>
+                  <span>{t('inbox.thread.replyWindow', { left })}</span>
                 </>
               )}
             </p>
           </div>
           {c.flagged && (
-            <Badge tone="danger" className="mt-0.5 hidden sm:inline-flex">
-              Flagged
-            </Badge>
+            <Pill tone="bad" dot className="mt-0.5 hidden sm:inline-flex">
+              {t('inbox.thread.flagged')}
+            </Pill>
           )}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,8 +106,8 @@ export function ThreadView({
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border px-3 text-[13px] transition-colors hover:bg-subtle sm:min-h-9"
               >
                 <CalendarDays className="size-3.5" strokeWidth={1.5} />
-                Booking {thread.bookingRef}
-                {thread.bookingDate && <span className="text-muted">· {formatDate(thread.bookingDate)}</span>}
+                {t('inbox.thread.booking', { ref: thread.bookingRef })}
+                {thread.bookingDate && <span className="text-muted">· {fmt.date(thread.bookingDate)}</span>}
               </Link>
             )}
             {c.clientId && thread.clientName ? (
@@ -122,17 +125,17 @@ export function ThreadView({
               )
             ) : canLinkClient ? (
               <FormSheet
-                title="Link to a client"
-                description="Matches an existing client by mobile number, or by exact name when there is no number. Otherwise a new client is created."
+                title={t('inbox.link.title')}
+                description={t('inbox.link.description')}
                 action={linkClientAction.bind(null, slug, c.id)}
-                submitLabel="Link client"
+                submitLabel={t('inbox.link.submit')}
                 trigger={
-                  <Button variant="secondary" size="sm" className="min-h-11 sm:min-h-9">
-                    <Link2 /> Link client
+                  <Button variant="secondary" size="sm">
+                    <Link2 /> {t('inbox.link.trigger')}
                   </Button>
                 }
               >
-                <Field label="Name" name="name">
+                <Field label={t('inbox.link.name')} name="name">
                   <Input
                     id="name"
                     name="name"
@@ -140,7 +143,7 @@ export function ThreadView({
                     autoComplete="off"
                   />
                 </Field>
-                <Field label="UAE mobile (optional)" name="phone" hint="e.g. 050 123 4567">
+                <Field label={t('inbox.link.phone')} name="phone" hint={t('inbox.link.phoneHint')}>
                   <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="off" />
                 </Field>
               </FormSheet>
@@ -151,16 +154,17 @@ export function ThreadView({
 
       <MessageScroller
         count={thread.messages.length}
-        className="max-h-[62dvh] min-h-64 space-y-3 overflow-y-auto bg-subtle/35 px-4 py-5 sm:px-6"
+        className="max-h-[62dvh] min-h-64 space-y-3 overflow-y-auto bg-[var(--crm-surface2)] px-4 py-5 sm:px-5"
+        label={t('inbox.thread.log')}
       >
-        {sent.length === 0 && <p className="py-10 text-center text-sm text-muted">No messages yet.</p>}
+        {sent.length === 0 && <p className="py-10 text-center text-sm text-muted">{t('inbox.thread.noMessages')}</p>}
         {sent.map((m, i) => {
           const out = m.direction === 'out'
           const prev = sent[i - 1]
           const showDay = !prev || dayKey(prev.createdAt) !== dayKey(m.createdAt)
           return (
             <div key={m.id} className="space-y-3">
-              {showDay && <p className="pt-1 text-center text-xs text-muted">{dayLabel(m.createdAt, now)}</p>}
+              {showDay && <p className="pt-1 text-center text-xs text-muted">{dayLabel(t, fmt, m.createdAt, now)}</p>}
               <div className={cn('flex', out ? 'justify-end' : 'justify-start')} data-testid="message">
                 <div className={cn('max-w-[85%] space-y-1 sm:max-w-[75%]', out && 'items-end text-end')}>
                   <div
@@ -181,18 +185,18 @@ export function ThreadView({
                     {out &&
                       (m.sender === 'bot' ? (
                         <span className="inline-flex items-center gap-1">
-                          <Bot className="size-3" strokeWidth={1.75} /> AI
+                          <Bot className="size-3" strokeWidth={1.75} /> {t('inbox.thread.ai')}
                         </span>
                       ) : (
-                        <span>Team</span>
+                        <span>{t('inbox.thread.team')}</span>
                       ))}
                     {out && <span aria-hidden>·</span>}
-                    <time dateTime={m.createdAt.toISOString()}>{clockTime(m.createdAt)}</time>
+                    <time dateTime={m.createdAt.toISOString()}>{fmt.time(m.createdAt)}</time>
                   </p>
                   {out && m.error && (
                     <p className="flex flex-wrap items-center justify-end gap-x-1.5 px-1 text-xs text-warning">
                       <TriangleAlert className="size-3.5 shrink-0" strokeWidth={1.75} />
-                      <span>Not sent — {m.error}</span>
+                      <span>{t('inbox.thread.notSent', { reason: m.error })}</span>
                       {!m.error.includes('24 hours') && <RetryButton slug={slug} messageId={m.id} />}
                     </p>
                   )}
@@ -212,8 +216,8 @@ export function ThreadView({
       </MessageScroller>
 
       {c.mode === 'closed' ? (
-        <p className="border-t px-4 py-4 text-sm text-muted sm:px-6">
-          This conversation is closed. Reopen it to reply — a new message from the customer reopens it too.
+        <p className="border-t border-[var(--crm-line)] px-4 py-4 text-sm text-muted sm:px-5">
+          {t('inbox.thread.closed')}
         </p>
       ) : (
         <Composer slug={slug} id={c.id} isComment={isComment} notice={sendNotice ?? windowNotice} />

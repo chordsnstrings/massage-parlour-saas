@@ -10,7 +10,7 @@ import { audit } from '@/server/audit'
 
 const schema = z.object({
   id: z.string().optional(),
-  name: z.string().trim().min(2, 'Name the role').max(40),
+  name: z.string().trim().min(2, 'roles.validation.name').max(40),
   description: z.string().trim().max(160).optional(),
   permissions: z.union([z.string(), z.array(z.string())]).optional(),
 })
@@ -29,8 +29,8 @@ export async function saveRoleAction(
   const problem = await withTenant(ctx.tenant.id, async (tx) => {
     if (d.id) {
       const [role] = await tx.select().from(roles).where(eq(roles.id, d.id))
-      if (!role) return 'Role not found.'
-      if (role.isSystem) return 'System roles can’t be edited — create a custom role instead.'
+      if (!role) return 'roles.result.notFound'
+      if (role.isSystem) return 'roles.result.systemLocked'
       await tx
         .update(roles)
         .set({ name: d.name, description: d.description || null, permissions })
@@ -38,7 +38,7 @@ export async function saveRoleAction(
     } else {
       const key = `custom_${normalizeSlug(d.name).replace(/-/g, '_')}`
       const [dupe] = await tx.select({ id: roles.id }).from(roles).where(eq(roles.key, key))
-      if (dupe) return 'A role with this name already exists.'
+      if (dupe) return 'roles.result.duplicate'
       await tx.insert(roles).values({
         tenantId: ctx.tenant.id,
         key,
@@ -57,7 +57,7 @@ export async function saveRoleAction(
     data: { name: d.name, permissions },
   })
   revalidatePath(`/dashboard/${slug}/team/roles`)
-  return ok('Role saved')
+  return ok('roles.result.saved')
 }
 
 export async function deleteRoleAction(slug: string, roleId: string): Promise<ActionResult> {
@@ -65,7 +65,7 @@ export async function deleteRoleAction(slug: string, roleId: string): Promise<Ac
   if (error) return fail(error)
   const problem = await withTenant(ctx.tenant.id, async (tx) => {
     const [role] = await tx.select().from(roles).where(eq(roles.id, roleId))
-    if (!role || role.isSystem) return 'Only custom roles can be deleted.'
+    if (!role || role.isSystem) return 'roles.result.onlyCustom'
     const [used] = await tx
       .select({ id: members.id })
       .from(members)
@@ -78,12 +78,12 @@ export async function deleteRoleAction(slug: string, roleId: string): Promise<Ac
         and(eq(invitations.roleId, roleId), isNull(invitations.acceptedAt), isNull(invitations.revokedAt)),
       )
       .limit(1)
-    if (used || pending) return 'Move people off this role first.'
+    if (used || pending) return 'roles.result.inUse'
     await tx.delete(roles).where(eq(roles.id, roleId))
     return null
   })
   if (problem) return fail(problem)
   await audit({ tenantId: ctx.tenant.id, actorUserId: ctx.user.id, action: 'role.deleted', entityId: roleId })
   revalidatePath(`/dashboard/${slug}/team/roles`)
-  return ok('Role deleted')
+  return ok('roles.result.deleted')
 }

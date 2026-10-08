@@ -1,2 +1,61 @@
 // `billing` namespace (EN source). Only the billing screens edit this file; mirror every key in th/billing.ts.
-export const billing = {} as const
+// Spa payments are recorded, never processed; card payment (Stripe) is only for paying platform invoices.
+export const billing = {
+  title: 'Subscription',
+  descriptionCards: 'Your plan, invoices and payments. Pay by card, bank transfer or cash.',
+  description: 'Your plan, invoices and payments. Pay by bank transfer or cash.',
+  plan: {
+    eyebrow: 'Your subscription',
+    fallback: 'Plan',
+    per: { year: 'year', month: 'month' },
+    exclVat: 'Excl. VAT',
+    inclVat: 'Incl. VAT',
+    renews: 'renews {date}',
+    trialEnds: 'trial ends {date}',
+    period: 'Current period {from} – {to}',
+    f1: 'Every feature and automation — no add-ons',
+    f3: 'Website, online booking and your own domain',
+    f4: 'AI tools with a monthly allowance',
+    f5: 'WhatsApp support from a real person',
+    payHint: 'Or pay by bank transfer or cash',
+  },
+  pay: {
+    title: 'How to pay',
+    sub: 'Bank transfer or cash to your account manager.',
+    bank: 'Bank',
+    accountName: 'Account name',
+    iban: 'IBAN',
+    swift: 'SWIFT',
+    soon: 'Bank details will appear here.',
+    whatsapp: 'Message us on WhatsApp',
+    byCard: 'Pay by card',
+    invoiceByCard: 'Pay invoice by card',
+  },
+  paid: {
+    processing: 'Thanks — your card payment is processing. This page updates once Stripe confirms it.',
+    received: 'Thank you — your card payment was received and the invoice is marked paid.',
+  },
+  invoices: {
+    title: 'Invoices',
+    empty: 'No invoices yet',
+    number: 'Number',
+    description: 'Description',
+    issued: 'Issued',
+    due: 'Due',
+    total: 'Total',
+    status: 'Status',
+  },
+  payments: {
+    title: 'Payments received',
+    date: 'Date',
+    method: 'Method',
+    reference: 'Reference',
+    amount: 'Amount',
+  },
+  error: {
+    cardsOff: 'Card payments aren’t switched on yet — pay by bank transfer or cash.',
+    notFound: 'Invoice not found',
+    notOpen: 'This invoice is not open for payment',
+    noPage: 'Stripe did not return a payment page',
+  },
+} as const

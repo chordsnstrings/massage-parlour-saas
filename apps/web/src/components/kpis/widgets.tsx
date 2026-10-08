@@ -1,93 +1,52 @@
+import { enumLabel } from '@spa/core/i18n'
 import type { AgendaItem } from '@spa/services'
+import { Pill, statusTone, TName } from '@/components/crm'
 import { Bar } from '@/components/kpis/bar'
-import { Badge, statusTone } from '@/components/ui/badge'
-import { NumberTicker } from '@/components/ui/motion'
-import { cn, formatAed } from '@/lib/utils'
+import { getI18n } from '@/i18n/server'
+import { cn } from '@/lib/utils'
 
-const timeFmt = new Intl.DateTimeFormat('en-GB', {
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'Asia/Dubai',
-})
-export const formatTime = (d: Date) => timeFmt.format(d)
-const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] || 'Walk-in'
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  confirmed: 'Confirmed',
-  checked_in: 'Checked in',
-  in_service: 'In service',
-}
+const firstName = (name: string | null) => name?.trim().split(/\s+/)[0] || null
 
-/** Compact secondary metrics: two columns on phones, four from tablet up. */
-export function MetricStrip({
-  items,
-}: {
-  items: { label: string; value: number; format?: 'aed' | 'int' | 'pct'; hint?: string; empty?: boolean }[]
-}) {
-  return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4">
-      {items.map((m) => (
-        <div key={m.label} className="bg-surface px-5 py-4 sm:px-6 sm:py-5">
-          <dt className="text-xs font-medium text-muted">{m.label}</dt>
-          <dd className="mt-1.5 text-lg font-semibold tracking-tight">
-            {m.empty ? (
-              <span className="text-muted">—</span>
-            ) : (
-              <NumberTicker value={m.value} format={m.format} />
-            )}
-          </dd>
-          {m.hint && <dd className="mt-0.5 truncate text-xs text-muted">{m.hint}</dd>}
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-/** Ranked rows with a hairline proportion bar under each. */
+/** Ranked rows with a hairline proportion bar under each. `display` is the preformatted value (fmt / t). */
 export function RankedList({
   rows,
-  money,
-  unit,
 }: {
-  rows: { key: string; label: string; value: number; sub?: string; color?: string }[]
-  money: boolean
-  unit?: string
+  rows: { key: string; label: string; value: number; display: string; color?: string }[]
 }) {
   const max = Math.max(1, ...rows.map((r) => r.value))
   return (
-    <ol className="space-y-4">
+    <ol className="space-y-3.5">
       {rows.map((r, i) => (
         <li key={r.key} className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-3 text-sm">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="w-4 shrink-0 text-xs text-muted tabular">{i + 1}</span>
+              <span className="crm-muted w-4 shrink-0 text-xs tabular">{i + 1}</span>
               {r.color && (
                 <span className="size-2 shrink-0 rounded-full" style={{ background: r.color }} aria-hidden />
               )}
               <span className="truncate">{r.label}</span>
             </span>
-            <span className="shrink-0 font-medium tabular">
-              {money ? formatAed(r.value) : `${r.value.toLocaleString('en-AE')}${unit ? ` ${unit}` : ''}`}
-            </span>
+            <span className="shrink-0 font-medium tabular">{r.display}</span>
           </div>
           <div className="ms-6">
             <Bar pct={(r.value / max) * 100} delay={i * 0.06} />
           </div>
-          {r.sub && <p className="ms-6 text-xs text-muted">{r.sub}</p>}
         </li>
       ))}
     </ol>
   )
 }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
 
 /**
  * Weekday × hour heatmap. Hours run from the business-day cutoff (late-night shops read left to right)
  * and are trimmed to the span that has bookings, never narrower than 10:00–22:00.
  */
-export function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number[][]; cutoffHour?: number }) {
+export async function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number[][]; cutoffHour?: number }) {
+  const { t } = await getI18n()
+  const day = (d: number) => t(`overview.peak.days.${DAY_KEYS[d]!}`)
   const order = Array.from({ length: 24 }, (_, i) => (cutoffHour + i) % 24)
   const busy = order.map((h) => heatmap.some((row) => (row[h] ?? 0) > 0))
   const lo = Math.min(order.indexOf(10), busy.indexOf(true) === -1 ? 99 : busy.indexOf(true))
@@ -105,17 +64,17 @@ export function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number[][]; 
     <div className="space-y-4">
       <div
         className="grid gap-[3px]"
-        style={{ gridTemplateColumns: `2.25rem repeat(${hours.length}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `2.5rem repeat(${hours.length}, minmax(0, 1fr))` }}
       >
         {days.map((d) => (
           <div key={d} className="contents">
-            <span className="self-center text-[11px] text-muted">{DAYS[d]}</span>
+            <span className="crm-muted self-center text-xs">{day(d)}</span>
             {hours.map((h) => {
               const n = heatmap[d]?.[h] ?? 0
               return (
                 <span
                   key={h}
-                  title={`${DAYS[d]} ${hh(h)} · ${n} booking${n === 1 ? '' : 's'}`}
+                  title={t('overview.peak.cell', { day: day(d), hour: hh(h), count: n })}
                   className={cn('h-3 rounded-[3px] sm:h-5', n ? 'bg-accent' : 'bg-subtle')}
                   style={n ? { opacity: 0.18 + (0.82 * n) / max } : undefined}
                 />
@@ -125,53 +84,108 @@ export function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number[][]; 
         ))}
         <span />
         {hours.map((h, i) => (
-          <span key={h} className="text-center text-[10px] text-muted tabular">
+          <span key={h} className="crm-muted text-center text-[10px] tabular">
             {i % 3 === 0 ? String(h).padStart(2, '0') : ''}
           </span>
         ))}
       </div>
-      <p className="text-sm text-muted">
+      <p className="crm-muted text-sm">
         {peak.n ? (
           <>
-            Busiest: <span className="text-fg">{`${DAYS[peak.d]} ${hh(peak.h)}`}</span> · {peak.n} booking
-            {peak.n === 1 ? '' : 's'}
+            {t('overview.peak.busiest')}{' '}
+            <span className="text-fg">{`${day(peak.d)} ${hh(peak.h)}`}</span> ·{' '}
+            {t('overview.peak.busiestCount', { count: peak.n })}
           </>
         ) : (
-          'Peak hours appear once bookings come in.'
+          t('overview.peak.empty')
         )}
       </p>
     </div>
   )
 }
 
-/** Time-ordered agenda rows (client first name only — no phone numbers on the dashboard). */
-export function AgendaList({
-  items,
-  showTherapist = true,
-}: {
-  items: AgendaItem[]
-  showTherapist?: boolean
-}) {
+/**
+ * Up-next table (crm-spec §5.1 "Priority bookings"): client first name only — no surnames or phone numbers on the
+ * dashboard. `tomorrow` marks rows from the next business date.
+ */
+export async function UpNextTable({ items }: { items: (AgendaItem & { tomorrow?: boolean })[] }) {
+  const { t, fmt } = await getI18n()
+  const h = {
+    client: t('overview.upNext.client'),
+    service: t('overview.upNext.service'),
+    therapist: t('overview.upNext.therapist'),
+    when: t('overview.upNext.when'),
+    status: t('overview.upNext.status'),
+  }
+  return (
+    <div className="crm-tbl-wrap">
+      <table className="crm-tbl" data-stack="true">
+        <thead>
+          <tr>
+            <th>{h.client}</th>
+            <th>{h.service}</th>
+            <th>{h.therapist}</th>
+            <th>{h.when}</th>
+            <th>{h.status}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it) => {
+            const name = firstName(it.clientName) ?? t('overview.upNext.walkIn')
+            const time = fmt.time(it.startsAt)
+            return (
+              <tr key={it.itemId}>
+                <td data-label={h.client}>
+                  <TName name={name} />
+                </td>
+                <td data-label={h.service} className="crm-muted">
+                  {t('overview.upNext.serviceLine', { service: it.serviceName, min: it.durationMin })}
+                </td>
+                <td data-label={h.therapist} className="crm-muted">
+                  {it.therapists.join(' & ') || '—'}
+                </td>
+                <td data-label={h.when} className="crm-num-c crm-muted">
+                  {t(it.tomorrow ? 'overview.upNext.tomorrow' : 'overview.upNext.today', { time })}
+                </td>
+                <td data-label={h.status}>
+                  <Pill tone={statusTone(it.status)} dot>
+                    {enumLabel(t, 'bookingStatus', it.status)}
+                  </Pill>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Time-ordered agenda rows for a therapist's own day (client first name only). */
+export async function AgendaList({ items }: { items: AgendaItem[] }) {
+  const { t, fmt } = await getI18n()
   return (
     <ul className="divide-y">
       {items.map((it) => (
-        <li key={it.itemId} className="flex items-center gap-4 py-3.5 first:pt-0 last:pb-0">
+        <li key={it.itemId} className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
           <div className="w-12 shrink-0">
-            <p className="text-sm font-semibold tabular">{formatTime(it.startsAt)}</p>
-            <p className="text-xs text-muted tabular">{it.durationMin}m</p>
+            <p className="text-sm font-semibold tabular">{fmt.time(it.startsAt)}</p>
+            <p className="crm-muted text-xs tabular">
+              {t('overview.therapist.minutes', { min: it.durationMin })}
+            </p>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{firstName(it.clientName)}</p>
-            <p className="truncate text-xs text-muted">
-              {[it.serviceName, showTherapist ? it.therapists.join(' & ') : it.roomName]
-                .filter(Boolean)
-                .join(' · ')}
+            <p className="truncate text-sm font-medium">
+              {firstName(it.clientName) ?? t('overview.therapist.walkIn')}
+            </p>
+            <p className="crm-muted truncate text-xs">
+              {[it.serviceName, it.roomName].filter(Boolean).join(' · ')}
             </p>
           </div>
           {it.status !== 'confirmed' && (
-            <Badge tone={statusTone(it.status)} className="shrink-0">
-              {STATUS_LABEL[it.status] ?? it.status}
-            </Badge>
+            <Pill tone={statusTone(it.status)} className="shrink-0">
+              {enumLabel(t, 'bookingStatus', it.status)}
+            </Pill>
           )}
         </li>
       ))}

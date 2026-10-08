@@ -15,7 +15,7 @@ import { and, asc, desc, eq } from 'drizzle-orm'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import type { BookingStatus, CalendarData, CalItem, RotationRow } from '@/components/calendar/types'
 import { appPath } from '@/lib/paths'
-import { formatAed } from '@/lib/utils'
+import { getI18n } from '@/i18n/server'
 import { can, type MemberContext } from '@/server/access'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -50,6 +50,7 @@ export async function loadCalendar(
 ): Promise<CalendarData | null> {
   const canManage = can(ctx, 'calendar.manage')
   const seePhone = can(ctx, 'clients.phone')
+  const { t, fmt } = await getI18n()
   return withTenant(ctx.tenant.id, async (tx) => {
     const branchRows = await allowedBranches(tx, ctx)
     const branch = branchRows.find((b) => b.id === q.branch) ?? branchRows[0]
@@ -149,7 +150,11 @@ export async function loadCalendar(
         .orderBy(asc(services.sort), asc(serviceVariants.sort), asc(serviceVariants.durationMin))
     ).map(({ variant, service }) => ({
       id: variant.id,
-      label: `${service.name.en} · ${variant.durationMin} min · ${formatAed(variant.priceAed)}`,
+      label: t('calendar.variant', {
+        service: service.name.en,
+        min: variant.durationMin,
+        price: fmt.aed(variant.priceAed),
+      }),
       durationMin: variant.durationMin,
       priceAed: variant.priceAed,
     }))
@@ -171,7 +176,7 @@ export async function loadCalendar(
           e.status === 'break' || e.status === 'off' ? e.status : busy ? 'busy' : onShift ? 'free' : 'off'
         return {
           staffId: e.staffId,
-          name: staffNames[e.staffId]?.name ?? 'Therapist',
+          name: staffNames[e.staffId]?.name ?? t('calendar.details.therapist'),
           color: staffNames[e.staffId]?.color ?? '#5e7d6b',
           turns: e.turns,
           status,

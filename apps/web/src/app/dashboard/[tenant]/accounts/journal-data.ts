@@ -1,27 +1,6 @@
 import { journalEntries, journalLines, ledgerAccounts, type Tx } from '@spa/db'
 import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm'
 
-export const SOURCE_LABELS: Record<string, string> = {
-  sale: 'Sale',
-  sale_reversal: 'Sale voided',
-  refund: 'Refund',
-  refund_cogs: 'Refunded goods back in stock',
-  refund_commission: 'Commission offset (refund)',
-  expense: 'Expense',
-  expense_reversal: 'Expense voided',
-  redemption: 'Package session',
-  package_expiry: 'Expired package',
-  commission: 'Commission',
-  commission_reversal: 'Commission (voided)',
-  advance: 'Salary advance',
-  payroll: 'Payroll',
-  cogs: 'Cost of goods sold',
-  cogs_reversal: 'Cost of goods sold (voided)',
-  consumption: 'Consumables used',
-  stock_purchase: 'Stock received',
-  stock_adjustment: 'Stock adjusted',
-}
-
 /** Journal entries with their lines for a date range, newest first. */
 export async function journal(tx: Tx, from: string, to: string, limit = 300) {
   const entries = await tx

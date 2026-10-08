@@ -1,23 +1,23 @@
 import { addDays, businessDateOf, dubaiParts } from '@spa/core'
+import { enumLabel } from '@spa/core/i18n'
 import { branches, members, platformDb, shifts, staff, staffServices, user, withTenant } from '@spa/db'
 import { and, asc, desc, eq, gt, lt } from 'drizzle-orm'
 import { ArrowLeft, CalendarDays } from 'lucide-react'
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Avatar, Card, Grid, Pill, Stack } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatAed, initials } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
-import { dayLabel, dubaiTime, memberOptions, serviceOptions } from '../data'
+import { dubaiTime, memberOptions, serviceOptions } from '../data'
 import { DeleteShiftButton, PatternForm, StaffSheet } from '../staff-client'
 
-export const metadata: Metadata = { title: 'Therapist' }
+export async function generateMetadata() {
+  return { title: (await getT())('staff.therapist') }
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const GENDER = { female: 'Female', male: 'Male', other: 'Other' } as const
 
 export default async function StaffDetailPage({
   params,
@@ -27,6 +27,7 @@ export default async function StaffDetailPage({
   const { tenant, id } = await params
   const ctx = await requireMember(tenant)
   if (!can(ctx, 'staff.view') || !UUID.test(id)) notFound()
+  const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const manage = can(ctx, 'staff.manage')
   const now = new Date()
@@ -94,11 +95,11 @@ export default async function StaffDetailPage({
   }
 
   const details: [string, React.ReactNode][] = [
-    ['Gender', person.gender ? GENDER[person.gender] : '—'],
-    ['Mobile', person.phoneE164 ? `+${person.phoneE164}` : '—'],
-    ['Commission', `${Number(person.commissionPct)}%`],
-    ['Base salary', formatAed(person.baseSalaryAed)],
-    ['Login', linkedUser?.name ?? 'Not linked'],
+    [t('staff.detail.gender'), person.gender ? enumLabel(t, 'staffGender', person.gender) : '—'],
+    [t('staff.detail.mobile'), person.phoneE164 ? `+${person.phoneE164}` : '—'],
+    [t('staff.detail.commission'), `${fmt.number(Number(person.commissionPct))}%`],
+    [t('staff.detail.baseSalary'), fmt.aed(person.baseSalaryAed)],
+    [t('staff.detail.login'), linkedUser?.name ?? t('staff.detail.notLinked')],
   ]
 
   return (
@@ -109,18 +110,12 @@ export default async function StaffDetailPage({
             href={appPath(`/${slug}/staff`)}
             className="inline-flex items-center gap-1 transition-colors hover:text-fg"
           >
-            <ArrowLeft className="size-3.5" /> Staff
+            <ArrowLeft className="size-3.5 rtl:-scale-x-100" /> {t('staff.title')}
           </Link>
         }
         title={
           <span className="flex items-center gap-3">
-            <span
-              className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
-              style={{ background: person.color }}
-              aria-hidden
-            >
-              {initials(person.displayName)}
-            </span>
+            <Avatar name={person.displayName} src={person.photoUrl} size="lg" />
             {person.displayName}
           </span>
         }
@@ -149,112 +144,98 @@ export default async function StaffDetailPage({
         }
       />
       <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-          <div className="space-y-6 lg:col-span-4">
-            <Card>
-              <CardHeader
-                title="Profile"
-                action={
-                  !person.active ? (
-                    <Badge>Archived</Badge>
-                  ) : person.bookable ? (
-                    <Badge tone="success">Bookable</Badge>
-                  ) : (
-                    <Badge tone="warning">Not bookable</Badge>
-                  )
-                }
-              />
-              <CardBody>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-                  {details.map(([k, v]) => (
-                    <div key={k} className="contents">
-                      <dt className="text-muted">{k}</dt>
-                      <dd className="text-end tabular-nums">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardBody>
+        <Grid cols="col-2b">
+          <Stack>
+            <Card
+              title={t('staff.detail.profile')}
+              actions={
+                !person.active ? (
+                  <Pill>{t('staff.status.archived')}</Pill>
+                ) : person.bookable ? (
+                  <Pill tone="ok">{t('staff.status.bookable')}</Pill>
+                ) : (
+                  <Pill tone="warn">{t('staff.status.notBookable')}</Pill>
+                )
+              }
+            >
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                {details.map(([k, v]) => (
+                  <div key={k} className="contents">
+                    <dt className="crm-muted">{k}</dt>
+                    <dd className="crm-num text-end">{v}</dd>
+                  </div>
+                ))}
+              </dl>
             </Card>
-            <Card>
-              <CardHeader
-                title="Skills"
-                description={`${skillNames.length} of ${serviceList.length} services`}
-              />
-              <CardBody className="flex flex-wrap gap-1.5">
+            <Card
+              title={t('staff.detail.skills')}
+              sub={t('staff.detail.skillsOf', { count: skillNames.length, total: serviceList.length })}
+            >
+              <div className="flex flex-wrap gap-1.5">
                 {skillNames.length === 0 ? (
-                  <p className="text-sm text-muted">No services assigned yet.</p>
+                  <p className="crm-muted text-sm">{t('staff.detail.noSkills')}</p>
                 ) : (
-                  skillNames.map((s) => <Badge key={s.id}>{s.name}</Badge>)
-                )}
-              </CardBody>
-            </Card>
-          </div>
-
-          <div className="space-y-6 lg:col-span-8">
-            {manage && (
-              <Card>
-                <CardHeader
-                  title="Weekly schedule"
-                  description="Set a pattern and generate shifts for a date range. An end time before the start runs past midnight."
-                />
-                <CardBody>
-                  <PatternForm
-                    slug={slug}
-                    staffId={person.id}
-                    branches={data.branches.map((b) => ({ id: b.id, name: b.name }))}
-                    from={today}
-                    to={addDays(today, 27)}
-                    initial={initial}
-                  />
-                </CardBody>
-              </Card>
-            )}
-            <Card>
-              <CardHeader title="Upcoming shifts" description="Next 14 days" />
-              <div className="mt-4 border-t">
-                {data.upcoming.length === 0 ? (
-                  <EmptyState
-                    icon={<CalendarDays className="size-5" strokeWidth={1.5} />}
-                    title="No shifts scheduled"
-                    description={
-                      manage
-                        ? 'Generate shifts from the weekly schedule above.'
-                        : 'A manager hasn’t scheduled shifts yet.'
-                    }
-                  />
-                ) : (
-                  <ul className="divide-y" aria-label="Upcoming shifts">
-                    {data.upcoming.map((s) => {
-                      const date = businessDateOf(s.startsAt, cutoff)
-                      const overnight = dubaiParts(s.endsAt).date !== dubaiParts(s.startsAt).date
-                      const label = `${dayLabel(dubaiParts(s.startsAt).date)} ${dubaiTime(s.startsAt)}–${dubaiTime(s.endsAt)}`
-                      return (
-                        <li key={s.id} className="anim-fade-in flex items-center gap-4 px-5 py-3 sm:px-6">
-                          <div className="w-24 shrink-0 text-sm font-medium">
-                            {dayLabel(dubaiParts(s.startsAt).date)}
-                            {date === today && (
-                              <span className="ms-2 text-xs font-normal text-accent">Today</span>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1 text-sm tabular-nums">
-                            {dubaiTime(s.startsAt)}–{dubaiTime(s.endsAt)}
-                            {overnight && <span className="ms-1.5 text-xs text-muted">+1 day</span>}
-                            {data.branches.length > 1 && (
-                              <span className="block truncate text-xs text-muted">
-                                {branchName.get(s.branchId)}
-                              </span>
-                            )}
-                          </div>
-                          {manage && <DeleteShiftButton slug={slug} shiftId={s.id} label={label} />}
-                        </li>
-                      )
-                    })}
-                  </ul>
+                  skillNames.map((s) => <Pill key={s.id}>{s.name}</Pill>)
                 )}
               </div>
             </Card>
-          </div>
-        </div>
+          </Stack>
+
+          <Stack>
+            {manage && (
+              <Card title={t('staff.detail.weekly')} sub={t('staff.detail.weeklyHint')}>
+                <PatternForm
+                  slug={slug}
+                  staffId={person.id}
+                  branches={data.branches.map((b) => ({ id: b.id, name: b.name }))}
+                  from={today}
+                  to={addDays(today, 27)}
+                  initial={initial}
+                />
+              </Card>
+            )}
+            <Card title={t('staff.detail.upcoming')} sub={t('staff.detail.next14')} flush>
+              {data.upcoming.length === 0 ? (
+                <EmptyState
+                  icon={<CalendarDays className="size-5" strokeWidth={1.5} />}
+                  title={t('staff.detail.noShifts')}
+                  description={manage ? t('staff.detail.noShiftsManage') : t('staff.detail.noShiftsView')}
+                />
+              ) : (
+                <ul className="divide-y" aria-label={t('staff.detail.upcoming')}>
+                  {data.upcoming.map((s) => {
+                    const date = businessDateOf(s.startsAt, cutoff)
+                    const overnight = dubaiParts(s.endsAt).date !== dubaiParts(s.startsAt).date
+                    const day = fmt.weekdayDate(s.startsAt)
+                    const times = `${dubaiTime(s.startsAt)}–${dubaiTime(s.endsAt)}`
+                    return (
+                      <li key={s.id} className="anim-fade-in flex items-center gap-4 px-5 py-3 sm:px-6">
+                        <div className="w-28 shrink-0 text-sm font-medium">
+                          {day}
+                          {date === today && (
+                            <span className="ms-2 text-xs font-normal text-accent">{t('common.today')}</span>
+                          )}
+                        </div>
+                        <div className="crm-num min-w-0 flex-1 text-sm">
+                          {times}
+                          {overnight && (
+                            <span className="crm-muted ms-1.5 text-xs">{t('staff.detail.plusDay')}</span>
+                          )}
+                          {data.branches.length > 1 && (
+                            <span className="crm-muted block truncate text-xs">
+                              {branchName.get(s.branchId)}
+                            </span>
+                          )}
+                        </div>
+                        {manage && <DeleteShiftButton slug={slug} shiftId={s.id} label={`${day} ${times}`} />}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Card>
+          </Stack>
+        </Grid>
       </PageBody>
     </>
   )

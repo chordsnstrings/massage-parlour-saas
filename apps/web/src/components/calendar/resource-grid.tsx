@@ -11,8 +11,10 @@ import {
 } from '@dnd-kit/core'
 import { CheckCircle2, Clock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { enumLabel } from '@spa/core/i18n'
+import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
-import { minuteLabel, STATUS_LABEL } from './time'
+import { minuteLabel } from './time'
 import type { CalendarData, CalItem } from './types'
 
 /** Pixels per minute: 72 px per hour, 18 px per 15-minute row. */
@@ -122,6 +124,7 @@ export function ResourceGrid({
   onOpen: (bookingId: string) => void
   onMove: (item: CalItem, to: MoveTarget) => void
 }) {
+  const t = useT()
   const { gridStart, gridEnd } = data
   const height = (gridEnd - gridStart) * PPM
   const now = useNowMinute(data.dayStartMs)
@@ -177,14 +180,14 @@ export function ResourceGrid({
     return (
       <div className="rounded-xl border bg-surface px-6 py-14 text-center">
         <p className="text-[15px] font-medium">
-          {view === 'staff' ? 'No therapists to show' : 'No rooms set up yet'}
+          {view === 'staff' ? t('calendar.grid.noTherapists') : t('calendar.grid.noRooms')}
         </p>
         <p className="mt-1 text-sm text-muted">
           {data.ownOnly
-            ? 'Your login isn’t linked to a staff profile yet. Ask a manager to link it.'
+            ? t('calendar.grid.notLinked')
             : view === 'staff'
-              ? 'Add bookable therapists under Staff to see their columns here.'
-              : 'Add rooms under Services & rooms.'}
+              ? t('calendar.grid.addTherapists')
+              : t('calendar.grid.addRooms')}
         </p>
       </div>
     )
@@ -220,7 +223,7 @@ export function ResourceGrid({
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{c.name}</span>
                   <span className="block text-xs text-muted tabular">
-                    {count} {count === 1 ? 'booking' : 'bookings'}
+                    {t('calendar.grid.bookings', { count })}
                   </span>
                 </span>
               </div>
@@ -290,6 +293,7 @@ function Column({
   onSlot: (colId: string, startMin: number) => void
   onOpen: (bookingId: string) => void
 }) {
+  const t = useT()
   const { gridStart, gridEnd } = data
   const { setNodeRef, isOver } = useDroppable({ id: col.id })
   const lanes = useMemo(() => layoutLanes(items), [items])
@@ -339,7 +343,10 @@ function Column({
           key={m}
           type="button"
           onClick={() => onSlot(col.id, m)}
-          aria-label={`New booking ${view === 'staff' ? 'with' : 'in'} ${col.name} at ${minuteLabel(m)}`}
+          aria-label={t(view === 'staff' ? 'calendar.grid.newWith' : 'calendar.grid.newIn', {
+            name: col.name,
+            time: minuteLabel(m),
+          })}
           className="group absolute inset-x-1 z-[1] flex items-center rounded-md px-2 text-[11px] font-medium text-accent opacity-0 transition-opacity duration-150 hover:bg-accent-soft hover:opacity-100 focus-visible:bg-accent-soft focus-visible:opacity-100"
           style={{ top: (m - gridStart) * PPM + 1, height: ROW - 2 }}
         >
@@ -403,6 +410,7 @@ function Block({
   subtitle: string
   onOpen: (bookingId: string) => void
 }) {
+  const t = useT()
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `${item.id}:${colId}`,
     data: { itemId: item.id, colId },
@@ -428,7 +436,7 @@ function Block({
         type="button"
         {...listeners}
         {...attributes}
-        aria-roledescription={canDrag ? 'draggable booking' : undefined}
+        aria-roledescription={canDrag ? t('calendar.grid.draggable') : undefined}
         onClick={() => onOpen(item.bookingId)}
         className={cn(
           'flex size-full flex-col overflow-hidden rounded-lg border px-2.5 text-start text-fg transition-[box-shadow,transform] duration-150 ease-[var(--ease-calm)] hover:-translate-y-px hover:shadow-soft',
@@ -456,21 +464,21 @@ function Block({
           {item.status === 'pending' && <Clock className="size-3" strokeWidth={1.75} />}
           {compact && (
             <span className={cn('truncate font-medium text-fg', struck && 'line-through')}>
-              {item.clientName ?? 'Walk-in'}
+              {item.clientName ?? t('calendar.walkIn')}
             </span>
           )}
         </span>
         {!compact && (
           <>
             <span className={cn('truncate text-[13px] font-medium leading-5', struck && 'line-through')}>
-              {item.clientName ?? 'Walk-in'}
+              {item.clientName ?? t('calendar.walkIn')}
             </span>
             <span className="truncate text-xs text-muted">
               {item.serviceName}
               {subtitle ? ` · ${subtitle}` : ''}
             </span>
             {item.status !== 'confirmed' && height > 80 && (
-              <span className="mt-auto text-[11px] font-medium text-muted">{STATUS_LABEL[item.status]}</span>
+              <span className="mt-auto text-[11px] font-medium text-muted">{enumLabel(t, 'bookingStatus', item.status)}</span>
             )}
           </>
         )}

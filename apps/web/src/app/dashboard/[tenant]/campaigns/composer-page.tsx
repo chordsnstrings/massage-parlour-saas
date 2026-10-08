@@ -3,11 +3,12 @@ import { and, asc, eq, gte, isNull, or } from 'drizzle-orm'
 import { ArrowLeft, Users } from 'lucide-react'
 import Link from 'next/link'
 import { CampaignComposer, type ComposerInitial } from '@/components/campaigns/campaign-composer'
+import { Card, Note } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatAed, todayDubai } from '@/lib/utils'
+import { todayDubai } from '@/lib/utils'
 import type { MemberContext } from '@/server/access'
 import { publicSiteUrl } from '@/server/sites'
 import { dubaiLocalValue, segmentOptions } from './data'
@@ -25,9 +26,10 @@ export async function ComposerPage({
   initial: ComposerInitial
 }) {
   const slug = ctx.tenant.slug
+  const { t, fmt } = await getI18n()
   const base = appPath(`/${slug}/campaigns`)
   const data = await withTenant(ctx.tenant.id, async (tx) => ({
-    segments: await segmentOptions(tx),
+    segments: await segmentOptions(tx, t, fmt),
     promos: await tx
       .select()
       .from(promoCodes)
@@ -47,13 +49,13 @@ export async function ComposerPage({
   return (
     <>
       <PageHeader
-        eyebrow="Campaigns"
+        eyebrow={t('campaigns.composer.eyebrow')}
         title={title}
-        description="Messages are written for each client and wait in the WhatsApp queue — your team presses send for every one."
+        description={t('campaigns.composer.description')}
         actions={
           <Button variant="ghost" asChild>
             <Link href={campaignId ? `${base}/${campaignId}` : base}>
-              <ArrowLeft className="rtl:rotate-180" /> {campaignId ? 'Campaign' : 'Campaigns'}
+              <ArrowLeft className="rtl:rotate-180" /> {campaignId ? t('campaigns.composer.backCampaign') : t('campaigns.composer.backCampaigns')}
             </Link>
           </Button>
         }
@@ -63,11 +65,11 @@ export async function ComposerPage({
           <Card>
             <EmptyState
               icon={<Users className="size-5" strokeWidth={1.5} />}
-              title="Create a segment first"
-              description="A segment decides who receives the campaign — for example clients who haven't visited in 60 days."
+              title={t('campaigns.composer.noSegmentTitle')}
+              description={t('campaigns.composer.noSegmentBody')}
               action={
                 <Button asChild>
-                  <Link href={`${base}/segments/new?preset=winback`}>New segment</Link>
+                  <Link href={`${base}/segments/new?preset=winback`}>{t('campaigns.newSegment')}</Link>
                 </Button>
               }
             />
@@ -75,9 +77,9 @@ export async function ComposerPage({
         ) : (
           <>
             {segmentLost && (
-              <p role="status" className="mb-6 rounded-lg border border-dashed px-4 py-3 text-sm text-muted">
-                The segment this campaign was written for has been deleted. Choose who should receive it.
-              </p>
+              <div role="status">
+                <Note tone="warn">{t('campaigns.composer.segmentLost')}</Note>
+              </div>
             )}
             <CampaignComposer
               slug={slug}
@@ -86,7 +88,10 @@ export async function ComposerPage({
               promos={data.promos.map((p) => ({
                 id: p.id,
                 code: p.code,
-                label: p.kind === 'percent' ? `${Number(p.value)}% off` : `${formatAed(p.value)} off`,
+                label:
+                  p.kind === 'percent'
+                    ? t('campaigns.composer.percentOff', { value: fmt.number(Number(p.value)) })
+                    : t('campaigns.composer.amountOff', { amount: fmt.aed(p.value) }),
               }))}
               spaName={ctx.tenant.name}
               bookingLink={`${await publicSiteUrl(ctx.tenant)}/book?src=campaign`}

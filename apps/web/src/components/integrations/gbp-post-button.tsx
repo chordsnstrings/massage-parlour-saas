@@ -4,9 +4,11 @@ import { useTransition } from 'react'
 import { postToGoogleAction } from '@/app/api/integrations/google/actions'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 
 /** "Post to Google" for an approved AI-studio post (Google local post with a Book button). */
 export function GbpPostButton({ slug, postId }: { slug: string; postId: string }) {
+  const t = useT()
   const [pending, start] = useTransition()
   return (
     <Button
@@ -18,12 +20,12 @@ export function GbpPostButton({ slug, postId }: { slug: string; postId: string }
       onClick={() =>
         start(async () => {
           const r = await postToGoogleAction(slug, postId)
-          if (r?.ok) toast.success(r.message ?? 'Posted to Google')
-          else if (r) toast.error(r.error)
+          if (r?.ok) toast.success(resultText(t, r) ?? t('common.saved'))
+          else if (r) toast.error(resultText(t, r) ?? '')
         })
       }
     >
-      {!pending && <Send />} Post to Google
+      {!pending && <Send />} {t('marketing.postToGoogle')}
     </Button>
   )
 }

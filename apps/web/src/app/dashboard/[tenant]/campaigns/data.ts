@@ -1,6 +1,8 @@
 import { clients, segments, services, type Tx } from '@spa/db'
 import { asc, desc, eq, sql } from 'drizzle-orm'
-import { describeRule, type SegmentRule } from '@/components/campaigns/rules'
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
+import { summarizeRules } from '@/components/campaigns/rules'
 
 /** Active treatments for the "has booked" rule. */
 export async function serviceOptions(tx: Tx) {
@@ -24,18 +26,12 @@ export async function clientTags(tx: Tx) {
     .sort()
 }
 
-export const summarize = (rules: SegmentRule[], services: { id: string; name: string }[]) => {
-  const name = (id: string) => services.find((s) => s.id === id)?.name
-  return rules.length
-    ? rules.map((r) => describeRule(r, name)).join(' · ')
-    : 'Everyone who can receive marketing'
-}
-
 /** Saved segments with a one-line description of their rules. */
-export async function segmentOptions(tx: Tx) {
+export async function segmentOptions(tx: Tx, t: Translator, fmt: Format) {
   const rows = await tx.select().from(segments).orderBy(desc(segments.createdAt))
   const svc = await serviceOptions(tx)
-  return rows.map((s) => ({ ...s, summary: summarize(s.rules, svc) }))
+  const name = (id: string) => svc.find((s) => s.id === id)?.name
+  return rows.map((s) => ({ ...s, summary: summarizeRules(t, fmt, s.rules, name) }))
 }
 
 /** Dubai wall clock as a datetime-local value. */

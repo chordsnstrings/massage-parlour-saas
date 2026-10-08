@@ -10,16 +10,16 @@ import { audit } from '@/server/audit'
 
 const schema = z.object({
   reviewId: z.uuid(),
-  reply: z.string().trim().min(2, 'Write a reply first.').max(2000),
+  reply: z.string().trim().min(2, 'reviews.writeFirst').max(2000, 'reviews.tooLong'),
   /** draft = keep editing · approve = ready to post · post = approve + post to Google · manual = fallback flow */
   intent: z.enum(['draft', 'approve', 'post', 'manual']),
   posted: z.preprocess((v) => v === 'on', z.boolean()),
 })
 
 const MESSAGES = {
-  draft: 'Draft saved',
-  approve: 'Reply approved',
-  post: 'Reply posted on Google',
+  draft: 'reviews.draftSaved',
+  approve: 'reviews.replyApproved',
+  post: 'reviews.replyPosted',
 } as const
 
 /** Saves a review reply; `post` also publishes it to Google (the review ends `posted` or `failed` with the reason). */
@@ -47,7 +47,7 @@ export async function saveReviewReplyAction(
       .where(and(eq(reviews.tenantId, ctx.tenant.id), eq(reviews.id, reviewId)))
       .returning({ id: reviews.id, rating: reviews.rating }),
   )
-  if (!row) return fail('Review not found.')
+  if (!row) return fail('reviews.notFound')
   const result = intent === 'post' ? await postGbpReply({ tenantId: ctx.tenant.id, reviewId }) : null
   await audit({
     tenantId: ctx.tenant.id,
@@ -59,6 +59,6 @@ export async function saveReviewReplyAction(
   })
   revalidatePath(`/dashboard/${slug}/ai/reviews`)
   if (result && !result.ok) return fail(result.error)
-  if (intent === 'manual') return ok(posted ? 'Marked as replied' : 'Reply saved')
+  if (intent === 'manual') return ok(posted ? 'reviews.markedReplied' : 'reviews.replySaved')
   return ok(MESSAGES[intent])
 }

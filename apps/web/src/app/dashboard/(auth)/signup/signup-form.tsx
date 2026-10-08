@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { LogoInput } from '@/components/media/logo-input'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { useT } from '@/i18n/client'
 import { appPath } from '@/lib/paths'
 import { checkSlugAction, signupAction } from './actions'
 
@@ -18,6 +19,7 @@ export function SignupForm({
   signedIn: boolean
   logo: { label: string; hint: string; tooLarge: string }
 }) {
+  const t = useT()
   const [business, setBusiness] = useState('')
   const [slug, setSlug] = useState('')
   const [touched, setTouched] = useState(false)
@@ -46,28 +48,28 @@ export function SignupForm({
     <ActionForm action={signupAction} className="space-y-5">
       {!signedIn && (
         <>
-          <Field label="Your name" name="name">
+          <Field label={t('auth.yourName')} name="name">
             <Input id="name" name="name" autoComplete="name" required />
           </Field>
-          <Field label="Work email" name="email">
+          <Field label={t('auth.signup.workEmail')} name="email">
             <Input id="email" name="email" type="email" autoComplete="email" required />
           </Field>
-          <Field label="Password" name="password" hint="At least 10 characters.">
+          <Field label={t('auth.password')} name="password" hint={t('auth.passwordHint')}>
             <Input id="password" name="password" type="password" autoComplete="new-password" required />
           </Field>
         </>
       )}
-      <Field label="Spa name" name="businessName">
+      <Field label={t('auth.signup.spaName')} name="businessName">
         <Input
           id="businessName"
           name="businessName"
-          placeholder="Serenity Spa"
+          placeholder={t('auth.signup.spaPlaceholder')}
           value={business}
           onChange={(e) => setBusiness(e.target.value)}
           required
         />
       </Field>
-      <Field label="Web address" name="slug">
+      <Field label={t('auth.signup.address')} name="slug">
         <div className="flex items-stretch overflow-hidden rounded-lg border bg-surface transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
           {address.prefix && (
             <span className="flex items-center border-e bg-subtle px-3 text-sm text-muted">
@@ -103,7 +105,7 @@ export function SignupForm({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <Loader2 className="size-3.5 animate-spin" /> Checking…
+                <Loader2 className="size-3.5 animate-spin" /> {t('auth.signup.checking')}
               </motion.span>
             ) : status ? (
               <motion.span
@@ -114,7 +116,9 @@ export function SignupForm({
                 exit={{ opacity: 0 }}
               >
                 {status.ok ? <Check className="size-3.5" /> : <X className="size-3.5" />}
-                {status.ok ? `${address.prefix}${slug}${address.suffix} is available` : status.reason}
+                {status.ok
+                  ? t('auth.signup.available', { address: `${address.prefix}${slug}${address.suffix}` })
+                  : status.reason}
               </motion.span>
             ) : null}
           </AnimatePresence>
@@ -124,13 +128,13 @@ export function SignupForm({
         <LogoInput tooLargeText={logo.tooLarge} />
       </Field>
       <SubmitButton size="lg" className="w-full">
-        {signedIn ? 'Create spa' : 'Create account'}
+        {signedIn ? t('auth.signup.submitAdd') : t('auth.signup.submit')}
       </SubmitButton>
       {!signedIn && (
         <p className="text-center text-sm text-muted">
-          Already have an account?{' '}
+          {t('auth.signup.haveAccount')}{' '}
           <Link href={appPath('/login')} className="font-medium text-fg underline-offset-4 hover:underline">
-            Sign in
+            {t('auth.signup.signIn')}
           </Link>
         </p>
       )}

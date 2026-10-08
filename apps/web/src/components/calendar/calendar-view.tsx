@@ -1,28 +1,29 @@
 'use client'
 import { addDays } from '@spa/core'
-import { ChevronLeft, ChevronRight, Footprints, Loader2, Plus } from 'lucide-react'
-import { motion } from 'motion/react'
+import { ChevronLeft, ChevronRight, Footprints, Loader2, Plus, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { rescheduleAction } from '@/app/dashboard/[tenant]/calendar/actions'
+import { Grid, Note, Pill, Seg, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { Checkbox, Input, Select } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { toast } from '@/components/ui/toast'
-import { spring } from '@/lib/motion'
+import { resultText, useI18n } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import { Agenda } from './agenda'
 import { BookingSheet } from './booking-sheet'
 import { NewBookingSheet } from './new-booking-sheet'
 import { type MoveTarget, ResourceGrid } from './resource-grid'
-import { dateLabel, isHiddenStatus, minuteLabel } from './time'
+import { isHiddenStatus, minuteLabel } from './time'
 import type { CalendarData, CalItem } from './types'
 import { WalkInSheet, WalkInsPanel } from './walk-ins'
 
 export type Draft = { startMin?: number; staffId?: string; roomId?: string }
 
 export function CalendarView({ data }: { data: CalendarData }) {
+  const { t, fmt } = useI18n()
   const router = useRouter()
   const [navPending, startNav] = useTransition()
   const [view, setView] = useState(data.view)
@@ -107,72 +108,95 @@ export function CalendarView({ data }: { data: CalendarData }) {
         staffIds: to.staffIds,
         roomId: to.roomId,
       })
-      if (r?.ok) toast.success(r.message ?? 'Booking moved')
+      if (r?.ok) toast.success(resultText(t, r) ?? t('calendar.moved'))
       else {
         setItems(before)
-        toast.error(r?.error ?? 'Could not move the booking')
+        toast.error((r && resultText(t, r)) ?? t('calendar.moveFailed'))
       }
     },
-    [items, data.slug, data.date],
+    [items, data.slug, data.date, t],
   )
 
   const selected = openBooking ? items.filter((i) => i.bookingId === openBooking) : []
   const isToday = data.date === data.today
   const showWalkIns = data.rotation !== null
+  const dayLabel = fmt.weekdayDate(`${data.date}T12:00:00Z`)
+
+  // Day stats (crm-spec §5.2): booked vs shift hours, walk-ins, late-night bookings — from the loaded day only.
+  const stats = useMemo(() => {
+    const live = items.filter((i) => !isHiddenStatus(i.status))
+    const bookedMin = live.reduce((s, i) => s + (i.endMin - i.startMin) * Math.max(1, i.staffIds.length), 0)
+    const shiftMin = data.staff.reduce(
+      (s, p) =>
+        s +
+        p.shifts.reduce(
+          (a, sh) => a + Math.max(0, Math.min(sh.end, data.gridEnd) - Math.max(sh.start, data.gridStart)),
+          0,
+        ),
+      0,
+    )
+    return {
+      bookings: new Set(live.map((i) => i.bookingId)).size,
+      bookedH: Math.round(bookedMin / 60),
+      shiftH: Math.round(shiftMin / 60),
+      walkIns: new Set(live.filter((i) => i.source === 'walk_in').map((i) => i.bookingId)).size,
+      late: new Set(live.filter((i) => i.startMin >= 20 * 60).map((i) => i.bookingId)).size,
+    }
+  }, [items, data.staff, data.gridStart, data.gridEnd])
 
   return (
     <>
       <PageHeader
-        eyebrow={isToday ? 'Today' : undefined}
-        title="Calendar"
-        description={`${dateLabel(data.date)}${data.ownOnly ? ' · your bookings' : ''}`}
+        title={t('calendar.title')}
+        description={data.ownOnly ? `${dayLabel} · ${t('calendar.yourBookings')}` : dayLabel}
         actions={
           data.canManage ? (
             <>
               {showWalkIns && (
                 <Button variant="secondary" onClick={() => setWalkInOpen(true)}>
-                  <Footprints /> Walk-in
+                  <Footprints /> {t('calendar.walkIn')}
                 </Button>
               )}
               <Button onClick={() => openNew({})}>
-                <Plus /> New booking
+                <Plus /> {t('calendar.newBooking')}
               </Button>
             </>
           ) : null
         }
       />
-      <PageBody className="space-y-5 sm:space-y-6">
+      <PageBody className="space-y-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
           <div className="flex items-center gap-1 rounded-xl border bg-surface p-1">
             <Button variant="ghost" size="icon" className="size-9" asChild>
-              <Link href={href({ date: addDays(data.date, -1) })} aria-label="Previous day" scroll={false}>
-                <ChevronLeft />
+              <Link href={href({ date: addDays(data.date, -1) })} aria-label={t('calendar.prevDay')} scroll={false}>
+                <ChevronLeft className="rtl:-scale-x-100" />
               </Link>
             </Button>
             <Button variant={isToday ? 'secondary' : 'ghost'} size="sm" className="h-9 px-3" asChild>
               <Link href={href({ date: data.today })} scroll={false}>
-                Today
+                {t('common.today')}
               </Link>
             </Button>
             <Button variant="ghost" size="icon" className="size-9" asChild>
-              <Link href={href({ date: addDays(data.date, 1) })} aria-label="Next day" scroll={false}>
-                <ChevronRight />
+              <Link href={href({ date: addDays(data.date, 1) })} aria-label={t('calendar.nextDay')} scroll={false}>
+                <ChevronRight className="rtl:-scale-x-100" />
               </Link>
             </Button>
           </div>
+          {isToday && <Pill tone="acc">{t('calendar.todayPill', { date: dayLabel })}</Pill>}
           <Input
             type="date"
-            aria-label="Go to date"
+            aria-label={t('calendar.goToDate')}
             value={data.date}
             onChange={(e) => e.target.value && go({ date: e.target.value })}
-            className="h-11 w-auto min-w-[9.5rem] tabular"
+            className="h-10 w-auto min-w-[9.5rem] tabular"
           />
           {data.branches.length > 1 && (
             <Select
-              aria-label="Branch"
+              aria-label={t('calendar.branch')}
               value={data.branchId}
               onChange={(e) => go({ branch: e.target.value })}
-              className="h-11 w-auto min-w-40"
+              className="h-10 w-auto min-w-40"
             >
               {data.branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -181,42 +205,36 @@ export function CalendarView({ data }: { data: CalendarData }) {
               ))}
             </Select>
           )}
-          {navPending && <Loader2 className="size-4 animate-spin text-muted" aria-label="Loading" />}
+          {navPending && <Loader2 className="size-4 animate-spin text-muted" aria-label={t('calendar.loading')} />}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ms-auto">
             {!data.ownOnly && (
-              <fieldset className="hidden items-center rounded-xl border bg-surface p-1 md:flex">
-                <legend className="sr-only">Calendar columns</legend>
-                {(['staff', 'rooms'] as const).map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={view === v}
-                    onClick={() => setView(v)}
-                    className={cn(
-                      'relative h-9 rounded-lg px-3.5 text-sm font-medium transition-colors',
-                      view === v ? 'text-fg' : 'text-muted hover:text-fg',
-                    )}
-                  >
-                    {view === v && (
-                      <motion.span
-                        layoutId="cal-view"
-                        transition={spring}
-                        className="absolute inset-0 rounded-lg bg-subtle"
-                      />
-                    )}
-                    <span className="relative">{v === 'staff' ? 'Therapists' : 'Rooms'}</span>
-                  </button>
-                ))}
-              </fieldset>
+              <Seg
+                className="hidden md:inline-flex"
+                label={t('calendar.columns')}
+                value={view}
+                onChange={(v) => setView(v as 'staff' | 'rooms')}
+                items={[
+                  { value: 'staff', label: t('calendar.therapists') },
+                  { value: 'rooms', label: t('calendar.rooms') },
+                ]}
+              />
             )}
-            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-muted">
+            <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-muted">
               <Checkbox checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
-              Show cancelled{hiddenCount ? ` (${hiddenCount})` : ''}
+              {hiddenCount
+                ? t('calendar.showCancelledCount', { count: hiddenCount })
+                : t('calendar.showCancelled')}
             </label>
           </div>
         </div>
 
-        <div className={cn('grid gap-6', showWalkIns && 'xl:grid-cols-[minmax(0,1fr)_17.5rem]')}>
+        {data.canManage && (
+          <Note tone="acc" icon={<ShieldCheck aria-hidden />}>
+            {t('calendar.reservedNote')}
+          </Note>
+        )}
+
+        <div className={cn('grid gap-4', showWalkIns && 'xl:grid-cols-[minmax(0,1fr)_16rem]')}>
           <div className="min-w-0">
             <div className="hidden md:block">
               <ResourceGrid
@@ -250,6 +268,31 @@ export function CalendarView({ data }: { data: CalendarData }) {
             </div>
           )}
         </div>
+
+        <Grid cols="g3">
+          <Stat
+            label={t('calendar.stats.booked')}
+            value={fmt.number(stats.bookings)}
+            change={{
+              text: stats.shiftH
+                ? t('calendar.stats.bookedSub', {
+                    booked: fmt.number(stats.bookedH),
+                    total: fmt.number(stats.shiftH),
+                  })
+                : t('calendar.stats.noShifts'),
+            }}
+          />
+          <Stat
+            label={t('calendar.stats.walkIns')}
+            value={fmt.number(stats.walkIns)}
+            change={{ text: t('calendar.stats.walkInsSub') }}
+          />
+          <Stat
+            label={t('calendar.stats.lateNight')}
+            value={fmt.number(stats.late)}
+            change={{ text: t('calendar.stats.lateNightSub') }}
+          />
+        </Grid>
       </PageBody>
 
       {data.canManage && (

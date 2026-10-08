@@ -8,15 +8,6 @@ export const dubaiTime = (d: Date) => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 }
 
-/** "Thu 8 Oct" for a Dubai date string. */
-export const dayLabel = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  })
-
 /** Members of the tenant with their names (names live in the platform-scoped auth table). */
 export async function memberOptions(tenantId: string) {
   const rows = await withTenant(tenantId, (tx) =>
@@ -39,7 +30,7 @@ export async function memberOptions(tenantId: string) {
   const byId = new Map(people.map((p) => [p.id, p]))
   return rows.map((r) => ({
     id: r.id,
-    name: byId.get(r.userId)?.name ?? 'Unknown',
+    name: byId.get(r.userId)?.name ?? '—',
     email: byId.get(r.userId)?.email ?? '',
   }))
 }

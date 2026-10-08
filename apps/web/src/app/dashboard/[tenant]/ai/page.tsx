@@ -4,51 +4,27 @@ import { ArrowRight, Image as ImageIcon, MessageCircle, Search, Sparkles, Star, 
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, ListRow, Meter, Pill } from '@/components/crm'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
-import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { saveAgentAction, saveBrandAction } from './actions'
 
-export const metadata: Metadata = { title: 'AI studio' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('ai.studio') }
+}
 
 const AGENTS = [
-  {
-    key: 'dm_agent',
-    icon: MessageCircle,
-    name: 'Instagram receptionist',
-    text: 'Answers DMs about prices, hours and location, and books appointments from chat.',
-  },
-  {
-    key: 'content_agent',
-    icon: ImageIcon,
-    name: 'Instagram content',
-    text: 'Drafts posts in English and Arabic with on-brand images, ready for your approval.',
-  },
-  {
-    key: 'review_agent',
-    icon: Star,
-    name: 'Google review replies',
-    text: 'Drafts warm, personal replies to every review — you approve before they go out.',
-  },
-  {
-    key: 'seo_agent',
-    icon: Search,
-    name: 'SEO',
-    text: 'Writes page titles and descriptions so people nearby find your website.',
-  },
-  {
-    key: 'slot_filler',
-    icon: Timer,
-    name: 'Slot filler',
-    text: 'Spots quiet hours and prepares WhatsApp offers for past clients to fill them.',
-  },
+  { key: 'dm_agent', icon: MessageCircle },
+  { key: 'content_agent', icon: ImageIcon },
+  { key: 'review_agent', icon: Star },
+  { key: 'seo_agent', icon: Search },
+  { key: 'slot_filler', icon: Timer },
 ] as const
 
 const dubaiMonthStart = () => {
@@ -73,160 +49,143 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
     brand: (await tx.select().from(brandProfiles))[0],
   }))
   const budget = Number(ctx.tenant.aiBudgetUsd)
-  const pct = Math.min(100, Math.round((spent / Math.max(budget, 0.01)) * 100))
   const manage = can(ctx, 'ai.manage')
+  const { t, fmt } = await getI18n()
+  const usd = (v: number) => fmt.number(Math.round(v * 100) / 100)
   return (
     <>
       <PageHeader
         eyebrow={
           <span className="inline-flex items-center gap-1.5">
-            <Sparkles className="size-3.5" /> AI studio
+            <Sparkles className="size-3.5" /> {t('ai.studio')}
           </span>
         }
-        title="Your AI team"
-        description="Helpers that answer clients, create content and fill quiet hours — always in your voice, and nothing goes out without the rules you set."
+        title={t('ai.title')}
+        description={t('ai.description')}
         actions={
           <Button asChild>
             <Link href={appPath(`/${slug}/ai/try`)}>
-              Try the receptionist <ArrowRight />
+              {t('ai.tryCta')} <ArrowRight className="rtl:rotate-180" />
             </Link>
           </Button>
         }
       />
       <PageBody>
-        <div className="grid gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-8">
-            <CardHeader title="Shortcuts" />
-            <CardBody className="grid gap-3 sm:grid-cols-3">
-              {[
-                { href: `/${slug}/ai/try`, label: 'Chat with your receptionist', icon: MessageCircle },
-                { href: `/${slug}/ai/content`, label: 'Instagram drafts', icon: ImageIcon },
-                { href: `/${slug}/ai/reviews`, label: 'Review replies', icon: Star },
-              ].map((l) => (
-                <Link
-                  key={l.href}
-                  href={appPath(l.href)}
-                  className="group flex items-center gap-3 rounded-xl border p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-soft"
-                >
-                  <span className="grid size-9 place-items-center rounded-lg bg-accent-soft text-accent">
-                    <l.icon className="size-4" strokeWidth={1.75} />
-                  </span>
-                  <span className="text-sm font-medium">{l.label}</span>
-                </Link>
-              ))}
-            </CardBody>
+        <Grid cols="col-2">
+          <Card title={t('ai.shortcuts')}>
+            {[
+              { href: `/${slug}/ai/try`, label: t('ai.shortcutChat'), icon: MessageCircle },
+              { href: `/${slug}/ai/content`, label: t('ai.shortcutPosts'), icon: ImageIcon },
+              { href: `/${slug}/ai/reviews`, label: t('ai.shortcutReviews'), icon: Star },
+            ].map((l) => (
+              <ListRow
+                key={l.href}
+                href={appPath(l.href)}
+                icon={<l.icon className="size-4" strokeWidth={1.75} />}
+                title={l.label}
+                end={<ArrowRight className="size-4 rtl:rotate-180" />}
+              />
+            ))}
           </Card>
-          <Card className="lg:col-span-4">
-            <CardHeader title="This month" description="AI usage against your plan's budget." />
-            <CardBody className="space-y-3">
-              <div className="flex items-baseline justify-between">
-                <span className="tabular text-2xl font-semibold tracking-tight">${spent.toFixed(2)}</span>
-                <span className="text-sm text-muted">of ${budget.toFixed(0)}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
-                <div
-                  className="h-full rounded-full bg-accent transition-[width] duration-700"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </CardBody>
+          <Card title={t('ai.month')} sub={t('ai.monthSub')}>
+            <div className="mb-3 flex items-baseline justify-between">
+              <span className="crm-num text-2xl font-semibold">{t('ai.usd', { v: usd(spent) })}</span>
+              <span className="crm-muted text-sm">{t('ai.ofBudget', { v: fmt.number(Math.round(budget)) })}</span>
+            </div>
+            <Meter
+              label={t('ai.usage')}
+              value={spent}
+              max={Math.max(budget, 0.01)}
+              tone={spent >= budget ? 'bad' : spent >= budget * 0.8 ? 'warn' : undefined}
+            />
           </Card>
-        </div>
-        <Stagger className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        </Grid>
+        <Grid cols="g3">
           {AGENTS.map((a) => {
             const s = settings.find((x) => x.agentKey === a.key)
+            const name = t(`ai.agent.${a.key}.name`)
+            const text = t(`ai.agent.${a.key}.text`)
             return (
-              <StaggerItem key={a.key}>
-                <Card className="flex h-full flex-col p-5 sm:p-6">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="grid size-10 place-items-center rounded-xl bg-subtle text-fg">
-                      <a.icon className="size-[18px]" strokeWidth={1.5} />
-                    </span>
-                    <Badge tone={s?.enabled ? 'success' : 'neutral'}>
-                      {s?.enabled ? (s.mode === 'autopilot' ? 'Autopilot' : 'Needs approval') : 'Off'}
-                    </Badge>
+              <Card key={a.key} as="article" className="flex h-full flex-col">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="crm-ricon" aria-hidden>
+                    <a.icon className="size-[18px]" strokeWidth={1.5} />
+                  </span>
+                  <Pill tone={s?.enabled ? 'ok' : 'neutral'} dot>
+                    {s?.enabled
+                      ? s.mode === 'autopilot'
+                        ? t('ai.statusAutopilot')
+                        : t('ai.statusApproval')
+                      : t('ai.statusOff')}
+                  </Pill>
+                </div>
+                <h3 className="mt-3 font-semibold">{name}</h3>
+                <p className="crm-muted mt-1 flex-1 text-sm">{text}</p>
+                {manage && (
+                  <div className="mt-4">
+                    <FormSheet
+                      title={name}
+                      description={text}
+                      action={saveAgentAction.bind(null, slug)}
+                      trigger={
+                        <Button variant="secondary" size="sm">
+                          {t('ai.configure')}
+                        </Button>
+                      }
+                    >
+                      <input type="hidden" name="agentKey" value={a.key} />
+                      <label className="flex items-center gap-2.5 text-sm">
+                        <Checkbox name="enabled" defaultChecked={s?.enabled ?? false} /> {t('ai.switchedOn')}
+                      </label>
+                      <Field label={t('ai.mode')} name="mode">
+                        <Select id="mode" name="mode" defaultValue={s?.mode ?? 'approve'}>
+                          <option value="approve">{t('ai.modeApprove')}</option>
+                          <option value="autopilot">{t('ai.modeAutopilot')}</option>
+                        </Select>
+                      </Field>
+                      <Field label={t('ai.tone')} name="tone">
+                        <Input id="tone" name="tone" defaultValue={s?.tone ?? 'warm, calm and professional'} />
+                      </Field>
+                      <Field label={t('ai.rules')} name="rules" hint={t('ai.rulesHint')}>
+                        <Textarea id="rules" name="rules" defaultValue={s?.rules ?? ''} />
+                      </Field>
+                    </FormSheet>
                   </div>
-                  <h3 className="mt-4 font-semibold tracking-tight">{a.name}</h3>
-                  <p className="mt-1.5 flex-1 text-sm text-muted">{a.text}</p>
-                  {manage && (
-                    <div className="mt-5">
-                      <FormSheet
-                        title={a.name}
-                        description={a.text}
-                        action={saveAgentAction.bind(null, slug)}
-                        trigger={
-                          <Button variant="secondary" size="sm">
-                            Configure
-                          </Button>
-                        }
-                      >
-                        <input type="hidden" name="agentKey" value={a.key} />
-                        <label className="flex items-center gap-2.5 text-sm">
-                          <Checkbox name="enabled" defaultChecked={s?.enabled ?? false} /> Switched on
-                        </label>
-                        <Field label="Mode" name="mode">
-                          <Select id="mode" name="mode" defaultValue={s?.mode ?? 'approve'}>
-                            <option value="approve">Draft — a person approves everything</option>
-                            <option value="autopilot">Autopilot — send within the rules</option>
-                          </Select>
-                        </Field>
-                        <Field label="Tone" name="tone">
-                          <Input
-                            id="tone"
-                            name="tone"
-                            defaultValue={s?.tone ?? 'warm, calm and professional'}
-                          />
-                        </Field>
-                        <Field
-                          label="Extra rules"
-                          name="rules"
-                          hint="e.g. Always mention free parking. Never offer discounts."
-                        >
-                          <Textarea id="rules" name="rules" defaultValue={s?.rules ?? ''} />
-                        </Field>
-                      </FormSheet>
-                    </div>
-                  )}
-                </Card>
-              </StaggerItem>
+                )}
+              </Card>
             )
           })}
-        </Stagger>
+        </Grid>
         {manage && (
-          <Card>
-            <CardHeader title="Brand voice" description="How every AI helper should sound." />
-            <CardBody>
-              <ActionForm action={saveBrandAction.bind(null, slug)} className="grid gap-5 md:grid-cols-3">
-                <Field label="Voice" name="voice" className="md:col-span-3">
-                  <Textarea
-                    id="voice"
-                    name="voice"
-                    defaultValue={
-                      brand?.voice ?? 'Warm, calm and welcoming. Short sentences. No medical claims.'
-                    }
-                  />
-                </Field>
-                <Field label="Always" name="dos" hint="One per line.">
-                  <Textarea
-                    id="dos"
-                    name="dos"
-                    defaultValue={brand?.dos.join('\n') ?? ''}
-                    placeholder="Mention our sea view"
-                  />
-                </Field>
-                <Field label="Never" name="donts" hint="One per line.">
-                  <Textarea
-                    id="donts"
-                    name="donts"
-                    defaultValue={brand?.donts.join('\n') ?? ''}
-                    placeholder="Use slang"
-                  />
-                </Field>
-                <div className="flex items-end justify-end">
-                  <SubmitButton>Save voice</SubmitButton>
-                </div>
-              </ActionForm>
-            </CardBody>
+          <Card title={t('ai.brand')} sub={t('ai.brandSub')}>
+            <ActionForm action={saveBrandAction.bind(null, slug)} className="grid gap-5 md:grid-cols-3">
+              <Field label={t('ai.voice')} name="voice" className="md:col-span-3">
+                <Textarea
+                  id="voice"
+                  name="voice"
+                  defaultValue={brand?.voice ?? 'Warm, calm and welcoming. Short sentences. No medical claims.'}
+                />
+              </Field>
+              <Field label={t('ai.always')} name="dos" hint={t('ai.onePerLine')}>
+                <Textarea
+                  id="dos"
+                  name="dos"
+                  defaultValue={brand?.dos.join('\n') ?? ''}
+                  placeholder={t('ai.alwaysPh')}
+                />
+              </Field>
+              <Field label={t('ai.never')} name="donts" hint={t('ai.onePerLine')}>
+                <Textarea
+                  id="donts"
+                  name="donts"
+                  defaultValue={brand?.donts.join('\n') ?? ''}
+                  placeholder={t('ai.neverPh')}
+                />
+              </Field>
+              <div className="flex items-end justify-end">
+                <SubmitButton>{t('ai.saveVoice')}</SubmitButton>
+              </div>
+            </ActionForm>
           </Card>
         )}
       </PageBody>

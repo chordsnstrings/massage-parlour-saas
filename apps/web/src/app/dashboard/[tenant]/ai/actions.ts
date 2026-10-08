@@ -13,17 +13,17 @@ import { canonicalUrls } from '@/server/origin'
 const AGENTS = ['dm_agent', 'content_agent', 'review_agent', 'seo_agent', 'slot_filler'] as const
 const aiError = (e: unknown) => {
   const msg = e instanceof Error ? e.message : String(e)
-  if (/budget/i.test(msg)) return 'Your monthly AI budget is used up. Ask your account manager to raise it.'
-  if (/disabled/i.test(msg)) return 'This AI feature is switched off by the platform.'
-  return 'The AI service is busy — please try again in a moment.'
+  if (/budget/i.test(msg)) return 'ai.errBudget' as const
+  if (/disabled/i.test(msg)) return 'ai.errDisabled' as const
+  return 'ai.errBusy' as const
 }
 
 const settingsSchema = z.object({
   agentKey: z.enum(AGENTS),
   enabled: z.preprocess((v) => v === 'on', z.boolean()),
   mode: z.enum(['approve', 'autopilot']),
-  tone: z.string().trim().min(3).max(120),
-  rules: z.string().trim().max(1000).optional(),
+  tone: z.string().trim().min(3, 'ai.errTone').max(120, 'ai.errTone'),
+  rules: z.string().trim().max(1000, 'ai.errRules').optional(),
 })
 
 export async function saveAgentAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -49,7 +49,7 @@ export async function saveAgentAction(slug: string, _p: ActionResult, fd: FormDa
     data: d,
   })
   revalidatePath(`/dashboard/${slug}/ai`)
-  return ok('Saved')
+  return ok('ai.saved')
 }
 
 export async function saveBrandAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -57,9 +57,9 @@ export async function saveBrandAction(slug: string, _p: ActionResult, fd: FormDa
   if (error) return fail(error)
   const parsed = z
     .object({
-      voice: z.string().trim().min(10).max(600),
-      dos: z.string().max(800).optional(),
-      donts: z.string().max(800).optional(),
+      voice: z.string().trim().min(10, 'ai.errVoice').max(600, 'ai.errVoice'),
+      dos: z.string().max(800, 'ai.errList').optional(),
+      donts: z.string().max(800, 'ai.errList').optional(),
     })
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
@@ -76,7 +76,7 @@ export async function saveBrandAction(slug: string, _p: ActionResult, fd: FormDa
       .onConflictDoUpdate({ target: brandProfiles.tenantId, set: v }),
   )
   revalidatePath(`/dashboard/${slug}/ai`)
-  return ok('Brand voice saved')
+  return ok('ai.voiceSaved')
 }
 
 export type ChatTurn = { from: 'customer' | 'spa'; text: string }
@@ -86,7 +86,7 @@ export async function tryDmAction(slug: string, history: ChatTurn[], text: strin
   const { ctx, error } = await guard(slug, 'ai.approve')
   if (error) return { ok: false as const, error }
   const incoming = text.trim().slice(0, 1000)
-  if (!incoming) return { ok: false as const, error: 'Type a message' }
+  if (!incoming) return { ok: false as const, error: 'ai.typeMessage' }
   try {
     const r = await runDmTurn({
       tenantId: ctx.tenant.id,
@@ -128,7 +128,7 @@ export async function draftPostAction(slug: string, _p: ActionResult, fd: FormDa
   await persistPostImages(ctx.tenant.id, slug, post, ctx.user.id)
   revalidatePath(`/dashboard/${slug}/ai/content`)
   revalidatePath(`/dashboard/${slug}/media`)
-  return ok('Draft ready for review')
+  return ok('ai.draftReady')
 }
 
 /**
@@ -211,10 +211,10 @@ export async function setPostStatusAction(
   revalidatePath(`/dashboard/${slug}/ai/content`)
   return ok(
     status === 'scheduled'
-      ? 'Approved and scheduled'
+      ? 'ai.approvedScheduled'
       : status === 'published'
-        ? 'Marked as posted'
-        : 'Moved back to drafts',
+        ? 'ai.markedPosted'
+        : 'ai.backToDrafts',
   )
 }
 
@@ -241,7 +241,7 @@ export async function addReviewAction(slug: string, _p: ActionResult, fd: FormDa
     }),
   )
   revalidatePath(`/dashboard/${slug}/ai/reviews`)
-  return ok('Review added')
+  return ok('ai.reviewAdded')
 }
 
 export async function draftReplyAction(slug: string, reviewId: string): Promise<ActionResult> {
@@ -254,5 +254,5 @@ export async function draftReplyAction(slug: string, reviewId: string): Promise<
     return fail(aiError(e))
   }
   revalidatePath(`/dashboard/${slug}/ai/reviews`)
-  return ok('Reply drafted')
+  return ok('ai.replyDrafted')
 }

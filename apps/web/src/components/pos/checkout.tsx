@@ -1,4 +1,5 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n/labels'
 import { Check, Gift, Heart, Loader2, Plus, Search, Trash2, UserPlus, UserRound, X } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useRouter } from 'next/navigation'
@@ -8,10 +9,11 @@ import {
   createSaleAction,
   searchPosClientsAction,
 } from '@/app/dashboard/[tenant]/sales/actions'
+import { Card } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader } from '@/components/ui/card'
 import { Checkbox, Input, Label, Select } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { resultText, useI18n } from '@/i18n/client'
 import { cn, formatAed } from '@/lib/utils'
 
 export type CheckoutLine = {
@@ -35,22 +37,14 @@ const PREPAID = new Set(['package', 'gift_card'])
 type Tip = { key: string; staffId: string; amount: string; method: Method }
 type ClientHit = { id: string; name: string; phone: string | null }
 
-const METHODS: { value: Method; label: string }[] = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'card_terminal', label: 'Card terminal' },
-  { value: 'bank_transfer', label: 'Bank transfer' },
-  { value: 'other', label: 'Other' },
-]
-const PAY_METHODS: { value: PayMethod; label: string }[] = [
-  ...METHODS,
-  { value: 'gift_card', label: 'Gift card' },
-]
+const METHODS: Method[] = ['cash', 'card_terminal', 'bank_transfer', 'other']
+const PAY_METHODS: PayMethod[] = [...METHODS, 'gift_card']
 
 const f = (v: string | number) => {
   const n = typeof v === 'number' ? v : Number.parseFloat(v.replace(/,/g, ''))
   return Number.isFinite(n) ? Math.round(n * 100) : 0
 }
-const fmt = (fils: number) => formatAed(fils / 100)
+const aed = (fils: number) => formatAed(fils / 100)
 const plain = (fils: number) => (fils / 100).toFixed(2).replace(/\.00$/, '')
 let seq = 0
 const newKey = () => `k${Date.now().toString(36)}${(seq++).toString(36)}`
@@ -80,6 +74,12 @@ export function Checkout({
 }) {
   const router = useRouter()
   const reduce = useReducedMotion()
+  const { t } = useI18n()
+  const methodLabel = (m: PayMethod) => enumLabel(t, 'paymentMethodKind', m)
+  const fieldError = (key: string) => {
+    const raw = errors[key]
+    return raw ? (t.maybe(raw) ?? raw) : undefined
+  }
   const [client, setClient] = useState<ClientHit | null>(initialClient)
   const [newClient, setNewClient] = useState<{ name: string; phone: string } | null>(null)
   const [lines, setLines] = useState<CheckoutLine[]>(initialLines)
@@ -205,7 +205,7 @@ export function Checkout({
     ])
   const addPayment = () => {
     const used = new Set(payments.map((p) => p.method))
-    const method = METHODS.find((m) => !used.has(m.value))?.value ?? 'other'
+    const method = METHODS.find((m) => !used.has(m)) ?? 'other'
     setPayments((ps) => [
       ...ps,
       { key: newKey(), method, amount: remaining > 0 ? plain(remaining) : '', reference: '' },
@@ -245,11 +245,11 @@ export function Checkout({
           .map((t) => ({ staffId: t.staffId, amountAed: f(t.amount) / 100, method: t.method })),
       })
       if (r?.ok) {
-        toast.success(r.message ?? 'Sale recorded')
+        toast.success(resultText(t, r) || t('sales.toast.recordedPlain'))
         router.push(`${receiptBase}/${r.data?.id as string}`)
       } else if (r) {
         setErrors(r.fieldErrors ?? {})
-        toast.error(r.error)
+        toast.error(resultText(t, r) ?? t('errors.generic'))
       }
     })
   }
@@ -264,15 +264,14 @@ export function Checkout({
       }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-      <div className="min-w-0 space-y-6 lg:col-span-7">
+    <div className="grid gap-[var(--crm-grid-gap)] lg:grid-cols-12">
+      <div className="crm-stack min-w-0 lg:col-span-7">
         {/* Client */}
-        <Card>
-          <CardHeader
-            title="Client"
-            description={bookingId ? 'From the booking' : 'Search, add, or leave as walk-in'}
-          />
-          <div className="px-5 pt-4 pb-5 sm:px-6 sm:pb-6">
+        <Card
+          title={t('sales.checkout.client')}
+          sub={bookingId ? t('sales.checkout.fromBooking') : t('sales.checkout.clientHint')}
+        >
+          <div>
             {client ? (
               <div className="flex items-center justify-between gap-3 rounded-xl border bg-subtle/50 px-4 py-3">
                 <span className="flex min-w-0 items-center gap-3">
@@ -289,7 +288,7 @@ export function Checkout({
                     type="button"
                     onClick={() => setClient(null)}
                     className="grid size-11 place-items-center rounded-lg text-muted hover:bg-subtle hover:text-fg"
-                    aria-label="Change client"
+                    aria-label={t('sales.checkout.changeClient')}
                   >
                     <X className="size-4" strokeWidth={1.5} />
                   </button>
@@ -298,18 +297,18 @@ export function Checkout({
             ) : newClient ? (
               <div className="space-y-4 rounded-xl border p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-medium">New client</p>
+                  <p className="text-[13px] font-medium">{t('sales.checkout.newClient')}</p>
                   <button
                     type="button"
                     onClick={() => setNewClient(null)}
                     className="min-h-9 text-[13px] font-medium text-accent hover:underline"
                   >
-                    Search instead
+                    {t('sales.checkout.searchInstead')}
                   </button>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label htmlFor="ncName">Name</Label>
+                    <Label htmlFor="ncName">{t('sales.checkout.name')}</Label>
                     <Input
                       id="ncName"
                       value={newClient.name}
@@ -317,12 +316,12 @@ export function Checkout({
                       autoComplete="off"
                       className="h-11"
                     />
-                    {errors['newClient.name'] && (
-                      <p className="text-[13px] text-danger">{errors['newClient.name']}</p>
+                    {fieldError('newClient.name') && (
+                      <p className="text-[13px] text-danger">{fieldError('newClient.name')}</p>
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="ncPhone">Mobile</Label>
+                    <Label htmlFor="ncPhone">{t('sales.checkout.mobile')}</Label>
                     <Input
                       id="ncPhone"
                       value={newClient.phone}
@@ -345,36 +344,42 @@ export function Checkout({
         </Card>
 
         {/* Items */}
-        <Card>
-          <CardHeader
-            title="Items"
-            description={
-              lines.length ? `${lines.length} ${lines.length === 1 ? 'item' : 'items'}` : 'Add what was sold'
-            }
-          />
-          <ul className="mt-4 divide-y border-t">
+        <Card
+          flush
+          title={t('sales.checkout.items')}
+          sub={
+            lines.length
+              ? t('sales.checkout.itemCount', { count: lines.length })
+              : t('sales.checkout.addWhatSold')
+          }
+        >
+          <ul className="divide-y border-t border-[var(--crm-line)]">
             <AnimatePresence initial={false}>
               {lines.map((l, i) => (
                 <motion.li key={l.key} {...rowAnim} className="overflow-hidden">
-                  <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-12 sm:items-end sm:px-6">
+                  <div className="grid grid-cols-2 gap-3 px-[var(--crm-pad-card)] py-3 sm:grid-cols-12 sm:items-end">
                     <div className="col-span-2 space-y-1.5 sm:col-span-12">
                       {l.kind === 'service' || l.kind === 'product' || l.kind === 'package' ? (
                         <p className="flex items-center justify-between gap-3 text-sm font-medium">
                           <span className="truncate">{l.description}</span>
                           <span className="shrink-0 tabular">
-                            {fmt(Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed)))}
+                            {aed(Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed)))}
                           </span>
                         </p>
                       ) : (
                         <>
                           <Label htmlFor={`desc-${l.key}`}>
-                            {l.kind === 'gift_card' ? 'Gift card' : `Item ${i + 1}`}
+                            {l.kind === 'gift_card'
+                              ? t('sales.checkout.giftCard')
+                              : t('sales.checkout.itemN', { n: i + 1 })}
                           </Label>
                           <Input
                             id={`desc-${l.key}`}
                             value={l.description}
                             placeholder={
-                              l.kind === 'gift_card' ? 'Gift card — for whom?' : 'e.g. Aromatherapy oil'
+                              l.kind === 'gift_card'
+                                ? t('sales.checkout.giftCardFor')
+                                : t('sales.checkout.customPlaceholder')
                             }
                             onChange={(e) => patchLine(l.key, { description: e.target.value })}
                             className="h-11"
@@ -391,15 +396,15 @@ export function Checkout({
                             checked={Boolean(l.clientPackageId)}
                             onChange={(e) => togglePackage(l, e.target.checked ? match.pkg.id : null)}
                           />
-                          Use a session from “{match.pkg.name}” · {match.left} left
+                          {t('sales.checkout.usePackage', { name: match.pkg.name, count: match.left })}
                         </Label>
                       )
                     })()}
                     <div className="col-span-2 space-y-1.5 sm:col-span-5">
-                      <Label htmlFor={`staff-${l.key}`}>Therapist</Label>
+                      <Label htmlFor={`staff-${l.key}`}>{t('sales.checkout.therapist')}</Label>
                       <Select
                         id={`staff-${l.key}`}
-                        aria-label={`Therapist for item ${i + 1}`}
+                        aria-label={t('sales.checkout.therapistFor', { n: i + 1 })}
                         value={l.staffId ?? ''}
                         onChange={(e) => patchLine(l.key, { staffId: e.target.value || null })}
                         className="h-11"
@@ -413,7 +418,7 @@ export function Checkout({
                       </Select>
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor={`price-${l.key}`}>Price</Label>
+                      <Label htmlFor={`price-${l.key}`}>{t('sales.checkout.price')}</Label>
                       <Input
                         id={`price-${l.key}`}
                         inputMode="decimal"
@@ -424,10 +429,10 @@ export function Checkout({
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor={`disc-${l.key}`}>Discount</Label>
+                      <Label htmlFor={`disc-${l.key}`}>{t('sales.checkout.discount')}</Label>
                       <Input
                         id={`disc-${l.key}`}
-                        aria-label={`Discount for item ${i + 1}`}
+                        aria-label={t('sales.checkout.discountFor', { n: i + 1 })}
                         inputMode="decimal"
                         placeholder="0"
                         value={l.discountAed ? String(l.discountAed) : ''}
@@ -439,7 +444,7 @@ export function Checkout({
                       <button
                         type="button"
                         onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
-                        aria-label={`Remove item ${i + 1}`}
+                        aria-label={t('sales.checkout.removeItem', { n: i + 1 })}
                         className="grid size-11 place-items-center rounded-lg text-muted transition-colors hover:bg-danger-soft hover:text-danger"
                       >
                         <Trash2 className="size-4" strokeWidth={1.5} />
@@ -450,82 +455,86 @@ export function Checkout({
               ))}
             </AnimatePresence>
           </ul>
-          <div className="flex flex-col gap-3 border-t px-5 py-4 sm:flex-row sm:items-center sm:px-6">
+          <div className="flex flex-col flex-wrap gap-2 border-t border-[var(--crm-line)] px-[var(--crm-pad-card)] py-3 sm:flex-row sm:items-center">
             <Select
-              aria-label="Add a service"
+              aria-label={t('sales.checkout.addService')}
               value=""
               onChange={(e) => addService(e.target.value)}
               className="h-11 sm:max-w-sm"
             >
-              <option value="">Add a service…</option>
+              <option value="">{t('sales.checkout.addServiceOption')}</option>
               {menu.map((m) => (
                 <option key={m.variantId} value={m.variantId}>
-                  {m.label} — {formatAed(m.priceAed)}
+                  {t('sales.checkout.optionPrice', { name: m.label, price: formatAed(m.priceAed) })}
                 </option>
               ))}
             </Select>
             {products.length > 0 && (
               <Select
-                aria-label="Add a product"
+                aria-label={t('sales.checkout.addProduct')}
                 value=""
                 onChange={(e) => addItem('product', e.target.value)}
                 className="h-11 sm:max-w-xs"
               >
-                <option value="">Add a product…</option>
+                <option value="">{t('sales.checkout.addProductOption')}</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.label} — {formatAed(p.priceAed)} ({p.stock})
+                    {t('sales.checkout.optionPriceStock', {
+                      name: p.label,
+                      price: formatAed(p.priceAed),
+                      stock: p.stock,
+                    })}
                   </option>
                 ))}
               </Select>
             )}
             {packages.length > 0 && (
               <Select
-                aria-label="Sell a package"
+                aria-label={t('sales.checkout.sellPackage')}
                 value=""
                 onChange={(e) => addItem('package', e.target.value)}
                 className="h-11 sm:max-w-xs"
               >
-                <option value="">Sell a package…</option>
+                <option value="">{t('sales.checkout.sellPackageOption')}</option>
                 {packages.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.label} — {formatAed(p.priceAed)}
+                    {t('sales.checkout.optionPrice', { name: p.label, price: formatAed(p.priceAed) })}
                   </option>
                 ))}
               </Select>
             )}
-            <Button type="button" variant="ghost" size="lg" onClick={addGiftCard}>
-              <Gift /> Gift card
+            <Button type="button" variant="secondary" onClick={addGiftCard}>
+              <Gift /> {t('sales.checkout.giftCard')}
             </Button>
-            <Button type="button" variant="ghost" size="lg" onClick={addCustom}>
-              <Plus /> Custom item
+            <Button type="button" variant="ghost" onClick={addCustom}>
+              <Plus /> {t('sales.checkout.customItem')}
             </Button>
           </div>
         </Card>
 
         {/* Tips */}
-        <Card>
-          <CardHeader
-            title="Tips"
-            description="On top of the bill, kept for the therapist"
-            action={
-              <Button type="button" variant="secondary" onClick={addTip} disabled={!staff.length}>
-                <Heart /> Add tip
-              </Button>
-            }
-          />
-          <ul className={cn('mt-4', tips.length ? 'divide-y border-t' : '')}>
+        <Card
+          flush
+          title={t('sales.checkout.tips')}
+          sub={t('sales.checkout.tipsHint')}
+          actions={
+            <Button type="button" variant="secondary" size="sm" onClick={addTip} disabled={!staff.length}>
+              <Heart /> {t('sales.checkout.addTip')}
+            </Button>
+          }
+        >
+          <ul className={cn(tips.length ? 'divide-y border-t border-[var(--crm-line)]' : '')}>
             <AnimatePresence initial={false}>
-              {tips.map((t, i) => (
-                <motion.li key={t.key} {...rowAnim} className="overflow-hidden">
-                  <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-12 sm:items-end sm:px-6">
+              {tips.map((tip, i) => (
+                <motion.li key={tip.key} {...rowAnim} className="overflow-hidden">
+                  <div className="grid grid-cols-2 gap-3 px-[var(--crm-pad-card)] py-3 sm:grid-cols-12 sm:items-end">
                     <div className="col-span-2 space-y-1.5 sm:col-span-5">
-                      <Label htmlFor={`tip-staff-${t.key}`}>Therapist</Label>
+                      <Label htmlFor={`tip-staff-${tip.key}`}>{t('sales.checkout.therapist')}</Label>
                       <Select
-                        id={`tip-staff-${t.key}`}
-                        aria-label={`Tip ${i + 1} therapist`}
-                        value={t.staffId}
-                        onChange={(e) => patchTip(t.key, { staffId: e.target.value })}
+                        id={`tip-staff-${tip.key}`}
+                        aria-label={t('sales.checkout.tipTherapist', { n: i + 1 })}
+                        value={tip.staffId}
+                        onChange={(e) => patchTip(tip.key, { staffId: e.target.value })}
                         className="h-11"
                       >
                         {staff.map((s) => (
@@ -536,29 +545,29 @@ export function Checkout({
                       </Select>
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor={`tip-amt-${t.key}`}>Amount</Label>
+                      <Label htmlFor={`tip-amt-${tip.key}`}>{t('sales.checkout.amount')}</Label>
                       <Input
-                        id={`tip-amt-${t.key}`}
-                        aria-label={`Tip ${i + 1} amount`}
+                        id={`tip-amt-${tip.key}`}
+                        aria-label={t('sales.checkout.tipAmount', { n: i + 1 })}
                         inputMode="decimal"
                         placeholder="0"
-                        value={t.amount}
-                        onChange={(e) => patchTip(t.key, { amount: e.target.value })}
+                        value={tip.amount}
+                        onChange={(e) => patchTip(tip.key, { amount: e.target.value })}
                         className="h-11 tabular"
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor={`tip-m-${t.key}`}>Paid by</Label>
+                      <Label htmlFor={`tip-m-${tip.key}`}>{t('sales.checkout.paidBy')}</Label>
                       <Select
-                        id={`tip-m-${t.key}`}
-                        aria-label={`Tip ${i + 1} method`}
-                        value={t.method}
-                        onChange={(e) => patchTip(t.key, { method: e.target.value as Method })}
+                        id={`tip-m-${tip.key}`}
+                        aria-label={t('sales.checkout.tipMethod', { n: i + 1 })}
+                        value={tip.method}
+                        onChange={(e) => patchTip(tip.key, { method: e.target.value as Method })}
                         className="h-11"
                       >
                         {METHODS.map((m) => (
-                          <option key={m.value} value={m.value}>
-                            {m.label}
+                          <option key={m} value={m}>
+                            {methodLabel(m)}
                           </option>
                         ))}
                       </Select>
@@ -566,8 +575,8 @@ export function Checkout({
                     <div className="col-span-2 flex justify-end sm:col-span-1">
                       <button
                         type="button"
-                        onClick={() => setTips((ts) => ts.filter((x) => x.key !== t.key))}
-                        aria-label={`Remove tip ${i + 1}`}
+                        onClick={() => setTips((ts) => ts.filter((x) => x.key !== tip.key))}
+                        aria-label={t('sales.checkout.removeTip', { n: i + 1 })}
                         className="grid size-11 place-items-center rounded-lg text-muted transition-colors hover:bg-danger-soft hover:text-danger"
                       >
                         <Trash2 className="size-4" strokeWidth={1.5} />
@@ -578,23 +587,27 @@ export function Checkout({
               ))}
             </AnimatePresence>
           </ul>
-          {tips.length === 0 && <div className="pb-5 sm:pb-6" />}
+          {tips.length === 0 && <div className="pb-[var(--crm-pad-card)]" />}
         </Card>
       </div>
 
       {/* Summary + payment */}
       <div className="lg:col-span-5">
-        <Card className="lg:sticky lg:top-6">
-          <CardHeader title="Payment" description="Split across methods if needed" />
-          <dl className="mt-5 space-y-2.5 px-5 text-sm sm:px-6">
+        <Card
+          flush
+          className="lg:sticky lg:top-6"
+          title={t('sales.checkout.payment')}
+          sub={t('sales.checkout.paymentHint')}
+        >
+          <dl className="space-y-2.5 px-[var(--crm-pad-card)] text-[length:var(--crm-fs-td)]">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted">Subtotal</dt>
-              <dd className="tabular">{fmt(subtotal)}</dd>
+              <dt className="crm-muted">{t('sales.checkout.subtotal')}</dt>
+              <dd className="tabular">{aed(subtotal)}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
               <dt>
                 <Label htmlFor="saleDiscount" className="font-normal text-muted">
-                  Discount (AED)
+                  {t('sales.checkout.saleDiscount')}
                 </Label>
               </dt>
               <dd>
@@ -609,36 +622,36 @@ export function Checkout({
               </dd>
             </div>
             <div className="flex justify-between gap-4 text-muted">
-              <dt>VAT 5% included</dt>
-              <dd className="tabular">{fmt(vat)}</dd>
+              <dt>{t('sales.checkout.vatIncluded')}</dt>
+              <dd className="tabular">{aed(vat)}</dd>
             </div>
-            <div className="flex items-baseline justify-between gap-4 border-t pt-3">
-              <dt className="font-medium">Total</dt>
-              <dd className="text-2xl font-semibold tracking-tight tabular" data-testid="sale-total">
-                {fmt(total)}
+            <div className="flex items-baseline justify-between gap-4 border-t border-[var(--crm-line)] pt-3">
+              <dt className="font-semibold">{t('sales.checkout.total')}</dt>
+              <dd className="crm-num text-2xl font-semibold tracking-tight tabular" data-testid="sale-total">
+                {aed(total)}
               </dd>
             </div>
           </dl>
 
-          <div className="mt-5 space-y-3 border-t px-5 pt-5 sm:px-6">
+          <div className="mt-4 space-y-3 border-t border-[var(--crm-line)] px-[var(--crm-pad-card)] pt-4">
             <AnimatePresence initial={false}>
               {payments.map((p, i) => (
                 <motion.div key={p.key} {...rowAnim} className="overflow-hidden">
                   <div className="grid grid-cols-[minmax(0,1fr)_7rem_2.75rem] items-center gap-2">
                     <Select
-                      aria-label={`Payment ${i + 1} method`}
+                      aria-label={t('sales.checkout.paymentMethod', { n: i + 1 })}
                       value={p.method}
                       onChange={(e) => patchPayment(p.key, { method: e.target.value as PayMethod })}
                       className="h-11"
                     >
                       {PAY_METHODS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
+                        <option key={m} value={m}>
+                          {methodLabel(m)}
                         </option>
                       ))}
                     </Select>
                     <Input
-                      aria-label={`Payment ${i + 1} amount`}
+                      aria-label={t('sales.checkout.paymentAmount', { n: i + 1 })}
                       inputMode="decimal"
                       placeholder={remaining > 0 ? plain(remaining) : '0'}
                       value={p.amount}
@@ -649,7 +662,7 @@ export function Checkout({
                       type="button"
                       onClick={() => setPayments((ps) => ps.filter((x) => x.key !== p.key))}
                       disabled={payments.length === 1}
-                      aria-label={`Remove payment ${i + 1}`}
+                      aria-label={t('sales.checkout.removePayment', { n: i + 1 })}
                       className="grid size-11 place-items-center rounded-lg text-muted transition-colors hover:bg-subtle hover:text-fg disabled:opacity-30"
                     >
                       <X className="size-4" strokeWidth={1.5} />
@@ -658,13 +671,13 @@ export function Checkout({
                       p.method === 'bank_transfer' ||
                       p.method === 'gift_card') && (
                       <Input
-                        aria-label={`Payment ${i + 1} reference`}
+                        aria-label={t('sales.checkout.paymentReference', { n: i + 1 })}
                         placeholder={
                           p.method === 'gift_card'
-                            ? 'Gift card code, e.g. ABCD-EFGH'
+                            ? t('sales.checkout.refGiftCard')
                             : p.method === 'card_terminal'
-                              ? 'Terminal slip no. (optional)'
-                              : 'Transfer ref (optional)'
+                              ? t('sales.checkout.refTerminal')
+                              : t('sales.checkout.refTransfer')
                         }
                         value={p.reference}
                         onChange={(e) => patchPayment(p.key, { reference: e.target.value })}
@@ -682,14 +695,14 @@ export function Checkout({
               className="-ms-2"
               disabled={payments.length >= 6}
             >
-              <Plus /> Split payment
+              <Plus /> {t('sales.checkout.splitPayment')}
             </Button>
           </div>
 
-          <div className="mt-4 space-y-4 border-t bg-subtle/40 px-5 py-5 sm:px-6">
+          <div className="mt-3 space-y-3 border-t border-[var(--crm-line)] bg-[var(--crm-bg)] px-[var(--crm-pad-card)] py-4">
             <div className="flex items-center justify-between gap-4 text-sm" aria-live="polite">
               <span className="flex items-center gap-2 text-muted">
-                {remaining < 0 ? 'Over by' : 'Remaining'}
+                {remaining < 0 ? t('sales.checkout.overBy') : t('sales.checkout.remaining')}
                 {remaining > 0 && payments.length > 0 && (
                   <button
                     type="button"
@@ -699,7 +712,7 @@ export function Checkout({
                     }}
                     className="min-h-9 rounded-full border bg-surface px-3 text-xs font-medium text-fg transition-colors hover:border-accent hover:text-accent"
                   >
-                    Fill {PAY_METHODS.find((m) => m.value === payments.at(-1)!.method)?.label.toLowerCase()}
+                    {t('sales.checkout.fill', { method: methodLabel(payments.at(-1)!.method).toLowerCase() })}
                   </button>
                 )}
               </span>
@@ -714,18 +727,17 @@ export function Checkout({
                 )}
               >
                 {remaining === 0 && total > 0 && <Check className="size-4" />}
-                {fmt(Math.abs(remaining))}
+                {aed(Math.abs(remaining))}
               </motion.span>
             </div>
             {tipTotal > 0 && (
               <p className="flex justify-between text-sm text-muted">
                 <span>
-                  Tips{' '}
                   {tips.length === 1 && staffName.get(tips[0]!.staffId)
-                    ? `for ${staffName.get(tips[0]!.staffId)}`
-                    : ''}
+                    ? t('sales.checkout.tipsFor', { name: staffName.get(tips[0]!.staffId)! })
+                    : t('sales.checkout.tipsLine')}
                 </span>
-                <span className="tabular">+{fmt(tipTotal)}</span>
+                <span className="tabular">+{aed(tipTotal)}</span>
               </p>
             )}
             <Button
@@ -735,10 +747,10 @@ export function Checkout({
               pending={pending}
               onClick={submit}
             >
-              Complete sale · {fmt(total + tipTotal)}
+              {t('sales.checkout.complete', { amount: aed(total + tipTotal) })}
             </Button>
             {lines.length === 0 && (
-              <p className="text-center text-[13px] text-muted">Add an item to continue.</p>
+              <p className="text-center text-[13px] text-muted">{t('sales.checkout.addItemFirst')}</p>
             )}
           </div>
         </Card>
@@ -757,6 +769,7 @@ function ClientSearch({
   onNew: () => void
 }) {
   const id = useId()
+  const t = useI18n().t
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<ClientHit[]>([])
   const [pending, start] = useTransition()
@@ -766,7 +779,7 @@ function ClientSearch({
       setHits([])
       return
     }
-    const t = setTimeout(
+    const timer = setTimeout(
       () =>
         start(async () => {
           const r = await searchPosClientsAction(slug, q)
@@ -774,22 +787,22 @@ function ClientSearch({
         }),
       220,
     )
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [q, slug])
 
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="sr-only">
-        Find client
+        {t('sales.checkout.findClient')}
       </Label>
       <div className="relative">
         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
         <Input
           id={id}
-          aria-label="Find client"
+          aria-label={t('sales.checkout.findClient')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name or mobile — or leave empty for a walk-in"
+          placeholder={t('sales.checkout.searchPlaceholder')}
           autoComplete="off"
           className="h-11 ps-9"
         />
@@ -818,7 +831,7 @@ function ClientSearch({
               </li>
             ))}
             {!pending && hits.length === 0 && (
-              <li className="px-3 py-2.5 text-sm text-muted">No matching clients</li>
+              <li className="px-3 py-2.5 text-sm text-muted">{t('sales.checkout.noMatches')}</li>
             )}
           </motion.ul>
         )}
@@ -828,7 +841,7 @@ function ClientSearch({
         onClick={onNew}
         className="inline-flex min-h-10 items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"
       >
-        <UserPlus className="size-3.5" /> New client
+        <UserPlus className="size-3.5" /> {t('sales.checkout.newClient')}
       </button>
     </div>
   )

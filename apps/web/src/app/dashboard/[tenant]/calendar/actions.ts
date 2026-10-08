@@ -26,15 +26,15 @@ import {
 import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { maskPhone, STATUS_LABEL, timeToGridMinute } from '@/components/calendar/time'
+import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { allowedBranches } from './data'
 
 const DAY_MS = 24 * 3600_000
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
-const time = z.string().regex(/^\d{2}:\d{2}$/, 'Pick a time')
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'calendar.errors.pickDate')
+const time = z.string().regex(/^\d{2}:\d{2}$/, 'calendar.errors.pickTime')
 const optionalId = z
   .string()
   .optional()
@@ -66,7 +66,7 @@ async function assertStaffAndRoom(tx: Tx, staffIds: string[], roomId?: string) {
   }
   if (roomId) {
     const [room] = await tx.select({ id: rooms.id }).from(rooms).where(eq(rooms.id, roomId))
-    if (!room) throw new DomainError('Room not found', 'not_found')
+    if (!room) throw new DomainError('Room not found', 'not_found', { key: 'calendar.errors.roomNotFound' })
   }
 }
 
@@ -119,7 +119,7 @@ const bookingSchema = z
     branchId: z.uuid(),
     date,
     time,
-    variantId: z.uuid('Choose a service'),
+    variantId: z.uuid('calendar.errors.chooseService'),
     staffId: optionalId,
     roomId: optionalId,
     clientId: optionalId,
@@ -131,9 +131,9 @@ const bookingSchema = z
   .superRefine((v, c) => {
     if (v.clientId) return
     if (!v.clientName)
-      c.addIssue({ code: 'custom', path: ['clientName'], message: 'Enter the client’s name' })
+      c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
     if (!v.clientPhone)
-      c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'Enter a UAE mobile number' })
+      c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'calendar.errors.clientPhone' })
   })
 
 export async function createBookingAction(
@@ -154,7 +154,7 @@ export async function createBookingAction(
       let clientId = v.clientId
       if (clientId) {
         const [c] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId))
-        if (!c) throw new DomainError('Client not found', 'not_found')
+        if (!c) throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
       } else {
         clientId = (
           await findOrCreateClient(tx, ctx.tenant.id, {
@@ -200,7 +200,7 @@ export async function createBookingAction(
       data: { ref: result.booking.refCode, source: v.source },
     })
     revalidate(slug)
-    return ok(`Booking ${result.booking.refCode} confirmed`, {
+    return ok({ key: 'calendar.results.created', params: { ref: result.booking.refCode } }, {
       ref: result.booking.refCode,
       whatsapp: result.confirmation ? outboxLink(result.confirmation, 'mobile') : null,
       whatsappWeb: result.confirmation ? outboxLink(result.confirmation, 'web') : null,
@@ -230,7 +230,7 @@ export async function setStatusAction(
   if (!parsed.success) return fromZod(parsed.error)
   const { bookingId, status, reason } = parsed.data
   if (status === 'cancelled' && !reason)
-    return fail('Add a reason for the cancellation', { reason: 'Required' })
+    return fail('calendar.errors.reason', { reason: 'validation.required' })
   try {
     const updated = await withTenant(ctx.tenant.id, async (tx) => {
       const [b] = await tx
@@ -250,7 +250,10 @@ export async function setStatusAction(
       data: reason ? { reason } : undefined,
     })
     revalidate(slug)
-    return ok(`${updated.refCode}: ${STATUS_LABEL[status].toLowerCase()}`)
+    return ok({
+      key: 'calendar.results.status',
+      params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },
+    })
   } catch (e) {
     return handle(e)
   }
@@ -331,7 +334,7 @@ export async function rescheduleAction(
       data: { date: v.date, time: v.time, staffIds: v.staffIds, roomId: v.roomId },
     })
     revalidate(slug)
-    return ok(`Booking ${ref} moved to ${v.time}`)
+    return ok({ key: 'calendar.results.moved', params: { ref, time: v.time } })
   } catch (e) {
     return handle(e)
   }
@@ -360,7 +363,7 @@ export async function rescheduleFormAction(
 
 const walkInSchema = z.object({
   branchId: z.uuid(),
-  variantId: z.uuid('Choose a service'),
+  variantId: z.uuid('calendar.errors.chooseService'),
   staffId: optionalId,
   clientName: z.string().trim().max(120).optional(),
   clientPhone: z.string().trim().max(30).optional(),
@@ -404,7 +407,10 @@ export async function walkInAction(
       if (v.staffId) {
         therapist = day.staff.find((s) => s.id === v.staffId)
         if (!therapist) throw new DomainError('Therapist not found', 'not_found')
-        if (!free(therapist)) throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken')
+        if (!free(therapist)) throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
+            key: 'calendar.errors.notFree',
+            params: { name: therapist.name },
+          })
       } else {
         therapist =
           rotation
@@ -414,7 +420,9 @@ export async function walkInAction(
           day.staff.find((s) => onShift(s) && free(s)) ??
           day.staff.find(free)
       }
-      if (!therapist) throw new DomainError('No therapist is free for this service right now', 'no_staff')
+      if (!therapist) throw new DomainError('No therapist is free for this service right now', 'no_staff', {
+          key: 'calendar.errors.noneFree',
+        })
       const client =
         v.clientPhone && v.clientPhone.length > 0
           ? await findOrCreateClient(tx, ctx.tenant.id, {
@@ -446,7 +454,10 @@ export async function walkInAction(
       data: { ref: result.booking.refCode, therapist: result.therapist },
     })
     revalidate(slug)
-    return ok(`Walk-in checked in with ${result.therapist}`, { ref: result.booking.refCode })
+    return ok(
+      { key: 'calendar.walkIns.started', params: { name: result.therapist } },
+      { ref: result.booking.refCode },
+    )
   } catch (e) {
     return handle(e)
   }

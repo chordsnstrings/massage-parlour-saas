@@ -1,155 +1,170 @@
 import { branches, withTenant } from '@spa/db'
-import { logoUrl } from '@spa/services'
+import { IMPORT_KINDS, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
-import {
-  ChevronRight,
-  ClipboardSignature,
-  Clock,
-  FileSpreadsheet,
-  Globe,
-  MessageCircle,
-  Plug,
-} from 'lucide-react'
+import { Download, MessageCircle, ShieldCheck, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { Card, Grid, ListRow, Pill, Stack } from '@/components/crm'
+import { IMPORT_PERMISSION } from '@/components/data/kinds'
+import { canExportAll } from '@/components/data/server'
+import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { PageBody, PageHeader } from '@/components/ui/page'
+import { PageHeader } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { saveSettingsAction } from './actions'
 import { LogoForm } from './logo-form'
+import { SettingsTabs } from './settings-tabs'
 
-export const metadata: Metadata = { title: 'Settings' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('settings.profile.title') }
+}
 
 export default async function SettingsPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'settings.manage')) notFound()
+  const t = await getT()
   const [branch] = await withTenant(ctx.tenant.id, (tx) =>
     tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1),
   )
-  const t = ctx.tenant
+  const tenant = ctx.tenant
+  const base = `/${tenant.slug}`
+  const canImport = IMPORT_KINDS.some((k) => can(ctx, IMPORT_PERMISSION[k]))
+  const canExport = canExportAll(ctx)
+  const twoFactor = Boolean((ctx.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled)
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Business details shown on invoices, your website and WhatsApp links."
-      />
-      <PageBody>
-        <LogoForm slug={t.slug} current={logoUrl(t.logoFileId)} />
-        <ActionForm action={saveSettingsAction.bind(null, t.slug)} className="grid gap-6 xl:grid-cols-2">
-          <Card>
-            <CardHeader title="Business" description="Legal details appear on tax invoices." />
-            <CardBody className="grid gap-5 sm:grid-cols-2">
-              <Field label="Spa name" name="name" className="sm:col-span-2">
-                <Input id="name" name="name" defaultValue={t.name} required />
-              </Field>
-              <Field label="Legal name" name="legalName">
-                <Input id="legalName" name="legalName" defaultValue={t.legalName ?? ''} />
-              </Field>
-              <Field label="TRN" name="trn" hint="15-digit VAT number, if registered.">
-                <Input id="trn" name="trn" inputMode="numeric" defaultValue={t.trn ?? ''} />
-              </Field>
-            </CardBody>
-          </Card>
-          <Card>
-            <CardHeader title="Main branch" description="Where clients find you and how they reach you." />
-            <CardBody className="grid gap-5 sm:grid-cols-2">
-              <Field label="Branch name" name="branchName">
-                <Input id="branchName" name="branchName" defaultValue={branch?.name ?? t.name} required />
-              </Field>
-              <Field label="Business day ends at" name="cutoff" hint="For late-night hours, e.g. 05:00.">
-                <Input
-                  id="cutoff"
+      <PageHeader title={t('settings.profile.title')} description={t('settings.profile.description')} />
+      <SettingsTabs ctx={ctx} value="profile" />
+      <Grid cols="col-2">
+        <Stack>
+          <ActionForm action={saveSettingsAction.bind(null, tenant.slug)} className="crm-stack">
+            <Card title={t('settings.profile.card')} sub={t('settings.profile.cardSub')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t('settings.profile.name')} name="name" className="sm:col-span-2">
+                  <Input id="name" name="name" defaultValue={tenant.name} required />
+                </Field>
+                <Field label={t('settings.profile.legalName')} name="legalName">
+                  <Input id="legalName" name="legalName" defaultValue={tenant.legalName ?? ''} />
+                </Field>
+                <Field label={t('settings.profile.trn')} name="trn" hint={t('settings.profile.trnHint')}>
+                  <Input id="trn" name="trn" inputMode="numeric" defaultValue={tenant.trn ?? ''} />
+                </Field>
+                <Field label={t('settings.profile.currency')} name="currency" className="sm:col-span-2">
+                  <Input id="currency" value={t('settings.profile.currencyValue')} readOnly disabled />
+                </Field>
+              </div>
+            </Card>
+            <Card title={t('settings.profile.branch')} sub={t('settings.profile.branchSub')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t('settings.profile.branchName')} name="branchName">
+                  <Input
+                    id="branchName"
+                    name="branchName"
+                    defaultValue={branch?.name ?? tenant.name}
+                    required
+                  />
+                </Field>
+                <Field
+                  label={t('settings.profile.cutoff')}
                   name="cutoff"
-                  type="time"
-                  defaultValue={(branch?.businessDayCutoff ?? '05:00').slice(0, 5)}
-                />
-              </Field>
-              <Field label="Address" name="address" className="sm:col-span-2">
-                <Input
-                  id="address"
-                  name="address"
-                  defaultValue={branch?.address ?? ''}
-                  placeholder="Shop 4, Marina Walk, Dubai"
-                />
-              </Field>
-              <Field label="Phone" name="phone">
-                <Input id="phone" name="phone" type="tel" defaultValue={branch?.phone ?? ''} />
-              </Field>
-              <Field label="WhatsApp number" name="whatsapp" hint="Clients message this number.">
-                <Input
-                  id="whatsapp"
+                  hint={t('settings.profile.cutoffHint')}
+                >
+                  <Input
+                    id="cutoff"
+                    name="cutoff"
+                    type="time"
+                    defaultValue={(branch?.businessDayCutoff ?? '05:00').slice(0, 5)}
+                  />
+                </Field>
+                <Field label={t('settings.profile.address')} name="address" className="sm:col-span-2">
+                  <Input
+                    id="address"
+                    name="address"
+                    defaultValue={branch?.address ?? ''}
+                    placeholder={t('settings.profile.addressPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('settings.profile.phone')} name="phone">
+                  <Input id="phone" name="phone" type="tel" defaultValue={branch?.phone ?? ''} />
+                </Field>
+                <Field
+                  label={t('settings.profile.whatsapp')}
                   name="whatsapp"
-                  type="tel"
-                  defaultValue={branch?.whatsappE164 ? `+${branch.whatsappE164}` : ''}
-                  placeholder="050 123 4567"
-                />
-              </Field>
-            </CardBody>
+                  hint={t('settings.profile.whatsappHint')}
+                >
+                  <Input
+                    id="whatsapp"
+                    name="whatsapp"
+                    type="tel"
+                    defaultValue={branch?.whatsappE164 ? `+${branch.whatsappE164}` : ''}
+                    placeholder={t('settings.profile.whatsappPlaceholder')}
+                  />
+                </Field>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <SubmitButton>{t('settings.profile.save')}</SubmitButton>
+              </div>
+            </Card>
+          </ActionForm>
+          {(canImport || canExport) && (
+            <Card title={t('settings.profile.data.title')}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {canImport && (
+                  <Button asChild variant="secondary">
+                    <a href={appPath(`${base}/settings/data`)}>
+                      <Upload aria-hidden /> {t('settings.profile.data.import')}
+                    </a>
+                  </Button>
+                )}
+                {canExport && (
+                  <Button asChild variant="secondary">
+                    <a href={appPath(`${base}/settings/data/export?type=full`)}>
+                      <Download aria-hidden /> {t('settings.profile.data.export')}
+                    </a>
+                  </Button>
+                )}
+              </div>
+              <p className="crm-muted mt-2.5 text-xs">{t('settings.profile.data.note')}</p>
+            </Card>
+          )}
+        </Stack>
+        <Stack>
+          <LogoForm slug={tenant.slug} current={logoUrl(tenant.logoFileId)} />
+          <Card title={t('settings.profile.security.title')}>
+            <ListRow
+              icon={<ShieldCheck aria-hidden />}
+              title={t('settings.profile.security.twoFactor')}
+              body={
+                twoFactor
+                  ? t('settings.profile.security.twoFactorOn')
+                  : t('settings.profile.security.twoFactorOff')
+              }
+              end={
+                <Pill tone={twoFactor ? 'ok' : 'neutral'}>
+                  {twoFactor ? t('settings.profile.security.on') : t('settings.profile.security.off')}
+                </Pill>
+              }
+              href={appPath('/account')}
+            />
+            <ListRow
+              title={t('settings.profile.security.audit')}
+              body={t('settings.profile.security.auditSub')}
+              end={<Pill tone="ok">{t('settings.profile.security.on')}</Pill>}
+            />
           </Card>
-          <div className="flex justify-end xl:col-span-2">
-            <SubmitButton size="lg">Save changes</SubmitButton>
-          </div>
-        </ActionForm>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[
-            {
-              path: 'settings/hours',
-              icon: Clock,
-              title: 'Opening hours',
-              text: 'Per weekday and branch, including split shifts and late-night closing.',
-            },
-            {
-              path: 'settings/intake',
-              icon: ClipboardSignature,
-              title: 'Intake & waiver',
-              text: 'Health questions and the waiver clients sign before a treatment.',
-            },
-            {
-              path: 'messages/templates',
-              icon: MessageCircle,
-              title: 'WhatsApp templates',
-              text: 'Confirmation, reminder and thank-you messages in English and Arabic.',
-            },
-            {
-              path: 'settings/domains',
-              icon: Globe,
-              title: 'Custom domain',
-              text: 'Use your own web address for your site, with free SSL.',
-            },
-            {
-              path: 'settings/integrations',
-              icon: Plug,
-              title: 'Instagram & Google',
-              text: 'Connect your Instagram and Google Business Profile for the AI agents.',
-            },
-            {
-              path: 'settings/data',
-              icon: FileSpreadsheet,
-              title: 'Import & export',
-              text: 'Bring clients and your menu from spreadsheets; export everything anytime.',
-            },
-          ].map((l) => (
-            <Link
-              key={l.path}
-              href={appPath(`/${t.slug}/${l.path}`)}
-              className="group flex items-center gap-4 rounded-xl border bg-surface px-5 py-5 transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-fg/20 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-6"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
-                <l.icon className="size-4" strokeWidth={1.5} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold tracking-tight">{l.title}</span>
-                <span className="block text-sm text-muted">{l.text}</span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          ))}
-        </div>
-      </PageBody>
+          <Card title={t('settings.profile.messages.title')}>
+            <ListRow
+              icon={<MessageCircle aria-hidden />}
+              title={t('settings.profile.messages.templates')}
+              body={t('settings.profile.messages.templatesSub')}
+              href={appPath(`${base}/messages/templates`)}
+            />
+          </Card>
+        </Stack>
+      </Grid>
     </>
   )
 }

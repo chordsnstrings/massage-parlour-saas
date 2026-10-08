@@ -1,4 +1,62 @@
 // `billing` namespace (TH). Mirrors en/billing.ts — a missing or extra key is a type error.
 import type { Messages } from '../types'
 
-export const billing: Messages['billing'] = {}
+export const billing: Messages['billing'] = {
+  title: 'การสมัครใช้งาน',
+  descriptionCards: 'แพ็กเกจ ใบแจ้งหนี้ และการชำระเงินของคุณ ชำระด้วยบัตร โอนผ่านธนาคาร หรือเงินสด',
+  description: 'แพ็กเกจ ใบแจ้งหนี้ และการชำระเงินของคุณ ชำระโดยโอนผ่านธนาคารหรือเงินสด',
+  plan: {
+    eyebrow: 'แพ็กเกจของคุณ',
+    fallback: 'แพ็กเกจ',
+    per: { year: 'ปี', month: 'เดือน' },
+    exclVat: 'ไม่รวม VAT',
+    inclVat: 'รวม VAT แล้ว',
+    renews: 'ต่ออายุ {date}',
+    trialEnds: 'ทดลองใช้ถึง {date}',
+    period: 'รอบปัจจุบัน {from} – {to}',
+    f1: 'ทุกฟีเจอร์และระบบอัตโนมัติ — ไม่มีค่าเสริม',
+    f3: 'เว็บไซต์ จองออนไลน์ และโดเมนของคุณเอง',
+    f4: 'เครื่องมือ AI พร้อมโควตารายเดือน',
+    f5: 'ซัพพอร์ตทาง WhatsApp จากคนจริง',
+    payHint: 'หรือชำระโดยโอนผ่านธนาคารหรือเงินสด',
+  },
+  pay: {
+    title: 'วิธีชำระเงิน',
+    sub: 'โอนผ่านธนาคาร หรือชำระเงินสดกับผู้ดูแลบัญชีของคุณ',
+    bank: 'ธนาคาร',
+    accountName: 'ชื่อบัญชี',
+    iban: 'IBAN',
+    swift: 'SWIFT',
+    soon: 'ข้อมูลธนาคารจะแสดงที่นี่',
+    whatsapp: 'ทักเราทาง WhatsApp',
+    byCard: 'ชำระด้วยบัตร',
+    invoiceByCard: 'ชำระใบแจ้งหนี้ด้วยบัตร',
+  },
+  paid: {
+    processing: 'ขอบคุณ — กำลังดำเนินการชำระด้วยบัตร หน้านี้จะอัปเดตเมื่อ Stripe ยืนยัน',
+    received: 'ขอบคุณ — ได้รับชำระด้วยบัตรแล้ว และใบแจ้งหนี้ถูกทำเครื่องหมายว่าชำระแล้ว',
+  },
+  invoices: {
+    title: 'ใบแจ้งหนี้',
+    empty: 'ยังไม่มีใบแจ้งหนี้',
+    number: 'เลขที่',
+    description: 'รายละเอียด',
+    issued: 'วันที่ออก',
+    due: 'ครบกำหนด',
+    total: 'ยอดรวม',
+    status: 'สถานะ',
+  },
+  payments: {
+    title: 'การชำระเงินที่ได้รับ',
+    date: 'วันที่',
+    method: 'ช่องทาง',
+    reference: 'อ้างอิง',
+    amount: 'จำนวนเงิน',
+  },
+  error: {
+    cardsOff: 'ยังไม่เปิดรับชำระด้วยบัตร — กรุณาโอนผ่านธนาคารหรือชำระเงินสด',
+    notFound: 'ไม่พบใบแจ้งหนี้',
+    notOpen: 'ใบแจ้งหนี้นี้ไม่ได้เปิดให้ชำระ',
+    noPage: 'Stripe ไม่ได้ส่งหน้าชำระเงินกลับมา',
+  },
+}

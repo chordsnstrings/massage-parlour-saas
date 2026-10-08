@@ -11,20 +11,23 @@ import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { receiptColumns, receiptFields } from './expenses/receipt'
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'accounts.validation.pickDate')
 const lockedMessage = (e: unknown) => {
   const msg = `${e instanceof Error ? e.message : ''} ${(e as { cause?: Error })?.cause?.message ?? ''}`
-  return /locked/i.test(msg) ? 'That date is in a closed period. Pick a date after the lock date.' : null
+  return /locked/i.test(msg)
 }
 
 const expenseSchema = z.object({
   expenseDate: date,
   accountCode: z.enum(EXPENSE_CODES.map((a) => a.code) as [string, ...string[]], {
-    message: 'Pick a category',
+    message: 'accounts.validation.pickCategory',
   }),
   vendor: z.string().trim().max(120).optional(),
   description: z.string().trim().max(300).optional(),
-  amountAed: z.coerce.number({ message: 'Enter the amount' }).positive('Enter the amount').max(10_000_000),
+  amountAed: z.coerce
+    .number({ message: 'accounts.validation.enterAmount' })
+    .positive('accounts.validation.enterAmount')
+    .max(10_000_000),
   hasVat: z.preprocess((v) => v === 'on', z.boolean()),
   paidVia: z.enum(['cash', 'bank', 'card', 'owner']),
   ...receiptFields,
@@ -74,12 +77,11 @@ export async function addExpenseAction(slug: string, _p: ActionResult, fd: FormD
       })
     })
   } catch (e) {
-    const locked = lockedMessage(e)
-    if (locked) return fail(locked, { expenseDate: locked })
+    if (lockedMessage(e)) return fail('accounts.result.lockedDate', { expenseDate: 'accounts.result.lockedDate' })
     throw e
   }
   revalidatePath(`/dashboard/${slug}/accounts`, 'layout')
-  return ok('Expense recorded')
+  return ok('accounts.result.recorded')
 }
 
 /** Voiding posts a reversal dated today (the original stays in the journal) and removes the expense row. */
@@ -102,13 +104,13 @@ export async function voidExpenseAction(slug: string, id: string): Promise<Actio
       data: { amountAed: removed.amountAed, accountCode: removed.accountCode, date: removed.expenseDate },
     })
   } catch (e) {
-    if (e instanceof DomainError) return failDomain(e)
-    const locked = lockedMessage(e)
-    if (locked) return fail('Today is inside a closed period, so this expense can’t be voided.')
+    if (e instanceof DomainError)
+      return e.message === 'Expense not found' ? fail('accounts.result.notFound') : failDomain(e)
+    if (lockedMessage(e)) return fail('accounts.result.lockedToday')
     throw e
   }
   revalidatePath(`/dashboard/${slug}/accounts`, 'layout')
-  return ok('Expense voided — a reversal was posted')
+  return ok('accounts.result.voided')
 }
 
 export async function lockPeriodAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -117,7 +119,7 @@ export async function lockPeriodAction(slug: string, _p: ActionResult, fd: FormD
   const parsed = z.object({ through: date }).safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   if (parsed.data.through >= todayDubai())
-    return fail('You can only close days that are over.', { through: 'Pick a past date' })
+    return fail('accounts.result.pastOnly', { through: 'accounts.result.pickPast' })
   await withTenant(ctx.tenant.id, (tx) => lockPeriod(tx, ctx.tenant.id, parsed.data.through, ctx.user.id))
   await audit({
     tenantId: ctx.tenant.id,
@@ -126,5 +128,5 @@ export async function lockPeriodAction(slug: string, _p: ActionResult, fd: FormD
     data: parsed.data,
   })
   revalidatePath(`/dashboard/${slug}/accounts`, 'layout')
-  return ok(`Books closed through ${parsed.data.through}`)
+  return ok({ key: 'accounts.result.closed', params: { date: parsed.data.through } })
 }

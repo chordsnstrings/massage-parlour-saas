@@ -16,15 +16,17 @@ import { ConversationList, FILTERS, InboxFilters } from '@/components/inbox/conv
 import { InstagramGlyph } from '@/components/inbox/icons'
 import { ThreadView } from '@/components/inbox/thread'
 import { InboxAutoRefresh } from '@/components/inbox/thread-client'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, Pill, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 
-export const metadata: Metadata = { title: 'Inbox' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('inbox.title') }
+}
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 
@@ -40,8 +42,9 @@ export default async function InboxPage({
   if (!can(ctx, 'marketing.send')) notFound()
   const slug = ctx.tenant.slug
   const sp = await searchParams
+  const { t, fmt } = await getI18n()
   const f = one(sp.f)
-  const filter: InboxFilter = FILTERS.some((x) => x.key === f) ? (f as InboxFilter) : 'open'
+  const filter: InboxFilter = FILTERS.includes(f as InboxFilter) ? (f as InboxFilter) : 'open'
   const selected = z.uuid().safeParse(one(sp.c)).data
 
   const { rows, counts, thread, account } = await withTenant(ctx.tenant.id, async (tx) => ({
@@ -55,32 +58,32 @@ export default async function InboxPage({
   const canSettings = can(ctx, 'ai.manage') || can(ctx, 'settings.manage')
   const settingsHref = appPath(`/${slug}/settings/integrations`)
   const sendNotice = !configured
-    ? 'Sandbox: Instagram isn’t set up on this server yet, so replies are saved here but not sent.'
+    ? t('inbox.notice.sandbox')
     : !account
-      ? 'Instagram isn’t connected, so replies are saved here but not sent.'
+      ? t('inbox.notice.notConnected')
       : !connected
-        ? 'The Instagram connection expired — reconnect it in Settings to send replies.'
+        ? t('inbox.notice.expired')
         : null
 
   const status = !configured ? (
-    <Badge>Instagram not configured</Badge>
+    <Pill>{t('inbox.status.notConfigured')}</Pill>
   ) : connected ? (
-    <Badge tone="success">
+    <Pill tone="ok">
       <InstagramGlyph className="size-3" />
-      {account?.username ? `@${account.username}` : 'Connected'}
-    </Badge>
+      {account?.username ? `@${account.username}` : t('inbox.status.connected')}
+    </Pill>
   ) : account ? (
-    <Badge tone="warning">Needs reconnecting</Badge>
+    <Pill tone="warn">{t('inbox.status.reconnect')}</Pill>
   ) : (
-    <Badge>Not connected</Badge>
+    <Pill>{t('inbox.status.notConnected')}</Pill>
   )
 
   return (
     <>
       <InboxAutoRefresh />
       <PageHeader
-        title="Inbox"
-        description="Instagram DMs and comments in one place. The AI receptionist answers or drafts replies following your AI studio settings — take over any time."
+        title={t('inbox.title')}
+        description={t('inbox.description')}
         actions={
           <>
             {status}
@@ -89,10 +92,10 @@ export default async function InboxPage({
                 asChild
                 variant="ghost"
                 className="min-h-11 min-w-11 px-0 sm:min-h-10 sm:px-4"
-                title="AI receptionist settings"
+                title={t('inbox.receptionistTitle')}
               >
                 <Link href={appPath(`/${slug}/ai`)}>
-                  <Bot /> <span className="sr-only sm:not-sr-only">Receptionist</span>
+                  <Bot /> <span className="sr-only sm:not-sr-only">{t('inbox.receptionist')}</span>
                 </Link>
               </Button>
             )}
@@ -101,10 +104,10 @@ export default async function InboxPage({
                 asChild
                 variant="ghost"
                 className="min-h-11 min-w-11 px-0 sm:min-h-10 sm:px-4"
-                title="Instagram connection"
+                title={t('inbox.instagramTitle')}
               >
                 <Link href={settingsHref}>
-                  <Settings2 /> <span className="sr-only sm:not-sr-only">Instagram</span>
+                  <Settings2 /> <span className="sr-only sm:not-sr-only">{t('inbox.instagram')}</span>
                 </Link>
               </Button>
             )}
@@ -116,19 +119,19 @@ export default async function InboxPage({
           <Card>
             <EmptyState
               icon={<MessagesSquare className="size-5" strokeWidth={1.5} />}
-              title={connected ? 'No messages yet' : 'Connect Instagram to start'}
+              title={connected ? t('inbox.empty.noMessagesTitle') : t('inbox.empty.connectTitle')}
               description={
                 connected
-                  ? 'New Instagram DMs and comments appear here as they arrive. The AI receptionist drafts or sends replies depending on its mode in AI studio.'
+                  ? t('inbox.empty.noMessagesBody')
                   : !configured
-                    ? 'Instagram isn’t configured on this server yet. Once it is, connect your professional account in Settings → Instagram & Google and DMs and comments will land here.'
-                    : 'Connect your Instagram professional account in Settings → Instagram & Google. DMs and comments then land here, with AI-drafted replies for you to approve.'
+                    ? t('inbox.empty.notConfiguredBody')
+                    : t('inbox.empty.connectBody')
               }
               action={
                 !connected && canSettings ? (
                   <Button asChild className="min-h-11">
                     <Link href={settingsHref}>
-                      <InstagramGlyph /> Instagram settings
+                      <InstagramGlyph /> {t('inbox.empty.settings')}
                     </Link>
                   </Button>
                 ) : undefined
@@ -136,15 +139,22 @@ export default async function InboxPage({
             />
           </Card>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-12">
+          <>
+          <Grid cols="g3" className={cn(thread && 'hidden lg:grid')}>
+            <Stat label={t('inbox.stats.open')} value={fmt.number(counts.open)} />
+            <Stat label={t('inbox.stats.unread')} value={fmt.number(counts.unread)} />
+            <Stat label={t('inbox.stats.flagged')} value={fmt.number(counts.flagged)} />
+          </Grid>
+          <div className="grid gap-[var(--crm-gap)] lg:grid-cols-12">
             <Card
+              flush
               className={cn(
                 'overflow-hidden lg:col-span-5 lg:self-start xl:col-span-4',
                 thread && 'hidden lg:block',
               )}
             >
-              <div className="border-b p-3 sm:p-4">
-                <InboxFilters slug={slug} active={filter} counts={counts} />
+              <div className="border-b border-[var(--crm-line)] p-3">
+                <InboxFilters slug={slug} active={filter} counts={counts} t={t} fmt={fmt} />
               </div>
               <div className="lg:max-h-[calc(100dvh-16rem)] lg:overflow-y-auto">
                 <ConversationList
@@ -152,6 +162,8 @@ export default async function InboxPage({
                   rows={rows}
                   filter={filter}
                   selectedId={thread?.conversation.id}
+                  t={t}
+                  fmt={fmt}
                 />
               </div>
             </Card>
@@ -165,22 +177,25 @@ export default async function InboxPage({
                   sendNotice={sendNotice}
                   canLinkClient={can(ctx, 'clients.manage')}
                   canViewClients={can(ctx, 'clients.view')}
+                  t={t}
+                  fmt={fmt}
                 />
               ) : (
                 <Card className="lg:min-h-96">
                   <EmptyState
                     icon={<MessagesSquare className="size-5" strokeWidth={1.5} />}
-                    title={selected ? 'Conversation not found' : 'Pick a conversation'}
+                    title={selected ? t('inbox.empty.notFound') : t('inbox.empty.pick')}
                     description={
                       counts.unread
-                        ? `${counts.unread} unread ${counts.unread === 1 ? 'conversation' : 'conversations'}.`
-                        : 'You’re all caught up.'
+                        ? t('inbox.empty.unread', { count: counts.unread })
+                        : t('inbox.empty.caughtUp')
                     }
                   />
                 </Card>
               )}
             </div>
           </div>
+          </>
         )}
       </PageBody>
     </>

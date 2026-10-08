@@ -9,12 +9,16 @@ import { SignatureImage } from '@/components/clients/signature-pad'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardBody } from '@/components/ui/card'
 import { PageBody } from '@/components/ui/page'
+import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { PrintButton } from './print-button'
 
-export const metadata: Metadata = { title: 'Signed intake' }
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT()
+  return { title: t('clients.intake.signedTitle') }
+}
 
 const humanize = (key: string) => key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 const ANSWER_AR: Record<string, string> = { yes: 'نعم', no: 'لا' }
@@ -73,9 +77,9 @@ export default async function IntakeSubmissionPage({
           href={appPath(`/${ctx.tenant.slug}/clients/${id}`)}
           className="inline-flex min-h-11 items-center gap-1.5 text-sm text-muted hover:text-fg"
         >
-          <ArrowLeft className="size-4" /> {clientName}
+          <ArrowLeft className="size-4 rtl:rotate-180" /> {clientName}
         </Link>
-        <PrintButton />
+        <PrintButton label={(await getT())('clients.intake.print')} />
       </div>
       <Card
         id="intake-document"

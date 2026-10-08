@@ -7,10 +7,12 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import { useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 
+/** `label` is the English fallback; known keys are shown via `documents.type.*`. */
 export type DocType = { key: string; label: string }
 export type EditableDocument = {
   id: string
@@ -34,13 +36,15 @@ export function ScanPicker({
   uploadUrl,
   current,
   onUploaded,
-  label = 'Upload scan or photo',
+  label,
 }: {
   uploadUrl: string
   current?: string | null
   onUploaded?: (file: Uploaded) => void
   label?: string
 }) {
+  const t = useT()
+  const text = label ?? t('documents.scan.upload')
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [file, setFile] = useState<Uploaded | null>(null)
@@ -48,7 +52,7 @@ export function ScanPicker({
 
   async function upload(f: File) {
     if (f.size > 8 * 1024 * 1024) {
-      toast.error('Files can be up to 8 MB.')
+      toast.error(t('documents.scan.tooLarge'))
       return
     }
     setBusy(true)
@@ -59,16 +63,17 @@ export function ScanPicker({
       const data = (await res.json().catch(() => null)) as {
         ok?: boolean
         error?: string
+        key?: string
         file?: Uploaded
       } | null
       if (!res.ok || !data?.file) {
-        toast.error(data?.error ?? 'Upload failed — please try again.')
+        toast.error(t.maybe(data?.key) ?? data?.error ?? t('errors.file.uploadFailed'))
         return
       }
       setFile(data.file)
       onUploaded?.(data.file)
     } catch {
-      toast.error('Upload failed — check your connection.')
+      toast.error(t('documents.scan.offline'))
     } finally {
       setBusy(false)
       if (input.current) input.current.value = ''
@@ -86,7 +91,7 @@ export function ScanPicker({
         accept="image/jpeg,image/png,image/webp,application/pdf"
         className="sr-only"
         tabIndex={-1}
-        aria-label={label}
+        aria-label={text}
         onChange={(e) => {
           const f = e.target.files?.[0]
           if (f) void upload(f)
@@ -100,7 +105,7 @@ export function ScanPicker({
           pending={busy}
           onClick={() => input.current?.click()}
         >
-          <FileUp /> {file || (current && !removed) ? 'Replace file' : label}
+          <FileUp /> {file || (current && !removed) ? t('documents.scan.replace') : text}
         </Button>
         {file ? (
           <motion.span
@@ -118,19 +123,19 @@ export function ScanPicker({
               rel="noreferrer"
               className="inline-flex items-center gap-1.5 text-accent underline-offset-4 hover:underline"
             >
-              <Paperclip className="size-4" /> Current file
+              <Paperclip className="size-4" /> {t('documents.scan.current')}
             </a>
             <button
               type="button"
               onClick={() => setRemoved(true)}
               className="min-h-8 text-muted underline-offset-4 hover:text-danger hover:underline"
             >
-              Remove
+              {t('common.remove')}
             </button>
           </span>
         ) : busy ? (
           <span className="flex items-center gap-1.5 text-sm text-muted">
-            <Loader2 className="size-4 animate-spin" /> Uploading…
+            <Loader2 className="size-4 animate-spin" /> {t('documents.scan.uploading')}
           </span>
         ) : current && removed ? (
           <motion.span
@@ -138,17 +143,17 @@ export function ScanPicker({
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2 text-sm text-muted"
           >
-            The file will be deleted when you save.
+            {t('documents.scan.willDelete')}
             <button
               type="button"
               onClick={() => setRemoved(false)}
               className="min-h-8 text-accent underline-offset-4 hover:underline"
             >
-              Undo
+              {t('documents.scan.undo')}
             </button>
           </motion.span>
         ) : (
-          <span className="text-[13px] text-muted">JPG, PNG, WebP or PDF · up to 8 MB</span>
+          <span className="text-[13px] text-muted">{t('documents.scan.hint')}</span>
         )}
       </div>
     </div>
@@ -175,19 +180,26 @@ export function DocumentSheet({
   defaultStaffId?: string
   trigger: React.ReactNode
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<'staff' | 'business'>(
     doc?.scope ?? (staff.length ? 'staff' : 'business'),
   )
   const types = scope === 'staff' ? staffTypes : businessTypes
-  const knownType = !doc || types.some((t) => t.key === doc.type)
+  const knownType = !doc || types.some((dt) => dt.key === doc.type)
 
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={doc ? `Edit ${doc.typeLabel.toLowerCase()}` : 'Add a document'}
-      description="We'll remind you 60, 30 and 7 days before it expires, and on the day."
+      title={
+        doc
+          ? t('documents.sheet.editTitle', {
+              type: t.locale === 'en' ? doc.typeLabel.toLowerCase() : doc.typeLabel,
+            })
+          : t('documents.sheet.addTitle')
+      }
+      description={t('documents.sheet.description')}
       trigger={trigger}
     >
       <ActionForm action={action} onSuccess={() => setOpen(false)} className="space-y-5">
@@ -195,7 +207,7 @@ export function DocumentSheet({
         <input type="hidden" name="scope" value={scope} />
         {!doc && (
           <fieldset className="space-y-1.5">
-            <legend className="text-[13px] font-medium">Belongs to</legend>
+            <legend className="text-[13px] font-medium">{t('documents.sheet.belongsTo')}</legend>
             <div className="grid grid-cols-2 rounded-xl border bg-surface p-1">
               {(['staff', 'business'] as const).map((s) => (
                 <button
@@ -211,21 +223,25 @@ export function DocumentSheet({
                   {scope === s && (
                     <motion.span layoutId="doc-scope" className="absolute inset-0 rounded-lg bg-subtle" />
                   )}
-                  <span className="relative">{s === 'staff' ? 'A staff member' : 'The business'}</span>
+                  <span className="relative">
+                    {s === 'staff' ? t('documents.sheet.staffOption') : t('documents.sheet.businessOption')}
+                  </span>
                 </button>
               ))}
             </div>
           </fieldset>
         )}
         {scope === 'staff' && (
-          <Field label="Staff member" name="staffId">
+          <Field label={t('documents.sheet.staffMember')} name="staffId">
             <Select id="staffId" name="staffId" defaultValue={doc?.staffId ?? defaultStaffId ?? ''}>
               <option value="" disabled>
                 Choose…
               </option>
               {/* A document of someone no longer active keeps its owner instead of falling to the first option. */}
               {doc?.staffId && !staff.some((s) => s.id === doc.staffId) && (
-                <option value={doc.staffId}>{`${doc.owner ?? 'Current owner'} (inactive)`}</option>
+                <option value={doc.staffId}>
+                  {t('documents.filter.inactive', { name: doc.owner ?? t('documents.sheet.currentOwner') })}
+                </option>
               )}
               {staff.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -236,40 +252,52 @@ export function DocumentSheet({
           </Field>
         )}
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Document" name="type">
+          <Field label={t('documents.sheet.document')} name="type">
             <Select id="type" name="type" key={scope} defaultValue={doc?.type ?? ''}>
               <option value="" disabled>
                 Choose…
               </option>
               {!knownType && doc && <option value={doc.type}>{doc.typeLabel}</option>}
-              {types.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
+              {types.map((dt) => (
+                <option key={dt.key} value={dt.key}>
+                  {t.maybe(`documents.type.${dt.key}`) ?? dt.label}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Number" name="number">
-            <Input id="number" name="number" defaultValue={doc?.number ?? ''} placeholder="Optional" />
+          <Field label={t('documents.sheet.number')} name="number">
+            <Input
+              id="number"
+              name="number"
+              defaultValue={doc?.number ?? ''}
+              placeholder={t('common.optional')}
+            />
           </Field>
-          <Field label="Issue date" name="issuedOn">
+          <Field label={t('documents.sheet.issued')} name="issuedOn">
             <Input id="issuedOn" name="issuedOn" type="date" defaultValue={doc?.issuedOn ?? ''} />
           </Field>
-          <Field label="Expiry date" name="expiresOn">
+          <Field label={t('documents.sheet.expiry')} name="expiresOn">
             <Input id="expiresOn" name="expiresOn" type="date" defaultValue={doc?.expiresOn ?? ''} />
           </Field>
         </div>
         <div className="space-y-1.5">
-          <p className="text-[13px] font-medium">Scan</p>
+          <p className="text-[13px] font-medium">{t('documents.sheet.scan')}</p>
           <ScanPicker
             uploadUrl={appPath(`/${slug}/documents/upload?scope=${scope}`)}
             current={doc?.fileUrl}
           />
         </div>
-        <Field label="Notes" name="notes">
-          <Textarea id="notes" name="notes" defaultValue={doc?.notes ?? ''} placeholder="Optional" />
+        <Field label={t('documents.sheet.notes')} name="notes">
+          <Textarea
+            id="notes"
+            name="notes"
+            defaultValue={doc?.notes ?? ''}
+            placeholder={t('common.optional')}
+          />
         </Field>
-        <SubmitButton className="w-full sm:w-auto">{doc ? 'Save changes' : 'Add document'}</SubmitButton>
+        <SubmitButton className="w-full sm:w-auto">
+          {doc ? t('documents.sheet.save') : t('documents.add')}
+        </SubmitButton>
       </ActionForm>
     </Sheet>
   )

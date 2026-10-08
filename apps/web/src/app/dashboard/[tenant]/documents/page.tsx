@@ -4,7 +4,6 @@ import {
   DOCUMENT_STATUSES,
   type DocumentStatus,
   dubaiToday,
-  expiryPhrase,
   filterDocuments,
   STAFF_DOCUMENT_TYPES,
   summarizeDocuments,
@@ -13,35 +12,33 @@ import {
 } from '@spa/services'
 import { asc, desc } from 'drizzle-orm'
 import { FileBadge, Paperclip, Pencil, Plus } from 'lucide-react'
-import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Card, Grid, Pill, Stat, type Tone } from '@/components/crm'
 import { DeleteDocumentButton, OwnerFilter } from '@/components/documents/controls'
 import { DocumentSheet } from '@/components/documents/document-sheet'
-import { Badge } from '@/components/ui/badge'
+import { docTypeLabel, expiryText } from '@/components/documents/labels'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { deleteDocumentAction, saveDocumentAction } from './actions'
 
-export const metadata: Metadata = { title: 'Documents' }
-
-const STATUS: Record<
-  DocumentStatus,
-  { label: string; tile: string; tone: 'danger' | 'warning' | 'accent' | 'success' | 'neutral'; dot: string }
-> = {
-  expired: { label: 'Expired', tile: 'Expired', tone: 'danger', dot: 'bg-danger' },
-  due30: { label: 'Due in 30 days', tile: 'Within 30 days', tone: 'warning', dot: 'bg-warning' },
-  due60: { label: 'Due in 60 days', tile: 'Within 60 days', tone: 'accent', dot: 'bg-accent' },
-  ok: { label: 'OK', tile: 'Up to date', tone: 'success', dot: 'bg-success' },
-  none: { label: 'No expiry', tile: 'No expiry', tone: 'neutral', dot: 'bg-border' },
+export async function generateMetadata() {
+  return { title: (await getT())('documents.title') }
 }
-const TILES: DocumentStatus[] = ['expired', 'due30', 'due60', 'ok']
+
+const TONE: Record<DocumentStatus, Tone> = {
+  expired: 'bad',
+  due30: 'warn',
+  due60: 'acc',
+  ok: 'ok',
+  none: 'neutral',
+}
+const TILES = ['expired', 'due30', 'due60', 'ok'] as const
 
 export default async function DocumentsPage({
   params,
@@ -54,6 +51,7 @@ export default async function DocumentsPage({
   if (!can(ctx, 'staff.manage')) notFound()
   const slug = ctx.tenant.slug
   const sp = await searchParams
+  const { t, fmt } = await getI18n()
   const today = dubaiToday()
 
   const data = await withTenant(ctx.tenant.id, async (tx) => ({
@@ -77,30 +75,36 @@ export default async function DocumentsPage({
     return appPath(`/${slug}/documents${qs ? `?${qs}` : ''}`)
   }
   const ownerOptions = [
-    { value: '', label: 'Everyone' },
-    { value: 'business', label: 'The business' },
-    ...data.people.map((p) => ({ value: p.id, label: p.active ? p.name : `${p.name} (inactive)` })),
+    { value: '', label: t('documents.filter.everyone') },
+    { value: 'business', label: t('documents.filter.business') },
+    ...data.people.map((p) => ({
+      value: p.id,
+      label: p.active ? p.name : t('documents.filter.inactive', { name: p.name }),
+    })),
   ]
   const staffChoices = data.people.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name }))
   const sheet = {
     slug,
     action: saveDocumentAction.bind(null, slug),
     staff: staffChoices,
-    staffTypes: [...STAFF_DOCUMENT_TYPES],
-    businessTypes: [...BUSINESS_DOCUMENT_TYPES],
+    staffTypes: STAFF_DOCUMENT_TYPES.map((d) => ({ key: d.key, label: docTypeLabel(t, d.key, d.label) })),
+    businessTypes: BUSINESS_DOCUMENT_TYPES.map((d) => ({
+      key: d.key,
+      label: docTypeLabel(t, d.key, d.label),
+    })),
   }
 
   const columns: Column<TrackedDocument>[] = [
     {
       key: 'doc',
-      header: 'Document',
+      header: t('documents.col.document'),
       primary: true,
       cell: (d) => (
         <span className="flex flex-col">
-          <span className="font-medium">{d.typeLabel}</span>
-          <span className="text-xs text-muted">
-            {d.scope === 'staff' ? d.owner : 'Business'}
-            {d.ownerActive ? '' : ' (inactive)'}
+          <span className="font-medium">{docTypeLabel(t, d.type, d.typeLabel)}</span>
+          <span className="crm-muted text-xs">
+            {d.scope === 'staff' ? d.owner : t('documents.business')}
+            {d.ownerActive ? '' : ` ${t('documents.inactive')}`}
             {d.number ? ` · ${d.number}` : ''}
           </span>
         </span>
@@ -108,27 +112,31 @@ export default async function DocumentsPage({
     },
     {
       key: 'expires',
-      header: 'Expires',
+      header: t('documents.col.expires'),
       cell: (d) =>
         d.expiresOn ? (
           <span className="flex flex-col">
-            <span className="tabular-nums">{formatDate(d.expiresOn)}</span>
-            <span className={cn('text-xs', d.status === 'expired' ? 'text-danger' : 'text-muted')}>
-              {expiryPhrase(d.days)}
+            <span className="crm-num">{fmt.date(`${d.expiresOn}T12:00:00Z`)}</span>
+            <span className={cn('text-xs', d.status === 'expired' ? 'text-danger' : 'crm-muted')}>
+              {expiryText(t, d.days)}
             </span>
           </span>
         ) : (
-          <span className="text-muted">—</span>
+          <span className="crm-muted">—</span>
         ),
     },
     {
       key: 'status',
-      header: 'Status',
-      cell: (d) => <Badge tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Badge>,
+      header: t('documents.col.status'),
+      cell: (d) => (
+        <Pill tone={TONE[d.status]} dot>
+          {t(`documents.status.${d.status}`)}
+        </Pill>
+      ),
     },
     {
       key: 'file',
-      header: 'File',
+      header: t('documents.col.file'),
       hideOnMobile: true,
       cell: (d) =>
         d.fileUrl ? (
@@ -138,7 +146,7 @@ export default async function DocumentsPage({
             rel="noreferrer"
             className="inline-flex min-h-8 items-center gap-1.5 text-accent underline-offset-4 hover:underline"
           >
-            <Paperclip className="size-3.5" /> View
+            <Paperclip className="size-3.5" /> {t('documents.view')}
           </a>
         ) : (
           <span className="text-muted">—</span>
@@ -146,15 +154,20 @@ export default async function DocumentsPage({
     },
     {
       key: 'actions',
-      header: '',
-      className: 'text-right',
+      header: <span className="sr-only">{t('documents.col.actions')}</span>,
+      className: 'text-end',
       cell: (d) => (
         <span className="inline-flex items-center justify-end gap-1">
           <DocumentSheet
             {...sheet}
-            doc={d}
+            doc={{ ...d, typeLabel: docTypeLabel(t, d.type, d.typeLabel) }}
             trigger={
-              <Button variant="ghost" size="sm" aria-label="Edit document" className="min-h-11 md:min-h-8">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t('documents.edit')}
+                className="min-h-11 md:min-h-8"
+              >
                 <Pencil />
               </Button>
             }
@@ -171,7 +184,7 @@ export default async function DocumentsPage({
       defaultStaffId={staffChoices.some((s) => s.id === who) ? who : undefined}
       trigger={
         <Button>
-          <Plus /> Add document
+          <Plus /> {t('documents.add')}
         </Button>
       }
     />
@@ -179,40 +192,36 @@ export default async function DocumentsPage({
 
   return (
     <>
-      <PageHeader
-        title="Documents"
-        description="Visas, Emirates IDs, health cards and licences in one place — with reminders before anything expires."
-        actions={addButton}
-      />
+      <PageHeader title={t('documents.title')} description={t('documents.description')} actions={addButton} />
       <PageBody>
-        <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 lg:gap-6">
+        <Grid cols="g4">
           {TILES.map((s) => {
             const active = status === s
             return (
-              <StaggerItem key={s}>
-                <Link
-                  href={href({ status: active ? undefined : s, who })}
-                  scroll={false}
-                  aria-current={active ? 'true' : undefined}
-                  className={cn(
-                    'group block rounded-xl border bg-surface p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:shadow-soft sm:p-5',
-                    active && 'border-accent ring-4 ring-accent/10',
-                  )}
-                >
-                  <span className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.06em] text-muted">
-                    <span className={cn('size-1.5 rounded-full', STATUS[s].dot)} />
-                    {STATUS[s].tile}
-                  </span>
-                  <span className="mt-2 block text-[26px] font-semibold tracking-tight tabular-nums">
-                    {summary[s]}
-                  </span>
-                </Link>
-              </StaggerItem>
+              <Link
+                key={s}
+                href={href({ status: active ? undefined : s, who })}
+                scroll={false}
+                aria-current={active ? 'true' : undefined}
+                className={cn(
+                  'block rounded-[var(--crm-radius)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+                  active && 'ring-2 ring-accent',
+                )}
+              >
+                <Stat
+                  label={
+                    <Pill tone={TONE[s]} dot>
+                      {t(`documents.tile.${s}`)}
+                    </Pill>
+                  }
+                  value={fmt.number(summary[s])}
+                />
+              </Link>
             )
           })}
-        </Stagger>
+        </Grid>
 
-        <Card>
+        <Card flush>
           <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <OwnerFilter
               value={who ?? ''}
@@ -221,12 +230,15 @@ export default async function DocumentsPage({
                 ownerOptions.map((o) => [o.value, href({ status, who: o.value || undefined })]),
               )}
             />
-            <p className="flex items-center gap-3 text-sm text-muted">
-              {status ? `${STATUS[status].label} · ` : ''}
-              {rows.length} of {summary.total}
+            <p className="crm-muted flex items-center gap-3 text-sm">
+              {status ? `${t(`documents.status.${status}`)} · ` : ''}
+              {t('documents.filter.count', {
+                shown: fmt.number(rows.length),
+                total: fmt.number(summary.total),
+              })}
               {(status || who) && (
                 <Link href={href({})} className="text-accent underline-offset-4 hover:underline">
-                  Clear filters
+                  {t('documents.filter.clear')}
                 </Link>
               )}
             </p>
@@ -234,15 +246,15 @@ export default async function DocumentsPage({
           {data.docs.length === 0 ? (
             <EmptyState
               icon={<FileBadge className="size-5" strokeWidth={1.5} />}
-              title="No documents yet"
-              description="Add each therapist's visa, Emirates ID and health card, plus your trade licence and Ejari. We'll remind you before they expire."
+              title={t('documents.empty.title')}
+              description={t('documents.empty.body')}
               action={addButton}
             />
           ) : rows.length === 0 ? (
             <EmptyState
               icon={<FileBadge className="size-5" strokeWidth={1.5} />}
-              title="Nothing matches these filters"
-              description="Try another status or person."
+              title={t('documents.noMatch.title')}
+              description={t('documents.noMatch.body')}
             />
           ) : (
             <div className="py-2">

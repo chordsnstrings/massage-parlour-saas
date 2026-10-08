@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label, Select } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 
 /** "Belongs to" filter: navigates on change, so the list stays a server-rendered, shareable URL. */
@@ -17,12 +18,13 @@ export function OwnerFilter({
   options: { value: string; label: string }[]
   hrefFor: Record<string, string>
 }) {
+  const t = useT()
   const router = useRouter()
   const [pending, start] = useTransition()
   return (
     <div className="flex items-center gap-3">
       <Label htmlFor="doc-owner" className="shrink-0 text-muted">
-        Belongs to
+        {t('documents.filter.belongsTo')}
       </Label>
       <Select
         id="doc-owner"
@@ -46,6 +48,7 @@ export function OwnerFilter({
 
 /** Two-step delete: the first tap arms it, the second removes the document and its scan. */
 export function DeleteDocumentButton({ action }: { action: () => Promise<ActionResult> }) {
+  const t = useT()
   const [armed, setArmed] = useState(false)
   const [pending, start] = useTransition()
   return (
@@ -53,20 +56,20 @@ export function DeleteDocumentButton({ action }: { action: () => Promise<ActionR
       variant={armed ? 'danger' : 'ghost'}
       size="sm"
       pending={pending}
-      aria-label={armed ? 'Confirm delete' : 'Delete document'}
+      aria-label={armed ? t('documents.confirmDelete') : t('documents.delete')}
       className="min-h-11 md:min-h-8"
       onBlur={() => setArmed(false)}
       onClick={() => {
         if (!armed) return setArmed(true)
         start(async () => {
           const r = await action()
-          if (r?.ok) toast.success(r.message ?? 'Deleted')
-          else if (r) toast.error(r.error)
+          if (r?.ok) toast.success(resultText(t, r) ?? t('documents.result.deleted'))
+          else if (r) toast.error(resultText(t, r) ?? t('errors.generic'))
           setArmed(false)
         })
       }}
     >
-      {armed ? 'Delete?' : <Trash2 />}
+      {armed ? t('documents.deleteQ') : <Trash2 />}
     </Button>
   )
 }

@@ -1,4 +1,5 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n'
 import { Check, Loader2, MessageCircle, Search, UserPlus, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState, useTransition } from 'react'
@@ -7,11 +8,14 @@ import { Button } from '@/components/ui/button'
 import { ActionForm, Field, FieldError, SubmitButton } from '@/components/ui/form'
 import { Input, Label, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
+import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import type { Draft } from './calendar-view'
 import { minuteLabel, snap } from './time'
 import type { CalendarData } from './types'
+
+const SOURCES = ['phone', 'whatsapp', 'walk_in', 'instagram'] as const
 
 type ClientHit = { id: string; name: string; phone: string | null; blocked: boolean }
 type Done = { ref: string; whatsapp: string | null; whatsappWeb: string | null }
@@ -34,6 +38,7 @@ export function NewBookingSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const t = useT()
   const [done, setDone] = useState<Done | null>(null)
   const [mode, setMode] = useState<'search' | 'new'>('search')
   const [client, setClient] = useState<ClientHit | null>(null)
@@ -48,11 +53,13 @@ export function NewBookingSheet({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={done ? 'Booking confirmed' : 'New booking'}
+      title={done ? t('calendar.create.doneTitle') : t('calendar.create.title')}
       description={
         done
-          ? 'Send the confirmation from your WhatsApp.'
-          : `${minuteLabel(startMin)}${staffName ? ` with ${staffName}` : ''}`
+          ? t('calendar.create.doneText')
+          : staffName
+            ? t('calendar.create.withName', { time: minuteLabel(startMin), name: staffName })
+            : minuteLabel(startMin)
       }
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -73,8 +80,8 @@ export function NewBookingSheet({
                 <Check className="size-4" strokeWidth={2} />
               </motion.span>
               <div>
-                <p className="text-sm font-medium">Reference {done.ref}</p>
-                <p className="text-[13px] text-muted">A reminder is queued in the WhatsApp outbox.</p>
+                <p className="text-sm font-medium">{t('calendar.create.reference', { ref: done.ref })}</p>
+                <p className="text-[13px] text-muted">{t('calendar.create.reminderQueued')}</p>
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -85,14 +92,14 @@ export function NewBookingSheet({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <MessageCircle /> Send confirmation on WhatsApp
+                    <MessageCircle /> {t('calendar.create.sendConfirmation')}
                   </a>
                 </Button>
               ) : (
-                <p className="text-sm text-muted">No mobile number on file, so there’s nothing to send.</p>
+                <p className="text-sm text-muted">{t('calendar.create.noMobile')}</p>
               )}
               <Button variant="secondary" size="lg" onClick={() => onOpenChange(false)}>
-                Done
+                {t('common.done')}
               </Button>
             </div>
           </motion.div>
@@ -119,20 +126,20 @@ export function NewBookingSheet({
               ) : (
                 <div className="space-y-4 rounded-xl border p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-[13px] font-medium">New client</p>
+                    <p className="text-[13px] font-medium">{t('calendar.create.newClient')}</p>
                     <button
                       type="button"
                       onClick={() => setMode('search')}
                       className="text-[13px] font-medium text-accent hover:underline"
                     >
-                      Search instead
+                      {t('calendar.create.searchInstead')}
                     </button>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Name" name="clientName">
+                    <Field label={t('calendar.fields.name')} name="clientName">
                       <Input id="clientName" name="clientName" autoComplete="off" autoFocus />
                     </Field>
-                    <Field label="UAE mobile" name="clientPhone">
+                    <Field label={t('calendar.fields.mobile')} name="clientPhone">
                       <Input
                         id="clientPhone"
                         name="clientPhone"
@@ -145,9 +152,9 @@ export function NewBookingSheet({
                 </div>
               )}
 
-              <Field label="Service" name="variantId">
+              <Field label={t('calendar.fields.service')} name="variantId">
                 <Select id="variantId" name="variantId" defaultValue={data.variants[0]?.id}>
-                  {data.variants.length === 0 && <option value="">Add services first</option>}
+                  {data.variants.length === 0 && <option value="">{t('calendar.create.addServicesFirst')}</option>}
                   {data.variants.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.label}
@@ -157,7 +164,7 @@ export function NewBookingSheet({
               </Field>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Time" name="time">
+                <Field label={t('calendar.fields.time')} name="time">
                   <Input
                     id="time"
                     name="time"
@@ -167,17 +174,18 @@ export function NewBookingSheet({
                     className="tabular"
                   />
                 </Field>
-                <Field label="Source" name="source">
+                <Field label={t('calendar.fields.source')} name="source">
                   <Select id="source" name="source" defaultValue="phone">
-                    <option value="phone">Phone</option>
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="walk_in">Walk-in</option>
-                    <option value="instagram">Instagram</option>
+                    {SOURCES.map((v) => (
+                      <option key={v} value={v}>
+                        {enumLabel(t, 'bookingSource', v)}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
-                <Field label="Therapist" name="staffId">
+                <Field label={t('calendar.fields.therapist')} name="staffId">
                   <Select id="staffId" name="staffId" defaultValue={draft?.staffId ?? ''}>
-                    <option value="">Any (automatic)</option>
+                    <option value="">{t('calendar.create.anyTherapist')}</option>
                     {data.staff.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -185,9 +193,9 @@ export function NewBookingSheet({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Room" name="roomId">
+                <Field label={t('calendar.fields.room')} name="roomId">
                   <Select id="roomId" name="roomId" defaultValue={draft?.roomId ?? ''}>
-                    <option value="">Automatic</option>
+                    <option value="">{t('calendar.create.automatic')}</option>
                     {data.rooms.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name}
@@ -197,12 +205,12 @@ export function NewBookingSheet({
                 </Field>
               </div>
 
-              <Field label="Notes" name="notes" hint="Pressure, focus areas, allergies…">
+              <Field label={t('calendar.fields.notes')} name="notes" hint={t('calendar.fields.notesHint')}>
                 <Textarea id="notes" name="notes" rows={2} className="min-h-16" />
               </Field>
 
               <SubmitButton size="lg" className="w-full">
-                Create booking
+                {t('calendar.create.submit')}
               </SubmitButton>
             </ActionForm>
           </motion.div>
@@ -223,6 +231,7 @@ function ClientSearch({
   onChange: (c: ClientHit | null) => void
   onNew: () => void
 }) {
+  const t = useT()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<ClientHit[]>([])
   const [pending, start] = useTransition()
@@ -232,7 +241,7 @@ function ClientSearch({
       setHits([])
       return
     }
-    const t = setTimeout(
+    const timer = setTimeout(
       () =>
         start(async () => {
           const r = await searchClientsAction(slug, q)
@@ -240,13 +249,13 @@ function ClientSearch({
         }),
       220,
     )
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [q, slug, value])
 
   if (value) {
     return (
       <div className="space-y-1.5">
-        <Label>Client</Label>
+        <Label>{t('calendar.fields.client')}</Label>
         <input type="hidden" name="clientId" value={value.id} />
         <div className="flex items-center justify-between gap-3 rounded-lg border bg-subtle/50 px-3 py-2">
           <span className="min-w-0">
@@ -257,26 +266,26 @@ function ClientSearch({
             type="button"
             onClick={() => onChange(null)}
             className="grid size-9 place-items-center rounded-md text-muted hover:bg-subtle hover:text-fg"
-            aria-label="Change client"
+            aria-label={t('calendar.create.changeClient')}
           >
             <X className="size-4" strokeWidth={1.5} />
           </button>
         </div>
-        {value.blocked && <p className="text-[13px] text-danger">This client is on the blocklist.</p>}
+        {value.blocked && <p className="text-[13px] text-danger">{t('calendar.create.blocked')}</p>}
       </div>
     )
   }
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="clientSearch">Client</Label>
+      <Label htmlFor="clientSearch">{t('calendar.fields.client')}</Label>
       <div className="relative">
         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
         <Input
           id="clientSearch"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name or mobile"
+          placeholder={t('calendar.create.searchPlaceholder')}
           autoComplete="off"
           className="ps-9"
           autoFocus
@@ -307,7 +316,7 @@ function ClientSearch({
               </li>
             ))}
             {!pending && hits.length === 0 && (
-              <li className="px-3 py-2.5 text-sm text-muted">No matching clients</li>
+              <li className="px-3 py-2.5 text-sm text-muted">{t('calendar.create.noMatches')}</li>
             )}
           </motion.ul>
         )}
@@ -317,7 +326,7 @@ function ClientSearch({
         onClick={onNew}
         className="inline-flex min-h-9 items-center gap-1.5 text-[13px] font-medium text-accent hover:underline"
       >
-        <UserPlus className="size-3.5" /> New client
+        <UserPlus className="size-3.5" /> {t('calendar.create.newClient')}
       </button>
     </div>
   )

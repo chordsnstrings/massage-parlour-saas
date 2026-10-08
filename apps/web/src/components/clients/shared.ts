@@ -4,8 +4,7 @@ import type { IntakeField } from '@spa/db'
 export const maskClientPhone = (e164: string) =>
   e164.length >= 8 ? `+${e164.slice(0, 3)} ${e164.slice(3, 5)} ••• ••${e164.slice(-2)}` : '•••'
 
-export const GENDER_LABEL: Record<string, string> = { female: 'Female', male: 'Male', other: 'Other' }
-export const LANGUAGE_LABEL: Record<string, string> = { en: 'English', ar: 'العربية' }
+/** Stored as these English values; shown via `clients.prefs.pressureOption.*`. */
 export const PRESSURE_OPTIONS = ['Light', 'Medium', 'Firm', 'Deep'] as const
 
 /** Comma/newline separated tags → unique, trimmed, lower-case list. */

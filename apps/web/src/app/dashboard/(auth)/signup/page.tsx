@@ -13,19 +13,17 @@ function siteAddress() {
   return { prefix: '', suffix: sample.host.slice('slug'.length) }
 }
 
-export const metadata: Metadata = { title: 'Create your spa' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('auth.meta.signup') }
+}
 
 export default async function SignupPage() {
   const session = await getSession()
   const t = await getT()
   return (
     <AuthLayout
-      title={session ? 'Add a spa' : 'Create your spa'}
-      subtitle={
-        session
-          ? 'Set up another business under your account.'
-          : '14-day free trial. Your site goes live instantly.'
-      }
+      title={session ? t('auth.signup.titleAdd') : t('auth.signup.title')}
+      subtitle={session ? t('auth.signup.subtitleAdd') : t('auth.signup.subtitle')}
     >
       <SignupForm
         address={siteAddress()}

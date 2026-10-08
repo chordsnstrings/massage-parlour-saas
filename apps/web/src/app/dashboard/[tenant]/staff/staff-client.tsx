@@ -1,17 +1,38 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n/labels'
 import { CalendarPlus, Moon, Pencil, Plus, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useRouter } from 'next/navigation'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, useTransition } from 'react'
 import { ImageInput } from '@/components/media/image-input'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, FieldError, SubmitButton, useFormCtx } from '@/components/ui/form'
 import { Checkbox, Input, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
+import { toast } from '@/components/ui/toast'
+import { resultText, useT } from '@/i18n/client'
+import type { ActionResult } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
-import { ChipCheckbox, ColorPicker, Toggle, useConfirmAction } from '../services/services-client'
+import { ChipCheckbox, ColorPicker, Toggle } from '../services/services-client'
 import { deleteShiftAction, deleteStaffAction, generateShiftsAction, saveStaffAction } from './actions'
+
+/** Optional confirm → run the action → toast its result in the viewer's language. */
+function useConfirmAction() {
+  const t = useT()
+  const [pending, start] = useTransition()
+  const run = (question: string | null, fn: () => Promise<ActionResult>, after?: () => void) => {
+    if (question && !window.confirm(question)) return
+    start(async () => {
+      const r = await fn()
+      if (r?.ok) {
+        if (r.message || r.key) toast.success(resultText(t, r) ?? '')
+        after?.()
+      } else if (r) toast.error(resultText(t, r) ?? t('errors.generic'))
+    })
+  }
+  return { pending, run }
+}
 
 type MemberOption = { id: string; name: string; email: string }
 type ServiceOption = { id: string; name: string; active: boolean }
@@ -42,6 +63,7 @@ export function StaffSheet({
   services: ServiceOption[]
   person?: StaffInput
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const router = useRouter()
   const { pending, run } = useConfirmAction()
@@ -49,17 +71,17 @@ export function StaffSheet({
     <Sheet
       open={open}
       onOpenChange={setOpen}
-      title={person ? `Edit ${person.displayName}` : 'New therapist'}
-      description="Shown on the calendar and, if bookable, on your booking page."
+      title={person ? t('staff.form.editTitle', { name: person.displayName }) : t('staff.form.newTitle')}
+      description={t('staff.form.description')}
       className="md:max-w-2xl"
       trigger={
         person ? (
           <Button variant="secondary">
-            <Pencil /> Edit profile
+            <Pencil /> {t('staff.form.editProfile')}
           </Button>
         ) : (
           <Button>
-            <Plus /> Add therapist
+            <Plus /> {t('staff.form.add')}
           </Button>
         )
       }
@@ -77,12 +99,16 @@ export function StaffSheet({
         <ImageInput
           slug={slug}
           name="photoUrl"
-          label="Photo"
-          hint="Shown in the Team section of your website."
+          label={t('staff.form.photo')}
+          hint={t('staff.form.photoHint')}
           defaultValue={person?.photoUrl}
         />
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Display name" name="displayName" hint="First name is enough — clients see it.">
+          <Field
+            label={t('staff.form.displayName')}
+            name="displayName"
+            hint={t('staff.form.displayNameHint')}
+          >
             <Input
               id="displayName"
               name="displayName"
@@ -91,15 +117,15 @@ export function StaffSheet({
               required
             />
           </Field>
-          <Field label="Gender" name="gender" hint="Clients often ask for a female or male therapist.">
+          <Field label={t('staff.form.gender')} name="gender" hint={t('staff.form.genderHint')}>
             <Select id="gender" name="gender" defaultValue={person?.gender ?? ''}>
-              <option value="">Not set</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="other">Other</option>
+              <option value="">{t('staff.form.notSet')}</option>
+              <option value="female">{enumLabel(t, 'staffGender', 'female')}</option>
+              <option value="male">{enumLabel(t, 'staffGender', 'male')}</option>
+              <option value="other">{enumLabel(t, 'staffGender', 'other')}</option>
             </Select>
           </Field>
-          <Field label="UAE mobile" name="phone">
+          <Field label={t('staff.form.mobile')} name="phone">
             <Input
               id="phone"
               name="phone"
@@ -109,13 +135,9 @@ export function StaffSheet({
               placeholder="050 123 4567"
             />
           </Field>
-          <Field
-            label="Team member login"
-            name="memberId"
-            hint="Optional — lets them see their own schedule."
-          >
+          <Field label={t('staff.form.memberLogin')} name="memberId" hint={t('staff.form.memberLoginHint')}>
             <Select id="memberId" name="memberId" defaultValue={person?.memberId ?? ''}>
-              <option value="">Not linked</option>
+              <option value="">{t('staff.form.notLinked')}</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.email})
@@ -123,7 +145,11 @@ export function StaffSheet({
               ))}
             </Select>
           </Field>
-          <Field label="Commission" name="commissionPct" hint="Percent of service sales.">
+          <Field
+            label={t('staff.form.commission')}
+            name="commissionPct"
+            hint={t('staff.form.commissionHint')}
+          >
             <div className="relative">
               <Input
                 id="commissionPct"
@@ -137,7 +163,11 @@ export function StaffSheet({
               </span>
             </div>
           </Field>
-          <Field label="Base salary" name="baseSalaryAed" hint="Monthly, in AED.">
+          <Field
+            label={t('staff.form.baseSalary')}
+            name="baseSalaryAed"
+            hint={t('staff.form.baseSalaryHint')}
+          >
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 start-3 grid place-items-center text-sm text-muted">
                 AED
@@ -154,26 +184,24 @@ export function StaffSheet({
         </div>
 
         <fieldset className="space-y-2">
-          <legend className="text-[13px] font-medium">Colour on the calendar</legend>
+          <legend className="text-[13px] font-medium">{t('staff.form.colour')}</legend>
           <ColorPicker name="color" defaultValue={person?.color} />
         </fieldset>
 
         <fieldset className="space-y-2">
-          <legend className="text-[13px] font-medium">Skills</legend>
+          <legend className="text-[13px] font-medium">{t('staff.form.skills')}</legend>
           {services.length === 0 ? (
-            <p className="text-[13px] text-muted">
-              Add services first, then choose what this therapist performs.
-            </p>
+            <p className="text-[13px] text-muted">{t('staff.form.skillsNone')}</p>
           ) : (
             <>
-              <p className="text-[13px] text-muted">Only these services can be booked with them.</p>
+              <p className="text-[13px] text-muted">{t('staff.form.skillsHint')}</p>
               <div className="flex flex-wrap gap-2 pt-1">
                 {services.map((s) => (
                   <ChipCheckbox
                     key={s.id}
                     name="skills"
                     value={s.id}
-                    label={s.active ? s.name : `${s.name} (inactive)`}
+                    label={s.active ? s.name : t('staff.form.inactive', { name: s.name })}
                     defaultChecked={person ? person.skills.includes(s.id) : s.active}
                   />
                 ))}
@@ -185,14 +213,14 @@ export function StaffSheet({
         <div className="grid gap-3 sm:grid-cols-2">
           <Toggle
             name="bookable"
-            label="Bookable"
-            hint="Appears on the calendar and booking page."
+            label={t('staff.form.bookable')}
+            hint={t('staff.form.bookableHint')}
             defaultChecked={person?.bookable ?? true}
           />
           <Toggle
             name="active"
-            label="Active"
-            hint="Archived staff keep their history."
+            label={t('staff.form.active')}
+            hint={t('staff.form.activeHint')}
             defaultChecked={person?.active ?? true}
           />
         </div>
@@ -206,18 +234,18 @@ export function StaffSheet({
               pending={pending}
               onClick={() =>
                 run(
-                  `Archive ${person.displayName}? They’ll no longer be bookable.`,
+                  t('staff.form.archiveConfirm', { name: person.displayName }),
                   () => deleteStaffAction(slug, person.id),
                   () => setOpen(false),
                 )
               }
             >
-              <Trash2 /> Archive
+              <Trash2 /> {t('staff.form.archive')}
             </Button>
           ) : (
             <span />
           )}
-          <SubmitButton>{person ? 'Save' : 'Add therapist'}</SubmitButton>
+          <SubmitButton>{person ? t('common.save') : t('staff.form.add')}</SubmitButton>
         </div>
       </ActionForm>
     </Sheet>
@@ -228,15 +256,7 @@ export function StaffSheet({
 // Weekly pattern → shifts
 // ---------------------------------------------------------------------------
 
-const DAYS = [
-  ['mon', 'Monday'],
-  ['tue', 'Tuesday'],
-  ['wed', 'Wednesday'],
-  ['thu', 'Thursday'],
-  ['fri', 'Friday'],
-  ['sat', 'Saturday'],
-  ['sun', 'Sunday'],
-] as const
+const DAYS = [['mon'], ['tue'], ['wed'], ['thu'], ['fri'], ['sat'], ['sun']] as const
 
 /**
  * React resets a form after its action completes, which leaves controlled checkboxes showing their
@@ -271,6 +291,7 @@ export function PatternForm({
   to: string
   initial?: Partial<Record<DayKey, { start: string; end: string }>>
 }) {
+  const t = useT()
   const [days, setDays] = useState<Record<DayKey, DayState>>(() => {
     const hasInitial = initial && Object.keys(initial).length > 0
     return Object.fromEntries(
@@ -296,14 +317,14 @@ export function PatternForm({
     <ActionForm action={generateShiftsAction.bind(null, slug)} className="space-y-6">
       <input type="hidden" name="staffId" value={staffId} />
       <div className={cn('grid gap-5', branches.length > 1 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
-        <Field label="From" name="from">
+        <Field label={t('staff.pattern.from')} name="from">
           <Input id="from" name="from" type="date" defaultValue={from} required />
         </Field>
-        <Field label="Until" name="to">
+        <Field label={t('staff.pattern.until')} name="to">
           <Input id="to" name="to" type="date" defaultValue={to} required />
         </Field>
         {branches.length > 1 ? (
-          <Field label="Branch" name="branchId">
+          <Field label={t('staff.pattern.branch')} name="branchId">
             <Select id="branchId" name="branchId" defaultValue={branches[0]?.id}>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -319,15 +340,16 @@ export function PatternForm({
 
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[13px] font-medium">Working days</p>
+          <p className="text-[13px] font-medium">{t('staff.pattern.workingDays')}</p>
           <Button type="button" variant="ghost" size="sm" onClick={copyFirst}>
-            Copy first day to all
+            {t('staff.pattern.copyFirst')}
           </Button>
         </div>
         <ResyncAfterSubmit>
           <ul className="divide-y rounded-xl border">
-            {DAYS.map(([k, label]) => {
+            {DAYS.map(([k]) => {
               const d = days[k]
+              const label = t(`staff.days.${k}`)
               const overnight = d.on && d.end <= d.start && d.end !== d.start
               return (
                 <li
@@ -339,7 +361,7 @@ export function PatternForm({
                       name={`${k}_on`}
                       checked={d.on}
                       onChange={(e) => set(k, { on: e.target.checked })}
-                      aria-label={`Works on ${label}`}
+                      aria-label={t('staff.pattern.worksOn', { day: label })}
                     />
                     <span className={cn('text-sm font-medium', !d.on && 'text-muted')}>{label}</span>
                   </label>
@@ -355,7 +377,7 @@ export function PatternForm({
                         <Input
                           type="time"
                           name={`${k}_start`}
-                          aria-label={`${label} start`}
+                          aria-label={t('staff.pattern.start', { day: label })}
                           value={d.start}
                           onChange={(e) => set(k, { start: e.target.value })}
                           className="min-w-0 flex-1 px-2.5 sm:w-36 sm:flex-none sm:px-3"
@@ -364,14 +386,14 @@ export function PatternForm({
                         <Input
                           type="time"
                           name={`${k}_end`}
-                          aria-label={`${label} end`}
+                          aria-label={t('staff.pattern.end', { day: label })}
                           value={d.end}
                           onChange={(e) => set(k, { end: e.target.value })}
                           className="min-w-0 flex-1 px-2.5 sm:w-36 sm:flex-none sm:px-3"
                         />
                         {overnight && (
                           <span className="flex basis-full items-center gap-1 text-[13px] text-muted sm:basis-auto">
-                            <Moon className="size-3.5" /> next day
+                            <Moon className="size-3.5" /> {t('staff.pattern.nextDay')}
                           </span>
                         )}
                         <FieldError name={k} />
@@ -384,7 +406,7 @@ export function PatternForm({
                         exit={{ opacity: 0 }}
                         className="text-end text-sm text-muted sm:text-start"
                       >
-                        Day off
+                        {t('staff.pattern.dayOff')}
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -396,9 +418,9 @@ export function PatternForm({
         <FieldError name="pattern" />
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[13px] text-muted">Days that already have an overlapping shift are skipped.</p>
+        <p className="text-[13px] text-muted">{t('staff.pattern.skipNote')}</p>
         <SubmitButton>
-          <CalendarPlus /> Generate shifts
+          <CalendarPlus /> {t('staff.pattern.generate')}
         </SubmitButton>
       </div>
     </ActionForm>
@@ -414,12 +436,13 @@ export function DeleteShiftButton({
   shiftId: string
   label: string
 }) {
+  const t = useT()
   const { pending, run } = useConfirmAction()
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label={`Delete shift ${label}`}
+      aria-label={t('staff.pattern.deleteShift', { label })}
       pending={pending}
       onClick={() => run(null, () => deleteShiftAction(slug, shiftId))}
     >

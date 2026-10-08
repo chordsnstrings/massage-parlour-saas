@@ -1,3 +1,4 @@
+import { enumLabel, type Translator } from '@spa/core/i18n'
 import {
   clientMemberships,
   clientPackages,
@@ -9,41 +10,42 @@ import {
   withTenant,
 } from '@spa/db'
 import { asc, count, desc, eq } from 'drizzle-orm'
-import { Gift, Package, Pencil, Plus, Repeat, TicketPercent } from 'lucide-react'
+import { Gift, Package, Pencil, Plus, Repeat, ShoppingBag, TicketPercent, Users } from 'lucide-react'
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, Pill, SectionTabs, Stack, Stat, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
-import { Stagger, StaggerItem } from '@/components/ui/motion'
-import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
-import { type Column, DataTable } from '@/components/ui/table'
+import { EmptyState, PageHeader } from '@/components/ui/page'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { cn, formatAed, formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { saveMembershipAction, savePackageAction, savePromoAction, toggleActiveAction } from './actions'
 
-export const metadata: Metadata = { title: 'Packages & gifts' }
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('packages.title') }
+}
 
 const TABS = [
-  { key: 'packages', label: 'Packages', icon: Package },
-  { key: 'memberships', label: 'Memberships', icon: Repeat },
-  { key: 'gift-cards', label: 'Gift cards', icon: Gift },
-  { key: 'promos', label: 'Promo codes', icon: TicketPercent },
+  { key: 'packages', label: 'packages.tabs.packages', icon: Package },
+  { key: 'memberships', label: 'packages.tabs.memberships', icon: Repeat },
+  { key: 'gift-cards', label: 'packages.tabs.giftCards', icon: Gift },
+  { key: 'promos', label: 'packages.tabs.promos', icon: TicketPercent },
 ] as const
 type Tab = (typeof TABS)[number]['key']
 type Item = { serviceId: string; quantity: number }
 type ServiceOpt = { id: string; name: string }
 
 function ItemRows({
+  t,
   options,
   items,
   optional,
 }: {
+  t: Translator
   options: ServiceOpt[]
   items?: Item[]
   optional?: boolean
@@ -51,7 +53,7 @@ function ItemRows({
   return (
     <fieldset className="space-y-2.5">
       <legend className="mb-2 text-sm font-medium">
-        {optional ? 'Included sessions each month (optional)' : 'Treatments included'}
+        {optional ? t('packages.items.monthly') : t('packages.items.included')}
       </legend>
       {[1, 2, 3, 4].map((n) => {
         const item = items?.[n - 1]
@@ -60,9 +62,9 @@ function ItemRows({
             <Select
               name={`item${n}Service`}
               defaultValue={item?.serviceId ?? ''}
-              aria-label={`Treatment ${n}`}
+              aria-label={t('packages.items.treatmentN', { n })}
             >
-              <option value="">{n === 1 && !optional ? 'Choose a treatment…' : '—'}</option>
+              <option value="">{n === 1 && !optional ? t('packages.items.choose') : '—'}</option>
               {options.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -75,7 +77,7 @@ function ItemRows({
               min={1}
               max={100}
               defaultValue={item?.quantity ?? (n === 1 ? 5 : '')}
-              aria-label={`Sessions of treatment ${n}`}
+              aria-label={t('packages.items.sessionsN', { n })}
               placeholder="×"
             />
           </div>
@@ -86,12 +88,14 @@ function ItemRows({
 }
 
 function ActiveToggle({
+  t,
   slug,
   kind,
   id,
   active,
   disabled,
 }: {
+  t: Translator
   slug: string
   kind: 'package' | 'membership' | 'promo'
   id: string
@@ -101,7 +105,7 @@ function ActiveToggle({
   return (
     <form action={toggleActiveAction.bind(null, slug, kind, id, !active)}>
       <Button variant="ghost" size="sm" type="submit" disabled={disabled}>
-        {active ? 'Pause' : 'Activate'}
+        {active ? t('packages.pause') : t('packages.activate')}
       </Button>
     </form>
   )
@@ -116,8 +120,9 @@ export default async function PackagesPage({
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'services.manage') && !can(ctx, 'pos.use')) notFound()
+  const { t, fmt } = await getI18n()
   const tabParam = (await searchParams).tab
-  const tab: Tab = TABS.some((t) => t.key === tabParam) ? (tabParam as Tab) : 'packages'
+  const tab: Tab = TABS.some((x) => x.key === tabParam) ? (tabParam as Tab) : 'packages'
   const slug = ctx.tenant.slug
   const manage = can(ctx, 'services.manage')
   const promos = can(ctx, 'marketing.campaigns')
@@ -158,21 +163,29 @@ export default async function PackagesPage({
   const soldBy = new Map(data.sold.map((r) => [r.id, r.n]))
   const membersBy = new Map(data.members.map((r) => [r.id, r.n]))
   const itemsText = (items: Item[]) =>
-    items.map((i) => `${i.quantity}× ${serviceName.get(i.serviceId) ?? 'Treatment'}`).join(' · ')
+    items.map((i) => `${i.quantity}× ${serviceName.get(i.serviceId) ?? t('packages.treatment')}`).join(' · ')
+
+  const totalSold = data.sold.reduce((sum, r) => sum + r.n, 0)
+  const totalMembers = data.members.reduce((sum, r) => sum + r.n, 0)
 
   const packageForm = (p?: (typeof data.packages)[number]) => (
     <>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name" name="nameEn">
-          <Input id="nameEn" name="nameEn" defaultValue={p?.name.en} placeholder="5 × Deep tissue" />
+        <Field label={t('packages.form.name')} name="nameEn">
+          <Input
+            id="nameEn"
+            name="nameEn"
+            defaultValue={p?.name.en}
+            placeholder={t('packages.form.namePlaceholder')}
+          />
         </Field>
-        <Field label="Name (Arabic)" name="nameAr">
+        <Field label={t('packages.form.nameAr')} name="nameAr">
           <Input id="nameAr" name="nameAr" dir="rtl" defaultValue={p?.name.ar} />
         </Field>
       </div>
-      <ItemRows options={data.services} items={p?.items} />
+      <ItemRows t={t} options={data.services} items={p?.items} />
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Package price (AED, incl. VAT)" name="priceAed">
+        <Field label={t('packages.form.price')} name="priceAed">
           <Input
             id="priceAed"
             name="priceAed"
@@ -180,15 +193,15 @@ export default async function PackagesPage({
             defaultValue={p ? Number(p.priceAed) : ''}
           />
         </Field>
-        <Field label="Valid for (days)" name="validityDays">
+        <Field label={t('packages.form.validity')} name="validityDays">
           <Input id="validityDays" name="validityDays" type="number" defaultValue={p?.validityDays ?? 180} />
         </Field>
       </div>
-      <Field label="Description" name="descriptionEn">
+      <Field label={t('packages.form.description')} name="descriptionEn">
         <Textarea id="descriptionEn" name="descriptionEn" defaultValue={p?.description?.en} rows={2} />
       </Field>
       <Label className="flex items-center gap-2.5 text-sm font-normal">
-        <Checkbox name="active" defaultChecked={p?.active ?? true} /> Available for sale
+        <Checkbox name="active" defaultChecked={p?.active ?? true} /> {t('packages.form.available')}
       </Label>
     </>
   )
@@ -196,15 +209,20 @@ export default async function PackagesPage({
   const planForm = (p?: (typeof data.plans)[number]) => (
     <>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name" name="nameEn">
-          <Input id="nameEn" name="nameEn" defaultValue={p?.name.en} placeholder="Monthly wellness" />
+        <Field label={t('packages.form.name')} name="nameEn">
+          <Input
+            id="nameEn"
+            name="nameEn"
+            defaultValue={p?.name.en}
+            placeholder={t('packages.form.planPlaceholder')}
+          />
         </Field>
-        <Field label="Name (Arabic)" name="nameAr">
+        <Field label={t('packages.form.nameAr')} name="nameAr">
           <Input id="nameAr" name="nameAr" dir="rtl" defaultValue={p?.name.ar} />
         </Field>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Monthly fee (AED, incl. VAT)" name="monthlyAed">
+        <Field label={t('packages.form.monthly')} name="monthlyAed">
           <Input
             id="monthlyAed"
             name="monthlyAed"
@@ -212,7 +230,7 @@ export default async function PackagesPage({
             defaultValue={p ? Number(p.monthlyAed) : ''}
           />
         </Field>
-        <Field label="Member discount on extras (%)" name="discountPct">
+        <Field label={t('packages.form.discount')} name="discountPct">
           <Input
             id="discountPct"
             name="discountPct"
@@ -221,95 +239,23 @@ export default async function PackagesPage({
           />
         </Field>
       </div>
-      <ItemRows options={data.services} items={p?.benefits.includedSessions} optional />
+      <ItemRows t={t} options={data.services} items={p?.benefits.includedSessions} optional />
       <Label className="flex items-center gap-2.5 text-sm font-normal">
-        <Checkbox name="active" defaultChecked={p?.active ?? true} /> Open for new members
+        <Checkbox name="active" defaultChecked={p?.active ?? true} /> {t('packages.form.open')}
       </Label>
     </>
   )
 
-  const cardCols: Column<(typeof data.cards)[number]>[] = [
-    {
-      key: 'code',
-      header: 'Code',
-      primary: true,
-      cell: (c) => <span className="font-mono font-medium">{c.code}</span>,
-    },
-    { key: 'to', header: 'For', cell: (c) => c.recipientName || '—' },
-    { key: 'issued', header: 'Issued', cell: (c) => formatDate(c.createdAt) },
-    {
-      key: 'expires',
-      header: 'Expires',
-      hideOnMobile: true,
-      cell: (c) => (c.expiresAt ? formatDate(c.expiresAt) : '—'),
-    },
-    {
-      key: 'value',
-      header: 'Value',
-      className: 'text-right tabular-nums',
-      cell: (c) => formatAed(c.initialAed),
-    },
-    {
-      key: 'balance',
-      header: 'Balance',
-      className: 'text-right tabular-nums font-medium',
-      cell: (c) => formatAed(c.balanceAed),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      cell: (c) => <Badge tone={c.status === 'active' ? 'success' : 'neutral'}>{c.status}</Badge>,
-    },
-  ]
-  const promoCols: Column<(typeof data.promos)[number]>[] = [
-    {
-      key: 'code',
-      header: 'Code',
-      primary: true,
-      cell: (p) => <span className="font-mono font-medium">{p.code}</span>,
-    },
-    {
-      key: 'off',
-      header: 'Discount',
-      cell: (p) => (p.kind === 'percent' ? `${Number(p.value)}%` : formatAed(p.value)),
-    },
-    {
-      key: 'valid',
-      header: 'Valid',
-      cell: (p) =>
-        p.validFrom || p.validTo
-          ? `${p.validFrom ? formatDate(p.validFrom) : '…'} – ${p.validTo ? formatDate(p.validTo) : '…'}`
-          : 'Always',
-    },
-    {
-      key: 'uses',
-      header: 'Used',
-      className: 'tabular-nums',
-      cell: (p) => `${p.uses}${p.maxUses ? ` / ${p.maxUses}` : ''}`,
-    },
-    {
-      key: 'status',
-      header: '',
-      className: 'text-right',
-      cell: (p) => (
-        <div className="flex items-center justify-end gap-2">
-          <Badge tone={p.active ? 'success' : 'neutral'}>{p.active ? 'Active' : 'Paused'}</Badge>
-          {promos && <ActiveToggle slug={slug} kind="promo" id={p.id} active={p.active} />}
-        </div>
-      ),
-    },
-  ]
-
   const action =
     tab === 'packages' && manage ? (
       <FormSheet
-        title="New package"
-        description="Clients prepay for several sessions; each visit draws one down."
+        title={t('packages.pkg.new')}
+        description={t('packages.pkg.newDescription')}
         action={savePackageAction.bind(null, slug, null)}
-        submitLabel="Create package"
+        submitLabel={t('packages.pkg.create')}
         trigger={
           <Button>
-            <Plus /> New package
+            <Plus /> {t('packages.pkg.new')}
           </Button>
         }
       >
@@ -317,12 +263,12 @@ export default async function PackagesPage({
       </FormSheet>
     ) : tab === 'memberships' && manage ? (
       <FormSheet
-        title="New membership plan"
+        title={t('packages.plan.newTitle')}
         action={saveMembershipAction.bind(null, slug, null)}
-        submitLabel="Create plan"
+        submitLabel={t('packages.plan.create')}
         trigger={
           <Button>
-            <Plus /> New plan
+            <Plus /> {t('packages.plan.new')}
           </Button>
         }
       >
@@ -330,119 +276,135 @@ export default async function PackagesPage({
       </FormSheet>
     ) : tab === 'promos' && promos ? (
       <FormSheet
-        title="New promo code"
+        title={t('packages.promo.newTitle')}
         action={savePromoAction.bind(null, slug)}
-        submitLabel="Create code"
+        submitLabel={t('packages.promo.create')}
         trigger={
           <Button>
-            <Plus /> New code
+            <Plus /> {t('packages.promo.new')}
           </Button>
         }
       >
-        <Field label="Code" name="code" hint="Clients enter this at checkout or when booking.">
+        <Field label={t('packages.promo.code')} name="code" hint={t('packages.promo.codeHint')}>
           <Input id="code" name="code" placeholder="RAMADAN20" className="font-mono uppercase" />
         </Field>
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Type" name="kind">
+          <Field label={t('packages.promo.type')} name="kind">
             <Select id="kind" name="kind" defaultValue="percent">
-              <option value="percent">Percent off</option>
-              <option value="amount">AED off</option>
+              <option value="percent">{t('packages.promo.percentOff')}</option>
+              <option value="amount">{t('packages.promo.amountOff')}</option>
             </Select>
           </Field>
-          <Field label="Value" name="value">
+          <Field label={t('packages.promo.value')} name="value">
             <Input id="value" name="value" inputMode="decimal" placeholder="20" />
           </Field>
-          <Field label="Starts" name="validFrom">
+          <Field label={t('packages.promo.starts')} name="validFrom">
             <Input id="validFrom" name="validFrom" type="date" />
           </Field>
-          <Field label="Ends" name="validTo">
+          <Field label={t('packages.promo.ends')} name="validTo">
             <Input id="validTo" name="validTo" type="date" />
           </Field>
         </div>
-        <Field label="Maximum uses" name="maxUses" hint="Leave empty for unlimited.">
+        <Field label={t('packages.promo.maxUses')} name="maxUses" hint={t('packages.promo.maxUsesHint')}>
           <Input id="maxUses" name="maxUses" type="number" />
         </Field>
       </FormSheet>
     ) : null
 
+  const editRow = (toggle: React.ReactNode, sheet: React.ReactNode) => (
+    <div className="mt-auto flex items-center justify-end gap-1 pt-4">
+      {toggle}
+      {sheet}
+    </div>
+  )
+  const editTrigger = (
+    <Button variant="secondary" size="sm">
+      <Pencil /> {t('packages.edit')}
+    </Button>
+  )
+
   return (
     <>
-      <PageHeader
-        title="Packages & gifts"
-        description="Prepaid packages, monthly memberships, gift cards and promo codes. Sell them from Sales — the money is held as a liability until it's used."
-        actions={action}
+      <PageHeader title={t('packages.title')} description={t('packages.description')} actions={action} />
+      <SectionTabs
+        label={t('packages.tabs.label')}
+        value={tab}
+        items={TABS.map((x) => ({
+          value: x.key,
+          href: `${base}?tab=${x.key}`,
+          label: (
+            <>
+              <x.icon className="size-4" strokeWidth={1.6} aria-hidden /> {t(x.label)}
+            </>
+          ),
+        }))}
       />
-      <nav
-        className="-mt-4 mb-8 flex gap-6 overflow-x-auto border-b text-sm sm:-mt-6"
-        aria-label="Packages & gifts"
-      >
-        {TABS.map((t) => (
-          <Link
-            key={t.key}
-            href={`${base}?tab=${t.key}`}
-            aria-current={tab === t.key ? 'page' : undefined}
-            className={cn(
-              '-mb-px flex shrink-0 items-center gap-2 border-b-2 pb-3 transition-colors',
-              tab === t.key ? 'border-fg font-medium text-fg' : 'border-transparent text-muted hover:text-fg',
-            )}
-          >
-            <t.icon className="size-4" strokeWidth={1.5} /> {t.label}
-          </Link>
-        ))}
-      </nav>
-      <PageBody>
+      <Stack>
+        {(tab === 'packages' || tab === 'memberships') && (
+          <Grid cols="g4">
+            <Stat
+              icon={<Package />}
+              label={t('packages.stat.onSale')}
+              value={fmt.number(data.packages.filter((p) => p.active).length)}
+            />
+            <Stat icon={<ShoppingBag />} label={t('packages.stat.sold')} value={fmt.number(totalSold)} />
+            <Stat
+              icon={<Repeat />}
+              label={t('packages.stat.plans')}
+              value={fmt.number(data.plans.filter((p) => p.active).length)}
+            />
+            <Stat icon={<Users />} label={t('packages.stat.members')} value={fmt.number(totalMembers)} />
+          </Grid>
+        )}
+
         {tab === 'packages' &&
           (data.packages.length === 0 ? (
             <Card>
               <EmptyState
                 icon={<Package className="size-5" strokeWidth={1.5} />}
-                title="No packages yet"
+                title={t('packages.pkg.emptyTitle')}
                 description={
-                  data.services.length === 0
-                    ? 'Add your treatments under Services & rooms first, then bundle them here.'
-                    : 'Bundle sessions at a better price — e.g. 5 × 60 min deep tissue for AED 1,250.'
+                  data.services.length === 0 ? t('packages.pkg.emptyNoServices') : t('packages.pkg.emptyBody')
                 }
               />
             </Card>
           ) : (
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Grid cols="g3">
               {data.packages.map((p) => (
-                <StaggerItem key={p.id}>
-                  <Card className={cn('flex h-full flex-col p-6', !p.active && 'opacity-60')}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <h2 className="text-[15px] font-semibold tracking-tight">{p.name.en}</h2>
-                        <p className="text-[13px] text-muted">{itemsText(p.items)}</p>
-                      </div>
-                      {!p.active && <Badge>Paused</Badge>}
+                <Card
+                  key={p.id}
+                  as="article"
+                  className={cn('flex h-full flex-col', !p.active && 'opacity-60')}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <h2 className="text-[length:var(--crm-fs-card-title)] font-semibold">{p.name.en}</h2>
+                      <p className="crm-muted text-[length:var(--crm-fs-sub)]">{itemsText(p.items)}</p>
                     </div>
-                    <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums">
-                      {formatAed(p.priceAed)}
-                    </p>
-                    <p className="mt-1 text-[13px] text-muted">
-                      Valid {p.validityDays} days · {soldBy.get(p.id) ?? 0} sold
-                    </p>
-                    {manage && (
-                      <div className="mt-auto flex items-center justify-end gap-1 pt-5">
-                        <ActiveToggle slug={slug} kind="package" id={p.id} active={p.active} />
-                        <FormSheet
-                          title="Edit package"
-                          description="Changes apply to new sales; packages already sold keep their terms."
-                          action={savePackageAction.bind(null, slug, p.id)}
-                          trigger={
-                            <Button variant="secondary" size="sm">
-                              <Pencil /> Edit
-                            </Button>
-                          }
-                        >
-                          {packageForm(p)}
-                        </FormSheet>
-                      </div>
+                    {!p.active && <Pill>{t('packages.paused')}</Pill>}
+                  </div>
+                  <p className="crm-num mt-4 text-2xl font-semibold tracking-tight">{fmt.aed(p.priceAed)}</p>
+                  <p className="crm-muted mt-1 text-[length:var(--crm-fs-sub)]">
+                    {t('packages.pkg.validSold', {
+                      days: p.validityDays,
+                      count: fmt.number(soldBy.get(p.id) ?? 0),
+                    })}
+                  </p>
+                  {manage &&
+                    editRow(
+                      <ActiveToggle t={t} slug={slug} kind="package" id={p.id} active={p.active} />,
+                      <FormSheet
+                        title={t('packages.pkg.edit')}
+                        description={t('packages.pkg.editDescription')}
+                        action={savePackageAction.bind(null, slug, p.id)}
+                        trigger={editTrigger}
+                      >
+                        {packageForm(p)}
+                      </FormSheet>,
                     )}
-                  </Card>
-                </StaggerItem>
+                </Card>
               ))}
-            </Stagger>
+            </Grid>
           ))}
 
         {tab === 'memberships' &&
@@ -450,85 +412,168 @@ export default async function PackagesPage({
             <Card>
               <EmptyState
                 icon={<Repeat className="size-5" strokeWidth={1.5} />}
-                title="No membership plans yet"
-                description="Monthly plans with included sessions and a member discount keep regulars coming back."
+                title={t('packages.plan.emptyTitle')}
+                description={t('packages.plan.emptyBody')}
               />
             </Card>
           ) : (
-            <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Grid cols="g3">
               {data.plans.map((p) => (
-                <StaggerItem key={p.id}>
-                  <Card className={cn('flex h-full flex-col p-6', !p.active && 'opacity-60')}>
-                    <h2 className="text-[15px] font-semibold tracking-tight">{p.name.en}</h2>
-                    <p className="mt-1 text-[13px] text-muted">
-                      {[
-                        p.benefits.includedSessions?.length ? itemsText(p.benefits.includedSessions) : null,
-                        p.benefits.discountPct ? `${p.benefits.discountPct}% off extras` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || 'No benefits set'}
-                    </p>
-                    <p className="mt-5 text-2xl font-semibold tracking-tight tabular-nums">
-                      {formatAed(p.monthlyAed)}
-                      <span className="text-sm font-normal text-muted"> / month</span>
-                    </p>
-                    <p className="mt-1 text-[13px] text-muted">{membersBy.get(p.id) ?? 0} active members</p>
-                    {manage && (
-                      <div className="mt-auto flex items-center justify-end gap-1 pt-5">
-                        <ActiveToggle slug={slug} kind="membership" id={p.id} active={p.active} />
-                        <FormSheet
-                          title="Edit plan"
-                          action={saveMembershipAction.bind(null, slug, p.id)}
-                          trigger={
-                            <Button variant="secondary" size="sm">
-                              <Pencil /> Edit
-                            </Button>
-                          }
-                        >
-                          {planForm(p)}
-                        </FormSheet>
-                      </div>
+                <Card
+                  key={p.id}
+                  as="article"
+                  className={cn('flex h-full flex-col', !p.active && 'opacity-60')}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="min-w-0 text-[length:var(--crm-fs-card-title)] font-semibold">
+                      {p.name.en}
+                    </h2>
+                    {!p.active && <Pill>{t('packages.paused')}</Pill>}
+                  </div>
+                  <p className="crm-muted mt-1 text-[length:var(--crm-fs-sub)]">
+                    {[
+                      p.benefits.includedSessions?.length ? itemsText(p.benefits.includedSessions) : null,
+                      p.benefits.discountPct
+                        ? t('packages.plan.offExtras', { pct: p.benefits.discountPct })
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || t('packages.plan.noBenefits')}
+                  </p>
+                  <p className="crm-num mt-4 text-2xl font-semibold tracking-tight">
+                    {fmt.aed(p.monthlyAed)}
+                    <span className="crm-muted text-sm font-normal"> {t('packages.plan.perMonth')}</span>
+                  </p>
+                  <p className="crm-muted mt-1 text-[length:var(--crm-fs-sub)]">
+                    {t('packages.plan.members', { count: membersBy.get(p.id) ?? 0 })}
+                  </p>
+                  {manage &&
+                    editRow(
+                      <ActiveToggle t={t} slug={slug} kind="membership" id={p.id} active={p.active} />,
+                      <FormSheet
+                        title={t('packages.plan.edit')}
+                        action={saveMembershipAction.bind(null, slug, p.id)}
+                        trigger={editTrigger}
+                      >
+                        {planForm(p)}
+                      </FormSheet>,
                     )}
-                  </Card>
-                </StaggerItem>
+                </Card>
               ))}
-            </Stagger>
+            </Grid>
           ))}
 
         {tab === 'gift-cards' && (
-          <Card className="py-2">
-            <DataTable
-              columns={cardCols}
-              rows={data.cards}
-              rowKey={(c) => c.id}
-              empty={
-                <EmptyState
-                  icon={<Gift className="size-5" strokeWidth={1.5} />}
-                  title="No gift cards sold yet"
-                  description="Sell a gift card from Sales; it gets a code the recipient can redeem at checkout."
-                />
-              }
-            />
+          <Card title={t('packages.card.list')} sub={t('packages.card.listSub')}>
+            {data.cards.length === 0 ? (
+              <EmptyState
+                icon={<Gift className="size-5" strokeWidth={1.5} />}
+                title={t('packages.card.emptyTitle')}
+                description={t('packages.card.emptyBody')}
+              />
+            ) : (
+              <div className="crm-tbl-wrap">
+                <table className="crm-tbl" data-stack="true">
+                  <thead>
+                    <tr>
+                      <th>{t('packages.card.code')}</th>
+                      <th>{t('packages.card.for')}</th>
+                      <th>{t('packages.card.issued')}</th>
+                      <th>{t('packages.card.expires')}</th>
+                      <th className="crm-num-c">{t('packages.card.value')}</th>
+                      <th className="crm-num-c">{t('packages.card.balance')}</th>
+                      <th>{t('packages.card.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.cards.map((c) => (
+                      <tr key={c.id}>
+                        <td data-label={t('packages.card.code')} className="font-mono font-semibold">
+                          {c.code}
+                        </td>
+                        <td data-label={t('packages.card.for')}>{c.recipientName || '—'}</td>
+                        <td data-label={t('packages.card.issued')}>{fmt.date(c.createdAt)}</td>
+                        <td data-label={t('packages.card.expires')} className="crm-muted">
+                          {c.expiresAt ? fmt.date(c.expiresAt) : '—'}
+                        </td>
+                        <td data-label={t('packages.card.value')} className="crm-num-c">
+                          {fmt.aed(c.initialAed)}
+                        </td>
+                        <td data-label={t('packages.card.balance')} className="crm-num-c font-semibold">
+                          {fmt.aed(c.balanceAed)}
+                        </td>
+                        <td data-label={t('packages.card.status')}>
+                          <Pill tone={statusTone(c.status)} dot>
+                            {enumLabel(t, 'giftCardStatus', c.status)}
+                          </Pill>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         )}
 
         {tab === 'promos' && (
-          <Card className="py-2">
-            <DataTable
-              columns={promoCols}
-              rows={data.promos}
-              rowKey={(p) => p.id}
-              empty={
-                <EmptyState
-                  icon={<TicketPercent className="size-5" strokeWidth={1.5} />}
-                  title="No promo codes yet"
-                  description="Create codes for Instagram offers, Ramadan or corporate partners."
-                />
-              }
-            />
+          <Card title={t('packages.promo.list')}>
+            {data.promos.length === 0 ? (
+              <EmptyState
+                icon={<TicketPercent className="size-5" strokeWidth={1.5} />}
+                title={t('packages.promo.emptyTitle')}
+                description={t('packages.promo.emptyBody')}
+              />
+            ) : (
+              <div className="crm-tbl-wrap">
+                <table className="crm-tbl" data-stack="true">
+                  <thead>
+                    <tr>
+                      <th>{t('packages.promo.code')}</th>
+                      <th>{t('packages.promo.discount')}</th>
+                      <th>{t('packages.promo.valid')}</th>
+                      <th className="crm-num-c">{t('packages.promo.used')}</th>
+                      <th className="crm-num-c">{t('packages.promo.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.promos.map((p) => (
+                      <tr key={p.id}>
+                        <td data-label={t('packages.promo.code')} className="font-mono font-semibold">
+                          {p.code}
+                        </td>
+                        <td data-label={t('packages.promo.discount')}>
+                          {p.kind === 'percent' ? `${fmt.number(Number(p.value))}%` : fmt.aed(p.value)}
+                        </td>
+                        <td data-label={t('packages.promo.valid')} className="crm-muted">
+                          {p.validFrom || p.validTo
+                            ? `${p.validFrom ? fmt.date(p.validFrom) : '…'} – ${p.validTo ? fmt.date(p.validTo) : '…'}`
+                            : t('packages.promo.always')}
+                        </td>
+                        <td data-label={t('packages.promo.used')} className="crm-num-c">
+                          {p.maxUses
+                            ? `${fmt.number(p.uses)} / ${fmt.number(p.maxUses)}`
+                            : fmt.number(p.uses)}
+                        </td>
+                        <td data-label={t('packages.promo.status')} className="crm-num-c">
+                          <div className="flex items-center justify-end gap-2">
+                            <Pill tone={p.active ? 'ok' : 'neutral'} dot>
+                              {p.active ? t('packages.active') : t('packages.paused')}
+                            </Pill>
+                            {promos && (
+                              <ActiveToggle t={t} slug={slug} kind="promo" id={p.id} active={p.active} />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Card>
         )}
-      </PageBody>
+      </Stack>
     </>
   )
 }

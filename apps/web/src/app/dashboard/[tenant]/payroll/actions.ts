@@ -3,20 +3,21 @@ import { payrollLines, payrollRuns, staff, tenants, withTenant } from '@spa/db'
 import { buildPayroll, DomainError, finalisePayroll, recordAdvance } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import type { MessageKey } from '@spa/core/i18n'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
-const done = (slug: string, message: string) => {
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'payroll.validation.pickDate')
+const done = (slug: string, message: MessageKey) => {
   revalidatePath(`/dashboard/${slug}/payroll`, 'layout')
   return ok(message)
 }
 const domain = (e: unknown) => {
   if (e instanceof DomainError) return failDomain(e)
   const msg = `${e instanceof Error ? e.message : ''} ${(e as { cause?: Error })?.cause?.message ?? ''}`
-  if (/locked/i.test(msg)) return fail('That date is in a closed accounting period.')
+  if (/locked/i.test(msg)) return fail('payroll.result.locked')
   throw e
 }
 
@@ -37,7 +38,7 @@ export async function prepareRunAction(
         .from(payrollRuns)
         .where(and(eq(payrollRuns.periodStart, from), eq(payrollRuns.periodEnd, to)))
       if (existing.some((r) => r.status === 'finalised'))
-        throw new DomainError('This month is already finalised.')
+        throw new DomainError('This month is already finalised.', 'invalid', { key: 'payroll.result.alreadyFinalised' })
       for (const r of existing) {
         await tx.delete(payrollLines).where(eq(payrollLines.runId, r.id))
         await tx.delete(payrollRuns).where(eq(payrollRuns.id, r.id))
@@ -52,7 +53,7 @@ export async function prepareRunAction(
   } catch (e) {
     return domain(e)
   }
-  return done(slug, 'Payroll prepared — review it, then finalise')
+  return done(slug, 'payroll.result.prepared')
 }
 
 export async function finaliseRunAction(
@@ -78,7 +79,7 @@ export async function finaliseRunAction(
     action: 'payroll.finalised',
     entityId: runId,
   })
-  return done(slug, 'Payroll finalised and posted to the accounts')
+  return done(slug, 'payroll.result.finalised')
 }
 
 export async function recordAdvanceAction(
@@ -90,8 +91,11 @@ export async function recordAdvanceAction(
   if (error) return fail(error)
   const parsed = z
     .object({
-      staffId: z.string().uuid('Pick a team member'),
-      amountAed: z.coerce.number({ message: 'Enter an amount' }).positive('Enter an amount').max(100_000),
+      staffId: z.string().uuid('payroll.validation.pickMember'),
+      amountAed: z.coerce
+        .number({ message: 'payroll.validation.enterAmount' })
+        .positive('payroll.validation.enterAmount')
+        .max(100_000),
       date,
       paidVia: z.enum(['cash', 'bank']),
       note: z.string().trim().max(200).optional(),
@@ -107,7 +111,7 @@ export async function recordAdvanceAction(
     return domain(e)
   }
   await audit({ tenantId: ctx.tenant.id, actorUserId: ctx.user.id, action: 'advance.recorded', data: d })
-  return done(slug, 'Advance recorded — it will be deducted in the next payroll')
+  return done(slug, 'payroll.result.advanceRecorded')
 }
 
 const iban = z
@@ -115,7 +119,7 @@ const iban = z
   .trim()
   .toUpperCase()
   .transform((v) => v.replace(/\s+/g, ''))
-  .refine((v) => v === '' || /^AE\d{21}$/.test(v), 'UAE IBANs are AE + 21 digits')
+  .refine((v) => v === '' || /^AE\d{21}$/.test(v), 'payroll.validation.iban')
 
 export async function saveEmployerAction(
   slug: string,
@@ -129,11 +133,11 @@ export async function saveEmployerAction(
       employerId: z
         .string()
         .trim()
-        .regex(/^\d{6,13}$/, 'The 13-digit MOHRE establishment ID'),
+        .regex(/^\d{6,13}$/, 'payroll.validation.employerId'),
       routingCode: z
         .string()
         .trim()
-        .regex(/^\d{9}$/, '9-digit routing code'),
+        .regex(/^\d{9}$/, 'payroll.validation.routing'),
       bank: z.string().trim().max(60).optional(),
     })
     .safeParse(formObject(fd))
@@ -154,7 +158,7 @@ export async function saveEmployerAction(
     action: 'wps.employer.updated',
     data: parsed.data,
   })
-  return done(slug, 'WPS details saved')
+  return done(slug, 'payroll.result.wpsSaved')
 }
 
 export async function saveStaffPayAction(
@@ -170,13 +174,13 @@ export async function saveStaffPayAction(
       personId: z
         .string()
         .trim()
-        .refine((v) => v === '' || /^\d{14}$/.test(v), 'The 14-digit MOHRE person code'),
+        .refine((v) => v === '' || /^\d{14}$/.test(v), 'payroll.validation.personId'),
       labourCardNo: z.string().trim().max(30).optional(),
       iban,
       routingCode: z
         .string()
         .trim()
-        .refine((v) => v === '' || /^\d{9}$/.test(v), '9-digit routing code'),
+        .refine((v) => v === '' || /^\d{9}$/.test(v), 'payroll.validation.routing'),
       bank: z.string().trim().max(60).optional(),
     })
     .safeParse(formObject(fd))
@@ -184,12 +188,12 @@ export async function saveStaffPayAction(
   const updated = await withTenant(ctx.tenant.id, (tx) =>
     tx.update(staff).set({ payroll: parsed.data }).where(eq(staff.id, staffId)).returning({ id: staff.id }),
   )
-  if (!updated.length) return fail('Team member not found')
+  if (!updated.length) return fail('payroll.result.memberNotFound')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
     action: 'staff.pay_details.updated',
     entityId: staffId,
   })
-  return done(slug, 'Pay details saved')
+  return done(slug, 'payroll.result.paySaved')
 }

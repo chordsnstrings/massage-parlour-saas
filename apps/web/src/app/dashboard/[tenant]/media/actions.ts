@@ -48,9 +48,9 @@ export async function listMediaAction(slug: string, filter: z.input<typeof Filte
 }
 
 const AltSchema = z.object({
-  altEn: z.string().trim().max(300).optional(),
-  altAr: z.string().trim().max(300).optional(),
-  tags: z.string().trim().max(300).optional(),
+  altEn: z.string().trim().max(300, 'media.tooLong').optional(),
+  altAr: z.string().trim().max(300, 'media.tooLong').optional(),
+  tags: z.string().trim().max(300, 'media.tooLong').optional(),
 })
 
 export async function saveAssetAction(
@@ -61,7 +61,7 @@ export async function saveAssetAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return fail(error)
-  if (!uuid.safeParse(id).success) return fail('Image not found')
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
   const parsed = AltSchema.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
@@ -83,14 +83,14 @@ export async function saveAssetAction(
     data: { alt: { en: d.altEn, ar: d.altAr }, tags: d.tags },
   })
   revalidate(slug)
-  return ok('Image details saved')
+  return ok('media.detailsSaved')
 }
 
 /** Where this image is used — pages, service and therapist photos, unpublished posts (for the delete warning). */
 export async function assetUsageAction(slug: string, id: string) {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return { ok: false as const, error }
-  if (!uuid.safeParse(id).success) return { ok: false as const, error: 'Image not found' }
+  if (!uuid.safeParse(id).success) return { ok: false as const, error: 'media.notFound' }
   const used = await withTenant(ctx.tenant.id, async (tx) => {
     const [row] = await tx.select({ url: mediaAssets.url }).from(mediaAssets).where(eq(mediaAssets.id, id))
     return row ? assetUsage(tx, row.url) : null
@@ -110,9 +110,9 @@ export async function assetUsageAction(slug: string, id: string) {
 export async function deleteAssetAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return fail(error)
-  if (!uuid.safeParse(id).success) return fail('Image not found')
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
   const removed = await withTenant(ctx.tenant.id, (tx) => deleteAsset(tx, id))
-  if (!removed) return fail('Image not found')
+  if (!removed) return fail('media.notFound')
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
@@ -122,7 +122,7 @@ export async function deleteAssetAction(slug: string, id: string): Promise<Actio
     data: { url: removed.url, source: removed.source },
   })
   revalidate(slug)
-  return ok('Image deleted')
+  return ok('media.deleted')
 }
 
 /**
@@ -132,12 +132,12 @@ export async function deleteAssetAction(slug: string, id: string): Promise<Actio
 export async function persistAssetAction(slug: string, id: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'site.content')
   if (error) return fail(error)
-  if (!uuid.safeParse(id).success) return fail('Image not found')
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
   const [row] = await withTenant(ctx.tenant.id, (tx) =>
     tx.select().from(mediaAssets).where(eq(mediaAssets.id, id)),
   )
-  if (!row) return fail('Image not found')
-  if (fileIdFromUrl(row.url)) return ok('Already saved')
+  if (!row) return fail('media.notFound')
+  if (fileIdFromUrl(row.url)) return ok('media.alreadySaved')
   try {
     const image = await saveRemoteImage(row.url)
     const origin = new URL(canonicalUrls().site(slug)).origin
@@ -151,9 +151,9 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
       await repointPostImages(tx, row.url, postImageUrl(asset.url, origin))
     })
   } catch (e) {
-    if (e instanceof DomainError) return fail(`Couldn’t save it: ${e.message}`)
+    if (e instanceof DomainError) return fail({ key: 'media.saveFailedReason', params: { reason: e.message } })
     console.error('persist media failed', e)
-    return fail('Couldn’t save the image — please try again.')
+    return fail('media.saveFailed')
   }
   await audit({
     tenantId: ctx.tenant.id,
@@ -164,5 +164,5 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
   })
   revalidate(slug)
   revalidatePath(`/dashboard/${slug}/ai/content`)
-  return ok('Saved to your library')
+  return ok('media.savedToLibrary')
 }

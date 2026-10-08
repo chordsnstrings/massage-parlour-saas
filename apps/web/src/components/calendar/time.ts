@@ -17,23 +17,7 @@ export const timeToGridMinute = (hhmm: string, cutoffMin: number) => {
 
 export const snap = (m: number, step = 15) => Math.round(m / step) * step
 
-/** Long, friendly label for a YYYY-MM-DD business date. */
-export const dateLabel = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'UTC',
-  })
-
-export const shortDateLabel = (date: string) =>
-  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  })
-
+/** Legacy English labels/tones (still used by un-converted screens); calendar UI uses enumLabel + crm statusTone. */
 export const STATUS_LABEL: Record<BookingStatus, string> = {
   pending: 'Pending',
   confirmed: 'Confirmed',
@@ -52,16 +36,6 @@ export const STATUS_TONE: Record<BookingStatus, 'neutral' | 'accent' | 'success'
   completed: 'success',
   no_show: 'danger',
   cancelled: 'neutral',
-}
-
-export const SOURCE_LABEL: Record<string, string> = {
-  phone: 'Phone',
-  whatsapp: 'WhatsApp',
-  walk_in: 'Walk-in',
-  instagram: 'Instagram',
-  online: 'Online',
-  ai_agent: 'AI agent',
-  gbp: 'Google',
 }
 
 export const isHiddenStatus = (s: BookingStatus) => s === 'cancelled' || s === 'no_show'

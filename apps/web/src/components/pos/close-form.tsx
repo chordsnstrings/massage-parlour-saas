@@ -4,8 +4,9 @@ import { motion, useReducedMotion } from 'motion/react'
 import { useState } from 'react'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Textarea } from '@/components/ui/input'
+import { useI18n } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
-import { cn, formatAed } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const f = (v: string) => {
   const n = Number.parseFloat(v.replace(/,/g, ''))
@@ -23,6 +24,7 @@ export function CloseForm({
   defaultFloat: number
 }) {
   const reduce = useReducedMotion()
+  const { t, fmt } = useI18n()
   const [float, setFloat] = useState(defaultFloat ? String(defaultFloat) : '')
   const [counted, setCounted] = useState('')
   const expected = f(float) + Math.round(cashMovementAed * 100)
@@ -31,9 +33,9 @@ export function CloseForm({
   const tone = !hasCount ? 'idle' : variance === 0 ? 'even' : Math.abs(variance) <= 1000 ? 'small' : 'large'
 
   return (
-    <ActionForm action={action} className="space-y-6">
+    <ActionForm action={action} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Opening float (AED)" name="openingFloatAed" hint="Cash in the drawer at opening">
+        <Field label={t('sales.close.floatLabel')} name="openingFloatAed" hint={t('sales.close.floatHint')}>
           <Input
             id="openingFloatAed"
             name="openingFloatAed"
@@ -44,7 +46,11 @@ export function CloseForm({
             className="h-11 tabular"
           />
         </Field>
-        <Field label="Counted cash (AED)" name="countedCashAed" hint="Everything in the drawer now">
+        <Field
+          label={t('sales.close.countedLabel')}
+          name="countedCashAed"
+          hint={t('sales.close.countedHint')}
+        >
           <Input
             id="countedCashAed"
             name="countedCashAed"
@@ -58,10 +64,10 @@ export function CloseForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border bg-subtle/40 px-4 py-3.5">
-          <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Expected cash</p>
-          <p className="mt-1.5 text-lg font-semibold tabular" data-testid="expected-cash">
-            {formatAed(expected / 100)}
+        <div className="crm-stat">
+          <p className="crm-lab">{t('sales.close.expectedCash')}</p>
+          <p className="crm-n" data-testid="expected-cash">
+            {fmt.aed(expected / 100)}
           </p>
         </div>
         <motion.div
@@ -71,30 +77,30 @@ export function CloseForm({
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
           aria-live="polite"
           className={cn(
-            'rounded-xl border px-4 py-3.5 transition-colors',
+            'crm-stat transition-colors',
             tone === 'even' && 'border-accent/30 bg-accent-soft text-accent',
             tone === 'small' && 'border-warning/30 bg-warning-soft text-warning',
             tone === 'large' && 'border-danger/30 bg-danger-soft text-danger',
           )}
         >
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.06em] opacity-80">
+          <p className="crm-lab text-inherit opacity-80">
             {tone === 'even' && <Check className="size-3.5" />}
             {(tone === 'small' || tone === 'large') && <TriangleAlert className="size-3.5" />}
-            Variance
+            {t('sales.close.variance')}
           </p>
-          <p className="mt-1.5 text-lg font-semibold tabular" data-testid="variance">
+          <p className="crm-n text-inherit" data-testid="variance">
             {hasCount
-              ? `${variance > 0 ? '+' : variance < 0 ? '−' : ''}${formatAed(Math.abs(variance) / 100)}`
+              ? `${variance > 0 ? '+' : variance < 0 ? '−' : ''}${fmt.aed(Math.abs(variance) / 100)}`
               : '—'}
           </p>
         </motion.div>
       </div>
 
-      <Field label="Notes" name="notes" hint="Explain any difference — it stays on the record.">
+      <Field label={t('sales.close.notes')} name="notes" hint={t('sales.close.notesHint')}>
         <Textarea id="notes" name="notes" rows={3} />
       </Field>
-      <SubmitButton size="lg" className="h-12 w-full sm:w-auto" disabled={!hasCount}>
-        Close the day
+      <SubmitButton className="w-full sm:w-auto" disabled={!hasCount}>
+        {t('sales.close.submit')}
       </SubmitButton>
     </ActionForm>
   )
