@@ -833,6 +833,18 @@ until `spamanagement.ae` is registered.
   platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: spa CNAME target,
   Meta webhooks/deauthorize/data-deletion, worker jobs.
 
+### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
+- Design `docs/design/be-relax-crm.html`, spec + gap analysis `docs/design/crm-spec.md`. Same design for every spa; the
+  sidebar shows the spa's own logo + name (logo captured at onboarding/settings). Super-admin console unchanged.
+- ~15–20% more compact than the HTML; light only. Menu per the design + a Sales entry.
+- Languages EN + Thai (no Arabic in the dashboard): every UI string, toast, validation and server message, dates and
+  numbers; per-user preference. Typed names (staff, clients, treatments, products, packages, rooms…) never translated.
+- Rule-safe wording: WhatsApp stays click-to-send ("queued, one tap to send"); deposits are recorded only; the spa's
+  website card is "request a change" (studio edits sites). No AI overage billing (agents pause at budget).
+- Phases (one PR each, owner approves merges): 1 shell + tokens + i18n + logo + menu · 2 every screen redesigned and
+  translated · 3 new: Bookings list, Automations, Coming next, global search, notifications, Ask AI, audit-log viewer,
+  calendar week/month. Supersedes §12 for the spa dashboard and "dashboard AR P4".
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

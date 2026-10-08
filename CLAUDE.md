@@ -24,7 +24,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
 - Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Marketing, page titles and PWA name use it; auth/emails/env still say
   spamanagement.ae (switch pending).
-- Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.
+- Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.
 - AI = BytePlus ModelArk, Seed 2.0 family by default; model IDs live in DB config (`ai_model_config`), never hard-coded.
@@ -32,7 +32,10 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - Price: AED 24,000 per spa per year (manual cash/bank-transfer billing).
 - Site builder: Puck-based drag & drop, 8 templates, granular per-device style overrides (PLAN.md §11).
   **Website Studio:** only super-admins edit sites; spas review, approve and request changes (PLAN.md §14.4).
-- All admin UI (every role + editor chrome + super-admin): minimal Swedish modern, airy well-padded 12-col grid, one accent,
+- **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM design (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
+  identical for every spa (spa logo + name in the sidebar from onboarding), ~15–20% more compact, light only, EN + Thai
+  (all UI text and system messages; typed names never translated). Plan: PLAN §14.6.
+- Super-admin console + editor chrome: minimal Swedish modern, airy well-padded 12-col grid, one accent,
   micro-animations via `motion`, fully responsive 360 px → wide desktop (PLAN.md §12). Tenant sites fully responsive too.
 - Legal/compliance is the operator's responsibility — don't add legal features beyond what PLAN.md lists.
 
