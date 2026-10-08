@@ -898,6 +898,11 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   (cancel / no-show / reschedule) marks matching entries notified and queues a `waitlist_slot` WhatsApp message
   (click-to-send); staff book an entry through createBooking. Merge = suggest (phone key / name) → preview → one
   transaction moving every client FK, merged row deleted, ledger untouched, new permission `clients.merge`.*
+  *Built (X7, migration 0022_equipment_timeclock): B5.3 equipment as a bookable resource (Services & rooms →
+  Equipment; services require types; reserved via `reservations` like rooms; calendar flags uncovered equipment) and
+  B5.4 time clock + leave (`/timeclock` PIN kiosk, timesheet actual vs planned with manager fixes, leave requests
+  annual/sick/unpaid approved by managers; approved leave blocks slots; unpaid days deducted from salaried pay,
+  worked hours on payroll). Details: CODEMAP "Service invariants". Thai copy needs native review.*
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

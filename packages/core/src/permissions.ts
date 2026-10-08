@@ -25,6 +25,14 @@ export const PERMISSION_GROUPS = {
   },
   services: { label: 'Services & rooms', actions: { manage: 'Manage services, rooms and resources' } },
   staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
+  timeclock: {
+    label: 'Time clock & leave',
+    actions: {
+      kiosk: 'Open the clock-in kiosk',
+      leave: 'Request leave for yourself',
+      approve: 'Approve leave and fix clock times',
+    },
+  },
   inventory: {
     label: 'Inventory',
     actions: {
@@ -102,6 +110,8 @@ export const SYSTEM_ROLES: Record<
       'pos.use',
       'pos.close',
       'staff.view',
+      'timeclock.kiosk',
+      'timeclock.leave',
       'inventory.adjust',
       'marketing.send',
       'ai.approve',
@@ -110,7 +120,7 @@ export const SYSTEM_ROLES: Record<
   therapist: {
     name: 'Therapist',
     description: 'Own schedule, check-in/out and earnings. Never sees client phone numbers.',
-    permissions: ['calendar.view'],
+    permissions: ['calendar.view', 'timeclock.leave'],
   },
   accountant: {
     name: 'Accountant',

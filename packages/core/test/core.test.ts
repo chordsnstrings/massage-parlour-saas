@@ -93,7 +93,7 @@ describe('permissions', () => {
   it('owner has everything and system roles resolve from code', () => {
     expect(resolvePermissions({ key: 'owner', permissions: [] }).size).toBe(ALL_PERMISSIONS.length)
     expect(resolvePermissions({ key: 'therapist', permissions: ['billing.view'] })).toEqual(
-      new Set(['calendar.view']),
+      new Set(['calendar.view', 'timeclock.leave']),
     )
   })
   it('custom roles keep only known permissions', () => {

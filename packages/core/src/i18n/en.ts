@@ -21,6 +21,7 @@ import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
 import { enums } from './en/enums'
+import { equipment } from './en/equipment'
 import { errors } from './en/errors'
 import { inbox } from './en/inbox'
 import { inventory } from './en/inventory'
@@ -46,6 +47,7 @@ import { sheets } from './en/sheets'
 import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
+import { timeclock } from './en/timeclock'
 import { validation } from './en/validation'
 import { waitlist } from './en/waitlist'
 import { warehouse } from './en/warehouse'
@@ -68,6 +70,7 @@ export const en = {
   clientsMerge,
   sales,
   services,
+  equipment,
   packages,
   inventory,
   purchases,
@@ -75,6 +78,7 @@ export const en = {
   waitlist,
   team,
   staff,
+  timeclock,
   documents,
   roles,
   inbox,

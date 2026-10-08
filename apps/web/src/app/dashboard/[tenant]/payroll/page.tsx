@@ -162,6 +162,31 @@ export default async function PayrollPage({
       cell: (l) => (Number(l.advancesAed) ? `− ${fmt.aed(l.advancesAed)}` : '—'),
     },
     {
+      key: 'worked',
+      header: t('timeclock.payroll.worked'),
+      className: 'text-end tabular-nums',
+      cell: (l) =>
+        l.workedMinutes
+          ? t('timeclock.hm', { h: Math.floor(l.workedMinutes / 60), m: l.workedMinutes % 60 })
+          : '—',
+    },
+    {
+      key: 'leave',
+      header: t('timeclock.payroll.unpaid'),
+      className: 'text-end tabular-nums',
+      cell: (l) =>
+        l.unpaidLeaveDays ? (
+          <span className="flex flex-col items-end">
+            <span>{Number(l.deductionsAed) ? `− ${fmt.aed(l.deductionsAed)}` : '—'}</span>
+            <span className="crm-muted text-xs">
+              {t('timeclock.payroll.unpaidDays', { count: l.unpaidLeaveDays })}
+            </span>
+          </span>
+        ) : (
+          '—'
+        ),
+    },
+    {
       key: 'net',
       header: t('payroll.col.net'),
       className: 'text-end tabular-nums font-semibold',

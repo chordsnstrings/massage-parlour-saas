@@ -125,7 +125,13 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
                 {it.roomId
                   ? ` · ${data.rooms.find((r) => r.id === it.roomId)?.name ?? t('calendar.details.room')}`
                   : ''}
+                {it.equipment.length ? ` · ${it.equipment.join(', ')}` : ''}
               </p>
+              {it.equipmentMissing.length > 0 && (
+                <p className="text-[13px] font-medium text-danger" role="note">
+                  {t('equipment.calendar.conflict', { types: it.equipmentMissing.join(', ') })}
+                </p>
+              )}
             </div>
             <p className="shrink-0 text-sm font-medium tabular">
               {it.priceAed == null ? t('common.priceOnRequest') : fmt.aed(it.priceAed)}

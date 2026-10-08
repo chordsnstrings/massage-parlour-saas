@@ -118,6 +118,11 @@ export default async function TenantLayout({
       ]),
       ...item('team', t('nav.team'), [
         ...page('staff.view', '/staff', t('nav.staff')),
+        ...page(
+          ['timeclock.kiosk', 'timeclock.leave', 'timeclock.approve'],
+          '/timeclock',
+          t('timeclock.title'),
+        ),
         ...page('team.manage', '/team', t('nav.access')),
         ...page('staff.manage', '/documents', t('nav.documents')),
       ]),
