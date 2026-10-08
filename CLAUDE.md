@@ -10,7 +10,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
   blocks/ui/config packages don't exist: site blocks + UI kit live in `apps/web/src/components/{site,ui}`.
 - Write path: `proxy.ts` rewrite → server action → `guard`/`studioGuard` (server/access.ts) → zod → `withTenant(ctx.tenant.id,
   tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `fail`.
-- Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, double checkout race, …).
+- Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
 - **Fix backlog reminder:** while any item in PLAN §17 (F1–F7) is open, remind the owner in one line in the first
