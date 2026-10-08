@@ -114,6 +114,8 @@ export type TenantSettings = {
   receptionistBookingFee?: string
   /** Automation switches (B3): keys = `AUTOMATIONS` in @spa/core; missing = on. Written via setAutomation(). */
   automations?: Record<string, boolean>
+  /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
+  require2fa?: boolean
 }
 
 export const tenants = pgTable(
@@ -282,7 +284,11 @@ export const auditLog = pgTable(
     ip: text('ip'),
     createdAt: createdAt(),
   },
-  () => tenantPolicies(),
+  // Owner-facing audit viewer (X5): newest first per tenant.
+  (t) => [
+    index('audit_log_tenant_created').on(t.tenantId, t.createdAt.desc(), t.id.desc()),
+    ...tenantPolicies(),
+  ],
 )
 
 /** Model per AI agent, chosen by super-admin. Model IDs never live in code. */

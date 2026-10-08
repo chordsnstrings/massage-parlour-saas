@@ -169,6 +169,13 @@
       "when": 1791502990080,
       "tag": "0023_automations",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791503163863,
+      "tag": "0024_search_audit_security",
+      "breakpoints": true
     }
   ]
 }

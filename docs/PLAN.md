@@ -899,6 +899,9 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
 ### 14.8 Owner requests (2026-10-08, after Phase 2) — Claude builds all of them, then B1–B6
 Owner stopped the Track B partner: Claude now owns every track (§14.7 split retired). Order: finish §14.6 Phase 2
 (verify + PR) → R1–R15 → B1–B6. Each item: one PR, CI green, owner approves.
+- **Client phone rule (owner, 2026-10-08, locked):** client phone numbers are visible ONLY to owner, manager and
+  receptionist — always; never to therapist / accountant / content editor or any custom role, no tenant toggle
+  (`@spa/core` `PHONE_ROLES`; details in §14.9 "Security toggles").
 - **R1 Website approvals:** only super-admins approve/publish; spas can only request changes (remove spa approve).
 - **R2 Bookings + pay:** "Bookings" in the sidebar (list + detail). Staff mark each booking Pending / Completed / Cancelled.
   When marking Completed the receptionist enters the therapist's commission in AED for that booking. A therapist's pay =
@@ -981,6 +984,27 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - R14: `platform_settings.domain_markup_usd` (default 10) is added **once per order** (not per year) to the registrar
   price; search offers and `domain_orders.price_usd/price_aed` include it, `markup_usd` records it; the console
   approve prompt shows the registrar cost (price − markup).
+
+### 14.9 X5 — B4 global search + audit viewer + Settings → Security (as built, worktree branch)
+- **Search** (services `search.ts` `globalSearch(tx, q, scope, {kind,page,limit})`): clients (name; phone only with
+  `clients.phone` — never matched or returned without it; local `05x` matches stored `9715x`), bookings (ref code,
+  client; allowed branches; members without `calendar.manage` only their own), receipts (`sales.number`, client;
+  needs `pos.use`), staff (`staff.view`), services (EN/AR name; `services.manage`). Rank: exact 3 > prefix 2 >
+  substring 1 + `word_similarity`; typos via `<%` (threshold 0.5, tx-local). Indexes: pg_trgm GIN (migration 0022,
+  hand-written; pg_trgm is trusted so `spa_owner` creates it; also in bootstrap.sql). UI: top-bar field + ⌘K/Ctrl+K
+  palette (`components/search`, server action builds the scope), grouped, ↑↓/Enter/Esc, "Show more" per group.
+- **Audit viewer**: permission `audit.view` (new; owner + manager via code). Services `audit-log.ts`
+  (`listAuditLog`, `auditFilterOptions`) read `audit_log` through `withTenant` (tenant policy); actor names from the
+  platform `user` table for ids in those rows only. Settings → Security card shows the last 5; `/settings/audit` =
+  filters (person, action, Dubai dates) + pages; Settings tab "Audit log". Action codes shown as stored.
+- **Security toggles** (`saveSecurityAction`, audited `settings.security.updated`): `tenants.settings.require2fa` —
+  `requireMember` redirects owner/manager members without TOTP (fresh `user` row, not the cached session) to
+  `/account?require2fa=<slug>`; super-admins exempt; can't be turned on without your own 2FA.
+  **Client phones (owner decision, 2026-10-08):** visible ONLY to owner, manager and receptionist — always.
+  `@spa/core` `PHONE_ROLES`; `resolvePermissions` strips `clients.phone` from every other system role and every
+  custom role; the custom-role editor hides it and `saveRoleAction` rejects it (`roles.result.phoneRestricted`).
+  X5's "Mask client phones for therapists" toggle + `tenants.settings.roleOverrides` were removed (integration).
+  Search keeps its phone filtering (`clients.phone`).
 
 ## 15. Working agreement (token-efficient, still thorough)
 

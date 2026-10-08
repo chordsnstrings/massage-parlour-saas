@@ -49,6 +49,7 @@ export const PERMISSION_GROUPS = {
   team: { label: 'Team & roles', actions: { manage: 'Invite members and edit roles' } },
   settings: { label: 'Business settings', actions: { manage: 'Edit business details and branches' } },
   billing: { label: 'Subscription', actions: { view: 'View invoices and payments' } },
+  audit: { label: 'Audit log', actions: { view: 'View the audit log' } },
 } as const
 
 type Groups = typeof PERMISSION_GROUPS
@@ -132,9 +133,27 @@ export const SYSTEM_ROLES: Record<
 
 export const isSystemRole = (key: string): key is SystemRoleKey => key in SYSTEM_ROLES
 
+/**
+ * Owner decision (2026-10-08): client phone numbers are visible ONLY to the owner, manager and receptionist system
+ * roles — always. `clients.phone` can never reach another system role or any custom role (stripped here, rejected by
+ * the custom-role editor, hidden from it). No tenant override exists.
+ */
+export const PHONE_ROLES: readonly SystemRoleKey[] = ['owner', 'manager', 'receptionist']
+export const RESTRICTED_PERMISSION = 'clients.phone' satisfies Permission
+
+/** May a role with this key ever hold the permission? (Only the phone rule restricts today.) */
+export const roleMayHold = (roleKey: string, p: Permission) =>
+  p !== RESTRICTED_PERMISSION || (PHONE_ROLES as readonly string[]).includes(roleKey)
+
+/** Permissions a custom role may be given (everything except client phones). */
+export const CUSTOM_ROLE_PERMISSIONS = ALL_PERMISSIONS.filter((p) => p !== RESTRICTED_PERMISSION)
+
 export function resolvePermissions(role: { key: string; permissions: readonly string[] }): Set<Permission> {
   const list = isSystemRole(role.key)
     ? SYSTEM_ROLES[role.key].permissions
     : role.permissions.filter(isPermission)
-  return new Set(list)
+  return new Set(list.filter((p) => roleMayHold(isSystemRole(role.key) ? role.key : 'custom', p)))
 }
+
+/** Roles that must use TOTP 2FA when the tenant turns on "Require 2FA for owner & managers". */
+export const TWO_FACTOR_POLICY_ROLES: readonly string[] = ['owner', 'manager']

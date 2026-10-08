@@ -6,7 +6,10 @@ import {
   matchRoot,
   normalizeSlug,
   parseRoots,
+  CUSTOM_ROLE_PERMISSIONS,
+  PHONE_ROLES,
   resolvePermissions,
+  roleMayHold,
   resolveSurface,
   SYSTEM_ROLES,
   toUaeE164,
@@ -100,6 +103,20 @@ describe('permissions', () => {
   })
   it('therapists never see client phones', () => {
     expect(SYSTEM_ROLES.therapist.permissions).not.toContain('clients.phone')
+  })
+  it('client phones: only owner, manager and receptionist — never other system roles or custom roles', () => {
+    for (const key of Object.keys(SYSTEM_ROLES))
+      expect(resolvePermissions({ key, permissions: [] }).has('clients.phone')).toBe(
+        (PHONE_ROLES as readonly string[]).includes(key),
+      )
+    expect([...PHONE_ROLES].sort()).toEqual(['manager', 'owner', 'receptionist'])
+    // A custom role row that somehow stores it (old data, hand edit) still never gets it.
+    expect(resolvePermissions({ key: 'custom_x', permissions: ['clients.phone', 'clients.view'] })).toEqual(
+      new Set(['clients.view']),
+    )
+    expect(CUSTOM_ROLE_PERMISSIONS).not.toContain('clients.phone')
+    expect(roleMayHold('therapist', 'clients.phone')).toBe(false)
+    expect(roleMayHold('receptionist', 'clients.phone')).toBe(true)
   })
 })
 

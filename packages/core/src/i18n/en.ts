@@ -8,6 +8,7 @@ import { account } from './en/account'
 import { accounts } from './en/accounts'
 import { ai } from './en/ai'
 import { analytics } from './en/analytics'
+import { audit } from './en/audit'
 import { auth } from './en/auth'
 import { automations } from './en/automations'
 import { billing } from './en/billing'
@@ -37,6 +38,7 @@ import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
 import { sales } from './en/sales'
+import { search } from './en/search'
 import { services } from './en/services'
 import { settings } from './en/settings'
 import { sheets } from './en/sheets'
@@ -91,4 +93,6 @@ export const en = {
   enums,
   permissions,
   notifications,
+  search,
+  audit,
 } as const

@@ -52,6 +52,7 @@ export const permissions = {
     team: { label: 'Team & roles', actions: { manage: 'Invite members and edit roles' } },
     settings: { label: 'Business settings', actions: { manage: 'Edit business details and branches' } },
     billing: { label: 'Subscription', actions: { view: 'View invoices and payments' } },
+    audit: { label: 'Audit log', actions: { view: 'View the audit log' } },
   },
   roleDescription: {
     owner: 'Full access, including subscription and roles.',

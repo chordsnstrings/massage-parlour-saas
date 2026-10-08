@@ -7,6 +7,7 @@ import { account } from './th/account'
 import { accounts } from './th/accounts'
 import { ai } from './th/ai'
 import { analytics } from './th/analytics'
+import { audit } from './th/audit'
 import { auth } from './th/auth'
 import { automations } from './th/automations'
 import { billing } from './th/billing'
@@ -36,6 +37,7 @@ import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
 import { sales } from './th/sales'
+import { search } from './th/search'
 import { services } from './th/services'
 import { settings } from './th/settings'
 import { sheets } from './th/sheets'
@@ -91,4 +93,6 @@ export const th: Messages = {
   enums,
   permissions,
   notifications,
+  search,
+  audit,
 }

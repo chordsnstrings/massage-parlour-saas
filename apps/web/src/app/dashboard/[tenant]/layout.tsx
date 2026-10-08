@@ -7,6 +7,7 @@ import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from 
 import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { NotificationBell } from '@/components/shell/notification-bell'
+import { SearchPalette } from '@/components/search/search-palette'
 import {
   type ShellGroup,
   type ShellItem,
@@ -221,6 +222,7 @@ export default async function TenantLayout({
           banner={notice}
           alert={alert}
           bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
+          search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
         >
