@@ -37,11 +37,11 @@ export function AppShell({
       <aside className="mkt-app-dark sticky top-0 hidden h-dvh flex-col md:flex">
         <Link
           href={homeHref}
-          className="flex min-h-16 items-center gap-3 px-5 py-4 md:justify-center lg:justify-start"
+          className="flex min-h-16 items-center gap-3 px-5 py-5 md:justify-center"
         >
           <LogoMark tone="light" className="lg:hidden" />
-          <span className="min-w-0 md:hidden lg:block">
-            <Logo className="mb-2.5 hidden h-5 lg:block" />
+          <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
+            <Logo className="mb-4 hidden h-7 lg:block" />
             <span className="mkt-app-chip">{title}</span>
             {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
           </span>
