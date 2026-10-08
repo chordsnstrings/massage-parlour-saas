@@ -34,11 +34,11 @@ export function AppShell({
       <aside className="sticky top-0 hidden h-dvh flex-col border-e bg-surface/60 md:flex">
         <Link
           href={homeHref}
-          className="flex h-16 items-center gap-3 px-5 md:justify-center lg:justify-start"
+          className="flex min-h-16 items-center gap-3 px-5 py-4 md:justify-center lg:justify-start"
         >
           <LogoMark className="lg:hidden" />
           <span className="min-w-0 md:hidden lg:block">
-            <Logo className="mb-1 hidden h-5 lg:block" />
+            <Logo className="mb-2.5 hidden h-5 lg:block" />
             <span className="block truncate text-sm font-semibold tracking-tight">{title}</span>
             {subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}
           </span>
