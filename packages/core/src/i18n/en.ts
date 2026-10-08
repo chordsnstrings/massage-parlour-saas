@@ -26,6 +26,7 @@ import { marketing } from './en/marketing'
 import { media } from './en/media'
 import { messages } from './en/messages'
 import { nav } from './en/nav'
+import { notifications } from './en/notifications'
 import { overview } from './en/overview'
 import { packages } from './en/packages'
 import { payroll } from './en/payroll'
@@ -87,4 +88,5 @@ export const en = {
   auth,
   enums,
   permissions,
+  notifications,
 } as const

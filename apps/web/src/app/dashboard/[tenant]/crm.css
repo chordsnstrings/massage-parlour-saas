@@ -381,6 +381,102 @@
   background: var(--crm-line);
 }
 
+/* Notifications bell (top bar) + its dropdown */
+.crm-bell {
+  position: relative;
+}
+.crm-bell-n {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-end: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 2px solid var(--crm-surface2);
+  border-radius: 999px;
+  background: var(--crm-bad);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+.crm-notif {
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 90px));
+  overflow-y: auto;
+}
+.crm-notif-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px 8px;
+  font-size: 13px;
+}
+.crm-notif-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: var(--crm-fs-micro, 11px);
+  color: var(--crm-accent-ink, var(--crm-accent));
+  cursor: pointer;
+  outline: none;
+}
+.crm-notif-all[data-highlighted] {
+  background: var(--crm-surface2);
+}
+.crm-notif-all svg {
+  width: 13px;
+  height: 13px;
+}
+.crm-notif-item {
+  align-items: flex-start;
+  height: auto;
+  padding: 8px 9px;
+}
+.crm-notif-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+.crm-notif-item[data-unread] .crm-notif-dot {
+  background: var(--crm-accent);
+}
+.crm-notif-b {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.35;
+}
+.crm-notif-b span {
+  overflow-wrap: anywhere;
+  color: var(--crm-muted);
+}
+.crm-notif-b time {
+  font-size: var(--crm-fs-micro, 11px);
+  color: var(--crm-muted);
+}
+.crm-notif-item:not([data-unread]) .crm-notif-t {
+  font-weight: 500;
+}
+.crm-notif-empty {
+  margin: 0;
+  padding: 14px 9px;
+  font-size: 12.5px;
+  color: var(--crm-muted);
+}
+.crm-notif-more {
+  justify-content: center;
+  color: var(--crm-accent-ink, var(--crm-accent));
+}
+
 /* Icon buttons (top bar burger, drawer close) */
 .crm-iconbtn {
   display: grid;

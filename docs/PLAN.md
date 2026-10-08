@@ -886,6 +886,9 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
   bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
   clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.
+  *B2 built (X3, 2026-10-08): migration 0022_notifications; bell + /notifications; producers online booking, pending
+  booking, low stock, document expiry, AI drafts, overdue invoice/payment reminder; push in each recipient's locale.
+  See CODEMAP "Notifications".*
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

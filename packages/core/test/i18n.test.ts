@@ -15,6 +15,7 @@ import {
 } from '../src/i18n'
 import { ui } from '../src/i18n/en-ui'
 import { isLeaf } from '../src/i18n/translate'
+import { NOTIFICATION_KINDS, notificationText } from '../src/notifications'
 import { ALL_PERMISSIONS, PERMISSION_GROUPS, SYSTEM_ROLES } from '../src/permissions'
 
 type Tree = { [key: string]: unknown }
@@ -140,5 +141,49 @@ describe('format', () => {
     expect(f.aed(-50)).toBe('-AED\u00a050')
     expect(f.aed(0.1)).toBe('AED\u00a00.10')
     expect(f.aed(-0.001)).toBe('AED\u00a00')
+  })
+})
+
+describe('notification kinds', () => {
+  it('every kind has a title and body in EN and TH and a real permission', () => {
+    for (const [kind, def] of Object.entries(NOTIFICATION_KINDS)) {
+      for (const cat of [en, th]) {
+        expect(lookup(cat, `notifications.kind.${kind}.title`), kind).toBeDefined()
+        expect(lookup(cat, `notifications.kind.${kind}.body`), kind).toBeDefined()
+      }
+      expect(ALL_PERMISSIONS).toContain(def.permission)
+    }
+  })
+
+  it('renders params in the reader locale (dates, AED, plurals, nested keys)', () => {
+    const t = translator('en')
+    const f = createFormat('en')
+    expect(
+      notificationText(t, f, {
+        kind: 'booking.online',
+        params: { name: 'Mia', service: 'Thai', at: '2026-10-09T10:00:00Z' },
+      }),
+    ).toEqual({
+      title: 'New online booking',
+      body: 'Mia \u00b7 Thai \u00b7 9 Oct, 14:00 \u2014 waiting for confirmation',
+    })
+    expect(
+      notificationText(t, f, {
+        kind: 'stock.low',
+        params: { count: 2, location: { key: 'notifications.warehouse' }, products: 'Oil, Towels' },
+      }).title,
+    ).toBe('Low stock at Warehouse: 2 products')
+    expect(
+      notificationText(t, f, {
+        kind: 'billing.overdue',
+        params: { number: 'INV-1', amount: '100', date: '2026-10-01' },
+      }).body,
+    ).toBe('INV-1 \u00b7 AED\u00a0100 was due on 1 Oct 2026')
+    const thai = notificationText(translator('th'), createFormat('th'), {
+      kind: 'ai.drafts',
+      params: { count: 3, posts: 2, replies: 1 },
+    })
+    expect(thai.title).toContain('3')
+    expect(notificationText(t, f, { kind: 'nope.never' })).toEqual({ title: 'Notification', body: '' })
   })
 })

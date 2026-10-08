@@ -6,6 +6,7 @@ import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
+import { NotificationBell } from '@/components/shell/notification-bell'
 import {
   type ShellGroup,
   type ShellItem,
@@ -18,6 +19,7 @@ import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { bellData } from '@/server/notifications'
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
 async function shellData(ctx: MemberContext) {
@@ -69,7 +71,9 @@ export default async function TenantLayout({
 }) {
   const { tenant: slug } = await params
   const ctx = await requireMember(slug)
-  const [{ locale, t, fmt, messages }, data] = await Promise.all([getI18n(), shellData(ctx)])
+  const i18n = await getI18n()
+  const { locale, t, fmt, messages } = i18n
+  const [data, bell] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt)])
   const base = appPath(`/${ctx.tenant.slug}`)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
@@ -215,6 +219,7 @@ export default async function TenantLayout({
           plan={plan}
           banner={notice}
           alert={alert}
+          bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
         >

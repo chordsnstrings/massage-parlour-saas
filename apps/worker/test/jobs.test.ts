@@ -8,6 +8,11 @@ describe('job schedule', () => {
       'document-reminders': '0 9 * * *',
       'weekly-insights': '0 8 * * 1',
       'daily-digest': '30 9 * * *',
+      'notify-pending-bookings': '*/15 * * * *',
+      'notify-low-stock': '15 9 * * *',
+      'notify-ai-drafts': '0 10 * * *',
+      'notify-billing': '20 9 * * *',
+      'notifications-prune': '50 4 * * *',
     })
     expect(new Set(jobs.map((j) => j.name)).size).toBe(jobs.length)
   })
