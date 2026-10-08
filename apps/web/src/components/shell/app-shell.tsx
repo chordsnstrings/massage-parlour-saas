@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { LogoMark } from '../brand'
+import { Logo, LogoMark } from '../brand'
 import { BottomNav, type NavItem, SidebarNav } from './nav'
 import { UserMenu } from './user-menu'
 
@@ -36,8 +36,9 @@ export function AppShell({
           href={homeHref}
           className="flex h-16 items-center gap-3 px-5 md:justify-center lg:justify-start"
         >
-          <LogoMark />
+          <LogoMark className="lg:hidden" />
           <span className="min-w-0 md:hidden lg:block">
+            <Logo className="mb-1 hidden h-6 lg:block" />
             <span className="block truncate text-sm font-semibold tracking-tight">{title}</span>
             {subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}
           </span>

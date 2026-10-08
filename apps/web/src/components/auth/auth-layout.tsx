@@ -35,7 +35,7 @@ export function AuthLayout({
         <p className="relative text-sm text-muted">Made for spas across the UAE.</p>
       </aside>
       <main className="flex flex-col px-5 py-8 sm:px-10 lg:justify-center lg:px-16">
-        <Logo className="mb-12 lg:hidden" />
+        <Logo className="mb-12 h-7 self-start lg:hidden" />
         <Reveal className="mx-auto w-full max-w-[400px]">
           <div className="mb-8 space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>

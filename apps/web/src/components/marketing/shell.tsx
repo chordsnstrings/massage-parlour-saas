@@ -1,6 +1,6 @@
 import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
-import { LogoMark } from '@/components/brand'
+import { Logo } from '@/components/brand'
 import { MarketingMotion } from '@/components/marketing/motion'
 import { requestUrls } from '@/server/origin'
 
@@ -19,8 +19,7 @@ async function Header({ active }: { active: MarketingPage }) {
     <header data-mkt-nav className="mkt-nav">
       <div className="mkt-wrap mkt-bar">
         <Link href="/" className="mkt-logo">
-          <LogoMark className="size-8" />
-          <span>spamanagement.co</span>
+          <Logo className="h-7 sm:h-8" />
         </Link>
         <nav aria-label="Main" className="mkt-links hidden items-center md:flex">
           {NAV.map((n) => (
@@ -117,7 +116,7 @@ async function Footer() {
         <div className="mkt-fgrid">
           <div>
             <div className="mkt-logo">
-              <LogoMark className="size-8" /> spamanagement.co
+              <Logo className="h-7" />
             </div>
             <p className="mt-3 max-w-[280px]">Software for massage spas in the UAE. Made in Dubai.</p>
           </div>
