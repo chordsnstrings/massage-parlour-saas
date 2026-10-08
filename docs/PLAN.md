@@ -922,7 +922,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   separate, generate payment reminders.
 - **R13 Login + super-admin console** use the marketing site design.
 - **R14 Domain orders:** price shown/charged = current price + USD 10.
-- **R15 Logo:** spamanagement.co wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`) in admin, marketing and
+- **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
 ## 15. Working agreement (token-efficient, still thorough)
