@@ -9,14 +9,14 @@ import {
   MAX_IMPORT_ROWS,
   missingRequired,
   runImport,
-  toCsv,
   validateRows,
   withoutValues,
 } from '@spa/services'
+import { toXlsx } from '@spa/services/xlsx'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { IMPORT_PERMISSION } from '@/components/data/kinds'
-import { crossSite, json, parseCsvFile } from '@/components/data/server'
+import { crossSite, isXlsxFile, json, parseCsvFile, parseXlsxFile } from '@/components/data/server'
 import { getT } from '@/i18n/server'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -42,7 +42,7 @@ const input = z.object({
 
 const REVALIDATE = { clients: 'clients', menu: 'services', products: 'inventory' } as const
 
-/** CSV import: `mode=preview` validates and checks duplicates; `mode=commit` writes in chunks of 500 rows. */
+/** CSV / .xlsx import: `mode=preview` validates and checks duplicates; `mode=commit` writes in chunks of 500 rows. */
 export async function POST(req: Request, { params }: { params: Promise<{ tenant: string }> }) {
   const slug = (await params).tenant
   const t = await getT()
@@ -66,7 +66,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
   const fileName = (file instanceof File ? file.name : 'import.csv').slice(0, 120)
 
   const bytes = new Uint8Array(await file.arrayBuffer())
-  if (isBinaryFile(bytes))
+  const xlsx = isXlsxFile(bytes)
+  const sheet = xlsx ? await parseXlsxFile(bytes) : null
+  if (xlsx && !sheet) return json({ ok: false, error: t('settings.data.upload.badXlsx') }, 400)
+  if (!xlsx && isBinaryFile(bytes))
     return json(
       {
         ok: false,
@@ -74,7 +77,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
       },
       400,
     )
-  const { headers, rows, firstRow, count, delimiter } = parseCsvFile(bytes)
+  const { headers, rows, firstRow, count, delimiter } = sheet ?? parseCsvFile(bytes)
   if (!count) return json({ ok: false, error: t('settings.data.upload.noRows') }, 400)
   if (count > MAX_IMPORT_ROWS)
     return json(
@@ -137,15 +140,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
     onDuplicate: parsed.data.onDuplicate,
     userId: ctx.user.id,
   })
-  const errorCsv = summary.errors.length
-    ? toCsv([
-        ['Row', ...headers, 'Error'],
-        ...summary.errors.map((e) => [
-          e.row,
-          ...headers.map((_, i) => rows[e.row - firstRow]?.[i] ?? ''),
-          e.message,
-        ]),
-      ])
+  // The failed rows as typed in the file + an Error column, ready to fix and re-import (the title rows are skipped).
+  const errorXlsx = summary.errors.length
+    ? Buffer.from(
+        await toXlsx({
+          sheets: [
+            {
+              name: t('sheets.importErrors'),
+              title: `${ctx.tenant.name} — ${t('sheets.importErrors')}`,
+              subtitle: t('sheets.importErrorsSub', { file: fileName, count: summary.errors.length }),
+              rows: [
+                [t('sheets.columns.row'), ...headers, t('sheets.columns.error')],
+                ...summary.errors.map((e) => [
+                  e.row,
+                  ...headers.map((_, i) => rows[e.row - firstRow]?.[i] ?? ''),
+                  e.message,
+                ]),
+              ],
+              // Values stay exactly as typed (no dates/numbers guessed), so a re-import reads the same text.
+              kinds: [undefined, ...headers.map(() => 'text' as const), 'text'],
+            },
+          ],
+        }),
+      ).toString('base64')
     : null
   const { errors, ...counts } = summary
   await audit({
@@ -169,6 +186,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
   return json({
     ok: true,
     summary: { ...counts, errorCount: errors.length, errors: errors.slice(0, 50) },
-    errorCsv,
+    errorXlsx,
   })
 }

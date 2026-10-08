@@ -936,7 +936,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases. Built (W3):
   warehouse = `branch_id NULL` stock location; transfers move quantity only (no ledger); per-location low-stock + counts.
 - **R10 Exports:** every CSV export becomes Excel (.xlsx) in an official/clean format. Exception: WPS SIF keeps its
-  mandated bank format.
+  mandated bank format. ✅ Built (X1): data exports, full export (one workbook), import templates, import-error files
+  and the journal are .xlsx (title row spa + period, bold frozen header, AED/date formats, widths, one sheet per
+  table); human data exports use TH headers for th viewers; import accepts .xlsx as well as CSV (CODEMAP "Spreadsheets").
 - **R11 Billing page (spa):** price + the 12-month schedule, each month Paid (green dot) / Must pay (red dot). Overdue →
   one-line red bar at the top of the CRM ("Please pay your invoice to avoid …"). Status is set by the super-admin only.
 - **R12 Admin console overview:** pause a spa (late payment), delete a spa, subscription one-time or monthly, setup fee

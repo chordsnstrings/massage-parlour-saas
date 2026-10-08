@@ -1,3 +1,4 @@
+import { th } from '@spa/core/i18n'
 import {
   branches,
   clients,
@@ -13,7 +14,6 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   autoMap,
-  csvCell,
   decodeCsvBytes,
   detectDateOrder,
   detectDelimiter,
@@ -21,6 +21,7 @@ import {
   exportRows,
   fullExportReadme,
   fullExportTables,
+  headerRowIndex,
   isBinaryFile,
   missingRequired,
   normalisePhone,
@@ -28,10 +29,11 @@ import {
   parseDate,
   parseDuration,
   runImport,
-  toCsv,
+  TH_EXPORT_ALIASES,
   validateRows,
   withoutValues,
 } from '../src'
+import { readXlsx, toXlsx } from '../src/xlsx'
 
 describe('decoding and delimiters', () => {
   it('strips a UTF-8 BOM and keeps Arabic text', () => {
@@ -178,18 +180,37 @@ describe('mapping and validation', () => {
   })
 })
 
-describe('CSV output', () => {
-  it('quotes everything and neutralises formulas but keeps negative numbers', () => {
-    expect(csvCell('Sara "the boss"')).toBe('"Sara ""the boss"""')
-    expect(csvCell('=HYPERLINK("x")')).toBe('"\'=HYPERLINK(""x"")"')
-    expect(csvCell('+971501234567')).toBe('"\'+971501234567"')
-    expect(csvCell('@SUM(A1)')).toBe('"\'@SUM(A1)"')
-    expect(csvCell('-12.50')).toBe('"-12.50"')
-    expect(csvCell('-cmd')).toBe('"\'-cmd"')
-    expect(csvCell(null)).toBe('""')
-    expect(csvCell(['vip', 'regular'])).toBe('"vip; regular"')
-    expect(csvCell({ en: 'Oil' })).toBe('"{""en"":""Oil""}"')
-    expect(toCsv([['a', 1]])).toBe('﻿"a","1"\r\n')
+describe('Thai export headers re-import', () => {
+  it('maps our Thai export columns and keeps the aliases in sync with the TH catalogue', () => {
+    const c = th.sheets.columns
+    expect(
+      autoMap('clients', [c.name, c.mobile, c.gender, c.birthday, c.language, c.tags, c.notes, c.source]),
+    ).toEqual(['name', 'phone', 'gender', 'birthday', 'language', 'tags', 'notes', 'source'])
+    expect(autoMap('products', [c.sku, c.name, c.nameAr, c.type, c.unit, c.cost, c.price, c.stock])).toEqual([
+      'sku',
+      'name',
+      'nameAr',
+      'kind',
+      'unit',
+      'cost',
+      'price',
+      'stock',
+    ])
+    const all = Object.values(TH_EXPORT_ALIASES).flatMap((f) => Object.values(f!).flat())
+    const thai = all.filter((a) => /[฀-๿]/.test(a))
+    const catalogue = new Set(Object.values(c).map((v) => v.toLowerCase()))
+    for (const a of thai) expect(catalogue, a).toContain(a)
+  })
+})
+
+describe('header row', () => {
+  it('skips a one-cell title block above the table, else takes the first non-blank row', () => {
+    expect(
+      headerRowIndex([['Spa — Clients'], ['2026-10-01 to 2026-10-31'], [], ['Name', 'Mobile'], ['A', '1']]),
+    ).toBe(3)
+    expect(headerRowIndex([[], ['Name', 'Mobile'], ['A', '1']])).toBe(1)
+    expect(headerRowIndex([['Name'], ['A'], ['B']])).toBe(0)
+    expect(headerRowIndex([])).toBe(0)
   })
 })
 
@@ -360,6 +381,12 @@ describe('database import and export', () => {
     const noPhones = await tx((t) => exportRows(t, 'clients', {}, { phones: false }))
     expect(noPhones[0]).not.toContain('Mobile')
     expect(noPhones.flat()).not.toContain('050 123 4567')
+    // As the route ships it: .xlsx with the phone kept as text and "Added" a real date-time cell.
+    const book = await readXlsx(await toXlsx({ sheets: [{ name: 'Clients', title: 'T', rows: withPhones }] }))
+    const at = headerRowIndex(book)
+    expect(book[at]).toEqual(withPhones[0])
+    expect(book.slice(at + 1).flat()).toContain('050 123 4567')
+    expect(book[at + 1]?.at(-1)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
     const future = await tx((t) => exportRows(t, 'clients', { from: '2099-01-01' }, { phones: true }))
     expect(future).toHaveLength(1)
 
@@ -380,9 +407,9 @@ describe('database import and export', () => {
         spa: 'Data Spa',
         slug: 'dataio',
         generatedAt: new Date(),
-        tables: [{ file: 'clients.csv', count: 3 }],
+        tables: [{ table: 'clients', count: 3 }],
         phones: false,
       }),
-    ).toContain('clients.csv')
+    ).toContain('clients ')
   })
 })

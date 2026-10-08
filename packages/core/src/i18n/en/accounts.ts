@@ -1,5 +1,5 @@
 // `accounts` namespace (EN source). Only the accounts screens edit this file; mirror every key in th/accounts.ts.
-// The journal CSV export keeps English column headers and ledger names (a file for accountants), never translated.
+// The journal Excel export keeps English column headers and ledger names (a file for accountants), never translated.
 export const accounts = {
   title: 'Accounts',
   description: 'Profit and loss, VAT and balances — built automatically from sales, refunds and expenses.',
@@ -24,7 +24,7 @@ export const accounts = {
     totalRevenue: 'Total revenue',
     totalExpenses: 'Total expenses',
     net: 'Net profit',
-    csv: 'CSV',
+    csv: 'Excel',
   },
   trend: { title: 'Last 4 months', sub: 'Revenue per month, excl. VAT', chart: 'Revenue per month' },
   mix: { title: 'Where the money went', sub: 'Expenses by category', empty: 'Nothing spent this month yet.' },
@@ -143,7 +143,7 @@ export const accounts = {
     title: 'Journal',
     description:
       'Every double-entry posting. Entries are never edited — mistakes are corrected with a reversal.',
-    export: 'Export CSV',
+    export: 'Export Excel',
     emptyTitle: 'No entries in {month}',
     emptyBody: 'Sales, refunds and expenses appear here as they are recorded.',
     account: 'Account',

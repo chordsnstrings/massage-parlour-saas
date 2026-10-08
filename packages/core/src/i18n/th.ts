@@ -36,6 +36,7 @@ import { roles } from './th/roles'
 import { sales } from './th/sales'
 import { services } from './th/services'
 import { settings } from './th/settings'
+import { sheets } from './th/sheets'
 import { shell } from './th/shell'
 import { staff } from './th/staff'
 import { team } from './th/team'
@@ -81,6 +82,7 @@ export const th: Messages = {
   payroll,
   billing,
   settings,
+  sheets,
   account,
   auth,
   enums,

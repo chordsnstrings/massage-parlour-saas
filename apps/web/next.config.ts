@@ -6,7 +6,7 @@ const config: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: monorepoRoot,
   transpilePackages: ['@spa/core', '@spa/db', '@spa/auth', '@spa/ai', '@spa/services'],
-  serverExternalPackages: ['pg'],
+  serverExternalPackages: ['pg', 'exceljs'],
   poweredByHeader: false,
   allowedDevOrigins: ['*.localhost'],
   devIndicators: false,

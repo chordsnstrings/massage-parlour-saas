@@ -1,5 +1,5 @@
-// Data export, database side: per-dataset CSV rows (date-filtered) and the full tenant dump.
-// Callers run these inside withTenant(); CSV text and zips are built by the caller (toCsv / fflate).
+// Data export, database side: per-dataset rows (date-filtered) and the full tenant dump.
+// Callers run these inside withTenant(); the .xlsx workbook is built by the caller (`@spa/services/xlsx`).
 import { addDays, dubaiInstant, type Permission } from '@spa/core'
 import {
   bookingItems,
@@ -341,7 +341,7 @@ const SECRET_COLUMN = /(token|secret|password|hash|_enc)$|^bytes$/
 
 const PHONE_COLUMN = /phone/
 
-export type ExportTable = { file: string; table: string; rows: unknown[][] }
+export type ExportTable = { table: string; rows: unknown[][] }
 
 /** Every tenant-scoped table (RLS tenant policy) as header + rows, secrets removed. */
 export async function fullExportTables(tx: Tx, opts: { phones: boolean }): Promise<ExportTable[]> {
@@ -358,7 +358,6 @@ export async function fullExportTables(tx: Tx, opts: { phones: boolean }): Promi
     // Only the exported columns: keeps stored file bytes and secrets out of memory entirely.
     const rows = (await tx.select(Object.fromEntries(cols)).from(t)) as Record<string, unknown>[]
     out.push({
-      file: `${cfg.name}.csv`,
       table: cfg.name,
       rows: [
         cols.map(([, c]) => c.name),
@@ -371,29 +370,30 @@ export async function fullExportTables(tx: Tx, opts: { phones: boolean }): Promi
   return out
 }
 
-/** README.txt for the full export zip. */
+/** README sheet of the full export workbook (lines joined with CRLF). */
 export function fullExportReadme(opts: {
   spa: string
   slug: string
   generatedAt: Date
-  tables: { file: string; count: number }[]
+  tables: { table: string; count: number }[]
   phones: boolean
 }) {
   return [
     `Data export for ${opts.spa} (${opts.slug})`,
     `Generated ${dubaiStamp(opts.generatedAt)} Asia/Dubai`,
     '',
-    'Each CSV file is one table of your data: UTF-8 with a byte-order mark, comma-separated, first row = column names.',
-    '- Timestamps are ISO 8601 in UTC; business dates (YYYY-MM-DD) follow your branch business day.',
+    'Each sheet after this one is one table of your data: table name, then a header row of column names, then the rows.',
+    '- Date-times are Asia/Dubai local time; business dates (YYYY-MM-DD) follow your branch business day.',
     '- Money columns are AED and VAT-inclusive unless the column says otherwise (e.g. vat_aed).',
     '- Bilingual text, preferences and settings are JSON, e.g. {"en":"Swedish massage","ar":"..."}.',
     '- Phone numbers are E.164 digits without "+" (971501234567).',
-    '- Cells that start with = + - @ are prefixed with an apostrophe so spreadsheets do not run them.',
+    '- Every cell is a plain value (no formulas). Values longer than an Excel cell holds (32,767 characters) are cut',
+    '  and kept in full, in parts, on the long_values sheet.',
     '- Access tokens, invitation/session hashes and uploaded file bytes are not included.',
     ...(opts.phones ? [] : ['- Phone numbers are blank: your role cannot see phone numbers.']),
     '',
-    'Files:',
-    ...opts.tables.map((t) => `  ${t.file.padEnd(32)} ${t.count} rows`),
+    'Sheets:',
+    ...opts.tables.map((t) => `  ${t.table.padEnd(32)} ${t.count} rows`),
     '',
   ].join('\r\n')
 }
