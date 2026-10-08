@@ -79,7 +79,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    `setLocaleAction` (updateUser + cookie + `refresh()`). `lib/utils.ts` `formatAed/Date/DateTime` = English `fmt`.
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
-     shared, stored or sent.
+     shared, stored or sent. Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
+     (old spamanagement.ae); droplet compose lets `APP_URL`/`ADMIN_URL` be overridden for `ROUTING=host`.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
 ## Web routes (`apps/web/src/app`)

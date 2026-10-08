@@ -1,3 +1,7 @@
+/** Platform brand + domain (docs/PLAN.md §14.7 B1); the old spamanagement.ae keeps working via EXTRA_ROOT_DOMAINS. */
+export const PLATFORM_NAME = 'spamanagement.co'
+export const DEFAULT_EMAIL_FROM = `${PLATFORM_NAME} <no-reply@${PLATFORM_NAME}>`
+
 /** Staff/owner email only (invites, password reset) — customers are contacted via WhatsApp. */
 export async function sendStaffEmail(msg: { to: string; subject: string; text: string }): Promise<void> {
   const key = process.env.RESEND_API_KEY
@@ -8,7 +12,12 @@ export async function sendStaffEmail(msg: { to: string; subject: string; text: s
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: msg.to, subject: msg.subject, text: msg.text }),
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM,
+      to: msg.to,
+      subject: msg.subject,
+      text: msg.text,
+    }),
   })
   if (!res.ok) throw new Error(`email send failed: ${res.status} ${await res.text()}`)
 }

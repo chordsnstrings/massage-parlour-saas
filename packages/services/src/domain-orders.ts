@@ -247,7 +247,7 @@ async function contactsFor(db: Db, tenantId: string) {
   const platformPhone = digits(platform?.phone) || registrant.phoneE164
   const admin: Contact = {
     ...splitName(platform?.legalName || platform?.companyName || 'Spa Management'),
-    organization: platform?.legalName || platform?.companyName || 'spamanagement.ae',
+    organization: platform?.legalName || platform?.companyName || 'spamanagement.co',
     address1: (platform?.address || registrant.address1).slice(0, 120),
     ...base,
     phoneE164: platformPhone,

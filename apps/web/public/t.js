@@ -1,4 +1,4 @@
-/* spamanagement.ae — cookieless, block-level site analytics. No cookies, no personal data. */
+/* spamanagement.co — cookieless, block-level site analytics. No cookies, no personal data. */
 ;(() => {
   var s = document.currentScript || document.querySelector('script[data-site]')
   var site = s && s.getAttribute('data-site')

@@ -1,6 +1,6 @@
 // Cloudflare for SaaS: custom hostnames on our zone (PLAN §3.3). Configured with CF_API_TOKEN (Zone → SSL and
 // Certificates: Edit, Zone → Custom Hostnames: Edit) and CF_ZONE_ID; CF_CNAME_TARGET is what customers CNAME to
-// (e.g. customers.spamanagement.ae). Without the token + zone id every caller skips Cloudflare. Never log the token.
+// (e.g. customers.spamanagement.co). Without the token + zone id every caller skips Cloudflare. Never log the token.
 
 const API = 'https://api.cloudflare.com/client/v4'
 

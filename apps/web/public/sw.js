@@ -1,4 +1,4 @@
-/* spamanagement.ae — web push for staff and owners. No fetch handler: pages always load from the network. */
+/* spamanagement.co — web push for staff and owners. No fetch handler: pages always load from the network. */
 /* Registered as /sw.js?base=<app surface base> ("" in host routing, "/app" in path routing). */
 const BASE = (new URL(self.location.href).searchParams.get('base') || '').replace(/\/$/, '')
 
