@@ -1,5 +1,6 @@
 import { createTranslator, en, type MessageKey, type MessageRef, type Params } from '@spa/core/i18n'
 import type { ZodError } from 'zod'
+import { domainErrorRef } from '@/i18n/domain-errors'
 
 /**
  * Server-action result. `message`/`error` are English (logs, tests); when the text came from the i18n catalogue,
@@ -33,9 +34,22 @@ export const fail = (error: Msg, fieldErrors?: Record<string, string>): ActionRe
   return { ok: false, error: r.text, ...withKey(r), fieldErrors }
 }
 
-/** A services `DomainError` → failure in the viewer's language when the error names a catalogue message. */
-export const failDomain = (e: { message: string; i18n?: MessageRef }, fieldErrors?: Record<string, string>) =>
-  fail(e.i18n ?? e.message, fieldErrors)
+/**
+ * A services `DomainError` → failure in the viewer's language: its own `i18n` ref, else the `errors.domain.*` key its
+ * English message maps to (i18n/domain-errors.ts). `error` stays the service's English text; unknown messages stay
+ * English everywhere.
+ */
+export const failDomain = (
+  e: { message: string; i18n?: MessageRef },
+  fieldErrors?: Record<string, string>,
+) => {
+  const ref = e.i18n ?? domainErrorRef(e.message)
+  if (!ref) return fail(e.message, fieldErrors)
+  return {
+    ...fail(ref, fieldErrors),
+    error: e.i18n ? english(ref.key, ref.params) : e.message,
+  } as ActionResult
+}
 
 export function fromZod(error: ZodError): ActionResult {
   const fieldErrors: Record<string, string> = {}

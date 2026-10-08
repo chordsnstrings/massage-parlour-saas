@@ -1,168 +1,84 @@
 // Thai catalogue — mirrors en.ts (typed as Messages: a missing or extra key fails typecheck).
 // Written to read naturally for spa staff; a native Thai speaker should review it before launch (docs/PLAN.md §14.6).
 // Glossary (crm-spec §6.1): therapist = พนักงานนวด, treatment = ทรีตเมนต์, booking = การจอง; money stays "AED".
+// Aggregator only: keys live in th/<ns>.ts (one file per namespace, same names as en/).
+
+import { account } from './th/account'
+import { accounts } from './th/accounts'
+import { ai } from './th/ai'
+import { analytics } from './th/analytics'
+import { auth } from './th/auth'
+import { billing } from './th/billing'
+import { bookings } from './th/bookings'
+import { calendar } from './th/calendar'
+import { campaigns } from './th/campaigns'
+import { clients } from './th/clients'
+import { common } from './th/common'
+import { documents } from './th/documents'
+import { domain } from './th/domain'
+import { enums } from './th/enums'
+import { errors } from './th/errors'
+import { inbox } from './th/inbox'
+import { inventory } from './th/inventory'
+import { logo } from './th/logo'
+import { marketing } from './th/marketing'
+import { media } from './th/media'
+import { messages } from './th/messages'
+import { nav } from './th/nav'
+import { overview } from './th/overview'
+import { packages } from './th/packages'
+import { payroll } from './th/payroll'
+import { permissions } from './th/permissions'
+import { reviews } from './th/reviews'
+import { role } from './th/role'
+import { roles } from './th/roles'
+import { sales } from './th/sales'
+import { services } from './th/services'
+import { settings } from './th/settings'
+import { shell } from './th/shell'
+import { staff } from './th/staff'
+import { team } from './th/team'
+import { ui } from './th/ui'
+import { validation } from './th/validation'
+import { website } from './th/website'
 import type { Messages } from './types'
 
 export const th: Messages = {
-  ui: {
-    close: 'ปิด',
-    dismiss: 'ปิดการแจ้งเตือน',
-    save: 'บันทึก',
-    copy: 'คัดลอก',
-    copied: 'คัดลอกแล้ว',
-    more: 'เพิ่มเติม',
-  },
-  common: {
-    save: 'บันทึก',
-    cancel: 'ยกเลิก',
-    edit: 'แก้ไข',
-    delete: 'ลบ',
-    remove: 'นำออก',
-    add: 'เพิ่ม',
-    back: 'ย้อนกลับ',
-    next: 'ถัดไป',
-    done: 'เสร็จสิ้น',
-    search: 'ค้นหา',
-    loading: 'กำลังโหลด…',
-    saving: 'กำลังบันทึก…',
-    saved: 'บันทึกแล้ว',
-    view: 'ดู',
-    viewAll: 'ดูทั้งหมด',
-    viewDetails: 'ดูรายละเอียด',
-    export: 'ส่งออก',
-    filter: 'กรอง',
-    sort: 'เรียงลำดับ',
-    all: 'ทั้งหมด',
-    none: 'ไม่มี',
-    yes: 'ใช่',
-    no: 'ไม่ใช่',
-    optional: 'ไม่บังคับ',
-    today: 'วันนี้',
-    tomorrow: 'พรุ่งนี้',
-    yesterday: 'เมื่อวาน',
-    upload: 'อัปโหลด',
-    replace: 'เปลี่ยน',
-  },
-  shell: {
-    mainMenu: 'เมนูหลัก',
-    sectionPages: 'หน้าในส่วนนี้',
-    openMenu: 'เปิดเมนู',
-    closeMenu: 'ปิดเมนู',
-    language: 'ภาษา',
-    account: 'บัญชีผู้ใช้และความปลอดภัย',
-    switchSpa: 'เปลี่ยนสปา',
-    signOut: 'ออกจากระบบ',
-    profileMenu: 'เมนูโปรไฟล์ของ {name}',
-    profileRole: '{role} · {spa}',
-    superAdmin: 'ผู้ดูแลแพลตฟอร์ม',
-    logoAlt: 'โลโก้ {spa}',
-    greeting: {
-      morning: 'สวัสดีตอนเช้า {name}',
-      afternoon: 'สวัสดีตอนบ่าย {name}',
-      evening: 'สวัสดีตอนเย็น {name}',
-    },
-    plan: {
-      aiAllowance: 'โควตา AI · ใช้ไปแล้ว {percent} ในเดือนนี้',
-      aiPaused: 'ใช้โควตา AI ครบแล้ว · AI จะหยุดทำงานจนถึงเดือนหน้า',
-      renews: 'ต่ออายุ {date} · {price}/{interval}',
-      trialEnds: 'ทดลองใช้ถึง {date}',
-      interval: { year: 'ปี', month: 'เดือน' },
-    },
-    banner: {
-      impersonating: 'กำลังดูในฐานะผู้ดูแลแพลตฟอร์ม — ทุกการเปลี่ยนแปลงจะถูกบันทึกไว้ในบันทึกการตรวจสอบ',
-      readOnly: 'บัญชีนี้อยู่ในโหมดอ่านอย่างเดียว โปรดติดต่อฝ่ายสนับสนุนเพื่อกลับมาใช้งานได้เต็มรูปแบบ',
-    },
-  },
-  nav: {
-    group: {
-      workspace: 'พื้นที่ทำงาน',
-      people: 'บุคคล',
-      growth: 'การเติบโต',
-      finance: 'การเงิน',
-      system: 'ระบบ',
-    },
-    dashboard: 'แดชบอร์ด',
-    calendar: 'ปฏิทิน',
-    sales: 'การขาย',
-    inbox: 'ข้อความและการติดตาม',
-    clients: 'ลูกค้า',
-    services: 'บริการและเมนู',
-    team: 'ทีมและสิทธิ์',
-    marketing: 'การตลาด',
-    website: 'สตูดิโอเว็บไซต์',
-    reviews: 'รีวิว',
-    accounts: 'บัญชี',
-    vatPayroll: 'ภาษีและเงินเดือน',
-    billing: 'ค่าบริการระบบ',
-    settings: 'ตั้งค่า',
-    whatsapp: 'WhatsApp',
-    instagram: 'Instagram',
-    campaigns: 'แคมเปญ',
-    servicesRooms: 'บริการและห้อง',
-    packages: 'แพ็กเกจและบัตรของขวัญ',
-    inventory: 'สินค้าคงคลัง',
-    staff: 'พนักงาน',
-    access: 'สิทธิ์การเข้าถึงของทีม',
-    documents: 'เอกสาร',
-    socialPosts: 'โพสต์โซเชียล',
-    analytics: 'การวิเคราะห์',
-    site: 'เว็บไซต์',
-    media: 'คลังสื่อ',
-    aiStudio: 'สตูดิโอ AI',
-  },
-  role: {
-    owner: 'เจ้าของ',
-    manager: 'ผู้จัดการ',
-    receptionist: 'พนักงานต้อนรับ',
-    therapist: 'พนักงานนวด',
-    accountant: 'นักบัญชี',
-    content_editor: 'ผู้ดูแลเนื้อหา',
-  },
-  errors: {
-    generic: 'เกิดข้อผิดพลาด โปรดลองอีกครั้ง',
-    forbidden: 'คุณไม่มีสิทธิ์ทำรายการนี้',
-    readOnly: 'บัญชีนี้อยู่ในโหมดอ่านอย่างเดียว โปรดติดต่อฝ่ายสนับสนุน',
-    studioOnly: 'เว็บไซต์ของคุณจัดทำโดยทีมสตูดิโอของเรา — ส่งคำขอแก้ไขถึงทีมได้เลย',
-    checkFields: 'โปรดตรวจสอบช่องที่ไฮไลต์ไว้',
-    notFound: 'ไม่พบข้อมูล',
-    signInAgain: 'โปรดเข้าสู่ระบบอีกครั้ง',
-    boundary: {
-      title: 'เกิดข้อผิดพลาดบางอย่าง',
-      body: 'เราได้รับแจ้งปัญหานี้แล้ว โปรดลองอีกครั้ง หากยังเกิดขึ้นอีก โปรดแจ้งเราว่าคุณกำลังทำอะไรอยู่',
-      ref: 'รหัสอ้างอิง {digest}',
-      retry: 'ลองอีกครั้ง',
-    },
-    file: {
-      empty: 'ไฟล์นี้ว่างเปล่า',
-      tooLarge: 'ไฟล์ต้องมีขนาดไม่เกิน {size}',
-      imageTooLarge: 'รูปภาพต้องมีขนาดไม่เกิน {size}',
-      compressedTooLarge: 'รูปภาพนี้ยังใหญ่เกินไปแม้จะบีบอัดแล้ว',
-      unreadable: 'ไม่สามารถอ่านรูปภาพนี้ได้ ไฟล์อาจเสียหาย',
-      svg: 'ไม่รองรับไฟล์ SVG โปรดอัปโหลดไฟล์ JPG, PNG หรือ WebP',
-      notImage: 'ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้ (JPG, PNG, WebP, AVIF หรือ GIF)',
-      uploadFailed: 'อัปโหลดไม่สำเร็จ โปรดลองอีกครั้ง',
-      choose: 'โปรดเลือกรูปภาพที่จะอัปโหลด',
-    },
-  },
-  validation: {
-    required: 'โปรดกรอกข้อมูลในช่องนี้',
-    tooShort: { other: 'ใช้อย่างน้อย {count} ตัวอักษร' },
-    tooLong: { other: 'ใช้ได้ไม่เกิน {count} ตัวอักษร' },
-    email: 'โปรดกรอกอีเมลให้ถูกต้อง',
-    number: 'โปรดกรอกตัวเลข',
-    uaeMobile: 'โปรดกรอกเบอร์มือถือ UAE เช่น 050 123 4567',
-  },
-  logo: {
-    title: 'โลโก้',
-    description: 'แสดงที่ด้านบนของเมนูแดชบอร์ด รูปทรงสี่เหลี่ยมจัตุรัสจะดูดีที่สุด',
-    signupLabel: 'โลโก้ (ไม่บังคับ)',
-    hint: 'ไฟล์ PNG, JPG หรือ WebP เพิ่มหรือเปลี่ยนภายหลังได้ที่หน้าตั้งค่า',
-    choose: 'เลือกรูปภาพ',
-    upload: 'อัปโหลดโลโก้',
-    remove: 'นำโลโก้ออก',
-    saved: 'อัปเดตโลโก้แล้ว',
-    removed: 'นำโลโก้ออกแล้ว',
-    tooLarge: 'โลโก้ต้องมีขนาดไม่เกิน {size}',
-    none: 'ยังไม่มีโลโก้ — ระบบจะแสดงอักษรย่อของสปาแทน',
-  },
+  ui,
+  common,
+  shell,
+  nav,
+  role,
+  errors: { ...errors, domain },
+  validation,
+  logo,
+  overview,
+  calendar,
+  bookings,
+  clients,
+  sales,
+  services,
+  packages,
+  inventory,
+  team,
+  staff,
+  documents,
+  roles,
+  inbox,
+  messages,
+  campaigns,
+  marketing,
+  ai,
+  analytics,
+  reviews,
+  website,
+  media,
+  accounts,
+  payroll,
+  billing,
+  settings,
+  account,
+  auth,
+  enums,
+  permissions,
 }

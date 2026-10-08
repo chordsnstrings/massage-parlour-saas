@@ -1,5 +1,6 @@
 import '@fontsource-variable/noto-sans-thai'
 import './crm.css'
+import './crm-kit.css'
 import { dubaiMonthStart } from '@spa/ai'
 import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'

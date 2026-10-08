@@ -14,6 +14,8 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
 - Spa dashboard (PLAN §14.6): `SpaShell` + scoped `crm.css` (super-admin keeps AppShell + globals.css look). UI text
   EN + TH only via `@spa/core/i18n` keys — server `getT()`, client `useT()`; `ok`/`fail` take keys; never translate
   typed names; Thai copy needs native review.
+- Phase 2 screen conversion: page kit `components/crm` + `crm-kit.css`, i18n per-namespace files, enum/permission/
+  DomainError translation and the per-screen checklist → `docs/design/phase2-kit.md`.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
