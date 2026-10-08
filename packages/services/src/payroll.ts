@@ -1,6 +1,7 @@
 // Commissions, salary advances, payroll runs and the UAE WPS salary information file (SIF).
 import { includedVat } from '@spa/core'
 import {
+  bookingCommissions,
   commissionEntries,
   payrollLines,
   payrollRuns,
@@ -18,8 +19,9 @@ import { post } from './ledger'
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
- * Accrues therapist commission for a paid sale: each line with a therapist earns the therapist's
- * commission % on the line's revenue net of VAT. Idempotent per sale line.
+ * Accrues % commission for a paid sale: each line attributed to a `sales_commission` person earns their
+ * commission % on the line's revenue net of VAT. Therapists (`booking_commission`) and salaried staff earn
+ * nothing here — therapists are paid the AED typed per completed booking (PLAN §14.8 R2). Idempotent per line.
  */
 export async function accrueCommissions(tx: Tx, saleId: string, vatRatePct = 5) {
   const [sale] = await tx.select().from(sales).where(eq(sales.id, saleId))
@@ -41,7 +43,9 @@ export async function accrueCommissions(tx: Tx, saleId: string, vatRatePct = 5) 
   const created = []
   for (const line of lines) {
     if (!line.staffId || done.has(line.id) || (line.kind !== 'service' && line.kind !== 'product')) continue
-    const rate = Number(people.find((p) => p.id === line.staffId)?.commissionPct ?? 0)
+    const person = people.find((p) => p.id === line.staffId)
+    if (person?.payType !== 'sales_commission') continue
+    const rate = Number(person.commissionPct)
     if (rate <= 0) continue
     const gross = Number(line.lineTotalAed)
     const base = r2(gross - includedVat(gross, vatRatePct))
@@ -68,7 +72,7 @@ export async function accrueCommissions(tx: Tx, saleId: string, vatRatePct = 5) 
       date: sale.businessDate,
       sourceType: 'commission',
       sourceId: sale.id,
-      memo: 'Therapist commission',
+      memo: 'Sales commission',
       lines: [
         { code: '6010', debit: total },
         { code: '2300', credit: total },
@@ -117,7 +121,10 @@ export async function recordAdvance(
   return row!
 }
 
-/** Builds (or rebuilds) a draft payroll run: base + unpaid commissions + tips − unrecovered advances. */
+/**
+ * Builds a draft payroll run per person: base (salaried staff only) + unpaid booking commissions + unpaid
+ * % commissions (incl. older accruals) + tips − unrecovered advances.
+ */
 export async function buildPayroll(
   tx: Tx,
   p: { tenantId: string; periodStart: string; periodEnd: string; createdBy?: string | null },
@@ -143,6 +150,18 @@ export async function buildPayroll(
             eq(commissionEntries.staffId, s.id),
             isNull(commissionEntries.payrollRunId),
             lte(commissionEntries.businessDate, p.periodEnd),
+          ),
+        ),
+    )
+    const perBooking = await sum(
+      tx
+        .select({ v: sql<string>`sum(${bookingCommissions.amountAed})` })
+        .from(bookingCommissions)
+        .where(
+          and(
+            eq(bookingCommissions.staffId, s.id),
+            isNull(bookingCommissions.payrollRunId),
+            lte(bookingCommissions.businessDate, p.periodEnd),
           ),
         ),
     )
@@ -172,17 +191,18 @@ export async function buildPayroll(
           ),
         ),
     )
-    const base = Number(s.baseSalaryAed)
-    if (!base && !commission && !tipTotal && !advances) continue
+    const base = s.payType === 'salary' ? Number(s.baseSalaryAed) : 0
+    const earned = commission + perBooking
+    if (!base && !earned && !tipTotal && !advances) continue
     await tx.insert(payrollLines).values({
       tenantId: p.tenantId,
       runId: run!.id,
       staffId: s.id,
       baseAed: base.toFixed(2),
-      commissionAed: r2(commission).toFixed(2),
+      commissionAed: r2(earned).toFixed(2),
       tipsAed: r2(tipTotal).toFixed(2),
       advancesAed: r2(advances).toFixed(2),
-      netAed: r2(base + commission + tipTotal - advances).toFixed(2),
+      netAed: r2(base + earned + tipTotal - advances).toFixed(2),
     })
   }
   return run!
@@ -204,6 +224,16 @@ export async function finalisePayroll(tx: Tx, runId: string, paidOn: string, cre
           inArray(commissionEntries.staffId, staffIds),
           isNull(commissionEntries.payrollRunId),
           lte(commissionEntries.businessDate, run.periodEnd),
+        ),
+      )
+    await tx
+      .update(bookingCommissions)
+      .set({ payrollRunId: runId })
+      .where(
+        and(
+          inArray(bookingCommissions.staffId, staffIds),
+          isNull(bookingCommissions.payrollRunId),
+          lte(bookingCommissions.businessDate, run.periodEnd),
         ),
       )
     await tx

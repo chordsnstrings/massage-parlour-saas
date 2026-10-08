@@ -3,7 +3,11 @@ export const PERMISSION_GROUPS = {
   dashboard: { label: 'Dashboard', actions: { view: 'View dashboard', revenue: 'See revenue figures' } },
   calendar: {
     label: 'Calendar & bookings',
-    actions: { view: 'View calendar', manage: 'Create and edit bookings' },
+    actions: {
+      view: 'View calendar',
+      manage: 'Create and edit bookings',
+      commission: 'Enter therapist commission',
+    },
   },
   clients: {
     label: 'Clients',
@@ -85,6 +89,7 @@ export const SYSTEM_ROLES: Record<
       'dashboard.view',
       'calendar.view',
       'calendar.manage',
+      'calendar.commission',
       'clients.view',
       'clients.manage',
       'clients.phone',

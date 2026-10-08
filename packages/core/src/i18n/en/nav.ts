@@ -8,6 +8,7 @@ export const nav = {
   },
   dashboard: 'Dashboard',
   calendar: 'Calendar',
+  bookings: 'Bookings',
   sales: 'Sales',
   inbox: 'Inbox & follow-ups',
   clients: 'Clients',

@@ -1,7 +1,7 @@
 'use client'
 import { canTransition } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
-import { ArrowRightLeft, MessageCircle, Phone, Receipt } from 'lucide-react'
+import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
@@ -16,13 +16,12 @@ import { resultText, useI18n, useT } from '@/i18n/client'
 import { minuteLabel } from './time'
 import type { BookingStatus, CalendarData, CalItem } from './types'
 
-type Target = Exclude<BookingStatus, 'pending'>
+type Target = Exclude<BookingStatus, 'pending' | 'completed'>
 
 const ACTIONS: { to: Target; variant: 'primary' | 'secondary' | 'danger' }[] = [
   { to: 'confirmed', variant: 'primary' },
   { to: 'checked_in', variant: 'primary' },
   { to: 'in_service', variant: 'secondary' },
-  { to: 'completed', variant: 'secondary' },
   { to: 'no_show', variant: 'secondary' },
   { to: 'cancelled', variant: 'danger' },
 ]
@@ -73,7 +72,9 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
   const [reason, setReason] = useState('')
   const [moving, setMoving] = useState(false)
   const movable = data.canManage && !['completed', 'cancelled', 'no_show'].includes(status)
-  const actions = data.canManage ? ACTIONS.filter((a) => canTransition(status, a.to)) : []
+  // Completing (with the therapist commission) and re-opening happen on the booking page (PLAN §14.8 R2).
+  const actions =
+    data.canManage && status !== 'completed' ? ACTIONS.filter((a) => canTransition(status, a.to)) : []
 
   const change = (to: Target, why?: string) => {
     setBusy(to)
@@ -216,6 +217,14 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
             )}
           </AnimatePresence>
         </div>
+      )}
+
+      {data.canManage && (
+        <Button asChild variant="secondary" size="lg" className="w-full">
+          <Link href={`${data.bookingsBase}/${first.bookingId}`}>
+            <ClipboardList /> {t('bookings.openBooking')}
+          </Link>
+        </Button>
       )}
 
       {data.canCheckout && status !== 'cancelled' && status !== 'no_show' && (

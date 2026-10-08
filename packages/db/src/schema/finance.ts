@@ -17,7 +17,7 @@ import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
 import { saleLines, sales } from './commerce'
-import { type Bilingual, bookings, clients, services, staff } from './operations'
+import { type Bilingual, bookingItems, bookings, clients, services, staff } from './operations'
 import { tenants } from './platform'
 import { branches } from './tenant'
 
@@ -320,6 +320,38 @@ export const commissionEntries = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('commission_staff_date').on(t.staffId, t.businessDate), ...tenantPolicies()],
+)
+
+/**
+ * Therapist commission typed in AED when a booking is marked completed (PLAN §14.8 R2). Append-only: an edit
+ * inserts the difference, un-completing inserts the negative of what is left; the current amount per
+ * item + therapist is the sum. Payroll pays the rows not yet linked to a run.
+ */
+export const bookingCommissions = pgTable(
+  'booking_commissions',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    bookingId: uuid('booking_id')
+      .notNull()
+      .references(() => bookings.id, { onDelete: 'cascade' }),
+    bookingItemId: uuid('booking_item_id')
+      .notNull()
+      .references(() => bookingItems.id, { onDelete: 'cascade' }),
+    staffId: uuid('staff_id')
+      .notNull()
+      .references(() => staff.id),
+    businessDate: date('business_date').notNull(),
+    amountAed: aed('amount_aed').notNull(),
+    payrollRunId: uuid('payroll_run_id'),
+    createdBy: text('created_by').references(() => user.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('booking_commissions_booking').on(t.bookingId),
+    index('booking_commissions_staff_date').on(t.staffId, t.businessDate),
+    ...tenantPolicies(),
+  ],
 )
 
 export const salaryAdvances = pgTable(

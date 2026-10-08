@@ -107,6 +107,12 @@ export const rooms = pgTable(
 )
 
 export const staffGender = pgEnum('staff_gender', ['female', 'male', 'other'])
+/**
+ * How a person is paid (PLAN §14.8 R2): `booking_commission` = the AED amounts entered per completed booking
+ * (therapists; no base, no % accrual); `salary` = fixed monthly base; `sales_commission` = commission_pct of the
+ * net POS lines attributed to them.
+ */
+export const staffPayType = pgEnum('staff_pay_type', ['booking_commission', 'salary', 'sales_commission'])
 
 export const staff = pgTable(
   'staff',
@@ -122,6 +128,7 @@ export const staff = pgTable(
     bio: jsonb('bio').$type<Bilingual>(),
     branchIds: uuid('branch_ids').array().notNull().default([]),
     bookable: boolean('bookable').notNull().default(true),
+    payType: staffPayType('pay_type').notNull().default('booking_commission'),
     commissionPct: numeric('commission_pct', { precision: 5, scale: 2 }).notNull().default('0'),
     baseSalaryAed: aed('base_salary_aed').notNull().default('0'),
     /** WPS / payroll identifiers: { personId, labourCardNo, iban, routingCode, bank } */

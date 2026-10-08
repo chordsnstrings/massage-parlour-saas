@@ -132,6 +132,8 @@ describe('helpers', () => {
   })
   it('guards status transitions', () => {
     expect(canTransition('pending', 'confirmed')).toBe(true)
-    expect(canTransition('completed', 'cancelled')).toBe(false)
+    expect(canTransition('completed', 'cancelled')).toBe(true)
+    expect(canTransition('in_service', 'pending')).toBe(false)
+    expect(canTransition('cancelled', 'completed')).toBe(false)
   })
 })

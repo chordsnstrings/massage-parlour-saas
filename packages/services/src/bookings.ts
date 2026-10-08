@@ -21,6 +21,7 @@ import {
   reservations,
   rooms,
   rotationEntries,
+  sales,
   services,
   serviceVariants,
   shifts,
@@ -29,6 +30,11 @@ import {
   type Tx,
 } from '@spa/db'
 import { and, asc, eq, gt, inArray, lt, sql } from 'drizzle-orm'
+import {
+  type CommissionInput,
+  recordBookingCommissions,
+  reverseBookingCommissions,
+} from './booking-commissions'
 import { DomainError, pgCode, pgConstraint } from './errors'
 import { consumeForBooking } from './inventory'
 
@@ -383,18 +389,30 @@ export async function rescheduleItem(
   }
 }
 
-/** Status changes; cancelling or no-show releases the reserved time. */
+/**
+ * Status changes; cancelling or no-show releases the reserved time. Leaving `completed` (re-open or cancel)
+ * reverses the booking's therapist commission; a checked-out booking must have its sale voided/refunded first.
+ */
 export async function setBookingStatus(
   tx: Tx,
   bookingId: string,
   to: (typeof bookings.$inferSelect)['status'],
   reason?: string,
+  opts: { userId?: string | null; now?: Date } = {},
 ) {
-  const [b] = await tx.select().from(bookings).where(eq(bookings.id, bookingId))
+  const [b] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).for('update')
   if (!b) throw new DomainError('Booking not found', 'not_found')
   if (b.status === to) return b
   if (!canTransition(b.status, to))
     throw new DomainError(`Can't change a ${b.status.replace('_', ' ')} booking to ${to.replace('_', ' ')}`)
+  if (b.status === 'completed') {
+    const [paid] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(and(eq(sales.bookingId, bookingId), eq(sales.status, 'paid')))
+    if (paid) throw new DomainError('This booking was checked out — void or refund the sale first')
+    await reverseBookingCommissions(tx, b, opts)
+  }
   if (to === 'cancelled' || to === 'no_show') {
     const items = await tx
       .select({ id: bookingItems.id })
@@ -484,4 +502,14 @@ export async function takeTurn(tx: Tx, branchId: string, date: string, staffId: 
         eq(rotationEntries.staffId, staffId),
       ),
     )
+}
+
+/** Marks a booking completed and records its therapist commission in the same transaction. */
+export async function completeBooking(
+  tx: Tx,
+  input: { bookingId: string; amounts: CommissionInput[]; userId?: string | null; now?: Date },
+) {
+  const updated = await setBookingStatus(tx, input.bookingId, 'completed', undefined, input)
+  await recordBookingCommissions(tx, input)
+  return updated
 }

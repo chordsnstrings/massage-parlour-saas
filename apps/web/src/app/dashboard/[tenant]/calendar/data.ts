@@ -207,6 +207,7 @@ export async function loadCalendar(
       canCheckout: can(ctx, 'pos.use'),
       ownOnly,
       checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
+      bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
     }
   })

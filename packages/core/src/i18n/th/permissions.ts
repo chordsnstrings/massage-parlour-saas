@@ -4,7 +4,10 @@ import type { Messages } from '../types'
 export const permissions: Messages['permissions'] = {
   groups: {
     dashboard: { label: 'แดชบอร์ด', actions: { view: 'ดูแดชบอร์ด', revenue: 'ดูตัวเลขรายได้' } },
-    calendar: { label: 'ปฏิทินและการจอง', actions: { view: 'ดูปฏิทิน', manage: 'สร้างและแก้ไขการจอง' } },
+    calendar: {
+      label: 'ปฏิทินและการจอง',
+      actions: { view: 'ดูปฏิทิน', manage: 'สร้างและแก้ไขการจอง', commission: 'บันทึกค่าคอมมิชชันนักบำบัด' },
+    },
     clients: {
       label: 'ลูกค้า',
       actions: { view: 'ดูข้อมูลลูกค้า', manage: 'แก้ไขข้อมูลลูกค้า', phone: 'ดูเบอร์โทรศัพท์', export: 'ส่งออกรายชื่อลูกค้า' },

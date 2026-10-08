@@ -81,7 +81,12 @@ beforeAll(async () => {
     ids.variant = v!.id
     const [p] = await db
       .insert(staff)
-      .values({ tenantId: ids.tenant!, displayName: 'Maya', commissionPct: '10' })
+      .values({
+        tenantId: ids.tenant!,
+        displayName: 'Maya',
+        payType: 'sales_commission',
+        commissionPct: '10',
+      })
       .returning()
     ids.maya = p!.id
     const [r] = await db

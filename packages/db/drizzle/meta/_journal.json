@@ -134,6 +134,13 @@
       "when": 1791491122166,
       "tag": "0018_optional_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791491170255,
+      "tag": "0019_booking_commissions",
+      "breakpoints": true
     }
   ]
 }

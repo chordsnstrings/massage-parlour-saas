@@ -17,6 +17,10 @@ export const domain = {
   },
   // Not found
   bookingNotFound: 'Booking not found',
+  bookingCheckedOutReopen: 'This booking was checked out — void or refund the sale first',
+  completeFirst: 'Mark the booking completed first',
+  commissionRange: 'Enter a commission between 0 and 100,000 AED',
+  commissionEveryone: 'Enter the commission for every therapist',
   branchNotFound: 'Branch not found',
   campaignNotFound: 'Campaign not found',
   conversationNotFound: 'Conversation not found',
