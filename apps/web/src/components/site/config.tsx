@@ -1,6 +1,7 @@
 import type { Config, Field, PuckContext } from '@puckeditor/core'
 import { ButtonGroup, Gallery, Heading, Hero, Image, RichText } from './blocks/elements'
 import { globalSectionBlock } from './blocks/global'
+import { HtmlDesign } from './blocks/html-design'
 import { Columns, Section, Spacer, Stack, withAdvanced } from './blocks/layout'
 import {
   BookingCTA,
@@ -36,6 +37,8 @@ export const siteConfig: Config = {
     more: { title: 'More', components: ['Testimonials', 'FAQ', 'Footer'] },
     // Inserted from the editor's library only (it references a saved section).
     global: { title: 'Global sections', components: ['GlobalSection'], visible: false },
+    // Uploaded from the Templates library only (PLAN §11.2): a whole page shown exactly as designed.
+    design: { title: 'HTML design', components: ['HtmlDesign'], visible: false },
   },
   components: {
     // Bands carry the Advanced group (schedule + scoped custom CSS, PLAN §11.3 layer 6).
@@ -58,14 +61,25 @@ export const siteConfig: Config = {
     FAQ: withAdvanced(FAQ),
     Footer: withAdvanced(Footer),
     GlobalSection: globalSectionBlock(() => siteConfig),
+    HtmlDesign,
   },
   root: {
     fields: {
       title: biField('Page title (search results)'),
       description: biField('Page description (search results)', { multiline: true }),
     },
-    render: ({ children, puck }: { children: React.ReactNode; puck: PuckContext }) => {
+    render: ({
+      children,
+      puck,
+      htmlDesign,
+    }: {
+      children: React.ReactNode
+      puck: PuckContext
+      htmlDesign?: boolean
+    }) => {
       const meta = puck.metadata as SiteMeta & { bare?: boolean }
+      // An uploaded HTML design is the whole page: no site header, footer or theme around it.
+      if (htmlDesign) return <div className="site-html-root">{children}</div>
       // `bare`: theme only, no header — the modal editor for one global section.
       if (meta.bare)
         return (

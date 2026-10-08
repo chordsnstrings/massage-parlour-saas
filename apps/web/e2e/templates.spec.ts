@@ -217,3 +217,55 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
     await expect(card.locator('iframe[title="Dune Signature preview"]')).toBeAttached()
   })
 })
+
+test('HTML design upload: shown exactly as built on the spa site, with live placeholders', async ({
+  page,
+}) => {
+  const owner = await signUpOwner(page, { spa: 'Mint Spa' })
+  const { slug } = owner
+  await makeStudio(slug)
+  const html = `<!doctype html><html><head><title>Mint</title><style>h1{color:rgb(1, 2, 3)}</style></head>
+<body><h1 id="t">Welcome to {{spa_name}}</h1><a id="book" href="{{book_url}}">Book</a>
+<script>document.getElementById('t').dataset.ran = 'yes'</script></body></html>`
+
+  await test.step('upload in the templates library', async () => {
+    await page.goto(`${admin}/login`)
+    if (!PATH) {
+      await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)
+      await page.getByLabel('Password').fill('correct-horse-battery')
+      await page.getByRole('button', { name: 'Sign in' }).click()
+      await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
+    }
+    await page.goto(`${admin}/templates`)
+    await page.getByRole('button', { name: 'Upload HTML' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Template name').fill('Mint Cloud')
+    await dialog
+      .getByLabel('HTML file')
+      .setInputFiles({ name: 'mint.html', mimeType: 'text/html', buffer: Buffer.from(html) })
+    await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
+    await dialog.getByRole('button', { name: 'Upload' }).click()
+    await expect(page.getByText('Mint Cloud uploaded')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('mint-cloud').first()).toBeVisible()
+  })
+
+  await test.step('apply and publish: the public page is the design itself, sandboxed', async () => {
+    await page.goto(`${app}/${slug}/website`)
+    await page.getByRole('button', { name: 'Use Mint Cloud' }).click()
+    await expect(page.getByTestId('current-template')).toHaveText('Mint Cloud', { timeout: 30_000 })
+    await page.getByRole('button', { name: 'Publish site' }).click()
+    await page.getByRole('button', { name: 'Publish now' }).click()
+    await expect(page.getByText('Published 1 page')).toBeVisible({ timeout: 30_000 })
+
+    await page.goto(site(slug))
+    const frame = page.locator('iframe.site-html-design')
+    await expect(frame).toHaveAttribute('sandbox', /allow-scripts/)
+    await expect(frame).not.toHaveAttribute('sandbox', /allow-same-origin/)
+    // No site header around it: the design is the whole page.
+    await expect(page.locator('.site-root')).toHaveCount(0)
+    const doc = page.frameLocator('iframe.site-html-design')
+    await expect(doc.getByRole('heading', { name: 'Welcome to Mint Spa' })).toHaveCSS('color', 'rgb(1, 2, 3)')
+    await expect(doc.locator('#t')).toHaveAttribute('data-ran', 'yes')
+    await expect(doc.getByRole('link', { name: 'Book' })).toHaveAttribute('href', /\/book$/)
+  })
+})

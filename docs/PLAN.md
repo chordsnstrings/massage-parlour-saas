@@ -947,6 +947,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   remove / update incl. bilingual + per-device style / theme), validated against the real Puck schema, previewed on the
   canvas, Apply saves the draft (+ theme, site-wide), one-click Undo, audited, never publishes. Details: CODEMAP
   "Site builder → Ask AI".
+- **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
+  becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
+  chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
+  **Built (2026-10-08):** hidden Puck block `HtmlDesign` (sandboxed `srcdoc` iframe, opaque origin, full screen; root
+  prop `htmlDesign` drops the site header/footer); placeholders `{{spa_name}}`, `{{book_url}}`, `{{whatsapp_url}}`,
+  `{{phone}}`, `{{phone_url}}`, `{{address}}`, `{{map_url}}`, `{{site_url}}` filled live per spa; ≤ ~500 KB (fits the
+  512 KB draft cap); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
+  "Replace" to update). Details: CODEMAP "Site builder → HTML designs".
 - **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 

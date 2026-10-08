@@ -13,6 +13,11 @@ import {
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import {
+  HTML_DESIGN_PLACEHOLDERS,
+  htmlDesignPages,
+  MAX_HTML_DESIGN_BYTES,
+} from '@/components/site/blocks/html-design'
 import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { requirePlatformAdmin } from '@/server/access'
@@ -169,4 +174,69 @@ export async function importTemplateAction(_p: ActionResult, fd: FormData): Prom
   })
   revalidate()
   return ok(active ? `${t.name} imported` : `${t.name} imported — hidden from spas until you switch it on`)
+}
+
+/**
+ * Uploads an HTML design as a one-page template, shown on spa sites exactly as built (sandboxed frame,
+ * `{{placeholders}}` filled with each spa's live details). With "replace" a template with the same key is
+ * overwritten; spas already using it keep their own copy.
+ */
+export async function uploadHtmlTemplateAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const { user } = await requirePlatformAdmin()
+  const parsed = z
+    .object({ name: z.string().trim().min(2).max(60), description: optionalText(300) })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const file = fd.get('file')
+  if (!(file instanceof File) || !file.size)
+    return fail('Choose an HTML file', { file: 'Choose an .html file' })
+  if (!/\.html?$/i.test(file.name) && file.type !== 'text/html')
+    return fail('Only .html files can be uploaded', { file: 'Choose an .html file' })
+  const key = templateKeyFrom(parsed.data.name)
+  const html = await file.text()
+  if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(html))
+    return fail('This file does not look like an HTML page', { file: 'Choose an .html file' })
+  const pages = htmlDesignPages(key, html)
+  // Checked as page JSON (quotes and newlines escaped), the shape it is saved and edited in.
+  if (file.size > MAX_HTML_DESIGN_BYTES || JSON.stringify(pages[0]!.data).length > MAX_HTML_DESIGN_BYTES) {
+    const error = `The file is ${Math.ceil(file.size / 1024)} KB; the limit is about ${MAX_HTML_DESIGN_BYTES / 1024} KB. Link fonts and images by URL instead of embedding them.`
+    return fail(error, { file: error })
+  }
+  const replace = fd.get('replace') === 'on'
+  if (isTemplateKey(key) && !replace) {
+    const error = `"${key}" is the built-in ${TEMPLATES[key].name}. Pick another name, or tick "Replace a template with the same key" to override it.`
+    return fail(error, { name: error })
+  }
+  const active = fd.get('active') === 'on'
+  const used = HTML_DESIGN_PLACEHOLDERS.filter((p) => html.includes(`{{${p}}}`))
+  try {
+    await saveStudioTemplate(
+      platformDb(),
+      {
+        key,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        theme: {},
+        pages,
+        active,
+        createdBy: user.id,
+      },
+      { replace },
+    )
+  } catch (e) {
+    return domainFail(e)
+  }
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.site_template.html_uploaded',
+    entity: 'site_template',
+    entityId: key,
+    data: { bytes: file.size, placeholders: used },
+  })
+  revalidate()
+  return ok(
+    active
+      ? `${parsed.data.name} uploaded`
+      : `${parsed.data.name} uploaded — hidden from spas until you switch it on`,
+  )
 }

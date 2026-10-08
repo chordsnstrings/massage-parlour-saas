@@ -38,7 +38,7 @@ export function AppShell({
         <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
           <LogoMark tone="light" className="lg:hidden" />
           <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
-            <Logo className="mb-4 hidden h-8 lg:block" />
+            <Logo className="mb-3.5 hidden h-7 lg:block" />
             <span className="mkt-app-chip">{title}</span>
             {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
           </span>
