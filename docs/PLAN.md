@@ -861,7 +861,7 @@ CLAUDE.md). Rules for the work:
   - Partial refunds: **owner decision**, see below.
 - Tests: services `sales` and `p2` tests; e2e `pos-prepaid.spec`.
 
-**F3. A booking can be checked out twice.**
+**F3. A booking can be checked out twice.** ✅ Fixed (booking lock + `sales_booking_once`, migration 0014).
 - Where: `packages/services/src/sales.ts` `createSale` (check-then-insert); schema `commerce.ts`.
 - Planned fix:
   - Lock the booking row (`FOR UPDATE`) before the earlier-sale check.

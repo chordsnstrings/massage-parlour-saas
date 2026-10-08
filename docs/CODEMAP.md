@@ -247,8 +247,9 @@ in **PLAN §17** (items F1–F7 match the numbers below).
    Retail refunds belong in 4100, and prepaid lines (2100/2110, no VAT) are misposted.
 2. **Refund side effects**: `refundSale` (`packages/services/src/sales.ts`) does not return stock or reverse COGS or
    commissions. Void does all three.
-3. **Double checkout**: `createSale` guards against checking out a booking twice with check-then-insert. There is no
-   unique key or row lock on `sales.booking_id`, so concurrent checkouts can both succeed.
+3. ✅ **Double checkout** (fixed, F3): `createSale` locks the booking row (`FOR UPDATE`) before the earlier-sale check;
+   partial unique index `sales_booking_once` (one non-void sale per booking, migration 0014) backs it up and its
+   `23505` maps to a `DomainError`. Migration 0014 skips the index with a WARNING if duplicates already exist.
 4. **Booking ref race**: booking `refCode` uses a select-then-insert loop. A concurrent `bookings_tenant_ref` `23505`
    isn't mapped to a `DomainError`. Rare: the code is 5 characters.
 5. **Loyalty cutoff**: `packages/services/src/loyalty.ts` (`businessDateOf(now)`, lines 92 and 117) uses the default

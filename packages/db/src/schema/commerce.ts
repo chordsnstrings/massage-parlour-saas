@@ -1,4 +1,5 @@
 // Phase 1 — point of sale (payments are recorded, never processed), daily close, WhatsApp outbox, counters.
+import { sql } from 'drizzle-orm'
 import {
   date,
   index,
@@ -11,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { createdAt, id } from './_columns'
@@ -74,6 +76,10 @@ export const sales = pgTable(
   (t) => [
     unique('sales_tenant_number').on(t.tenantId, t.number),
     index('sales_branch_day').on(t.branchId, t.businessDate),
+    // A booking is checked out at most once (voided sales free it up again).
+    uniqueIndex('sales_booking_once')
+      .on(t.bookingId)
+      .where(sql`${t.bookingId} is not null and ${t.status} <> 'void'`),
     ...tenantPolicies(),
   ],
 )
