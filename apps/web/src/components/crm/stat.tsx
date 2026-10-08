@@ -71,7 +71,7 @@ export function Kpi({
 }) {
   return (
     <div className={cn('crm-kpi', className)}>
-      <div className="crm-top">
+      <div className="crm-ktop">
         {icon ? <span className="crm-ic">{icon}</span> : null}
         {label}
       </div>

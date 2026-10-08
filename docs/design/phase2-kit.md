@@ -13,7 +13,7 @@ via `--ui-*` hooks inside `.crm` only — keep using `Button`, `Input`/`Select`/
 | `CardHeader` | `title sub? actions? as?` | `.crm-card-h` |
 | `Grid` / `Stack` | `cols: g1·g2·g3·g4·col-2·col-2b·kgrid` (g4 of Stat/Kpi + kgrid stay 2 cols on phones) / – | `.crm-grid .crm-g4 …` (§1.7 collapse) `.crm-stack` |
 | `Stat` | `label value unit? change?{text,dir} icon?` (corner deco only with icon) | `.crm-stat .crm-lab .crm-n .crm-chg[data-dir]` |
-| `Kpi` / `Delta` | `label value icon? delta?{text,dir} sub? href? linkLabel?` / `dir` | `.crm-kpi … .crm-vd` `.crm-delta[data-dir=up·down·flat]` |
+| `Kpi` / `Delta` | `label value icon? delta?{text,dir} sub? href? linkLabel?` / `dir` | `.crm-kpi .crm-ktop … .crm-vd` `.crm-delta[data-dir=up·down·flat]` |
 | `Pill` | `tone?: neutral·ok·warn·bad·info·acc` `dot?`; `statusTone(status)` | `.crm-pill[data-tone]` `.crm-dotc` |
 | `Avatar` / `TName` | `name src? color? size?: sm·md·lg` / `name sub? src?` | `.crm-tav` `.crm-tname` |
 | `ListRow` | `icon? title body? time? end? href?` | `.crm-row .crm-ricon .crm-rbody .crm-rtime .crm-rend` |

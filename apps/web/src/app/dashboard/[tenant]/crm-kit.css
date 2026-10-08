@@ -256,7 +256,7 @@
     box-shadow: var(--crm-shadow-kpi);
     color: inherit;
   }
-  :where(:root:has(.crm)) .crm-kpi .crm-top {
+  :where(:root:has(.crm)) .crm-kpi .crm-ktop {
     display: flex;
     align-items: center;
     gap: 7px;

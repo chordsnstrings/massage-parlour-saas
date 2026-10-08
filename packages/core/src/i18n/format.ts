@@ -67,7 +67,14 @@ function parts(v: Date | string | number): Parts {
   const m = Number(p.month)
   const d = Number(p.day)
   const hh = String(Number(p.hour) % 24).padStart(2, '0')
-  return { y, m, d, wd: new Date(Date.UTC(y, m - 1, d)).getUTCDay(), hh, mm: (p.minute ?? '0').padStart(2, '0') }
+  return {
+    y,
+    m,
+    d,
+    wd: new Date(Date.UTC(y, m - 1, d)).getUTCDay(),
+    hh,
+    mm: (p.minute ?? '0').padStart(2, '0'),
+  }
 }
 
 const number = new Intl.NumberFormat('en-US')
