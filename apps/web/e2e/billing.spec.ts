@@ -38,14 +38,14 @@ test('platform billing: schedule, overdue bar, mark paid, pause and reminder', a
     await ops.goto(`${admin}/tenants/${tenant!.id}`)
     await ops.getByRole('button', { name: 'Generate payment schedule' }).click()
     await expect(ops.getByText('12 invoices created')).toBeVisible()
-    await expect(ops.getByText('overdue', { exact: true })).toHaveCount(1)
+    await expect(ops.getByText('overdue', { exact: true }).filter({ visible: true })).toHaveCount(1)
   })
 
   await test.step('spa sees the red bar and the schedule with Must pay dots', async () => {
     await owner.goto(`${dashboard}/billing`)
     await expect(bar).toBeVisible()
     await expect(owner.getByText(/12 monthly payments of/)).toBeVisible()
-    await expect(owner.getByText('Month 1 of 12')).toBeVisible()
+    await expect(owner.getByText('Month 1 of 12', { exact: true })).toBeVisible()
     await expect(owner.getByText('Must pay')).toHaveCount(12)
   })
 
