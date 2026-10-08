@@ -8,7 +8,7 @@ test('payroll: advance, prepare, WPS file, finalise', async ({ page }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
   const [maya] = seed.staffIds
-  await testDb().update(staff).set({ baseSalaryAed: '3000.00' }).where(eq(staff.id, maya!))
+  await testDb().update(staff).set({ payType: 'salary', baseSalaryAed: '3000.00' }).where(eq(staff.id, maya!))
 
   await page.goto(`${app}/${slug}/payroll`)
   await expect(page.getByRole('heading', { name: 'Payroll', exact: true })).toBeVisible()

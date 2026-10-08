@@ -10,6 +10,7 @@ export const nav: Messages['nav'] = {
   },
   dashboard: 'แดชบอร์ด',
   calendar: 'ปฏิทิน',
+  bookings: 'การจอง',
   sales: 'การขาย',
   inbox: 'ข้อความและการติดตาม',
   clients: 'ลูกค้า',

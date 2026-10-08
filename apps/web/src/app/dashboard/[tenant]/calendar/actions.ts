@@ -220,7 +220,8 @@ export async function createBookingAction(
 
 const statusSchema = z.object({
   bookingId: z.uuid(),
-  status: z.enum(['confirmed', 'checked_in', 'in_service', 'completed', 'no_show', 'cancelled']),
+  // Completed is set on the booking page with the therapist commission, or by a POS checkout.
+  status: z.enum(['confirmed', 'checked_in', 'in_service', 'no_show', 'cancelled']),
   reason: z.string().trim().max(300).optional(),
 })
 
@@ -238,12 +239,15 @@ export async function setStatusAction(
   try {
     const updated = await withTenant(ctx.tenant.id, async (tx) => {
       const [b] = await tx
-        .select({ branchId: bookings.branchId })
+        .select({ branchId: bookings.branchId, status: bookings.status })
         .from(bookings)
         .where(eq(bookings.id, bookingId))
       if (!b) throw new DomainError('Booking not found', 'not_found')
       await branchFor(tx, ctx, b.branchId)
-      return setBookingStatus(tx, bookingId, status, reason)
+      // Leaving `completed` reverses commission: only from the booking page, with that permission.
+      if (b.status === 'completed' && !can(ctx, 'calendar.commission'))
+        throw new DomainError('Booking not found', 'not_found')
+      return setBookingStatus(tx, bookingId, status, reason, { userId: ctx.user.id })
     })
     await audit({
       tenantId: ctx.tenant.id,

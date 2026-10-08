@@ -6,7 +6,11 @@ export const permissions = {
     dashboard: { label: 'Dashboard', actions: { view: 'View dashboard', revenue: 'See revenue figures' } },
     calendar: {
       label: 'Calendar & bookings',
-      actions: { view: 'View calendar', manage: 'Create and edit bookings' },
+      actions: {
+        view: 'View calendar',
+        manage: 'Create and edit bookings',
+        commission: 'Enter therapist commission',
+      },
     },
     clients: {
       label: 'Clients',

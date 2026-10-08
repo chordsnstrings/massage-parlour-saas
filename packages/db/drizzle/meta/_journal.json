@@ -120,6 +120,13 @@
       "when": 1791462507995,
       "tag": "0016_dashboard_shell",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791486943155,
+      "tag": "0017_booking_commissions",
+      "breakpoints": true
     }
   ]
 }

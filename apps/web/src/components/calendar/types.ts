@@ -80,5 +80,6 @@ export type CalendarData = {
   canCheckout: boolean
   ownOnly: boolean
   checkoutBase: string
+  bookingsBase: string
   calendarBase: string
 }

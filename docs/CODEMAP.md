@@ -169,6 +169,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `23P01` becomes `DomainError('slot_taken')`.
   - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
   - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
+  - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
+    internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
+    cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
+  - Commission (R2): `completeBooking` = complete + `recordBookingCommissions` (AED per item + therapist, every
+    pair required, 0 allowed). `booking_commissions` is append-only (trigger): edits insert the delta, leaving
+    `completed` inserts the negative; each change posts 6010/2300 (`booking_commission[_reversal]`) on the
+    branch's current business date; row `business_date` = the booking's. POS checkout completes without
+    commission → list filter "Commission missing". Calendar can't complete/re-open (booking page only);
+    entering/re-opening needs `calendar.commission` (owner, manager, receptionist).
 - **Ledger**:
   - `post` only inserts; `reverseSource` posts a mirror entry with source type `<type>_reversal`.
   - `DEFAULT_CHART` codes:
@@ -212,6 +221,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
+- **Payroll / pay types (R2)**: `staff.pay_type` = `booking_commission` (therapists: only their unpaid
+  `booking_commissions`), `salary` (base_salary_aed), `sales_commission` (commission_pct of the net POS lines
+  credited to them via `accrueCommissions`; package-session accrual too). Every line = base (salary only) +
+  unpaid booking commissions + unpaid `commission_entries` (older accruals still paid) + tips − advances;
+  `finalisePayroll` links both commission tables. A correction after a finalised run is a new unpaid row → next run.
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.

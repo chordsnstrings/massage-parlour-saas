@@ -10,6 +10,7 @@ import {
   Calculator,
   CalendarDays,
   ChevronDown,
+  ClipboardList,
   Contact,
   CreditCard,
   HandHeart,
@@ -40,6 +41,7 @@ import { initials } from '@/lib/utils'
 const icons = {
   dashboard: House,
   calendar: CalendarDays,
+  bookings: ClipboardList,
   sales: Wallet,
   inbox: MessagesSquare,
   clients: Contact,

@@ -185,14 +185,34 @@ export function newRefCode(random: () => number = Math.random, length = 5) {
 export const includedVat = (gross: number, ratePct = 5) =>
   Math.round(((gross * ratePct) / (100 + ratePct)) * 100) / 100
 
-/** Allowed booking status transitions. */
+/**
+ * Allowed booking status transitions. Staff mark bookings Pending / Completed / Cancelled (PLAN §14.8 R2):
+ * a completed booking can be re-opened (pending) or cancelled — its commission is then reversed.
+ */
 export const BOOKING_TRANSITIONS: Record<string, string[]> = {
-  pending: ['confirmed', 'cancelled', 'checked_in', 'no_show'],
-  confirmed: ['checked_in', 'in_service', 'cancelled', 'no_show', 'pending'],
+  pending: ['confirmed', 'cancelled', 'checked_in', 'no_show', 'completed'],
+  confirmed: ['checked_in', 'in_service', 'cancelled', 'no_show', 'pending', 'completed'],
   checked_in: ['in_service', 'completed', 'cancelled'],
   in_service: ['completed'],
-  completed: [],
+  completed: ['pending', 'cancelled'],
   no_show: ['confirmed'],
   cancelled: ['confirmed'],
 }
 export const canTransition = (from: string, to: string) => BOOKING_TRANSITIONS[from]?.includes(to) ?? false
+
+/** The three marks staff use (PLAN §14.8 R2); other statuses stay internal. */
+export type BookingMark = 'pending' | 'completed' | 'cancelled'
+export const bookingMark = (status: string): BookingMark | null =>
+  status === 'completed'
+    ? 'completed'
+    : status === 'cancelled'
+      ? 'cancelled'
+      : status === 'no_show'
+        ? null
+        : 'pending'
+/** The statuses a mark filter covers. */
+export const MARK_STATUSES: Record<BookingMark, string[]> = {
+  pending: ['pending', 'confirmed', 'checked_in', 'in_service'],
+  completed: ['completed'],
+  cancelled: ['cancelled', 'no_show'],
+}

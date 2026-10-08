@@ -23,6 +23,11 @@ export const enums = {
   rotationStatus: { available: 'Available', busy: 'Busy', break: 'On break', off: 'Off' },
   resourceKind: { staff: 'Staff', room: 'Room' },
   staffGender: { female: 'Female', male: 'Male', other: 'Other' },
+  staffPayType: {
+    booking_commission: 'Commission per booking',
+    salary: 'Fixed monthly salary',
+    sales_commission: '% of sales',
+  },
   saleStatus: { open: 'Open', paid: 'Paid', void: 'Void', refunded: 'Refunded' },
   saleLineKind: {
     service: 'Service',

@@ -146,8 +146,13 @@ export default async function StaffPage({ params }: { params: Promise<{ tenant: 
                           : t('staff.card.off'),
                       },
                       {
-                        label: t('staff.card.commission'),
-                        value: `${fmt.number(Number(p.commissionPct))}%`,
+                        label: t('staff.card.pay'),
+                        value:
+                          p.payType === 'sales_commission'
+                            ? `${fmt.number(Number(p.commissionPct))}%`
+                            : p.payType === 'salary'
+                              ? fmt.aed(p.baseSalaryAed)
+                              : t('staff.card.perBooking'),
                       },
                     ]}
                   >
