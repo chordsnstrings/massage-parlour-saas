@@ -929,6 +929,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R15 Logo:** spamanagement.co wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
+**R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
+- `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
+  invoices (price ÷ 12, cents rounding on the last), `year` = one invoice (one-time annual). Plans' interval = default.
+- "Generate payment schedule" issues the current period's plan invoices (`platform_invoices.kind='plan'`,
+  `period_start`, `installment`/`installments`; partial unique index → idempotent) + the setup fee as its own invoice
+  (`kind='setup'`, one live per spa). Switching plan voids the other plan's unpaid invoices; refuses if any is paid.
+- Paid / Must pay is set by the super-admin only ("Mark paid" records a payment for the open balance; "Mark unpaid"
+  records a reversing negative payment). Stripe Checkout still settles platform invoices on its own.
+- Red bar (full width above the CRM, every member): any `issued` invoice past due, or an open
+  `platform_reminders` row while an invoice is unpaid. Reminders resolve when the last overdue invoice is marked paid.
+- Reminder = row the spa sees (bar + Billing note) + EN message for a wa.me click-to-send link / copy (no sending).
+- Pause = `tenants.status='read_only'` (PLAN §1.17: dashboard read-only, public site live); **online booking stays
+  open** while paused (no rule against it); paying by card still works. Resume → `active` (`trial` while trialing).
+- Delete = soft: `status='cancelled'` + `tenants.deleted_at`; members get 404, spa picker hides it, site/booking off,
+  data kept; super-admin "Restore" = resume. Confirm by typing the slug.
+- R14: `platform_settings.domain_markup_usd` (default 10) is added **once per order** (not per year) to the registrar
+  price; search offers and `domain_orders.price_usd/price_aed` include it, `markup_usd` records it; the console
+  approve prompt shows the registrar cost (price − markup).
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

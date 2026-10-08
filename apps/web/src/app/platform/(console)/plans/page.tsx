@@ -27,13 +27,13 @@ function PlanFields({ plan }: { plan?: Plan }) {
       <Field label="Code" name="code" hint="Internal identifier.">
         <Input id="code" name="code" defaultValue={plan?.code} required />
       </Field>
-      <Field label="Price (AED)" name="priceAed">
+      <Field label="Annual price (AED)" name="priceAed">
         <Input id="priceAed" name="priceAed" inputMode="decimal" defaultValue={plan?.priceAed ?? '24000'} />
       </Field>
-      <Field label="Billing" name="billingInterval">
+      <Field label="Default payment plan" name="billingInterval">
         <Select id="billingInterval" name="billingInterval" defaultValue={plan?.billingInterval ?? 'year'}>
-          <option value="year">Yearly</option>
-          <option value="month">Monthly</option>
+          <option value="year">One-time annual</option>
+          <option value="month">12 monthly invoices</option>
         </Select>
       </Field>
       <Field label="Setup fee (AED)" name="setupFeeAed">
@@ -92,7 +92,9 @@ export default async function PlansPage() {
                   <Badge tone={p.active ? 'success' : 'neutral'}>{p.active ? 'Active' : 'Hidden'}</Badge>
                 </div>
                 <p className="tabular mt-4 text-3xl font-semibold tracking-tight">{formatAed(p.priceAed)}</p>
-                <p className="text-sm text-muted">per {p.billingInterval}</p>
+                <p className="text-sm text-muted">
+                  per year{p.billingInterval === 'month' ? ' · 12 monthly invoices' : ''}
+                </p>
                 <p className="mt-4 flex-1 text-sm text-muted">{p.description}</p>
                 <dl className="mt-5 grid grid-cols-2 gap-2 border-t pt-4 text-sm">
                   <dt className="text-muted">Setup fee</dt>

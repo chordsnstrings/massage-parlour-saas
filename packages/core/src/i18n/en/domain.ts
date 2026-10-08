@@ -198,4 +198,12 @@ export const domain = {
     "That version has a different layout — restoring it needs the 'Edit design' permission.",
   globalLiveNeedsPublish:
     "This global section is on your live site — saving it needs the 'Publish' permission.",
+  // Platform billing (super-admin console; R3/R12)
+  subscriptionFirst: 'Save a subscription for this spa first',
+  otherPlanPaid:
+    'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
+  invoiceNotFound: 'Invoice not found',
+  invoiceVoid: 'This invoice is void',
+  nothingToRemind: 'Nothing to remind — this spa has no unpaid invoices',
+  typeSlugToConfirm: 'Type {slug} to confirm',
 } as const

@@ -40,6 +40,8 @@ export const subscriptionStatus = pgEnum('subscription_status', [
   'cancelled',
 ])
 export const invoiceStatus = pgEnum('invoice_status', ['draft', 'issued', 'paid', 'void'])
+/** What a platform invoice bills: a plan installment (R3 schedule), the per-spa setup fee, or anything else. */
+export const platformInvoiceKind = pgEnum('platform_invoice_kind', ['plan', 'setup', 'other'])
 export const paymentMethod = pgEnum('platform_payment_method', ['cash', 'bank_transfer', 'other', 'card'])
 export const domainKind = pgEnum('domain_kind', ['subdomain', 'custom'])
 export const domainStatus = pgEnum('domain_status', ['pending', 'verifying', 'active', 'failed'])
@@ -76,6 +78,8 @@ export const platformSettings = pgTable(
     invoicePrefix: text('invoice_prefix').notNull().default('SM'),
     vatRate: numeric('vat_rate', { precision: 5, scale: 2 }).notNull().default('5'),
     pricesIncludeVat: boolean('prices_include_vat').notNull().default(false),
+    /** Added once per domain order on top of the registrar price (USD), PLAN §14.8 R14. */
+    domainMarkupUsd: numeric('domain_markup_usd', { precision: 10, scale: 2 }).notNull().default('10'),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -125,6 +129,8 @@ export const tenants = pgTable(
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
     logoFileId: uuid('logo_file_id').references((): AnyPgColumn => storedFiles.id, { onDelete: 'set null' }),
+    /** Soft delete by a super-admin (status is also 'cancelled'): data is kept, members and the site are shut out. */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -200,6 +206,11 @@ export const platformInvoices = pgTable(
     issueDate: date('issue_date').notNull(),
     dueDate: date('due_date').notNull(),
     description: text('description').notNull(),
+    kind: platformInvoiceKind('kind').notNull().default('other'),
+    /** Plan invoices: subscription period start, installment n of `installments` (12 monthly or 1 one-time). */
+    periodStart: date('period_start'),
+    installment: smallint('installment'),
+    installments: smallint('installments'),
     subtotalAed: numeric('subtotal_aed', { precision: 12, scale: 2 }).notNull(),
     vatAed: numeric('vat_aed', { precision: 12, scale: 2 }).notNull(),
     totalAed: numeric('total_aed', { precision: 12, scale: 2 }).notNull(),
@@ -209,7 +220,30 @@ export const platformInvoices = pgTable(
     stripeSessionId: text('stripe_session_id'),
     createdAt: createdAt(),
   },
-  () => tenantPolicies(),
+  (t) => [
+    uniqueIndex('platform_invoices_plan_installment')
+      .on(t.tenantId, t.periodStart, t.installments, t.installment)
+      .where(sql`${t.kind} = 'plan' and ${t.status} <> 'void'`),
+    uniqueIndex('platform_invoices_one_setup')
+      .on(t.tenantId)
+      .where(sql`${t.kind} = 'setup' and ${t.status} <> 'void'`),
+    ...tenantPolicies(),
+  ],
+)
+
+/** Payment reminders a super-admin generates (R12): the spa sees them until resolved; sending is click-to-send. */
+export const platformReminders = pgTable(
+  'platform_reminders',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    message: text('message').notNull(),
+    amountAed: numeric('amount_aed', { precision: 12, scale: 2 }).notNull(),
+    createdBy: text('created_by').references(() => user.id),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('platform_reminders_tenant').on(t.tenantId, t.createdAt), ...tenantPolicies()],
 )
 
 export const platformPayments = pgTable(
@@ -310,9 +344,11 @@ export const domainOrders = pgTable(
     tenantId: tenantId(),
     domain: text('domain').notNull(),
     years: integer('years').notNull().default(1),
-    /** Registrar price at request time (USD) and what the spa is billed (AED). */
+    /** What the spa is billed: registrar price at request time + markup (USD), and the same in AED. */
     priceUsd: numeric('price_usd', { precision: 10, scale: 2 }).notNull(),
     priceAed: numeric('price_aed', { precision: 10, scale: 2 }).notNull(),
+    /** Platform markup included in price_usd / price_aed (platform_settings.domain_markup_usd at request time). */
+    markupUsd: numeric('markup_usd', { precision: 10, scale: 2 }).notNull().default('0'),
     premium: boolean('premium').notNull().default(false),
     status: domainOrderStatus('status').notNull().default('requested'),
     requestedBy: text('requested_by').references(() => user.id),

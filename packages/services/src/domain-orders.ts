@@ -28,9 +28,27 @@ import {
   splitDomain,
 } from './integrations/namecheap'
 
-/** AED is pegged to the USD. Spas are billed the registrar cost, rounded up to whole dirhams. */
+/** AED is pegged to the USD. Spas are billed the registrar cost + markup, rounded up to whole dirhams. */
 export const USD_TO_AED = 3.6725
 export const aedFromUsd = (usd: number) => Math.ceil(usd * USD_TO_AED)
+/** Default platform markup per domain order (platform_settings.domain_markup_usd), PLAN §14.8 R14. */
+export const DEFAULT_DOMAIN_MARKUP_USD = 10
+
+/** The markup the super-admin set (USD, added once per order); the default when settings are missing. */
+export async function domainMarkupUsd(db: DbOrTx = platformDb()) {
+  const [row] = await db
+    .select({ markup: platformSettings.domainMarkupUsd })
+    .from(platformSettings)
+    .where(eq(platformSettings.id, 1))
+  const n = Number(row?.markup ?? DEFAULT_DOMAIN_MARKUP_USD)
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DOMAIN_MARKUP_USD
+}
+
+/** What a spa pays for `years` of a domain: registrar price × years + the markup once (USD and AED). */
+export function domainPrice(registrarUsdPerYear: number, years: number, markupUsd: number) {
+  const usd = Math.round((registrarUsdPerYear * years + markupUsd) * 100) / 100
+  return { usd, aed: aedFromUsd(usd) }
+}
 /** Extensions offered in search (Namecheap doesn't sell .ae; those go through a UAE registrar). */
 export const SEARCH_TLDS = ['com', 'co', 'net', 'spa', 'salon', 'beauty', 'massage', 'shop'] as const
 export const MAX_OPEN_ORDERS = 3
@@ -43,6 +61,8 @@ type Deps = {
   /** App-role DB for the tenant-scoped domain insert (defaults to appDb()). */
   app?: Db
   env?: Record<string, string | undefined>
+  /** Override the platform markup (tests); defaults to platform_settings.domain_markup_usd. */
+  markupUsd?: number
 }
 
 /** Turns "Serenity Spa" or "serenityspa.com" into domains to check. */
@@ -101,6 +121,7 @@ export async function searchDomains(
   const list = domainCandidates(query).slice(0, 10)
   const checked = await checkDomains(cfg, list, deps.fetch)
   const prices = await tldPrices(cfg, [...new Set(list.map((d) => splitDomain(d).tld))], deps.fetch)
+  const markup = deps.markupUsd ?? (await domainMarkupUsd(deps.db))
   const offers = list.map<DomainOffer>((d) => {
     const c = checked.find((x) => x.domain === d)
     const usd = c?.premium ? c.premiumPriceUsd : (prices[splitDomain(d).tld] ?? null)
@@ -108,8 +129,8 @@ export async function searchDomains(
       domain: d,
       available: Boolean(c?.available && usd),
       premium: Boolean(c?.premium),
-      priceUsd: usd,
-      priceAed: usd ? aedFromUsd(usd) : null,
+      priceUsd: usd ? domainPrice(usd, 1, markup).usd : null,
+      priceAed: usd ? domainPrice(usd, 1, markup).aed : null,
       note: c?.error ?? (c?.available && !usd ? 'Price unavailable' : null),
     }
   })
@@ -146,6 +167,8 @@ export async function requestDomain(
   const usd = check.premium ? check.premiumPriceUsd : (await tldPrices(cfg, [tld], deps.fetch))[tld]
   if (!usd) throw new DomainError('Could not get a price for that domain — try again shortly.')
   const years = Math.min(Math.max(Math.round(r.years ?? 1), 1), 5)
+  const markup = deps.markupUsd ?? (await domainMarkupUsd(deps.db))
+  const price = domainPrice(usd, years, markup)
   try {
     const [order] = await run((db) =>
       db
@@ -154,8 +177,9 @@ export async function requestDomain(
           tenantId: r.tenantId,
           domain,
           years,
-          priceUsd: (usd * years).toFixed(2),
-          priceAed: (aedFromUsd(usd) * years).toFixed(2),
+          priceUsd: price.usd.toFixed(2),
+          priceAed: price.aed.toFixed(2),
+          markupUsd: markup.toFixed(2),
           premium: check.premium,
           requestedBy: r.userId,
         })

@@ -521,6 +521,17 @@
   background: var(--crm-warn-bg);
   color: #7a5408;
 }
+.crm-banner[data-tone="danger"] {
+  background: var(--crm-bad);
+  border-bottom: 0;
+  color: #fff;
+  font-weight: 600;
+}
+.crm-banner[data-tone="danger"] a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .crm-top {
   position: sticky;
   top: 0;

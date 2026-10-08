@@ -9,12 +9,24 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
-import { eq, sql, sum } from 'drizzle-orm'
+import {
+  createPaymentReminder,
+  createPlatformInvoice,
+  DomainError,
+  deleteTenant,
+  generateBillingSchedule,
+  pauseTenant,
+  resumeTenant,
+  setInvoicePaid,
+} from '@spa/services'
+import { eq, sum } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { canonicalUrls } from '@/server/origin'
 
 const money = z.coerce
   .number({ error: 'Enter an amount' })
@@ -99,25 +111,8 @@ export async function createInvoiceAction(
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
-  const db = platformDb()
-  const settings = await db.query.platformSettings.findFirst({ where: eq(platformSettings.id, 1) })
-  const rate = Number(settings?.vatRate ?? 5)
-  const amount = Number(d.amountAed)
-  const vat = settings?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
-  const subtotal = settings?.pricesIncludeVat ? amount - vat : amount
-  const [{ n }] = (await db.execute<{ n: string }>(sql`select nextval('platform_invoice_seq') as n`))
-    .rows as [{ n: string }]
-  const number = `${settings?.invoicePrefix ?? 'SM'}-${d.issueDate.slice(0, 4)}-${String(n).padStart(4, '0')}`
-  await db.insert(platformInvoices).values({
-    tenantId,
-    number,
-    issueDate: d.issueDate,
-    dueDate: d.dueDate,
-    description: d.description,
-    subtotalAed: subtotal.toFixed(2),
-    vatAed: vat.toFixed(2),
-    totalAed: (subtotal + vat).toFixed(2),
-  })
+  const row = await createPlatformInvoice(platformDb(), tenantId, d)
+  const number = row?.number
   await audit({ tenantId, actorUserId: user.id, action: 'platform.invoice.created', data: { number, ...d } })
   revalidatePath(`/platform/tenants/${tenantId}`)
   return ok(`Invoice ${number} created`)
@@ -230,6 +225,11 @@ export async function saveCompanyAction(_p: ActionResult, fd: FormData): Promise
         .max(100)
         .transform((n) => n.toFixed(2)),
       pricesIncludeVat: bool,
+      domainMarkupUsd: z.coerce
+        .number({ error: 'Enter an amount' })
+        .min(0, 'Must be 0 or more')
+        .max(1000)
+        .transform((n) => n.toFixed(2)),
     })
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
@@ -266,4 +266,139 @@ export async function saveAiModelAction(_p: ActionResult, fd: FormData): Promise
   await audit({ actorUserId: user.id, action: 'platform.ai_model.updated', entityId: agentKey, data: d })
   revalidatePath('/platform/ai')
   return ok('Model saved')
+}
+
+/** Revalidates the console pages and the spa's dashboard (red bar + Billing page). */
+function refresh(tenantId: string) {
+  revalidatePath(`/platform/tenants/${tenantId}`)
+  revalidatePath('/platform')
+  revalidatePath('/dashboard', 'layout')
+}
+
+const domainFail = (e: unknown) => {
+  if (e instanceof DomainError) return fail(e.message)
+  throw e
+}
+
+/** R3: issue the plan invoices for the current period (12 monthly or one-time) + the setup fee. */
+export async function generateScheduleAction(tenantId: string, _p: ActionResult): Promise<ActionResult> {
+  const user = await admin()
+  try {
+    const r = await generateBillingSchedule(platformDb(), tenantId, todayDubai())
+    await audit({ tenantId, actorUserId: user.id, action: 'platform.invoice.schedule', data: r })
+    refresh(tenantId)
+    return ok(
+      r.created
+        ? `${r.created} invoice${r.created === 1 ? '' : 's'} created${r.voided ? `, ${r.voided} voided` : ''}`
+        : 'Schedule is already up to date',
+    )
+  } catch (e) {
+    return domainFail(e)
+  }
+}
+
+/** R11: the super-admin alone sets an invoice Paid / Must pay. */
+export async function setInvoicePaidAction(
+  tenantId: string,
+  invoiceId: string,
+  paid: boolean,
+  _p: ActionResult,
+): Promise<ActionResult> {
+  const user = await admin()
+  if (!z.uuid().safeParse(invoiceId).success) return fail('Invoice not found')
+  try {
+    const row = await setInvoicePaid(platformDb(), {
+      tenantId,
+      invoiceId,
+      paid,
+      userId: user.id,
+      today: todayDubai(),
+    })
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: paid ? 'platform.invoice.marked_paid' : 'platform.invoice.marked_unpaid',
+      entity: 'platform_invoice',
+      entityId: invoiceId,
+      data: { number: row.number },
+    })
+    refresh(tenantId)
+    return ok(paid ? `${row.number} marked paid` : `${row.number} marked unpaid`)
+  } catch (e) {
+    return domainFail(e)
+  }
+}
+
+/** R12: pause (dashboard read-only; site + booking stay on) or resume a spa. */
+export async function pauseTenantAction(
+  tenantId: string,
+  pause: boolean,
+  _p: ActionResult,
+): Promise<ActionResult> {
+  const user = await admin()
+  try {
+    const row = pause ? await pauseTenant(platformDb(), tenantId) : await resumeTenant(platformDb(), tenantId)
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: pause ? 'platform.tenant.paused' : 'platform.tenant.resumed',
+      data: { status: row.status },
+    })
+    refresh(tenantId)
+    return ok(pause ? `${row.name} paused` : `${row.name} resumed`)
+  } catch (e) {
+    return domainFail(e)
+  }
+}
+
+/** R12: soft-delete a spa; the admin types its address to confirm. */
+export async function deleteTenantAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const confirm = String(fd.get('confirm') ?? '')
+  try {
+    const row = await deleteTenant(platformDb(), tenantId, confirm)
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.tenant.deleted',
+      data: { slug: row.slug },
+    })
+    refresh(tenantId)
+    revalidatePath('/platform/tenants')
+    return ok(`${row.name} deleted (data kept — Resume restores it)`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { confirm: e.message })
+    throw e
+  }
+}
+
+/** R12: a reminder the spa sees in its dashboard + the message text for a click-to-send WhatsApp link. */
+export async function paymentReminderAction(tenantId: string, _p: ActionResult): Promise<ActionResult> {
+  const user = await admin()
+  const tenant = await platformDb().query.tenants.findFirst({ where: eq(tenants.id, tenantId) })
+  if (!tenant) return fail('Spa not found')
+  try {
+    const { reminder, message } = await createPaymentReminder(platformDb(), {
+      tenantId,
+      userId: user.id,
+      today: todayDubai(),
+      billingUrl: canonicalUrls().app(`/${tenant.slug}/billing`),
+    })
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.reminder.created',
+      entity: 'platform_reminder',
+      entityId: reminder.id,
+      data: { amountAed: reminder.amountAed },
+    })
+    refresh(tenantId)
+    return ok('Reminder created — the spa sees it now. Send the message below.', { message })
+  } catch (e) {
+    return domainFail(e)
+  }
 }
