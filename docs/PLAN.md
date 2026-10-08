@@ -872,6 +872,16 @@ until `spamanagement.ae` is registered.
     Settings; sidebar falls back to initials on the accent gradient.
   - **Thai copy** is written to read naturally but needs a native Thai speaker's review before launch.
 
+### 14.7 Work split (owner, 2026-10-08)
+- Track A (Claude): spa dashboard UI (`apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,
+  `packages/core/src/i18n/**`) — §14.6 Phase 2, then Phase 3 screens on Track B's services.
+- Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch
+  to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
+  bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
+  clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.
+- Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
+  catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.
