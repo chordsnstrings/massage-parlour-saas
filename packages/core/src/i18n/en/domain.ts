@@ -206,4 +206,8 @@ export const domain = {
   invoiceVoid: 'This invoice is void',
   nothingToRemind: 'Nothing to remind — this spa has no unpaid invoices',
   typeSlugToConfirm: 'Type {slug} to confirm',
+  waitlistWindow: 'The time window must end after it starts',
+  waitlistClosed: 'This waitlist entry is already closed',
+  waitlistNotFound: 'Waitlist entry not found',
+  mergeSameClient: 'Choose two different clients',
 } as const

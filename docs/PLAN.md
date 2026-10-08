@@ -893,6 +893,11 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   page in the System menu (`settings.manage`; backups + domains/SSL shown "Always on"), tenant `job_runs` log (migration
   0022) shown as "Last 24 hours". Switches only stop QUEUEING (outbox) / pushes — click-to-send unchanged. Details: CODEMAP
   "Automation switches".
+  *B5.1 waitlist + B5.2 merge duplicate clients built (X6, migration 0022_waitlist_merge; CODEMAP "Waitlist" /
+  "Merge duplicate clients"): waitlist per branch + business date + optional service and time window; a freed slot
+  (cancel / no-show / reschedule) marks matching entries notified and queues a `waitlist_slot` WhatsApp message
+  (click-to-send); staff book an entry through createBooking. Merge = suggest (phone key / name) → preview → one
+  transaction moving every client FK, merged row deleted, ledger untouched, new permission `clients.merge`.*
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

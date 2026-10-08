@@ -12,6 +12,7 @@ export const MESSAGE_KINDS = [
   'birthday',
   'winback',
   'slot_offer',
+  'waitlist_slot',
   'custom',
 ] as const
 export type MessageKind = (typeof MESSAGE_KINDS)[number]
@@ -29,6 +30,7 @@ export const KIND_TONE: Record<MessageKind, Tone> = {
   birthday: 'neutral',
   winback: 'neutral',
   slot_offer: 'neutral',
+  waitlist_slot: 'info',
   custom: 'neutral',
 }
 

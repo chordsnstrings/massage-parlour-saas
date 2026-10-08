@@ -120,6 +120,7 @@ export const messages = {
     birthday: 'In the client’s birthday week.',
     winback: 'For clients who have not visited in a while.',
     slot_offer: 'To fill a gap that just opened in the day.',
+    waitlist_slot: 'When a slot frees up for a client on the waitlist.',
     custom: 'Free text.',
   },
   variables: {

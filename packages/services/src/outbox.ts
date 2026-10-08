@@ -47,20 +47,24 @@ export const DEFAULT_TEMPLATES: Record<MessageKind, { en: string; ar: string }> 
     en: 'Hi {first_name}, we have a free slot {day} at {time} at {spa}. Would you like it?',
     ar: 'مرحباً {first_name}، لدينا موعد متاح {day} الساعة {time} في {spa}. هل ترغب بحجزه؟',
   },
+  waitlist_slot: {
+    en: 'Hi {first_name}, good news: a {service} slot just opened at {spa} on {day} at {time}. Reply here if you would like it.',
+    ar: 'مرحباً {first_name}، خبر سار: أصبح موعد {service} متاحاً في {spa} يوم {day} الساعة {time}. راسلنا هنا إذا كنت ترغب بحجزه.',
+  },
   custom: { en: '{text}', ar: '{text}' },
 }
 
 export const renderTemplate = (body: string, vars: Record<string, string>) =>
   body.replace(/\{(\w+)\}/g, (m, key: string) => vars[key] ?? m)
 
-const fmtDay = (d: Date, lang: string) =>
+export const fmtDay = (d: Date, lang: string) =>
   d.toLocaleDateString(lang === 'ar' ? 'ar-AE' : 'en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     timeZone: 'Asia/Dubai',
   })
-const fmtTime = (d: Date, lang: string) =>
+export const fmtTime = (d: Date, lang: string) =>
   d.toLocaleTimeString(lang === 'ar' ? 'ar-AE' : 'en-GB', {
     hour: '2-digit',
     minute: '2-digit',
@@ -75,7 +79,7 @@ const BOOKING_MESSAGE_AUTOMATION: Partial<Record<MessageKind, AutomationKey>> = 
   review_request: 'thankYou',
 }
 
-async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
+export async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
   const [row] = await tx
     .select({ body: messageTemplates.body })
     .from(messageTemplates)

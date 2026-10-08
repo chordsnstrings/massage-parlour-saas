@@ -176,6 +176,13 @@
       "when": 1791503163863,
       "tag": "0024_search_audit_security",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791503202989,
+      "tag": "0025_waitlist_merge",
+      "breakpoints": true
     }
   ]
 }

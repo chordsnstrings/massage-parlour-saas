@@ -19,6 +19,7 @@ export const permissions = {
         manage: 'Edit clients',
         phone: 'See phone numbers',
         export: 'Export clients',
+        merge: 'Merge duplicate clients',
       },
     },
     pos: {

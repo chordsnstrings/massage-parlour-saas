@@ -15,6 +15,7 @@ import { bookings } from './th/bookings'
 import { calendar } from './th/calendar'
 import { campaigns } from './th/campaigns'
 import { clients } from './th/clients'
+import { clientsMerge } from './th/clientsMerge'
 import { common } from './th/common'
 import { documents } from './th/documents'
 import { domain } from './th/domain'
@@ -46,6 +47,7 @@ import { staff } from './th/staff'
 import { team } from './th/team'
 import { ui } from './th/ui'
 import { validation } from './th/validation'
+import { waitlist } from './th/waitlist'
 import { warehouse } from './th/warehouse'
 import { website } from './th/website'
 import type { Messages } from './types'
@@ -63,12 +65,14 @@ export const th: Messages = {
   calendar,
   bookings,
   clients,
+  clientsMerge,
   sales,
   services,
   packages,
   inventory,
   purchases,
   warehouse,
+  waitlist,
   team,
   staff,
   documents,

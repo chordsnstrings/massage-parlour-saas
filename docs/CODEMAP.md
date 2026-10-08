@@ -111,6 +111,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
     Billing (Stripe Checkout for platform invoices only).
   - System: Settings (incl. logo, hours, intake, integrations, domains, data).
+  - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
+    (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
   - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
   - Settings → Security: require-2FA toggle (`saveSecurityAction`), recent audit rows;
@@ -299,6 +301,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
   manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
   monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
+- **Waitlist (B5.1, migration 0022, X6)**: `waitlist_entries` (branch, client, optional service/variant, business
+  date, optional `from_at`/`until_at` window — CHECK from < until, notes, status waiting · notified · booked ·
+  cancelled, booking_id, created_by). services `waitlist.ts`: `addToWaitlist`, `cancelWaitlistEntry`,
+  `listWaitlist`, `notifyWaitlistForFreedSlot` (called by `setBookingStatus` → cancelled/no_show and by
+  `rescheduleItem` when the time moves; opt out with `notifyWaitlist: false`): same branch + business date,
+  service matches or is open, window overlaps the freed time, client has a mobile, slot not in the past; claims ≤ 5
+  oldest via `FOR UPDATE SKIP LOCKED` + status → `notified` (no double message under concurrent cancels), then queues
+  outbox kind `waitlist_slot` (EN/AR default template, click-to-send). `bookFromWaitlist` locks the entry and uses
+  `createBooking` (reservations EXCLUDE decides) → `booked`. Web: `dashboard/[tenant]/waitlist` (calendar.view;
+  edits calendar.manage).
+- **Merge duplicate clients (B5.2, X6)**: services `client-merge.ts`. `duplicateClientPairs` = same phone key (last 9
+  digits) or same normalised name (two equi-join unions). `mergePreview` counts; `mergeClients` locks both rows in id
+  order, re-points every FK in `CLIENT_REFERENCES` (bookings, sales, outbox, intake_submissions, treatment_notes,
+  client_packages, client_memberships, gift_cards.purchaser_client_id, conversations, waitlist_entries — the test
+  compares this list with `pg_constraint`, so a new FK to clients must be added there), combines fields (earliest
+  created_at / first visit, latest last visit, summed no-shows, union of tags, notes joined, kept values win, gaps
+  filled, opt-out/blocklist kept), deletes the merged row (hard delete). Ledger untouched. Permission `clients.merge`
+  (owner + manager); audit `client.merged` with keptId + mergedId.
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.

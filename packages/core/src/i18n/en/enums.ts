@@ -54,8 +54,10 @@ export const enums = {
     birthday: 'Birthday',
     winback: 'Win-back',
     slot_offer: 'Free slot offer',
+    waitlist_slot: 'Waitlist slot',
     custom: 'Custom',
   },
+  waitlistStatus: { waiting: 'Waiting', notified: 'Notified', booked: 'Booked', cancelled: 'Removed' },
   outboxStatus: { queued: 'Queued', opened: 'Opened', sent: 'Sent', skipped: 'Skipped' },
   accountType: {
     asset: 'Asset',

@@ -16,6 +16,7 @@ import { bookings } from './en/bookings'
 import { calendar } from './en/calendar'
 import { campaigns } from './en/campaigns'
 import { clients } from './en/clients'
+import { clientsMerge } from './en/clientsMerge'
 import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
@@ -46,6 +47,7 @@ import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
 import { validation } from './en/validation'
+import { waitlist } from './en/waitlist'
 import { warehouse } from './en/warehouse'
 import { website } from './en/website'
 import { ui } from './en-ui'
@@ -63,12 +65,14 @@ export const en = {
   calendar,
   bookings,
   clients,
+  clientsMerge,
   sales,
   services,
   packages,
   inventory,
   purchases,
   warehouse,
+  waitlist,
   team,
   staff,
   documents,
