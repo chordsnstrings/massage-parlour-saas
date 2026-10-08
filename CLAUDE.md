@@ -22,6 +22,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
+- Brand domain: **spamanagement.co** (owner, 2026-10-08). Code, emails and env still say spamanagement.ae; switch pending.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing also manual. Stripe later.
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.

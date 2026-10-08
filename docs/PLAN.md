@@ -784,6 +784,9 @@ until `spamanagement.ae` is registered.
 - Positioning: **automation — "More bookings. Less work."** Copy only claims what is automated in code; WhatsApp
   messages are described as written and queued automatically, sent by the spa in one tap (click-to-send stays locked).
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
+- **Redesign (owner, 2026-10-08):** new visual style + better UX + mobile-first polish for the marketing site only (backend
+  unchanged). Brand domain spamanagement.co. Main CTA = WhatsApp chat with sales (number from super-admin company
+  settings). Style chosen from 3 mockups (dark luxury / warm editorial / bold product-led): pending.
 
 ### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
 - **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
