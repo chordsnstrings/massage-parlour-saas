@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { expect, type Page } from '@playwright/test'
 import { businessDateOf, dubaiInstant } from '@spa/core'
 import {
@@ -93,6 +96,13 @@ export async function screenshotAt(page: Page, name: string) {
 // ---------------------------------------------------------------------------
 
 export const testDb = () => createDb(testUrls.platform, 3)
+
+/** Writes the canned AI reply the server returns for this spa (AI_E2E_FIXTURE_DIR, see playwright.config). */
+export async function mockAiReply(slug: string, reply: unknown) {
+  const dir = path.join(tmpdir(), `spa-e2e-ai-${PORT}`)
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(dir, `${slug}.json`), JSON.stringify(reply))
+}
 
 /** Makes a signed-up owner a super-admin too, so the Website Studio (super-admin only) opens on their spa. */
 export async function makeStudio(slug: string) {

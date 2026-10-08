@@ -35,6 +35,7 @@ import {
   useTransition,
 } from 'react'
 import { editorConfig } from '@/components/site/config'
+import { AiEditPanel } from '@/components/site/editor/ai-edit'
 import { preflightColors } from '@/components/site/editor/colors'
 import {
   type EditorServices,
@@ -51,6 +52,7 @@ import { PublishSheet } from '@/components/site/editor/publish'
 import { Segmented } from '@/components/site/editor/segmented'
 import { VersionsSheet } from '@/components/site/editor/versions'
 import { type AiAssist, EditorContext } from '@/components/site/fields'
+import type { SiteTheme } from '@/components/site/theme'
 import type { Device, Locale, SiteMeta } from '@/components/site/types'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
@@ -70,6 +72,7 @@ import {
   translateBatchAction,
   updateGlobalSectionAction,
 } from '../actions'
+import { aiEditApplyAction, aiEditPlanAction, aiEditUndoAction } from '../ai-edit-actions'
 
 const usePuckStore = createUsePuck()
 
@@ -100,6 +103,9 @@ type Chrome = {
   insights: Insights | null
   setInsights: (i: Insights | null) => void
   preflight: Omit<PreflightContext, 'globalIds'>
+  /** Theme on the canvas (an AI edit preview may change it before it is saved). */
+  theme: SiteTheme
+  setTheme: (t: SiteTheme) => void
 }
 const ChromeContext = createContext<Chrome | null>(null)
 const useChrome = () => useContext(ChromeContext)!
@@ -117,6 +123,8 @@ type EditorProps = {
   canPublish: boolean
   canInsights: boolean
   aiReady: boolean
+  /** R16 Ask AI (studio editor; ModelArk configured). */
+  aiEditReady: boolean
   sections: SavedSection[]
   pages: { slug: string; visible: boolean; published: boolean }[]
   backHref: string
@@ -139,6 +147,7 @@ export function SiteEditor(props: EditorProps) {
   const [saving, setSaving] = useState(false)
   const [editingGlobal, setEditingGlobal] = useState<string | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
+  const [theme, setTheme] = useState<SiteTheme>(props.meta.theme)
   const baseline = useRef<string | null>(null)
   const { slug } = props
 
@@ -149,8 +158,8 @@ export function SiteEditor(props: EditorProps) {
     [sections],
   )
   const metadata = useMemo(
-    () => ({ ...props.meta, locale, editing: true, globals, insights }),
-    [props.meta, locale, globals, insights],
+    () => ({ ...props.meta, theme, locale, editing: true, globals, insights }),
+    [props.meta, theme, locale, globals, insights],
   )
   const onChange = useCallback((data: Data) => {
     if (baseline.current !== null) setDirty(JSON.stringify(data) !== baseline.current)
@@ -184,6 +193,8 @@ export function SiteEditor(props: EditorProps) {
     insights,
     setInsights,
     preflight: preflightContext,
+    theme,
+    setTheme,
   }
 
   const setSections = useCallback(
@@ -394,6 +405,14 @@ function EditorHeader() {
     }),
     [props.slug, props.pageId],
   )
+  const aiEditApi = useMemo(
+    () => ({
+      plan: (input: unknown) => aiEditPlanAction(props.slug, props.pageId, input),
+      apply: (input: unknown) => aiEditApplyAction(props.slug, props.pageId, input),
+      undo: (input: unknown) => aiEditUndoAction(props.slug, props.pageId, input),
+    }),
+    [props.slug, props.pageId],
+  )
 
   const state = chrome.dirty ? 'Unsaved changes' : chrome.status === 'published' ? 'Live' : 'Draft saved'
   return (
@@ -463,6 +482,18 @@ function EditorHeader() {
           </Button>
           {props.canInsights && <InsightsToggle />}
         </div>
+        {props.aiEditReady && (
+          <AiEditPanel
+            api={aiEditApi}
+            getData={() => current() as unknown as Record<string, unknown>}
+            theme={chrome.theme}
+            show={(data, theme) => {
+              getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
+              chrome.setTheme(theme)
+            }}
+            saved={() => markSaved(JSON.stringify(getPuck().appState.data), 'draft')}
+          />
+        )}
         <VersionsSheet api={versionsApi} dirty={chrome.dirty} onRestored={onRestored} />
         <Button
           variant="secondary"

@@ -151,6 +151,19 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Draft JSON is capped at 512 KB.
   - Design changes need `site.design` (checked via `designSignature`).
   - Preflight runs before publish (`server/site-preflight.ts`); errors block publishing, warnings don't.
+- **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
+  - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the
+    instruction, the trimmed page (`trimPageForPrompt`: ids/types/props, page text marked as data) and the vocabulary
+    from `siteEditSchema()` (`components/site/ai-schema.ts`: built from the Puck config — custom fields carry
+    `ai` meta in `field-defs.tsx` — plus `SECTION_PRESETS` and theme tokens; GlobalSection, custom CSS and
+    schedules excluded). Output = ops (add / preset / move / remove / update incl. `{en,ar}` + per-device / theme).
+  - `applySiteEditOps` (`@spa/services/site-kit/edit-ops.ts`, pure): validates every op against that schema
+    (unknown block/prop/option/id or disallowed slot ⇒ the whole plan is rejected), applies to a copy.
+  - Preview on the canvas (Puck `setData` + theme state), then Apply = draft save (512 KB cap, `designSignature`
+    ⇒ `site.design`; theme ops update `sites.theme`, live like the Theme panel) → audit `site.page.ai_edit`;
+    Undo restores the previous draft + theme (`site.page.ai_edit_undone`). Never publishes.
+  - E2E: `AI_E2E_FIXTURE_DIR` (Playwright only) makes the action answer from `<dir>/<slug>.json` via
+    `server/ai-fixture.ts`, still through the real gateway (`mockAiReply` helper, `ai-edit.spec.ts`).
 - **Share preview**: an HMAC token signed with `BETTER_AUTH_SECRET`, valid for 1, 7 or 30 days, opened at
   `/website/preview?token=` on the app host.
 - **Analytics**:

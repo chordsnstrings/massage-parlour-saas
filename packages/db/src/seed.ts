@@ -56,6 +56,15 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
     priceCachedInPerM: '0.10',
   },
   {
+    // R16: Website Studio "Ask AI" — returns typed edit ops (validated against the block schema).
+    agentKey: 'site_editor',
+    label: 'Website Studio AI edits',
+    modelId: 'seed-2-0-pro-260328',
+    priceInPerM: '0.50',
+    priceOutPerM: '3.00',
+    priceCachedInPerM: '0.10',
+  },
+  {
     agentKey: 'insights_agent',
     label: 'Weekly insights',
     modelId: 'seed-2-0-pro-260328',

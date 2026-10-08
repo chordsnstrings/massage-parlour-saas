@@ -943,6 +943,10 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   hero", "add FAQ after services", "rewrite About in Arabic"); the AI (ModelArk via `@spa/ai` gateway) returns a change to
   the Puck draft built only from existing blocks/templates/presets; preview + undo; publishing stays a separate click.
   Spas still only request changes. Drag & drop editor stays.
+  **Built (2026-10-08):** editor header "Ask AI" panel → agent `site_editor` returns typed ops (add / preset / move /
+  remove / update incl. bilingual + per-device style / theme), validated against the real Puck schema, previewed on the
+  canvas, Apply saves the draft (+ theme, site-wide), one-click Undo, audited, never publishes. Details: CODEMAP
+  "Site builder → Ask AI".
 - **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
