@@ -926,6 +926,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
 - **R7 Meta MCP for AI:** AI agents reach Instagram / WhatsApp through a Meta MCP server. Customer WhatsApp stays
   click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).
+- **R7 decision (owner, 2026-10-08):** WhatsApp stays click-to-send — the AI may read and draft WhatsApp messages
+  through Meta MCP but never sends; staff tap to send. Instagram/Facebook via Meta MCP: read, draft, publish approved posts.
+- **B1 decision (2026-10-08):** staff emails (invites, password reset, 2FA) keep sending from spamanagement.ae
+  (`EMAIL_FROM`) until spamanagement.co is verified in Resend; then switch the env value.
+- **Phone visibility (owner, 2026-10-09):** client phone numbers are shown only to owner, manager and receptionist —
+  always; never to therapist, accountant, content editor or custom roles (no per-spa toggle).
 - **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):
   Services & menu → Purchases; one ledger entry per purchase (stock → 1200, rest → 6150/6160/6170/6900 by category,
   input VAT 1300); void = reversal + stock back out (CODEMAP "Stock locations + purchases").

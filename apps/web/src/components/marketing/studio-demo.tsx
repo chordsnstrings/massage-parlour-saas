@@ -5,6 +5,7 @@ import { useState } from 'react'
 
 const STYLES = {
   serene: {
+    label: 'Serene',
     bg: '#f4f1ea',
     ink: '#2f3a33',
     mute: '#6c766f',
@@ -13,6 +14,7 @@ const STYLES = {
     font: 'ui-serif, Georgia, "Times New Roman", serif',
   },
   desert: {
+    label: 'Desert',
     bg: '#f8f0e6',
     ink: '#4a3426',
     mute: '#86705f',
@@ -21,6 +23,7 @@ const STYLES = {
     font: 'ui-sans-serif, system-ui, sans-serif',
   },
   midnight: {
+    label: 'Midnight',
     bg: '#1e2225',
     ink: '#f3efe8',
     mute: '#a9a49b',
@@ -28,8 +31,101 @@ const STYLES = {
     soft: '#2b3135',
     font: 'ui-serif, Georgia, "Times New Roman", serif',
   },
+  signature: {
+    label: 'Signature',
+    bg: '#ecece8',
+    ink: '#141615',
+    mute: '#5f6461',
+    accent: '#3e5bd8',
+    soft: '#dde1ee',
+    font: 'ui-sans-serif, system-ui, sans-serif',
+  },
+  noirGold: {
+    label: 'Noir Gold',
+    bg: '#0e0d0b',
+    ink: '#f2ede4',
+    mute: '#a39a8a',
+    accent: '#c9a96e',
+    soft: '#1d1a15',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
+  ivoryMarble: {
+    label: 'Ivory Marble',
+    bg: '#f5f2ec',
+    ink: '#2a2620',
+    mute: '#7a7266',
+    accent: '#a8874f',
+    soft: '#ebe4d6',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
+  navyOfficial: {
+    label: 'Navy Official',
+    bg: '#0d1b2a',
+    ink: '#e8edf2',
+    mute: '#9aa8b6',
+    accent: '#c7ced6',
+    soft: '#16283b',
+    font: 'ui-sans-serif, system-ui, sans-serif',
+  },
+  emerald: {
+    label: 'Emerald Prestige',
+    bg: '#0e241d',
+    ink: '#efe9dc',
+    mute: '#a7b3a7',
+    accent: '#d4b26a',
+    soft: '#173329',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
+  platinum: {
+    label: 'Platinum Minimal',
+    bg: '#f7f7f5',
+    ink: '#0f0f0f',
+    mute: '#6b6b6b',
+    accent: '#0f0f0f',
+    soft: '#e8e8e5',
+    font: 'ui-sans-serif, system-ui, sans-serif',
+  },
+  desertNight: {
+    label: 'Desert Night',
+    bg: '#161122',
+    ink: '#f1e7dc',
+    mute: '#b0a3a0',
+    accent: '#e0b39a',
+    soft: '#221a31',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
+  monogram: {
+    label: 'Monogram Atelier',
+    bg: '#efe8dc',
+    ink: '#2b1d1f',
+    mute: '#7d6a62',
+    accent: '#6e1e2b',
+    soft: '#e3d6c6',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
+  obsidian: {
+    label: 'Obsidian Glass',
+    bg: '#0a0a0b',
+    ink: '#e8e8ec',
+    mute: '#94949c',
+    accent: '#b9c2ff',
+    soft: '#17171a',
+    font: 'ui-sans-serif, system-ui, sans-serif',
+  },
+  sandstone: {
+    label: 'Sandstone Bronze',
+    bg: '#e9e1d3',
+    ink: '#3a2c1f',
+    mute: '#7d6a55',
+    accent: '#8a5a2b',
+    soft: '#ddd1bd',
+    font: 'ui-serif, Georgia, "Times New Roman", serif',
+  },
 } as const
 type StyleKey = keyof typeof STYLES
+const STYLE_OPTIONS = Object.fromEntries(
+  (Object.keys(STYLES) as StyleKey[]).map((k) => [k, STYLES[k].label]),
+) as Record<StyleKey, string>
 
 const HEROES = { centered: 'Centred', split: 'Split', photo: 'Full photo' } as const
 type HeroKey = keyof typeof HEROES
@@ -141,17 +237,12 @@ export function StudioDemo() {
   return (
     <div className="grid gap-8 lg:grid-cols-[17rem_1fr] lg:gap-12">
       <div className="space-y-6">
-        <Choice
-          label="Style"
-          options={{ serene: 'Serene', desert: 'Desert', midnight: 'Midnight' }}
-          value={style}
-          onChange={setStyle}
-        />
+        <Choice label="Style" options={STYLE_OPTIONS} value={style} onChange={setStyle} />
         <Choice label="Hero design" options={HEROES} value={hero} onChange={setHero} />
         <Choice label="Language" options={{ en: 'English', ar: 'العربية' }} value={lang} onChange={setLang} />
         <p className="text-[14px] leading-relaxed text-[var(--ink-2)]">
-          Three of the 30 hero designs in our library. Every section — treatments, team, offers, reviews — has
-          its own set, and the studio picks and tunes each one for your spa.
+          Thirteen of our 23 site styles and three of the 30 hero designs. Every section — treatments, team,
+          offers, reviews — has its own set, and the studio picks and tunes each one for your spa.
         </p>
       </div>
 

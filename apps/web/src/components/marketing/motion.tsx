@@ -225,7 +225,7 @@ export function MarketingMotion() {
     let W = 0
     let H = 0
     const size = () => {
-      const d = 0.3
+      const d = 0.4
       W = vw
       H = vh
       cv.width = Math.ceil(W * d)
@@ -255,6 +255,8 @@ export function MarketingMotion() {
 
     const T0 = performance.now()
     let lastBg = -1e9
+    let lastY = -1
+    let lastScroll = -1e9
     const frame = (now: number) => {
       const y = scrollY
       sx += ((fine ? mx : 0) - sx) * 0.06
@@ -262,7 +264,12 @@ export function MarketingMotion() {
       riseFx(y)
       tiltFx(y)
       depthFx(y)
-      if (now - lastBg > 32) {
+      // the aurora repaints only between scroll gestures (and at ~20 fps), so scrolling stays smooth
+      if (y !== lastY) {
+        lastY = y
+        lastScroll = now
+      }
+      if (now - lastScroll > 140 && now - lastBg > 50) {
         lastBg = now
         draw((now - T0) / 1000, y)
       }
