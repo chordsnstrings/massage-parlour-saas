@@ -1,129 +1,493 @@
-/* Marketing site: white, minimal, muted palette. Scoped to .mkt so the app's tokens stay untouched. */
-/* In the components layer so Tailwind utilities on the same element still win. */
+/* Marketing site: Mint Cloud theme (docs/design/01-mint-cloud.html), light mode only.
+   Everything is scoped to .mkt (or html/body that contain it) so the app, admin and spa sites stay untouched.
+   In the components layer so Tailwind utilities on the same element still win. */
 @layer components {
   .mkt {
     color-scheme: light;
-    --ink: #23221f;
-    --ink-2: #4f4c46;
-    --mute: #86827a;
-    --line: #ecebe6;
-    --sage: #8fa89a;
-    --sage-deep: #5e7d6b;
-    --sage-soft: #e5ede8;
-    --clay: #c8a490;
-    --clay-soft: #f4e8df;
-    --mist: #9fb1c2;
-    --mist-soft: #e4ebf2;
-    --sand: #e8dfd2;
-    --sand-soft: #f7f2ea;
-    --plum: #b3a1b0;
-    --plum-soft: #efe6ed;
-    /* app tokens used by shared components, pinned to light inside the marketing site */
-    --bg: #ffffff;
+    /* Mint Cloud tokens */
+    --bg: #f7fafa;
+    --bg2: #eef5f4;
     --surface: #ffffff;
-    --subtle: #f6f5f2;
+    --text: #0e1b2c;
+    --muted: #5a6b7b;
+    --accent: #13836a;
+    --accent-ink: #0f7a62;
+    --on-accent: #ffffff;
+    --accent2: #9ee6cf;
+    --line: rgba(14, 27, 44, 0.08);
+    --line2: rgba(14, 27, 44, 0.15);
+    --glow: rgba(19, 131, 106, 0.3);
+    --head: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", sans-serif;
+    --font: "Inter Variable", "Inter", sans-serif;
+    --demo-bg: #0e1b2c;
+    --demo-text: #eaf2f1;
+    --t1: #bfefe0;
+    --t2: #d7f0ff;
+    --t3: #fce7d2;
+    --nav-h: 71px;
+    /* names the marketing markup uses, mapped onto the Mint Cloud palette */
+    --ink: var(--text);
+    --ink-2: var(--muted);
+    --mute: #6b7a8a;
+    --sage: var(--accent);
+    --sage-deep: var(--accent-ink);
+    --sage-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    --clay: #e2a86b;
+    --clay-soft: color-mix(in srgb, var(--t3) 80%, var(--surface));
+    --mist: #7c8cf8;
+    --mist-soft: color-mix(in srgb, var(--t2) 80%, var(--surface));
+    --sand: #f6c04f;
+    --sand-soft: var(--bg2);
+    --plum: #e07a9b;
+    --plum-soft: color-mix(in srgb, var(--accent2) 40%, var(--surface));
+    /* app tokens used by shared components (LogoMark), pinned to the marketing palette */
+    --subtle: var(--bg2);
     --border: var(--line);
-    --fg: var(--ink);
-    --muted: var(--mute);
-    --accent: var(--sage-deep);
-    --accent-fg: #ffffff;
+    --fg: var(--text);
+    --accent-fg: var(--on-accent);
     --accent-soft: var(--sage-soft);
-    background: #ffffff;
-    color: var(--ink);
-  }
-  :root {
-    --scene-top: 65px; /* sticky marketing header */
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-feature-settings: normal;
+    line-height: 1.6;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
   }
   @media (max-width: 767px) {
-    :root {
-      --scene-top: 105px; /* header + mobile nav row */
+    .mkt {
+      --nav-h: 115px; /* bar + mobile link row */
     }
   }
-
+  html:has(.mkt) {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    background: #f7fafa;
+  }
+  html:has(.mkt),
+  body:has(.mkt) {
+    overflow-x: clip;
+  }
+  body:has(.mkt) {
+    background: #f7fafa;
+  }
+  .mkt :is(h1, h2, h3) {
+    font-family: var(--head);
+    font-weight: 700; /* the design relies on the browser's bold headings; Tailwind's preflight resets them */
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+  }
+  .mkt-head {
+    font-family: var(--head);
+    letter-spacing: -0.02em;
+  }
   .mkt-wrap {
+    max-width: 1200px;
     margin-inline: auto;
-    max-width: 72rem;
-    padding-inline: 1.25rem;
-  }
-  @media (min-width: 640px) {
-    .mkt-wrap {
-      padding-inline: 2rem;
-    }
+    padding-inline: 20px;
   }
 
-  .mkt-eyebrow {
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--sage-deep);
+  /* drifting light behind the page (drawn by MarketingMotion) */
+  .mkt-calm {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100lvh;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .mkt main,
+  .mkt footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* top bar: hides on scroll down, returns on scroll up (fades away by scroll where JS is blocked) */
+  .mkt-nav {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid transparent;
+    transition:
+      transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1),
+      opacity 0.4s,
+      border-color 0.3s;
+  }
+  .mkt-nav.scrolled {
+    border-color: var(--line);
+  }
+  .mkt-nav.hide {
+    transform: translateY(-105%);
+    opacity: 0;
+  }
+  @supports (animation-timeline: scroll()) {
+    .mkt:not(.mkt-js) .mkt-nav {
+      animation: mkt-navaway linear both;
+      animation-timeline: scroll(root);
+      animation-range: 40px 260px;
+    }
+  }
+  @keyframes mkt-navaway {
+    to {
+      transform: translateY(-105%);
+      opacity: 0;
+    }
+  }
+  .mkt-bar {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    height: 70px;
+  }
+  .mkt-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--head);
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+  }
+  .mkt-links {
+    gap: 24px;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+  .mkt-links a:hover,
+  .mkt-links a[aria-current="page"],
+  .mkt-subnav a[aria-current="page"] {
+    color: var(--text);
+  }
+  .mkt-subnav {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 44px;
+    padding-inline: 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .mkt-subnav::-webkit-scrollbar {
+    display: none;
   }
 
   /* buttons */
   .mkt-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    height: 2.75rem;
-    padding-inline: 1.25rem;
-    border-radius: 999px;
+    justify-content: center;
+    gap: 8px;
+    height: 48px;
+    padding: 0 24px;
+    border-radius: 14px;
+    font-weight: 600;
     font-size: 15px;
-    font-weight: 500;
+    white-space: nowrap;
     transition:
-      background-color 0.25s ease,
-      box-shadow 0.25s ease,
-      transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+      transform 0.25s,
+      box-shadow 0.25s,
+      background 0.25s;
+  }
+  .mkt-btn svg {
+    width: 18px;
+    height: 18px;
   }
   .mkt-btn-primary {
-    background: var(--ink);
-    color: #fff;
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 10px 30px -8px var(--glow);
   }
   .mkt-btn-primary:hover {
-    background: #3a3833;
-    transform: translateY(-1px);
-    box-shadow: 0 8px 24px -12px rgb(35 34 31 / 0.45);
+    transform: translateY(-2px);
   }
   .mkt-btn-ghost {
-    color: var(--ink);
-    box-shadow: inset 0 0 0 1px var(--line);
+    border: 1px solid var(--line2);
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
   }
   .mkt-btn-ghost:hover {
-    box-shadow: inset 0 0 0 1px #d9d6cf;
-    background: var(--sand-soft);
+    border-color: var(--accent);
   }
-  .mkt-arrow {
-    transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  .mkt-btn-sm {
+    height: 40px;
+    padding: 0 18px;
+    font-size: 14px;
   }
-  .group:hover .mkt-arrow,
-  .mkt-btn:hover .mkt-arrow {
-    transform: translateX(3px);
-  }
-
-  /* links: underline sweeps in */
   .mkt-link {
-    background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
-    transition:
-      background-size 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
-      color 0.2s ease;
+    transition: color 0.25s;
   }
-  .mkt-link:hover,
-  .mkt-link[aria-current="page"] {
-    background-size: 100% 1px;
+  .mkt-link:hover {
+    color: var(--accent-ink);
   }
 
-  /* cards lift a touch on hover */
+  /* sections and headings */
+  .mkt-sec {
+    padding-block: 110px;
+    position: relative;
+  }
+  .mkt-band {
+    border-block: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+  }
+  .mkt-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+  .mkt-h1 {
+    font-size: clamp(36px, 3.9vw, 56px);
+    font-weight: 700;
+  }
+  .mkt-h2 {
+    font-size: clamp(32px, 4.4vw, 54px);
+    margin-top: 12px;
+  }
+  .mkt-lead {
+    color: var(--muted);
+    font-size: 17.5px;
+    max-width: 600px;
+    margin-top: 14px;
+  }
+  .mkt-shead {
+    text-align: center;
+  }
+  .mkt-shead .mkt-lead,
+  .mkt-shead .mkt-h2 {
+    margin-inline: auto;
+  }
+
+  /* hero */
+  .mkt-hero {
+    min-height: calc(100svh - var(--nav-h));
+    display: flex;
+    align-items: center;
+    padding: 50px 0 70px;
+    position: relative;
+  }
+  .mkt-hero > * {
+    width: 100%;
+  }
+  .mkt-hsub {
+    font-size: clamp(16px, 1.5vw, 19px);
+    color: var(--muted);
+    max-width: 540px;
+    margin-top: 20px;
+  }
+  .mkt-ctas {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 30px;
+  }
+  .mkt-hnotes {
+    margin-top: 26px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  /* product visual: tilted in 3D, straightens as it scrolls in and follows the mouse (MarketingMotion) */
+  .mkt-stage {
+    position: relative;
+    perspective: 1600px;
+  }
+  .mkt-tilt {
+    transform-style: preserve-3d;
+    transform: rotateX(14deg) rotateY(-18deg) rotateZ(2deg);
+    will-change: transform;
+  }
+  .mkt-shot {
+    box-shadow: 0 40px 90px -20px rgba(10, 30, 40, 0.35);
+  }
+
+  /* cards */
+  .mkt-tile,
   .mkt-card {
-    border-radius: 1.25rem;
+    position: relative;
+    padding: 28px 26px;
+    border-radius: 22px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    overflow: hidden;
     transition:
-      transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1),
-      box-shadow 0.35s ease;
+      border-color 0.3s,
+      box-shadow 0.3s;
   }
   .mkt-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 40px -28px rgb(35 34 31 / 0.35);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    box-shadow: 0 26px 50px -20px var(--glow);
+  }
+  .mkt-tile h3,
+  .mkt-card h3 {
+    font-size: 21px;
+    margin-bottom: 8px;
+  }
+  .mkt-tile p,
+  .mkt-card p {
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .mkt-num {
+    font-family: var(--head);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+  .mkt-mi {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent-ink);
+    margin-bottom: 18px;
+  }
+  .mkt-mi svg {
+    width: 26px;
+    height: 26px;
+  }
+  .mkt-ben {
+    padding: 22px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+  }
+  .mkt-plan {
+    padding: 32px 28px;
+    border-radius: 24px;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    box-shadow: 0 30px 60px -24px var(--glow);
+  }
+  .mkt-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border: 1px solid var(--line2);
+    border-radius: 99px;
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    font-size: 14px;
+    transition: border-color 0.3s;
+  }
+  a.mkt-chip:hover {
+    border-color: var(--accent);
+  }
+  .mkt-check {
+    color: var(--accent-ink);
   }
 
-  /* soft tints */
+  /* FAQ */
+  .mkt-faq {
+    display: grid;
+    gap: 12px;
+  }
+  .mkt-faq details {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    padding: 0 22px;
+    transition: border-color 0.3s;
+  }
+  .mkt-faq details[open] {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .mkt-faq summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0;
+    font-weight: 600;
+    font-size: 16.5px;
+  }
+  .mkt-faq summary::-webkit-details-marker {
+    display: none;
+  }
+  .mkt-faq summary > span {
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--accent-ink);
+    transition: transform 0.3s;
+  }
+  .mkt-faq details[open] summary > span {
+    transform: rotate(45deg);
+  }
+  .mkt-faq details p {
+    color: var(--muted);
+    padding-bottom: 20px;
+  }
+
+  /* closing call to action: the design's deep-navy demo panel */
+  .mkt-demo {
+    padding: clamp(28px, 5vw, 60px);
+    border-radius: 32px;
+    background: var(--demo-bg);
+    color: var(--demo-text);
+    position: relative;
+    overflow: hidden;
+  }
+  .mkt-demo .mkt-lead {
+    color: color-mix(in srgb, var(--demo-text) 75%, transparent);
+  }
+  .mkt-demo .mkt-btn-ghost {
+    color: var(--demo-text);
+    border-color: color-mix(in srgb, var(--demo-text) 30%, transparent);
+    background: color-mix(in srgb, var(--demo-text) 8%, transparent);
+  }
+  .mkt-demo .mkt-btn-ghost:hover {
+    border-color: var(--accent2);
+  }
+
+  /* footer */
+  .mkt-foot {
+    border-top: 1px solid var(--line);
+    padding: 50px 0 30px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .mkt-fgrid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    gap: 30px;
+  }
+  .mkt-fgrid b {
+    display: block;
+    color: var(--text);
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+  .mkt-fgrid a {
+    display: block;
+    padding: 4px 0;
+  }
+  .mkt-fgrid a:hover {
+    color: var(--text);
+  }
+  .mkt-fbot {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+
+  /* soft tints for small accents inside cards and mocks */
   .tint-sage {
     background: var(--sage-soft);
   }
@@ -149,26 +513,25 @@
     background: var(--mist);
   }
   .dot-sand {
-    background: #cdbfa9;
+    background: var(--sand);
   }
   .dot-plum {
     background: var(--plum);
   }
 
   /* load-in for hero copy (not scroll-driven) */
-  @keyframes mkt-rise {
+  @keyframes mkt-fin {
     from {
       opacity: 0;
-      transform: translateY(14px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
+      transform: translateY(18px);
     }
   }
   .mkt-rise {
-    animation: mkt-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-    animation-delay: calc(var(--d, 0) * 90ms);
+    animation: mkt-fin 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--d, 0) * 0.1s);
+  }
+  .mkt-r3 {
+    will-change: transform, opacity;
   }
   @keyframes mkt-pulse {
     0%,
@@ -183,8 +546,31 @@
     animation: mkt-pulse 2.4s ease-in-out infinite;
   }
 
-  /* in-page anchors land below the sticky header */
+  /* in-page anchors land below the top bar */
   .mkt [id] {
     scroll-margin-top: 80px;
+  }
+
+  @media (max-width: 980px) {
+    .mkt-fgrid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 640px) {
+    .mkt-sec {
+      padding-block: 80px;
+    }
+    .mkt-ctas .mkt-btn {
+      width: 100%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mkt,
+    .mkt * {
+      /* biome-ignore lint/complexity/noImportantStyles: the design's reduced-motion rule must win */
+      animation: none !important;
+      /* biome-ignore lint/complexity/noImportantStyles: the design's reduced-motion rule must win */
+      transition: none !important;
+    }
   }
 }

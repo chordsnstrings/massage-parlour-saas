@@ -18,21 +18,23 @@ const NEXT = [
   'Reserve with Google',
 ]
 
+const css = (vars: Record<string, number>) => vars as React.CSSProperties
+
 export default function FeaturesPage() {
   return (
     <MarketingShell active="features">
       <section className="mkt-wrap pt-20 pb-12 sm:pt-28">
         <p className="mkt-eyebrow mkt-rise">Features</p>
-        <h1 className="mkt-rise mt-4 max-w-3xl text-[38px] leading-[1.06] font-semibold tracking-tight sm:text-[56px]">
+        <h1 className="mkt-h1 mkt-rise mt-3 max-w-3xl" style={css({ '--d': 1 })}>
           Everything that runs itself.
         </h1>
-        <nav aria-label="Feature areas" className="mkt-rise mt-10 flex flex-wrap gap-2">
+        <nav
+          aria-label="Feature areas"
+          className="mkt-rise mt-10 flex flex-wrap gap-2"
+          style={css({ '--d': 2 })}
+        >
           {AREAS.map((a) => (
-            <a
-              key={a.key}
-              href={`#${a.key}`}
-              className={`mkt-card rounded-full px-4 py-2 text-[14px] tint-${a.tint}`}
-            >
+            <a key={a.key} href={`#${a.key}`} className="mkt-chip">
               {a.title}
             </a>
           ))}
@@ -40,18 +42,14 @@ export default function FeaturesPage() {
       </section>
 
       {AREAS.map((a, i) => (
-        <section key={a.key} id={a.key} className="border-t border-[var(--line)]">
-          <div
-            data-scene="reveal"
-            data-span=".45"
-            className="mkt-wrap grid gap-8 py-16 lg:grid-cols-[1fr_1.6fr] lg:gap-16"
-          >
-            <div>
-              <span className="text-[13px] text-[var(--mute)] tabular-nums">0{i + 1}</span>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">{a.title}</h2>
-              <p className="mt-3 max-w-sm text-[var(--ink-2)]">{a.blurb}</p>
+        <section key={a.key} id={a.key}>
+          <div className="mkt-wrap grid gap-8 py-16 lg:grid-cols-[1fr_1.6fr] lg:gap-16">
+            <div data-rise>
+              <span className="mkt-num tabular-nums">0{i + 1}</span>
+              <h2 className="mt-2 text-[28px] sm:text-[32px]">{a.title}</h2>
+              <p className="mt-3 max-w-sm text-[var(--muted)]">{a.blurb}</p>
             </div>
-            <ul className={`grid gap-x-8 gap-y-3.5 rounded-2xl p-6 sm:grid-cols-2 sm:p-8 tint-${a.tint}`}>
+            <ul data-rise="card" className="mkt-tile grid gap-x-8 gap-y-3.5 sm:grid-cols-2 sm:p-8">
               {a.features.map((f) => (
                 <li key={f} className="flex gap-3 text-[15px] leading-snug">
                   <span className={`mt-[7px] size-1.5 shrink-0 rounded-full dot-${a.tint}`} />
@@ -63,34 +61,29 @@ export default function FeaturesPage() {
         </section>
       ))}
 
-      {/* Included in every plan — rows hinge open like a departure board */}
-      <section data-scene="flip" className="border-t border-[var(--line)]">
-        <div className="mkt-wrap grid gap-10 py-20 lg:grid-cols-2">
-          <div>
+      {/* Included in every plan */}
+      <section className="mkt-sec">
+        <div className="mkt-wrap grid gap-10 lg:grid-cols-2">
+          <div data-rise>
             <p className="mkt-eyebrow">Runs on its own</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              Working in the background, every day.
-            </h2>
+            <h2 className="mkt-h2">Working in the background, every day.</h2>
           </div>
-          <ul className="divide-y divide-[var(--line)] rounded-2xl border border-[var(--line)]">
+          <ul data-rise className="mkt-tile divide-y divide-[var(--line)] p-0">
             {AUTOMATIONS.map((t) => (
-              <li key={t} data-beat className="flex items-center gap-3 bg-white px-5 py-4 text-[15px]">
-                <Check className="size-4 text-[var(--sage-deep)]" /> {t}
+              <li key={t} className="flex items-center gap-3 px-5 py-4 text-[15px]">
+                <Check className="mkt-check size-[18px] shrink-0" /> {t}
               </li>
             ))}
           </ul>
         </div>
       </section>
 
-      <section className="border-t border-[var(--line)]">
-        <div data-scene="reveal" data-span=".45" className="mkt-wrap py-16">
+      <section className="mkt-band">
+        <div data-rise className="mkt-wrap py-16">
           <p className="mkt-eyebrow">Coming next</p>
           <ul className="mt-5 flex flex-wrap gap-2">
             {NEXT.map((t) => (
-              <li
-                key={t}
-                className="rounded-full border border-[var(--line)] px-4 py-2 text-[14px] text-[var(--ink-2)]"
-              >
+              <li key={t} className="mkt-chip text-[var(--muted)]">
                 {t}
               </li>
             ))}

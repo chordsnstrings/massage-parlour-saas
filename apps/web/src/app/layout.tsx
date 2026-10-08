@@ -21,7 +21,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    // data-scroll-behavior: the marketing pages scroll smoothly to in-page anchors; route changes still jump.
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* Scroll scenes run for every visitor (owner decision: also with OS reduced motion); set before first paint so pins never shift the layout. */}
         <script

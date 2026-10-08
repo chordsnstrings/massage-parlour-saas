@@ -88,7 +88,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **`dashboard/account`** (profile, 2FA, push) and **`dashboard/dev/kit`** (design-system gallery).
 - **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
   (studio templates), websites (studio overview).
-- **`marketing/`**: `/`, features, website-builder, pricing, contact.
+- **`marketing/`**: `/`, features, website-builder, pricing, contact — Mint Cloud theme (`marketing.css`, scoped `.mkt`)
+  + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`, `data-tilt`); PLAN §14.3.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
 - **`api/`**:

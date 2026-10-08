@@ -778,15 +778,25 @@ until `spamanagement.ae` is registered.
 
 ### 14.3 Marketing site & card billing (2026-10-06)
 - Marketing site: `/`, `/features`, `/website-builder`, `/pricing`, `/contact` (apps/web/src/app/marketing, shared
-  `components/marketing`). White, minimal, muted palette (sage/clay/mist/sand/plum tints) scoped under `.mkt`; scroll
-  scenes from the scroll-scenes skill (`lib/scroll-scenes.ts`, `lib/scenes.ts`, `marketing/scenes.css`), on for
-  every visitor including OS reduced motion (owner decision 2026-10-07); feature copy lives in `components/marketing/content.ts`.
+  `components/marketing`); feature copy lives in `components/marketing/content.ts`.
+- **Mint Cloud theme + motion (owner, 2026-10-08)** — spec `docs/design/01-mint-cloud.{html,md}`. Only the look and
+  motion were taken from the design; pages, sections, copy, plans, buttons and links are unchanged (no design text,
+  sections, demo form, EN/AR or light/dark toggles, or WhatsApp button were imported). Light mode only. Theme =
+  `marketing/marketing.css`, scoped to `.mkt` (plus `html/body:has(.mkt)`): Plus Jakarta Sans headings
+  (`@fontsource-variable/plus-jakarta-sans`, loaded in the marketing layout) + Inter body, white/navy/mint tokens (old
+  tint names remapped onto them), design buttons/cards/FAQ/navy CTA panel/footer. Motion = one client component
+  `components/marketing/motion.tsx` (the design's script adapted): top bar hides on scroll down / returns on scroll up
+  (CSS scroll-timeline fade when JS is blocked), `[data-rise]` blocks rise with the 3D tilt linked to scroll
+  (`data-rise="card"` also leans to the pointer), `[data-tilt]` product visuals (home calendar, studio preview — the
+  heroes are text-only) straighten as they scroll in and follow the mouse, drifting mint/sky/peach canvas behind the
+  page; the design's reduced-motion handling as written. The marketing pages no longer use scroll scenes (the engine
+  stays for public spa sites). No tabbed/rotating element exists, so the tour auto-advance was not applied.
 - Positioning: **automation — "More bookings. Less work."** Copy only claims what is automated in code; WhatsApp
   messages are described as written and queued automatically, sent by the spa in one tap (click-to-send stays locked).
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
 - **Redesign (owner, 2026-10-08):** new visual style + better UX + mobile-first polish for the marketing site only (backend
   unchanged). Brand domain spamanagement.co. Main CTA = WhatsApp chat with sales (number from super-admin company
-  settings). Owner rejected 3 generated mockups; owner will supply the design to implement.
+  settings). Owner rejected 3 generated mockups and supplied Mint Cloud; applied as theme + motion only (above).
 
 ### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
 - **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
