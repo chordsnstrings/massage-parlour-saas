@@ -18,6 +18,14 @@ export const permissions: Messages['permissions'] = {
     },
     services: { label: 'บริการและห้อง', actions: { manage: 'จัดการบริการ ห้อง และทรัพยากร' } },
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },
+    timeclock: {
+      label: 'ลงเวลาและการลา',
+      actions: {
+        kiosk: 'เปิดหน้าลงเวลาเข้า-ออกงาน',
+        leave: 'ขอลางานของตัวเอง',
+        approve: 'อนุมัติการลาและแก้ไขเวลาเข้า-ออก',
+      },
+    },
     inventory: {
       label: 'คลังสินค้า',
       actions: {

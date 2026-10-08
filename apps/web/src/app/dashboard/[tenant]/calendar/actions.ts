@@ -1,5 +1,5 @@
 'use server'
-import { businessDateOf, dubaiInstant, holdInterval, overlaps } from '@spa/core'
+import { businessDateOf, dubaiInstant, holdInterval, onLeave, overlaps } from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -407,7 +407,7 @@ export async function walkInAction(
       )
       const day = await loadDay(tx, branch.id, businessDate)
       const free = (s: (typeof day.staff)[number]) =>
-        s.skills.includes(svc.service.id) && !s.busy.some((b) => overlaps(b, hold))
+        s.skills.includes(svc.service.id) && !s.busy.some((b) => overlaps(b, hold)) && !onLeave(s, hold)
       const onShift = (s: (typeof day.staff)[number]) =>
         s.shifts.some((sh) => sh.start <= start && start < sh.end)
       const rotation = await rotationFor(tx, ctx.tenant.id, branch.id, businessDate)

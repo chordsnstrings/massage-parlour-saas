@@ -88,8 +88,16 @@ export function holdInterval(
   }
 }
 
-export type StaffAvailability = { id: string; shifts: Interval[]; busy: Interval[]; skills: string[] }
+export type StaffAvailability = {
+  id: string
+  shifts: Interval[]
+  busy: Interval[]
+  skills: string[]
+  /** Approved leave (whole business days); blocks slots even inside a shift. */
+  leave?: Interval[]
+}
 export type RoomAvailability = { id: string; type: string; busy: Interval[] }
+export type EquipmentAvailability = { id: string; type: string; busy: Interval[] }
 
 export type SlotQuery = {
   date: string
@@ -104,6 +112,9 @@ export type SlotQuery = {
   roomTypes?: string[]
   staff: StaffAvailability[]
   rooms: RoomAvailability[]
+  /** Equipment types the service needs, one unit per entry (repeat a type for two). */
+  equipmentTypes?: string[]
+  equipment?: EquipmentAvailability[]
   /** Restrict to these therapists (client preference). */
   preferredStaffIds?: string[]
   stepMin?: number
@@ -111,14 +122,44 @@ export type SlotQuery = {
   notBefore?: Date
 }
 
-export type Slot = { start: Date; end: Date; staffIds: string[]; roomIds: string[] }
+export type Slot = {
+  start: Date
+  end: Date
+  staffIds: string[]
+  roomIds: string[]
+  /** One free unit per required equipment type (empty when the service needs none). */
+  equipmentIds: string[]
+}
 
 const isFree = (busy: Interval[], hold: Interval) => !busy.some((b) => overlaps(b, hold))
+
+/** True when the person is on approved leave at any point of the interval. */
+export const onLeave = (s: Pick<StaffAvailability, 'leave'>, i: Interval) =>
+  (s.leave ?? []).some((l) => overlaps(l, i))
+
+/**
+ * Picks one distinct free unit per required type (`types` may repeat a type for two units); null when any type
+ * runs out. Units of a type are interchangeable, so taking the first free one is optimal.
+ */
+export function pickEquipment(
+  units: EquipmentAvailability[],
+  types: string[] | undefined,
+  hold: Interval,
+): string[] | null {
+  const taken: string[] = []
+  for (const type of types ?? []) {
+    const unit = units.find((u) => u.type === type && !taken.includes(u.id) && isFree(u.busy, hold))
+    if (!unit) return null
+    taken.push(unit.id)
+  }
+  return taken
+}
 
 /**
  * Every bookable start time on a business date, with the therapists and rooms free for it.
  * A slot needs `therapistsRequired` distinct skilled therapists on shift and free for the whole hold,
- * plus one free room of an allowed type (couples treatments share one room).
+ * plus one free room of an allowed type (couples treatments share one room) and one free unit of each required
+ * equipment type. Therapists on approved leave are never offered.
  */
 export function findSlots(q: SlotQuery): Slot[] {
   const step = q.stepMin ?? 15
@@ -139,12 +180,14 @@ export function findSlots(q: SlotQuery): Slot[] {
       const service: Interval = { start, end: new Date(t + q.durationMin * MIN) }
       const hold = holdInterval(start, q.durationMin, q.bufferBeforeMin, q.bufferAfterMin)
       const staffIds = skilled
-        .filter((s) => s.shifts.some((sh) => contains(sh, hold)) && isFree(s.busy, hold))
+        .filter((s) => s.shifts.some((sh) => contains(sh, hold)) && isFree(s.busy, hold) && !onLeave(s, hold))
         .map((s) => s.id)
       if (staffIds.length < need) continue
       const roomIds = rooms.filter((r) => isFree(r.busy, hold)).map((r) => r.id)
       if (roomIds.length === 0) continue
-      slots.push({ start, end: service.end, staffIds, roomIds })
+      const equipmentIds = pickEquipment(q.equipment ?? [], q.equipmentTypes, hold)
+      if (!equipmentIds) continue
+      slots.push({ start, end: service.end, staffIds, roomIds, equipmentIds })
     }
   }
   return slots

@@ -2,11 +2,15 @@ import {
   businessDateOf,
   businessDayWindow,
   canTransition,
+  type EquipmentAvailability,
   findSlots,
   holdInterval,
   type Interval,
   newRefCode,
   type OpeningHours,
+  onLeave,
+  overlaps,
+  pickEquipment,
   pickStaff,
   type RoomAvailability,
   type Slot,
@@ -18,6 +22,8 @@ import {
   bookings,
   branches,
   clients,
+  equipment,
+  leaveRequests,
   reservations,
   rooms,
   rotationEntries,
@@ -29,7 +35,7 @@ import {
   staffServices,
   type Tx,
 } from '@spa/db'
-import { and, asc, eq, gt, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, gte, inArray, lt, lte, ne, sql } from 'drizzle-orm'
 import {
   type CommissionInput,
   recordBookingCommissions,
@@ -46,6 +52,36 @@ export type DayContext = {
   window: Interval
   staff: (StaffAvailability & { name: string; color: string })[]
   rooms: (RoomAvailability & { name: string })[]
+  equipment: (EquipmentAvailability & { name: string })[]
+}
+
+/** Approved leave as instants: [first date's cutoff, day after the last date's cutoff), per staff id. */
+export async function approvedLeave(
+  tx: Tx,
+  staffIds: string[],
+  fromDate: string,
+  toDate: string,
+  cutoff = '05:00',
+) {
+  const out = new Map<string, Interval[]>()
+  if (!staffIds.length) return out
+  const rows = await tx
+    .select()
+    .from(leaveRequests)
+    .where(
+      and(
+        inArray(leaveRequests.staffId, staffIds),
+        eq(leaveRequests.status, 'approved'),
+        lte(leaveRequests.startDate, toDate),
+        gte(leaveRequests.endDate, fromDate),
+      ),
+    )
+  for (const r of rows)
+    out.set(r.staffId, [
+      ...(out.get(r.staffId) ?? []),
+      { start: businessDayWindow(r.startDate, cutoff).start, end: businessDayWindow(r.endDate, cutoff).end },
+    ])
+  return out
 }
 
 /** Everything needed to compute availability for one branch and business date. */
@@ -85,6 +121,12 @@ export async function loadDay(tx: Tx, branchId: string, date: string): Promise<D
     .from(rooms)
     .where(and(eq(rooms.branchId, branchId), eq(rooms.active, true)))
     .orderBy(asc(rooms.sort), asc(rooms.name))
+  const equipmentRows = await tx
+    .select()
+    .from(equipment)
+    .where(and(eq(equipment.branchId, branchId), eq(equipment.active, true)))
+    .orderBy(asc(equipment.sort), asc(equipment.name))
+  const leave = await approvedLeave(tx, ids, addDay(date, -1), addDay(date, 1), cutoff)
   const held = await tx
     .select({
       kind: reservations.resourceKind,
@@ -96,7 +138,7 @@ export async function loadDay(tx: Tx, branchId: string, date: string): Promise<D
     .where(
       sql`${reservations.period} && tstzrange(${from.toISOString()}::timestamptz, ${to.toISOString()}::timestamptz)`,
     )
-  const busyOf = (kind: 'staff' | 'room', id: string) =>
+  const busyOf = (kind: 'staff' | 'room' | 'equipment', id: string) =>
     held
       .filter((h) => h.kind === kind && h.resourceId === id)
       .map((h) => ({ start: new Date(h.start), end: new Date(h.end) }))
@@ -113,10 +155,26 @@ export async function loadDay(tx: Tx, branchId: string, date: string): Promise<D
         .filter((sh) => sh.staffId === s.id)
         .map((sh) => ({ start: sh.startsAt, end: sh.endsAt })),
       busy: busyOf('staff', s.id),
+      leave: leave.get(s.id) ?? [],
     })),
     rooms: roomRows.map((r) => ({ id: r.id, name: r.name, type: r.type, busy: busyOf('room', r.id) })),
+    equipment: equipmentRows.map((e) => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      busy: busyOf('equipment', e.id),
+    })),
   }
 }
+
+const addDay = (date: string, days: number) => {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+const NO_EQUIPMENT = 'The equipment this treatment needs is not free at that time'
+const ON_LEAVE = 'A chosen therapist is on leave at that time'
 
 async function loadVariant(tx: Tx, variantId: string) {
   const [row] = await tx
@@ -153,6 +211,8 @@ export async function availableSlots(
     roomTypes: service.roomTypes,
     staff: day.staff,
     rooms: day.rooms,
+    equipmentTypes: service.equipmentTypes,
+    equipment: day.equipment,
     preferredStaffIds: q.preferredStaffIds,
     notBefore: q.notBefore,
     stepMin: q.stepMin,
@@ -190,6 +250,7 @@ export async function createBooking(tx: Tx, input: NewBooking) {
     hold: Interval
     staffIds: string[]
     roomId: string
+    equipmentIds: string[]
   }[] = []
   const days = new Map<string, DayContext>()
   for (const item of input.items) {
@@ -206,6 +267,8 @@ export async function createBooking(tx: Tx, input: NewBooking) {
     const need = service.therapistsRequired
     let staffIds = item.staffIds?.filter(Boolean) ?? []
     let roomId = item.roomId
+    if (staffIds.some((id) => day.staff.find((s) => s.id === id && onLeave(s, hold))))
+      throw new DomainError(ON_LEAVE, 'no_staff')
     if (staffIds.length < need || !roomId) {
       const slot = findSlots({
         date,
@@ -236,6 +299,13 @@ export async function createBooking(tx: Tx, input: NewBooking) {
         if (!roomId) throw new DomainError('No room is free at that time', 'no_room')
       }
     }
+    // Units already taken by earlier items of this booking count as busy (the DB would reject them anyway).
+    const units = day.equipment.map((u) => ({
+      ...u,
+      busy: [...u.busy, ...prepared.filter((p) => p.equipmentIds.includes(u.id)).map((p) => p.hold)],
+    }))
+    const equipmentIds = pickEquipment(units, service.equipmentTypes, hold)
+    if (!equipmentIds) throw new DomainError(NO_EQUIPMENT, 'no_equipment')
     prepared.push({
       item,
       name: service.name.en,
@@ -244,6 +314,7 @@ export async function createBooking(tx: Tx, input: NewBooking) {
       hold,
       staffIds,
       roomId,
+      equipmentIds,
     })
   }
   const startsAt = new Date(Math.min(...prepared.map((p) => p.item.start.getTime())))
@@ -283,6 +354,7 @@ export async function createBooking(tx: Tx, input: NewBooking) {
               endsAt: new Date(p.item.start.getTime() + p.duration * 60_000),
               roomId: p.roomId,
               staffIds: p.staffIds,
+              equipmentIds: p.equipmentIds,
             })
             .returning({ id: bookingItems.id })
           await sp.insert(reservations).values([
@@ -300,6 +372,13 @@ export async function createBooking(tx: Tx, input: NewBooking) {
               resourceId: p.roomId,
               period: toRange(p.hold),
             },
+            ...p.equipmentIds.map((eid) => ({
+              tenantId: input.tenantId,
+              bookingItemId: row!.id,
+              resourceKind: 'equipment' as const,
+              resourceId: eid,
+              period: toRange(p.hold),
+            })),
           ])
         }
         return booking!
@@ -320,6 +399,56 @@ const dayKey = (d: Date) =>
   (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const)[
     new Date(d.getTime() + 4 * 3600_000).getUTCDay()
   ]!
+
+/**
+ * Free units for a hold (the item being moved doesn't block itself); keeps its current units when they are
+ * still free. Throws when a required type has no free unit.
+ */
+async function equipmentFor(
+  tx: Tx,
+  q: { branchId: string; types: string[]; hold: Interval; exceptItemId: string; prefer: string[] },
+) {
+  if (!q.types.length) return []
+  const units = await tx
+    .select()
+    .from(equipment)
+    .where(
+      and(
+        eq(equipment.branchId, q.branchId),
+        eq(equipment.active, true),
+        inArray(equipment.type, [...new Set(q.types)]),
+      ),
+    )
+    .orderBy(asc(equipment.sort), asc(equipment.name))
+  const held = units.length
+    ? await tx
+        .select({ id: reservations.resourceId })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.resourceKind, 'equipment'),
+            inArray(
+              reservations.resourceId,
+              units.map((u) => u.id),
+            ),
+            ne(reservations.bookingItemId, q.exceptItemId),
+            sql`${reservations.period} && ${toRange(q.hold)}::tstzrange`,
+          ),
+        )
+    : []
+  const busy = new Set(held.map((h) => h.id))
+  const ordered = [
+    ...units.filter((u) => q.prefer.includes(u.id)),
+    ...units.filter((u) => !q.prefer.includes(u.id)),
+  ]
+  const picked = pickEquipment(
+    ordered.map((u) => ({ id: u.id, type: u.type, busy: busy.has(u.id) ? [q.hold] : [] })),
+    q.types,
+    q.hold,
+  )
+  if (!picked) throw new DomainError(NO_EQUIPMENT, 'no_equipment')
+  return picked
+}
 
 /** Moves one booking item (time / therapists / room), re-reserving atomically. */
 export async function rescheduleItem(
@@ -342,6 +471,19 @@ export async function rescheduleItem(
   const staffIds = to.staffIds?.length ? to.staffIds : item.staffIds
   const roomId = to.roomId ?? item.roomId
   if (!roomId) throw new DomainError('Choose a room', 'no_room')
+  const [branch] = await tx.select().from(branches).where(eq(branches.id, booking.branchId))
+  const cutoff = branch?.businessDayCutoff.slice(0, 5)
+  const date = businessDateOf(to.start, cutoff)
+  const leave = await approvedLeave(tx, staffIds, date, date, cutoff)
+  if (staffIds.some((id) => (leave.get(id) ?? []).some((l) => overlaps(l, hold))))
+    throw new DomainError(ON_LEAVE, 'no_staff')
+  const equipmentIds = await equipmentFor(tx, {
+    branchId: booking.branchId,
+    types: svc?.service.equipmentTypes ?? [],
+    hold,
+    exceptItemId: itemId,
+    prefer: item.equipmentIds,
+  })
   try {
     await tx.transaction(async (sp) => {
       await sp.delete(reservations).where(eq(reservations.bookingItemId, itemId))
@@ -352,6 +494,7 @@ export async function rescheduleItem(
           endsAt: new Date(to.start.getTime() + item.durationMin * 60_000),
           staffIds,
           roomId,
+          equipmentIds,
         })
         .where(eq(bookingItems.id, itemId))
       await sp.insert(reservations).values([
@@ -369,9 +512,15 @@ export async function rescheduleItem(
           resourceId: roomId,
           period: toRange(hold),
         },
+        ...equipmentIds.map((eid) => ({
+          tenantId: item.tenantId,
+          bookingItemId: itemId,
+          resourceKind: 'equipment' as const,
+          resourceId: eid,
+          period: toRange(hold),
+        })),
       ])
       const all = await sp.select().from(bookingItems).where(eq(bookingItems.bookingId, item.bookingId))
-      const [branch] = await sp.select().from(branches).where(eq(branches.id, booking.branchId))
       const startsAt = new Date(Math.min(...all.map((i) => i.startsAt.getTime())))
       const endsAt = new Date(Math.max(...all.map((i) => i.endsAt.getTime())))
       await sp

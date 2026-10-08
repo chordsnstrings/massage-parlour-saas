@@ -2,6 +2,7 @@ import {
   bookingItems,
   bookings,
   branches,
+  equipment,
   products,
   rooms,
   serviceCategories,
@@ -11,7 +12,7 @@ import {
   withTenant,
 } from '@spa/db'
 import { and, asc, count, eq, gte, isNotNull, notInArray } from 'drizzle-orm'
-import { DoorOpen, Sparkles } from 'lucide-react'
+import { DoorOpen, Sparkles, Wrench } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Card, ListRow, Pill, Stack } from '@/components/crm'
@@ -19,6 +20,7 @@ import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
 import { ROOM_TYPES, type RoomType } from './constants'
+import { EquipmentSheet } from './equipment-client'
 import { CategorySheet, RoomSheet, SampleMenuButton, ServiceSheet } from './services-client'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -49,6 +51,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
       .from(serviceVariants)
       .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin)),
     rooms: await tx.select().from(rooms).orderBy(asc(rooms.sort), asc(rooms.createdAt)),
+    equipment: await tx.select().from(equipment).orderBy(asc(equipment.sort), asc(equipment.createdAt)),
     branches: await tx
       .select({
         id: branches.id,
@@ -79,6 +82,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
 
   const categoryOptions = data.categories.map((c) => ({ id: c.id, name: c.name.en }))
   const branchOptions = data.branches.map((b) => ({ id: b.id, name: b.name }))
+  const kitTypes = [...new Set(data.equipment.map((e) => e.type))].sort()
   const bookedBy = new Map(data.booked.map((b) => [b.variantId, Number(b.n)]))
   const list = data.services.map((s) => {
     const variants = data.variants
@@ -127,7 +131,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
         actions={
           <>
             <CategorySheet slug={slug} />
-            <ServiceSheet slug={slug} categories={categoryOptions} />
+            <ServiceSheet slug={slug} categories={categoryOptions} equipmentTypes={kitTypes} />
           </>
         }
       />
@@ -208,7 +212,9 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                       {s.name.ar}
                                     </span>
                                   )}
-                                  {(s.therapistsRequired > 1 || s.roomTypes.length > 0) && (
+                                  {(s.therapistsRequired > 1 ||
+                                    s.roomTypes.length > 0 ||
+                                    s.equipmentTypes.length > 0) && (
                                     <span className="mt-1 flex flex-wrap gap-1">
                                       {s.therapistsRequired > 1 && (
                                         <Pill tone="acc">{t('services.twoTherapists')}</Pill>
@@ -216,6 +222,11 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                       {s.roomTypes.map((rt) => (
                                         <Pill key={rt}>
                                           {t('services.roomBadge', { type: roomTypeLabel(rt) })}
+                                        </Pill>
+                                      ))}
+                                      {s.equipmentTypes.map((et) => (
+                                        <Pill key={`eq-${et}`} tone="info">
+                                          {t('equipment.badge', { type: et })}
                                         </Pill>
                                       ))}
                                     </span>
@@ -259,6 +270,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                               <ServiceSheet
                                 slug={slug}
                                 categories={categoryOptions}
+                                equipmentTypes={kitTypes}
                                 service={{
                                   id: s.id,
                                   categoryId: s.categoryId,
@@ -268,6 +280,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                   bufferAfterMin: s.bufferAfterMin,
                                   therapistsRequired: s.therapistsRequired,
                                   roomTypes: s.roomTypes,
+                                  equipmentTypes: s.equipmentTypes,
                                   onlineBookable: s.onlineBookable,
                                   showPrice: s.showPrice,
                                   active: s.active,
@@ -323,6 +336,55 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                 name: r.name,
                                 type: r.type,
                                 active: r.active,
+                              }}
+                            />
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                )
+              })
+            )}
+          </Card>
+
+          <Card
+            title={t('equipment.title')}
+            sub={t('equipment.sub')}
+            actions={<EquipmentSheet slug={slug} branches={branchOptions} types={kitTypes} />}
+          >
+            {data.equipment.length === 0 ? (
+              <EmptyState
+                icon={<Wrench className="size-5" strokeWidth={1.5} />}
+                title={t('equipment.emptyTitle')}
+                description={t('equipment.emptyBody')}
+              />
+            ) : (
+              data.branches.map((b) => {
+                const units = data.equipment.filter((e) => e.branchId === b.id)
+                if (units.length === 0) return null
+                return (
+                  <div key={b.id}>
+                    {data.branches.length > 1 && <p className="crm-ey mt-2">{b.name}</p>}
+                    {units.map((e) => (
+                      <ListRow
+                        key={e.id}
+                        icon={<Wrench />}
+                        title={e.name}
+                        body={e.type}
+                        end={
+                          <>
+                            {!e.active && <Pill>{t('services.inactive')}</Pill>}
+                            <EquipmentSheet
+                              slug={slug}
+                              branches={branchOptions}
+                              types={kitTypes}
+                              unit={{
+                                id: e.id,
+                                branchId: e.branchId,
+                                name: e.name,
+                                type: e.type,
+                                active: e.active,
                               }}
                             />
                           </>

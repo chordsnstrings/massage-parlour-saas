@@ -18,6 +18,7 @@ import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
 import { enums } from './en/enums'
+import { equipment } from './en/equipment'
 import { errors } from './en/errors'
 import { inbox } from './en/inbox'
 import { inventory } from './en/inventory'
@@ -40,6 +41,7 @@ import { settings } from './en/settings'
 import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
+import { timeclock } from './en/timeclock'
 import { validation } from './en/validation'
 import { warehouse } from './en/warehouse'
 import { website } from './en/website'
@@ -60,12 +62,14 @@ export const en = {
   clients,
   sales,
   services,
+  equipment,
   packages,
   inventory,
   purchases,
   warehouse,
   team,
   staff,
+  timeclock,
   documents,
   roles,
   inbox,

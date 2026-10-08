@@ -43,7 +43,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tenant:
     const p = byId.get(l.staffId)?.payroll
     const net = Number(l.netAed)
     if (!p?.iban || !p.personId || net <= 0) return []
-    const fixed = Math.min(Number(l.baseAed), net)
+    // Unpaid leave (B5.4) comes off the fixed part; its days go in the EDR leave field.
+    const fixed = Math.max(0, Math.min(Number(l.baseAed) - Number(l.deductionsAed), net))
     return [
       {
         personId: p.personId,
@@ -52,6 +53,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ tenant:
         days: period,
         fixedAed: fixed,
         variableAed: Math.round((net - fixed) * 100) / 100,
+        leaveDays: l.unpaidLeaveDays,
       },
     ]
   })

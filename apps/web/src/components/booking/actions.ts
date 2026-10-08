@@ -282,7 +282,12 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
     return ok(undefined, { booking: result.done })
   } catch (e) {
     if (e instanceof DomainError) {
-      if (e.code === 'slot_taken' || e.code === 'no_staff' || e.code === 'no_room')
+      if (
+        e.code === 'slot_taken' ||
+        e.code === 'no_staff' ||
+        e.code === 'no_room' ||
+        e.code === 'no_equipment'
+      )
         return fail(t('slotTaken', lang), { start: t('slotTaken', lang) })
       return fail(e.message)
     }

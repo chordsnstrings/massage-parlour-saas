@@ -57,6 +57,8 @@ export const services = pgTable(
     bufferAfterMin: integer('buffer_after_min').notNull().default(10),
     /** Allowed room types; empty = any room. */
     roomTypes: text('room_types').array().notNull().default([]),
+    /** Equipment types each booking needs, one unit per entry (repeat a type for two units); empty = none (B5.3). */
+    equipmentTypes: text('equipment_types').array().notNull().default([]),
     therapistsRequired: integer('therapists_required').notNull().default(1),
     onlineBookable: boolean('online_bookable').notNull().default(true),
     /** Show prices on the public website: null = the spa default (`tenants.settings.hidePrices`), else override (R4). */
@@ -138,6 +140,11 @@ export const staff = pgTable(
     payType: staffPayType('pay_type').notNull().default('booking_commission'),
     commissionPct: numeric('commission_pct', { precision: 5, scale: 2 }).notNull().default('0'),
     baseSalaryAed: aed('base_salary_aed').notNull().default('0'),
+    /** Time-clock PIN, scrypt-hashed (`v1.<salt>.<hash>`); null = no PIN set (B5.4). */
+    pinHash: text('pin_hash'),
+    /** Wrong PINs in a row; at 5 the kiosk locks this person until `pin_locked_until`. */
+    pinFailures: integer('pin_failures').notNull().default(0),
+    pinLockedUntil: ts('pin_locked_until'),
     /** WPS / payroll identifiers: { personId, labourCardNo, iban, routingCode, bank } */
     payroll: jsonb('payroll')
       .$type<{
@@ -323,14 +330,16 @@ export const bookingItems = pgTable(
     endsAt: ts('ends_at').notNull(),
     roomId: uuid('room_id').references(() => rooms.id, { onDelete: 'set null' }),
     staffIds: uuid('staff_ids').array().notNull().default([]),
+    /** Equipment units reserved for this item (B5.3). */
+    equipmentIds: uuid('equipment_ids').array().notNull().default([]),
   },
   () => tenantPolicies(),
 )
 
-export const resourceKind = pgEnum('resource_kind', ['staff', 'room'])
+export const resourceKind = pgEnum('resource_kind', ['staff', 'room', 'equipment'])
 
 /**
- * Time a staff member or room is held, including buffers. An EXCLUDE constraint
+ * Time a staff member, room or equipment unit is held, including buffers. An EXCLUDE constraint
  * (migration 0003) makes overlapping holds on the same resource impossible.
  */
 export const reservations = pgTable(

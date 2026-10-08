@@ -21,7 +21,9 @@ export const enums = {
     gbp: 'Google',
   },
   rotationStatus: { available: 'Available', busy: 'Busy', break: 'On break', off: 'Off' },
-  resourceKind: { staff: 'Staff', room: 'Room' },
+  resourceKind: { staff: 'Staff', room: 'Room', equipment: 'Equipment' },
+  leaveType: { annual: 'Annual leave', sick: 'Sick leave', unpaid: 'Unpaid leave' },
+  leaveStatus: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' },
   staffGender: { female: 'Female', male: 'Male', other: 'Other' },
   staffPayType: {
     booking_commission: 'Commission per booking',

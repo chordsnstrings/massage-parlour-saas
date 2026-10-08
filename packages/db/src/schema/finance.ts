@@ -406,7 +406,11 @@ export const payrollLines = pgTable(
     feeAed: aed('fee_aed').notNull().default('0'),
     tipsAed: aed('tips_aed').notNull().default('0'),
     advancesAed: aed('advances_aed').notNull().default('0'),
+    /** Unpaid leave (salaried staff): base ÷ days in the period × unpaid leave days (B5.4). */
     deductionsAed: aed('deductions_aed').notNull().default('0'),
+    unpaidLeaveDays: integer('unpaid_leave_days').notNull().default(0),
+    /** Clocked time (closed time-clock entries) with a business date in the period, for information. */
+    workedMinutes: integer('worked_minutes').notNull().default(0),
     netAed: aed('net_aed').notNull(),
     note: text('note'),
   },

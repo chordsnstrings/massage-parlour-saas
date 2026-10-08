@@ -27,6 +27,14 @@ export const permissions = {
     },
     services: { label: 'Services & rooms', actions: { manage: 'Manage services, rooms and resources' } },
     staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },
+    timeclock: {
+      label: 'Time clock & leave',
+      actions: {
+        kiosk: 'Open the clock-in kiosk',
+        leave: 'Request leave for yourself',
+        approve: 'Approve leave and fix clock times',
+      },
+    },
     inventory: {
       label: 'Inventory',
       actions: {

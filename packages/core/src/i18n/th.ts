@@ -17,6 +17,7 @@ import { common } from './th/common'
 import { documents } from './th/documents'
 import { domain } from './th/domain'
 import { enums } from './th/enums'
+import { equipment } from './th/equipment'
 import { errors } from './th/errors'
 import { inbox } from './th/inbox'
 import { inventory } from './th/inventory'
@@ -39,6 +40,7 @@ import { settings } from './th/settings'
 import { shell } from './th/shell'
 import { staff } from './th/staff'
 import { team } from './th/team'
+import { timeclock } from './th/timeclock'
 import { ui } from './th/ui'
 import { validation } from './th/validation'
 import { warehouse } from './th/warehouse'
@@ -60,12 +62,14 @@ export const th: Messages = {
   clients,
   sales,
   services,
+  equipment,
   packages,
   inventory,
   purchases,
   warehouse,
   team,
   staff,
+  timeclock,
   documents,
   roles,
   inbox,

@@ -37,7 +37,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   = soft delete (`requireMember` 404s members).
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
-    `staff | room` only (no equipment yet).
+    `staff | room | equipment` (equipment added in migration 0022, B5.3).
+  - `time_entries`: unique partial index `time_entries_one_open` (one open clock entry per person) + EXCLUDE
+    `time_entries_no_overlap`; `leave_requests`: EXCLUDE `leave_no_overlap` (same person, overlapping dates,
+    status ≠ rejected) — all migration 0022 (B5.4).
   - `shifts` has `EXCLUDE` per staff member over `[starts_at, ends_at)` (migration 0003).
   - Ledger (migration 0005):
     - a one-sided-line CHECK;
@@ -95,7 +98,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
   - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
-  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · team · documents).
+  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · timeclock · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
   - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
@@ -193,6 +196,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `23P01` becomes `DomainError('slot_taken')`.
   - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
   - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
+  - Equipment (B5.3, `schema/workforce.ts` `equipment`; services `equipment.ts`): `services.equipment_types` lists
+    required types (one unit per entry; types typed by the spa); `findSlots` needs one free unit per type
+    (`pickEquipment`, `Slot.equipmentIds`); `createBooking`/`rescheduleItem` reserve them (`resource_kind =
+    'equipment'`, `booking_items.equipment_ids`) in the same savepoint → EXCLUDE makes concurrent bookings of the
+    last unit fail with `slot_taken`; none free → `DomainError('no_equipment')`. Delete refused while a unit holds a
+    future reservation (deactivate instead). `equipmentStatus` = calendar conflict (required type not covered by an
+    active reserved unit). UI: Services & rooms → Equipment card + "Equipment needed" chips in the service sheet.
+  - Leave (B5.4): `loadDay` adds approved leave as `StaffAvailability.leave` (business-day windows by the branch
+    cutoff); `findSlots` and the walk-in picker skip people on leave; explicit `staffIds` on leave → `DomainError
+    ('no_staff')` (create + reschedule; also with `allowOffShift`). Existing bookings keep their reservations:
+    `decideLeave` returns the clash count for the toast.
   - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
     internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
     cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
@@ -274,6 +288,19 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
   manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
   monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
+  Unpaid leave (B5.4): `buildPayroll` sets `deductions_aed` = salary base ÷ days in the period × approved unpaid
+  leave days in it (salary pay type only; capped at base; Cr 6900 at finalise as before), `unpaid_leave_days` and
+  `worked_minutes` (closed clock entries by business date; info only). WPS EDR: fixed = base − deduction, leave
+  days filled.
+- **Time clock (B5.4, services `timeclock.ts`)**: `staff.pin_hash` = scrypt `v1.<salt>.<hash>`; `punch` locks the
+  staff row, counts wrong PINs (returned, not thrown, so they commit; 5 → locked 5 min), toggles the open entry
+  (a second punch < 1 min after clock-in is refused, so double taps / two kiosks never clock straight out);
+  `business_date` = branch business date of the clock-in. `adjustTimeEntry` = manager fix (`source = 'manual'`).
+  `timesheet` = planned (shifts split per business day) vs worked per person/date + approved leave. Leave:
+  `requestLeave` (≤ 90 days), `decideLeave` (pending only), `cancelLeave` (own pending; approvers also approved
+  before it starts). Permissions `timeclock.kiosk` (receptionist), `timeclock.leave` (receptionist, therapist: own
+  staff record only), `timeclock.approve` (owner/manager). Route `/timeclock` (tabs Kiosk · Timesheet · Leave),
+  menu Team & roles; calendar marks staff "On leave".
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.
