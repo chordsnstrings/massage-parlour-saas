@@ -80,8 +80,8 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
   }, [publicKey])
 
   const report = (res: ActionResult) => {
-    if (res?.ok && res.message) toast.success(resultText(t, res))
-    else if (res && !res.ok) toast.error(resultText(t, res))
+    if (res?.ok && res.message) toast.success(resultText(t, res) ?? '')
+    else if (res && !res.ok) toast.error(resultText(t, res) ?? '')
     return Boolean(res?.ok)
   }
 

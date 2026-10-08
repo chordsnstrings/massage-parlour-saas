@@ -90,7 +90,8 @@ export const messages = {
   templates: {
     title: 'Message templates',
     eyebrow: 'WhatsApp',
-    description: 'The words your team sends, in English and Arabic. Clients get the language set on their profile.',
+    description:
+      'The words your team sends, in English and Arabic. Clients get the language set on their profile.',
     back: 'Outbox',
     kindsLabel: 'Message kinds',
     customised: 'Customised',

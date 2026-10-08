@@ -208,7 +208,9 @@ export function CampaignComposer({
               <Field
                 key={lang}
                 label={
-                  lang === 'en' ? t('campaigns.composer.englishMessage') : t('campaigns.composer.arabicMessage')
+                  lang === 'en'
+                    ? t('campaigns.composer.englishMessage')
+                    : t('campaigns.composer.arabicMessage')
                 }
                 name={lang === 'en' ? 'bodyEn' : 'bodyAr'}
                 hint={
@@ -390,7 +392,10 @@ function AudienceSummary({
   const { t, fmt } = useI18n()
   if (!hasSegment) return null
   return (
-    <div className="rounded-xl border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-4 py-4 sm:px-5" aria-live="polite">
+    <div
+      className="rounded-xl border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-4 py-4 sm:px-5"
+      aria-live="polite"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-sm text-muted">{t('campaigns.composer.willReceive')}</p>
         {loading && <Loader2 className="size-4 animate-spin text-muted" strokeWidth={1.75} aria-hidden />}

@@ -11,8 +11,8 @@ export const ai = {
   shortcutReviews: 'Review replies',
   month: 'This month',
   monthSub: "AI usage against your plan's budget.",
-  usd: 'US${v}',
-  ofBudget: 'of US${v}',
+  usd: 'USD {v}',
+  ofBudget: 'of USD {v}',
   usage: 'AI usage',
   agent: {
     dm_agent: {
@@ -27,7 +27,10 @@ export const ai = {
       name: 'Google review replies',
       text: 'Drafts warm, personal replies to every review — you approve before they go out.',
     },
-    seo_agent: { name: 'SEO', text: 'Writes page titles and descriptions so people nearby find your website.' },
+    seo_agent: {
+      name: 'SEO',
+      text: 'Writes page titles and descriptions so people nearby find your website.',
+    },
     slot_filler: {
       name: 'Slot filler',
       text: 'Spots quiet hours and prepares WhatsApp offers for past clients to fill them.',

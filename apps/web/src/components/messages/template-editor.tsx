@@ -1,9 +1,9 @@
 'use client'
+import { enumLabel } from '@spa/core/i18n/labels'
 import { Plus, RotateCcw } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useRef, useState } from 'react'
 import { saveTemplateAction } from '@/app/dashboard/[tenant]/messages/actions'
-import { enumLabel } from '@spa/core/i18n/labels'
 import { Card, Pill } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -208,7 +208,9 @@ export function TemplateEditor({
             </Button>
             <div className="flex items-center gap-3">
               {dirty(kind) && (
-                <span className="hidden text-[13px] text-muted sm:inline">{t('messages.templates.unsaved')}</span>
+                <span className="hidden text-[13px] text-muted sm:inline">
+                  {t('messages.templates.unsaved')}
+                </span>
               )}
               <SubmitButton disabled={!dirty(kind)}>{t('messages.templates.save')}</SubmitButton>
             </div>

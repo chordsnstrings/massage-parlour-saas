@@ -104,7 +104,8 @@ export const settings = {
       'The health questions and consent clients sign on the reception tablet before their first treatment.',
     version: 'Version {version} · {date}',
     empty: 'No intake form yet. Start from the recommended UAE massage intake, or write your own below.',
-    footer: 'Saving creates a new version. Earlier signatures keep the exact questions and waiver they signed.',
+    footer:
+      'Saving creates a new version. Earlier signatures keep the exact questions and waiver they signed.',
     goClients: 'Go to clients',
     questions: 'Questions',
     questionsSub: 'Asked in the client’s language. Arabic labels fall back to English when empty.',
@@ -162,7 +163,8 @@ export const settings = {
       sub: 'Sync Google reviews, post approved replies and share offers with a Book button.',
       notConfigured:
         'Google sign-in isn’t set up on this server yet. The platform administrator adds GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET once Google approves API access.',
-      untilThen: 'Until then, paste new reviews into Review replies — the AI drafts a reply you can copy into Google.',
+      untilThen:
+        'Until then, paste new reviews into Review replies — the AI drafts a reply you can copy into Google.',
       features: {
         reviews: 'Reviews arrive every two hours, with an AI draft reply when the review agent is on.',
         autopilot: 'Autopilot answers 4–5★ reviews; 1–3★ always wait for your approval.',
@@ -189,7 +191,8 @@ export const settings = {
         connected: 'Google Business Profile is connected again.',
         choose: 'Signed in with Google. Now choose the location this spa manages.',
         denied: 'Google access was not granted, so nothing was connected.',
-        scope: 'Google did not grant permission to manage the Business Profile. Please try again and allow access.',
+        scope:
+          'Google did not grant permission to manage the Business Profile. Please try again and allow access.',
         state: 'That connect link expired or was opened in another browser. Please try again.',
         forbidden: 'Only someone who can manage AI settings for this spa can connect Google.',
         not_configured: 'Google sign-in isn’t configured on this server yet.',
@@ -305,19 +308,22 @@ export const settings = {
     purpose: { TXT: 'Proves you own the domain', CNAME: 'Points the domain at your site' },
     recordName: 'Name',
     recordValue: 'Value',
-    fullName: 'Full name: {name}',
+    fullName: 'Full name',
     yourDomain: 'Your domain',
     addDomain: 'Add domain',
-    addHint: 'A domain you already own. We recommend the www version — you can forward the bare domain to it.',
+    addHint:
+      'A domain you already own. We recommend the www version — you can forward the bare domain to it.',
     checkNow: 'Check now',
     makePrimary: 'Make primary',
     openSite: 'Open site',
     remove: 'Remove',
-    removeConfirm: 'Remove {host}? Your site will stop answering on this address. You can add it again later.',
+    removeConfirm:
+      'Remove {host}? Your site will stop answering on this address. You can add it again later.',
     search: {
       label: 'Search for a name',
       button: 'Search',
-      unconfigured: 'Buying domains isn’t switched on yet — contact support, or connect a domain you already own.',
+      unconfigured:
+        'Buying domains isn’t switched on yet — contact support, or connect a domain you already own.',
       results: 'Search results',
       perYear: '{price} / year',
       premium: '{price} / year · premium name',
@@ -555,6 +561,7 @@ export const settings = {
     },
     upload: {
       choose: 'Choose what to import.',
+      settings: 'Please check the import settings.',
       chooseFile: 'Choose a CSV file to upload.',
       tooLarge: 'The file is larger than 5 MB.',
       xlsx: 'This is a spreadsheet file, not CSV. In Excel choose File → Save As → “CSV UTF-8”, then upload that.',

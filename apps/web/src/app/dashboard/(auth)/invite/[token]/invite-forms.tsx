@@ -18,7 +18,7 @@ export function AcceptButton({ token }: { token: string }) {
       onClick={() =>
         start(async () => {
           const res = await acceptInviteAction(token)
-          if (res && !res.ok) toast.error(resultText(t, res))
+          if (res && !res.ok) toast.error(resultText(t, res) ?? '')
         })
       }
     >

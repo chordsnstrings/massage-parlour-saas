@@ -87,9 +87,7 @@ export function ReceptionistChat({ slug, spaName }: { slug: string; spaName: str
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6">
         {items.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-            <p className="max-w-sm text-sm text-muted">
-              {t('ai.chatIntro')}
-            </p>
+            <p className="max-w-sm text-sm text-muted">{t('ai.chatIntro')}</p>
             <div className="flex flex-wrap justify-center gap-2">
               {SUGGESTIONS.map((s) => (
                 <button

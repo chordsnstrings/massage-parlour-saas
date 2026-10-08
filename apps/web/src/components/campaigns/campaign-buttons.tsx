@@ -73,9 +73,7 @@ export function ArchiveButton({
     <ActionButton
       action={archiveCampaignAction.bind(null, slug, id, true)}
       variant="ghost"
-      confirm={
-        pending > 0 ? t('campaigns.buttons.archiveConfirm', { count: pending }) : undefined
-      }
+      confirm={pending > 0 ? t('campaigns.buttons.archiveConfirm', { count: pending }) : undefined}
     >
       <Archive /> {t('campaigns.buttons.archive')}
     </ActionButton>

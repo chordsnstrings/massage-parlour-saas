@@ -52,7 +52,8 @@ export const campaigns = {
     editTitle: 'Edit segment',
     eyebrow: 'Segment',
     newDescription: 'A saved group of clients you can message again and again. The count updates as you go.',
-    editDescription: 'Changes apply to campaigns you write from now on; queued campaigns keep their recipients.',
+    editDescription:
+      'Changes apply to campaigns you write from now on; queued campaigns keep their recipients.',
   },
   detail: {
     metaTitle: 'Campaign',
@@ -65,7 +66,8 @@ export const campaigns = {
     skippedOverLimit: '{count} left out — a campaign reaches at most 500 clients',
     overLimitHint: 'Duplicate it next week to reach the rest.',
     recipientsTitle: 'Recipients',
-    recipientsSub: 'Clicks aren’t tracked — “Booked” means the client booked within 14 days of their message.',
+    recipientsSub:
+      'Clicks aren’t tracked — “Booked” means the client booked within 14 days of their message.',
     client: 'Client',
     mobile: 'Mobile',
     message: 'Message',
@@ -116,7 +118,8 @@ export const campaigns = {
     segment: 'Segment',
     chooseSegment: 'Choose a segment…',
     messageTitle: 'Message',
-    messageSub: 'Each client gets it in their language. Arabic speakers get English if you leave Arabic empty.',
+    messageSub:
+      'Each client gets it in their language. Arabic speakers get English if you leave Arabic empty.',
     insertVariable: 'Insert a variable',
     englishMessage: 'English message',
     arabicMessage: 'Arabic message (optional)',
@@ -184,7 +187,11 @@ export const campaigns = {
   rule: {
     aTreatment: 'a treatment',
     lapsed: { label: 'Last visit more than N days ago', before: 'Last visit more than', after: 'days ago' },
-    visited_within: { label: 'Last visit within N days', before: 'Last visit within the last', after: 'days' },
+    visited_within: {
+      label: 'Last visit within N days',
+      before: 'Last visit within the last',
+      after: 'days',
+    },
     visits_at_least: { label: 'Visits at least N', before: 'At least', after: 'visits' },
     visits_at_most: { label: 'Visits at most N', before: 'At most', after: 'visits' },
     service: { label: 'Has booked a treatment', before: 'Has booked' },
@@ -203,7 +210,10 @@ export const campaigns = {
     },
   },
   preset: {
-    winback: { name: 'Win back (no visit 60 days)', description: 'Regulars who have not been in for two months.' },
+    winback: {
+      name: 'Win back (no visit 60 days)',
+      description: 'Regulars who have not been in for two months.',
+    },
     birthday: { name: 'Birthday this month', description: 'A birthday treat brings them in.' },
     packageExpiring: {
       name: 'Package expiring in 14 days',

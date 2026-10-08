@@ -27,7 +27,7 @@ export function InstagramConnectButton({
         start(async () => {
           const r = await connectInstagramAction(slug)
           if (r?.ok && typeof r.data?.url === 'string') window.location.assign(r.data.url)
-          else if (r && !r.ok) toast.error(resultText(t, r))
+          else if (r && !r.ok) toast.error(resultText(t, r) ?? '')
         })
       }
     >
@@ -69,7 +69,7 @@ export function InstagramDisconnectButton({ slug, username }: { slug: string; us
               if (r?.ok) {
                 toast.success(resultText(t, r) ?? t('settings.integrations.ig.disconnected'))
                 setOpen(false)
-              } else if (r) toast.error(resultText(t, r))
+              } else if (r) toast.error(resultText(t, r) ?? '')
             })
           }
         >

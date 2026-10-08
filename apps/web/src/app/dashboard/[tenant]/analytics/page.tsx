@@ -94,9 +94,19 @@ export default async function AnalyticsPage({
       cell: (r) => <span className="font-medium">{r.key}</span>,
     },
     { key: 'views', header: t('analytics.colViews'), className: num, cell: (r) => fmt.number(r.views) },
-    { key: 'visitors', header: t('analytics.colVisitors'), className: num, cell: (r) => fmt.number(r.sessions) },
+    {
+      key: 'visitors',
+      header: t('analytics.colVisitors'),
+      className: num,
+      cell: (r) => fmt.number(r.sessions),
+    },
     { key: 'clicks', header: t('analytics.colClicks'), className: num, cell: (r) => fmt.number(r.clicks) },
-    { key: 'booked', header: t('analytics.colBookings'), className: num, cell: (r) => fmt.number(r.conversions) },
+    {
+      key: 'booked',
+      header: t('analytics.colBookings'),
+      className: num,
+      cell: (r) => fmt.number(r.conversions),
+    },
   ]
   const blockCols: Column<Row>[] = [
     {
@@ -193,7 +203,8 @@ export default async function AnalyticsPage({
                       : t('analytics.sourceVisitors', { count: s.sessions }),
                   }))}
                 />
-                <div className="mt-4 flex flex-wrap gap-2" aria-label={t('analytics.devices')}>
+                <p className="crm-ey mt-4">{t('analytics.devices')}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
                   {data.devices.map((d) => (
                     <Pill key={d.key}>
                       {deviceLabel(d.key)} {p(d.sessions, deviceTotal)}

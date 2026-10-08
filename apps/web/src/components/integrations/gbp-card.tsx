@@ -17,8 +17,8 @@ import { GBP_NOTICES } from '@/app/api/integrations/google/oauth'
 import { Card, Pill } from '@/components/crm'
 import { buttonVariants } from '@/components/ui/button'
 import { ActionForm, FieldError, SubmitButton } from '@/components/ui/form'
-import { appPath } from '@/lib/paths'
 import { getI18n } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import type { MemberContext } from '@/server/access'
 import { can } from '@/server/access'
@@ -136,10 +136,7 @@ export async function GbpCard({
         ) : null}
 
         {conn?.status === 'error' && (
-          <Notice
-            tone="error"
-            text={conn.lastError ?? t('settings.integrations.gbp.expired')}
-          />
+          <Notice tone="error" text={conn.lastError ?? t('settings.integrations.gbp.expired')} />
         )}
 
         {conn?.status === 'pending_location' &&
@@ -152,7 +149,9 @@ export async function GbpCard({
           ) : picker ? (
             <ActionForm action={chooseLocationAction.bind(null, slug)} className="space-y-4">
               <fieldset className="space-y-2">
-                <legend className="mb-2 text-sm font-medium">{t('settings.integrations.gbp.whichLocation')}</legend>
+                <legend className="mb-2 text-sm font-medium">
+                  {t('settings.integrations.gbp.whichLocation')}
+                </legend>
                 {picker.choices.map((l, i) => (
                   <label
                     key={`${l.accountName}|${l.name}`}
@@ -184,17 +183,25 @@ export async function GbpCard({
         {conn?.hasLocation && (
           <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
-              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{t('settings.integrations.gbp.location')}</dt>
+              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                {t('settings.integrations.gbp.location')}
+              </dt>
               <dd className="font-medium">{conn.title}</dd>
               {conn.address && <dd className="text-muted">{conn.address}</dd>}
             </div>
             <div className="space-y-1">
-              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{t('settings.integrations.gbp.lastSync')}</dt>
-              <dd>{conn.lastSyncAt ? fmt.dateTime(conn.lastSyncAt) : t('settings.integrations.gbp.notYet')}</dd>
+              <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                {t('settings.integrations.gbp.lastSync')}
+              </dt>
+              <dd>
+                {conn.lastSyncAt ? fmt.dateTime(conn.lastSyncAt) : t('settings.integrations.gbp.notYet')}
+              </dd>
             </div>
             {stats && (
               <div className="space-y-1">
-                <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{t('settings.integrations.gbp.reviews')}</dt>
+                <dt className="text-xs font-medium uppercase tracking-[0.06em] text-muted">
+                  {t('settings.integrations.gbp.reviews')}
+                </dt>
                 <dd className="inline-flex items-center gap-1.5">
                   {fmt.number(stats.count)}
                   {stats.count > 0 && (

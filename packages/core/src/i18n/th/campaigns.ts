@@ -4,8 +4,7 @@ import type { Messages } from '../types'
 export const campaigns: Messages['campaigns'] = {
   title: 'แคมเปญ',
   eyebrow: 'WhatsApp · กดส่งเอง',
-  description:
-    'เลือกกลุ่มลูกค้า เขียนข้อความเดียวเป็นภาษาอังกฤษและอาหรับ แล้วข้อความจะเข้าคิว WhatsApp ให้ทีมกดส่ง',
+  description: 'เลือกกลุ่มลูกค้า เขียนข้อความเดียวเป็นภาษาอังกฤษและอาหรับ แล้วข้อความจะเข้าคิว WhatsApp ให้ทีมกดส่ง',
   newSegment: 'กลุ่มลูกค้าใหม่',
   newCampaign: 'แคมเปญใหม่',
   everyone: 'ลูกค้าทุกคนที่รับข้อความการตลาดได้',
@@ -131,8 +130,7 @@ export const campaigns: Messages['campaigns'] = {
     nothing: 'ยังไม่มีข้อความ',
     tooLong: 'ข้อความยาว — WhatsApp อาจเปิดไม่ได้ ลองย่อให้สั้นลงเล็กน้อย',
     whenTitle: 'เวลาส่ง',
-    whenSub:
-      'ข้อความจะแสดงใน WhatsApp → ถึงเวลาส่ง ตามเวลานี้ ไม่มีการส่งอัตโนมัติ — เข้าคิวไว้ แตะเดียวส่งได้ทีละข้อความ',
+    whenSub: 'ข้อความจะแสดงใน WhatsApp → ถึงเวลาส่ง ตามเวลานี้ ไม่มีการส่งอัตโนมัติ — เข้าคิวไว้ แตะเดียวส่งได้ทีละข้อความ',
     now: 'ตอนนี้',
     schedule: 'ตั้งเวลา',
     sendAt: 'วันที่และเวลา (ดูไบ)',
@@ -175,7 +173,13 @@ export const campaigns: Messages['campaigns'] = {
     tag: 'แท็ก',
     remove: 'นำ “{label}” ออก',
   },
-  group: { visits: 'การมาใช้บริการ', spend: 'ยอดใช้จ่าย', birthday: 'วันเกิด', profile: 'โปรไฟล์', packages: 'แพ็กเกจ' },
+  group: {
+    visits: 'การมาใช้บริการ',
+    spend: 'ยอดใช้จ่าย',
+    birthday: 'วันเกิด',
+    profile: 'โปรไฟล์',
+    packages: 'แพ็กเกจ',
+  },
   gender: { female: 'หญิง', male: 'ชาย', other: 'อื่น ๆ' },
   genderOption: { female: 'หญิง', male: 'ชาย', other: 'อื่น ๆ' },
   language: { en: 'ภาษาอังกฤษ', ar: 'ภาษาอาหรับ' },

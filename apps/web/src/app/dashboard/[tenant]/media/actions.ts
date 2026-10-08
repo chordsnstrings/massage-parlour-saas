@@ -151,7 +151,8 @@ export async function persistAssetAction(slug: string, id: string): Promise<Acti
       await repointPostImages(tx, row.url, postImageUrl(asset.url, origin))
     })
   } catch (e) {
-    if (e instanceof DomainError) return fail({ key: 'media.saveFailedReason', params: { reason: e.message } })
+    if (e instanceof DomainError)
+      return fail({ key: 'media.saveFailedReason', params: { reason: e.message } })
     console.error('persist media failed', e)
     return fail('media.saveFailed')
   }

@@ -300,7 +300,8 @@ export function RetryButton({ slug, messageId }: { slug: string; messageId: stri
       onClick={() => start(async () => void report(await retryMessageAction(slug, messageId)))}
       className="inline-flex min-h-8 items-center gap-1 rounded-md px-1.5 font-medium text-fg underline-offset-2 hover:underline disabled:opacity-50"
     >
-      <RotateCcw className={cn('size-3', pending && 'animate-spin')} strokeWidth={1.75} /> {t('inbox.actions.retry')}
+      <RotateCcw className={cn('size-3', pending && 'animate-spin')} strokeWidth={1.75} />{' '}
+      {t('inbox.actions.retry')}
     </button>
   )
 }

@@ -24,7 +24,10 @@ export const analytics = {
   stepWhatsapp: 'Tapped WhatsApp',
   sources: 'Where visitors come from',
   sourceVisitors: { one: '{count} visitor', other: '{count} visitors' },
-  sourceVisitorsBooked: { one: '{count} visitor · {booked} booked', other: '{count} visitors · {booked} booked' },
+  sourceVisitorsBooked: {
+    one: '{count} visitor · {booked} booked',
+    other: '{count} visitors · {booked} booked',
+  },
   devices: 'Devices',
   topPages: 'Top pages',
   colPage: 'Page',

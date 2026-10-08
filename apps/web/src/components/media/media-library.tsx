@@ -6,9 +6,9 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { Seg } from '@/components/crm'
 import { Input } from '@/components/ui/input'
-import { useT } from '@/i18n/client'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState } from '@/components/ui/page'
+import { useT } from '@/i18n/client'
 import { ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { AssetSheet } from './asset-sheet'
@@ -170,11 +170,7 @@ export function MediaLibrary({
               )
             }
             title={filtered ? t('media.noMatch') : t('media.emptyTitle')}
-            description={
-              filtered
-                ? t('media.noMatchBody')
-                : t('media.emptyBody')
-            }
+            description={filtered ? t('media.noMatchBody') : t('media.emptyBody')}
             action={
               filtered ? (
                 <Link href={base} className="text-sm font-medium text-accent hover:underline">

@@ -1,3 +1,4 @@
+import { enumLabel } from '@spa/core/i18n'
 import { socialPosts, withTenant } from '@spa/db'
 import {
   gbpConnectionView,
@@ -7,7 +8,6 @@ import {
   metaConfig,
   publicImageUrl,
 } from '@spa/services'
-import { enumLabel } from '@spa/core/i18n'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -30,7 +30,14 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('marketing.title') }
 }
 
-type Agg = { scheduled: number; next: string | null; awaiting: number; reviews: number; avg: string | null; clicks: number }
+type Agg = {
+  scheduled: number
+  next: string | null
+  awaiting: number
+  reviews: number
+  avg: string | null
+  clicks: number
+}
 
 export default async function ContentPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
@@ -124,7 +131,9 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
           <Stat
             label={t('marketing.statReviews')}
             value={fmt.number(agg.reviews)}
-            change={agg.avg ? { text: t('marketing.statAvg', { avg: fmt.number(Number(agg.avg)) }) } : undefined}
+            change={
+              agg.avg ? { text: t('marketing.statAvg', { avg: fmt.number(Number(agg.avg)) }) } : undefined
+            }
           />
           <Stat
             label={t('marketing.statClicks')}
@@ -223,7 +232,10 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                           : fmt.dateTime(p.createdAt)}
                       </span>
                     </div>
-                    <p dir="auto" className="line-clamp-[10] flex-1 whitespace-pre-wrap text-sm leading-relaxed">
+                    <p
+                      dir="auto"
+                      className="line-clamp-[10] flex-1 whitespace-pre-wrap text-sm leading-relaxed"
+                    >
                       {p.caption}
                     </p>
                     {p.status === 'failed' && p.error && !isPublishing(p) && (
@@ -243,7 +255,9 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                       postId={p.id}
                       status={p.status}
                       caption={p.caption}
-                      publishBlocker={p.platform === 'instagram' ? publishBlocker(p) : t('marketing.blockNotIg')}
+                      publishBlocker={
+                        p.platform === 'instagram' ? publishBlocker(p) : t('marketing.blockNotIg')
+                      }
                     />
                     {p.platform !== 'gbp' && onGoogle.has(p.caption) ? (
                       <Pill tone="ok" className="self-start">

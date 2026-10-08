@@ -3,7 +3,6 @@ export const auth = {
   meta: {
     signIn: 'Sign in',
     reset: 'Reset password',
-    twoFactor: 'Two-step verification',
     newPassword: 'Choose a new password',
     signup: 'Create your spa',
     invite: 'Invitation',
@@ -109,7 +108,8 @@ export const auth = {
     OTP_HAS_EXPIRED: 'That code has expired.',
     TOO_MANY_ATTEMPTS: 'Too many attempts. Please wait and try again.',
     TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE: 'Too many attempts. Please request a new code.',
-    ACCOUNT_TEMPORARILY_LOCKED: 'Too many failed attempts. Your account is locked for a while — try again later.',
+    ACCOUNT_TEMPORARILY_LOCKED:
+      'Too many failed attempts. Your account is locked for a while — try again later.',
     INVALID_TWO_FACTOR_COOKIE: 'Your verification step expired. Please sign in again.',
     TWO_FACTOR_NOT_ENABLED: 'Two-step verification isn’t turned on.',
     TOTP_NOT_ENABLED: 'Two-step verification isn’t turned on.',

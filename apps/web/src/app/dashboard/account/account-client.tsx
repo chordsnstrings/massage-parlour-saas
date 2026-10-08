@@ -4,11 +4,11 @@ import { ShieldCheck } from 'lucide-react'
 import { motion } from 'motion/react'
 import QRCode from 'qrcode'
 import { useState } from 'react'
+import { authErrorText } from '@/components/auth/errors'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input, Label } from '@/components/ui/input'
-import { authErrorText } from '@/components/auth/errors'
 import { toast } from '@/components/ui/toast'
 import { useT } from '@/i18n/client'
 
@@ -16,7 +16,10 @@ function useBusy() {
   const t = useT()
   const [busy, setBusy] = useState(false)
   const run = async (
-    fn: () => Promise<{ data?: unknown; error?: { code?: string; message?: string; status?: number } | null }>,
+    fn: () => Promise<{
+      data?: unknown
+      error?: { code?: string; message?: string; status?: number } | null
+    }>,
   ): Promise<unknown> => {
     setBusy(true)
     try {
@@ -41,7 +44,8 @@ export function ProfileCard({ name }: { name: string }) {
         onSubmit={async (e) => {
           e.preventDefault()
           const value = String(new FormData(e.currentTarget).get('name')).trim()
-          if (await run(() => authClient.updateUser({ name: value }))) toast.success(t('account.profile.saved'))
+          if (await run(() => authClient.updateUser({ name: value })))
+            toast.success(t('account.profile.saved'))
         }}
       >
         <CardHeader title={t('account.profile.title')} />
@@ -120,7 +124,11 @@ export function TwoFactorCard({ enabled: initial }: { enabled: boolean }) {
       <CardHeader
         title={t('account.twoFactor.title')}
         description={t('account.twoFactor.sub')}
-        action={<Badge tone={enabled ? 'success' : 'neutral'}>{enabled ? t('account.twoFactor.on') : t('account.twoFactor.off')}</Badge>}
+        action={
+          <Badge tone={enabled ? 'success' : 'neutral'}>
+            {enabled ? t('account.twoFactor.on') : t('account.twoFactor.off')}
+          </Badge>
+        }
       />
       <CardBody>
         {codes ? (

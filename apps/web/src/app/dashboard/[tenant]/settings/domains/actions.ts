@@ -116,10 +116,9 @@ export async function checkDomainAction(slug: string, id: string): Promise<Actio
         to: d.status,
       })
     refresh(slug)
-    if (d.status === 'active') return ok({ key: 'settings.domains.result.connected', params: { host: d.hostname } })
-    return d.lastError
-      ? failDomain({ message: d.lastError })
-      : fail('settings.domains.result.notConnected')
+    if (d.status === 'active')
+      return ok({ key: 'settings.domains.result.connected', params: { host: d.hostname } })
+    return d.lastError ? failDomain({ message: d.lastError }) : fail('settings.domains.result.notConnected')
   } catch (e) {
     return domainFail(e)
   }

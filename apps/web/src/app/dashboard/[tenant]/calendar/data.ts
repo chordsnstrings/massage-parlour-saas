@@ -187,6 +187,7 @@ export async function loadCalendar(
     return {
       slug: ctx.tenant.slug,
       date,
+      dayLabel: fmt.weekdayDate(`${date}T12:00:00Z`),
       today,
       branchId: branch.id,
       branches: branchRows.map((b) => ({ id: b.id, name: b.name })),

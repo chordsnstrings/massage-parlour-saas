@@ -2,8 +2,10 @@
 export const website = {
   title: 'Website',
   previewMeta: 'Preview',
-  descStudio: "Studio view — you're building this spa's site. Prices, team and hours come live from its dashboard.",
-  descSpa: 'Handcrafted for you by our studio. Prices, team and opening hours stay in sync with your dashboard.',
+  descStudio:
+    "Studio view — you're building this spa's site. Prices, team and hours come live from its dashboard.",
+  descSpa:
+    'Handcrafted for you by our studio. Prices, team and opening hours stay in sync with your dashboard.',
   preview: 'Preview',
   viewSite: 'View site',
   status: {
@@ -33,7 +35,10 @@ export const website = {
   template: 'Template',
   copyLink: 'Copy link',
   pages: 'Pages',
-  pagesPending: { one: '{count} page has unpublished changes', other: '{count} pages have unpublished changes' },
+  pagesPending: {
+    one: '{count} page has unpublished changes',
+    other: '{count} pages have unpublished changes',
+  },
   allLive: 'Everything is live',
   noPages: 'No pages yet',
   colPage: 'Page',
@@ -74,11 +79,13 @@ export const website = {
   studioReply: 'Studio: {text}',
   // Studio sheets (studio-client)
   requestChange: 'Request a change',
-  requestChangeSub: "Tell the studio what you'd like changed. They'll update your site and let you know here.",
+  requestChangeSub:
+    "Tell the studio what you'd like changed. They'll update your site and let you know here.",
   sendToStudio: 'Send to studio',
   pageOptional: 'Page (optional)',
   whatChange: 'What should change?',
   whatChangeHint: 'New photos? Send them to Media first and mention them here.',
+  describeChange: 'Describe a change…',
   whatChangePh: 'e.g. Use our new opening hours banner on the home page and swap the hero photo.',
   approveTitle: 'Approve your website?',
   approveSub: 'The studio will publish it as you see it in the preview. You can still ask for changes later.',

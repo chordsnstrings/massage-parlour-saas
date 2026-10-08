@@ -55,7 +55,8 @@ export async function ComposerPage({
         actions={
           <Button variant="ghost" asChild>
             <Link href={campaignId ? `${base}/${campaignId}` : base}>
-              <ArrowLeft className="rtl:rotate-180" /> {campaignId ? t('campaigns.composer.backCampaign') : t('campaigns.composer.backCampaigns')}
+              <ArrowLeft className="rtl:rotate-180" />{' '}
+              {campaignId ? t('campaigns.composer.backCampaign') : t('campaigns.composer.backCampaigns')}
             </Link>
           </Button>
         }

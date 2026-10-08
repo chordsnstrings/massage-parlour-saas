@@ -46,7 +46,8 @@ export async function subscribePushAction(input: unknown): Promise<ActionResult>
   if (!user) return fail('errors.signInAgain')
   if (!pushConfigured()) return fail('account.push.result.notSetUp')
   const parsed = subscription.safeParse(input)
-  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'account.push.result.invalidSubscription')
+  if (!parsed.success)
+    return fail(parsed.error.issues[0]?.message ?? 'account.push.result.invalidSubscription')
   await savePushSubscription(user.id, parsed.data)
   await audit({ actorUserId: user.id, action: 'push.subscribed', entity: 'push_subscription' })
   return ok('account.push.result.on')
@@ -85,9 +86,5 @@ export async function testPushAction(input: unknown): Promise<ActionResult> {
     { endpoint: parsed.data },
   )
   if (res.sent) return ok('account.push.result.sent')
-  return fail(
-    res.pruned
-      ? 'account.push.result.pruned'
-      : 'account.push.result.unreachable',
-  )
+  return fail(res.pruned ? 'account.push.result.pruned' : 'account.push.result.unreachable')
 }

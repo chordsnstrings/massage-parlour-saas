@@ -1,3 +1,4 @@
+import type { Translator } from '@spa/core/i18n'
 import { campaigns, segments, withTenant } from '@spa/db'
 import { campaignResults, resolveSegment } from '@spa/services'
 import { desc, isNotNull, isNull } from 'drizzle-orm'
@@ -5,7 +6,6 @@ import { Archive, Megaphone, Plus, Sparkles, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import type { Translator } from '@spa/core/i18n'
 import {
   campaignState,
   describeRule,
@@ -257,7 +257,9 @@ export default async function CampaignsPage({
               value={fmt.number(totals.booked)}
               sub={
                 totals.reached
-                  ? t('campaigns.stats.bookedHint', { pct: fmt.percent(ratio(totals.booked, totals.reached)) })
+                  ? t('campaigns.stats.bookedHint', {
+                      pct: fmt.percent(ratio(totals.booked, totals.reached)),
+                    })
                   : t('campaigns.stats.notTracked')
               }
             />

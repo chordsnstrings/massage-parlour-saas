@@ -1,5 +1,15 @@
 'use client'
-import { CalendarDays, CheckCheck, Clock, ExternalLink, Inbox, Keyboard, MessageCircle, ShieldCheck, SkipForward } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCheck,
+  Clock,
+  ExternalLink,
+  Inbox,
+  Keyboard,
+  MessageCircle,
+  ShieldCheck,
+  SkipForward,
+} from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { markMessageAction } from '@/app/dashboard/[tenant]/messages/actions'
@@ -284,7 +294,9 @@ export function OutboxQueue({
               <li>{t('messages.responsible.noBots')}</li>
               <li>
                 {t('messages.responsible.pace')}{' '}
-                <span className="crm-num font-semibold text-[var(--crm-text)]">{fmt.number(live.sentToday)}</span>
+                <span className="crm-num font-semibold text-[var(--crm-text)]">
+                  {fmt.number(live.sentToday)}
+                </span>
               </li>
             </ul>
           </Card>

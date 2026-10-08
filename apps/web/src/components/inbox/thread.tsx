@@ -1,3 +1,5 @@
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
 import type { getThread, InboxFilter } from '@spa/services'
 import { dmWindowLeftMs } from '@spa/services'
 import {
@@ -10,8 +12,6 @@ import {
   UserRound,
 } from 'lucide-react'
 import Link from 'next/link'
-import type { Format } from '@spa/core/i18n/format'
-import type { Translator } from '@spa/core/i18n/translate'
 import { linkClientAction } from '@/app/dashboard/[tenant]/inbox/actions'
 import { Card, Pill } from '@/components/crm'
 import { Button } from '@/components/ui/button'
@@ -52,8 +52,7 @@ export function ThreadView({
   const name = displayName(t, { ...c, clientName: thread.clientName })
   const now = new Date()
   const left = isComment ? null : windowLeft(t, dmWindowLeftMs(c.lastCustomerMsgAt, now))
-  const windowNotice =
-    !isComment && !left ? t('inbox.notice.window') : null
+  const windowNotice = !isComment && !left ? t('inbox.notice.window') : null
   const sent = thread.messages.filter((m) => m.sender !== 'ai_draft')
   const drafts = thread.messages.filter((m) => m.sender === 'ai_draft')
   const unread = Boolean(c.lastCustomerMsgAt && (!c.readAt || c.lastCustomerMsgAt > c.readAt))
@@ -157,14 +156,18 @@ export function ThreadView({
         className="max-h-[62dvh] min-h-64 space-y-3 overflow-y-auto bg-[var(--crm-surface2)] px-4 py-5 sm:px-5"
         label={t('inbox.thread.log')}
       >
-        {sent.length === 0 && <p className="py-10 text-center text-sm text-muted">{t('inbox.thread.noMessages')}</p>}
+        {sent.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted">{t('inbox.thread.noMessages')}</p>
+        )}
         {sent.map((m, i) => {
           const out = m.direction === 'out'
           const prev = sent[i - 1]
           const showDay = !prev || dayKey(prev.createdAt) !== dayKey(m.createdAt)
           return (
             <div key={m.id} className="space-y-3">
-              {showDay && <p className="pt-1 text-center text-xs text-muted">{dayLabel(t, fmt, m.createdAt, now)}</p>}
+              {showDay && (
+                <p className="pt-1 text-center text-xs text-muted">{dayLabel(t, fmt, m.createdAt, now)}</p>
+              )}
               <div className={cn('flex', out ? 'justify-end' : 'justify-start')} data-testid="message">
                 <div className={cn('max-w-[85%] space-y-1 sm:max-w-[75%]', out && 'items-end text-end')}>
                   <div

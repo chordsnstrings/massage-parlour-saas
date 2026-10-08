@@ -5,8 +5,7 @@ export const reviews: Messages['reviews'] = {
   title: 'รีวิว Google',
   descConnected: 'ซิงก์จาก {name} ทุกสองชั่วโมง ให้ AI ร่างคำตอบ อนุมัติ แล้วโพสต์ลง Google',
   yourProfile: 'Google Business Profile ของคุณ',
-  descManual:
-    'ระหว่างที่ยังไม่ได้เชื่อม Google Business Profile ให้วางรีวิวใหม่ที่นี่ — AI จะร่างคำตอบให้คุณคัดลอกไปใส่ใน Google',
+  descManual: 'ระหว่างที่ยังไม่ได้เชื่อม Google Business Profile ให้วางรีวิวใหม่ที่นี่ — AI จะร่างคำตอบให้คุณคัดลอกไปใส่ใน Google',
   addTitle: 'เพิ่มรีวิว',
   add: 'เพิ่มรีวิว',
   reviewer: 'ผู้รีวิว',

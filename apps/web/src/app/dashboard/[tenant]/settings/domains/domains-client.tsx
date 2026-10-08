@@ -17,8 +17,8 @@ function useRun() {
     start(async () => {
       const r = await fn()
       if (r?.ok) {
-        if (r.message) toast.success(resultText(t, r))
-      } else if (r) toast.error(resultText(t, r))
+        if (r.message) toast.success(resultText(t, r) ?? '')
+      } else if (r) toast.error(resultText(t, r) ?? '')
     })
   }
   return { pending, run, t }
@@ -99,10 +99,7 @@ export function DomainActions({
         className="text-danger hover:bg-danger-soft hover:text-danger sm:ms-auto"
         disabled={pending}
         onClick={() =>
-          run(
-            () => removeDomainAction(slug, id),
-            t('settings.domains.removeConfirm', { host: hostname }),
-          )
+          run(() => removeDomainAction(slug, id), t('settings.domains.removeConfirm', { host: hostname }))
         }
       >
         <Trash2 /> {t('settings.domains.remove')}

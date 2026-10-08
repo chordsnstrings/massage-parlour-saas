@@ -1,5 +1,5 @@
-import { pushConfig } from '@spa/services'
 import type { Messages } from '@spa/core/i18n'
+import { pushConfig } from '@spa/services'
 import type { Metadata } from 'next'
 import { NotificationsCard } from '@/components/push/enable-notifications'
 import { AppShell } from '@/components/shell/app-shell'

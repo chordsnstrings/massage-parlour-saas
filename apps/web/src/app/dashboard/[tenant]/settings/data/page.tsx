@@ -1,39 +1,28 @@
 import { auditLog, withTenant } from '@spa/db'
 import { EXPORT_DATASETS, type ExportDataset, IMPORT_KINDS, type ImportKind } from '@spa/services'
 import { desc, eq } from 'drizzle-orm'
-import { ArrowLeft, ArrowRight, Download, FileArchive, Package, Sparkles, Upload, Users } from 'lucide-react'
+import { ArrowRight, Download, FileArchive, Package, Sparkles, Upload, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { IMPORT_LABEL, IMPORT_PERMISSION } from '@/components/data/kinds'
+import { Card, Grid, Pill, Stack } from '@/components/crm'
+import { IMPORT_PERMISSION } from '@/components/data/kinds'
 import { canExportAll } from '@/components/data/server'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input, Label, Select } from '@/components/ui/input'
-import { Stagger, StaggerItem } from '@/components/ui/motion'
-import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
+import { EmptyState, PageHeader } from '@/components/ui/page'
 import { type Column, DataTable } from '@/components/ui/table'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
-import { formatDateTime, todayDubai } from '@/lib/utils'
+import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { SettingsTabs } from '../settings-tabs'
 
-export const metadata: Metadata = { title: 'Import & export' }
-
-const IMPORT_CARDS: Record<ImportKind, { icon: typeof Users; text: string }> = {
-  clients: {
-    icon: Users,
-    text: 'Name, mobile, gender, birthday, tags, notes and language. Existing clients are matched by mobile number.',
-  },
-  menu: {
-    icon: Sparkles,
-    text: 'Category, service name in English and Arabic, duration and price. Each duration becomes a bookable option.',
-  },
-  products: {
-    icon: Package,
-    text: 'Name, SKU, unit, cost, price and stock on hand. Opening stock is valued at cost in your accounts.',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())('settings.data.title') }
 }
+
+const IMPORT_ICON: Record<ImportKind, typeof Users> = { clients: Users, menu: Sparkles, products: Package }
 
 type ImportSummaryData = {
   file?: string
@@ -48,6 +37,7 @@ type HistoryRow = { id: number; kind: ImportKind; at: Date; data: ImportSummaryD
 export default async function DataPage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   const slug = ctx.tenant.slug
+  const { t, fmt } = await getI18n()
   const importable = IMPORT_KINDS.filter((k) => can(ctx, IMPORT_PERMISSION[k]))
   const exportable = (Object.keys(EXPORT_DATASETS) as ExportDataset[]).filter((d) =>
     can(ctx, EXPORT_DATASETS[d].permission),
@@ -75,34 +65,42 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
   const columns: Column<HistoryRow>[] = [
     {
       key: 'file',
-      header: 'File',
+      header: t('settings.data.history.file'),
       primary: true,
       cell: (r) => (
         <span className="flex min-w-0 flex-col">
           <span className="truncate font-medium">{r.data.file ?? 'import.csv'}</span>
-          <span className="text-[13px] text-muted md:hidden">{formatDateTime(r.at)}</span>
+          <span className="text-[13px] text-muted md:hidden">{fmt.dateTime(r.at)}</span>
         </span>
       ),
     },
-    { key: 'kind', header: 'Type', cell: (r) => <Badge>{IMPORT_LABEL[r.kind]}</Badge> },
+    {
+      key: 'kind',
+      header: t('settings.data.history.type'),
+      cell: (r) => <Pill>{t(`settings.data.kinds.${r.kind}`)}</Pill>,
+    },
     {
       key: 'when',
-      header: 'When',
+      header: t('settings.data.history.when'),
       hideOnMobile: true,
-      cell: (r) => <span className="whitespace-nowrap text-muted">{formatDateTime(r.at)}</span>,
+      cell: (r) => <span className="whitespace-nowrap text-muted">{fmt.dateTime(r.at)}</span>,
     },
     {
       key: 'result',
-      header: 'Result',
+      header: t('settings.data.history.result'),
       cell: (r) => (
         <span className="tabular-nums">
-          {r.data.created ?? 0} new · {r.data.updated ?? 0} updated · {r.data.skipped ?? 0} skipped
+          {t('settings.data.history.resultText', {
+            created: fmt.number(r.data.created ?? 0),
+            updated: fmt.number(r.data.updated ?? 0),
+            skipped: fmt.number(r.data.skipped ?? 0),
+          })}
         </span>
       ),
     },
     {
       key: 'errors',
-      header: 'Errors',
+      header: t('settings.data.history.errors'),
       className: 'text-end',
       cell: (r) =>
         r.data.errorCount ? (
@@ -119,7 +117,7 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
     },
     {
       key: 'by',
-      header: 'By',
+      header: t('settings.data.history.by'),
       hideOnMobile: true,
       cell: (r) => <span className="text-muted">{r.data.by ?? '—'}</span>,
     },
@@ -127,157 +125,127 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
 
   return (
     <>
-      <Link
-        href={appPath(`/${slug}/settings`)}
-        className="mb-6 inline-flex min-h-11 items-center gap-1.5 text-sm text-muted transition-colors hover:text-fg"
-      >
-        <ArrowLeft className="size-4" strokeWidth={1.5} /> Settings
-      </Link>
-      <PageHeader
-        title="Import & export"
-        description="Bring clients, your menu and products in from a spreadsheet — and take your data with you whenever you like."
-      />
-      <PageBody>
+      <PageHeader title={t('settings.data.title')} description={t('settings.data.description')} />
+      <SettingsTabs ctx={ctx} value="data" />
+      <Stack>
         {importable.length > 0 && (
-          <section aria-labelledby="import-heading" className="space-y-4">
+          <section aria-labelledby="import-heading" className="crm-stack">
             <div className="space-y-1">
               <h2 id="import-heading" className="text-[15px] font-semibold tracking-tight">
-                Import from CSV
+                {t('settings.data.importTitle')}
               </h2>
-              <p className="text-sm text-muted">
-                Excel, Google Sheets, Fresha and most booking systems export CSV. You check every column
-                before anything is saved.
-              </p>
+              <p className="crm-muted text-sm">{t('settings.data.importSub')}</p>
             </div>
-            <Stagger className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Grid cols="g3">
               {importable.map((kind) => {
-                const card = IMPORT_CARDS[kind]
+                const Icon = IMPORT_ICON[kind]
                 return (
-                  <StaggerItem key={kind} className="h-full">
-                    <Card className="flex h-full flex-col transition-[border-color,box-shadow] duration-200 hover:border-fg/15 hover:shadow-soft">
-                      <CardBody className="flex-1 space-y-3">
-                        <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-accent">
-                          <card.icon className="size-4" strokeWidth={1.5} />
-                        </span>
-                        <h3 className="text-[15px] font-semibold tracking-tight">{IMPORT_LABEL[kind]}</h3>
-                        <p className="text-sm text-muted">{card.text}</p>
-                      </CardBody>
-                      <CardFooter className="justify-between">
-                        <Button asChild variant="ghost" size="sm" className="h-11 md:h-9">
-                          <a
-                            href={appPath(`${base}/template?kind=${kind}`)}
-                            aria-label={`Download ${IMPORT_LABEL[kind].toLowerCase()} template`}
-                          >
-                            <Download strokeWidth={1.5} /> Template
-                          </a>
-                        </Button>
-                        <Button asChild size="sm" className="h-11 md:h-9">
-                          <Link href={appPath(`${base}/import/${kind}`)}>
-                            Import {IMPORT_LABEL[kind].toLowerCase()} <ArrowRight strokeWidth={1.5} />
-                          </Link>
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  </StaggerItem>
+                  <Card key={kind} className="flex h-full flex-col">
+                    <div className="flex-1 space-y-3">
+                      <span className="grid size-10 place-items-center rounded-full bg-accent-soft text-accent">
+                        <Icon className="size-4" strokeWidth={1.5} />
+                      </span>
+                      <h3 className="text-[15px] font-semibold tracking-tight">
+                        {t(`settings.data.kinds.${kind}`)}
+                      </h3>
+                      <p className="crm-muted text-sm">{t(`settings.data.cards.${kind}`)}</p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                      <Button asChild variant="ghost" size="sm" className="h-11 md:h-9">
+                        <a
+                          href={appPath(`${base}/template?kind=${kind}`)}
+                          aria-label={t(`settings.data.downloadTemplate.${kind}`)}
+                        >
+                          <Download strokeWidth={1.5} /> {t('settings.data.template')}
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" className="h-11 md:h-9">
+                        <Link href={appPath(`${base}/import/${kind}`)}>
+                          {t(`settings.data.importKind.${kind}`)} <ArrowRight strokeWidth={1.5} />
+                        </Link>
+                      </Button>
+                    </div>
+                  </Card>
                 )
               })}
-            </Stagger>
+            </Grid>
           </section>
         )}
 
         {(exportable.length > 0 || full) && (
-          <div className="grid gap-6 lg:grid-cols-12">
+          <Grid cols={exportable.length > 0 && full ? 'col-2' : undefined}>
             {exportable.length > 0 && (
-              <Card className={full ? 'lg:col-span-7' : 'lg:col-span-12'}>
-                <CardHeader
-                  title="Export a CSV"
-                  description="Opens in Excel or Google Sheets. Leave the dates empty for everything."
-                />
-                <form method="get" action={appPath(`${base}/export`)}>
-                  <CardBody className="grid gap-5 sm:grid-cols-6">
-                    <div className="space-y-1.5 sm:col-span-6">
-                      <Label htmlFor="export-type">What to export</Label>
+              <Card title={t('settings.data.export.title')} sub={t('settings.data.export.sub')}>
+                <form method="get" action={appPath(`${base}/export`)} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="export-type">{t('settings.data.export.what')}</Label>
                       <Select id="export-type" name="type" defaultValue={exportable[0]}>
                         {exportable.map((d) => (
                           <option key={d} value={d}>
-                            {EXPORT_DATASETS[d].label}
+                            {t(`settings.data.export.datasets.${d}`)}
                           </option>
                         ))}
                       </Select>
                     </div>
-                    <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor="export-from">From</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="export-from">{t('settings.data.export.from')}</Label>
                       <Input id="export-from" name="from" type="date" max={todayDubai()} />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-3">
-                      <Label htmlFor="export-to">To</Label>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="export-to">{t('settings.data.export.to')}</Label>
                       <Input id="export-to" name="to" type="date" />
                     </div>
-                    <p className="text-[13px] text-muted sm:col-span-6">
-                      Dates filter clients by when they were added, bookings, sales and payments by business
-                      day and expenses by expense date. Products export today’s stock.
-                      {!can(ctx, 'clients.phone') && ' Phone numbers are left out for your role.'}
-                    </p>
-                  </CardBody>
-                  <CardFooter>
-                    <Button type="submit" className="h-11 w-full sm:w-auto md:h-10">
-                      <Download strokeWidth={1.5} /> Download CSV
-                    </Button>
-                  </CardFooter>
+                  </div>
+                  <p className="crm-muted text-[13px]">
+                    {t('settings.data.export.note')}
+                    {!can(ctx, 'clients.phone') && ` ${t('settings.data.export.noPhones')}`}
+                  </p>
+                  <Button type="submit" className="h-11 w-full sm:w-auto md:h-10">
+                    <Download strokeWidth={1.5} /> {t('settings.data.export.download')}
+                  </Button>
                 </form>
               </Card>
             )}
             {full && (
               <Card
-                className={exportable.length ? 'flex flex-col lg:col-span-5' : 'flex flex-col lg:col-span-12'}
+                className="flex flex-col"
+                title={t('settings.data.full.title')}
+                sub={t('settings.data.full.sub')}
               >
-                <CardHeader
-                  title="Full export"
-                  description="Everything in your account as CSV files in one zip, with a README explaining each file."
-                />
-                <CardBody className="flex-1 space-y-3 text-sm text-muted">
-                  <p>
-                    Clients, bookings, sales, payments, packages, gift cards, the ledger, payroll, stock,
-                    website pages and settings. Passwords, access tokens and uploaded files are never
-                    included.
-                  </p>
-                  <p>Each download is recorded in the activity log.</p>
-                </CardBody>
-                <CardFooter>
+                <div className="crm-muted flex-1 space-y-3 text-sm">
+                  <p>{t('settings.data.full.body')}</p>
+                  <p>{t('settings.data.full.logged')}</p>
+                </div>
+                <div className="mt-4">
                   <Button asChild variant="secondary" className="h-11 w-full sm:w-auto md:h-10">
                     <a href={appPath(`${base}/export?type=full`)}>
-                      <FileArchive strokeWidth={1.5} /> Download .zip
+                      <FileArchive strokeWidth={1.5} /> {t('settings.data.full.download')}
                     </a>
                   </Button>
-                </CardFooter>
+                </div>
               </Card>
             )}
-          </div>
+          </Grid>
         )}
 
         {importable.length > 0 && (
-          <Card>
-            <CardHeader
-              title="Recent imports"
-              description="The last ten imports and what happened to each row."
+          <Card title={t('settings.data.history.title')} sub={t('settings.data.history.sub')} flush>
+            <DataTable
+              columns={columns}
+              rows={history}
+              rowKey={(r) => String(r.id)}
+              empty={
+                <EmptyState
+                  icon={<Upload className="size-4" strokeWidth={1.5} />}
+                  title={t('settings.data.history.empty')}
+                  description={t('settings.data.history.emptySub')}
+                />
+              }
             />
-            <div className="mt-4 border-t">
-              <DataTable
-                columns={columns}
-                rows={history}
-                rowKey={(r) => String(r.id)}
-                empty={
-                  <EmptyState
-                    icon={<Upload className="size-4" strokeWidth={1.5} />}
-                    title="No imports yet"
-                    description="Your imports will be listed here with a downloadable list of any rows that needed fixing."
-                  />
-                }
-              />
-            </div>
           </Card>
         )}
-      </PageBody>
+      </Stack>
     </>
   )
 }

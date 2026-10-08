@@ -39,10 +39,7 @@ export function BuyDomain({ slug }: { slug: string }) {
     })
   }
   const request = (domain: string, price: number) => {
-    if (
-      !window.confirm(t('settings.domains.search.confirm', { domain, price: fmt.aed(price) }))
-    )
-      return
+    if (!window.confirm(t('settings.domains.search.confirm', { domain, price: fmt.aed(price) }))) return
     setPicked(domain)
     startRequest(async () => {
       const r = await requestDomainAction(slug, domain)
@@ -50,7 +47,7 @@ export function BuyDomain({ slug }: { slug: string }) {
         toast.success(resultText(t, r) ?? '')
         setOffers(null)
         setQuery('')
-      } else if (r) toast.error(resultText(t, r))
+      } else if (r) toast.error(resultText(t, r) ?? '')
       setPicked(null)
     })
   }
@@ -116,7 +113,8 @@ export function BuyDomain({ slug }: { slug: string }) {
                     disabled={requesting}
                     onClick={() => request(o.domain, o.priceAed!)}
                   >
-                    {!(requesting && picked === o.domain) && <ShoppingBag />} {t('settings.domains.search.request')}
+                    {!(requesting && picked === o.domain) && <ShoppingBag />}{' '}
+                    {t('settings.domains.search.request')}
                   </Button>
                 ) : (
                   <Badge>{t('settings.domains.search.unavailable')}</Badge>
@@ -145,7 +143,7 @@ export function CancelOrderButton({ slug, id, domain }: { slug: string; id: stri
         start(async () => {
           const r = await cancelDomainOrderAction(slug, id)
           if (r?.ok) toast.success(resultText(t, r) ?? '')
-          else if (r) toast.error(resultText(t, r))
+          else if (r) toast.error(resultText(t, r) ?? '')
         })
       }}
     >

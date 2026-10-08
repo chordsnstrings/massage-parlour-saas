@@ -22,9 +22,9 @@ function useRun() {
       const r = await fn()
       if (!r) return
       if (r.ok) {
-        if (r.message) toast.success(resultText(t, r))
+        if (r.message) toast.success(resultText(t, r) ?? '')
         after?.(r)
-      } else toast.error(resultText(t, r))
+      } else toast.error(resultText(t, r) ?? '')
     })
   return { pending, run, t }
 }

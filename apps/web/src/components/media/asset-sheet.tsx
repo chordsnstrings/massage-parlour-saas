@@ -150,11 +150,7 @@ function Details({
           </div>
         )}
         <ActionForm action={saveAssetAction.bind(null, slug, item.id)} className="space-y-4">
-          <Field
-            label={t('media.altEn')}
-            name="altEn"
-            hint={t('media.altEnHint')}
-          >
+          <Field label={t('media.altEn')} name="altEn" hint={t('media.altEnHint')}>
             <Input
               id="altEn"
               name="altEn"

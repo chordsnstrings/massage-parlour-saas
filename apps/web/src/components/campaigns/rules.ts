@@ -1,7 +1,8 @@
 /** Client-safe segment rule + campaign helpers (no DB imports). */
-import type { SegmentRule } from '@spa/db'
+
 import type { Format } from '@spa/core/i18n/format'
 import type { Translator } from '@spa/core/i18n/translate'
+import type { SegmentRule } from '@spa/db'
 import { z } from 'zod'
 import type { Tone } from '@/components/crm'
 
@@ -121,12 +122,14 @@ export const summarizeRules = (
   rules: SegmentRule[],
   serviceName?: (id: string) => string | undefined,
 ) =>
-  rules.length
-    ? rules.map((r) => describeRule(t, fmt, r, serviceName)).join(' · ')
-    : t('campaigns.everyone')
+  rules.length ? rules.map((r) => describeRule(t, fmt, r, serviceName)).join(' · ') : t('campaigns.everyone')
 
 /** Presets; name + description via `campaigns.preset.<key>.{name,description}`. */
-export type SegmentPreset = { key: 'winback' | 'birthday' | 'packageExpiring' | 'vip' | 'firstTimers'; slug: string; rules: SegmentRule[] }
+export type SegmentPreset = {
+  key: 'winback' | 'birthday' | 'packageExpiring' | 'vip' | 'firstTimers'
+  slug: string
+  rules: SegmentRule[]
+}
 
 export const SEGMENT_PRESETS: SegmentPreset[] = [
   { key: 'winback', slug: 'winback', rules: [{ kind: 'lapsed', days: 60 }] },
@@ -143,7 +146,8 @@ export const SEGMENT_PRESETS: SegmentPreset[] = [
   },
 ]
 export const presetName = (t: Translator, p: SegmentPreset) => t(`campaigns.preset.${p.key}.name`)
-export const presetDescription = (t: Translator, p: SegmentPreset) => t(`campaigns.preset.${p.key}.description`)
+export const presetDescription = (t: Translator, p: SegmentPreset) =>
+  t(`campaigns.preset.${p.key}.description`)
 
 const int = (min: number, max: number) => z.coerce.number().int().min(min).max(max)
 
@@ -161,7 +165,10 @@ export const segmentRulesSchema = z
       z.object({ kind: z.literal('birthday_within'), days: int(1, 90) }),
       z.object({ kind: z.literal('gender'), gender: z.enum(['female', 'male', 'other']) }),
       z.object({ kind: z.literal('language'), language: z.enum(['en', 'ar']) }),
-      z.object({ kind: z.literal('tag'), tag: z.string().trim().min(1, 'campaigns.validation.chooseTag').max(40) }),
+      z.object({
+        kind: z.literal('tag'),
+        tag: z.string().trim().min(1, 'campaigns.validation.chooseTag').max(40),
+      }),
       z.object({ kind: z.literal('has_package') }),
       z.object({ kind: z.literal('package_expiring'), days: int(1, 365) }),
       z.object({ kind: z.literal('no_shows_at_least'), count: int(1, 1000) }),

@@ -22,7 +22,9 @@ export function displayName(
   if (c.clientName) return c.clientName
   if (c.participant) return c.participant
   const tail = c.externalThreadId.slice(-4)
-  return c.channel === 'instagram_comment' ? t('inbox.name.commenter', { tail }) : t('inbox.name.user', { tail })
+  return c.channel === 'instagram_comment'
+    ? t('inbox.name.commenter', { tail })
+    : t('inbox.name.user', { tail })
 }
 
 const dubaiDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' })

@@ -129,12 +129,7 @@ export function TwoFactorForm({ next }: { next: string }) {
 export function ForgotPasswordForm() {
   const { pending, run, t } = useSubmit()
   const [sent, setSent] = useState(false)
-  if (sent)
-    return (
-      <p className="anim-fade-in text-[15px] text-muted">
-        {t('auth.forgot.sent')}
-      </p>
-    )
+  if (sent) return <p className="anim-fade-in text-[15px] text-muted">{t('auth.forgot.sent')}</p>
   return (
     <form
       className="space-y-5"

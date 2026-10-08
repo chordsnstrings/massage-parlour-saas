@@ -57,6 +57,8 @@ export type RotationRow = {
 export type CalendarData = {
   slug: string
   date: string
+  /** Server-formatted "Thu, 8 Oct" in the viewer's language (client ICU may differ → hydration mismatch). */
+  dayLabel: string
   today: string
   branchId: string
   branches: { id: string; name: string }[]

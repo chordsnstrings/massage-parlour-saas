@@ -24,10 +24,7 @@ export default async function TryReceptionist({ params }: { params: Promise<{ te
       >
         <ArrowLeft className="size-4 rtl:rotate-180" strokeWidth={1.5} /> {t('ai.studio')}
       </Link>
-      <PageHeader
-        title={t('ai.tryTitle')}
-        description={t('ai.tryDescription')}
-      />
+      <PageHeader title={t('ai.tryTitle')} description={t('ai.tryDescription')} />
       <ReceptionistChat slug={ctx.tenant.slug} spaName={ctx.tenant.name} />
     </>
   )

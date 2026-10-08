@@ -120,7 +120,7 @@ export function CalendarView({ data }: { data: CalendarData }) {
   const selected = openBooking ? items.filter((i) => i.bookingId === openBooking) : []
   const isToday = data.date === data.today
   const showWalkIns = data.rotation !== null
-  const dayLabel = fmt.weekdayDate(`${data.date}T12:00:00Z`)
+  const dayLabel = data.dayLabel
 
   // Day stats (crm-spec §5.2): booked vs shift hours, walk-ins, late-night bookings — from the loaded day only.
   const stats = useMemo(() => {

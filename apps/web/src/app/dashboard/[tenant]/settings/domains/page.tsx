@@ -333,7 +333,17 @@ function RecordsTable({ t, records }: { t: Translator; records: DnsRecord[] }) {
   )
 }
 
-function RecordLine({ t, label, value, full }: { t: Translator; label: string; value: string; full?: string }) {
+function RecordLine({
+  t,
+  label,
+  value,
+  full,
+}: {
+  t: Translator
+  label: string
+  value: string
+  full?: string
+}) {
   return (
     <div className="grid gap-2 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:items-start sm:gap-3">
       <span className="crm-muted text-xs font-medium uppercase tracking-[0.06em] sm:pt-2">{label}</span>
@@ -342,7 +352,9 @@ function RecordLine({ t, label, value, full }: { t: Translator; label: string; v
           {value}
         </code>
         {full && full !== value && (
-          <p className="crm-muted break-all text-xs">{t('settings.domains.fullName', { name: full })}</p>
+          <p className="crm-muted break-all text-xs">
+            {t('settings.domains.fullName')}: <span dir="ltr">{full}</span>
+          </p>
         )}
       </div>
       <div className="[&_button]:h-11 sm:pt-px sm:[&_button]:h-8">

@@ -245,7 +245,8 @@ export async function saveCampaignAction(
     sendAt = dubaiLocal(d.sendAt)
     if (!sendAt) fieldErrors.sendAt = 'campaigns.validation.pickDateTime'
     else if (sendAt.getTime() < now.getTime() + 60_000) fieldErrors.sendAt = 'campaigns.validation.future'
-    else if (sendAt.getTime() > now.getTime() + 90 * 86_400_000) fieldErrors.sendAt = 'campaigns.validation.maxAhead'
+    else if (sendAt.getTime() > now.getTime() + 90 * 86_400_000)
+      fieldErrors.sendAt = 'campaigns.validation.maxAhead'
   }
   if (Object.keys(fieldErrors).length) return fail('errors.checkFields', fieldErrors)
 
@@ -261,7 +262,8 @@ export async function saveCampaignAction(
   try {
     result = await withTenant(ctx.tenant.id, async (tx) => {
       const [seg] = await tx.select().from(segments).where(eq(segments.id, d.segmentId))
-      if (!seg) throw new DomainError('That segment no longer exists', 'invalid', {
+      if (!seg)
+        throw new DomainError('That segment no longer exists', 'invalid', {
           key: 'campaigns.errors.segmentGone',
         })
       if (d.promoCodeId) {
@@ -286,7 +288,10 @@ export async function saveCampaignAction(
           .set({ ...values, rules: seg.rules })
           .where(and(eq(campaigns.id, id), eq(campaigns.status, 'draft')))
           .returning({ id: campaigns.id })
-        if (!row) throw new DomainError('Only drafts can be edited', 'invalid', { key: 'campaigns.errors.onlyDrafts' })
+        if (!row)
+          throw new DomainError('Only drafts can be edited', 'invalid', {
+            key: 'campaigns.errors.onlyDrafts',
+          })
       } else {
         const [row] = await tx
           .insert(campaigns)

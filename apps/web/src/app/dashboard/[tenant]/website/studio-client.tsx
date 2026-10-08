@@ -50,11 +50,7 @@ export function RequestChangeSheet({
           </Select>
         </Field>
       )}
-      <Field
-        label={t('website.whatChange')}
-        name="body"
-        hint={t('website.whatChangeHint')}
-      >
+      <Field label={t('website.whatChange')} name="body" hint={t('website.whatChangeHint')}>
         <Textarea
           id="body"
           name="body"

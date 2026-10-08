@@ -5,7 +5,6 @@ export const auth: Messages['auth'] = {
   meta: {
     signIn: 'เข้าสู่ระบบ',
     reset: 'รีเซ็ตรหัสผ่าน',
-    twoFactor: 'ยืนยันตัวตนสองขั้นตอน',
     newPassword: 'ตั้งรหัสผ่านใหม่',
     signup: 'สร้างสปาของคุณ',
     invite: 'คำเชิญ',

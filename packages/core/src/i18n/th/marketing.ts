@@ -3,8 +3,7 @@ import type { Messages } from '../types'
 
 export const marketing: Messages['marketing'] = {
   title: 'ร่างโพสต์ Instagram',
-  description:
-    'โพสต์ที่ AI เขียนเป็นภาษาอังกฤษและอาหรับพร้อมรูป อนุมัติแล้วโพสต์ลง Instagram ทันที ตั้งเวลา หรือคัดลอกแคปชัน',
+  description: 'โพสต์ที่ AI เขียนเป็นภาษาอังกฤษและอาหรับพร้อมรูป อนุมัติแล้วโพสต์ลง Instagram ทันที ตั้งเวลา หรือคัดลอกแคปชัน',
   statScheduled: 'โพสต์ที่ตั้งเวลาไว้',
   statNext: 'ถัดไป {when}',
   statNoneNext: 'ยังไม่มีการตั้งเวลา',

@@ -49,25 +49,28 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const slug = ctx.tenant.slug
   const reports = can(ctx, 'reports.view')
   const { t, fmt } = await getI18n()
-  const { site, pages, undoBlocked, requests, hosts, glance } = await withTenant(ctx.tenant.id, async (tx) => {
-    const site = await getSite(tx, ctx.tenant.id)
-    return {
-      site,
-      hosts: await tx.select().from(domains).orderBy(asc(domains.createdAt)),
-      // "Site at a glance" (crm-spec §5.9): cookieless visitors + booking conversion, last 30 days.
-      glance: reports
-        ? ((
-            await tx.execute(sql`select count(distinct session_hash)::int as visitors,
+  const { site, pages, undoBlocked, requests, hosts, glance } = await withTenant(
+    ctx.tenant.id,
+    async (tx) => {
+      const site = await getSite(tx, ctx.tenant.id)
+      return {
+        site,
+        hosts: await tx.select().from(domains).orderBy(asc(domains.createdAt)),
+        // "Site at a glance" (crm-spec §5.9): cookieless visitors + booking conversion, last 30 days.
+        glance: reports
+          ? ((
+              await tx.execute(sql`select count(distinct session_hash)::int as visitors,
               (count(distinct session_hash) filter (where type = 'booking_complete'))::int as booked
               from web_events where ts >= now() - interval '30 days'`)
-          ).rows[0] as { visitors: number; booked: number })
-        : null,
-      pages: await listPages(tx, ctx.tenant.id),
-      requests: await listChangeRequests(tx, ctx.tenant.id),
-      // Undo is only offered while nothing the switch wrote has been edited or published since.
-      undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
-    }
-  })
+            ).rows[0] as { visitors: number; booked: number })
+          : null,
+        pages: await listPages(tx, ctx.tenant.id),
+        requests: await listChangeRequests(tx, ctx.tenant.id),
+        // Undo is only offered while nothing the switch wrote has been edited or published since.
+        undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
+      }
+    },
+  )
   const catalog = await templateCatalog()
   // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits; the spa reviews and asks.
   const studio = await isStudio(ctx)
@@ -214,8 +217,8 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
             required
             minLength={3}
             maxLength={2000}
-            placeholder={t('website.whatChangePh')}
-            aria-label={t('website.whatChange')}
+            placeholder={t('website.describeChange')}
+            aria-label={t('website.describeChange')}
             className="min-w-0 flex-1"
           />
           <SubmitButton size="sm" className="shrink-0">
@@ -392,7 +395,9 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                   : t(`website.status.${studioStatus}.spa`)}
               </p>
               {openRequests > 0 && (
-                <span className="crm-muted text-sm">{t('website.openRequests', { count: openRequests })}</span>
+                <span className="crm-muted text-sm">
+                  {t('website.openRequests', { count: openRequests })}
+                </span>
               )}
             </div>
             {canDesign && undo && (
@@ -500,7 +505,10 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                           .filter(Boolean)
                           .join(' · ')}
                         end={
-                          <Pill tone={d.status === 'active' ? 'ok' : d.status === 'failed' ? 'bad' : 'warn'} dot>
+                          <Pill
+                            tone={d.status === 'active' ? 'ok' : d.status === 'failed' ? 'bad' : 'warn'}
+                            dot
+                          >
                             {enumLabel(t, 'domainStatus', d.status)}
                           </Pill>
                         }

@@ -238,50 +238,84 @@ export default async function AccountsPage({
           </Grid>
 
           <Grid cols="col-2">
-            <Card title={t('accounts.recent.title')} sub={t('accounts.recent.sub')}>
-              {recent.length === 0 ? (
-                <p className="crm-muted text-sm">{t('accounts.recent.empty')}</p>
-              ) : (
-                <div className="crm-tbl-wrap">
-                  <table className="crm-tbl" data-stack="true">
-                    <thead>
-                      <tr>
-                        <th>{t('accounts.recent.date')}</th>
-                        <th>{t('accounts.recent.description')}</th>
-                        <th>{t('accounts.recent.method')}</th>
-                        <th className="crm-num-c">{t('accounts.recent.amount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recent.map(({ e, amount, method }) => (
-                        <tr key={e.id}>
-                          <td data-label={t('accounts.recent.date')} className="crm-muted crm-num-c">
-                            {fmt.dateShort(`${e.entryDate}T12:00:00Z`)}
-                          </td>
-                          <td data-label={t('accounts.recent.description')}>
-                            <span className="block font-medium">{sourceLabel(t, e.sourceType)}</span>
-                            {e.memo && <span className="crm-muted block text-xs">{e.memo}</span>}
-                          </td>
-                          <td data-label={t('accounts.recent.method')}>
-                            <Pill>{t(`accounts.recent.${method}`)}</Pill>
-                          </td>
-                          <td
-                            data-label={t('accounts.recent.amount')}
-                            className={cn('crm-num-c font-semibold', amount < 0 && 'text-danger')}
-                          >
-                            {amount < 0 ? '−' : ''}
-                            {fmt.aed(Math.abs(amount))}
-                          </td>
+            <Stack>
+              <Card title={t('accounts.recent.title')} sub={t('accounts.recent.sub')}>
+                {recent.length === 0 ? (
+                  <p className="crm-muted text-sm">{t('accounts.recent.empty')}</p>
+                ) : (
+                  <div className="crm-tbl-wrap">
+                    <table className="crm-tbl" data-stack="true">
+                      <thead>
+                        <tr>
+                          <th>{t('accounts.recent.date')}</th>
+                          <th>{t('accounts.recent.description')}</th>
+                          <th>{t('accounts.recent.method')}</th>
+                          <th className="crm-num-c">{t('accounts.recent.amount')}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {recent.map(({ e, amount, method }) => (
+                          <tr key={e.id}>
+                            <td data-label={t('accounts.recent.date')} className="crm-muted crm-num">
+                              {fmt.dateShort(`${e.entryDate}T12:00:00Z`)}
+                            </td>
+                            <td data-label={t('accounts.recent.description')}>
+                              <span className="block font-medium">{sourceLabel(t, e.sourceType)}</span>
+                              {e.memo && <span className="crm-muted block text-xs">{e.memo}</span>}
+                            </td>
+                            <td data-label={t('accounts.recent.method')}>
+                              <Pill>{t(`accounts.recent.${method}`)}</Pill>
+                            </td>
+                            <td
+                              data-label={t('accounts.recent.amount')}
+                              className={cn('crm-num-c font-semibold', amount < 0 && 'text-danger')}
+                            >
+                              {amount < 0 ? '−' : ''}
+                              {fmt.aed(Math.abs(amount))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <Note tone="acc" icon={<Banknote aria-hidden strokeWidth={1.8} />} className="mt-3">
+                  {t('accounts.recent.note')}
+                </Note>
+              </Card>
+              <Card title={t('accounts.close.title')} sub={t('accounts.close.sub')}>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <p className="flex items-center gap-2 text-sm">
+                    <Lock className="crm-muted size-4" strokeWidth={1.5} />
+                    {lock ? (
+                      <span>
+                        {t('accounts.close.closedThrough', {
+                          date: fmt.date(`${lock.lockedThrough}T12:00:00Z`),
+                        })}
+                      </span>
+                    ) : (
+                      <span className="crm-muted">{t('accounts.close.none')}</span>
+                    )}
+                  </p>
+                  {manage && (
+                    <ActionForm
+                      action={lockPeriodAction.bind(null, ctx.tenant.slug)}
+                      className="flex items-end gap-3"
+                    >
+                      <Field label={t('accounts.close.through')} name="through">
+                        <Input
+                          id="through"
+                          name="through"
+                          type="date"
+                          defaultValue={range.to < todayDubai() ? range.to : ''}
+                        />
+                      </Field>
+                      <SubmitButton variant="secondary">{t('accounts.close.submit')}</SubmitButton>
+                    </ActionForm>
+                  )}
                 </div>
-              )}
-              <Note tone="acc" icon={<Banknote aria-hidden strokeWidth={1.8} />} className="mt-3">
-                {t('accounts.recent.note')}
-              </Note>
-            </Card>
+              </Card>
+            </Stack>
 
             <Stack>
               <Card
@@ -313,39 +347,6 @@ export default async function AccountsPage({
               </Card>
             </Stack>
           </Grid>
-
-          <Card title={t('accounts.close.title')} sub={t('accounts.close.sub')}>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <p className="flex items-center gap-2 text-sm">
-                <Lock className="crm-muted size-4" strokeWidth={1.5} />
-                {lock ? (
-                  <span>
-                    {t('accounts.close.closedThrough', {
-                      date: fmt.date(`${lock.lockedThrough}T12:00:00Z`),
-                    })}
-                  </span>
-                ) : (
-                  <span className="crm-muted">{t('accounts.close.none')}</span>
-                )}
-              </p>
-              {manage && (
-                <ActionForm
-                  action={lockPeriodAction.bind(null, ctx.tenant.slug)}
-                  className="flex items-end gap-3"
-                >
-                  <Field label={t('accounts.close.through')} name="through">
-                    <Input
-                      id="through"
-                      name="through"
-                      type="date"
-                      defaultValue={range.to < todayDubai() ? range.to : ''}
-                    />
-                  </Field>
-                  <SubmitButton variant="secondary">{t('accounts.close.submit')}</SubmitButton>
-                </ActionForm>
-              )}
-            </div>
-          </Card>
         </Stack>
       </PageBody>
     </>

@@ -287,10 +287,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ tenan
               <EmptyState
                 icon={<MessageCircle className="size-5" strokeWidth={1.5} />}
                 title={
-                  c.status === 'draft' ? t('campaigns.detail.notQueuedTitle') : t('campaigns.detail.nobodyTitle')
+                  c.status === 'draft'
+                    ? t('campaigns.detail.notQueuedTitle')
+                    : t('campaigns.detail.nobodyTitle')
                 }
                 description={
-                  c.status === 'draft' ? t('campaigns.detail.notQueuedBody') : t('campaigns.detail.nobodyBody')
+                  c.status === 'draft'
+                    ? t('campaigns.detail.notQueuedBody')
+                    : t('campaigns.detail.nobodyBody')
                 }
               />
             }

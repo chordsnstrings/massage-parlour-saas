@@ -12,11 +12,11 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { z } from 'zod'
+import { Card, Grid, Pill, Stat } from '@/components/crm'
 import { ConversationList, FILTERS, InboxFilters } from '@/components/inbox/conversation-list'
 import { InstagramGlyph } from '@/components/inbox/icons'
 import { ThreadView } from '@/components/inbox/thread'
 import { InboxAutoRefresh } from '@/components/inbox/thread-client'
-import { Card, Grid, Pill, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
@@ -140,61 +140,61 @@ export default async function InboxPage({
           </Card>
         ) : (
           <>
-          <Grid cols="g3" className={cn(thread && 'hidden lg:grid')}>
-            <Stat label={t('inbox.stats.open')} value={fmt.number(counts.open)} />
-            <Stat label={t('inbox.stats.unread')} value={fmt.number(counts.unread)} />
-            <Stat label={t('inbox.stats.flagged')} value={fmt.number(counts.flagged)} />
-          </Grid>
-          <div className="grid gap-[var(--crm-gap)] lg:grid-cols-12">
-            <Card
-              flush
-              className={cn(
-                'overflow-hidden lg:col-span-5 lg:self-start xl:col-span-4',
-                thread && 'hidden lg:block',
-              )}
-            >
-              <div className="border-b border-[var(--crm-line)] p-3">
-                <InboxFilters slug={slug} active={filter} counts={counts} t={t} fmt={fmt} />
-              </div>
-              <div className="lg:max-h-[calc(100dvh-16rem)] lg:overflow-y-auto">
-                <ConversationList
-                  slug={slug}
-                  rows={rows}
-                  filter={filter}
-                  selectedId={thread?.conversation.id}
-                  t={t}
-                  fmt={fmt}
-                />
-              </div>
-            </Card>
-            <div className={cn('min-w-0 lg:col-span-7 xl:col-span-8', !thread && 'hidden lg:block')}>
-              {thread ? (
-                <ThreadView
-                  key={thread.conversation.id}
-                  slug={slug}
-                  thread={thread}
-                  filter={filter}
-                  sendNotice={sendNotice}
-                  canLinkClient={can(ctx, 'clients.manage')}
-                  canViewClients={can(ctx, 'clients.view')}
-                  t={t}
-                  fmt={fmt}
-                />
-              ) : (
-                <Card className="lg:min-h-96">
-                  <EmptyState
-                    icon={<MessagesSquare className="size-5" strokeWidth={1.5} />}
-                    title={selected ? t('inbox.empty.notFound') : t('inbox.empty.pick')}
-                    description={
-                      counts.unread
-                        ? t('inbox.empty.unread', { count: counts.unread })
-                        : t('inbox.empty.caughtUp')
-                    }
+            <Grid cols="g3" className={cn(thread && 'hidden lg:grid')}>
+              <Stat label={t('inbox.stats.open')} value={fmt.number(counts.open)} />
+              <Stat label={t('inbox.stats.unread')} value={fmt.number(counts.unread)} />
+              <Stat label={t('inbox.stats.flagged')} value={fmt.number(counts.flagged)} />
+            </Grid>
+            <div className="grid gap-[var(--crm-gap)] lg:grid-cols-12">
+              <Card
+                flush
+                className={cn(
+                  'overflow-hidden lg:col-span-5 lg:self-start xl:col-span-4',
+                  thread && 'hidden lg:block',
+                )}
+              >
+                <div className="border-b border-[var(--crm-line)] p-3">
+                  <InboxFilters slug={slug} active={filter} counts={counts} t={t} fmt={fmt} />
+                </div>
+                <div className="lg:max-h-[calc(100dvh-16rem)] lg:overflow-y-auto">
+                  <ConversationList
+                    slug={slug}
+                    rows={rows}
+                    filter={filter}
+                    selectedId={thread?.conversation.id}
+                    t={t}
+                    fmt={fmt}
                   />
-                </Card>
-              )}
+                </div>
+              </Card>
+              <div className={cn('min-w-0 lg:col-span-7 xl:col-span-8', !thread && 'hidden lg:block')}>
+                {thread ? (
+                  <ThreadView
+                    key={thread.conversation.id}
+                    slug={slug}
+                    thread={thread}
+                    filter={filter}
+                    sendNotice={sendNotice}
+                    canLinkClient={can(ctx, 'clients.manage')}
+                    canViewClients={can(ctx, 'clients.view')}
+                    t={t}
+                    fmt={fmt}
+                  />
+                ) : (
+                  <Card className="lg:min-h-96">
+                    <EmptyState
+                      icon={<MessagesSquare className="size-5" strokeWidth={1.5} />}
+                      title={selected ? t('inbox.empty.notFound') : t('inbox.empty.pick')}
+                      description={
+                        counts.unread
+                          ? t('inbox.empty.unread', { count: counts.unread })
+                          : t('inbox.empty.caughtUp')
+                      }
+                    />
+                  </Card>
+                )}
+              </div>
             </div>
-          </div>
           </>
         )}
       </PageBody>

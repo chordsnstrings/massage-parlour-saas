@@ -34,7 +34,11 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
   }
   const items = (Object.keys(path) as SettingsTab[])
     .filter((k) => show[k])
-    .map((k) => ({ value: k, label: t(`settings.tabs.${k}`), href: appPath(`/${ctx.tenant.slug}/${path[k]}`) }))
+    .map((k) => ({
+      value: k,
+      label: t(`settings.tabs.${k}`),
+      href: appPath(`/${ctx.tenant.slug}/${path[k]}`),
+    }))
   if (items.length < 2) return null
   return <SectionTabs items={items} value={value} label={t('settings.tabs.label')} />
 }

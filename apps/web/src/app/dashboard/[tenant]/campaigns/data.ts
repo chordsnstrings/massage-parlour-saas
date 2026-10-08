@@ -1,7 +1,7 @@
-import { clients, segments, services, type Tx } from '@spa/db'
-import { asc, desc, eq, sql } from 'drizzle-orm'
 import type { Format } from '@spa/core/i18n/format'
 import type { Translator } from '@spa/core/i18n/translate'
+import { clients, segments, services, type Tx } from '@spa/db'
+import { asc, desc, eq, sql } from 'drizzle-orm'
 import { summarizeRules } from '@/components/campaigns/rules'
 
 /** Active treatments for the "has booked" rule. */

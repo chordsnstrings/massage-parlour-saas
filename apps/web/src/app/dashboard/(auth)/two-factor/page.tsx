@@ -5,9 +5,8 @@ import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { safeNext } from '@/server/session'
 
-export async function generateMetadata(): Promise<Metadata> {
-  return { title: (await getT())('auth.meta.twoFactor') }
-}
+// Static (English) title: app/platform/(auth)/two-factor re-exports `metadata` from this page.
+export const metadata: Metadata = { title: 'Two-step verification' }
 
 export default async function TwoFactorPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const t = await getT()

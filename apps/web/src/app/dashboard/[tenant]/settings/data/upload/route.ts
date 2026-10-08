@@ -17,6 +17,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { IMPORT_PERMISSION } from '@/components/data/kinds'
 import { crossSite, json, parseCsvFile } from '@/components/data/server'
+import { getT } from '@/i18n/server'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -44,10 +45,11 @@ const REVALIDATE = { clients: 'clients', menu: 'services', products: 'inventory'
 /** CSV import: `mode=preview` validates and checks duplicates; `mode=commit` writes in chunks of 500 rows. */
 export async function POST(req: Request, { params }: { params: Promise<{ tenant: string }> }) {
   const slug = (await params).tenant
-  if (crossSite(req)) return json({ ok: false, error: 'Forbidden' }, 403)
+  const t = await getT()
+  if (crossSite(req)) return json({ ok: false, error: t('errors.forbidden') }, 403)
   const fd = await req.formData().catch(() => null)
   const kind = String(fd?.get('kind') ?? '')
-  if (!fd || !isImportKind(kind)) return json({ ok: false, error: 'Choose what to import.' }, 400)
+  if (!fd || !isImportKind(kind)) return json({ ok: false, error: t('settings.data.upload.choose') }, 400)
   const { ctx, error } = await guard(slug, IMPORT_PERMISSION[kind])
   if (error) return json({ ok: false, error }, 403)
 
@@ -56,11 +58,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
     onDuplicate: fd.get('onDuplicate') ?? undefined,
     mapping: fd.get('mapping') ?? undefined,
   })
-  if (!parsed.success) return json({ ok: false, error: 'Please check the import settings.' }, 400)
+  if (!parsed.success) return json({ ok: false, error: t('settings.data.upload.settings') }, 400)
   const file = fd.get('file')
   if (!(file instanceof Blob) || file.size === 0)
-    return json({ ok: false, error: 'Choose a CSV file to upload.' }, 400)
-  if (file.size > MAX_IMPORT_BYTES) return json({ ok: false, error: 'The file is larger than 5 MB.' }, 400)
+    return json({ ok: false, error: t('settings.data.upload.chooseFile') }, 400)
+  if (file.size > MAX_IMPORT_BYTES) return json({ ok: false, error: t('settings.data.upload.tooLarge') }, 400)
   const fileName = (file instanceof File ? file.name : 'import.csv').slice(0, 120)
 
   const bytes = new Uint8Array(await file.arrayBuffer())
@@ -68,16 +70,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
     return json(
       {
         ok: false,
-        error:
-          'This is a spreadsheet file, not CSV. In Excel choose File → Save As → “CSV UTF-8”, then upload that.',
+        error: t('settings.data.upload.xlsx'),
       },
       400,
     )
   const { headers, rows, firstRow, count, delimiter } = parseCsvFile(bytes)
-  if (!count) return json({ ok: false, error: 'No data rows found under the header row.' }, 400)
+  if (!count) return json({ ok: false, error: t('settings.data.upload.noRows') }, 400)
   if (count > MAX_IMPORT_ROWS)
     return json(
-      { ok: false, error: `Split the file: at most ${MAX_IMPORT_ROWS.toLocaleString()} rows at a time.` },
+      { ok: false, error: t('settings.data.upload.split', { max: MAX_IMPORT_ROWS.toLocaleString('en-GB') }) },
       400,
     )
 
@@ -127,7 +128,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ tenant:
     })
   }
 
-  if (missing.length) return json({ ok: false, error: `Map a column to: ${missing.join(', ')}.` }, 400)
+  if (missing.length)
+    return json({ ok: false, error: t('settings.data.upload.map', { fields: missing.join(', ') }) }, 400)
   const summary = await runImport({
     tenantId: ctx.tenant.id,
     kind,

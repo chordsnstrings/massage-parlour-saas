@@ -45,7 +45,11 @@ const templateSchema = z.object({
           const seen = new Set<string>()
           for (const f of fields) {
             if (seen.has(f.key))
-              c.addIssue({ code: 'custom', message: 'settings.intake.errors.duplicate', params: { key: f.key } })
+              c.addIssue({
+                code: 'custom',
+                message: 'settings.intake.errors.duplicate',
+                params: { key: f.key },
+              })
             seen.add(f.key)
             if (f.type === 'select' && !f.options?.length)
               c.addIssue({

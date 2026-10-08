@@ -14,13 +14,12 @@ import {
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { Card, Grid, Pill, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
-import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/card'
 import { Label, Select } from '@/components/ui/input'
-import { StatCard } from '@/components/ui/stat-card'
 import { type Column, DataTable } from '@/components/ui/table'
 import { toast } from '@/components/ui/toast'
+import { useI18n } from '@/i18n/client'
 import { duration, ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
@@ -52,38 +51,7 @@ type Summary = {
 }
 type Mode = 'update' | 'skip'
 
-const COPY: Record<
-  ImportKind,
-  { one: string; many: string; question: string; update: string; updateHint: string; skip: string }
-> = {
-  clients: {
-    one: 'client',
-    many: 'clients',
-    question: 'Clients you already have (same mobile number)',
-    update: 'Update their details',
-    updateHint:
-      'Keeps their name and notes (new notes are added below), adds tags and updates other details the file has.',
-    skip: 'Leave them as they are',
-  },
-  menu: {
-    one: 'menu item',
-    many: 'menu items',
-    question: 'Services you already have (same name and duration)',
-    update: 'Update price, Arabic name and category',
-    updateHint: 'Bookings already made keep the price they were booked at.',
-    skip: 'Leave them as they are',
-  },
-  products: {
-    one: 'product',
-    many: 'products',
-    question: 'Products you already have (same SKU or name)',
-    update: 'Update details and set stock to the file’s count',
-    updateHint: 'Stock differences are recorded as a stock count adjustment.',
-    skip: 'Leave them as they are',
-  },
-}
-
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`
+type Translate = ReturnType<typeof useI18n>['t']
 
 function downloadText(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
@@ -96,10 +64,14 @@ function downloadText(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-function Steps({ step }: { step: 0 | 1 | 2 }) {
+function Steps({ step, t }: { step: 0 | 1 | 2; t: Translate }) {
   return (
-    <ol className="flex items-center gap-2 text-sm sm:gap-3" aria-label="Import steps">
-      {['Upload', 'Check', 'Done'].map((label, i) => (
+    <ol className="flex items-center gap-2 text-sm sm:gap-3" aria-label={t('settings.data.wizard.steps')}>
+      {[
+        t('settings.data.wizard.upload'),
+        t('settings.data.wizard.check'),
+        t('settings.data.wizard.done'),
+      ].map((label, i) => (
         <li
           key={label}
           className="flex items-center gap-2 sm:gap-3"
@@ -140,7 +112,12 @@ export function ImportWizard({
   done: { label: string; href: string }
   historyHref: string
 }) {
-  const copy = COPY[kind]
+  const { t, fmt } = useI18n()
+  const w = (key: string, params?: Record<string, string | number>) =>
+    t(`settings.data.wizard.${key}` as Parameters<Translate>[0], params)
+  const rowsText = (n: number) => w('rows', { count: n })
+  /** Field label in the viewer's language (services keep the English label as the fallback). */
+  const label = (f: ImportField) => t.maybe(`settings.data.fields.${kind}.${f.key}`) ?? f.label
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [mapping, setMapping] = useState<string[]>([])
@@ -170,7 +147,7 @@ export function ImportWizard({
         | { ok: true; preview?: Preview; summary?: Summary; errorCsv?: string | null }
         | { ok: false; error: string }
     } catch {
-      return { ok: false as const, error: 'Something went wrong. Please try again.' }
+      return { ok: false as const, error: w('generic') }
     }
   }
 
@@ -181,7 +158,7 @@ export function ImportWizard({
     if (id !== request.current) return
     setBusy(null)
     if (!res.ok || !res.preview) {
-      toast.error(res.ok ? 'Could not read that file.' : res.error)
+      toast.error(res.ok ? w('unreadable') : res.error)
       return
     }
     setPreview(res.preview)
@@ -191,7 +168,7 @@ export function ImportWizard({
   function choose(f: File | undefined) {
     if (!f) return
     if (f.size > MAX_BYTES) {
-      toast.error('That file is larger than 5 MB. Split it into smaller files.')
+      toast.error(w('tooLarge'))
       return
     }
     setFile(f)
@@ -211,11 +188,11 @@ export function ImportWizard({
     const res = await send({ file, mode: 'commit', mapping, onDuplicate: mode })
     setBusy(null)
     if (!res.ok || !res.summary) {
-      toast.error(res.ok ? 'Import failed.' : res.error)
+      toast.error(res.ok ? w('failed') : res.error)
       return
     }
     setResult({ summary: res.summary, errorCsv: res.errorCsv ?? null })
-    toast.success('Import finished')
+    toast.success(w('finished'))
   }
 
   function reset() {
@@ -243,36 +220,36 @@ export function ImportWizard({
 
   const statusOf = (r: PreviewRow) =>
     r.errors.length ? (
-      <Badge tone="danger">Error</Badge>
+      <Pill tone="bad">{w('badge.error')}</Pill>
     ) : r.dupOfRow != null ? (
-      <Badge>Repeats row {r.dupOfRow}</Badge>
+      <Pill>{w('badge.repeats', { row: r.dupOfRow })}</Pill>
     ) : r.exists ? (
       mode === 'update' ? (
-        <Badge tone="accent">Update</Badge>
+        <Pill tone="acc">{w('badge.update')}</Pill>
       ) : (
-        <Badge>Skip</Badge>
+        <Pill>{w('badge.skip')}</Pill>
       )
     ) : (
-      <Badge tone="success">New</Badge>
+      <Pill tone="ok">{w('badge.new')}</Pill>
     )
 
   const columns: Column<PreviewRow>[] = [
     {
       key: '_row',
-      header: 'Row',
+      header: w('row'),
       className: 'w-16',
       cell: (r) => <span className="tabular-nums text-muted">{r.row}</span>,
     },
     ...shown.map((f, i) => ({
       key: f.key,
-      header: f.label,
+      header: label(f),
       primary: i === 0,
       className: LONG.has(f.key) ? 'min-w-48' : 'whitespace-nowrap',
       cell: (r: PreviewRow) => <span className="break-words">{r.display[f.key] || '—'}</span>,
     })),
     {
       key: '_status',
-      header: 'Status',
+      header: w('status'),
       className: 'min-w-52',
       cell: (r) => (
         <span className="inline-flex flex-col items-end gap-1.5 md:items-start">
@@ -285,7 +262,7 @@ export function ImportWizard({
 
   return (
     <div className="space-y-6">
-      <Steps step={step} />
+      <Steps step={step} t={t} />
       <AnimatePresence mode="wait" initial={false}>
         {step === 0 && (
           <motion.div
@@ -297,79 +274,73 @@ export function ImportWizard({
             className="grid gap-6 lg:grid-cols-12"
           >
             <Card className="lg:col-span-8">
-              <CardBody>
-                <label
-                  htmlFor="csv-file"
-                  data-drag={drag}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setDrag(true)
+              <label
+                htmlFor="csv-file"
+                data-drag={drag}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDrag(true)
+                }}
+                onDragLeave={() => {
+                  setDrag(false)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDrag(false)
+                  choose(e.dataTransfer.files[0])
+                }}
+                className="flex min-h-60 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-subtle/40 px-6 py-10 text-center transition-[border-color,background-color] duration-200 focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15 hover:border-accent/60 data-[drag=true]:border-accent data-[drag=true]:bg-accent-soft/60"
+              >
+                <span className="grid size-12 place-items-center rounded-full bg-surface text-accent shadow-soft">
+                  {busy ? (
+                    <Loader2 className="size-5 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <Upload className="size-5" strokeWidth={1.5} />
+                  )}
+                </span>
+                <span className="text-[15px] font-medium">
+                  {busy ? (
+                    w('reading', { name: file?.name ?? w('file') })
+                  ) : (
+                    <>
+                      {w('drop')}{' '}
+                      <span className="text-accent underline underline-offset-4">{w('browse')}</span>
+                    </>
+                  )}
+                </span>
+                <span className="max-w-sm text-sm text-muted">{w('dropHint')}</span>
+                <input
+                  ref={inputRef}
+                  id="csv-file"
+                  type="file"
+                  accept=".csv,.txt,text/csv"
+                  aria-label={w('csvFile')}
+                  className="sr-only"
+                  disabled={busy != null}
+                  onChange={(e) => {
+                    choose(e.target.files?.[0])
                   }}
-                  onDragLeave={() => {
-                    setDrag(false)
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDrag(false)
-                    choose(e.dataTransfer.files[0])
-                  }}
-                  className="flex min-h-60 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-subtle/40 px-6 py-10 text-center transition-[border-color,background-color] duration-200 focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15 hover:border-accent/60 data-[drag=true]:border-accent data-[drag=true]:bg-accent-soft/60"
-                >
-                  <span className="grid size-12 place-items-center rounded-full bg-surface text-accent shadow-soft">
-                    {busy ? (
-                      <Loader2 className="size-5 animate-spin" strokeWidth={1.5} />
-                    ) : (
-                      <Upload className="size-5" strokeWidth={1.5} />
-                    )}
-                  </span>
-                  <span className="text-[15px] font-medium">
-                    {busy ? (
-                      `Reading ${file?.name ?? 'file'}…`
-                    ) : (
-                      <>
-                        Drop your CSV here or{' '}
-                        <span className="text-accent underline underline-offset-4">browse</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="max-w-sm text-sm text-muted">
-                    Comma or semicolon separated, saved from Excel, Google Sheets or your old booking system.
-                    Up to 5 MB.
-                  </span>
-                  <input
-                    ref={inputRef}
-                    id="csv-file"
-                    type="file"
-                    accept=".csv,.txt,text/csv"
-                    aria-label="CSV file"
-                    className="sr-only"
-                    disabled={busy != null}
-                    onChange={(e) => {
-                      choose(e.target.files?.[0])
-                    }}
-                  />
-                </label>
-              </CardBody>
+                />
+              </label>
             </Card>
-            <Card className="lg:col-span-4">
-              <CardHeader title="Columns we recognise" description="Headers don’t have to match exactly." />
-              <CardBody className="space-y-5">
+            <Card className="lg:col-span-4" title={w('recognised')} sub={w('recognisedSub')}>
+              <div className="space-y-5">
                 <ul className="flex flex-wrap gap-2">
                   {fields.map((f) => (
                     <li key={f.key}>
-                      <Badge tone={f.required ? 'accent' : 'neutral'}>
-                        {f.label}
+                      <Pill tone={f.required ? 'acc' : 'neutral'}>
+                        {label(f)}
                         {f.required && ' *'}
-                      </Badge>
+                      </Pill>
                     </li>
                   ))}
                 </ul>
                 <Button asChild variant="secondary" className="h-11 w-full md:h-10">
                   <a href={templateUrl}>
-                    <Download strokeWidth={1.5} /> Download template
+                    <Download strokeWidth={1.5} /> {w('downloadTemplate')}
                   </a>
                 </Button>
-              </CardBody>
+              </div>
             </Card>
           </motion.div>
         )}
@@ -384,7 +355,7 @@ export function ImportWizard({
             className="space-y-6"
           >
             <Card>
-              <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
                     <FileSpreadsheet className="size-4" strokeWidth={1.5} />
@@ -392,29 +363,30 @@ export function ImportWizard({
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-medium">{preview.fileName}</p>
                     <p className="text-sm text-muted" aria-live="polite">
-                      {plural(c.total, 'row', 'rows')} · {c.errors.toLocaleString()} with errors ·{' '}
-                      {c.existing.toLocaleString()} already exist
-                      {c.fileDuplicates ? ` · ${c.fileDuplicates.toLocaleString()} repeated` : ''}
+                      {w('counts', {
+                        rows: rowsText(c.total),
+                        errors: fmt.number(c.errors),
+                        existing: fmt.number(c.existing),
+                      })}
+                      {c.fileDuplicates ? ` · ${w('repeated', { count: fmt.number(c.fileDuplicates) })}` : ''}
                     </p>
                   </div>
                 </div>
                 <Button variant="ghost" onClick={reset} className="h-11 self-start sm:self-auto md:h-10">
-                  <RotateCcw strokeWidth={1.5} /> Choose another file
+                  <RotateCcw strokeWidth={1.5} /> {w('another')}
                 </Button>
-              </CardBody>
+              </div>
             </Card>
 
-            <Card className={cn('transition-opacity duration-200', busy === 'preview' && 'opacity-70')}>
-              <CardHeader
-                title="Match your columns"
-                description="We guessed from the headers. Change anything that looks wrong; unmatched columns are not imported."
-                action={
-                  busy === 'preview' ? (
-                    <Loader2 className="size-4 animate-spin text-muted" aria-hidden />
-                  ) : null
-                }
-              />
-              <CardBody className="space-y-5">
+            <Card
+              className={cn('transition-opacity duration-200', busy === 'preview' && 'opacity-70')}
+              title={w('match')}
+              sub={w('matchSub')}
+              actions={
+                busy === 'preview' ? <Loader2 className="size-4 animate-spin text-muted" aria-hidden /> : null
+              }
+            >
+              <div className="space-y-5">
                 <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
                   {preview.headers.map((h, i) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: columns are positional and never reorder
@@ -435,16 +407,16 @@ export function ImportWizard({
                         }}
                         className="h-11 md:h-10"
                       >
-                        <option value="">Don’t import</option>
+                        <option value="">{w('dontImport')}</option>
                         {fields.map((f) => (
                           <option key={f.key} value={f.key}>
-                            {f.label}
+                            {label(f)}
                             {f.required ? ' *' : ''}
                           </option>
                         ))}
                       </Select>
                       <p className="truncate text-[13px] text-muted">
-                        {preview.samples[i] ? `e.g. ${preview.samples[i]}` : 'Empty column'}
+                        {preview.samples[i] ? w('sample', { value: preview.samples[i]! }) : w('emptyColumn')}
                       </p>
                     </div>
                   ))}
@@ -452,31 +424,23 @@ export function ImportWizard({
                 {preview.missing.length > 0 && (
                   <p className="flex items-start gap-2 rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
-                    Choose a column for {preview.missing.join(', ')} to continue.
+                    {w('missing', { fields: preview.missing.join(', ') })}
                   </p>
                 )}
-                {ignoredMapped && (
-                  <p className="text-[13px] text-muted">
-                    Email addresses are recognised but not imported — client messages go by WhatsApp.
-                  </p>
-                )}
-              </CardBody>
+                {ignoredMapped && <p className="text-[13px] text-muted">{w('emailIgnored')}</p>}
+              </div>
             </Card>
 
-            <Card>
-              <CardHeader
-                title={copy.question}
-                description={`${plural(c.existing, 'match', 'matches')} in this file.`}
-              />
-              <CardBody>
+            <Card title={w(`copy.${kind}.question`)} sub={w('matches', { count: c.existing })}>
+              <div>
                 <fieldset className="grid gap-3 sm:grid-cols-2">
-                  <legend className="sr-only">{copy.question}</legend>
+                  <legend className="sr-only">{w(`copy.${kind}.question`)}</legend>
                   {(
                     [
-                      ['update', copy.update, copy.updateHint],
-                      ['skip', copy.skip, 'Only new rows are added.'],
+                      ['update', w(`copy.${kind}.update`), w(`copy.${kind}.updateHint`)],
+                      ['skip', w('skip'), w('onlyNew')],
                     ] as const
-                  ).map(([value, label, hint]) => (
+                  ).map(([value, text, hint]) => (
                     <label
                       key={value}
                       className={cn(
@@ -495,28 +459,24 @@ export function ImportWizard({
                         className="mt-1 size-4 accent-[var(--accent)]"
                       />
                       <span className="space-y-0.5">
-                        <span className="block text-sm font-medium">{label}</span>
+                        <span className="block text-sm font-medium">{text}</span>
                         <span className="block text-[13px] text-muted">{hint}</span>
                       </span>
                     </label>
                   ))}
                 </fieldset>
-              </CardBody>
+              </div>
             </Card>
 
-            <Card>
-              <CardHeader
-                title="Preview"
-                description={`The first ${Math.min(preview.rows.length, 20)} rows as they will be saved.`}
-              />
-              <div className="mt-4 border-t">
-                <DataTable columns={columns} rows={preview.rows} rowKey={(r) => String(r.row)} />
-              </div>
-              <CardFooter className="flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Card
+              title={w('preview')}
+              sub={w('previewSub', { count: Math.min(preview.rows.length, 20) })}
+              flush
+            >
+              <DataTable columns={columns} rows={preview.rows} rowKey={(r) => String(r.row)} />
+              <div className="flex flex-col-reverse items-stretch gap-3 border-t px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted">
-                  {c.errors > 0
-                    ? `${plural(c.errors, 'row has', 'rows have')} errors and will be listed in an error file.`
-                    : 'No errors found.'}
+                  {c.errors > 0 ? w('errorRows', { count: c.errors }) : w('noErrors')}
                 </p>
                 <Button
                   onClick={commit}
@@ -524,9 +484,9 @@ export function ImportWizard({
                   disabled={busy != null || preview.missing.length > 0 || ready <= 0}
                   className="h-11 md:h-10"
                 >
-                  Import {plural(Math.max(ready, 0), copy.one, copy.many)} <ArrowRight strokeWidth={1.5} />
+                  {w(`importN.${kind}`, { count: Math.max(ready, 0) })} <ArrowRight strokeWidth={1.5} />
                 </Button>
-              </CardFooter>
+              </div>
             </Card>
           </motion.div>
         )}
@@ -541,59 +501,62 @@ export function ImportWizard({
             className="space-y-6"
           >
             <Card>
-              <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <span className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
                   <CheckCircle2 className="size-5" strokeWidth={1.5} />
                 </span>
                 <div className="min-w-0 flex-1 space-y-0.5">
-                  <h2 className="text-[15px] font-semibold tracking-tight">Import finished</h2>
+                  <h2 className="text-[15px] font-semibold tracking-tight">{w('finished')}</h2>
                   <p className="text-sm text-muted">
-                    {plural(result.summary.total, 'row', 'rows')} from {preview?.fileName ?? file?.name}. It
-                    is listed under recent imports.
+                    {w('finishedBody', {
+                      count: result.summary.total,
+                      file: preview?.fileName ?? file?.name ?? '',
+                    })}
                   </p>
                 </div>
-              </CardBody>
+              </div>
             </Card>
-            <div className="grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4">
-              <StatCard label="Created" value={result.summary.created} format="int" />
-              <StatCard label="Updated" value={result.summary.updated} format="int" />
-              <StatCard label="Skipped" value={result.summary.skipped} format="int" />
-              <StatCard label="Errors" value={result.summary.errorCount} format="int" />
-            </div>
+            <Grid cols="g4">
+              <Stat label={w('created')} value={fmt.number(result.summary.created)} />
+              <Stat label={w('updated')} value={fmt.number(result.summary.updated)} />
+              <Stat label={w('skipped')} value={fmt.number(result.summary.skipped)} />
+              <Stat label={w('errors')} value={fmt.number(result.summary.errorCount)} />
+            </Grid>
             {result.summary.errorCount > 0 && (
-              <Card>
-                <CardHeader
-                  title="Rows that need fixing"
-                  description="Download them with an Error column, fix them in your spreadsheet and import that file."
-                  action={
-                    result.errorCsv && (
-                      <Button
-                        variant="secondary"
-                        className="h-11 md:h-10"
-                        onClick={() => {
-                          downloadText(`${kind}-import-errors.csv`, result.errorCsv!)
-                        }}
-                      >
-                        <Download strokeWidth={1.5} /> Download error CSV
-                      </Button>
-                    )
-                  }
-                />
-                <CardBody>
+              <Card
+                title={w('fix')}
+                sub={w('fixSub')}
+                actions={
+                  result.errorCsv && (
+                    <Button
+                      variant="secondary"
+                      className="h-11 md:h-10"
+                      onClick={() => {
+                        downloadText(`${kind}-import-errors.csv`, result.errorCsv!)
+                      }}
+                    >
+                      <Download strokeWidth={1.5} /> {w('downloadErrors')}
+                    </Button>
+                  )
+                }
+              >
+                <div>
                   <ul className="divide-y rounded-lg border text-sm">
                     {result.summary.errors.slice(0, 10).map((e) => (
                       <li key={e.row} className="flex gap-4 px-4 py-3">
-                        <span className="w-16 shrink-0 tabular-nums text-muted">Row {e.row}</span>
+                        <span className="w-16 shrink-0 tabular-nums text-muted">
+                          {w('rowN', { row: e.row })}
+                        </span>
                         <span className="min-w-0 text-danger">{e.message}</span>
                       </li>
                     ))}
                   </ul>
                   {result.summary.errorCount > 10 && (
                     <p className="mt-3 text-[13px] text-muted">
-                      and {(result.summary.errorCount - 10).toLocaleString()} more in the error CSV.
+                      {w('more', { count: fmt.number(result.summary.errorCount - 10) })}
                     </p>
                   )}
-                </CardBody>
+                </div>
               </Card>
             )}
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -603,10 +566,10 @@ export function ImportWizard({
                 </Link>
               </Button>
               <Button variant="secondary" onClick={reset} className="h-11 md:h-10">
-                <Upload strokeWidth={1.5} /> Import another file
+                <Upload strokeWidth={1.5} /> {w('importAnother')}
               </Button>
               <Button asChild variant="ghost" className="h-11 md:h-10">
-                <Link href={historyHref}>Back to import &amp; export</Link>
+                <Link href={historyHref}>{w('back')}</Link>
               </Button>
             </div>
           </motion.div>

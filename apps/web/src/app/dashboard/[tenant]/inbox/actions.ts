@@ -128,7 +128,8 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
       .from(conversationMessages)
       .where(and(eq(conversationMessages.id, parsed.data), eq(conversationMessages.direction, 'out'))),
   )
-  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer') return fail('inbox.results.nothingToResend')
+  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer')
+    return fail('inbox.results.nothingToResend')
   let r: Awaited<ReturnType<typeof deliverReply>>
   try {
     r = await deliverReply(ctx.tenant.id, msg.conversationId, msg.text, {

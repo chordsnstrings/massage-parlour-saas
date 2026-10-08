@@ -88,21 +88,21 @@ export function IntakeEditor({
         title={t('settings.intake.questions')}
         sub={t('settings.intake.questionsSub')}
         actions={
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-11 sm:h-8"
-              onClick={() =>
-                setRows((rs) => [
-                  ...rs,
-                  { uid: uid(), key: '', en: '', ar: '', type: 'yesno', options: '', required: false },
-                ])
-              }
-            >
-              <Plus /> {t('settings.intake.addQuestion')}
-            </Button>
-          }
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-11 sm:h-8"
+            onClick={() =>
+              setRows((rs) => [
+                ...rs,
+                { uid: uid(), key: '', en: '', ar: '', type: 'yesno', options: '', required: false },
+              ])
+            }
+          >
+            <Plus /> {t('settings.intake.addQuestion')}
+          </Button>
+        }
       >
         <div className="space-y-3">
           <FieldError name="fields" />
@@ -278,7 +278,7 @@ export function RecommendedButton({ slug, hasTemplate }: { slug: string; hasTemp
         start(async () => {
           const r = await applyRecommendedIntakeAction(slug)
           if (r?.ok) toast.success(resultText(t, r) ?? t('common.saved'))
-          else if (r) toast.error(resultText(t, r))
+          else if (r) toast.error(resultText(t, r) ?? '')
         })
       }}
     >

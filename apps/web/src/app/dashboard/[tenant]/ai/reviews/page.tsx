@@ -249,7 +249,10 @@ export default async function ReviewsPage({
               }
               action={
                 rating || status ? (
-                  <Link href={base} className="text-sm font-medium text-accent underline-offset-4 hover:underline">
+                  <Link
+                    href={base}
+                    className="text-sm font-medium text-accent underline-offset-4 hover:underline"
+                  >
                     {t('reviews.clearFilters')}
                   </Link>
                 ) : undefined

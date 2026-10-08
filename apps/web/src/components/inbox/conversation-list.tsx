@@ -1,8 +1,8 @@
+import type { Format } from '@spa/core/i18n/format'
+import type { Translator } from '@spa/core/i18n/translate'
 import type { InboxFilter, listInbox } from '@spa/services'
 import { Flag, MessageSquareText, Sparkles } from 'lucide-react'
 import Link from 'next/link'
-import type { Format } from '@spa/core/i18n/format'
-import type { Translator } from '@spa/core/i18n/translate'
 import { Seg } from '@/components/crm'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
@@ -116,7 +116,11 @@ export function ConversationList({
                 )}
               >
                 {r.channel === 'instagram_comment' ? (
-                  <MessageSquareText className="size-4" strokeWidth={1.5} aria-label={t('inbox.list.comment')} />
+                  <MessageSquareText
+                    className="size-4"
+                    strokeWidth={1.5}
+                    aria-label={t('inbox.list.comment')}
+                  />
                 ) : (
                   <InstagramGlyph />
                 )}

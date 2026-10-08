@@ -33,7 +33,8 @@ export const media = {
   added: 'added {date}',
   upload: 'Upload',
   temporaryLink: 'Temporary link',
-  tempNote: 'This AI image still lives on the generator’s temporary link, which expires 7 days after creation.',
+  tempNote:
+    'This AI image still lives on the generator’s temporary link, which expires 7 days after creation.',
   saveToLibrary: 'Save to library',
   altEn: 'Alt text (English)',
   altEnHint: 'Describe the image for screen readers and Google.',

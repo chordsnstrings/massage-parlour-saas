@@ -65,7 +65,8 @@ export const inbox = {
     ai: 'AI',
     team: 'Team',
     notSent: 'Not sent — {reason}',
-    closed: 'This conversation is closed. Reopen it to reply — a new message from the customer reopens it too.',
+    closed:
+      'This conversation is closed. Reopen it to reply — a new message from the customer reopens it too.',
   },
   link: {
     title: 'Link to a client',

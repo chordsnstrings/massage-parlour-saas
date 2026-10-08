@@ -4,8 +4,8 @@ import { ArrowRight, Image as ImageIcon, MessageCircle, Search, Sparkles, Star, 
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Card, Grid, ListRow, Meter, Pill } from '@/components/crm'
+import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
@@ -90,7 +90,9 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
           <Card title={t('ai.month')} sub={t('ai.monthSub')}>
             <div className="mb-3 flex items-baseline justify-between">
               <span className="crm-num text-2xl font-semibold">{t('ai.usd', { v: usd(spent) })}</span>
-              <span className="crm-muted text-sm">{t('ai.ofBudget', { v: fmt.number(Math.round(budget)) })}</span>
+              <span className="crm-muted text-sm">
+                {t('ai.ofBudget', { v: fmt.number(Math.round(budget)) })}
+              </span>
             </div>
             <Meter
               label={t('ai.usage')}
@@ -144,7 +146,11 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
                         </Select>
                       </Field>
                       <Field label={t('ai.tone')} name="tone">
-                        <Input id="tone" name="tone" defaultValue={s?.tone ?? 'warm, calm and professional'} />
+                        <Input
+                          id="tone"
+                          name="tone"
+                          defaultValue={s?.tone ?? 'warm, calm and professional'}
+                        />
                       </Field>
                       <Field label={t('ai.rules')} name="rules" hint={t('ai.rulesHint')}>
                         <Textarea id="rules" name="rules" defaultValue={s?.rules ?? ''} />
@@ -163,7 +169,9 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
                 <Textarea
                   id="voice"
                   name="voice"
-                  defaultValue={brand?.voice ?? 'Warm, calm and welcoming. Short sentences. No medical claims.'}
+                  defaultValue={
+                    brand?.voice ?? 'Warm, calm and welcoming. Short sentences. No medical claims.'
+                  }
                 />
               </Field>
               <Field label={t('ai.always')} name="dos" hint={t('ai.onePerLine')}>
