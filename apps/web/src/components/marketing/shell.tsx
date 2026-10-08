@@ -19,7 +19,7 @@ async function Header({ active }: { active: MarketingPage }) {
     <header data-mkt-nav className="mkt-nav">
       <div className="mkt-wrap mkt-bar">
         <Link href="/" className="mkt-logo">
-          <Logo className="h-6" />
+          <Logo className="h-8 sm:h-9" />
         </Link>
         <nav aria-label="Main" className="mkt-links hidden items-center md:flex">
           {NAV.map((n) => (
@@ -116,7 +116,7 @@ async function Footer() {
         <div className="mkt-fgrid">
           <div>
             <div className="mkt-logo">
-              <Logo className="h-6" />
+              <Logo className="h-8" />
             </div>
             <p className="mt-3 max-w-[280px]">Software for massage spas in the UAE. Made in Dubai.</p>
           </div>
