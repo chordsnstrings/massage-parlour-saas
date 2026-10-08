@@ -151,6 +151,7 @@ export const settings = {
       'Connect your accounts so the AI agents can answer DMs and comments, publish posts and reply to Google reviews — always within the rules you set in AI studio.',
     status: {
       notConfigured: 'Not configured yet',
+      notConfiguredShort: 'Not configured',
       notConnected: 'Not connected',
       reconnect: 'Reconnect needed',
       chooseLocation: 'Choose location',

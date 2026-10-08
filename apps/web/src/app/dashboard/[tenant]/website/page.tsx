@@ -481,7 +481,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                   {hosts.length === 0 ? (
                     <ListRow
                       icon={<Globe className="size-4" />}
-                      title={host}
+                      title={<span className="break-all">{host}</span>}
                       body={t('website.domainFree')}
                       end={
                         <Pill tone="ok" dot>
@@ -494,7 +494,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                       <ListRow
                         key={d.id}
                         icon={<Globe className="size-4" />}
-                        title={d.hostname}
+                        title={<span className="break-all">{d.hostname}</span>}
                         body={[
                           enumLabel(t, 'domainKind', d.kind),
                           d.isPrimary ? t('website.primary') : null,

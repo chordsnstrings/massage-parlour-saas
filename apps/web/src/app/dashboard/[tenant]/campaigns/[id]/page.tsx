@@ -1,7 +1,7 @@
 import { campaigns, clients, outbox, promoCodes, segments, withTenant } from '@spa/db'
 import { campaignBookedClients, campaignResults } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
-import { ArrowLeft, CalendarCheck, Info, MessageCircle, Pencil } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, Clock, Info, MessageCircle, Pencil, Send, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -184,11 +184,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ tenan
           <Grid cols="g4">
             <Kpi
               label={t('campaigns.stats.recipients')}
+              icon={<Users />}
               value={fmt.number(c.recipients)}
               sub={t('campaigns.stats.ofSegment', { count: fmt.number(c.stats.matched ?? c.recipients) })}
             />
             <Kpi
               label={t('campaigns.stats.sent')}
+              icon={<Send />}
               value={fmt.number(r.sent)}
               sub={
                 r.skipped
@@ -198,11 +200,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ tenan
             />
             <Kpi
               label={t('campaigns.stats.waiting')}
+              icon={<Clock />}
               value={fmt.number(r.pending)}
               sub={t('campaigns.stats.waitingHint')}
             />
             <Kpi
               label={t('campaigns.stats.bookedShort')}
+              icon={<CalendarCheck />}
               value={fmt.number(r.bookedClients)}
               sub={
                 r.reached

@@ -150,6 +150,7 @@ export const settings: Messages['settings'] = {
       'เชื่อมต่อบัญชีเพื่อให้ AI ตอบ DM และคอมเมนต์ โพสต์คอนเทนต์ และตอบรีวิว Google — ภายใต้กฎที่คุณตั้งไว้ใน AI studio เสมอ',
     status: {
       notConfigured: 'ยังไม่ได้ตั้งค่า',
+      notConfiguredShort: 'ไม่ได้ตั้งค่า',
       notConnected: 'ยังไม่ได้เชื่อมต่อ',
       reconnect: 'ต้องเชื่อมต่อใหม่',
       chooseLocation: 'เลือกสถานที่',

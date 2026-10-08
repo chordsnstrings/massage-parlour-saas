@@ -46,7 +46,7 @@ export async function InstagramCard({
     text: t.maybe(`settings.integrations.ig.notices.${noticeKey}`) ?? known.text,
   }
   const badge = !configured
-    ? { tone: 'neutral' as const, label: t('settings.integrations.status.notConfigured') }
+    ? { tone: 'neutral' as const, label: t('settings.integrations.status.notConfiguredShort') }
     : account?.status === 'connected'
       ? { tone: 'ok' as const, label: t('settings.integrations.status.connected') }
       : account?.status === 'expired'

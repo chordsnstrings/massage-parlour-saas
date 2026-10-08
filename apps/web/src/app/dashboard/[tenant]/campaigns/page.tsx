@@ -2,7 +2,7 @@ import type { Translator } from '@spa/core/i18n'
 import { campaigns, segments, withTenant } from '@spa/db'
 import { campaignResults, resolveSegment } from '@spa/services'
 import { desc, isNotNull, isNull } from 'drizzle-orm'
-import { Archive, Megaphone, Plus, Sparkles, Users } from 'lucide-react'
+import { Archive, CalendarCheck, Clock, Megaphone, Plus, Send, Sparkles, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -244,16 +244,19 @@ export default async function CampaignsPage({
           <Grid cols="g3">
             <Kpi
               label={t('campaigns.stats.waiting')}
+              icon={<Clock />}
               value={fmt.number(totals.pending)}
               sub={t('campaigns.stats.waitingHint')}
             />
             <Kpi
               label={t('campaigns.stats.sent')}
+              icon={<Send />}
               value={fmt.number(totals.sent)}
               sub={t('campaigns.stats.sentHint')}
             />
             <Kpi
               label={t('campaigns.stats.booked')}
+              icon={<CalendarCheck />}
               value={fmt.number(totals.booked)}
               sub={
                 totals.reached
