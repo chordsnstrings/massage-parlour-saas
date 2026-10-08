@@ -15,7 +15,10 @@ export const permissions: Messages['permissions'] = {
     },
     services: { label: 'บริการและห้อง', actions: { manage: 'จัดการบริการ ห้อง และทรัพยากร' } },
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },
-    inventory: { label: 'คลังสินค้า', actions: { manage: 'จัดการสต็อก' } },
+    inventory: {
+      label: 'คลังสินค้า',
+      actions: { manage: 'จัดการสต็อกและคลังกลาง', purchase: 'บันทึกการซื้อ' },
+    },
     marketing: {
       label: 'WhatsApp และการตลาด',
       actions: { send: 'ส่งข้อความ WhatsApp', campaigns: 'สร้างแคมเปญ' },

@@ -30,6 +30,7 @@ import { overview } from './en/overview'
 import { packages } from './en/packages'
 import { payroll } from './en/payroll'
 import { permissions } from './en/permissions'
+import { purchases } from './en/purchases'
 import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
@@ -40,6 +41,7 @@ import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
 import { validation } from './en/validation'
+import { warehouse } from './en/warehouse'
 import { website } from './en/website'
 import { ui } from './en-ui'
 
@@ -60,6 +62,8 @@ export const en = {
   services,
   packages,
   inventory,
+  purchases,
+  warehouse,
   team,
   staff,
   documents,

@@ -342,7 +342,7 @@ async function importProducts(
           .insert(stockLevels)
           .values({ tenantId, branchId: ctx.branchId, productId: made!.id, qty: p.stock.toString() })
           .onConflictDoUpdate({
-            target: [stockLevels.branchId, stockLevels.productId],
+            target: [stockLevels.tenantId, stockLevels.branchId, stockLevels.productId],
             set: { qty: sql`${stockLevels.qty} + ${p.stock}` },
           })
         openingValue += p.stock * (p.costAed ?? 0)

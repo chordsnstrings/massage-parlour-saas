@@ -330,7 +330,7 @@ export async function exportRows(
       p.priceAed,
       p.lowStockAt,
       p.active ? 'yes' : 'no',
-      branchId ? (l.branch.get(branchId) ?? '') : '',
+      branchId ? (l.branch.get(branchId) ?? '') : qty != null ? 'Warehouse' : '',
       qty ?? '0',
     ]),
   ]

@@ -899,8 +899,11 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
 - **R7 Meta MCP for AI:** AI agents reach Instagram / WhatsApp through a Meta MCP server. Customer WhatsApp stays
   click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).
-- **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt.
-- **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases.
+- **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):
+  Services & menu → Purchases; one ledger entry per purchase (stock → 1200, rest → 6150/6160/6170/6900 by category,
+  input VAT 1300); void = reversal + stock back out (CODEMAP "Stock locations + purchases").
+- **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases. Built (W3):
+  warehouse = `branch_id NULL` stock location; transfers move quantity only (no ledger); per-location low-stock + counts.
 - **R10 Exports:** every CSV export becomes Excel (.xlsx) in an official/clean format. Exception: WPS SIF keeps its
   mandated bank format.
 - **R11 Billing page (spa):** price + the 12-month schedule, each month Paid (green dot) / Must pay (red dot). Overdue →

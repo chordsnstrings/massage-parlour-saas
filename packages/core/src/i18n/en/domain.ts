@@ -95,6 +95,13 @@ export const domain = {
   giftCardInvalid: 'This gift card is no longer valid',
   giftCardBalance: 'Only AED {amount} left on this gift card',
   // Inventory, payroll, ledger
+  // Purchases, warehouse
+  supplierNotFound: 'Supplier not found',
+  purchaseNotFound: 'Purchase not found',
+  purchaseVoided: 'This purchase was already voided',
+  vatOverSubtotal: 'VAT is more than the subtotal',
+  stockOnlyThere: 'Only {qty} of “{item}” in stock there',
+  twoLocations: 'Choose two different locations',
   quantityPositive: 'Quantity must be positive',
   alreadyFinalised: 'Already finalised',
   unbalancedEntry: 'Unbalanced entry ({debit} ≠ {credit})',

@@ -43,7 +43,7 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
     const [branch] = await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1)
     return {
       products: await tx
-        .select({ p: products, qty: stockLevels.qty })
+        .select({ p: products, qty: stockLevels.qty, lowAt: stockLevels.lowStockAt })
         .from(products)
         .leftJoin(
           stockLevels,
@@ -65,7 +65,12 @@ export default async function InventoryPage({ params }: { params: Promise<{ tena
         .limit(15),
     }
   })
-  const rows = data.products.map((r) => ({ ...r.p, qty: Number(r.qty ?? 0) }))
+  // A branch's own low-stock level (warehouse screen sets these per location) wins over the product's.
+  const rows = data.products.map((r) => ({
+    ...r.p,
+    lowStockAt: r.lowAt ?? r.p.lowStockAt,
+    qty: Number(r.qty ?? 0),
+  }))
   const low = rows.filter((r) => r.lowStockAt != null && r.qty <= Number(r.lowStockAt))
   const stockValue = rows.reduce((s, r) => s + Math.max(0, r.qty) * Number(r.costAed), 0)
   const variantName = new Map(

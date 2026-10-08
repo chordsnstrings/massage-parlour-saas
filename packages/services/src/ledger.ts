@@ -29,6 +29,9 @@ export const DEFAULT_CHART: { code: string; name: string; type: AccountType }[] 
   { code: '6000', name: 'Salaries', type: 'expense' },
   { code: '6010', name: 'Commissions', type: 'expense' },
   { code: '6100', name: 'Rent', type: 'expense' },
+  { code: '6150', name: 'Cleaning supplies', type: 'expense' },
+  { code: '6160', name: 'Spa materials & supplies', type: 'expense' },
+  { code: '6170', name: 'Small equipment', type: 'expense' },
   { code: '6200', name: 'Utilities (DEWA, internet)', type: 'expense' },
   { code: '6300', name: 'Marketing', type: 'expense' },
   { code: '6400', name: 'Staff accommodation & transport', type: 'expense' },
@@ -285,6 +288,9 @@ export async function postRefund(
   })
 }
 
+/** Account an expense or purchase is paid from (the spa's card settles from the bank; owner = equity). */
+export const EXPENSE_CREDIT = { cash: '1000', bank: '1020', card: '1020', owner: '3000' } as const
+
 export async function postExpense(
   tx: Tx,
   x: {
@@ -300,7 +306,7 @@ export async function postExpense(
     memo?: string
   },
 ) {
-  const credit = { cash: '1000', bank: '1020', card: '1020', owner: '3000' }[x.paidVia]
+  const credit = EXPENSE_CREDIT[x.paidVia]
   return post(tx, {
     tenantId: x.tenantId,
     branchId: x.branchId,
