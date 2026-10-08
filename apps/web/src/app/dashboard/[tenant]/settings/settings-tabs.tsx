@@ -6,7 +6,15 @@ import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext } from '@/server/access'
 
-export type SettingsTab = 'profile' | 'hours' | 'intake' | 'integrations' | 'domains' | 'data' | 'audit'
+export type SettingsTab =
+  | 'profile'
+  | 'hours'
+  | 'intake'
+  | 'integrations'
+  | 'domains'
+  | 'widget'
+  | 'data'
+  | 'audit'
 
 /** Settings sub-pages as in-page tabs (crm-spec §7: settings subpages → Settings tabs), filtered by permission. */
 export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: SettingsTab }) {
@@ -22,6 +30,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
     intake: manage,
     integrations: manage || can(ctx, 'ai.manage'),
     domains: manage,
+    widget: manage,
     data,
     audit: can(ctx, 'audit.view'),
   }
@@ -31,6 +40,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
     intake: 'settings/intake',
     integrations: 'settings/integrations',
     domains: 'settings/domains',
+    widget: 'settings/widget',
     data: 'settings/data',
     audit: 'settings/audit',
   }
@@ -38,7 +48,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
     .filter((k) => show[k])
     .map((k) => ({
       value: k,
-      label: k === 'audit' ? t('audit.tab') : t(`settings.tabs.${k}`),
+      label: k === 'audit' ? t('audit.tab') : k === 'widget' ? t('widget.tab') : t(`settings.tabs.${k}`),
       href: appPath(`/${ctx.tenant.slug}/${path[k]}`),
     }))
   if (items.length < 2) return null

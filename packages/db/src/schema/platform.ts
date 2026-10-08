@@ -381,3 +381,17 @@ export const domainOrders = pgTable(
     ...tenantPolicies(),
   ],
 )
+
+/** Ops job outcomes the super-admin console shows (B6: monthly restore drill). Platform-only (like platform_settings); no tenant data. Spa job logs are the tenant `job_runs` (B3). */
+export const platformJobRuns = pgTable(
+  'platform_job_runs',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    job: text('job').notNull(),
+    status: text('status', { enum: ['ok', 'failed', 'skipped'] }).notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('platform_job_runs_job_finished').on(t.job, t.finishedAt), ...platformPolicies()],
+)

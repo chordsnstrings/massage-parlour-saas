@@ -7,6 +7,7 @@ import {
   conversationMessages,
   conversations,
   type Db,
+  instagramReplyQueue,
   platformDb,
   socialAccounts,
   socialPosts,
@@ -14,7 +15,7 @@ import {
   tenants,
   withTenant,
 } from '@spa/db'
-import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
 import { automationOnSql } from './automations'
 import { findOrCreateClient } from './clients'
 import { DomainError } from './errors'
@@ -239,7 +240,17 @@ export async function ingestInstagramEvents(events: InstagramEvent[], o: SocialO
       owners.set(ev.accountId, tenantsOf)
     }
     for (const { tenantId, live } of tenantsOf) {
-      const item = await withTenant(tenantId, (tx) => storeInbound(tx, tenantId, ev), appOf(o))
+      const item = await withTenant(
+        tenantId,
+        async (tx) => {
+          const stored = await storeInbound(tx, tenantId, ev)
+          // Same transaction as the message: the worker's instagram-reply job picks it up (never lost on a restart).
+          if (stored && live)
+            await tx.insert(instagramReplyQueue).values({ tenantId, messageId: stored.messageId }).onConflictDoNothing()
+          return stored
+        },
+        appOf(o),
+      )
       if (item && live) items.push(item)
     }
   }
@@ -293,6 +304,132 @@ async function storeInbound(tx: Tx, tenantId: string, ev: InstagramEvent): Promi
 }
 
 /** What the agent needs for one inbound message: the thread state and prior turns (sent messages only). */
+/** instagram-reply backoff: 30 s, 1 min, 2 min … capped at 30 min; after 5 failed tries the row is marked failed. */
+export const INSTAGRAM_REPLY_RETRY = { retryLimit: 5, retryDelay: 30, retryDelayMax: 1800 } as const
+/** A claimed row is leased this long (a crashed worker's rows come back after it). */
+const REPLY_LEASE_MS = 5 * 60_000
+
+/** Tenants with due instagram-reply rows (cross-tenant discovery for the worker; platform role). */
+export async function tenantsWithDueReplies(now = new Date(), o: SocialOpts = {}) {
+  const rows = await (o.platform ?? platformDb())
+    .selectDistinct({ tenantId: instagramReplyQueue.tenantId })
+    .from(instagramReplyQueue)
+    .where(and(isNull(instagramReplyQueue.failedAt), lte(instagramReplyQueue.nextAt, now)))
+  return rows.map((r) => r.tenantId)
+}
+
+/** Claims up to `limit` due rows for one spa (lease via next_at, SKIP LOCKED) and returns them as agent items. */
+export async function claimDueReplies(tenantId: string, now = new Date(), limit = 20, o: SocialOpts = {}) {
+  return withTenant(
+    tenantId,
+    async (tx) => {
+      const due = await tx
+        .select({ messageId: instagramReplyQueue.messageId })
+        .from(instagramReplyQueue)
+        .where(and(isNull(instagramReplyQueue.failedAt), lte(instagramReplyQueue.nextAt, now)))
+        .orderBy(asc(instagramReplyQueue.createdAt))
+        .limit(limit)
+        .for('update', { skipLocked: true })
+      if (!due.length) return []
+      const ids = due.map((d) => d.messageId)
+      await tx
+        .update(instagramReplyQueue)
+        .set({ nextAt: new Date(now.getTime() + REPLY_LEASE_MS) })
+        .where(inArray(instagramReplyQueue.messageId, ids))
+      const rows = await tx
+        .select({
+          messageId: conversationMessages.id,
+          conversationId: conversationMessages.conversationId,
+          channel: conversations.channel,
+          text: conversationMessages.text,
+          attempts: instagramReplyQueue.attempts,
+        })
+        .from(instagramReplyQueue)
+        .innerJoin(conversationMessages, eq(conversationMessages.id, instagramReplyQueue.messageId))
+        .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+        .where(inArray(instagramReplyQueue.messageId, ids))
+      return rows.map((r) => ({
+        item: {
+          tenantId,
+          conversationId: r.conversationId,
+          messageId: r.messageId,
+          channel: r.channel as Channel,
+          text: r.text,
+        } satisfies InboundItem,
+        attempts: r.attempts,
+      }))
+    },
+    appOf(o),
+  )
+}
+
+/** Done (answered, drafted or nothing to do): the row goes. */
+export async function finishReply(item: Pick<InboundItem, 'tenantId' | 'messageId'>, o: SocialOpts = {}) {
+  await withTenant(
+    item.tenantId,
+    (tx) => tx.delete(instagramReplyQueue).where(eq(instagramReplyQueue.messageId, item.messageId)),
+    appOf(o),
+  )
+}
+
+/** A failed try: exponential backoff, or marked failed after the last retry (stays unread for staff). */
+export async function failReply(
+  item: Pick<InboundItem, 'tenantId' | 'messageId'>,
+  attempts: number,
+  error: string,
+  now = new Date(),
+  o: SocialOpts = {},
+) {
+  const n = attempts + 1
+  const { retryLimit, retryDelay, retryDelayMax } = INSTAGRAM_REPLY_RETRY
+  const delay = Math.min(retryDelay * 2 ** (n - 1), retryDelayMax) * 1000
+  await withTenant(
+    item.tenantId,
+    (tx) =>
+      tx
+        .update(instagramReplyQueue)
+        .set({
+          attempts: n,
+          lastError: error.slice(0, 200),
+          nextAt: new Date(now.getTime() + delay),
+          failedAt: n >= retryLimit ? now : null,
+        })
+        .where(eq(instagramReplyQueue.messageId, item.messageId)),
+    appOf(o),
+  )
+  return { attempts: n, failed: n >= retryLimit }
+}
+
+/**
+ * True when the thread already has a spa-side message (bot, staff or AI draft) at or after this inbound message —
+ * the instagram-reply job's idempotency check, so a retried or duplicated job never answers twice.
+ */
+export async function inboundAnswered(item: InboundItem, o: SocialOpts = {}) {
+  return withTenant(
+    item.tenantId,
+    async (tx) => {
+      const [msg] = await tx
+        .select({ createdAt: conversationMessages.createdAt })
+        .from(conversationMessages)
+        .where(eq(conversationMessages.id, item.messageId))
+      if (!msg) return true
+      const [later] = await tx
+        .select({ id: conversationMessages.id })
+        .from(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, item.conversationId),
+            ne(conversationMessages.sender, 'customer'),
+            gte(conversationMessages.createdAt, msg.createdAt),
+          ),
+        )
+        .limit(1)
+      return Boolean(later)
+    },
+    appOf(o),
+  )
+}
+
 export async function loadAgentTurn(item: InboundItem, o: SocialOpts = {}) {
   return withTenant(
     item.tenantId,

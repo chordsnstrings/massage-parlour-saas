@@ -144,6 +144,8 @@ const bookingInput = z.object({
   notes: z.string().trim().max(500).optional().default(''),
   /** Honeypot: humans never see this field. */
   website: z.string().optional().default(''),
+  /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
+  via: z.enum(['widget']).optional(),
   lang: locale,
 })
 
@@ -262,7 +264,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       action: 'booking.created',
       entity: 'booking',
       entityId: result.bookingId,
-      data: { ref: result.done.ref, source: 'online' },
+      data: { ref: result.done.ref, source: 'online', ...(v.via ? { via: v.via } : {}) },
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)

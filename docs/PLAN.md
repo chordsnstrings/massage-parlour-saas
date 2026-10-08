@@ -758,8 +758,10 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
 ### 14.2 P2/P3 implementation decisions (recorded at integration)
 - **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
   `conversation_messages.error`; `conversations.read_at` drives the unread dot; the inbox polls every 20 s. Each comment is
-  its own conversation. Autopilot replies run in `after()` in the web process (not durable across a restart — move to a
-  pg-boss job if that matters). Approve mode creates *pending* bookings the spa confirms.
+  its own conversation. Autopilot replies run in the worker job `instagram-reply` (B6, 2026-10-08, every minute): the webhook stores the
+  message + an `instagram_reply_queue` row (RLS, PK = message id → idempotent) in one transaction; the job claims due
+  rows (lease + SKIP LOCKED), answers, deletes; failures back off 30 s → 30 min, give up after 5 (`failed_at`). The web
+  app has no pg-boss, no owner URL and no `after()` path. Approve mode creates *pending* bookings the spa confirms.
 - **Campaigns:** the 7-day cap counts other campaigns' messages within ±7 days of the send (skipped ones ignored); max 500
   recipients; result = non-cancelled bookings within 14 days of a sent/opened message; archiving withdraws unsent messages.
   Segments always exclude never-visited clients and clients tagged `no-marketing`. Campaign messages are outbox kind `custom`
@@ -903,6 +905,8 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   B5.4 time clock + leave (`/timeclock` PIN kiosk, timesheet actual vs planned with manager fixes, leave requests
   annual/sick/unpaid approved by managers; approved leave blocks slots; unpaid days deducted from salaried pay,
   worked hours on payroll). Details: CODEMAP "Service invariants". Thai copy needs native review.*
+  clock + leave, embeddable booking widget (✅ X8: `public/widget.js` + `/book/embed`, CODEMAP "Online booking") · B6 restore
+  drill, Instagram autopilot as a pg-boss job (✅ X8: worker `restore-drill` + `instagram-reply`, migration 0027: platform-only `platform_job_runs` + tenant `instagram_reply_queue`).
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 

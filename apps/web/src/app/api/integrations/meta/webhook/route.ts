@@ -1,6 +1,5 @@
-import { respondToInstagram } from '@spa/ai'
 import { constantTimeEqual, ingestInstagramWebhook, metaConfig, verifyMetaSignature } from '@spa/services'
-import { after, type NextRequest } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +18,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * DM + comment events. The signature covers the raw body; storing the messages is quick and happens before we answer
- * (so Meta retries if the database is down); the AI turn runs after the 200 response.
+ * (so Meta retries if the database is down); the AI turn is the worker's `instagram-reply` job (no work in the web
+ * process, no pg-boss or owner role here).
  */
 export async function POST(req: NextRequest) {
   const cfg = metaConfig()
@@ -33,27 +33,13 @@ export async function POST(req: NextRequest) {
   } catch {
     return text('Bad payload', 400)
   }
-  let items: Awaited<ReturnType<typeof ingestInstagramWebhook>>
   try {
-    items = await ingestInstagramWebhook(body)
+    // Stores the messages and, for live spas, their instagram_reply_queue rows in one transaction; the worker's
+    // `instagram-reply` job (every minute, retries with backoff) produces the AI turns.
+    await ingestInstagramWebhook(body)
   } catch (e) {
     console.error('instagram webhook: ingest failed', e instanceof Error ? e.message : 'unknown error')
     return text('Try again', 500)
-  }
-  if (items.length) {
-    after(async () => {
-      for (const item of items) {
-        try {
-          await respondToInstagram(item)
-        } catch (e) {
-          // The message stays unread in the inbox for staff; no tokens are ever part of these errors.
-          console.error('instagram webhook: agent turn failed', {
-            tenantId: item.tenantId,
-            error: e instanceof Error ? e.message.slice(0, 200) : 'unknown error',
-          })
-        }
-      }
-    })
   }
   return text('EVENT_RECEIVED', 200)
 }

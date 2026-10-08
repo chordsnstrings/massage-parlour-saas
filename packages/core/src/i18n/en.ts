@@ -52,6 +52,7 @@ import { validation } from './en/validation'
 import { waitlist } from './en/waitlist'
 import { warehouse } from './en/warehouse'
 import { website } from './en/website'
+import { widget } from './en/widget'
 import { ui } from './en-ui'
 
 export const en = {
@@ -89,6 +90,7 @@ export const en = {
   analytics,
   reviews,
   website,
+  widget,
   media,
   accounts,
   payroll,

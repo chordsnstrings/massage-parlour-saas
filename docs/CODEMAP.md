@@ -200,6 +200,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   3. `createBooking` with status `pending`, source `online`.
   4. `enqueueBookingMessage`.
   5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
+  5. Push to the spa via `after(notifyTenant)`.
+- **Embeddable widget (B5.5)**: `public/widget.js` (no deps, excluded from Biome like `t.js`) injects a button + iframe
+  modal; data attributes `data-spa`, `data-url` (spa site + `/book/embed`), `data-lang` en|ar, `data-color`, `data-text`.
+  Iframe route `site/[slug]/book/embed` + `domain/[hostname]/book/embed` = `BookingPage embed` (chrome-less
+  `BookingFlow`, noindex). postMessage to the parent: `spa-widget:resize` {height}, `spa-widget:booked` {ref,start,service}
+  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape). `next.config.ts` headers: only `/book/embed` and
+  `/s/:slug/book/embed` get `frame-ancestors *` and no X-Frame-Options; everything else stays SAMEORIGIN. Same
+  `bookOnline` (limits + honeypot) with `via: 'widget'` (audit data only; booking source stays `online`). Analytics
+  source `widget` comes from `?src=widget` (t.js: a tagged URL now starts a new session entry). Snippet:
+  Settings → Booking widget (`settings/widget`, i18n namespace `widget`). e2e `widget.spec.ts`.
 
 ## Service invariants (`packages/services`)
 
@@ -363,6 +373,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | Job | Schedule |
 |---|---|
 | `db-backup` (pg_dump → R2 when `R2_*` is set) | 03:30 |
+| `restore-drill` (latest R2 daily dump → scratch DB via `RESTORE_DRILL_ADMIN_URL` (CREATEDB; compose uses the postgres superuser) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
+| `instagram-reply` (DB queue `instagram_reply_queue`, RLS, PK = message id: the Meta webhook's `ingestInstagramWebhook` inserts the row in the message's transaction for live spas; the job finds spas with due rows (`tenantsWithDueReplies`, platform role), `claimDueReplies` (5-min lease, SKIP LOCKED), `inboundAnswered` skips threads already answered, `finishReply` deletes, `failReply` backs off 30 s ×2 … 30 min, `failed_at` after 5 tries. Web has no pg-boss / owner URL / `after()`) | every minute |
 | `analytics-rollup` | hourly at :07 |
 | `analytics-prune` | 04:20 |
 | `packages-expire` | 04:10 |
