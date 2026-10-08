@@ -1,7 +1,8 @@
 # spamanagement.ae — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 ✅, Phase 2 (every screen) next (§14.6);
+fix backlog F1–F3 ✅, F4–F8 open (§17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
 - Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
@@ -16,7 +17,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** while any item in PLAN §17 (F1–F8) is open, remind the owner in one line in the first
+- **Fix backlog reminder:** while any item in PLAN §17 (F1–F8; F1–F3 done) is open, remind the owner in one line in the first
   reply of every session and at the end of every task. Name the open items and the next one in order. Don't fix them
   until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
@@ -31,7 +32,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.
 - AI = BytePlus ModelArk, Seed 2.0 family by default; model IDs live in DB config (`ai_model_config`), never hard-coded.
-- Infra ≤ USD 50/month: one DO droplet (docker compose: web, worker, postgres, cloudflared) behind Cloudflare Free. No Redis.
+- Infra ≤ USD 50/month: one DO droplet (docker compose: postgres, migrate, web, worker, caddy — no cloudflared in the running stack) behind Cloudflare Free. No Redis.
 - Price: AED 24,000 per spa per year (manual cash/bank-transfer billing).
 - Site builder: Puck-based drag & drop, 8 templates, granular per-device style overrides (PLAN.md §11).
   **Website Studio:** only super-admins edit sites; spas review, approve and request changes (PLAN.md §14.4).

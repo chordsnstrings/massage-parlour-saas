@@ -1,6 +1,6 @@
 # Code map
 
-Where things live and how a request flows. Verified against the code on 2026-10-08 (commit `1f6a349`).
+Where things live and how a request flows. Verified against the code on 2026-10-08 (re-checked at commit `6992d74`).
 `docs/PLAN.md` stays the source of truth for product decisions; update this file when the structure changes.
 
 ## Workspace (pnpm + Turborepo)
@@ -272,7 +272,7 @@ Integration jobs do nothing until their credentials are configured.
 ## Known gaps (verified 2026-10-08, not fixed yet)
 
 Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
-in **PLAN §17** (items F1–F7 match the numbers below).
+in **PLAN §17** (items F1–F8 match the numbers below; 1–3 fixed, 4–8 open).
 
 1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
    before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
