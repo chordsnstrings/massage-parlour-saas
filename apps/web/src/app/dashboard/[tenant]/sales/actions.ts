@@ -14,7 +14,7 @@ import { and, asc, eq, gt, ilike, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone } from '@/components/calendar/time'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { pickBranch } from './data'
@@ -34,7 +34,7 @@ const optionalUuid = z
 const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/sales`, 'layout')
 
 const handle = (e: unknown): ActionResult => {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   throw e
 }
 

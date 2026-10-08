@@ -28,11 +28,17 @@ export function DataTable<T>({
   return (
     <>
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full text-sm">
+        <table className="w-full text-[length:var(--ui-td-fs,0.875rem)]">
           <thead>
-            <tr className="border-b text-left text-xs font-medium uppercase tracking-[0.06em] text-muted">
+            <tr className="border-b text-left text-[length:var(--ui-th-fs,0.75rem)] font-medium uppercase tracking-[0.06em] text-muted">
               {columns.map((c) => (
-                <th key={c.key} className={cn('px-6 py-3 font-medium', c.className)}>
+                <th
+                  key={c.key}
+                  className={cn(
+                    'px-[var(--ui-cell-px,1.5rem)] py-[var(--ui-th-py,0.75rem)] font-medium',
+                    c.className,
+                  )}
+                >
                   {c.header}
                 </th>
               ))}
@@ -40,9 +46,18 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={rowKey(row)} className="border-b transition-colors last:border-0 hover:bg-subtle/50">
+              <tr
+                key={rowKey(row)}
+                className="border-b transition-colors last:border-0 hover:bg-[var(--ui-row-hover,color-mix(in_oklab,var(--subtle)_50%,transparent))]"
+              >
                 {columns.map((c) => (
-                  <td key={c.key} className={cn('px-6 py-3.5 align-middle', c.className)}>
+                  <td
+                    key={c.key}
+                    className={cn(
+                      'px-[var(--ui-cell-px,1.5rem)] py-[var(--ui-cell-py,0.875rem)] align-middle',
+                      c.className,
+                    )}
+                  >
                     {c.cell(row)}
                   </td>
                 ))}

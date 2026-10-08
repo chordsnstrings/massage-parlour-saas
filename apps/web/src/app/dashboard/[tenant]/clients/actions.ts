@@ -15,7 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
 import { isSignaturePath, parseTags } from '@/components/clients/shared'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { ownStaffId } from '../calendar/data'
@@ -359,7 +359,7 @@ export async function submitIntakeAction(
   } catch (e) {
     if (e instanceof FieldErrors)
       return fail(ar ? 'يرجى مراجعة الحقول المحددة' : 'Please check the highlighted fields.', e.fields)
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
 }

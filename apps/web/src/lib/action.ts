@@ -1,20 +1,41 @@
+import { createTranslator, en, type MessageKey, type MessageRef, type Params } from '@spa/core/i18n'
 import type { ZodError } from 'zod'
 
+/**
+ * Server-action result. `message`/`error` are English (logs, tests); when the text came from the i18n catalogue,
+ * `key` + `params` travel too and the client renders them in the viewer's language (`resultText`, i18n/client.tsx).
+ * Field errors may be plain text or catalogue keys (Phase 2 turns zod messages into keys).
+ */
 export type ActionResult =
-  | { ok: true; message?: string; data?: Record<string, unknown> }
-  | { ok: false; error: string; fieldErrors?: Record<string, string> }
+  | { ok: true; message?: string; key?: MessageKey; params?: Params; data?: Record<string, unknown> }
+  | { ok: false; error: string; key?: MessageKey; params?: Params; fieldErrors?: Record<string, string> }
   | null
 
-export const ok = (message?: string, data?: Record<string, unknown>): ActionResult => ({
-  ok: true,
-  message,
-  data,
+/** Plain text, a catalogue key (`'errors.forbidden'`) or a key with params. */
+export type Msg = string | MessageRef
+
+const english = createTranslator('en', en)
+const resolve = (m: Msg): { text: string; key?: MessageKey; params?: Params } => {
+  if (typeof m !== 'string') return { text: english(m.key, m.params), key: m.key, params: m.params }
+  return english.has(m) ? { text: english(m), key: m } : { text: m }
+}
+const withKey = (r: { key?: MessageKey; params?: Params }) => ({
+  ...(r.key ? { key: r.key } : {}),
+  ...(r.params ? { params: r.params } : {}),
 })
-export const fail = (error: string, fieldErrors?: Record<string, string>): ActionResult => ({
-  ok: false,
-  error,
-  fieldErrors,
-})
+
+export const ok = (message?: Msg, data?: Record<string, unknown>): ActionResult => {
+  const r = message === undefined ? undefined : resolve(message)
+  return { ok: true, message: r?.text, ...(r ? withKey(r) : {}), data }
+}
+export const fail = (error: Msg, fieldErrors?: Record<string, string>): ActionResult => {
+  const r = resolve(error)
+  return { ok: false, error: r.text, ...withKey(r), fieldErrors }
+}
+
+/** A services `DomainError` → failure in the viewer's language when the error names a catalogue message. */
+export const failDomain = (e: { message: string; i18n?: MessageRef }, fieldErrors?: Record<string, string>) =>
+  fail(e.i18n ?? e.message, fieldErrors)
 
 export function fromZod(error: ZodError): ActionResult {
   const fieldErrors: Record<string, string> = {}
@@ -22,7 +43,7 @@ export function fromZod(error: ZodError): ActionResult {
     const key = issue.path.join('.')
     if (key && !fieldErrors[key]) fieldErrors[key] = issue.message
   }
-  return fail('Please check the highlighted fields.', fieldErrors)
+  return fail('errors.checkFields', fieldErrors)
 }
 
 /** FormData → plain object (checkbox groups with the same name become arrays). */

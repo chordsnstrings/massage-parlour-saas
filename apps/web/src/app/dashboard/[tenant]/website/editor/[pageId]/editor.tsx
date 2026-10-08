@@ -258,7 +258,7 @@ export function SiteEditor(props: EditorProps) {
 
   const permissions = props.canDesign ? {} : { drag: false, duplicate: false, delete: false, insert: false }
   return (
-    <div className="site-editor fixed inset-0 z-50 bg-bg text-fg">
+    <div className="site-editor fixed inset-0 z-50 bg-bg text-fg" data-crm-off>
       <EditorContext.Provider value={{ locale, device, ai }}>
         <EditorServicesContext.Provider value={services}>
           <ChromeContext.Provider value={chrome}>

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -21,6 +22,7 @@ import {
 import { createdAt, id, updatedAt } from './_columns'
 import { appRole, currentTenantId, platformPolicies, tenantPolicies } from './_rls'
 import { user } from './auth'
+import { storedFiles } from './files'
 
 export const tenantStatus = pgEnum('tenant_status', [
   'trial',
@@ -119,6 +121,8 @@ export const tenants = pgTable(
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
     /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
+    /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
+    logoFileId: uuid('logo_file_id').references((): AnyPgColumn => storedFiles.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

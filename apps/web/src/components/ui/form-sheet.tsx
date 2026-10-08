@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { ActionForm, SubmitButton } from './form'
 import { Sheet } from './sheet'
@@ -10,7 +11,7 @@ export function FormSheet({
   description,
   trigger,
   action,
-  submitLabel = 'Save',
+  submitLabel,
   children,
   className,
 }: {
@@ -23,6 +24,7 @@ export function FormSheet({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  const t = useT()
   return (
     <Sheet
       open={open}
@@ -34,7 +36,7 @@ export function FormSheet({
     >
       <ActionForm action={action} onSuccess={() => setOpen(false)} className="space-y-5">
         {children}
-        <SubmitButton className="w-full sm:w-auto">{submitLabel}</SubmitButton>
+        <SubmitButton className="w-full sm:w-auto">{submitLabel ?? t('ui.save')}</SubmitButton>
       </ActionForm>
     </Sheet>
   )

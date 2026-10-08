@@ -37,8 +37,13 @@ export type PutFile = {
 
 /** Stores a file (inside the caller's tenant transaction) and returns its row (without bytes). */
 export async function putFile(tx: Tx, f: PutFile) {
-  if (f.bytes.length === 0) throw new DomainError('The file is empty')
-  if (f.bytes.length > MAX_FILE_BYTES) throw new DomainError('Files can be up to 8 MB')
+  if (f.bytes.length === 0)
+    throw new DomainError('The file is empty', 'invalid', { key: 'errors.file.empty' })
+  if (f.bytes.length > MAX_FILE_BYTES)
+    throw new DomainError('Files can be up to 8 MB', 'invalid', {
+      key: 'errors.file.tooLarge',
+      params: { size: '8 MB' },
+    })
   const bucket = s3()
   const [row] = await tx
     .insert(storedFiles)

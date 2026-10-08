@@ -3,6 +3,7 @@ import { memberBranches, members, platformAdmins, platformDb, roles, tenants, wi
 import { and, eq } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
+import { getT } from '@/i18n/server'
 import { requireUser } from './session'
 
 export type TenantRow = typeof tenants.$inferSelect
@@ -91,8 +92,8 @@ export const isWritable = (tenant: TenantRow) =>
 /** Common guard for tenant server actions. Returns an error message or null. */
 export async function guard(slug: string, permission: Permission) {
   const ctx = await requireMember(slug)
-  if (!can(ctx, permission)) return { ctx, error: "You don't have permission to do that." }
-  if (!isWritable(ctx.tenant)) return { ctx, error: 'This account is read-only. Please contact support.' }
+  if (!can(ctx, permission)) return { ctx, error: (await getT())('errors.forbidden') }
+  if (!isWritable(ctx.tenant)) return { ctx, error: (await getT())('errors.readOnly') }
   return { ctx, error: null }
 }
 
@@ -107,7 +108,7 @@ export async function studioGuard(slug: string, permission: Permission) {
   if (!result.error && !(await isStudio(result.ctx)))
     return {
       ctx: result.ctx,
-      error: 'Your website is built by our studio team — send them a change request.',
+      error: (await getT())('errors.studioOnly'),
     }
   return result
 }

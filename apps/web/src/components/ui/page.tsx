@@ -13,11 +13,15 @@ export function PageHeader({
   eyebrow?: React.ReactNode
 }) {
   return (
-    <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-[var(--ui-header-mb,2rem)] flex flex-col gap-4 sm:mb-[var(--ui-header-mb-sm,2.5rem)] sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0 space-y-1.5">
         {eyebrow && <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">{eyebrow}</p>}
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{title}</h1>
-        {description && <p className="max-w-2xl text-[15px] text-muted">{description}</p>}
+        <h1 className="text-[length:var(--ui-title-fs,1.5rem)] font-semibold tracking-tight sm:text-[length:var(--ui-title-fs-sm,28px)]">
+          {title}
+        </h1>
+        {description && (
+          <p className="max-w-2xl text-[length:var(--ui-desc-fs,15px)] text-muted">{description}</p>
+        )}
       </div>
       {actions && (
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">{actions}</div>
@@ -28,7 +32,13 @@ export function PageHeader({
 
 /** Page body: consistent vertical rhythm and entrance animation. */
 export function PageBody({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <Reveal className={cn('space-y-6 sm:space-y-8', className)}>{children}</Reveal>
+  return (
+    <Reveal
+      className={cn('space-y-[var(--ui-stack,1.5rem)] sm:space-y-[var(--ui-stack-sm,2rem)]', className)}
+    >
+      {children}
+    </Reveal>
+  )
 }
 
 export function EmptyState({

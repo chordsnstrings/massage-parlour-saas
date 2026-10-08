@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useRef, useState, useTransition } from 'react'
+import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
@@ -26,6 +27,7 @@ export function ActionForm({
   onSuccess?: (result: Extract<ActionResult, { ok: true }>) => void
 }) {
   const [state, setState] = useState<ActionResult>(null)
+  const t = useT()
   const [pending, start] = useTransition()
   const ref = useRef<HTMLFormElement>(null)
   // One submission at a time: a double click lands before `pending` re-renders the button as disabled.
@@ -44,12 +46,12 @@ export function ActionForm({
       // Feedback is fired here rather than in an effect so it survives the form unmounting after revalidation.
       if (!result) return
       if (result.ok) {
-        const msg = result.message ?? successMessage
+        const msg = resultText(t, result) ?? successMessage
         if (msg) toast.success(msg)
         if (resetOnSuccess) ref.current?.reset()
         onSuccess?.(result)
       } else {
-        toast.error(result.error)
+        toast.error(resultText(t, result) ?? result.error)
       }
     })
   }
@@ -87,7 +89,10 @@ export function SubmitButton({ children, ...props }: React.ComponentProps<typeof
 
 export function FieldError({ name }: { name: string }) {
   const { state } = useFormCtx()
-  const msg = state && !state.ok ? state.fieldErrors?.[name] : undefined
+  const t = useT()
+  const raw = state && !state.ok ? state.fieldErrors?.[name] : undefined
+  // Field messages may be catalogue keys (Phase 2 zod messages) or plain text.
+  const msg = t.maybe(raw) ?? raw
   if (!msg) return null
   return <p className="anim-fade-in text-[13px] text-danger">{msg}</p>
 }

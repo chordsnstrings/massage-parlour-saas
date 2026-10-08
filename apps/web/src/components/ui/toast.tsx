@@ -2,6 +2,7 @@
 import { CheckCircle2, CircleAlert, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
+import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 
 type Toast = { id: number; tone: 'success' | 'error'; text: string }
@@ -29,6 +30,7 @@ export const toast = {
 
 export function Toaster() {
   const [items, setItems] = useState<Toast[]>([])
+  const tr = useT()
   useEffect(() => {
     listeners.push(setItems)
     return () => {
@@ -61,7 +63,7 @@ export function Toaster() {
               type="button"
               onClick={() => dismiss(t.id)}
               className="text-muted hover:text-fg"
-              aria-label="Dismiss"
+              aria-label={tr('ui.dismiss')}
             >
               <X className="size-4" strokeWidth={1.5} />
             </button>

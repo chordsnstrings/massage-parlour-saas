@@ -844,6 +844,33 @@ until `spamanagement.ae` is registered.
 - Phases (one PR each, owner approves merges): 1 shell + tokens + i18n + logo + menu · 2 every screen redesigned and
   translated · 3 new: Bookings list, Automations, Coming next, global search, notifications, Ask AI, audit-log viewer,
   calendar week/month. Supersedes §12 for the spa dashboard and "dashboard AR P4".
+- **Phase 1 ✅ (2026-10-08)** — shell + tokens + i18n + logo + menu. Implementation decisions:
+  - **Tokens**: `apps/web/src/app/dashboard/[tenant]/crm.css`, imported by the tenant layout, which wraps the dashboard
+    in `.crm`. Tokens sit on `:root:has(.crm)` (so Radix portals + the root Toaster get them) and are lifted under
+    `[data-crm-off]` (site editor + preview overlays keep their chrome). Compact density = `--crm-*` + `--ui-*`
+    variables; the UI kit (`components/ui`) reads `--ui-*` hooks whose fallbacks are its old sizes, so super-admin and
+    auth pages render exactly as before. Light only; Inter + Noto Sans Thai (`@fontsource-variable/noto-sans-thai`,
+    the whole UI switches to it when `lang=th`; Thai text never below 12 px; ≥ 40 px controls on touch).
+  - **Shell**: `components/shell/spa-shell.tsx` (AppShell/BottomNav stay for super-admin). Phone ≤ 860 px = drawer
+    (supersedes §12's bottom tab bar for the spa dashboard). Menu per the design + Sales; pages without a design home
+    are grouped under their item as section tabs below the top bar (Inbox: WhatsApp · Instagram · Campaigns;
+    Services: services · packages · inventory; Team: staff · access · documents; Marketing: social posts · analytics
+    · AI studio; Website: site · media). AI studio sits under Marketing, not Settings, so AI roles without
+    `settings.manage` (receptionist) never get a Settings item. VAT & payroll → /payroll (VAT stays in Accounts until
+    Phase 2). Plan card: plan + renewal/trial end for `billing.view`; AI meter (month `ai_usage` ÷ `ai_budget_usd`)
+    also for AI roles. Home greeting moved from the page header to the top bar.
+  - **i18n API**: catalogue in `packages/core/src/i18n` (`en.ts` source, `th.ts` typed — missing key = type error;
+    test checks keys + placeholders). Server: `getT()` / `getI18n()` (`apps/web/src/i18n/server.ts`); client:
+    `useT()` / `useI18n()` under `<I18nProvider>`; formatting `fmt` (`createFormat`). Action results carry English
+    text + optional `key`/`params` (`ok`/`fail` accept keys; `failDomain(e)`; `DomainError(message, code, { key,
+    params })`); the client renders keys in the viewer's language. Phase 2 only adds keys/namespaces and converts
+    call sites (pages, `toast.error(r.error)` → `resultText`, zod messages → keys, worker/notify in the recipient's
+    locale).
+  - **Locale storage**: `user.locale` (`'en' | 'th'`, default `en`; Better Auth additional field, migration 0016) +
+    `spa_locale` cookie for pages before sign-in; read from the user row each request.
+  - **Logo**: `tenants.logo_file_id` → public `stored_files` (purpose `logo`, 512 px WebP), optional at sign-up and in
+    Settings; sidebar falls back to initials on the accent gradient.
+  - **Thai copy** is written to read naturally but needs a native Thai speaker's review before launch.
 
 ## 15. Working agreement (token-efficient, still thorough)
 

@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils'
 
 const control =
-  'w-full rounded-lg border bg-surface px-3 text-sm text-fg placeholder:text-muted/70 transition-[border-color,box-shadow] duration-150 hover:border-fg/20 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:opacity-60 aria-[invalid=true]:border-danger'
+  'w-full rounded-[var(--ui-ctl-radius,0.5rem)] border bg-[var(--ui-ctl-bg,var(--surface))] px-3 text-[length:var(--ui-ctl-fs,0.875rem)] text-fg placeholder:text-muted/70 transition-[border-color,box-shadow] duration-150 hover:border-fg/20 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:opacity-60 aria-[invalid=true]:border-danger'
 
 export function Input({ className, ...props }: React.ComponentProps<'input'>) {
-  return <input className={cn(control, 'h-10', className)} {...props} />
+  return <input className={cn(control, 'h-[var(--ui-ctl-h,2.5rem)]', className)} {...props} />
 }
 
 export function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
@@ -16,7 +16,7 @@ export function Select({ className, ...props }: React.ComponentProps<'select'>) 
     <select
       className={cn(
         control,
-        "h-10 appearance-none bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b6a66' stroke-width='1.5'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pe-9",
+        "h-[var(--ui-ctl-h,2.5rem)] appearance-none bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b6a66' stroke-width='1.5'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pe-9",
         className,
       )}
       {...props}
@@ -31,6 +31,14 @@ export function Checkbox({ className, ...props }: Omit<React.ComponentProps<'inp
 }
 
 export function Label({ className, ...props }: React.ComponentProps<'label'>) {
-  // biome-ignore lint/a11y/noLabelWithoutControl: htmlFor is passed by callers
-  return <label className={cn('text-[13px] font-medium text-fg', className)} {...props} />
+  return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: htmlFor is passed by callers
+    <label
+      className={cn(
+        'text-[length:var(--ui-label-fs,13px)] font-medium text-[color:var(--ui-label-color,var(--fg))]',
+        className,
+      )}
+      {...props}
+    />
+  )
 }

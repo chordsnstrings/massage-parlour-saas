@@ -85,8 +85,12 @@ function assertImage(input: Uint8Array): ImageType {
   const type = sniffImageType(input)
   if (type) return type
   if (looksLikeSvg(input))
-    throw new MediaError('SVG files aren’t supported — please upload a JPG, PNG or WebP.')
-  throw new MediaError('That file isn’t an image we can use (JPG, PNG, WebP, AVIF or GIF).')
+    throw new MediaError('SVG files aren’t supported — please upload a JPG, PNG or WebP.', 'invalid', {
+      key: 'errors.file.svg',
+    })
+  throw new MediaError('That file isn’t an image we can use (JPG, PNG, WebP, AVIF or GIF).', 'invalid', {
+    key: 'errors.file.notImage',
+  })
 }
 
 // Loaded lazily so importing @spa/services never loads the native module (worker bundle, unrelated tests).
@@ -105,8 +109,12 @@ export async function processImage(
   input: Buffer,
   opts: { maxEdge?: number; quality?: number } = {},
 ): Promise<ProcessedImage> {
-  if (input.length === 0) throw new MediaError('The file is empty')
-  if (input.length > MAX_UPLOAD_BYTES) throw new MediaError('Images can be up to 20 MB')
+  if (input.length === 0) throw new MediaError('The file is empty', 'invalid', { key: 'errors.file.empty' })
+  if (input.length > MAX_UPLOAD_BYTES)
+    throw new MediaError('Images can be up to 20 MB', 'invalid', {
+      key: 'errors.file.imageTooLarge',
+      params: { size: '20 MB' },
+    })
   const sourceType = assertImage(input)
   const sharp = await loadSharp()
   const maxEdge = opts.maxEdge ?? MAX_EDGE
@@ -117,11 +125,16 @@ export async function processImage(
       .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: opts.quality ?? WEBP_QUALITY, effort: 4 })
       .toBuffer({ resolveWithObject: true })
-    if (data.length > MAX_FILE_BYTES) throw new MediaError('That image is too large even after compression')
+    if (data.length > MAX_FILE_BYTES)
+      throw new MediaError('That image is too large even after compression', 'invalid', {
+        key: 'errors.file.compressedTooLarge',
+      })
     return { bytes: data, contentType: 'image/webp', width: info.width, height: info.height, sourceType }
   } catch (e) {
     if (e instanceof MediaError) throw e
-    throw new MediaError('We couldn’t read that image — it may be damaged.')
+    throw new MediaError('We couldn’t read that image — it may be damaged.', 'invalid', {
+      key: 'errors.file.unreadable',
+    })
   }
 }
 

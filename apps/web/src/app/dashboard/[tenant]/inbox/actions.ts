@@ -13,7 +13,7 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -56,7 +56,7 @@ export async function sendReplyAction(
     revalidatePath(inboxPath(slug))
     return delivered(r)
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
 }
@@ -92,7 +92,7 @@ export async function approveDraftAction(
     revalidatePath(inboxPath(slug))
     return delivered(r)
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
 }
@@ -134,7 +134,7 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
       messageId: msg.id,
     })
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
@@ -171,7 +171,7 @@ export async function setModeAction(
       setConversationMode(tx, parsed.data.conversationId, parsed.data.mode),
     )
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
@@ -247,7 +247,7 @@ export async function linkClientAction(
       }),
     )
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message, { phone: e.message })
+    if (e instanceof DomainError) return failDomain(e, { phone: e.message })
     throw e
   }
   await audit({

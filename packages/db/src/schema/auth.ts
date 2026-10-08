@@ -13,6 +13,8 @@ export const user = pgTable(
     emailVerified: boolean('email_verified').notNull().default(false),
     image: text('image'),
     twoFactorEnabled: boolean('two_factor_enabled').default(false),
+    /** Spa-dashboard language ('en' | 'th'); Better Auth additional field, set by the top-bar toggle. */
+    locale: text('locale').notNull().default('en'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },

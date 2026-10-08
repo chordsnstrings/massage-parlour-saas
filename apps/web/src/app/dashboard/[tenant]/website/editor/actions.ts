@@ -30,7 +30,7 @@ import { designSignature, isPageData } from '@/components/site/content'
 import { TRANSLATE_BATCH } from '@/components/site/editor/colors'
 import type { SavedSection } from '@/components/site/editor/context'
 import type { VersionItem } from '@/components/site/editor/versions'
-import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
@@ -54,7 +54,7 @@ const auditAs = (ctx: MemberContext, action: string, entity: string, entityId?: 
 const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/website`, 'layout')
 
 function domainFail(e: unknown): ActionResult {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   throw e
 }
 

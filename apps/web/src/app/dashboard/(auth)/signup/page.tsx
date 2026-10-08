@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { AuthLayout } from '@/components/auth/auth-layout'
+import { getT } from '@/i18n/server'
 import { PATH_ROUTING } from '@/lib/paths'
 import { canonicalUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
@@ -16,6 +17,7 @@ export const metadata: Metadata = { title: 'Create your spa' }
 
 export default async function SignupPage() {
   const session = await getSession()
+  const t = await getT()
   return (
     <AuthLayout
       title={session ? 'Add a spa' : 'Create your spa'}
@@ -25,7 +27,15 @@ export default async function SignupPage() {
           : '14-day free trial. Your site goes live instantly.'
       }
     >
-      <SignupForm address={siteAddress()} signedIn={Boolean(session)} />
+      <SignupForm
+        address={siteAddress()}
+        signedIn={Boolean(session)}
+        logo={{
+          label: t('logo.signupLabel'),
+          hint: t('logo.hint'),
+          tooLarge: t('logo.tooLarge', { size: '1 MB' }),
+        }}
+      />
     </AuthLayout>
   )
 }

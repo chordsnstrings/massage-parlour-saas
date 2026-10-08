@@ -17,7 +17,7 @@ import {
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { invalidateSiteHost } from '@/server/sites'
@@ -49,7 +49,7 @@ const record = (ctx: MemberContext, action: string, entityId: string, data: unkn
 const refresh = (slug: string) => revalidatePath(`/dashboard/${slug}`, 'layout')
 
 const domainFail = (error: unknown): ActionResult => {
-  if (error instanceof DomainError) return fail(error.message)
+  if (error instanceof DomainError) return failDomain(error)
   throw error
 }
 
@@ -87,7 +87,7 @@ export async function addDomainAction(
     refresh(slug)
     return ok(`${d.hostname} added — now add the two DNS records`)
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message, { hostname: e.message })
+    if (e instanceof DomainError) return failDomain(e, { hostname: e.message })
     throw e
   }
 }
