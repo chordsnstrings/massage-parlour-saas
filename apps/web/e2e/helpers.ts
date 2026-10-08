@@ -108,7 +108,8 @@ export async function makeStudio(slug: string) {
 export const today = () => businessDateOf(new Date(), '05:00')
 
 /**
- * Gives a freshly signed-up spa a small menu, two therapists on shift today + tomorrow (09:00–23:00),
+ * Gives a freshly signed-up spa a small menu, two therapists on shift all of today's and tomorrow's
+ * business day (05:00–05:00, so walk-in/rotation specs don't depend on the clock),
  * two rooms and one client. Returns the ids tests need.
  */
 export async function seedCatalog(slug: string) {
@@ -166,8 +167,8 @@ export async function seedCatalog(slug: string) {
         tenantId: tenant.id,
         staffId: p.id,
         branchId: branch!.id,
-        startsAt: dubaiInstant(d, 9 * 60),
-        endsAt: dubaiInstant(d, 23 * 60),
+        startsAt: dubaiInstant(d, 5 * 60),
+        endsAt: dubaiInstant(d, 29 * 60),
       })
     }
   }
