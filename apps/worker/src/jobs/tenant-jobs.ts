@@ -38,22 +38,17 @@ export async function runSlotFiller() {
   const startOfDay = new Date(Date.now() - ((Date.now() + 4 * 3600_000) % 86_400_000))
   for (const { tenantId } of enabled) {
     try {
-      const [already] = await platformDb()
-        .select({ id: outbox.id })
-        .from(outbox)
-        .where(
-          and(
-            eq(outbox.tenantId, tenantId),
-            eq(outbox.kind, 'slot_offer'),
-            gte(outbox.createdAt, startOfDay),
-          ),
-        )
-        .limit(1)
-      if (already) continue
-      const [branch] = await platformDb()
-        .select()
-        .from(branches)
-        .where(and(eq(branches.tenantId, tenantId), eq(branches.isDefault, true)))
+      // Tenant tables are read as the tenant (RLS); only the enabled-spa lookup above is cross-tenant.
+      const branch = await withTenant(tenantId, async (tx) => {
+        const [already] = await tx
+          .select({ id: outbox.id })
+          .from(outbox)
+          .where(and(eq(outbox.kind, 'slot_offer'), gte(outbox.createdAt, startOfDay)))
+          .limit(1)
+        if (already) return null
+        const [row] = await tx.select().from(branches).where(eq(branches.isDefault, true))
+        return row ?? null
+      })
       if (!branch) continue
       const n = await queueSlotOffers({ tenantId, branchId: branch.id })
       if (n) log('info', 'slot offers queued', { tenantId, n })

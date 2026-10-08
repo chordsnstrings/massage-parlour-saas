@@ -4,8 +4,10 @@ import {
   bookings,
   branches,
   campaigns,
+  clientPackages,
   clients,
   closeAllDbs,
+  journalEntries,
   outbox,
   packageDefinitions,
   payrollLines,
@@ -22,24 +24,28 @@ import {
   withTenant,
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   accountTotals,
   accrueCommissions,
+  adjustStock,
   buildPayroll,
   consumeForBooking,
+  createSale,
   expirePackages,
   expiringDocuments,
   finalisePayroll,
   issueGiftCard,
   issuePackage,
   lowStock,
+  nextCounter,
   queueCampaign,
   receiveStock,
   redeemGiftCard,
   redeemPackageSession,
   resolveSegment,
+  reverseSource,
   wpsSif,
 } from '../src'
 
@@ -133,6 +139,56 @@ describe('packages', () => {
     const n = await tx((db) => expirePackages(db, ids.tenant!, dubaiInstant('2026-12-01', 600)))
     expect(n).toBe(1)
     expect(await bal('4300')).toBe(1200)
+  })
+
+  it('dates redemption and expiry by the branch cutoff (F5)', async () => {
+    await tx((db) =>
+      db.update(branches).set({ businessDayCutoff: '07:00' }).where(eq(branches.id, ids.branch!)),
+    )
+    try {
+      const [def] = await tx((db) =>
+        db
+          .insert(packageDefinitions)
+          .values({
+            tenantId: ids.tenant!,
+            name: { en: '2 × Swedish' },
+            priceAed: '600',
+            validityDays: 1,
+            items: [{ serviceId: ids.service!, quantity: 2 }],
+          })
+          .returning(),
+      )
+      const pkg = await tx((db) =>
+        issuePackage(db, {
+          tenantId: ids.tenant!,
+          clientId: ids.client!,
+          definitionId: def!.id,
+          now: dubaiInstant('2026-11-01', 600),
+        }),
+      )
+      // 06:00 Dubai is still the previous business day with a 07:00 cutoff.
+      await tx((db) =>
+        redeemPackageSession(db, {
+          clientPackageId: pkg.id,
+          serviceId: ids.service!,
+          branchId: ids.branch!,
+          now: dubaiInstant('2026-11-02', 360),
+        }),
+      )
+      await tx((db) => expirePackages(db, ids.tenant!, dubaiInstant('2026-11-03', 360)))
+      const dates = await tx((db) =>
+        db
+          .select({ type: journalEntries.sourceType, date: journalEntries.entryDate })
+          .from(journalEntries)
+          .where(eq(journalEntries.sourceId, pkg.id)),
+      )
+      expect(dates.find((d) => d.type === 'redemption')?.date).toBe('2026-11-01')
+      expect(dates.find((d) => d.type === 'package_expiry')?.date).toBe('2026-11-02')
+    } finally {
+      await tx((db) =>
+        db.update(branches).set({ businessDayCutoff: '05:00' }).where(eq(branches.id, ids.branch!)),
+      )
+    }
   })
 })
 
@@ -309,6 +365,44 @@ describe('inventory', () => {
     expect(await tx((db) => lowStock(db, ids.branch!))).toEqual([])
     expect(await bal('1200')).toBe(97)
   })
+
+  it('posts receipts and adjustments with a source so they can be reversed (F6)', async () => {
+    const [towel] = await tx((db) =>
+      db
+        .insert(products)
+        .values({ tenantId: ids.tenant!, kind: 'consumable', name: { en: 'Towels' }, unit: 'pc' })
+        .returning(),
+    )
+    const before = { inv: await bal('1200'), bank: await bal('1020'), cons: await bal('5100') }
+    const received = await tx((db) =>
+      receiveStock(db, {
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        productId: towel!.id,
+        qty: 10,
+        unitCostAed: 4,
+        paidVia: 'bank',
+        date: D,
+      }),
+    )
+    const adjusted = await tx((db) =>
+      adjustStock(db, {
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        productId: towel!.id,
+        qty: -2,
+        date: D,
+      }),
+    )
+    expect(await bal('1200')).toBe(before.inv + 32)
+    await tx(async (db) => {
+      await reverseSource(db, ids.tenant!, 'stock_purchase', received, D)
+      await reverseSource(db, ids.tenant!, 'stock_adjustment', adjusted, D)
+    })
+    expect(await bal('1200')).toBe(before.inv)
+    expect(await bal('1020')).toBe(before.bank)
+    expect(await bal('5100')).toBe(before.cons)
+  })
 })
 
 describe('segments, campaigns and documents', () => {
@@ -348,5 +442,60 @@ describe('segments, campaigns and documents', () => {
     )
     const docs = await tx((db) => expiringDocuments(db, ids.tenant!, 60, dubaiInstant(D, 600)))
     expect(docs.map((d) => [d.type, d.owner])).toEqual([['Visa', 'Maya']])
+  })
+})
+
+describe('discounted packages', () => {
+  it('carries the discounted price paid, not the list price (F8)', async () => {
+    const [def] = await tx((db) =>
+      db
+        .insert(packageDefinitions)
+        .values({
+          tenantId: ids.tenant!,
+          name: { en: '5 × Swedish promo' },
+          priceAed: '1500',
+          validityDays: 30,
+          items: [{ serviceId: ids.service!, quantity: 5 }],
+        })
+        .returning(),
+    )
+    // The payroll test above inserted sale #1 by hand; move the counter past it.
+    await tx((db) => nextCounter(db, ids.tenant!, 'sale'))
+    const { sale } = await tx((db) =>
+      createSale(db, {
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        clientId: ids.client!,
+        lines: [
+          {
+            kind: 'package',
+            refId: def!.id,
+            description: '5 × Swedish promo',
+            qty: 2,
+            unitPriceAed: 1500,
+            discountAed: 100,
+          },
+        ],
+        discountAed: 50.01,
+        payments: [{ method: 'cash', amountAed: 2849.99 }],
+        now: dubaiInstant(D, 720),
+      }),
+    )
+    const pkgs = await tx((db) =>
+      db
+        .select()
+        .from(clientPackages)
+        .where(and(eq(clientPackages.saleId, sale.id), eq(clientPackages.definitionId, def!.id))),
+    )
+    expect(pkgs.map((p) => Number(p.pricePaidAed)).sort()).toEqual([1424.99, 1425])
+    expect(pkgs.reduce((s, p) => s + Number(p.remainingValueAed) * 100, 0)).toBe(284999)
+    const r = await tx((db) =>
+      redeemPackageSession(db, {
+        clientPackageId: pkgs[0]!.id,
+        serviceId: ids.service!,
+        branchId: ids.branch!,
+      }),
+    )
+    expect(r.valueAed).toBe(Math.round((Number(pkgs[0]!.pricePaidAed) / 5) * 100) / 100)
   })
 })

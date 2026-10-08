@@ -937,32 +937,32 @@ CLAUDE.md). Rules for the work:
   - Map `23505` to a `DomainError`.
 - Tests: a concurrent checkout test in services `sales`; e2e `pos.spec`.
 
-**F4. Two bookings taking the same reference code at once surface a raw `23505`.**
+**F4. Two bookings taking the same reference code at once surface a raw `23505`.** ✅ Fixed (insert-and-retry on `bookings_tenant_ref`, 5 attempts, then `DomainError('invalid')`).
 - Where: `packages/services/src/bookings.ts` `createBooking`.
 - Planned fix: catch `bookings_tenant_ref` `23505` inside the savepoint and retry with a new code, up to 5 times.
-- Tests: services `bookings` test with a forced collision.
+- Tests: services `bookings` test with a forced collision (mocked `newRefCode`).
 
-**F5. Package redemption and expiry ignore the branch cutoff.**
+**F5. Package redemption and expiry ignore the branch cutoff.** ✅ Fixed (`createSale` passes the sale's business date; otherwise the branch / default-branch `business_day_cutoff`).
 - Where: `packages/services/src/loyalty.ts` lines 92 and 117 (`businessDateOf(now)`).
 - Planned fix:
   - Redemption: take the sale's business date from the caller.
   - Expiry job: use the default branch's `business_day_cutoff`.
 - Tests: services `p2` test with a cutoff other than 05:00.
 
-**F6. Stock receipt and adjustment entries can't be reversed.**
+**F6. Stock receipt and adjustment entries can't be reversed.** ✅ Fixed (`move()` returns the movement id, posted as `sourceId`; existing rows unchanged).
 - Where: `packages/services/src/inventory.ts` `receiveStock`/`adjustStock`.
 - Problem: their ledger entries carry no `sourceId`, so `reverseSource` can't target them.
 - Planned fix: have `move()` return the inserted `stock_movements` id and post with it as `sourceId`. Existing rows
   stay as they are.
-- Tests: services inventory tests; e2e `inventory.spec`.
+- Tests: services `p2`; e2e `inventory.spec`.
 
-**F7. The slot filler reads tenant tables through the platform role.**
+**F7. The slot filler reads tenant tables through the platform role.** ✅ Fixed (spa list via `platformDb`, per-spa reads in `withTenant`).
 - Where: `apps/worker/src/jobs/tenant-jobs.ts` `runSlotFiller`.
 - Planned fix: keep finding the enabled spas through `platformDb`; move the per-spa `outbox`/`branches` reads into
   `withTenant`.
 - Tests: `apps/worker/test/jobs.test.ts`.
 
-**F8. A discounted package's liability drifts.** (found during F2, verified 2026-10-08)
+**F8. A discounted package's liability drifts.** (found during F2, verified 2026-10-08) ✅ Fixed (`issuePackage` takes the line's net share as `pricePaidAed`; existing packages unchanged).
 - Where: `packages/services/src/loyalty.ts` `issuePackage` (~line 41) stores the definition's list price
   (`pricePaidAed`/`remainingValueAed = def.priceAed`), not the discounted line price actually paid.
 - Effect: when a package is sold at a discount, 2110 and the per-session redemption value no longer match the money taken.

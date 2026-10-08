@@ -29,7 +29,7 @@ import {
   type Tx,
 } from '@spa/db'
 import { and, asc, eq, gt, inArray, lt, sql } from 'drizzle-orm'
-import { DomainError, pgCode } from './errors'
+import { DomainError, pgCode, pgConstraint } from './errors'
 import { consumeForBooking } from './inventory'
 
 const DAY = 24 * 3600_000
@@ -242,69 +242,71 @@ export async function createBooking(tx: Tx, input: NewBooking) {
   }
   const startsAt = new Date(Math.min(...prepared.map((p) => p.item.start.getTime())))
   const endsAt = new Date(Math.max(...prepared.map((p) => p.item.start.getTime() + p.duration * 60_000)))
-  let refCode = newRefCode()
-  for (let i = 0; i < 5; i++) {
-    const [exists] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.refCode, refCode))
-    if (!exists) break
-    refCode = newRefCode()
-  }
-  try {
-    return await tx.transaction(async (sp) => {
-      const [booking] = await sp
-        .insert(bookings)
-        .values({
-          tenantId: input.tenantId,
-          branchId: input.branchId,
-          clientId: input.clientId ?? null,
-          refCode,
-          source: input.source,
-          status: input.status ?? 'pending',
-          businessDate: businessDateOf(startsAt, cutoff),
-          startsAt,
-          endsAt,
-          notes: input.notes ?? null,
-          createdBy: input.createdBy ?? null,
-        })
-        .returning()
-      for (const p of prepared) {
-        const [row] = await sp
-          .insert(bookingItems)
+  // The unique `bookings_tenant_ref` index decides; a taken code (even by a concurrent insert) just retries.
+  for (let attempt = 1; ; attempt++) {
+    const refCode = newRefCode()
+    try {
+      return await tx.transaction(async (sp) => {
+        const [booking] = await sp
+          .insert(bookings)
           .values({
             tenantId: input.tenantId,
-            bookingId: booking!.id,
-            serviceVariantId: p.item.serviceVariantId,
-            serviceName: p.name,
-            durationMin: p.duration,
-            priceAed: p.price,
-            startsAt: p.item.start,
-            endsAt: new Date(p.item.start.getTime() + p.duration * 60_000),
-            roomId: p.roomId,
-            staffIds: p.staffIds,
+            branchId: input.branchId,
+            clientId: input.clientId ?? null,
+            refCode,
+            source: input.source,
+            status: input.status ?? 'pending',
+            businessDate: businessDateOf(startsAt, cutoff),
+            startsAt,
+            endsAt,
+            notes: input.notes ?? null,
+            createdBy: input.createdBy ?? null,
           })
-          .returning({ id: bookingItems.id })
-        await sp.insert(reservations).values([
-          ...p.staffIds.map((sid) => ({
-            tenantId: input.tenantId,
-            bookingItemId: row!.id,
-            resourceKind: 'staff' as const,
-            resourceId: sid,
-            period: toRange(p.hold),
-          })),
-          {
-            tenantId: input.tenantId,
-            bookingItemId: row!.id,
-            resourceKind: 'room' as const,
-            resourceId: p.roomId,
-            period: toRange(p.hold),
-          },
-        ])
+          .returning()
+        for (const p of prepared) {
+          const [row] = await sp
+            .insert(bookingItems)
+            .values({
+              tenantId: input.tenantId,
+              bookingId: booking!.id,
+              serviceVariantId: p.item.serviceVariantId,
+              serviceName: p.name,
+              durationMin: p.duration,
+              priceAed: p.price,
+              startsAt: p.item.start,
+              endsAt: new Date(p.item.start.getTime() + p.duration * 60_000),
+              roomId: p.roomId,
+              staffIds: p.staffIds,
+            })
+            .returning({ id: bookingItems.id })
+          await sp.insert(reservations).values([
+            ...p.staffIds.map((sid) => ({
+              tenantId: input.tenantId,
+              bookingItemId: row!.id,
+              resourceKind: 'staff' as const,
+              resourceId: sid,
+              period: toRange(p.hold),
+            })),
+            {
+              tenantId: input.tenantId,
+              bookingItemId: row!.id,
+              resourceKind: 'room' as const,
+              resourceId: p.roomId,
+              period: toRange(p.hold),
+            },
+          ])
+        }
+        return booking!
+      })
+    } catch (e) {
+      if (pgCode(e) === '23P01')
+        throw new DomainError('That time was just taken — please pick another slot', 'slot_taken')
+      if (pgCode(e) === '23505' && pgConstraint(e) === 'bookings_tenant_ref') {
+        if (attempt < 5) continue
+        throw new DomainError('Could not allocate a booking reference — please try again', 'invalid')
       }
-      return booking!
-    })
-  } catch (e) {
-    if (pgCode(e) === '23P01')
-      throw new DomainError('That time was just taken — please pick another slot', 'slot_taken')
-    throw e
+      throw e
+    }
   }
 }
 

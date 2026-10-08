@@ -1,6 +1,7 @@
 // Packages (prepaid session bundles), gift cards and memberships. Sold for cash/card/transfer, tracked as liabilities.
 import { addDays, businessDateOf, dubaiParts } from '@spa/core'
 import {
+  branches,
   clientPackages,
   giftCards,
   giftCardTxns,
@@ -8,13 +9,27 @@ import {
   packageRedemptions,
   type Tx,
 } from '@spa/db'
-import { and, eq, lt } from 'drizzle-orm'
+import { and, desc, eq, lt } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { post, postRedemption } from './ledger'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
-/** Creates the client's package after it was sold (the sale line already credited 2110). */
+/** Business date "now" by the branch's cutoff (or the tenant's default branch when none is given). */
+async function businessDateFor(tx: Tx, now: Date, branchId?: string | null) {
+  const [b] = await tx
+    .select({ cutoff: branches.businessDayCutoff })
+    .from(branches)
+    .where(branchId ? eq(branches.id, branchId) : eq(branches.isDefault, true))
+    .orderBy(desc(branches.isDefault))
+    .limit(1)
+  return businessDateOf(now, b?.cutoff.slice(0, 5))
+}
+
+/**
+ * Creates the client's package after it was sold (the sale line already credited 2110). `pricePaidAed` is what
+ * was actually taken for this package (the line's net share after discounts); it defaults to the list price.
+ */
 export async function issuePackage(
   tx: Tx,
   p: {
@@ -23,12 +38,14 @@ export async function issuePackage(
     definitionId: string
     saleId?: string | null
     saleLineId?: string | null
+    pricePaidAed?: number
     now?: Date
   },
 ) {
   const [def] = await tx.select().from(packageDefinitions).where(eq(packageDefinitions.id, p.definitionId))
   if (!def?.active) throw new DomainError('Package not available', 'not_found')
   const now = p.now ?? new Date()
+  const paid = p.pricePaidAed === undefined ? def.priceAed : r2(p.pricePaidAed).toFixed(2)
   const [row] = await tx
     .insert(clientPackages)
     .values({
@@ -38,9 +55,9 @@ export async function issuePackage(
       saleId: p.saleId ?? null,
       saleLineId: p.saleLineId ?? null,
       name: def.name.en,
-      pricePaidAed: def.priceAed,
+      pricePaidAed: paid,
       balances: Object.fromEntries(def.items.map((i) => [i.serviceId, i.quantity])),
-      remainingValueAed: def.priceAed,
+      remainingValueAed: paid,
       purchasedAt: now,
       expiresAt: new Date(now.getTime() + def.validityDays * 86_400_000),
     })
@@ -61,6 +78,8 @@ export async function redeemPackageSession(
     saleId?: string | null
     createdBy?: string | null
     branchId?: string | null
+    /** The sale's business date; otherwise derived from the branch cutoff. */
+    businessDate?: string
     now?: Date
   },
 ) {
@@ -97,7 +116,7 @@ export async function redeemPackageSession(
     tenantId: pkg.tenantId,
     branchId: r.branchId,
     sourceId: pkg.id,
-    date: businessDateOf(now),
+    date: r.businessDate ?? (await businessDateFor(tx, now, r.branchId)),
     valueAed: value,
     createdBy: r.createdBy,
   })
@@ -116,13 +135,14 @@ export async function expirePackages(tx: Tx, tenantId: string, now = new Date())
         lt(clientPackages.expiresAt, now),
       ),
     )
+  const date = expired.length ? await businessDateFor(tx, now) : ''
   for (const p of expired) {
     await tx.update(clientPackages).set({ status: 'expired' }).where(eq(clientPackages.id, p.id))
     const value = Number(p.remainingValueAed)
     if (value > 0) {
       await post(tx, {
         tenantId,
-        date: businessDateOf(now),
+        date,
         sourceType: 'package_expiry',
         sourceId: p.id,
         memo: `Package expired: ${p.name}`,

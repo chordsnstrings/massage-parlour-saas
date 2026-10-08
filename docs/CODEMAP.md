@@ -167,6 +167,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Each item inserts one `reservations` row per therapist plus one for the room, covering service time plus
     buffers, inside a savepoint.
   - `23P01` becomes `DomainError('slot_taken')`.
+  - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
   - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
 - **Ledger**:
   - `post` only inserts; `reverseSource` posts a mirror entry with source type `<type>_reversal`.
@@ -272,7 +273,7 @@ Integration jobs do nothing until their credentials are configured.
 ## Known gaps (verified 2026-10-08, not fixed yet)
 
 Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
-in **PLAN §17** (items F1–F8 match the numbers below; 1–3 fixed, 4–8 open).
+in **PLAN §17** (items F1–F8 match the numbers below; all fixed).
 
 1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
    before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
@@ -282,14 +283,14 @@ in **PLAN §17** (items F1–F8 match the numbers below; 1–3 fixed, 4–8 open
 3. ✅ **Double checkout** (fixed, F3): `createSale` locks the booking row (`FOR UPDATE`) before the earlier-sale check;
    partial unique index `sales_booking_once` (one non-void sale per booking, migration 0014) backs it up and its
    `23505` maps to a `DomainError`. Migration 0014 skips the index with a WARNING if duplicates already exist.
-4. **Booking ref race**: booking `refCode` uses a select-then-insert loop. A concurrent `bookings_tenant_ref` `23505`
-   isn't mapped to a `DomainError`. Rare: the code is 5 characters.
-5. **Loyalty cutoff**: `packages/services/src/loyalty.ts` (`businessDateOf(now)`, lines 92 and 117) uses the default
-   05:00 cutoff, not the branch's `business_day_cutoff`.
-6. **Unreversible stock entries**: `inventory.receiveStock`/`adjustStock` post ledger entries without a `sourceId`, so
-   `reverseSource` can't target them.
-7. **Slot filler DB role**: the worker's `runSlotFiller` (`apps/worker/src/jobs/tenant-jobs.ts`) reads `outbox` and
-   `branches` through `platformDb()` instead of `withTenant()`. The queries filter by `tenant_id`, but this departs
-   from the tenant-access rule.
-8. **Discounted package liability (F8)**: `loyalty.issuePackage` stores the list price, not the discounted price paid,
-   so 2110 and per-session values drift on discounted package sales.
+4. ✅ **Booking ref race** (fixed, F4): `createBooking` inserts inside the savepoint without a pre-check; a
+   `bookings_tenant_ref` `23505` retries with a new code (up to 5 attempts), then `DomainError('invalid')`.
+5. ✅ **Loyalty cutoff** (fixed, F5): `redeemPackageSession` takes the sale's `businessDate` from `createSale`; otherwise
+   it and `expirePackages` use the branch's `business_day_cutoff` (given branch, else the default branch).
+6. ✅ **Unreversible stock entries** (fixed, F6): `inventory.move()` returns the `stock_movements` id; `receiveStock`/
+   `adjustStock` post with it as `sourceId` (and return it), so `reverseSource` can target them. Older rows unchanged.
+7. ✅ **Slot filler DB role** (fixed, F7): `runSlotFiller` finds enabled spas via `platformDb()` and reads per-spa
+   `outbox`/`branches` inside `withTenant()`.
+8. ✅ **Discounted package liability** (fixed, F8): `issuePackage` takes optional `pricePaidAed` (default list price);
+   `createSale` passes each package's share of the line's net `line_total_aed` (cumulative fils rounding). Older
+   packages unchanged.

@@ -320,7 +320,9 @@ export async function createSale(tx: Tx, input: NewSale) {
         saleId: sale!.id,
         date: businessDate,
       })
-    if (l.kind === 'package' && l.refId && clientId)
+    if (l.kind === 'package' && l.refId && clientId) {
+      // Each package carries its share of the line's net paid amount (cumulative rounding in fils).
+      const lineFils = fils(num(line.lineTotalAed))
       for (let n = 0; n < l.qty; n++)
         await issuePackage(tx, {
           tenantId: input.tenantId,
@@ -328,7 +330,9 @@ export async function createSale(tx: Tx, input: NewSale) {
           definitionId: l.refId,
           saleId: sale!.id,
           saleLineId: line.id,
+          pricePaidAed: (Math.round((lineFils * (n + 1)) / l.qty) - Math.round((lineFils * n) / l.qty)) / 100,
         })
+    }
     if (l.kind === 'gift_card')
       for (let n = 0; n < l.qty; n++)
         await issueGiftCard(tx, {
@@ -352,6 +356,8 @@ export async function createSale(tx: Tx, input: NewSale) {
         bookingId: booking?.id ?? null,
         saleId: sale!.id,
         branchId: input.branchId,
+        businessDate,
+        now: input.now,
         createdBy: input.createdBy,
       })
       // The line is priced at 0, so commission is earned on the session's redeemed value instead.
