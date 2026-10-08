@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_PERMISSIONS,
+  CUSTOM_ROLE_PERMISSIONS,
   checkSlug,
   DEFAULT_EMAIL_FROM,
   matchRoot,
   normalizeSlug,
-  parseRoots,
-  CUSTOM_ROLE_PERMISSIONS,
   PHONE_ROLES,
+  parseRoots,
   resolvePermissions,
-  roleMayHold,
   resolveSurface,
+  roleMayHold,
   SYSTEM_ROLES,
   toUaeE164,
   whatsappLink,
@@ -63,7 +63,7 @@ describe('platform roots', () => {
       expect(resolveSurface(`pilot.${root}`, roots)).toEqual({ kind: 'site', slug: 'pilot' })
     }
     expect(matchRoot('spamanagement.com', roots)).toBeNull()
-    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.co <no-reply@spamanagement.co>')
+    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.ae <no-reply@spamanagement.ae>') // B1: .ae until .co is verified
   })
 
   it('resolves surfaces on every platform domain', () => {

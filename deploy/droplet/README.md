@@ -50,13 +50,13 @@ which domains are ours:
 
 ### Move to a new domain without downtime (spamanagement.ae → spamanagement.co)
 
-The code already speaks spamanagement.co (auth app name, TOTP issuer, email sender default, copy). The old domain
+The code already speaks spamanagement.co (auth app name, TOTP issuer, copy); staff email still sends from
+spamanagement.ae (B1 decision) until step 0 is done. The old domain
 keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checklist, in order:
 
 0. **Email first.** Resend → Domains → add `spamanagement.co`, add the SPF/DKIM (TXT) and return-path (MX/TXT)
-   records it shows in Cloudflare DNS (DNS-only), wait for "Verified". Until then pin
-   `EMAIL_FROM="spamanagement.ae <no-reply@spamanagement.ae>"` in the overlay: the compose default is now `.co`, so
-   sends fail while `.co` is unverified.
+   records it shows in Cloudflare DNS (DNS-only), wait for "Verified". Until then nothing to do: the compose default and `DEFAULT_EMAIL_FROM` stay
+   `spamanagement.ae <no-reply@spamanagement.ae>`; once verified set `EMAIL_FROM` (step 3).
 1. **DNS** (Cloudflare zone `spamanagement.co`, all at the droplet; start **DNS-only / grey cloud** so Caddy can get
    its certificates directly):
 

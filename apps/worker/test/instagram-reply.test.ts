@@ -84,7 +84,10 @@ describe('instagram-reply job (B6, DB queue)', () => {
     }
     expect(row!.attempts).toBe(5)
     expect(row!.failedAt).not.toBeNull()
-    expect(await replyToInstagramMessages(new Date(now.getTime() + 86_400_000))).toEqual({ answered: 0, failed: 0 })
+    expect(await replyToInstagramMessages(new Date(now.getTime() + 86_400_000))).toEqual({
+      answered: 0,
+      failed: 0,
+    })
     spy.mockReset()
     spy.mockResolvedValue('sent')
     await owner.delete(instagramReplyQueue)

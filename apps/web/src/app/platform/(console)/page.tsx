@@ -1,4 +1,11 @@
-import { platformJobRuns, platformDb, platformInvoices, platformPayments, subscriptions, tenants } from '@spa/db'
+import {
+  platformDb,
+  platformInvoices,
+  platformJobRuns,
+  platformPayments,
+  subscriptions,
+  tenants,
+} from '@spa/db'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'

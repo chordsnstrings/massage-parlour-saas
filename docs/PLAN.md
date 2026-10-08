@@ -958,7 +958,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Settings → Integrations "AI tools via Meta MCP" card (groups, autopilot for public replies, Ask the AI); write tools
   audit-logged. Gap: no Facebook Page connect flow yet (Page tools appear once a Page token is stored). Details: CODEMAP "Meta MCP".
 - **B1 decision (2026-10-08):** staff emails (invites, password reset, 2FA) keep sending from spamanagement.ae
-  (`EMAIL_FROM`) until spamanagement.co is verified in Resend; then switch the env value.
+  (`EMAIL_FROM`; compose default + core `DEFAULT_EMAIL_FROM` stay `.ae`, UI/app names say .co) until spamanagement.co is
+  verified in Resend; then switch the env value.
 - **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):
   Services & menu → Purchases; one ledger entry per purchase (stock → 1200, rest → 6150/6160/6170/6900 by category,
   input VAT 1300); void = reversal + stock back out (CODEMAP "Stock locations + purchases").

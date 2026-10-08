@@ -54,7 +54,12 @@ export async function replyToInstagramMessages(now = new Date()) {
         // No tokens are ever part of these errors.
         const error = e instanceof Error ? e.message : 'unknown error'
         const r = await failReply(item, attempts, error, now)
-        log('error', 'instagram-reply failed', { tenantId, attempts: r.attempts, gaveUp: r.failed, error: error.slice(0, 200) })
+        log('error', 'instagram-reply failed', {
+          tenantId,
+          attempts: r.attempts,
+          gaveUp: r.failed,
+          error: error.slice(0, 200),
+        })
       }
     }
   }

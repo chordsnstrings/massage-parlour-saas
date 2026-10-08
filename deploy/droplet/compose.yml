@@ -40,7 +40,7 @@ x-app-env: &app-env
   S3_REGION: ${S3_REGION:-auto}
   SENTRY_DSN: ${SENTRY_DSN:-}
   RESEND_API_KEY: ${RESEND_API_KEY:-}
-  EMAIL_FROM: ${EMAIL_FROM:-spamanagement.co <no-reply@spamanagement.co>}
+  EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>} # B1: .ae until .co is verified in Resend
   APP_RELEASE: ${APP_RELEASE:-}
 
 x-db: &db

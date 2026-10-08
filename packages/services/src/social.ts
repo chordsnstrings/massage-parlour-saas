@@ -246,7 +246,10 @@ export async function ingestInstagramEvents(events: InstagramEvent[], o: SocialO
           const stored = await storeInbound(tx, tenantId, ev)
           // Same transaction as the message: the worker's instagram-reply job picks it up (never lost on a restart).
           if (stored && live)
-            await tx.insert(instagramReplyQueue).values({ tenantId, messageId: stored.messageId }).onConflictDoNothing()
+            await tx
+              .insert(instagramReplyQueue)
+              .values({ tenantId, messageId: stored.messageId })
+              .onConflictDoNothing()
           return stored
         },
         appOf(o),

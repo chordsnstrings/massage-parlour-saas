@@ -6,8 +6,8 @@ import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
-import { NotificationBell } from '@/components/shell/notification-bell'
 import { SearchPalette } from '@/components/search/search-palette'
+import { NotificationBell } from '@/components/shell/notification-bell'
 import {
   type ShellGroup,
   type ShellItem,

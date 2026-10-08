@@ -231,4 +231,18 @@ export const domain = {
   leaveNotFound: 'Leave request not found',
   leaveDecided: 'This leave request was already decided',
   leaveLocked: 'This leave request can no longer be withdrawn',
+  // X9 — Meta MCP tools (R7)
+  metaThreadNotFound: 'Thread not found',
+  metaThreadClosed: 'This thread is closed.',
+  metaThreadFlagged: 'This thread is flagged for staff review.',
+  metaCaptionFirst: 'Write a caption first',
+  metaImageLink: 'Images must be an https link or a media-library file',
+  metaPostNotFound: 'Post not found',
+  metaPostNotApproved: 'Only posts staff approved can be published — this one is not approved.',
+  metaPostScheduled: 'Scheduled for {at} — it will go out then.',
+  metaPostPublishing: 'This post is being published right now.',
+  metaNoPage: 'No Facebook Page is connected.',
+  metaImageNotPublic: 'The image is not on a public https link.',
+  metaReplyFirst: 'Write a reply first',
+  metaPhoneNeeded: 'A UAE mobile number or a client with one is needed',
 } as const

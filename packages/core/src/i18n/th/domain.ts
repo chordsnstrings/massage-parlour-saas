@@ -207,4 +207,18 @@ export const domain: Messages['errors']['domain'] = {
   leaveNotFound: 'ไม่พบคำขอลา',
   leaveDecided: 'คำขอลานี้ได้รับการพิจารณาแล้ว',
   leaveLocked: 'ไม่สามารถถอนคำขอลานี้ได้แล้ว',
+  // X9 — Meta MCP tools (R7)
+  metaThreadNotFound: 'ไม่พบบทสนทนา',
+  metaThreadClosed: 'บทสนทนานี้ปิดแล้ว',
+  metaThreadFlagged: 'บทสนทนานี้ถูกทำเครื่องหมายให้พนักงานตรวจสอบ',
+  metaCaptionFirst: 'เขียนคำบรรยายก่อน',
+  metaImageLink: 'รูปภาพต้องเป็นลิงก์ https หรือไฟล์จากคลังสื่อ',
+  metaPostNotFound: 'ไม่พบโพสต์',
+  metaPostNotApproved: 'เผยแพร่ได้เฉพาะโพสต์ที่พนักงานอนุมัติแล้ว — โพสต์นี้ยังไม่ได้รับการอนุมัติ',
+  metaPostScheduled: 'กำหนดเผยแพร่ {at} — จะเผยแพร่ตามเวลานั้น',
+  metaPostPublishing: 'กำลังเผยแพร่โพสต์นี้อยู่',
+  metaNoPage: 'ยังไม่ได้เชื่อมต่อเพจ Facebook',
+  metaImageNotPublic: 'รูปภาพไม่ได้อยู่บนลิงก์ https สาธารณะ',
+  metaReplyFirst: 'เขียนคำตอบก่อน',
+  metaPhoneNeeded: 'ต้องมีเบอร์มือถือ UAE หรือลูกค้าที่มีเบอร์',
 }

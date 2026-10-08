@@ -307,7 +307,10 @@ export const instagramReplyQueue = pgTable(
     failedAt: ts('failed_at'),
     createdAt: createdAt(),
   },
-  (t) => [index('instagram_reply_queue_due').on(t.nextAt).where(sql`${t.failedAt} is null`), ...tenantPolicies()],
+  (t) => [
+    index('instagram_reply_queue_due').on(t.nextAt).where(sql`${t.failedAt} is null`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const agentMode = pgEnum('agent_mode', ['approve', 'autopilot'])
