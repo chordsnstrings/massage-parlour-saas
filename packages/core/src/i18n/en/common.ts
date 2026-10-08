@@ -1,6 +1,7 @@
 export const common = {
   save: 'Save',
   cancel: 'Cancel',
+  priceOnRequest: 'Price on request',
   edit: 'Edit',
   delete: 'Delete',
   remove: 'Remove',

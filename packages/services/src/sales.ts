@@ -129,6 +129,7 @@ export async function createSale(tx: Tx, input: NewSale) {
   // Lines → net amounts in fils.
   const priced = input.lines.map((l) => {
     if (!Number.isInteger(l.qty) || l.qty < 1) throw new DomainError('Quantity must be at least 1')
+    if (!Number.isFinite(l.unitPriceAed)) throw new DomainError(`Type a price for “${l.description}”`)
     if (l.unitPriceAed < 0) throw new DomainError('Prices cannot be negative')
     const gross = fils(l.unitPriceAed) * l.qty
     const discount = fils(l.discountAed ?? 0)

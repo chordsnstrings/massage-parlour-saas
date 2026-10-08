@@ -13,7 +13,8 @@ export type SiteService = {
   name: Bi
   description: Bi | null
   category: Bi | null
-  variants: { durationMin: number; priceAed: string }[]
+  /** null = "Price on request": none set, or hidden by the service / spa default (R4; never sent to the page). */
+  variants: { durationMin: number; priceAed: string | null }[]
 }
 export type SiteStaff = { id: string; name: string; photoUrl: string | null; bio: Bi | null }
 export type SiteBranch = {

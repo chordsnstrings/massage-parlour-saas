@@ -47,7 +47,10 @@ export async function writeSiteCopy(opts: {
   const menu = new Map<string, string[]>()
   for (const m of ctx.menu) {
     const label = m.nameAr ? `${m.name} / ${m.nameAr}` : m.name
-    menu.set(label, [...(menu.get(label) ?? []), `${m.durationMin} min AED ${m.priceAed}`])
+    menu.set(label, [
+      ...(menu.get(label) ?? []),
+      `${m.durationMin} min ${m.priceAed == null ? 'price on request' : `AED ${m.priceAed}`}`,
+    ])
   }
   const services =
     [...menu].map(([name, v]) => `- ${name}: ${v.join(', ')}`).join('\n') || '- (menu not set up yet)'

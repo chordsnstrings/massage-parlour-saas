@@ -139,6 +139,11 @@ const serviceSchema = z
     therapistsRequired: z.coerce.number().int().min(1).max(2),
     roomTypes: z.preprocess(asArray, z.array(z.enum(ROOM_TYPES))),
     onlineBookable: bool,
+    // '' = spa default (settings), 'show' / 'hide' = this service overrides it (R4).
+    showPrice: z
+      .enum(['', 'show', 'hide'])
+      .optional()
+      .transform((v) => (v === 'show' ? true : v === 'hide' ? false : null)),
     active: bool,
     color,
     variantId: z.preprocess(asArray, z.array(z.string())),
@@ -149,12 +154,16 @@ const serviceSchema = z
     const variants = d.variantDuration.map((dur, i) => ({
       id: UUID.test(d.variantId[i] ?? '') ? d.variantId[i] : undefined,
       durationMin: Number(dur),
-      priceAed: Number(d.variantPrice[i]),
+      // Blank = price on request: the receptionist types it at checkout (R4).
+      priceAed: (d.variantPrice[i] ?? '').trim() === '' ? null : Number(d.variantPrice[i]),
     }))
     variants.forEach((v, i) => {
       if (!Number.isInteger(v.durationMin) || v.durationMin < 10 || v.durationMin > 480)
         zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.duration' })
-      else if (!Number.isFinite(v.priceAed) || v.priceAed < 0 || v.priceAed > 100_000)
+      else if (
+        v.priceAed !== null &&
+        (!Number.isFinite(v.priceAed) || v.priceAed < 0 || v.priceAed > 100_000)
+      )
         zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.price' })
     })
     if (variants.length === 0)
@@ -182,6 +191,7 @@ export async function saveServiceAction(
     therapistsRequired: d.therapistsRequired,
     roomTypes: d.roomTypes,
     onlineBookable: d.onlineBookable,
+    showPrice: d.showPrice,
     active: d.active,
     color: d.color,
     // Only forms that post the field change the photo.
@@ -214,7 +224,7 @@ export async function saveServiceAction(
           : eq(serviceVariants.serviceId, serviceId),
       )
     for (const [sort, v] of d.variants.entries()) {
-      const row = { durationMin: v.durationMin, priceAed: v.priceAed.toFixed(2), sort }
+      const row = { durationMin: v.durationMin, priceAed: v.priceAed?.toFixed(2) ?? null, sort }
       if (v.id)
         await tx
           .update(serviceVariants)

@@ -2,7 +2,7 @@ import type { ComponentConfig } from '@puckeditor/core'
 import { CalendarCheck, MapPin, MessageCircle, Phone, Plus, Quote, Store } from 'lucide-react'
 import { cn, initials } from '@/lib/utils'
 import { biField, radio, text } from '../field-defs'
-import { clock, dayName, minutes, price, tr, ui, WEEKDAYS } from '../i18n'
+import { clock, dayName, minutes, tr, ui, variantPrice, WEEKDAYS } from '../i18n'
 import { bookHref, linkProps, mapHref, pageHref, phoneHref, whatsappHref } from '../links'
 import type { Bi } from '../types'
 import { bandFields, SectionShell, type ShellProps } from './layout'
@@ -76,7 +76,9 @@ export const ServicesMenu: ComponentConfig<
                   {s.variants.map((v) => (
                     <li key={v.durationMin} className="flex items-baseline justify-between gap-4 text-[15px]">
                       <span className="text-muted">{minutes(v.durationMin, meta.locale)}</span>
-                      <span className="font-medium tabular-nums">{price(v.priceAed, meta.locale)}</span>
+                      <span className="font-medium tabular-nums">
+                        {variantPrice(v.priceAed, meta.locale)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -102,7 +104,9 @@ export const ServicesMenu: ComponentConfig<
                   {s.variants.map((v) => (
                     <span key={v.durationMin} className="inline-flex items-baseline gap-2 text-[15px]">
                       <span className="text-muted">{minutes(v.durationMin, meta.locale)}</span>
-                      <span className="font-medium tabular-nums">{price(v.priceAed, meta.locale)}</span>
+                      <span className="font-medium tabular-nums">
+                        {variantPrice(v.priceAed, meta.locale)}
+                      </span>
                     </span>
                   ))}
                   {showBook && (

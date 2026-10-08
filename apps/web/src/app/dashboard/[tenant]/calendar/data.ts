@@ -153,7 +153,7 @@ export async function loadCalendar(
       label: t('calendar.variant', {
         service: service.name.en,
         min: variant.durationMin,
-        price: fmt.aed(variant.priceAed),
+        price: variant.priceAed == null ? t('common.priceOnRequest') : fmt.aed(variant.priceAed),
       }),
       durationMin: variant.durationMin,
       priceAed: variant.priceAed,

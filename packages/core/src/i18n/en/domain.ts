@@ -58,6 +58,7 @@ export const domain = {
   itemOnce: 'Each item can be listed once',
   discountOverSubtotal: 'Discount is more than the subtotal',
   discountOverPrice: 'Discount on “{item}” is more than its price',
+  priceMissing: 'Type a price for “{item}”',
   coveredByPackage: '“{item}” is covered by a package — its price must be 0',
   choosePackageClient: 'Choose the client to sell a package to',
   packageSessionsNeedClient: 'Package sessions need a client and a treatment',

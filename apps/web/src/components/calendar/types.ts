@@ -24,7 +24,7 @@ export type CalItem = {
   roomId: string | null
   serviceName: string
   durationMin: number
-  priceAed: string
+  priceAed: string | null
   clientName: string | null
   /** Already masked when the viewer lacks clients.phone. */
   clientPhone: string | null
@@ -44,7 +44,7 @@ export type CalStaff = {
 
 export type CalRoom = { id: string; name: string }
 
-export type CalVariant = { id: string; label: string; durationMin: number; priceAed: string }
+export type CalVariant = { id: string; label: string; durationMin: number; priceAed: string | null }
 
 export type RotationRow = {
   staffId: string

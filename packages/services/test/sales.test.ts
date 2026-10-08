@@ -1,5 +1,6 @@
 import { businessDateOf, dubaiInstant } from '@spa/core'
 import {
+  bookingItems,
   bookings,
   branches,
   clientPackages,
@@ -36,6 +37,7 @@ import {
   daySummary,
   nextCounter,
   profitAndLoss,
+  publicPrice,
   receiveStock,
   refundOptions,
   refundSale,
@@ -741,5 +743,65 @@ describe('line-level refunds (F2)', () => {
         }),
       ),
     ).rejects.toThrow(/has been used — nothing unused is left to refund/)
+  })
+})
+
+describe('price on request (R4)', () => {
+  const DAY = dubaiInstant('2026-10-09', 12 * 60)
+  it('books a priceless service and checks it out at the price the receptionist types', async () => {
+    const variant = await tx(async (db) => {
+      const [s] = await db
+        .insert(services)
+        .values({ tenantId: ids.tenant!, name: { en: 'Bespoke ritual' }, showPrice: false })
+        .returning()
+      const [v] = await db
+        .insert(serviceVariants)
+        .values({ tenantId: ids.tenant!, serviceId: s!.id, durationMin: 90, priceAed: null })
+        .returning()
+      return v!.id
+    })
+    const booking = await tx((db) =>
+      createBooking(db, {
+        ...base(),
+        source: 'phone',
+        status: 'confirmed',
+        allowOffShift: true,
+        items: [{ serviceVariantId: variant, start: DAY, staffIds: [ids.maya!], roomId: ids.room }],
+      }),
+    )
+    const [item] = await tx((db) =>
+      db.select().from(bookingItems).where(eq(bookingItems.bookingId, booking.id)),
+    )
+    expect(item!.priceAed).toBeNull()
+    const line = { kind: 'service' as const, refId: variant, description: 'Bespoke ritual 90 min', qty: 1 }
+    await expect(
+      tx((db) =>
+        createSale(db, {
+          ...base(),
+          bookingId: booking.id,
+          lines: [{ ...line, unitPriceAed: Number.NaN }],
+          payments: [{ method: 'cash', amountAed: 0 }],
+          now: DAY,
+        }),
+      ),
+    ).rejects.toThrow(/Type a price/)
+    const { sale } = await tx((db) =>
+      createSale(db, {
+        ...base(),
+        bookingId: booking.id,
+        lines: [{ ...line, unitPriceAed: 420, staffId: ids.maya }],
+        payments: [{ method: 'cash', amountAed: 420 }],
+        now: DAY,
+      }),
+    )
+    expect(Number(sale.totalAed)).toBe(420)
+  })
+
+  it('shows public prices per service, else by the spa default', () => {
+    expect(publicPrice('350.00', null, false)).toBe('350.00')
+    expect(publicPrice('350.00', null, true)).toBeNull()
+    expect(publicPrice('350.00', true, true)).toBe('350.00')
+    expect(publicPrice('350.00', false, false)).toBeNull()
+    expect(publicPrice(null, true, false)).toBeNull()
   })
 })

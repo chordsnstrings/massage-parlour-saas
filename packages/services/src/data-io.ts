@@ -627,7 +627,8 @@ export type MenuRecord = {
   nameEn: string
   nameAr: string | null
   durationMin: number
-  priceAed: number
+  /** null = price on request (blank in the file — R4). */
+  priceAed: number | null
   description: string | null
 }
 export type ProductRecord = {
@@ -720,10 +721,9 @@ function validateMenu(get: (k: string) => string) {
     errors.push(`Duration “${rawDuration}” should be minutes between 5 and 600`)
   const rawPrice = get('price')
   const priceAed = parseAmount(rawPrice)
-  display.price = priceAed == null ? rawPrice : priceAed.toFixed(2)
-  if (!rawPrice) errors.push('Price is missing')
-  else if (priceAed == null || priceAed < 0 || priceAed > 100_000)
-    errors.push(`Price “${rawPrice}” should be an amount in AED`)
+  display.price = !rawPrice ? 'On request' : priceAed == null ? rawPrice : priceAed.toFixed(2)
+  if (rawPrice && (priceAed == null || priceAed < 0 || priceAed > 100_000))
+    errors.push(`Price “${rawPrice}” should be an amount in AED, or blank for on request`)
   const description = text(get('description'), 1000)
   if (description) display.description = description
   const record: MenuRecord = {
@@ -731,7 +731,7 @@ function validateMenu(get: (k: string) => string) {
     nameEn,
     nameAr,
     durationMin: durationMin ?? 0,
-    priceAed: Math.round((priceAed ?? 0) * 100) / 100,
+    priceAed: rawPrice && priceAed != null ? Math.round(priceAed * 100) / 100 : null,
     description,
   }
   const key = nameEn && durationMin ? `${nameEn.toLowerCase()}|${durationMin}` : null

@@ -134,7 +134,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   and 7 page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
-  - The spa can request a change (`site.content`), or approve (`site.publish`) while `studio_status = 'review'`.
+  - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,
+    approve, reopen) is `setStudioStatusAction` behind `studioGuard(…, 'site.publish')` (R1).
   - The editor route 404s for non-studio users.
 - **Saving and publishing**:
   - Draft JSON is capped at 512 KB.

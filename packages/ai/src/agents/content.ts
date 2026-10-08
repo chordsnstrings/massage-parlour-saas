@@ -24,7 +24,11 @@ export async function draftInstagramPost(opts: {
   client?: ModelArkClient
 }) {
   const ctx = await withTenant(opts.tenantId, (tx) => loadSpaContext(tx, opts.tenantId, 'content_agent'))
-  const menu = ctx.menu.map((m) => `${m.name} ${m.durationMin}min AED ${m.priceAed}`).join('; ')
+  const menu = ctx.menu
+    .map(
+      (m) => `${m.name} ${m.durationMin}min ${m.priceAed == null ? 'price on request' : `AED ${m.priceAed}`}`,
+    )
+    .join('; ')
   const res = await runChat({
     tenantId: opts.tenantId,
     agentKey: 'content_agent',

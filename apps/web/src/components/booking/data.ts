@@ -9,6 +9,7 @@ import {
   type Tx,
   withTenant,
 } from '@spa/db'
+import { publicPrice, spaHidesPrices } from '@spa/services'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { BookingCatalog, BookingGroup } from './types'
 
@@ -83,13 +84,17 @@ export async function loadBookingCatalog(tenant: {
           )
       : []
 
+    const hides = await spaHidesPrices(tx, tenant.id)
     const groups = new Map<string, BookingGroup>()
     for (const c of cats) groups.set(c.id, { id: c.id, name: c.name, services: [] })
     const other: BookingGroup = { id: 'other', name: null, services: [] }
     for (const s of svcRows) {
       const vs = variants
         .filter((v) => v.serviceId === s.id)
-        .map((v) => ({ id: v.id, durationMin: v.durationMin, priceAed: Number(v.priceAed) }))
+        .map((v) => {
+          const price = publicPrice(v.priceAed, s.showPrice, hides)
+          return { id: v.id, durationMin: v.durationMin, priceAed: price == null ? null : Number(price) }
+        })
       if (!vs.length) continue
       const group = (s.categoryId && groups.get(s.categoryId)) || other
       group.services.push({

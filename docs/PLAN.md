@@ -806,10 +806,10 @@ until `spamanagement.ae` is registered.
 
 ### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
 - **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
-  page: live link, preview, status, **Request a change** (`site_change_requests`) and **Approve** while a review is
-  pending. Editing = `studioGuard`/`isStudio` (platform admin acting on the spa, or a platform admin who is also a
-  member). Flow: `sites.studio_status` building → review (studio sends) → approved (spa only); a request made during
-  review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
+  page: live link, preview, status and **Request a change** (`site_change_requests`) — no approving (R1, 2026-10-08).
+  Editing, approving and publishing = `studioGuard`/`isStudio` (platform admin acting on the spa, or a platform admin
+  who is also a member). Flow: `sites.studio_status` building → review (studio sends) → approved (studio only); the
+  studio can withdraw or reopen; a request made during review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
   the spa's existing editor. Live data blocks (prices, team, hours) keep the site current without edits.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
@@ -901,6 +901,10 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   from the plan and set per spa by the super-admin.
 - **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide
   prices on the public website.
+  Built: `service_variants.price_aed` + `booking_items.price_aed` nullable (null = "Price on request"); POS lines
+  for such services must have a typed price (≥ 0; client + zod + `createSale`). `services.show_price` (null = spa
+  default) + `tenants.settings.hidePrices` (Settings → profile); public site, online booking and AI agents use
+  `publicPrice()` (services/sites.ts) so hidden prices never leave the server. Migration 0017_optional_prices.
 - **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
   designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.

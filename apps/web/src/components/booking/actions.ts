@@ -8,6 +8,8 @@ import {
   enqueueBookingMessage,
   findOrCreateClient,
   notifyTenant,
+  publicPrice,
+  spaHidesPrices,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -220,6 +222,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         const [s] = await tx.select({ name: staff.displayName }).from(staff).where(eq(staff.id, v.staffId))
         therapist = s?.name ?? null
       }
+      const hides = await spaHidesPrices(tx, tenant.id)
       const service = `${(lang === 'ar' && row.service.name.ar?.trim()) || row.service.name.en} · ${row.variant.durationMin} ${t('min', lang)}`
       const done: BookingDone = {
         ref: booking.refCode,
@@ -227,7 +230,10 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         end: new Date(start.getTime() + row.variant.durationMin * 60_000).toISOString(),
         service,
         durationMin: row.variant.durationMin,
-        priceAed: Number(row.variant.priceAed),
+        priceAed: (() => {
+          const p = publicPrice(row.variant.priceAed, row.service.showPrice, hides)
+          return p == null ? null : Number(p)
+        })(),
         therapist,
         whatsappUrl: branch.whatsappE164
           ? whatsappLink(

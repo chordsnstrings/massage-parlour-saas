@@ -94,18 +94,16 @@ export async function resolveChangeRequest(
 }
 
 /**
- * Moves the site through building → review → approved. The studio sends for review (or pulls it back);
- * only the spa approves, and only while a review is pending.
+ * Moves the site through building → review → approved. Only the studio (super-admin) changes the status —
+ * it sends for review, pulls it back, approves or reopens; the spa only reviews and requests changes (R1).
  */
-export async function setStudioStatus(tx: Tx, tenantId: string, to: StudioStatus, by: 'studio' | 'spa') {
+export async function setStudioStatus(tx: Tx, tenantId: string, to: StudioStatus) {
   const [site] = await tx
     .select({ status: sites.studioStatus })
     .from(sites)
     .where(eq(sites.tenantId, tenantId))
   if (!site) throw new DomainError('There is no website yet.', 'not_found')
-  const allowed =
-    by === 'spa' ? site.status === 'review' && to === 'approved' : to !== 'approved' && site.status !== to
-  if (!allowed) throw new DomainError('That step is not available right now.')
+  if (site.status === to) throw new DomainError('That step is not available right now.')
   await tx.update(sites).set({ studioStatus: to, updatedAt: new Date() }).where(eq(sites.tenantId, tenantId))
 }
 
