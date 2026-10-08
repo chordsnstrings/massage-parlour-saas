@@ -5,7 +5,7 @@ import { DomainError, EXPENSE_CODES, lockPeriod, postExpense, reverseSource } fr
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { todayDubai } from '@/lib/utils'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -102,7 +102,7 @@ export async function voidExpenseAction(slug: string, id: string): Promise<Actio
       data: { amountAed: removed.amountAed, accountCode: removed.accountCode, date: removed.expenseDate },
     })
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     const locked = lockedMessage(e)
     if (locked) return fail('Today is inside a closed period, so this expense can’t be voided.')
     throw e

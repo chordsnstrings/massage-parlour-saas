@@ -1,4 +1,5 @@
 import { parseRoots, sendStaffEmail } from '@spa/core'
+import { isLocale } from '@spa/core/i18n'
 import { account, platformDb, session, twoFactor, user, verification } from '@spa/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -25,6 +26,27 @@ function createAuth() {
       provider: 'pg',
       schema: { user, session, account, verification, twoFactor },
     }),
+    user: {
+      additionalFields: {
+        // Spa-dashboard language (docs/PLAN.md §14.6); the top-bar toggle saves it through updateUser.
+        locale: {
+          type: 'string',
+          required: false,
+          defaultValue: 'en',
+          input: true,
+          validator: {
+            input: {
+              '~standard': {
+                version: 1,
+                vendor: 'spa',
+                validate: (value: unknown) =>
+                  isLocale(value) ? { value } : { issues: [{ message: 'Unsupported language' }] },
+              },
+            },
+          },
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,

@@ -32,7 +32,9 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
     await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
     await page.getByRole('button', { name: 'Create account' }).click()
     await page.waitForURL(`${app}/${slug}`)
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Aisha')
+    // The time-of-day greeting lives in the shell's top bar; the page heading names the spa.
+    await expect(page.getByRole('banner')).toContainText('Aisha')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Serenity Spa')
     await screenshotAt(page, 'tenant-home')
   })
 
@@ -75,9 +77,10 @@ test('invitee joins with the receptionist role and limited navigation', async ({
   await page.getByLabel('Password').fill('another-strong-pass')
   await page.getByRole('button', { name: 'Create account & join' }).click()
   await page.waitForURL(`${app}/${slug}`)
-  const nav = page.locator('aside nav')
-  await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible()
-  await expect(nav.getByRole('link', { name: 'Team' })).toHaveCount(0)
+  const nav = page.getByRole('navigation', { name: 'Main menu' })
+  await expect(nav.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  // Team access (team.manage) and Settings stay out of a receptionist's menu and section tabs.
+  await expect(page.locator(`a[href$="/${slug}/team"]`)).toHaveCount(0)
   await expect(nav.getByRole('link', { name: 'Settings' })).toHaveCount(0)
   const res = await page.goto(`${app}/${slug}/team`)
   expect(res?.status()).toBe(404)

@@ -7,9 +7,9 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 
 | Package | Role |
 |---|---|
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0015` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
-| `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `./client` for the browser. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0016` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
 | `@spa/web` (apps/web) | Next.js 16; one app serves every surface. |
@@ -65,8 +65,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
      `audit()` (`server/audit.ts`, platformDb `audit_log`) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
-   - `DomainError` becomes `fail(message)`; other errors rethrow to the error boundary.
-   - UI side: `ActionForm` (useTransition, double-submit guard, toasts, field errors) and `FormSheet`.
+   - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
+     rethrow to the error boundary.
+   - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
+     plus `key`/`params`, which the client renders in the viewer's language (`resultText`); `fromZod` → `errors.checkFields`.
+     `guard`/`studioGuard` errors are translated server-side (`getT`).
+   - UI side: `ActionForm` (useTransition, double-submit guard, toasts, field errors — keys translated) and `FormSheet`.
+6. **i18n (spa dashboard)**: `i18n/server.ts` `getLocale` (row `user.locale` → `spa_locale` cookie → en; reads the row,
+   not the 5-min cached session) / `getT` / `getI18n` (locale, t, fmt, messages); `i18n/client.tsx` `I18nProvider`
+   (tenant layout) + `useI18n`/`useT` (outside the provider: English UI-kit strings only); `i18n/actions.ts`
+   `setLocaleAction` (updateUser + cookie + `refresh()`). `lib/utils.ts` `formatAed/Date/DateTime` = English `fmt`.
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
      shared, stored or sent.
@@ -78,13 +86,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Signup calls `provisionTenant`, which creates the tenant, a default branch, the 6 system roles, the owner member
     and a trial subscription on the first active plan. An email listed in `PLATFORM_ADMIN_EMAILS` also becomes a
     platform admin.
-- **`dashboard/[tenant]`**: home page with KPIs, plus four groups:
-  - Front desk: calendar, clients + intake, sales/POS + daily close, messages (outbox + templates), inbox (Instagram).
-  - Business: services, packages, inventory, staff, payroll + WPS SIF, documents, accounts (P&L, VAT, expenses with
-    receipt scan, journal, export).
-  - Growth: website, media, campaigns + segments, analytics, ai (settings, content, reviews, try).
-  - Admin: team + roles, settings (branch, hours, intake, integrations, domains, data import/export), billing (Stripe
-    Checkout for platform invoices only).
+- **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
+  `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
+  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`; top bar: group crumb + title (home = greeting), EN | ไทย;
+  ≤860 px drawer). Look = `crm.css` (tokens on `:root:has(.crm)`, lifted under `[data-crm-off]` = site editor/preview
+  overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
+  with several pages show section tabs under the top bar):
+  - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
+  - People: Clients, Services & menu (services · packages · inventory), Team & roles (staff · team · documents).
+  - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
+    (ai/reviews).
+  - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
+    Billing (Stripe Checkout for platform invoices only).
+  - System: Settings (incl. logo, hours, intake, integrations, domains, data).
+  - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
 - **`dashboard/account`** (profile, 2FA, push) and **`dashboard/dev/kit`** (design-system gallery).
 - **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
   (studio templates), websites (studio overview).
@@ -93,6 +108,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
+- Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
+  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); uploaded by the signup action (optional, validated before the
+  account is created) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
+  pick in the browser (server actions take ≤ 1 MB). Replaced logo files are kept (URL may be reused).
 - **`api/`**:
   - `auth`, `health`, `client-error`.
   - `collect`: analytics beacon; inserts into `web_events` via platformDb.

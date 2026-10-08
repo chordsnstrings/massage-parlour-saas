@@ -3,6 +3,7 @@ import { Check, Loader2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { LogoInput } from '@/components/media/logo-input'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { appPath } from '@/lib/paths'
@@ -11,9 +12,11 @@ import { checkSlugAction, signupAction } from './actions'
 export function SignupForm({
   address,
   signedIn,
+  logo,
 }: {
   address: { prefix: string; suffix: string }
   signedIn: boolean
+  logo: { label: string; hint: string; tooLarge: string }
 }) {
   const [business, setBusiness] = useState('')
   const [slug, setSlug] = useState('')
@@ -116,6 +119,9 @@ export function SignupForm({
             ) : null}
           </AnimatePresence>
         </div>
+      </Field>
+      <Field label={logo.label} name="logo" hint={logo.hint}>
+        <LogoInput tooLargeText={logo.tooLarge} />
       </Field>
       <SubmitButton size="lg" className="w-full">
         {signedIn ? 'Create spa' : 'Create account'}

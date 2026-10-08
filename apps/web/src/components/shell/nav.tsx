@@ -35,6 +35,7 @@ import { motion } from 'motion/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Fragment, useState } from 'react'
+import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import { Sheet } from '../ui/sheet'
@@ -135,6 +136,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
 export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
   const isActive = useActive()
   const [open, setOpen] = useState(false)
+  const t = useT()
   const moreActive = more.some(isActive)
   const tab = (key: string, active: boolean, Icon: (typeof icons)[keyof typeof icons], label: string) => (
     <span
@@ -170,10 +172,10 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
           <Sheet
             open={open}
             onOpenChange={setOpen}
-            title="More"
+            title={t('ui.more')}
             trigger={
               <button type="button" className="pt-2">
-                {tab('more', moreActive, Ellipsis, 'More')}
+                {tab('more', moreActive, Ellipsis, t('ui.more'))}
               </button>
             }
           >

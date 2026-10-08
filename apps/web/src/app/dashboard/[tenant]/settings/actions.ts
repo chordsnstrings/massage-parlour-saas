@@ -1,10 +1,11 @@
 'use server'
 import { toUaeE164 } from '@spa/core'
 import { branches, tenants, withTenant } from '@spa/db'
+import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -68,4 +69,39 @@ export async function saveSettingsAction(
   })
   revalidatePath(`/dashboard/${slug}`, 'layout')
   return ok('Settings saved')
+}
+
+/** Settings › Business: upload (or remove, with intent=remove) the spa logo shown in the dashboard sidebar. */
+export async function saveLogoAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'settings.manage')
+  if (error) return fail(error)
+  const remove = formData.get('intent') === 'remove'
+  if (remove) {
+    await withTenant(ctx.tenant.id, (tx) => clearTenantLogo(tx, ctx.tenant.id))
+  } else {
+    const file = formData.get('logo')
+    if (!(file instanceof File) || file.size === 0)
+      return fail('errors.file.choose', { logo: 'errors.file.choose' })
+    try {
+      const image = await processLogo(Buffer.from(await file.arrayBuffer()))
+      await withTenant(ctx.tenant.id, (tx) =>
+        setTenantLogo(tx, { tenantId: ctx.tenant.id, image, createdBy: ctx.user.id }),
+      )
+    } catch (e) {
+      if (e instanceof DomainError) return failDomain(e, { logo: e.i18n?.key ?? e.message })
+      throw e
+    }
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+    action: remove ? 'settings.logo_removed' : 'settings.logo_updated',
+  })
+  revalidatePath(`/dashboard/${slug}`, 'layout')
+  return ok(remove ? 'logo.removed' : 'logo.saved')
 }

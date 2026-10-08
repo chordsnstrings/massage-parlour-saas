@@ -25,7 +25,7 @@ import { z } from 'zod'
 import { designSignature, isPageData } from '@/components/site/content'
 import { PAGE_TEMPLATES, pageTemplateData } from '@/components/site/presets'
 import { normalizeTheme } from '@/components/site/theme'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { publishAllErrors } from '@/server/site-preflight'
@@ -49,7 +49,7 @@ const auditAs = (ctx: MemberContext, action: string, entity: string, entityId?: 
 const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/website`, 'layout')
 
 function domainFail(e: unknown): ActionResult {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   throw e
 }
 

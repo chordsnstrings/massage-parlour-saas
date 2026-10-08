@@ -27,7 +27,7 @@ import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone, STATUS_LABEL, timeToGridMinute } from '@/components/calendar/time'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { allowedBranches } from './data'
@@ -71,7 +71,7 @@ async function assertStaffAndRoom(tx: Tx, staffIds: string[], roomId?: string) {
 }
 
 const handle = (e: unknown): ActionResult => {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   throw e
 }
 

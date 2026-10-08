@@ -55,7 +55,7 @@ export default async function SitePreviewPage({ params, searchParams }: Props) {
   }
   // Covers the dashboard chrome: this route is shown full-screen and inside thumbnails.
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg" data-crm-off>
       <Render config={siteConfig} data={pageData as Partial<Data>} metadata={meta} />
     </div>
   )

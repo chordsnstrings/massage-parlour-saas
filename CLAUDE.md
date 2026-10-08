@@ -9,7 +9,10 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); production runs
   · `ai` (ModelArk gateway + agents) · `apps/web` (every surface) · `apps/worker` (pg-boss jobs). PLAN §4's
   blocks/ui/config packages don't exist: site blocks + UI kit live in `apps/web/src/components/{site,ui}`.
 - Write path: `proxy.ts` rewrite → server action → `guard`/`studioGuard` (server/access.ts) → zod → `withTenant(ctx.tenant.id,
-  tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `fail`.
+  tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `failDomain`.
+- Spa dashboard (PLAN §14.6): `SpaShell` + scoped `crm.css` (super-admin keeps AppShell + globals.css look). UI text
+  EN + TH only via `@spa/core/i18n` keys — server `getT()`, client `useT()`; `ok`/`fail` take keys; never translate
+  typed names; Thai copy needs native review.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)

@@ -5,7 +5,7 @@ import { adjustStock, DomainError, receiveStock } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { todayDubai } from '@/lib/utils'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -15,7 +15,7 @@ const done = (slug: string, message: string) => {
   return ok(message)
 }
 const handle = (e: unknown) => {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   const msg = `${e instanceof Error ? e.message : ''} ${(e as { cause?: Error })?.cause?.message ?? ''}`
   if (/locked/i.test(msg)) return fail('That date is in a closed accounting period.')
   throw e

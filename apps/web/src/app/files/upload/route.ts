@@ -2,6 +2,7 @@ import { withTenant } from '@spa/db'
 import { createAsset, DomainError, MAX_UPLOAD_BYTES, processImage } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { getT } from '@/i18n/server'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { getSession } from '@/server/session'
@@ -48,11 +49,13 @@ export async function POST(req: Request) {
   const origin = req.headers.get('origin')
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
   if (!origin || !host || new URL(origin).host !== host) return json(403, { ok: false, error: 'Forbidden' })
+  const t = await getT()
+  const tooLarge = t('errors.file.imageTooLarge', { size: '20 MB' })
   if (Number(req.headers.get('content-length') ?? 0) > BODY_LIMIT)
-    return json(413, { ok: false, error: 'Images can be up to 20 MB' })
-  if (!(await getSession())) return json(401, { ok: false, error: 'Please sign in again.' })
+    return json(413, { ok: false, error: tooLarge })
+  if (!(await getSession())) return json(401, { ok: false, error: t('errors.signInAgain') })
   const tenant = Tenant.safeParse(new URL(req.url).searchParams.get('tenant'))
-  if (!tenant.success) return json(400, { ok: false, error: 'Upload failed — please try again.' })
+  if (!tenant.success) return json(400, { ok: false, error: t('errors.file.uploadFailed') })
   const { ctx, error } = await guard(tenant.data, 'site.content') // 404s for non-members
   if (error) return json(403, { ok: false, error })
 
@@ -60,14 +63,14 @@ export async function POST(req: Request) {
   try {
     form = await readForm(req, BODY_LIMIT)
   } catch (e) {
-    if (e instanceof TooLarge) return json(413, { ok: false, error: 'Images can be up to 20 MB' })
-    return json(400, { ok: false, error: 'Upload failed — please try again.' })
+    if (e instanceof TooLarge) return json(413, { ok: false, error: tooLarge })
+    return json(400, { ok: false, error: t('errors.file.uploadFailed') })
   }
   const tags = Tags.safeParse(form.get('tags') ?? undefined)
   const file = form.get('file')
   if (!tags.success || !(file instanceof File))
-    return json(400, { ok: false, error: 'Choose an image to upload.' })
-  if (file.size > MAX_UPLOAD_BYTES) return json(413, { ok: false, error: 'Images can be up to 20 MB' })
+    return json(400, { ok: false, error: t('errors.file.choose') })
+  if (file.size > MAX_UPLOAD_BYTES) return json(413, { ok: false, error: tooLarge })
 
   try {
     // Re-encode before opening the transaction (CPU work shouldn't hold a DB connection).
@@ -107,8 +110,9 @@ export async function POST(req: Request) {
       },
     })
   } catch (e) {
-    if (e instanceof DomainError) return json(422, { ok: false, error: e.message })
+    if (e instanceof DomainError)
+      return json(422, { ok: false, error: t.maybe(e.i18n?.key, e.i18n?.params) ?? e.message })
     console.error('media upload failed', e)
-    return json(500, { ok: false, error: 'Upload failed — please try again.' })
+    return json(500, { ok: false, error: t('errors.file.uploadFailed') })
   }
 }

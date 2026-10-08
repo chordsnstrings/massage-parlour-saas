@@ -3,7 +3,7 @@ import { withTenant } from '@spa/db'
 import { createChangeRequest, DomainError, resolveChangeRequest, setStudioStatus } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard, isStudio, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -26,7 +26,7 @@ const revalidate = (slug: string) => {
 }
 
 function domainFail(e: unknown): ActionResult {
-  if (e instanceof DomainError) return fail(e.message)
+  if (e instanceof DomainError) return failDomain(e)
   throw e
 }
 

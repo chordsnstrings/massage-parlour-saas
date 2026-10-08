@@ -1,11 +1,13 @@
 'use server'
 import { getAuth } from '@spa/auth'
 import { checkSlug, normalizeSlug } from '@spa/core'
+import { withTenant } from '@spa/db'
+import { DomainError, type ProcessedImage, processLogo, setTenantLogo } from '@spa/services'
 import { APIError } from 'better-auth/api'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { audit } from '@/server/audit'
 import { isSlugAvailable, provisionTenant } from '@/server/provision'
@@ -41,6 +43,18 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   if (!slugCheck.ok)
     return fail(slugCheck.reason ?? 'Choose another address.', { slug: slugCheck.reason ?? '' })
 
+  // Optional logo: validated before the account exists, stored once the spa is provisioned.
+  let logo: ProcessedImage | undefined
+  const logoFile = formData.get('logo')
+  if (logoFile instanceof File && logoFile.size > 0) {
+    try {
+      logo = await processLogo(Buffer.from(await logoFile.arrayBuffer()))
+    } catch (e) {
+      if (e instanceof DomainError) return failDomain(e, { logo: e.i18n?.key ?? e.message })
+      throw e
+    }
+  }
+
   let user: { id: string; email: string } | undefined = session?.user
   if (!user) {
     const data = parsed.data as z.infer<typeof account>
@@ -72,6 +86,11 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
       slug,
     })
     tenantId = tenant.id
+    if (logo) {
+      const image = logo
+      const createdBy = user.id
+      await withTenant(tenant.id, (tx) => setTenantLogo(tx, { tenantId: tenant.id, image, createdBy }))
+    }
   } catch (e) {
     if (String((e as { cause?: { code?: string } }).cause?.code) === '23505')
       return fail('That address is taken.', { slug: 'That address is taken.' })
@@ -83,7 +102,7 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     action: 'tenant.created',
     entity: 'tenant',
     entityId: tenantId,
-    data: { slug },
+    data: { slug, logo: Boolean(logo) },
   })
   redirect(appPath(`/${slug}`))
 }

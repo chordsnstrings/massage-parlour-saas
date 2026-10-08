@@ -1,4 +1,5 @@
 import { branches, withTenant } from '@spa/db'
+import { logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import {
   ChevronRight,
@@ -19,6 +20,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { saveSettingsAction } from './actions'
+import { LogoForm } from './logo-form'
 
 export const metadata: Metadata = { title: 'Settings' }
 
@@ -36,6 +38,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
         description="Business details shown on invoices, your website and WhatsApp links."
       />
       <PageBody>
+        <LogoForm slug={t.slug} current={logoUrl(t.logoFileId)} />
         <ActionForm action={saveSettingsAction.bind(null, t.slug)} className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader title="Business" description="Legal details appear on tax invoices." />

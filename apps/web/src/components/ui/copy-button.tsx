@@ -2,10 +2,12 @@
 import { Check, Copy } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
+import { useT } from '@/i18n/client'
 import { Button } from './button'
 
-export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
+export function CopyButton({ value, label }: { value: string; label?: string }) {
   const [done, setDone] = useState(false)
+  const t = useT()
   return (
     <Button
       type="button"
@@ -29,7 +31,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
           {done ? <Check className="text-success" /> : <Copy />}
         </motion.span>
       </AnimatePresence>
-      {done ? 'Copied' : label}
+      {done ? t('ui.copied') : (label ?? t('ui.copy'))}
     </Button>
   )
 }

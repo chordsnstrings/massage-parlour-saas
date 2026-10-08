@@ -45,13 +45,6 @@ const SOURCE_LABELS: Record<string, string> = {
   gbp: 'Google Business',
 }
 
-function greeting() {
-  const h = Number(
-    new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Dubai' }),
-  )
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
-}
-
 const pct = (v: number | null) => (v === null ? 0 : Math.round(v * 100))
 
 export default async function TenantHome({
@@ -211,8 +204,7 @@ export default async function TenantHome({
   return (
     <>
       <PageHeader
-        eyebrow={tenant.name}
-        title={`${greeting()}, ${ctx.user.name.split(' ')[0]}`}
+        title={tenant.name}
         description={`Here's how your spa is doing ${periodLabel}.`}
         actions={
           <>
@@ -506,8 +498,7 @@ async function TherapistHome({ ctx }: { ctx: MemberContext }) {
   return (
     <>
       <PageHeader
-        eyebrow={ctx.tenant.name}
-        title={`${greeting()}, ${ctx.user.name.split(' ')[0]}`}
+        title={ctx.tenant.name}
         description={formatDate(`${data.date}T12:00:00+04:00`)}
         actions={
           can(ctx, 'calendar.view') && (

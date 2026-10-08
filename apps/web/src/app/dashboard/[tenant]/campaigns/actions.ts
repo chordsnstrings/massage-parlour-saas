@@ -14,7 +14,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import { MAX_MESSAGE, segmentRulesSchema, unknownCampaignVariables } from '@/components/campaigns/rules'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -306,7 +306,7 @@ export async function saveCampaignAction(
     })
   } catch (e) {
     if (e instanceof FieldError) return fail('Please check the highlighted fields.', { [e.field]: e.message })
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
@@ -339,7 +339,7 @@ export async function duplicateCampaignAction(
   try {
     copyId = (await withTenant(ctx.tenant.id, (tx) => duplicateCampaign(tx, id, ctx.user.id))).id
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
@@ -369,7 +369,7 @@ export async function archiveCampaignAction(
   try {
     withdrawn = await withTenant(ctx.tenant.id, (tx) => archiveCampaign(tx, id, archived))
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({

@@ -1,6 +1,7 @@
 'use client'
 import { X } from 'lucide-react'
 import { Dialog } from 'radix-ui'
+import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 
 /** Bottom sheet on phones, centred dialog on md+. */
@@ -21,6 +22,7 @@ export function Sheet({
   onOpenChange?: (open: boolean) => void
   className?: string
 }) {
+  const t = useT()
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
@@ -46,7 +48,7 @@ export function Sheet({
             </div>
             <Dialog.Close
               className="rounded-md p-1 text-muted transition-colors hover:bg-subtle hover:text-fg"
-              aria-label="Close"
+              aria-label={t('ui.close')}
             >
               <X className="size-4" strokeWidth={1.5} />
             </Dialog.Close>

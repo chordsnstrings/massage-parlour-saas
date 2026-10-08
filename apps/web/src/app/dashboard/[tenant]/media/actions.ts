@@ -17,7 +17,7 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { toMediaItem } from '@/components/media/types'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
@@ -71,7 +71,7 @@ export async function saveAssetAction(
       await setTags(tx, id, (d.tags ?? '').split(','))
     })
   } catch (e) {
-    if (e instanceof DomainError) return fail(e.message)
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
