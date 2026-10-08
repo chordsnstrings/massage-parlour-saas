@@ -786,7 +786,7 @@ until `spamanagement.ae` is registered.
 - Stripe Checkout for **platform invoices only** (SaaS billing; overrides "Stripe later"); client payments stay recorded-only.
 - **Redesign (owner, 2026-10-08):** new visual style + better UX + mobile-first polish for the marketing site only (backend
   unchanged). Brand domain spamanagement.co. Main CTA = WhatsApp chat with sales (number from super-admin company
-  settings). Style chosen from 3 mockups (dark luxury / warm editorial / bold product-led): pending.
+  settings). Owner rejected 3 generated mockups; owner will supply the design to implement.
 
 ### 14.4 Website Studio — sites are a bespoke service (decided 2026-10-07)
 - **Super-admin builds every spa's site** (overrides §11 self-serve editing). Spa members get a read-only Website
