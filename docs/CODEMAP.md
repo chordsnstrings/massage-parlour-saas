@@ -132,8 +132,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
   - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
   - `advanced` holds the schedule and scoped custom CSS.
-- **Themes and templates**: theme tokens in `sites.theme`; 8 built-in templates (`templates.ts`); 24 section presets
-  and 7 page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
+- **Themes and templates**: theme tokens in `sites.theme`; 23 built-in templates — 8 classic (`templates.ts`) + 15
+  design templates (R5, `templates-designs.ts`); 24 section presets + one "3D motion" preset per design scene, and 7
+  page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
+- **Design templates (R5)**: look = theme tokens `headingFace` (self-hosted @fontsource faces, `site-designs.css`),
+  `backdrop` (CSS-drawn hero art), `emblem` (hero art built from the spa name + live hours/prices, shown when the
+  hero has no photo; `blocks/hero-art.tsx`), `emphasis` (`*word*` in headings). Motion = per-band `scene` props set by
+  `applyMotion` (fan, cube, doors, coverflow, road, pages, prism, slabs, layers, blocks, brochure, turn — pose scenes
+  in `lib/scenes.ts`, all ending at rest). Scroll scenes are off in the editor; ambient hero loops stop in the editor
+  and under OS reduced motion. Gallery thumbnails: `public/site-templates/{key}.webp`, regenerated with
+  `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
   - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,

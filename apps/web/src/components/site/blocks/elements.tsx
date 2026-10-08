@@ -4,7 +4,8 @@ import { alignField, biField, buttonsField, hideField, imageField, radio, select
 import { tr } from '../i18n'
 import { type Align, responsiveStyle, type Visibility } from '../style'
 import type { Bi, Responsive } from '../types'
-import { type Background, bandFields, SectionShell, type ShellProps } from './layout'
+import { Emphasis, HeroBackdrop, HeroEmblem } from './hero-art'
+import { type Background, bandFields, type SceneKey, SectionShell, type ShellProps } from './layout'
 import { ArtPlaceholder, type ButtonItem, metaOf, SiteButton } from './shared'
 
 const SIZES = {
@@ -55,7 +56,9 @@ export const Heading: ComponentConfig<{
     return (
       <div {...s.attrs} className={cn('flex flex-col gap-4', s.className)} style={s.style}>
         {kicker && <p className="text-xs font-medium tracking-[0.22em] text-muted uppercase">{kicker}</p>}
-        <Tag className={cn('sb-heading max-w-4xl', SIZES[size])}>{tr(value, meta)}</Tag>
+        <Tag className={cn('sb-heading max-w-4xl', SIZES[size])}>
+          <Emphasis text={tr(value, meta)} />
+        </Tag>
       </div>
     )
   },
@@ -305,7 +308,7 @@ export const Gallery: ComponentConfig<
           className={cn('sb-card size-full object-cover', extra)}
         />
       ) : (
-        <ArtPlaceholder seed={i + 3} className={cn('sb-card', extra)} />
+        <ArtPlaceholder seed={i + 3} className={cn('sb-card size-full', extra)} />
       )
     return (
       <SectionShell meta={meta} {...shell} width="contained">
@@ -353,6 +356,7 @@ export const Hero: ComponentConfig<{
   imageAlt: Bi
   background: Background
   hide?: Responsive<Visibility>
+  scene?: SceneKey
 }> = {
   label: 'Hero',
   fields: {
@@ -369,6 +373,7 @@ export const Hero: ComponentConfig<{
     imageAlt: biField('Image alt text'),
     background: bandFields.background,
     hide: hideField(),
+    scene: bandFields.scene,
   },
   defaultProps: {
     variant: 'split',
@@ -380,8 +385,25 @@ export const Hero: ComponentConfig<{
     imageAlt: { en: '' },
     background: 'none',
   },
-  render: ({ puck, id, variant, eyebrow, title, subtitle, buttons, image, imageAlt, background, hide }) => {
+  render: ({
+    puck,
+    id,
+    variant,
+    eyebrow,
+    title,
+    subtitle,
+    buttons,
+    image,
+    imageAlt,
+    background,
+    hide,
+    scene,
+  }) => {
     const meta = metaOf(puck)
+    // Design templates (R5): CSS-drawn backdrop + an emblem made from the spa name where there is no photo.
+    const emblemKind = meta.theme.emblem ?? 'none'
+    const backdrop = <HeroBackdrop kind={meta.theme.backdrop ?? 'none'} meta={meta} />
+    const emblem = <HeroEmblem kind={emblemKind} meta={meta} id={id} />
     const kicker = tr(eyebrow, meta)
     const sub = tr(subtitle, meta)
     const copy = (center: boolean, split = false) => (
@@ -393,7 +415,7 @@ export const Hero: ComponentConfig<{
             split ? 'text-[clamp(2.4rem,5.6vw,4.25rem)]' : 'text-[clamp(2.6rem,7.5vw,5rem)]',
           )}
         >
-          {tr(title, meta)}
+          <Emphasis text={tr(title, meta)} />
         </h1>
         {sub && <p className="sb-prose max-w-xl text-lg text-muted sm:text-xl">{sub}</p>}
         <div className={cn('mt-2 flex flex-wrap gap-3', center && 'justify-center')}>
@@ -412,6 +434,7 @@ export const Hero: ComponentConfig<{
           bgImage={image}
           padding={{ base: 'xl', lg: 'xl' }}
           hide={hide}
+          scene={scene}
           className="flex min-h-[min(78vh,760px)] items-end"
         >
           {copy(false)}
@@ -425,17 +448,38 @@ export const Hero: ComponentConfig<{
           background={background}
           padding={{ base: 'xl', lg: 'xl' }}
           hide={hide}
+          scene={scene}
           width="contained"
+          backdrop={backdrop}
         >
-          {copy(true)}
+          {emblemKind !== 'none' && emblemKind !== 'bento' ? (
+            <div className="flex flex-col items-center gap-10">
+              {emblem}
+              {copy(true)}
+            </div>
+          ) : (
+            <>
+              {copy(true)}
+              {emblemKind === 'bento' && <div className="mx-auto mt-12 max-w-xl">{emblem}</div>}
+            </>
+          )}
         </SectionShell>
       )
     }
     return (
-      <SectionShell meta={meta} background={background} padding={{ base: 'lg', lg: 'xl' }} hide={hide}>
+      <SectionShell
+        meta={meta}
+        background={background}
+        padding={{ base: 'lg', lg: 'xl' }}
+        hide={hide}
+        scene={scene}
+        backdrop={backdrop}
+      >
         <div className="grid items-center gap-10 md:grid-cols-[1.1fr_1fr] lg:gap-16">
           {copy(false, true)}
-          {image ? (
+          {!image && emblemKind !== 'none' ? (
+            emblem
+          ) : image ? (
             // biome-ignore lint/performance/noImgElement: tenant-provided URL
             <img src={image} alt={tr(imageAlt, meta)} className="sb-card aspect-[4/5] w-full object-cover" />
           ) : (

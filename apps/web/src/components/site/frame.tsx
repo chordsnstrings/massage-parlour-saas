@@ -30,6 +30,7 @@ export function SiteFrame({ meta, children }: { meta: SiteMeta; children: React.
       dir={meta.locale === 'ar' ? 'rtl' : 'ltr'}
       lang={meta.locale}
       data-motion={meta.editing ? 'none' : meta.theme.motion}
+      data-emphasis={meta.theme.emphasis ?? 'italic'}
       style={themeVars(meta.theme)}
     >
       <a

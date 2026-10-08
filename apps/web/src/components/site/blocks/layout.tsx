@@ -115,15 +115,47 @@ export const backgroundField = select<Background>('Background', [
  * Per-section scroll effect (scroll-scenes engine, `lib/scenes.ts`). `auto` keeps the theme's gentle entrance.
  * Only on the public site and preview — never in the editor.
  */
-export type SceneKey = 'auto' | 'none' | 'reveal' | 'rise' | 'assemble' | 'flip' | 'depart'
+export type SceneKey =
+  | 'auto'
+  | 'none'
+  | 'reveal'
+  | 'rise'
+  | 'assemble'
+  | 'flip'
+  | 'depart'
+  // 3D scenes of the design templates (R5, lib/scenes.ts SCENE_POSES)
+  | 'fan'
+  | 'cube'
+  | 'doors'
+  | 'coverflow'
+  | 'road'
+  | 'pages'
+  | 'prism'
+  | 'slabs'
+  | 'layers'
+  | 'blocks'
+  | 'brochure'
+  | 'turn'
 export const sceneField = select<SceneKey>('Scroll effect', [
   ['auto', 'Theme default'],
   ['none', 'None'],
   ['reveal', 'Tilt up'],
-  ['rise', 'Wipe in, one by one'],
-  ['assemble', 'Fly into place'],
-  ['flip', 'Flip open'],
+  ['rise', 'Wipe in, one by one (pillars)'],
+  ['assemble', 'Fly into place (bento)'],
+  ['flip', 'Flip open (split-flap)'],
   ['depart', 'Sink back (hero)'],
+  ['fan', 'Deal out from a fan'],
+  ['cube', 'Turn like a cube'],
+  ['doors', 'Open like doors'],
+  ['coverflow', 'Slide past (coverflow)'],
+  ['road', 'Come down the road'],
+  ['pages', 'Turn the pages'],
+  ['prism', 'Unwrap a prism'],
+  ['slabs', 'Slide apart (slabs)'],
+  ['layers', 'Separate layers'],
+  ['blocks', 'Rise block by block'],
+  ['brochure', 'Unfold (brochure)'],
+  ['turn', 'Flip to the front'],
 ])
 const SCENE_ATTRS: Partial<Record<SceneKey, Record<string, string>>> = {
   reveal: { 'data-span': '.45' },
@@ -151,8 +183,15 @@ export function SectionShell({
   anchor,
   scene = 'auto',
   className,
+  backdrop,
   children,
-}: ShellProps & { meta: SiteMeta; className?: string; children: React.ReactNode }) {
+}: ShellProps & {
+  meta: SiteMeta
+  className?: string
+  /** Decorative full-bleed layer behind the content (hero art of the design templates). */
+  backdrop?: React.ReactNode
+  children: React.ReactNode
+}) {
   const s = responsiveStyle({ padding, hide }, { editing: meta.editing, padFallback: 'lg' })
   const image = background === 'image' && bgImage
   const scripted = !meta.editing && scene !== 'auto' && scene !== 'none'
@@ -173,6 +212,7 @@ export function SectionShell({
           <div className="absolute inset-0 -z-10 bg-black/45" />
         </>
       )}
+      {!image && backdrop}
       <div
         data-beats={scripted ? '' : undefined}
         data-world={scripted && scene === 'depart' ? '' : undefined}
