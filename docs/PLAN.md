@@ -897,7 +897,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   When marking Completed the receptionist enters the therapist's commission in AED for that booking. A therapist's pay =
   the sum of these commissions only (no base, no % accrual). Receptionists (and other non-therapists): fixed salary or
   commission, chosen per person by the owner. Payroll + WPS build from this.
-  *Built (W2, branch worktree-agent-a97b77d5b8dd6e500): migration 0017_booking_commissions; "% commission" for
+  *Built (W2, branch worktree-agent-a97b77d5b8dd6e500): migration 0019_booking_commissions; "% commission" for
   non-therapists = % of net POS lines credited to them (existing `commission_pct`); open: owner to confirm vs
   fixed AED per booking. Details: CODEMAP Service invariants (Bookings marks/commission, Payroll / pay types).*
 - **R3 Subscription:** AED 24,000/yr = 12 monthly invoices of AED 2,000, or one-time annual; setup fee is separate
@@ -907,7 +907,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Built: `service_variants.price_aed` + `booking_items.price_aed` nullable (null = "Price on request"); POS lines
   for such services must have a typed price (≥ 0; client + zod + `createSale`). `services.show_price` (null = spa
   default) + `tenants.settings.hidePrices` (Settings → profile); public site, online booking and AI agents use
-  `publicPrice()` (services/sites.ts) so hidden prices never leave the server. Migration 0017_optional_prices.
+  `publicPrice()` (services/sites.ts) so hidden prices never leave the server. Migration 0018_optional_prices.
 - **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
   designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
