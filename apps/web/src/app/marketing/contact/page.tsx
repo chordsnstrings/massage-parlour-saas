@@ -6,7 +6,7 @@ import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
   title: 'Contact',
-  description: 'Talk to the Spa Management team in Dubai.',
+  description: 'Talk to the spamanagement.co team in Dubai.',
 }
 export const dynamic = 'force-dynamic' // contact details are edited in the super-admin
 
@@ -15,13 +15,13 @@ const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 export default async function ContactPage() {
   const c = await companyContact()
   const wa = digits(c?.whatsapp) || digits(c?.phone)
-  const email = c?.email || 'hello@spamanagement.ae'
+  const email = c?.email || 'hello@spamanagement.co'
   const cards = [
     wa && {
       icon: MessageCircle,
       title: 'WhatsApp',
       text: 'The quickest way to reach us.',
-      href: `https://wa.me/${wa}?text=${encodeURIComponent('Hi! I’d like to know more about Spa Management.')}`,
+      href: `https://wa.me/${wa}?text=${encodeURIComponent('Hi! I’d like to know more about spamanagement.co.')}`,
       label: 'Message us',
     },
     {

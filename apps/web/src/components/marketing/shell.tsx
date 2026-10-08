@@ -20,7 +20,7 @@ async function Header({ active }: { active: MarketingPage }) {
       <div className="mkt-wrap mkt-bar">
         <Link href="/" className="mkt-logo">
           <LogoMark className="size-8" />
-          <span>Spa Management</span>
+          <span>spamanagement.co</span>
         </Link>
         <nav aria-label="Main" className="mkt-links hidden items-center md:flex">
           {NAV.map((n) => (
@@ -117,7 +117,7 @@ async function Footer() {
         <div className="mkt-fgrid">
           <div>
             <div className="mkt-logo">
-              <LogoMark className="size-8" /> Spa Management
+              <LogoMark className="size-8" /> spamanagement.co
             </div>
             <p className="mt-3 max-w-[280px]">Software for massage spas in the UAE. Made in Dubai.</p>
           </div>
@@ -140,7 +140,7 @@ async function Footer() {
           </div>
         </div>
         <div className="mkt-fbot">
-          <span>© {new Date().getFullYear()} spamanagement.ae</span>
+          <span>© {new Date().getFullYear()} spamanagement.co</span>
         </div>
       </div>
     </footer>

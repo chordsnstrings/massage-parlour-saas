@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Spa Management',
+    name: 'spamanagement.co',
     short_name: 'Spa',
     description: 'Run your spa: bookings, payments, team and website.',
     start_url: '/',

@@ -6,7 +6,7 @@ import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 export const metadata: Metadata = {
   title: 'Features',
   description:
-    'Every automation in Spa Management: bookings, follow-ups, accounts, marketing and your website.',
+    'Every automation in spamanagement.co: bookings, follow-ups, accounts, marketing and your website.',
 }
 
 const NEXT = [

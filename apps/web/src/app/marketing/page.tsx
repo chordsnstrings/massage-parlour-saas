@@ -9,7 +9,7 @@ import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = {
-  title: { absolute: 'Spa Management — more bookings, less work for UAE spas' },
+  title: { absolute: 'spamanagement.co — more bookings, less work for UAE spas' },
 }
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 

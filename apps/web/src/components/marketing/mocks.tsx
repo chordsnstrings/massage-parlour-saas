@@ -82,7 +82,7 @@ export function EditorMock() {
         <span className="size-2.5 rounded-full bg-[var(--sand)]" />
         <span className="size-2.5 rounded-full bg-[var(--sage)]" />
         <span className="ms-3 truncate rounded-full bg-[var(--sand-soft)] px-3 py-1 text-[11px] text-[var(--mute)]">
-          serenity.spamanagement.ae
+          serenity.spamanagement.co
         </span>
       </div>
       <div className="grid grid-cols-[8.5rem_1fr] text-[11px] sm:grid-cols-[10rem_1fr]">

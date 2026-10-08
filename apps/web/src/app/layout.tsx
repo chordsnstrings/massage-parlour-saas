@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/toast'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: { default: 'Spa Management', template: '%s · Spa Management' },
+  title: { default: 'spamanagement.co', template: '%s · spamanagement.co' },
   description: 'Bookings, payments, accounting, websites and AI marketing for spas in the UAE.',
   manifest: '/manifest.webmanifest',
 }
