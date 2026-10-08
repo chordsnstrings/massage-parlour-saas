@@ -882,6 +882,36 @@ until `spamanagement.ae` is registered.
 - Migrations ≥ 0017, number agreed before merge. One PR per item; CI green; owner approves merges. Shared seam: the i18n
   catalogue — Track B returns codes/keys, Track A adds the text. `packages/core/src/email.ts` (B1) is Track B's.
 
+### 14.8 Owner requests (2026-10-08, after Phase 2) — Claude builds all of them, then B1–B6
+Owner stopped the Track B partner: Claude now owns every track (§14.7 split retired). Order: finish §14.6 Phase 2
+(verify + PR) → R1–R15 → B1–B6. Each item: one PR, CI green, owner approves.
+- **R1 Website approvals:** only super-admins approve/publish; spas can only request changes (remove spa approve).
+- **R2 Bookings + pay:** "Bookings" in the sidebar (list + detail). Staff mark each booking Pending / Completed / Cancelled.
+  When marking Completed the receptionist enters the therapist's commission in AED for that booking. A therapist's pay =
+  the sum of these commissions only (no base, no % accrual). Receptionists (and other non-therapists): fixed salary or
+  commission, chosen per person by the owner. Payroll + WPS build from this.
+- **R3 Subscription:** AED 24,000/yr = 12 monthly invoices of AED 2,000, or one-time annual; setup fee is separate
+  from the plan and set per spa by the super-admin.
+- **R4 Service prices optional:** a service may have no price (typed at checkout), and each service + the spa can hide
+  prices on the public website.
+- **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
+  designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
+- **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
+- **R7 Meta MCP for AI:** AI agents reach Instagram / WhatsApp through a Meta MCP server. Customer WhatsApp stays
+  click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).
+- **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt.
+- **R9 Warehouse stock:** central warehouse stock, transfers to branches, linked to purchases.
+- **R10 Exports:** every CSV export becomes Excel (.xlsx) in an official/clean format. Exception: WPS SIF keeps its
+  mandated bank format.
+- **R11 Billing page (spa):** price + the 12-month schedule, each month Paid (green dot) / Must pay (red dot). Overdue →
+  one-line red bar at the top of the CRM ("Please pay your invoice to avoid …"). Status is set by the super-admin only.
+- **R12 Admin console overview:** pause a spa (late payment), delete a spa, subscription one-time or monthly, setup fee
+  separate, generate payment reminders.
+- **R13 Login + super-admin console** use the marketing site design.
+- **R14 Domain orders:** price shown/charged = current price + USD 10.
+- **R15 Logo:** spamanagement.co wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`) in admin, marketing and
+  login pages (not the spa dashboard, which shows the spa's own logo).
+
 ## 15. Working agreement (token-efficient, still thorough)
 
 - One vertical slice per PR, with a 5–10 line spec in the PR description.

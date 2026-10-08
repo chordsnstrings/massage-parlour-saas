@@ -26,15 +26,9 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
   `docs/CODEMAP.md` / `docs/PLAN.md` in the same session, commit, and merge the docs into the deploy branch
   `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path).
 
-## Work split (owner, 2026-10-08) — brief: Track B partner, backend + infra
-- **Claude = Track A:** spa dashboard UI only — `apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,
-  `packages/core/src/i18n/**`. Now: PLAN §14.6 Phase 2 (every screen redesigned + Thai).
-- **Track B (partner) owns** `packages/services`, `packages/db` (schema + migrations ≥ 0017, agree the number first),
-  `apps/worker`, `packages/auth`, `deploy/`. Don't edit those; if a screen needs a service, note it in the PR.
-  Track B items: B1 domain → spamanagement.co, B2 notifications, B3 automation switches, B4 search / bookings list /
-  audit log services, B5 waitlist, merge clients, equipment resource, time clock + leave, booking widget, B6 restore
-  drill + Instagram autopilot job. Services return error codes / i18n keys; Track A wires the text.
-- One PR per item into the deploy branch, CI green, owner approves the merge.
+## Work split (owner, 2026-10-08)
+- The Track B partner is stopped: **Claude owns every track** (UI, services, db, worker, auth, deploy). Queue: finish
+  PLAN §14.6 Phase 2 → owner requests R1–R15 (PLAN §14.8) → former Track B items B1–B6 (PLAN §14.7).
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
