@@ -1,5 +1,7 @@
+import { toUaeE164 } from '@spa/core'
 import {
   auditLog,
+  branches,
   members,
   plans,
   platformDb,
@@ -10,7 +12,8 @@ import {
   tenants,
   user,
 } from '@spa/db'
-import { asc, desc, eq } from 'drizzle-orm'
+import { billingAlert } from '@spa/services'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -27,10 +30,16 @@ import { appUrl } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
 import {
   createInvoiceAction,
+  deleteTenantAction,
+  generateScheduleAction,
+  pauseTenantAction,
+  paymentReminderAction,
   recordPaymentAction,
+  setInvoicePaidAction,
   setTenantStatusAction,
   updateSubscriptionAction,
 } from '../../actions'
+import { PaymentReminder } from './reminder'
 
 const UUID = /^[0-9a-f-]{36}$/i
 
@@ -40,7 +49,8 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const db = platformDb()
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) })
   if (!tenant) notFound()
-  const [sub, planRows, invoices, payments, team, events] = await Promise.all([
+  const today = todayDubai()
+  const [sub, planRows, invoices, payments, team, events, branch, alert] = await Promise.all([
     db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
     db.select().from(plans).orderBy(asc(plans.sort)),
     db
@@ -66,8 +76,15 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
       .innerJoin(roles, eq(roles.id, members.roleId))
       .where(eq(members.tenantId, id)),
     db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
+    db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
+    billingAlert(db, id, today),
   ])
-  const today = todayDubai()
+  const ownerPhone =
+    (branch?.whatsappE164 && toUaeE164(branch.whatsappE164)) ||
+    (branch?.phone && toUaeE164(branch.phone)) ||
+    null
+  const paused = tenant.status === 'read_only'
+  const deleted = Boolean(tenant.deletedAt)
   const site = await publicSiteUrl(tenant)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
 
@@ -80,7 +97,11 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         <ArrowLeft className="size-4" strokeWidth={1.5} /> Spas
       </Link>
       <PageHeader
-        eyebrow={<Badge tone={statusTone(tenant.status)}>{tenant.status}</Badge>}
+        eyebrow={
+          <Badge tone={deleted ? 'danger' : statusTone(tenant.status)}>
+            {deleted ? 'deleted' : paused ? 'paused' : tenant.status}
+          </Badge>
+        }
         title={tenant.name}
         description={`${tenant.slug} · joined ${formatDate(tenant.createdAt)}`}
         actions={
@@ -132,7 +153,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     ))}
                   </Select>
                 </Field>
-                <Field label="Price (AED)" name="priceAed" hint="Agreed price for this spa.">
+                <Field label="Annual price (AED)" name="priceAed" hint="Agreed yearly price for this spa.">
                   <Input
                     id="priceAed"
                     name="priceAed"
@@ -140,7 +161,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     defaultValue={sub?.priceAed ?? planRows[0]?.priceAed}
                   />
                 </Field>
-                <Field label="Setup fee (AED)" name="setupFeeAed">
+                <Field label="Setup fee (AED)" name="setupFeeAed" hint="One-off, billed as its own invoice.">
                   <Input
                     id="setupFeeAed"
                     name="setupFeeAed"
@@ -148,14 +169,14 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     defaultValue={sub?.setupFeeAed ?? '0'}
                   />
                 </Field>
-                <Field label="Billing" name="billingInterval">
+                <Field label="Payment plan" name="billingInterval">
                   <Select
                     id="billingInterval"
                     name="billingInterval"
                     defaultValue={sub?.billingInterval ?? 'year'}
                   >
-                    <option value="year">Yearly</option>
-                    <option value="month">Monthly</option>
+                    <option value="year">One-time annual</option>
+                    <option value="month">12 monthly invoices</option>
                   </Select>
                 </Field>
                 <Field label="Grace days" name="graceDays">
@@ -193,6 +214,40 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
             </CardBody>
           </Card>
           <div className="space-y-6 xl:col-span-5">
+            <Card>
+              <CardHeader
+                title="Account"
+                description={
+                  alert.overdue.length
+                    ? `${alert.overdue.length} overdue invoice${alert.overdue.length === 1 ? '' : 's'} · ${formatAed(alert.overdueAed)}`
+                    : 'No overdue invoices.'
+                }
+              />
+              <CardBody className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {paused || deleted || tenant.status === 'suspended' ? (
+                    <ActionForm action={pauseTenantAction.bind(null, id, false)}>
+                      <SubmitButton>{deleted ? 'Restore spa' : 'Resume spa'}</SubmitButton>
+                    </ActionForm>
+                  ) : (
+                    <ActionForm action={pauseTenantAction.bind(null, id, true)}>
+                      <SubmitButton variant="secondary">Pause spa</SubmitButton>
+                    </ActionForm>
+                  )}
+                </div>
+                <p className="text-xs text-muted">
+                  Paused: the dashboard is read-only with a notice; the website and online booking keep
+                  working.
+                </p>
+                <PaymentReminder action={paymentReminderAction.bind(null, id)} phone={ownerPhone} />
+                {alert.reminder && (
+                  <p className="text-xs text-muted">
+                    Open reminder since {formatDateTime(alert.reminder.createdAt)} ·{' '}
+                    {formatAed(alert.reminder.amountAed)}
+                  </p>
+                )}
+              </CardBody>
+            </Card>
             <Card>
               <CardHeader title="Access" description="Read-only keeps the website live but blocks changes." />
               <CardBody>
@@ -286,7 +341,15 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
           </div>
         </div>
         <Card>
-          <CardHeader title="Invoices" />
+          <CardHeader
+            title="Invoices"
+            description="Payment plan + setup fee invoices for the current period. Only you set Paid / Must pay."
+            action={
+              <ActionForm action={generateScheduleAction.bind(null, id)}>
+                <SubmitButton variant="secondary">Generate payment schedule</SubmitButton>
+              </ActionForm>
+            }
+          />
           <div className="mt-4 border-t">
             <DataTable
               rows={invoices}
@@ -311,7 +374,26 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   key: 's',
                   header: 'Status',
                   className: 'text-end',
-                  cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge>,
+                  cell: (r) => (
+                    <Badge
+                      tone={r.status === 'issued' && r.dueDate < today ? 'danger' : statusTone(r.status)}
+                    >
+                      {r.status === 'issued' && r.dueDate < today ? 'overdue' : r.status}
+                    </Badge>
+                  ),
+                },
+                {
+                  key: 'x',
+                  header: <span className="sr-only">Mark</span>,
+                  className: 'text-end',
+                  cell: (r) =>
+                    r.status === 'void' ? null : (
+                      <ActionForm action={setInvoicePaidAction.bind(null, id, r.id, r.status !== 'paid')}>
+                        <SubmitButton size="sm" variant={r.status === 'paid' ? 'ghost' : 'secondary'}>
+                          {r.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}
+                        </SubmitButton>
+                      </ActionForm>
+                    ),
                 },
               ]}
             />
@@ -383,6 +465,25 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
             </ul>
           </CardBody>
         </Card>
+        {!deleted && (
+          <Card>
+            <CardHeader
+              title="Delete spa"
+              description="Closes the dashboard, website and booking. Every record is kept; Restore brings it back."
+            />
+            <CardBody>
+              <ActionForm
+                action={deleteTenantAction.bind(null, id)}
+                className="flex flex-wrap items-end gap-3"
+              >
+                <Field label={`Type ${tenant.slug} to confirm`} name="confirm">
+                  <Input id="confirm" name="confirm" autoComplete="off" required />
+                </Field>
+                <SubmitButton variant="danger">Delete spa</SubmitButton>
+              </ActionForm>
+            </CardBody>
+          </Card>
+        )}
       </PageBody>
     </>
   )

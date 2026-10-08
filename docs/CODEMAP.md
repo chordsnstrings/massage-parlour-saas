@@ -32,7 +32,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`. `tenants` adds a `tenant_self` policy so a spa
   sees its own row.
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
-  `audit_log`, `ai_usage`, `domain_orders`.
+  `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
+  reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
+  = soft delete (`requireMember` 404s members).
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
     `staff | room` only (no equipment yet).

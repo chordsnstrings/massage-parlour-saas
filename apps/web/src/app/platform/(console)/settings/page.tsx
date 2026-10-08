@@ -61,6 +61,18 @@ export default async function CompanyPage() {
                 <Field label="VAT rate (%)" name="vatRate">
                   <Input id="vatRate" name="vatRate" inputMode="decimal" defaultValue={s?.vatRate ?? '5'} />
                 </Field>
+                <Field
+                  label="Domain markup (USD)"
+                  name="domainMarkupUsd"
+                  hint="Added once to every domain order on top of the registrar price."
+                >
+                  <Input
+                    id="domainMarkupUsd"
+                    name="domainMarkupUsd"
+                    inputMode="decimal"
+                    defaultValue={s?.domainMarkupUsd ?? '10'}
+                  />
+                </Field>
                 <label className="flex items-center gap-2.5 text-sm sm:col-span-2">
                   <Checkbox name="pricesIncludeVat" defaultChecked={s?.pricesIncludeVat ?? false} /> Plan
                   prices already include VAT

@@ -16,9 +16,12 @@ export const BOOKING_DAYS = 14
 /** Online bookings need at least this much notice. */
 export const LEAD_MIN = 60
 
-/** Tenants whose public booking is open (suspended / cancelled accounts keep the site but not bookings). */
+/**
+ * Tenants whose public booking is open. A paused spa (`read_only`, late payment — PLAN §14.8 R12) keeps its site and
+ * booking; suspended / cancelled accounts keep the site but not bookings.
+ */
 export const acceptsBookings = (status: string) =>
-  status === 'trial' || status === 'active' || status === 'past_due'
+  status === 'trial' || status === 'active' || status === 'past_due' || status === 'read_only'
 
 /** The branch online bookings go to: the default branch, else the first active one. */
 export async function bookingBranch(tx: Tx) {

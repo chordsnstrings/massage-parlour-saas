@@ -8,16 +8,23 @@ import {
   subscriptions,
   withTenant,
 } from '@spa/db'
-import { getCheckoutSession, StripeError, settleCheckoutSession, stripeConfig } from '@spa/services'
+import {
+  billingAlert,
+  getCheckoutSession,
+  StripeError,
+  settleCheckoutSession,
+  stripeConfig,
+} from '@spa/services'
 import { and, desc, eq, isNotNull } from 'drizzle-orm'
 import { Check, MessageCircle, ReceiptText } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Card, Eyebrow, Grid, Hairline, Note, Pill, Stack, statusTone } from '@/components/crm'
+import { Card, Eyebrow, Grid, Hairline, ListRow, Note, Pill, Stack, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
 import { getI18n, getT } from '@/i18n/server'
+import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { PayByCardButton } from './pay-button'
 
@@ -64,10 +71,12 @@ export default async function BillingPage({
   const justPaid = Boolean((await searchParams).paid)
   await settlePendingCardPayments(ctx.tenant.id)
   const cardsOn = stripeConfig() !== null
-  const { sub, invoices, payments } = await withTenant(ctx.tenant.id, async (tx) => ({
+  const today = todayDubai()
+  const { sub, invoices, payments, alert } = await withTenant(ctx.tenant.id, async (tx) => ({
     sub: (await tx.select().from(subscriptions).limit(1))[0],
     invoices: await tx.select().from(platformInvoices).orderBy(desc(platformInvoices.issueDate)),
     payments: await tx.select().from(platformPayments).orderBy(desc(platformPayments.receivedAt)),
+    alert: await billingAlert(tx, ctx.tenant.id, today),
   }))
   const [plan, company] = await Promise.all([
     sub ? platformDb().query.plans.findFirst({ where: eq(plans.id, sub.planId) }) : undefined,
@@ -81,7 +90,15 @@ export default async function BillingPage({
     [t('billing.pay.swift'), company?.swift],
   ].filter(([, v]) => v)
   const open = invoices.find((i) => i.status === 'issued')
-  const interval = sub?.billingInterval === 'month' ? 'month' : 'year'
+  // R11: the current period's plan invoices (12 monthly or one-time) + the setup fee; status is set by the super-admin.
+  const schedule = [
+    ...invoices
+      .filter((i) => i.kind === 'plan' && i.status !== 'void' && i.periodStart === sub?.currentPeriodStart)
+      .sort((a, b) => (a.installment ?? 0) - (b.installment ?? 0)),
+    ...invoices.filter((i) => i.kind === 'setup' && i.status !== 'void'),
+  ]
+  const monthly = sub?.billingInterval === 'month'
+  const installment = sub ? fmt.aed((Math.round(Number(sub.priceAed) * 100) / 1200).toFixed(2)) : ''
 
   return (
     <>
@@ -111,8 +128,22 @@ export default async function BillingPage({
               <h2 className="mt-2 text-[26px] leading-tight">{plan?.name ?? t('billing.plan.fallback')}</h2>
               <div className="mt-1.5 flex items-baseline gap-1.5">
                 <span className="crm-num text-[34px] font-semibold">{sub ? fmt.aed(sub.priceAed) : '—'}</span>
-                <span className="crm-muted">/ {t(`billing.plan.per.${interval}`)}</span>
+                <span className="crm-muted">/ {t('billing.plan.per.year')}</span>
               </div>
+              {sub && (
+                <p className="mt-1 text-[13px] font-medium">
+                  {t('billing.schedule.planLabel')}:{' '}
+                  {monthly
+                    ? t('billing.schedule.plan.month', { amount: installment })
+                    : t('billing.schedule.plan.year')}
+                  {Number(sub.setupFeeAed) > 0 && (
+                    <span className="crm-muted font-normal">
+                      {' '}
+                      · {t('billing.schedule.setupFee')} {fmt.aed(sub.setupFeeAed)}
+                    </span>
+                  )}
+                </p>
+              )}
               {sub && (
                 <p className="crm-muted mt-1 text-[13px]">
                   {company?.pricesIncludeVat ? t('billing.plan.inclVat') : t('billing.plan.exclVat')} ·{' '}
@@ -231,6 +262,54 @@ export default async function BillingPage({
               </Card>
             </Stack>
           </Grid>
+
+          {alert.reminder && (
+            <Note tone="warn">
+              <span role="status">
+                {t('billing.schedule.reminder', {
+                  date: day(alert.reminder.createdAt),
+                  amount: fmt.aed(alert.reminder.amountAed),
+                })}
+              </span>
+            </Note>
+          )}
+
+          <Card title={t('billing.schedule.title')} sub={t('billing.schedule.sub')}>
+            {schedule.length === 0 ? (
+              <p className="crm-muted text-sm">{t('billing.schedule.empty')}</p>
+            ) : (
+              <div>
+                {schedule.map((i) => {
+                  const paid = i.status === 'paid'
+                  const late = !paid && i.dueDate < today
+                  return (
+                    <ListRow
+                      key={i.id}
+                      title={
+                        i.kind === 'setup'
+                          ? t('billing.schedule.setupFee')
+                          : i.installments === 1
+                            ? t('billing.schedule.annual')
+                            : t('billing.schedule.month', {
+                                n: i.installment ?? 0,
+                                total: i.installments ?? 0,
+                              })
+                      }
+                      body={`${t('billing.schedule.due', { date: day(i.dueDate) })} · ${i.number}${
+                        late ? ` · ${t('billing.schedule.overdue')}` : ''
+                      }`}
+                      time={<span className="crm-num">{fmt.aed(i.totalAed)}</span>}
+                      end={
+                        <Pill tone={paid ? 'ok' : 'bad'} dot>
+                          {paid ? t('billing.schedule.paid') : t('billing.schedule.mustPay')}
+                        </Pill>
+                      }
+                    />
+                  )
+                })}
+              </div>
+            )}
+          </Card>
 
           {payments.length > 0 && (
             <Card title={t('billing.payments.title')} flush>

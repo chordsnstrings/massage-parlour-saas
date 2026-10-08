@@ -4,6 +4,7 @@ import {
   domainOrders,
   domains,
   members,
+  platformSettings,
   roles,
   type Tx,
   tenants,
@@ -17,9 +18,12 @@ import {
   aedFromUsd,
   approveDomainOrder,
   cancelDomainOrder,
+  DEFAULT_DOMAIN_MARKUP_USD,
   DomainError,
   type DomainRun,
   domainCandidates,
+  domainMarkupUsd,
+  domainPrice,
   listDomainOrders,
   namecheapConfig,
   rejectDomainOrder,
@@ -95,14 +99,21 @@ describe('domain order helpers', () => {
     expect(aedFromUsd(11.28)).toBe(42)
   })
 
+  it('adds the markup once per order, not per year', () => {
+    expect(domainPrice(11.28, 1, 10)).toEqual({ usd: 21.28, aed: 79 })
+    expect(domainPrice(11.28, 2, 10)).toEqual({ usd: 32.56, aed: 120 })
+    expect(domainPrice(11.28, 1, 0)).toEqual({ usd: 11.28, aed: 42 })
+  })
+
   it('searches with live prices and flags unpriced TLDs', async () => {
     const nc = fakeNamecheap()
-    const { configured, offers } = await searchDomains('serenity', { cfg, fetch: nc.fetch })
+    const { configured, offers } = await searchDomains('serenity', { cfg, fetch: nc.fetch, markupUsd: 10 })
     expect(configured).toBe(true)
     expect(offers.find((o) => o.domain === 'serenity.com')).toMatchObject({
       available: true,
-      priceUsd: 11.28,
-      priceAed: 42,
+      // Registrar USD 11.28 + USD 10 markup = 21.28 → AED 79 (rounded up).
+      priceUsd: 21.28,
+      priceAed: 79,
     })
     expect(offers.find((o) => o.domain === 'serenity.spa')).toMatchObject({
       available: false,
@@ -165,32 +176,43 @@ describe('domain orders (db)', () => {
   const runA: DomainRun = (fn) => tenantDomainRun(ids.a, app)(fn)
   const runB: DomainRun = (fn) => tenantDomainRun(ids.b, app)(fn)
 
+  it('reads the markup from platform settings (default USD 10)', async () => {
+    expect(await domainMarkupUsd(platform)).toBe(DEFAULT_DOMAIN_MARKUP_USD)
+    await platform.insert(platformSettings).values({ id: 1, domainMarkupUsd: '4.50' })
+    expect(await domainMarkupUsd(platform)).toBe(4.5)
+    const nc = fakeNamecheap()
+    const { offers } = await searchDomains('serenity', { cfg, fetch: nc.fetch, db: platform })
+    expect(offers.find((o) => o.domain === 'serenity.com')).toMatchObject({ priceUsd: 15.78, priceAed: 58 })
+    await platform.delete(platformSettings)
+  })
+
   it('requests, blocks duplicates across spas, cancels and rejects', async () => {
     const nc = fakeNamecheap()
     const order = await requestDomain(
       runA,
       { tenantId: ids.a, domain: 'SerenitySpa.com', userId: ids.owner },
-      { cfg, fetch: nc.fetch },
+      { cfg, fetch: nc.fetch, db: platform },
     )
     expect(order).toMatchObject({
       domain: 'serenityspa.com',
       status: 'requested',
-      priceUsd: '11.28',
-      priceAed: '42.00',
+      priceUsd: '21.28',
+      priceAed: '79.00',
+      markupUsd: '10.00',
       years: 1,
     })
     await expect(
       requestDomain(
         runB,
         { tenantId: ids.b, domain: 'serenityspa.com', userId: ids.owner },
-        { cfg, fetch: nc.fetch },
+        { cfg, fetch: nc.fetch, db: platform },
       ),
     ).rejects.toThrow(/already requested/)
     await expect(
       requestDomain(
         runA,
         { tenantId: ids.a, domain: 'taken.com', userId: ids.owner },
-        { cfg, fetch: nc.fetch },
+        { cfg, fetch: nc.fetch, db: platform },
       ),
     ).rejects.toThrow(/not available/)
     await expect(
@@ -203,7 +225,7 @@ describe('domain orders (db)', () => {
     const other = await requestDomain(
       runA,
       { tenantId: ids.a, domain: 'serenity.net', userId: ids.owner },
-      { cfg, fetch: nc.fetch },
+      { cfg, fetch: nc.fetch, db: platform },
     )
     expect((await asA((tx) => cancelDomainOrder(tx, other.id))).status).toBe('cancelled')
     await expect(asA((tx) => cancelDomainOrder(tx, other.id))).rejects.toThrow(DomainError)
@@ -211,7 +233,7 @@ describe('domain orders (db)', () => {
     const third = await requestDomain(
       runA,
       { tenantId: ids.a, domain: 'serenity.co', userId: ids.owner },
-      { cfg, fetch: nc.fetch },
+      { cfg, fetch: nc.fetch, db: platform },
     )
     expect(await rejectDomainOrder(third.id, ids.admin, 'Pick a .com', platform)).toMatchObject({
       status: 'rejected',
@@ -268,7 +290,7 @@ describe('domain orders (db)', () => {
     const order = await requestDomain(
       runB,
       { tenantId: ids.b, domain: 'otherspa.com', userId: ids.owner },
-      { cfg, fetch: nc.fetch },
+      { cfg, fetch: nc.fetch, db: platform },
     )
     // spa B has no owner member → contacts fail before any registrar call
     await expect(
