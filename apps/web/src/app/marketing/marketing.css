@@ -125,6 +125,8 @@
     top: -30%;
     left: -20%;
     animation: mkt-glow 34s ease-in-out infinite alternate;
+    will-change: transform;
+    backface-visibility: hidden;
   }
   .mkt-dark::after,
   .mkt-demo::after {
@@ -165,6 +167,21 @@
     height: 100lvh;
     z-index: 0;
     pointer-events: none;
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: strict;
+  }
+  /* fine grain over the aurora: dithers the soft gradients so they don't band */
+  .mkt::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.05;
+    transform: translateZ(0);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   .mkt main,
   .mkt footer {
@@ -177,9 +194,8 @@
     position: sticky;
     top: 0;
     z-index: 60;
-    background: rgba(255, 255, 255, 0.78);
-    backdrop-filter: blur(16px) saturate(1.4);
-    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    background: rgba(255, 255, 255, 0.92);
+    transform: translateZ(0);
     border-bottom: 1px solid transparent;
     transition:
       transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),

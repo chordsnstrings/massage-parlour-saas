@@ -29,7 +29,7 @@ async function Header({ active }: { active: MarketingPage }) {
           ))}
         </nav>
         <div className="mkt-links ms-auto flex items-center gap-2">
-          <a href={urls.app('/login')} className="hidden px-2 sm:inline">
+          <a href={urls.app('/login')} className="px-2 text-[14px] font-semibold">
             Sign in
           </a>
           <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm">
