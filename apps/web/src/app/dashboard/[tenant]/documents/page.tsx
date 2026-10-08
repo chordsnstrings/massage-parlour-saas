@@ -194,7 +194,7 @@ export default async function DocumentsPage({
     <>
       <PageHeader title={t('documents.title')} description={t('documents.description')} actions={addButton} />
       <PageBody>
-        <Grid cols="g4">
+        <Grid cols="g4" className="grid-cols-2 min-[1081px]:grid-cols-4">
           {TILES.map((s) => {
             const active = status === s
             return (
