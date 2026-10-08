@@ -46,8 +46,8 @@ function createAuth() {
       cookieCache: { enabled: true, maxAge: 300 },
     },
     rateLimit: {
-      // Production only: dev/e2e servers sign up many accounts from one IP.
-      enabled: process.env.NODE_ENV === 'production',
+      // Production only: dev/e2e servers sign up many accounts from one IP (e2e on a production build sets AUTH_RATE_LIMIT=off).
+      enabled: process.env.NODE_ENV === 'production' && process.env.AUTH_RATE_LIMIT !== 'off',
       window: 60,
       max: 100,
       // Brute-force guard on credential endpoints (per client IP).

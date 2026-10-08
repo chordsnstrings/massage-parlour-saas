@@ -21,7 +21,9 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
   ],
   webServer: {
-    command: `node scripts/next.mjs dev -p ${PORT}`,
+    // E2E_SERVER=start serves the existing production build (`pnpm --filter @spa/web build`, same NEXT_PUBLIC_ROUTING).
+    // CI uses it: the dev server compiles every route on demand and grew past 13 GB over the full suite (OOM).
+    command: `node scripts/next.mjs ${process.env.E2E_SERVER === 'start' ? 'start' : 'dev'} -p ${PORT}`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
     timeout: 180_000,
@@ -46,6 +48,8 @@ export default defineConfig({
       // A second platform domain (resolves to loopback): links and sign-in must follow whichever domain is used.
       EXTRA_ROOT_DOMAINS: `alt.localhost:${PORT}`,
       RESEND_API_KEY: '',
+      // The suite signs up dozens of owners from one IP; a production build would otherwise rate-limit them.
+      AUTH_RATE_LIMIT: 'off',
     },
   },
 })

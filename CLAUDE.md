@@ -57,7 +57,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `pnpm db:generate` (after schema edits in `packages/db/src/schema`) · `pnpm db:migrate` · `pnpm db:seed`
 - `pnpm dev` — web on http://localhost:3000 (marketing), http://app.localhost:3000, http://admin.localhost:3000, http://{slug}.localhost:3000
 - `pnpm lint` (Biome) · `pnpm format` · `pnpm typecheck` · `pnpm test` (Vitest; DB tests use `spa_test`)
-- `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`
+- `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`. Full suite: build first and run
+  with `E2E_SERVER=start` (production server, as CI does) — the dev server's on-demand compiles OOM past ~13 GB.
 - Targeted: `pnpm --filter @spa/<pkg> test` · `cd <pkg> && npx tsc --noEmit`
 - Super-admin locally: sign up with an email in `PLATFORM_ADMIN_EMAILS`, then use admin.localhost:3000.
 

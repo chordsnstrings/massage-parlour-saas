@@ -45,6 +45,9 @@ jobs:
         run: pnpm --filter @spa/web exec playwright install --with-deps chromium
       - name: End-to-end tests
         run: pnpm --filter @spa/web e2e
+        env:
+          # Against the build above: the dev server's on-demand compiles ran the runner out of memory.
+          E2E_SERVER: start
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
