@@ -1,3 +1,4 @@
+import { TEMPLATES } from './templates'
 import type { Bi } from './types'
 
 /**
@@ -15,6 +16,7 @@ export type PresetCategory =
   | 'faq'
   | 'contact'
   | 'cta'
+  | 'motion'
 
 export type PresetNode = { type: string; props: Record<string, unknown> }
 
@@ -761,6 +763,52 @@ const intro = (eyebrow: Bi, title: Bi, lead: Bi, align = 'start') =>
   section([heading(eyebrow, title, { level: 'h1', size: 'xl', align }), text(lead, { size: 'lg', align })], {
     width: align === 'center' ? 'narrow' : 'contained',
   })
+
+/**
+ * 3D motion bands of the design templates (R5): each template's services band and "your visit" steps with its
+ * scroll scene, deduplicated by scene, so any page can borrow a motion (the look follows the active theme).
+ */
+const SCENE_NAMES: Record<string, string> = {
+  fan: 'dealt from a fan',
+  cube: 'turning cube',
+  doors: 'opening doors',
+  coverflow: 'coverflow',
+  road: 'down the road',
+  pages: 'turning pages',
+  prism: 'glass prism',
+  slabs: 'sliding slabs',
+  layers: 'separating layers',
+  blocks: 'block by block',
+  brochure: 'unfolding brochure',
+  turn: 'flip to the front',
+  assemble: 'fly into place',
+  rise: 'rising pillars',
+  flip: 'split-flap rows',
+}
+function motionPresets(): SectionPreset[] {
+  const seen = new Set<string>()
+  const out: SectionPreset[] = []
+  for (const t of Object.values(TEMPLATES).slice(8)) {
+    const home = t.pages.find((p) => p.slug === '')?.data.content as PresetNode[] | undefined
+    for (const node of home ?? []) {
+      const scene = String(node.props.scene ?? '')
+      const kind = node.type === 'ServicesMenu' ? 'Services' : node.type === 'Section' ? 'Your visit' : null
+      if (!kind || !SCENE_NAMES[scene] || seen.has(`${kind}:${scene}`)) continue
+      if (kind === 'Your visit' && !JSON.stringify(node.props).includes('01  ')) continue
+      seen.add(`${kind}:${scene}`)
+      out.push({
+        key: `motion-${kind === 'Services' ? 'services' : 'visit'}-${scene}`,
+        name: `${kind} — ${SCENE_NAMES[scene]}`,
+        category: 'motion',
+        description: `From ${t.name}: the ${kind === 'Services' ? 'treatment cards' : 'four steps'} arrive with a 3D scroll scene.`,
+        template: t.key,
+        node,
+      })
+    }
+  }
+  return out
+}
+SECTION_PRESETS.push(...motionPresets())
 
 export const PAGE_TEMPLATES: PageTemplate[] = [
   {

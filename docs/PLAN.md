@@ -896,6 +896,11 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   prices on the public website.
 - **R5 Site templates:** tenant website templates rebuilt from the owner's designs (zip `1997labs-all-designs`, 20
   designs + final compilation) with their 3D scroll motion, adapted to spa content as Puck templates.
+  *Built:* 15 design templates — Signature (final compilation), Noir Gold, Ivory Marble, Navy Official, Emerald
+  Prestige, Platinum Minimal, Desert Night, Monogram Atelier, Obsidian Glass, Sandstone Bronze, Split Flap (I–R) and
+  Aurora Glass, Blueprint, Sahara, Clay (B, C, E, H). Skipped as too tech/agency for spas: A Signal (phone demo),
+  D Orbit, G Tunnel; F Bento lives inside Signature. Each keeps the design's default light/dark mode (tenant sites have
+  no visitor theme switch). No agency branding, copy or numbers were carried over. Arabic copy needs native review.
 - **R6 CRM width:** the spa dashboard fits the screen (no max-width cap on wide monitors); density stays.
 - **R7 Meta MCP for AI:** AI agents reach Instagram / WhatsApp through a Meta MCP server. Customer WhatsApp stays
   click-to-send unless the owner explicitly lifts that lock when R7 is built (ask then).

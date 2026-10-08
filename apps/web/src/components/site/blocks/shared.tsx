@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { tr } from '../i18n'
 import { actionHref, type LinkAction, linkProps } from '../links'
 import type { Bi, SiteMeta } from '../types'
+import { Emphasis } from './hero-art'
 
 export const metaOf = (puck: PuckContext) => puck.metadata as SiteMeta
 
@@ -98,7 +99,11 @@ export function SectionTitle({
   if (!t && !i) return null
   return (
     <div className={cn('mb-10 max-w-2xl space-y-3 sm:mb-14', center && 'mx-auto text-center')}>
-      {t && <h2 className="sb-heading text-3xl sm:text-4xl">{t}</h2>}
+      {t && (
+        <h2 className="sb-heading text-3xl sm:text-4xl">
+          <Emphasis text={t} />
+        </h2>
+      )}
       {i && <p className="sb-prose text-[17px] text-muted">{i}</p>}
     </div>
   )

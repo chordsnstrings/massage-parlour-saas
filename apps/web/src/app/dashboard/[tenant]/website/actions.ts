@@ -24,7 +24,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { designSignature, isPageData } from '@/components/site/content'
 import { PAGE_TEMPLATES, pageTemplateData } from '@/components/site/presets'
-import { normalizeTheme } from '@/components/site/theme'
+import { BACKDROPS, EMBLEMS, normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -282,6 +282,8 @@ const themeSchema = z.object({
   buttonShape: z.enum(['square', 'rounded', 'pill']),
   density: z.enum(['compact', 'comfortable', 'airy']),
   motion: z.enum(['none', 'subtle', 'expressive']),
+  backdrop: z.enum(BACKDROPS).optional(),
+  emblem: z.enum(EMBLEMS).optional(),
 })
 
 /** Theme layer (PLAN §11.3 layer 1): accent, fonts, shape, spacing density and motion intensity. */

@@ -251,6 +251,15 @@ export default async function TemplatesStudioPage() {
                 return (
                   <StaggerItem key={key}>
                     <div className="flex h-full flex-col gap-3 rounded-xl border p-4">
+                      {/* biome-ignore lint/performance/noImgElement: static public thumbnail */}
+                      <img
+                        src={`/site-templates/${key}.webp`}
+                        alt=""
+                        loading="lazy"
+                        width={640}
+                        height={480}
+                        className="aspect-[4/3] w-full rounded-lg border bg-subtle object-cover object-top"
+                      />
                       <span
                         aria-hidden
                         className="flex h-10 overflow-hidden rounded-lg border"

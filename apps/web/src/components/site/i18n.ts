@@ -25,6 +25,12 @@ const UI = {
   pages: { en: 'Pages', ar: 'الصفحات' },
   menu: { en: 'Menu', ar: 'القائمة' },
   bookingHello: { en: "Hi, I'd like to book a massage.", ar: 'مرحبًا، أود حجز جلسة مساج.' },
+  // Hero emblems of the design templates (R5).
+  emblemCaption: { en: 'Massage & wellness', ar: 'مساج وعافية' },
+  emblemPlace: { en: 'UAE', ar: 'الإمارات' },
+  openToday: { en: 'Open today', ar: 'مفتوح اليوم' },
+  treatments: { en: 'Treatments', ar: 'الجلسات' },
+  bookMinute: { en: 'Book in a minute', ar: 'احجز في دقيقة' },
 } as const satisfies Record<string, Record<Locale, string>>
 
 export const ui = (key: keyof typeof UI, locale: Locale) => UI[key][locale]

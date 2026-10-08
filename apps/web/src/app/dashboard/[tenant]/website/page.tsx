@@ -109,11 +109,25 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               aria-label={tpl.name}
               className="crm-card group flex h-full flex-col overflow-hidden !p-0 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0"
             >
-              <ScaledFrame
-                src={preview(`template=${tpl.key}&starter=1`)}
-                title={t('website.templatePreview', { name: tpl.name })}
-                className="aspect-[4/3] border-b"
-              />
+              {tpl.source === 'builtin' ? (
+                // Built-ins ship a static thumbnail (public/site-templates, rendered by the
+                // e2e/template-thumbs.spec.ts with THUMBS=1) so a gallery of 20+ templates doesn't boot a live page each.
+                // biome-ignore lint/performance/noImgElement: static public asset, fixed size
+                <img
+                  src={`/site-templates/${tpl.key}.webp`}
+                  alt={t('website.templatePreview', { name: tpl.name })}
+                  loading="lazy"
+                  width={640}
+                  height={480}
+                  className="aspect-[4/3] w-full border-b bg-subtle object-cover object-top"
+                />
+              ) : (
+                <ScaledFrame
+                  src={preview(`template=${tpl.key}&starter=1`)}
+                  title={t('website.templatePreview', { name: tpl.name })}
+                  className="aspect-[4/3] border-b"
+                />
+              )}
               <div className="flex flex-1 flex-col gap-3 p-4">
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center justify-between gap-3">

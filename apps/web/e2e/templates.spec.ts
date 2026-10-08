@@ -14,6 +14,22 @@ const NAMES = [
   'Tropical Bali',
   'Urban Express',
   'Hotel Spa',
+  // R5 design templates
+  'Signature',
+  'Noir Gold',
+  'Ivory Marble',
+  'Navy Official',
+  'Emerald Prestige',
+  'Platinum Minimal',
+  'Desert Night',
+  'Monogram Atelier',
+  'Obsidian Glass',
+  'Sandstone Bronze',
+  'Split Flap',
+  'Aurora Glass',
+  'Blueprint',
+  'Sahara',
+  'Clay',
 ]
 
 test('presets, page templates and templates only use real blocks with their required props', () => {
@@ -48,12 +64,31 @@ test('presets, page templates and templates only use real blocks with their requ
   expect(Object.values(TEMPLATES).map((t) => t.name)).toEqual(NAMES)
   for (const t of Object.values(TEMPLATES)) {
     expect(t.pages.map((p) => p.slug)).toEqual(expect.arrayContaining(['', 'services', 'about', 'contact']))
+    expect(new Set(t.pages.map((p) => p.slug)).size, t.key).toBe(t.pages.length)
     for (const p of t.pages)
       expect(checkNodes(p.data.content as unknown[], spec), `${t.key}/${p.slug}`).toEqual([])
   }
 })
 
-test('templates: gallery of 8, side-by-side switch with undo, Desert Sand in EN + AR, page templates, studio', async ({
+test('design templates: tokens, hero art and a 3D scroll scene each', () => {
+  const designs = Object.values(TEMPLATES).slice(8)
+  expect(designs).toHaveLength(15)
+  const scenes = new Set<string>()
+  for (const t of designs) {
+    expect(t.theme.headingFace, t.key).not.toBe('theme')
+    expect(t.theme.backdrop !== 'none' || t.theme.emblem !== 'none', t.key).toBe(true)
+    const home = t.pages.find((p) => p.slug === '')!.data.content as {
+      type: string
+      props: { scene?: string }
+    }[]
+    const own = home.map((n) => n.props.scene).filter((s) => s && s !== 'reveal' && s !== 'depart')
+    expect(own.length, t.key).toBeGreaterThan(0)
+    for (const s of own) scenes.add(s!)
+  }
+  expect(scenes.size).toBeGreaterThanOrEqual(12)
+})
+
+test('templates: gallery of all built-ins, side-by-side switch with undo, Desert Sand in EN + AR, page templates, studio', async ({
   page,
 }) => {
   const owner = await signUpOwner(page, { spa: 'Dune Spa' })
@@ -61,10 +96,12 @@ test('templates: gallery of 8, side-by-side switch with undo, Desert Sand in EN 
   await makeStudio(slug) // the website is built by the studio (super-admin)
   await seedCatalog(slug)
 
-  await test.step('the gallery shows all 8 templates with live previews', async () => {
+  await test.step('the gallery shows every built-in template with its thumbnail', async () => {
     await page.goto(`${app}/${slug}/website`)
     for (const name of NAMES) await expect(page.getByRole('article', { name })).toBeVisible()
-    await expect(page.locator('iframe[title="Desert Sand preview"]')).toBeAttached()
+    const thumb = page.getByRole('img', { name: 'Desert Sand preview' })
+    await thumb.scrollIntoViewIfNeeded()
+    await expect.poll(() => thumb.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(640)
     await page.getByRole('button', { name: 'Use Zen Minimal' }).click()
     await expect(page.getByTestId('current-template')).toHaveText('Zen Minimal', { timeout: 30_000 })
     await expect(page.getByRole('link', { name: 'Edit About' })).toBeVisible()
