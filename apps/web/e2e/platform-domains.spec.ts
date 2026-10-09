@@ -9,6 +9,29 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute('href', `${app}/login`)
   })
 
+  await test.step('legal pages load and are linked from the footer and sign-in', async () => {
+    for (const [path, title] of [
+      ['/privacy', 'Privacy policy'],
+      ['/terms', 'Terms of service'],
+      ['/data-deletion', 'Delete your data'],
+    ] as const) {
+      await page.goto(`${base}${path}`)
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible()
+    }
+    const foot = page.locator('footer')
+    for (const [name, href] of [
+      ['Privacy', '/privacy'],
+      ['Terms', '/terms'],
+      ['Data deletion', '/data-deletion'],
+    ] as const)
+      await expect(foot.getByRole('link', { name, exact: true })).toHaveAttribute('href', href)
+    await page.goto(`${app}/login`)
+    await expect(page.getByRole('link', { name: 'Privacy', exact: true })).toHaveAttribute(
+      'href',
+      `${base}/privacy`,
+    )
+  })
+
   await test.step('second domain: marketing pages link to the app on that domain', async () => {
     for (const path of ['/', '/features', '/website-builder', '/pricing', '/contact']) {
       await page.goto(`${altBase}${path}`)

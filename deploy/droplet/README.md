@@ -98,6 +98,12 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
      `https://app.spamanagement.co/api/integrations/meta/callback` (path routing: on the bare domain). Then point the
      Webhooks callback, Deauthorize callback and Data deletion request URLs at the `.co` origin and add
      `spamanagement.co` to App domains.
+   - Legal URLs (both consoles; pages in apps/web/src/app/marketing, company details in
+     apps/web/src/components/marketing/legal-config.ts): Meta app → Settings → Basic → Privacy policy URL
+     `https://spamanagement.co/privacy`, Terms of service URL `https://spamanagement.co/terms`, User data deletion →
+     Data deletion instructions URL `https://spamanagement.co/data-deletion`. Google Cloud → OAuth consent screen →
+     Application privacy policy link `https://spamanagement.co/privacy`, terms of service link
+     `https://spamanagement.co/terms`.
 5. **Re-encrypt the overlay**: the updater replaces the previous overlay as a whole, so the plaintext must hold
    every key the current overlay holds (from your own copy) plus the ones above:
    ```sh

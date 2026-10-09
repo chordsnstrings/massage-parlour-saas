@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { AuthLayout } from '@/components/auth/auth-layout'
+import { LegalLinks } from '@/components/auth/legal-links'
 import { getT } from '@/i18n/server'
 import { PATH_ROUTING } from '@/lib/paths'
 import { canonicalUrls } from '@/server/origin'
@@ -34,6 +35,7 @@ export default async function SignupPage() {
           tooLarge: t('logo.tooLarge', { size: '1 MB' }),
         }}
       />
+      <LegalLinks />
     </AuthLayout>
   )
 }

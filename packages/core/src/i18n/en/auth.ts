@@ -7,6 +7,7 @@ export const auth = {
     signup: 'Create your spa',
     invite: 'Invitation',
   },
+  legal: { terms: 'Terms', privacy: 'Privacy' },
   generic: 'Something went wrong.',
   email: 'Email',
   password: 'Password',

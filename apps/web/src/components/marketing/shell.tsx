@@ -1,10 +1,19 @@
 import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
 import { Logo } from '@/components/brand'
+import { LEGAL_LINKS } from '@/components/marketing/legal-config'
 import { MarketingMotion } from '@/components/marketing/motion'
 import { requestUrls } from '@/server/origin'
 
-export type MarketingPage = 'home' | 'features' | 'website-builder' | 'pricing' | 'contact'
+export type MarketingPage =
+  | 'home'
+  | 'features'
+  | 'website-builder'
+  | 'pricing'
+  | 'contact'
+  | 'privacy'
+  | 'terms'
+  | 'data-deletion'
 
 const NAV: { key: MarketingPage; href: string; label: string }[] = [
   { key: 'features', href: '/features', label: 'Features' },
@@ -132,6 +141,11 @@ async function Footer() {
             <b>Company</b>
             <Link href="/contact">Contact</Link>
             <a href={urls.app('/login')}>Sign in</a>
+            {LEGAL_LINKS.map((l) => (
+              <Link key={l.href} href={l.href}>
+                {l.label}
+              </Link>
+            ))}
           </div>
           <div>
             <b>Built for the UAE</b>
