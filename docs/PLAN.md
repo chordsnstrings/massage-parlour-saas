@@ -844,6 +844,7 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   Meta webhooks/deauthorize/data-deletion, worker jobs.
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
+- **Colours + fonts superseded 2026-10-09 (owner): brand look, see §18.6.** Layout, density and menu stay as below.
 - Design `docs/design/be-relax-crm.html`, spec + gap analysis `docs/design/crm-spec.md`. Same design for every spa; the
   sidebar shows the spa's own logo + name (logo captured at onboarding/settings). Super-admin console unchanged.
 - ~15–20% more compact than the HTML; light only. Menu per the design + a Sales entry.
@@ -1397,3 +1398,21 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
     publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
     (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+### 18.6 Spa CRM look + PWA (owner 2026-10-09)
+- **Look ✅ (branch feat/crm-brand-theme)** — replaces the blue Be Relax colours (§14.6 layout/density unchanged):
+  the sign-in brand (`components/brand-app.css`) made lighter, every spa's CRM identical. Tokens only, in
+  `app/dashboard/[tenant]/crm.css` `:root:has(.crm)`: fonts `--crm-font` (DM Sans) / `--crm-head` (Space Grotesk:
+  h1–h3, top-bar title, spa name) / `--crm-num` (Space Grotesk for KPI/stat figures in both languages); Thai puts
+  Noto Sans Thai Variable first in `--crm-font` + `--crm-head` (no tofu, Thai headings in Noto). Colours: frame
+  `--crm-bg` #E7EFE6 mint, page `--crm-page` #F8FAF5, sidebar `--crm-side-bg` #F5F8F1, cards white, primary
+  `--crm-accent` #0F6B4B (ink #0A4F37), lime `--crm-lime` #D9F26A only for the active menu item (lime wash + green
+  start bar), nav count badges, `acc` pills (`--crm-lime-soft`) and the keyboard focus halo (green 2 px ring + lime
+  inside). Semantic colours darkened to pass AA on their tints: ok #13773F, warn #8A5A00, bad #B93B1B, info teal
+  #1B6684. Avatars and chart palette re-picked (white initials AA). WCAG AA checked over all text/control pairs.
+- **Platform badge ✅** — `Logo` (components/brand.tsx, 28 px tall) at the sidebar foot under the plan card (also in
+  the phone drawer), links to `canonicalUrls().marketing()` in a new tab (`rel=noopener`, aria-label "Spa
+  Management", brand name not translated). Tall screens: pinned under the scrolling menu; ≤700 px tall the whole
+  sidebar scrolls as one so the foot never squeezes the menu. Not on the no-spa/locked pages.
+- **PWA** — separate branch (manifest, icons = spa logo + "<first word> Management", service worker, install item
+  in the user menu).

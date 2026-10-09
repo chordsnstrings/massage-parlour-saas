@@ -1,48 +1,65 @@
 /*
- * Spa dashboard look — "Be Relax CRM" design at compact density, light only
- * (docs/design/crm-spec.md §1–2 + §D, docs/PLAN.md §14.6).
+ * Spa dashboard look — the platform brand (sign-in pages, components/brand-app.css) made lighter, at the compact
+ * "Be Relax CRM" density (docs/design/crm-spec.md §D, docs/PLAN.md §14.6 + §18.6, owner 2026-10-09): DM Sans text,
+ * Space Grotesk headings + numbers, a soft mint/cream light theme, dark-green primary, lime for small highlights only
+ * (active menu item, count badges, `acc` pills, focus halo). Light only.
  *
  * Scope: the tokens apply while the tenant layout's `.crm` wrapper is on the page, set on :root (not on .crm) so
  * Radix portals (sheets, menus) and the root Toaster get them too. They are lifted while the site editor or site
  * preview overlay is open ([data-crm-off]) so that chrome stays unchanged. Super-admin and auth never render .crm.
  * The UI kit reads `--ui-*` density hooks whose fallbacks are its original sizes (components/ui/*).
+ * Contrast: the text/control pairs below pass WCAG AA (checked 2026-10-09; re-check when changing a colour).
  */
 :root:has(.crm):not(:has([data-crm-off])) {
   color-scheme: light;
 
-  /* Design tokens (spec §1.1) */
-  --crm-bg: #e7ecfb;
+  /* Brand fonts (sign-in pages). Thai keeps Noto Sans Thai first (DM Sans/Space Grotesk have no Thai glyphs). */
+  --crm-font: "DM Sans Variable", "Noto Sans Thai Variable", ui-sans-serif, system-ui, sans-serif;
+  --crm-head:
+    "Space Grotesk Variable", "DM Sans Variable", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+  /* KPI / stat figures are digits + "AED": Space Grotesk in both languages, Noto Sans Thai catches any Thai glyph. */
+  --crm-num: "Space Grotesk Variable", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+  /* Tailwind's `font-sans` + preflight html font follow the brand stack too */
+  --font-sans: var(--crm-font);
+
+  /* Colour tokens: brand green #0F6B4B + lime #D9F26A (marketing.css), lightened for all-day use */
+  --crm-bg: #e7efe6;
+  --crm-page: #f8faf5;
+  --crm-side-bg: #f5f8f1;
   --crm-surface: #ffffff;
-  --crm-surface2: #f6f8fd;
-  --crm-text: #1a1f2e;
-  --crm-muted: #737c8c;
-  --crm-accent: #3b6fe0;
-  --crm-accent-ink: #2f5fd0;
-  --crm-accent-grad: linear-gradient(135deg, #4c84f2, #3156d6);
-  --crm-line: rgb(26 31 46 / 0.08);
-  --crm-line2: rgb(26 31 46 / 0.13);
-  --crm-glow: rgb(59 111 224 / 0.18);
-  --crm-ok: #1fa865;
-  --crm-ok-bg: rgb(31 168 101 / 0.12);
-  --crm-warn: #c98a12;
-  --crm-warn-bg: rgb(245 184 46 / 0.18);
-  --crm-bad: #e0552f;
-  --crm-bad-bg: rgb(242 96 60 / 0.14);
-  --crm-shadow-card: 0 1px 2px rgb(32 44 94 / 0.04), 0 6px 20px rgb(32 44 94 / 0.05);
-  --crm-shadow-window: 0 20px 60px rgb(32 44 94 / 0.12);
-  --crm-info: #3b6fe0;
-  --crm-info-bg: rgb(59 111 224 / 0.12);
-  --crm-bg2: #f4f6fd;
-  --crm-tint1: #9db8f2;
-  --crm-tint2: #dce6fb;
-  --crm-tint3: #6e8fec;
-  --crm-blue: #3b6fe0;
+  --crm-surface2: #f5f7f2;
+  --crm-text: #111a15;
+  --crm-muted: #59645d;
+  --crm-accent: #0f6b4b;
+  --crm-accent-ink: #0a4f37;
+  --crm-accent-grad: linear-gradient(135deg, #17825b, #0b5539);
+  --crm-lime: #d9f26a;
+  --crm-lime-soft: #eff9c8;
+  --crm-lime-ink: #1d2a06;
+  --crm-line: rgb(17 40 28 / 0.08);
+  --crm-line2: rgb(17 40 28 / 0.14);
+  --crm-glow: rgb(15 107 75 / 0.18);
+  --crm-ok: #13773f;
+  --crm-ok-bg: rgb(32 160 92 / 0.12);
+  --crm-warn: #8a5a00;
+  --crm-warn-bg: rgb(245 184 46 / 0.2);
+  --crm-bad: #b93b1b;
+  --crm-bad-bg: rgb(226 84 48 / 0.12);
+  --crm-shadow-card: 0 1px 2px rgb(17 40 28 / 0.04), 0 6px 20px rgb(17 40 28 / 0.05);
+  --crm-shadow-window: 0 20px 60px rgb(17 40 28 / 0.1);
+  --crm-info: #1b6684;
+  --crm-info-bg: rgb(27 102 132 / 0.1);
+  --crm-bg2: #f1f6ef;
+  --crm-tint1: #9ccfb3;
+  --crm-tint2: #dfefe5;
+  --crm-tint3: #237a56;
+  --crm-blue: #3b7dd8;
   --crm-amber: #f5b82e;
   --crm-orange: #f2603c;
   --crm-green: #28c877;
   --crm-violet: #7a6ce0;
   --crm-wa: #25d366;
-  --crm-shadow-kpi: 0 1px 2px rgb(32 44 94 / 0.04), 0 4px 14px rgb(32 44 94 / 0.04);
+  --crm-shadow-kpi: 0 1px 2px rgb(17 40 28 / 0.04), 0 4px 14px rgb(17 40 28 / 0.04);
 
   /* Compact density (spec §D) — tune here */
   --crm-side: 216px;
@@ -79,7 +96,7 @@
   --muted: var(--crm-muted);
   --accent: var(--crm-accent);
   --accent-fg: #ffffff;
-  --accent-soft: rgb(59 111 224 / 0.12);
+  --accent-soft: #e3f1ea;
   --success: var(--crm-ok);
   --success-soft: var(--crm-ok-bg);
   --warning: var(--crm-warn);
@@ -121,7 +138,7 @@
   --ui-td-fs: 12.5px;
   --ui-cell-px: 10px;
   --ui-cell-py: 9px;
-  --ui-row-hover: rgb(59 111 224 / 0.05);
+  --ui-row-hover: rgb(15 107 75 / 0.05);
   --ui-header-mb: 16px;
   --ui-header-mb-sm: 20px;
   --ui-title-fs: 18px;
@@ -150,8 +167,12 @@
   --ui-mcard-fs: 12.5px;
 }
 
-/* Thai: taller glyphs — never below 12 px for reading text (spec §D), no wide uppercase tracking. */
+/* Thai: taller glyphs — never below 12 px for reading text (spec §D), no wide uppercase tracking. Noto Sans Thai
+   leads every stack (text and headings; it carries Latin too), so Thai never falls back to a system font or tofu. */
 :root:has(.crm[lang="th"]):not(:has([data-crm-off])) {
+  --crm-font: "Noto Sans Thai Variable", "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --crm-head:
+    "Noto Sans Thai Variable", "Space Grotesk Variable", "DM Sans Variable", ui-sans-serif, sans-serif;
   --ui-btn-fs-sm: 12px;
   --crm-fs-sub: 12px;
   --crm-fs-note: 12.5px;
@@ -189,12 +210,25 @@
 
 :root:has(.crm):not(:has([data-crm-off])) body {
   /* Noto Sans Thai is a fallback in English too, so the ไทย toggle and any Thai text never fall to system fonts. */
-  font-family: "Inter Variable", "Noto Sans Thai Variable", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--crm-font);
+  /* globals.css turns on Inter's cv11/ss01 for the rest of the app; DM Sans would swap glyphs with them. */
+  font-feature-settings: normal;
   font-size: 13px;
   line-height: 1.55;
+  background: var(--crm-bg);
 }
-:root:has(.crm[lang="th"]):not(:has([data-crm-off])) body {
-  font-family: "Noto Sans Thai Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+/* Keyboard focus: green ring (≥ 3:1 on every surface) with a lime halo inside it. */
+:where(:root:has(.crm):not(:has([data-crm-off]))) :is(a, button, summary, [role="tab"]):focus-visible {
+  outline: 2px solid var(--crm-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--crm-lime);
+}
+/* Headings in Space Grotesk (sign-in look); figures use --crm-num (crm-kit.css). In the components layer with zero
+   specificity, so a Tailwind font utility on a heading still wins. */
+@layer components {
+  :where(:root:has(.crm):not(:has([data-crm-off]))) :where(h1, h2, h3, .crm-crumb b, .crm-bname b) {
+    font-family: var(--crm-head);
+  }
 }
 
 /* ===== Window ===== */
@@ -218,7 +252,7 @@
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 2 * var(--crm-gap));
-  background: var(--crm-surface);
+  background: var(--crm-side-bg);
   border-inline-end: 1px solid var(--crm-line);
 }
 .crm-brand {
@@ -302,7 +336,7 @@
   padding: 7px 9px;
   border: 1px solid var(--crm-line);
   border-radius: 10px;
-  background: var(--crm-surface2);
+  background: var(--crm-surface);
   text-align: start;
   transition: border-color 0.18s;
 }
@@ -351,8 +385,8 @@
   border-radius: 10px;
   background: var(--crm-surface);
   box-shadow:
-    0 2px 6px rgb(32 44 94 / 0.06),
-    0 18px 40px -12px rgb(32 44 94 / 0.22);
+    0 2px 6px rgb(17 40 28 / 0.06),
+    0 18px 40px -12px rgb(17 40 28 / 0.2);
   animation: menu-in 160ms var(--ease-calm) both;
 }
 .crm-menu-item {
@@ -550,7 +584,7 @@
 .crm-nlink[aria-current="page"] > svg {
   color: var(--crm-accent);
 }
-/* Count badge (crm-spec §2.1 ③): red pill, accent on the active item */
+/* Count badge (crm-spec §2.1 ③): lime pill (brand highlight), green on the lime active item */
 .crm-ncount {
   position: relative;
   margin-inline-start: auto;
@@ -560,26 +594,42 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--crm-bad);
-  color: #fff;
+  background: var(--crm-lime);
+  box-shadow: inset 0 0 0 1px rgb(17 40 28 / 0.08);
+  color: var(--crm-lime-ink);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .crm-nlink[aria-current="page"] > .crm-ncount {
   background: var(--crm-accent);
+  box-shadow: none;
+  color: #fff;
 }
+/* Active item: lime wash + a short green bar at the start edge */
 .crm-nactive {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--crm-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--crm-lime) 46%, var(--crm-surface));
+}
+.crm-nactive::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--crm-accent);
 }
 
-/* Plan card */
+/* Sidebar foot: plan card + platform badge, pinned under the scrolling menu */
 .crm-side-foot {
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 8px;
   border-top: 1px solid var(--crm-line);
 }
 .crm-plan {
@@ -589,7 +639,41 @@
   padding: 10px 12px;
   border: 1px solid var(--crm-line);
   border-radius: 12px;
-  background: var(--crm-surface2);
+  background: var(--crm-surface);
+}
+/* Platform badge (owner 2026-10-09): "SM Spa Management", links to the marketing site in a new tab. */
+.crm-platform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: var(--crm-text);
+  transition: background-color 0.18s;
+}
+.crm-platform:hover {
+  background: color-mix(in srgb, var(--crm-accent) 7%, transparent);
+}
+.crm-platform-logo {
+  width: auto;
+  height: 28px;
+}
+/* Short screens: the whole sidebar scrolls as one, so the foot never squeezes the menu. */
+@media (max-height: 700px) {
+  .crm-side {
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .crm-nav {
+    flex: none;
+    overflow: visible;
+  }
+  .crm-side-foot {
+    margin-top: auto;
+  }
+  .crm-platform-logo {
+    height: 24px;
+  }
 }
 .crm-plan b {
   font-size: 13.5px;
@@ -622,6 +706,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--crm-page);
 }
 .crm-banner {
   padding: 7px 20px;
@@ -705,7 +790,7 @@
     color 0.18s;
 }
 .crm-seg button[lang="th"] {
-  font-family: "Noto Sans Thai Variable", "Inter Variable", sans-serif;
+  font-family: "Noto Sans Thai Variable", "DM Sans Variable", sans-serif;
   font-size: 12.5px;
 }
 .crm-seg button:hover:not([aria-pressed="true"]) {
@@ -897,7 +982,7 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgb(26 31 46 / 0.28);
+  background: rgb(17 26 21 / 0.28);
   backdrop-filter: blur(2px);
 }
 .crm-search-dlg {

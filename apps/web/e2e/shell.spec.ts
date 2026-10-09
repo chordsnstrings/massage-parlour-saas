@@ -58,6 +58,12 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     // Accepted spas start on an active yearly subscription (PLAN §18.3), not a trial.
     await expect(page.getByText(/^Renews \d{1,2} \w{3} \d{4} · AED\s?[\d,]+\/yr$/)).toBeVisible()
     await expect(page.getByRole('banner')).toContainText('Workspace')
+    // Platform badge at the foot of the sidebar (PLAN §18.6): the marketing site, in a new tab.
+    const platform = page.getByRole('complementary').getByRole('link', { name: 'Spa Management' })
+    await expect(platform).toBeVisible()
+    await expect(platform).toHaveAttribute('href', /^http:\/\/localhost:\d+\/?$/)
+    await expect(platform).toHaveAttribute('target', '_blank')
+    await expect(platform).toHaveAttribute('rel', /noopener/)
   })
 
   await test.step('section tabs group the pages of a menu item', async () => {
@@ -104,6 +110,8 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await page.setViewportSize({ width: 360, height: 780 })
     await expect(menu).toBeHidden()
     await page.getByRole('button', { name: 'Open menu' }).click()
+    // The badge sits in the drawer, below the menu.
+    await expect(page.getByRole('complementary').getByRole('link', { name: 'Spa Management' })).toBeVisible()
     await menu.getByRole('link', { name: 'Clients' }).click()
     await page.waitForURL(`${dashboard}/clients`)
     await expect(menu).toBeHidden()

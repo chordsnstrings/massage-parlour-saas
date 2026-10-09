@@ -1,4 +1,7 @@
+// Brand fonts (same as the sign-in pages) + Thai; tokens in crm.css.
+import '@fontsource-variable/dm-sans'
 import '@fontsource-variable/noto-sans-thai'
+import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
 import { isSystemRole, type Permission } from '@spa/core'
@@ -21,6 +24,7 @@ import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
 import { navBadgeCounts } from '@/server/nav-counts'
 import { bellData } from '@/server/notifications'
+import { canonicalUrls } from '@/server/origin'
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
 async function shellData(ctx: MemberContext) {
@@ -251,6 +255,7 @@ export default async function TenantLayout({
           search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
+          platformHref={canonicalUrls().marketing()}
         >
           {children}
         </SpaShell>
