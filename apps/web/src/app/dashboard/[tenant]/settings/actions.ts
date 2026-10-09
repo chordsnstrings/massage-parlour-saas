@@ -1,5 +1,5 @@
 'use server'
-import { isGoogleMapsUrl, requires2fa, toUaeE164 } from '@spa/core'
+import { isGoogleMapsUrl, normalizeGoogleMapsUrl, requires2fa, toUaeE164 } from '@spa/core'
 import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
 import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -31,7 +31,7 @@ const schema = z.object({
     .trim()
     .optional()
     .refine((v) => !v || isGoogleMapsUrl(v), 'settings.profile.errors.mapsUrl')
-    .transform((v) => v || null),
+    .transform((v) => normalizeGoogleMapsUrl(v)), // store URL.href, never the raw paste
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),

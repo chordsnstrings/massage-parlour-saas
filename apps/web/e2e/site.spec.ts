@@ -70,9 +70,12 @@ test('owner picks a template, publishes from the editor and the public site rend
     const address = 'Shop 4, Marina Walk, Dubai'
     await page.goto(`${app}/${slug}/settings`)
     await page.getByLabel('Address', { exact: true }).fill(address)
-    await page.getByLabel('Google Maps link').fill('https://evil.test/maps/place')
-    await page.getByRole('button', { name: 'Save changes' }).click()
-    await expect(page.getByText('Paste a Google Maps link').first()).toBeVisible()
+    // a lookalike host and a Google host outside the allowlist are refused server-side
+    for (const bad of ['https://evil.test/maps/place', 'https://www.google.xyz/maps/place/x']) {
+      await page.getByLabel('Google Maps link').fill(bad)
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await expect(page.getByText('Paste a Google Maps link').first()).toBeVisible()
+    }
     await page.getByLabel('Google Maps link').fill('')
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page.getByText('Settings saved').first()).toBeVisible()
@@ -85,7 +88,8 @@ test('owner picks a template, publishes from the editor and the public site rend
 
     const pin = 'https://maps.app.goo.gl/BirchSpaPin1'
     await page.goto(`${app}/${slug}/settings`)
-    await page.getByLabel('Google Maps link').fill(pin)
+    // stored normalized (URL.href), never the raw paste
+    await page.getByLabel('Google Maps link').fill('HTTPS://Maps.App.Goo.gl/BirchSpaPin1')
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page.getByText('Settings saved').first()).toBeVisible()
     await page.goto(`${site(slug)}?lang=ar`)

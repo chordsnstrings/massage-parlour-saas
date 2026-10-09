@@ -1212,7 +1212,11 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - **Map links (owner request 2026-10-09):** every spa-website address (all templates, footer, placeholder site,
   booking page, uploaded HTML designs via `{{address}}`) opens Google Maps in a new tab. Optional per-branch
   "Google Maps link" (`branches.maps_url`, Settings → Business + Settings → Branches; only Google Maps URLs) pins the
-  exact place; else the address is searched. Details: CODEMAP "Site builder → Map links".
+  exact place; else the address is searched. Review fixes: explicit Google host allowlist (no lookalike TLDs, no /url
+  redirector), the normalized `URL.href` is stored, `{{address}}` links only in real text (quote-aware tokenizer),
+  and `runMigrations` stops a deploy whose journal holds a migration older than the newest applied one (merge order
+  with the AI branch's 0033: the branch merging second regenerates its migration as 0034). Details: CODEMAP
+  "Site builder → Map links".
 - **G1:** compose passes `R2_*` to the worker; `offsiteConfig` falls back to the `S3_*` bucket (`backups/`) when no `R2_*`
   is set (separate bucket recommended); `db-backup` records ok/skipped/failed in `platform_job_runs`; console overview
   card "Off-site backup" warns when the last ok run is missing or > 36 h old.
