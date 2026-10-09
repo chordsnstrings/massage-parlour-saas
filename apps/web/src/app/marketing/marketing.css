@@ -1355,18 +1355,18 @@
     .mkt-show-stage {
       display: block;
       padding-inline: 100px;
-      margin-top: 44px;
+      margin-block: 44px 96px; /* the earnings card hangs ~70px below the device */
     }
     .mkt-show-slot {
       position: absolute;
-      width: 224px;
+      width: 236px;
     }
     .mkt-show-card {
       --show-rx: 16;
     }
     .mkt-show-slot[data-slot="cal"] {
       inset-inline-start: 0;
-      top: 20%;
+      top: 26%;
     }
     .mkt-show-slot[data-slot="cal"] .mkt-show-card {
       --show-y0: 150;
@@ -1393,7 +1393,7 @@
     }
     .mkt-show-slot[data-slot="earn"] {
       inset-inline-end: 1%;
-      bottom: 12%;
+      bottom: -12%; /* below the till's total, over the device's corner */
     }
     .mkt-show-slot[data-slot="earn"] .mkt-show-card {
       --show-y0: 120;
@@ -1425,7 +1425,20 @@
     }
     .mkt-show-slot[data-slot="earn"] {
       inset-inline-end: -28px;
-      bottom: 4%;
+    }
+  }
+  @media (min-width: 1440px) {
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: -96px;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: -72px;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: -96px;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: -84px;
     }
   }
   @media (prefers-reduced-motion: no-preference) {

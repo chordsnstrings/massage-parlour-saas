@@ -86,7 +86,7 @@ export function CrmDashboard({ c, overview = false }: { c: CrmDemoCopy; overview
     <div
       lang={c.locale}
       data-testid="crm-demo"
-      className="mkt-screen crm-demo grid text-[13px] sm:grid-cols-[11.5rem_1fr]"
+      className="mkt-screen crm-demo grid grid-cols-[minmax(0,1fr)] text-[13px] sm:grid-cols-[11.5rem_minmax(0,1fr)]"
     >
       <div className="crm-demo-side">
         <div className="flex items-center gap-2.5 px-2 pb-3">
