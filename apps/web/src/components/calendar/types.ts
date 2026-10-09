@@ -84,6 +84,8 @@ export type CalendarData = {
   canManage: boolean
   canCheckout: boolean
   ownOnly: boolean
+  /** Staff id whose bookings this member may check in / start / complete (`calendar.ownStatus`, G14). */
+  ownStatusStaffId: string | null
   checkoutBase: string
   bookingsBase: string
   calendarBase: string

@@ -16,11 +16,13 @@ import {
   DomainError,
   findOrCreateClient,
   loadDay,
+  OWN_STATUS_TARGETS,
   outboxLink,
   planBookingMessages,
   rescheduleItem,
   rotationFor,
   setBookingStatus,
+  setOwnBookingStatus,
   takeTurn,
 } from '@spa/services'
 import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
@@ -30,7 +32,7 @@ import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
-import { allowedBranches } from './data'
+import { allowedBranches, ownStaffId } from './data'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'calendar.errors.pickDate')
 const time = z.string().regex(/^\d{2}:\d{2}$/, 'calendar.errors.pickTime')
@@ -251,6 +253,54 @@ export async function setStatusAction(
       data: reason ? { reason } : undefined,
     })
     revalidate(slug)
+    return ok({
+      key: 'calendar.results.status',
+      params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },
+    })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+const ownStatusSchema = z.object({
+  bookingId: z.uuid(),
+  status: z.enum(OWN_STATUS_TARGETS),
+})
+
+/**
+ * Therapist (G14, `calendar.ownStatus`): check in / start / complete a booking they are assigned to. Ownership is
+ * checked in the service (their linked staff profile must be on the booking); others' bookings read as not found.
+ */
+export async function setOwnStatusAction(
+  slug: string,
+  input: z.input<typeof ownStatusSchema>,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.ownStatus')
+  if (error) return fail(error)
+  const parsed = ownStatusSchema.safeParse(input)
+  if (!parsed.success) return fromZod(parsed.error)
+  const { bookingId, status } = parsed.data
+  try {
+    const updated = await withTenant(ctx.tenant.id, async (tx) => {
+      const myStaff = await ownStaffId(tx, ctx)
+      const [b] = await tx
+        .select({ branchId: bookings.branchId })
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+      if (!b || !myStaff) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, b.branchId)
+      return setOwnBookingStatus(tx, { bookingId, staffId: myStaff, to: status, userId: ctx.user.id })
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: `booking.${status}`,
+      entity: 'booking',
+      entityId: bookingId,
+      data: { own: true },
+    })
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}`)
     return ok({
       key: 'calendar.results.status',
       params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },

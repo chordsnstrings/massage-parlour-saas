@@ -775,8 +775,12 @@ function DoneView({ done, locale, onAgain }: { done: BookingDone; locale: Locale
         <Check className="size-7" strokeWidth={2.25} />
       </motion.div>
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{L('doneTitle')}</h1>
-        <p className="mx-auto max-w-md text-[15px] text-muted text-pretty">{L('doneBody')}</p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          {L(done.confirmed ? 'doneConfirmedTitle' : 'doneTitle')}
+        </h1>
+        <p className="mx-auto max-w-md text-[15px] text-muted text-pretty">
+          {L(done.confirmed ? 'doneConfirmedBody' : 'doneBody')}
+        </p>
       </div>
       <Card className="text-start">
         <div className="flex items-center justify-between gap-3 border-b px-5 py-4 sm:px-6">
@@ -803,7 +807,7 @@ function DoneView({ done, locale, onAgain }: { done: BookingDone; locale: Locale
           <Button asChild size="lg" className="min-h-12">
             <a href={done.whatsappUrl} target="_blank" rel="noopener noreferrer">
               <MessageCircle />
-              {L('confirmWhatsapp')}
+              {L(done.confirmed ? 'chatWhatsapp' : 'confirmWhatsapp')}
             </a>
           </Button>
         )}

@@ -34,6 +34,7 @@ import {
   staff,
   staffServices,
   type Tx,
+  tenants,
 } from '@spa/db'
 import { and, asc, eq, gt, gte, inArray, lt, lte, ne, sql } from 'drizzle-orm'
 import {
@@ -649,6 +650,61 @@ export async function setBookingStatus(
   // takes the unsent ones out of the outbox (G4).
   await planBookingMessages(tx, bookingId, { now: opts.now })
   return updated!
+}
+
+/** What a therapist may do to their own booking (G14): check in, start, complete — never confirm, cancel or move. */
+export const OWN_STATUS_TARGETS = ['checked_in', 'in_service', 'completed'] as const
+export type OwnStatusTarget = (typeof OWN_STATUS_TARGETS)[number]
+const OWN_STATUS_FROM: readonly string[] = ['confirmed', 'checked_in', 'in_service']
+
+/**
+ * A therapist moves a booking they are assigned to (any item) along check-in → in service → completed. Someone
+ * else's booking reads as not found. Completing records no commission: the front desk enters it on the booking page.
+ */
+export async function setOwnBookingStatus(
+  tx: Tx,
+  input: { bookingId: string; staffId: string; to: OwnStatusTarget; userId?: string | null; now?: Date },
+) {
+  if (!(OWN_STATUS_TARGETS as readonly string[]).includes(input.to))
+    throw new DomainError('Booking not found', 'not_found')
+  const [b] = await tx
+    .select({ status: bookings.status })
+    .from(bookings)
+    .where(eq(bookings.id, input.bookingId))
+  const [mine] = b
+    ? await tx
+        .select({ id: bookingItems.id })
+        .from(bookingItems)
+        .where(
+          and(
+            eq(bookingItems.bookingId, input.bookingId),
+            sql`${input.staffId}::uuid = any(${bookingItems.staffIds})`,
+          ),
+        )
+        .limit(1)
+    : []
+  if (!b || !mine) throw new DomainError('Booking not found', 'not_found')
+  if (!OWN_STATUS_FROM.includes(b.status))
+    throw new DomainError(
+      `Can't change a ${b.status.replace('_', ' ')} booking to ${input.to.replace('_', ' ')}`,
+    )
+  return setBookingStatus(tx, input.bookingId, input.to, undefined, { userId: input.userId, now: input.now })
+}
+
+/**
+ * Status for a booking the client made themselves (website, Instagram, AI): `confirmed` when the spa turned on
+ * "Auto-confirm returning clients" (G21) and the client has at least N completed visits, else `pending`.
+ */
+export async function selfBookingStatus(tx: Tx, tenantId: string, clientId: string) {
+  const [t] = await tx.select({ s: tenants.settings }).from(tenants).where(eq(tenants.id, tenantId))
+  const rule = t?.s.onlineBooking
+  if (!rule?.autoConfirmReturning) return 'pending' as const
+  const needed = Math.max(1, rule.autoConfirmAfterVisits ?? 1)
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(bookings)
+    .where(and(eq(bookings.clientId, clientId), eq(bookings.status, 'completed')))
+  return Number(row?.n ?? 0) >= needed ? ('confirmed' as const) : ('pending' as const)
 }
 
 /** Walk-in turn list for a business day; created on first use from therapists on shift. */

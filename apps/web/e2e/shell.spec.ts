@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import sharp from 'sharp'
-import { app, uniqueSlug } from './helpers'
+import { app, enableTotp, enrolUrl, uniqueSlug } from './helpers'
 
 // Spa dashboard shell (docs/PLAN.md §14.6 Phase 1): logo at sign-up, grouped menu, section tabs, plan card,
 // EN | ไทย toggle saved per user, logo managed in Settings, phone drawer.
@@ -26,6 +26,9 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
     await page.getByLabel('Logo (optional)').setInputFiles(await logo())
     await page.getByRole('button', { name: 'Create account' }).click()
+    await page.waitForURL(enrolUrl(slug)) // G23: 2FA first
+    await enableTotp(`owner-${slug}@e2e.test`)
+    await page.goto(dashboard)
     await page.waitForURL(dashboard)
   })
 

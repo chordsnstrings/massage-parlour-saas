@@ -1,4 +1,10 @@
-import { type Permission, resolvePermissions, SYSTEM_ROLES, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
+import {
+  type Permission,
+  requires2fa,
+  resolvePermissions,
+  SYSTEM_ROLES,
+  TWO_FACTOR_POLICY_ROLES,
+} from '@spa/core'
 import {
   grantListedPlatformAdmins,
   listedAdminEmails,
@@ -89,7 +95,7 @@ export const requireMember = cache(async (slug: string): Promise<MemberContext> 
   if (row && !tenant.deletedAt) {
     // Security policy (Settings → Security, X5): owners and managers need TOTP 2FA before they get in.
     if (
-      tenant.settings.require2fa &&
+      requires2fa(tenant.settings) &&
       TWO_FACTOR_POLICY_ROLES.includes(row.roleKey) &&
       !user.twoFactorEnabled
     ) {

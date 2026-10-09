@@ -45,7 +45,14 @@ export async function provisionTenant(input: {
       .limit(1)
     const [tenant] = await tx
       .insert(tenants)
-      .values({ slug: input.slug, name: input.businessName, planId: plan?.id, status: 'trial' })
+      .values({
+        slug: input.slug,
+        name: input.businessName,
+        planId: plan?.id,
+        status: 'trial',
+        // G23: owners and managers enrol TOTP 2FA on their first visit (they may turn the policy off).
+        settings: { require2fa: true },
+      })
       .returning()
     if (!tenant) throw new Error('tenant insert failed')
     await tx.insert(branches).values({ tenantId: tenant.id, name: input.businessName, isDefault: true })

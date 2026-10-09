@@ -1,7 +1,16 @@
 import { expect, test } from '@playwright/test'
-import { bookings, clients, notifications } from '@spa/db'
+import { bookings, clients, notifications, outbox } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
-import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import {
+  app,
+  hoursOnToday,
+  screenshotAt,
+  seedBooking,
+  seedCatalog,
+  signUpOwner,
+  site,
+  testDb,
+} from './helpers'
 
 test('visitor books online: service → tomorrow → first time → details → pending booking + WhatsApp confirm', async ({
   page,
@@ -69,6 +78,67 @@ test('visitor books online: service → tomorrow → first time → details → 
   await expect(page.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: /New online booking/ })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Mark all as read' })).toHaveCount(0)
+})
+
+test('G21: a returning client is auto-confirmed online and gets the WhatsApp confirmation + reminders', async ({
+  page,
+}) => {
+  const { slug, dashboard } = await signUpOwner(page, { spa: 'Juniper Spa' })
+  const seed = await seedCatalog(slug)
+  const db = testDb()
+  // Fatima (050 123 4567) has one completed visit.
+  const past = await seedBooking(seed, hoursOnToday(-3))
+  await db.update(bookings).set({ status: 'completed' }).where(eq(bookings.id, past.id))
+
+  await test.step('owner turns on "Auto-confirm returning clients" (after 1 visit)', async () => {
+    await page.goto(`${dashboard}/settings`)
+    const toggle = page.getByRole('switch', { name: 'Auto-confirm returning clients' })
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await toggle.click()
+    await expect(page.getByLabel('After completed visits')).toHaveValue('1')
+    await page.getByRole('button', { name: 'Save online booking' }).click()
+    await expect(page.getByText('Online booking settings saved')).toBeVisible()
+  })
+
+  await test.step('Fatima books online: confirmed at once, messages queued', async () => {
+    await page.goto(`${site(slug)}/book`)
+    await page
+      .getByRole('region', { name: 'Swedish massage' })
+      .getByRole('button', { name: /60 min/ })
+      .click()
+    await page.getByRole('button', { name: /^Tomorrow/ }).click()
+    await page.getByTestId('slots').getByRole('button').first().click()
+    await page.getByLabel('Your name').fill('Fatima')
+    await page.getByLabel('UAE mobile').fill('050 123 4567')
+    await page.getByRole('button', { name: 'Request booking' }).click()
+    await expect(page.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Message us on WhatsApp' })).toBeVisible()
+    const ref = (await page.getByTestId('booking-ref').textContent())?.trim() ?? ''
+    const [row] = await db
+      .select({ id: bookings.id, status: bookings.status })
+      .from(bookings)
+      .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
+    expect(row!.status).toBe('confirmed')
+    const kinds = (await db.select({ kind: outbox.kind }).from(outbox).where(eq(outbox.bookingId, row!.id)))
+      .map((r) => r.kind)
+      .sort()
+    // The day-before reminder is planned only while its moment is still ahead (tomorrow's first slot).
+    expect(kinds).toEqual(expect.arrayContaining(['booking_confirmation', 'reminder_2h']))
+  })
+
+  await test.step('a new client still waits for the spa to confirm', async () => {
+    await page.goto(`${site(slug)}/book`)
+    await page
+      .getByRole('region', { name: 'Swedish massage' })
+      .getByRole('button', { name: /60 min/ })
+      .click()
+    await page.getByRole('button', { name: /^Tomorrow/ }).click()
+    await page.getByTestId('slots').getByRole('button').last().click()
+    await page.getByLabel('Your name').fill('Noura Haddad')
+    await page.getByLabel('UAE mobile').fill('050 765 4321')
+    await page.getByRole('button', { name: 'Request booking' }).click()
+    await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
+  })
 })
 
 test('Arabic booking page renders right-to-left', async ({ page }) => {
