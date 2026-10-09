@@ -12,7 +12,7 @@ export async function activePlans() {
 }
 
 /** Shown on the contact page and in the footer when no contact email is set in the super-admin. */
-export const DEFAULT_CONTACT_EMAIL = 'hello@spamanagement.co'
+export const DEFAULT_CONTACT_EMAIL = 'ask@spamanagement.co'
 
 /** The operator's public contact details (super-admin → Settings); one read per request (page + footer). */
 export const companyContact = cache(async () => {

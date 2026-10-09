@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { platformSettings } from '@spa/db'
 import {
   altApp,
   altBase,
@@ -11,6 +12,7 @@ import {
   PATH,
   PORT,
   site,
+  testDb,
   uniqueSlug,
 } from './helpers'
 
@@ -62,7 +64,10 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
       .getByRole('link')
       .evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href))
     expect(hrefs.length).toBeGreaterThanOrEqual(25)
-    expect(hrefs.filter((h) => h.startsWith('mailto:'))).toHaveLength(1)
+    const [settings] = await testDb().select().from(platformSettings).limit(1)
+    expect(hrefs.filter((h) => h.startsWith('mailto:'))).toEqual([
+      `mailto:${settings?.email || 'ask@spamanagement.co'}`,
+    ])
     expect(hrefs).toContain(`${app}/signup`)
     const anchors = new Map<string, Set<string>>()
     for (const href of hrefs.filter((h) => !h.startsWith('mailto:'))) {

@@ -230,7 +230,10 @@ async function Footer() {
           <span>
             © {new Date().getFullYear()} {LEGAL.companyName} · {LEGAL.brand}
           </span>
-          <span>Payments are recorded, never processed. Customer messages are sent by you on WhatsApp.</span>
+          <span>
+            Client payments are recorded, never processed. WhatsApp reminders and follow-ups are sent by you,
+            from your own number.
+          </span>
         </div>
       </div>
     </footer>

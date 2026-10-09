@@ -1405,8 +1405,10 @@ Product (Features, Website studio, Pricing, Apply for your spa, Sign in), Featur
 marketing|team|automations`), Website studio (`/website-builder#make-it-yours|how-we-build-it|section-designs|
 after-launch|included`), Built for the UAE (`/pricing#plans`, VAT + WhatsApp → features anchors, English & Arabic →
 `#included`, `/pricing#faq`), Company (Contact, the contact-page email (super-admin Settings, fallback
-`DEFAULT_CONTACT_EMAIL`), Privacy, Terms, Data deletion) — then "© year {LEGAL.companyName} · {LEGAL.brand}" + "Payments are
-recorded, never processed. Customer messages are sent by you on WhatsApp." Only existing pages/sections are linked
+`DEFAULT_CONTACT_EMAIL` = ask@spamanagement.co), Privacy, Terms, Data deletion) — then "© year {LEGAL.companyName} ·
+{LEGAL.brand}" + "Client payments are recorded, never processed. WhatsApp reminders and follow-ups are sent by you, from
+your own number." (scoped on purpose: the subscription can be paid by card via Stripe, and the Instagram DM agent replies
+automatically). Only existing pages/sections are linked
 (no multi-branch section exists, so none); section `id`s are stable link targets. Layout: brand + 5 cols ≥ 1100 px,
-brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, that every footer link
-answers 200 and that every `#anchor` exists.
+brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, the mailto address
+(Settings email or the default), that every footer link answers 200 and that every `#anchor` exists.
