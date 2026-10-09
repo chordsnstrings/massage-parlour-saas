@@ -1181,3 +1181,11 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
+
+### 18.1 Owner decisions (2026-10-09)
+- Order: G1–G5 first, then the access change below.
+- Super-admin access stays exactly as today (impersonation, data export, fixing a spa's setup) until the owner decides otherwise.
+- Add a per-spa performance view in the console: revenue totals, booking counts, marketing analytics (web visits, sources AI/IG/GBP/QR, campaigns).
+- Spa logins (owner, manager, receptionist, therapist) keep the dashboard/CRM. On the website the spa edits **only services + prices**
+  (name, description, duration, price → live site); no design approval / change requests — super-admin edits and publishes directly.
+- Online booking from tenant sites stays.
