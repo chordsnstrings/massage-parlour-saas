@@ -9,19 +9,32 @@ import {
   MessageCircle,
   ShieldCheck,
   SkipForward,
+  UserRound,
+  X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { markMessageAction } from '@/app/dashboard/[tenant]/messages/actions'
-import { Card, Grid, Pill, Seg, Stat } from '@/components/crm'
+import { assignMessagesAction, markMessageAction } from '@/app/dashboard/[tenant]/messages/actions'
+import { Card, Grid, Note, Pill, Seg, Stat } from '@/components/crm'
 import { Button } from '@/components/ui/button'
+import { Checkbox, Select } from '@/components/ui/input'
 import { NumberTicker } from '@/components/ui/motion'
 import { EmptyState, PageBody } from '@/components/ui/page'
 import { toast } from '@/components/ui/toast'
 import { resultText, useI18n } from '@/i18n/client'
 import { duration, ease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
-import { KIND_TONE, type OutboxRow, rowLabel, WA_MODE_KEY, WA_MODES, type WaMode } from './shared'
+import {
+  type AssigneeFilter,
+  type AssignProps,
+  KIND_TONE,
+  type OutboxRow,
+  rowLabel,
+  WA_MODE_KEY,
+  WA_MODES,
+  type WaMode,
+} from './shared'
 
 type Tab = 'due' | 'scheduled' | 'sent'
 type Counts = { due: number; scheduled: number; sentToday: number; sentWeek: number }
@@ -65,6 +78,7 @@ export function OutboxQueue({
   rows,
   counts,
   aside,
+  assign,
 }: {
   slug: string
   tab: Tab
@@ -73,8 +87,11 @@ export function OutboxQueue({
   counts: Counts
   /** Server-rendered side cards (campaigns, AI receptionist). */
   aside?: React.ReactNode
+  /** F28 assignment: filter, who can be assigned, names. */
+  assign: AssignProps
 }) {
   const { t, fmt } = useI18n()
+  const router = useRouter()
   const [mode, setMode] = useSendMode()
   // Optimistic state: rows handled here disappear at once; the server refresh then catches up.
   const [handled, setHandled] = useState<Map<string, 'sent' | 'skipped'>>(new Map())
@@ -93,6 +110,52 @@ export function OutboxQueue({
     sentWeek: counts.sentWeek + pendingSent,
   }
   const readOnly = tab === 'sent'
+  // F28: per-row assignee (optimistic) and the bulk selection.
+  const [assigned, setAssigned] = useState<Map<string, string | null>>(new Map())
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [bulkTo, setBulkTo] = useState('')
+  const assigneeOf = (row: OutboxRow) =>
+    assigned.has(row.id) ? (assigned.get(row.id) ?? null) : row.assignedTo
+  const assignRows = useCallback(
+    (ids: string[], memberId: string | null) => {
+      if (!ids.length) return
+      setAssigned((m) => {
+        const copy = new Map(m)
+        for (const id of ids) copy.set(id, memberId)
+        return copy
+      })
+      startTransition(async () => {
+        const res = await assignMessagesAction(slug, { ids, memberId })
+        if (res?.ok) {
+          if (res.message) toast.success(resultText(t, res) ?? '')
+          setPicked(new Set())
+        } else {
+          toast.error((res && resultText(t, res)) || t('errors.generic'))
+          setAssigned((m) => {
+            const copy = new Map(m)
+            for (const id of ids) copy.delete(id)
+            return copy
+          })
+        }
+        router.refresh()
+      })
+    },
+    [slug, t, router],
+  )
+  const togglePick = (id: string) =>
+    setPicked((s) => {
+      const copy = new Set(s)
+      if (copy.has(id)) copy.delete(id)
+      else copy.add(id)
+      return copy
+    })
+  const href = (k: Tab, who: AssigneeFilter) => {
+    const q = new URLSearchParams()
+    if (k !== 'due') q.set('tab', k)
+    if (who !== 'all') q.set('who', who)
+    const qs = q.toString()
+    return qs ? `${base}?${qs}` : base
+  }
   const selectedIndex = Math.max(
     0,
     visible.findIndex((r) => r.id === selectedId),
@@ -227,7 +290,7 @@ export function OutboxQueue({
               value={tab}
               items={(['due', 'scheduled', 'sent'] as const).map((k) => ({
                 value: k,
-                href: k === 'due' ? base : `${base}?tab=${k}`,
+                href: href(k, assign.who),
                 label: (
                   <>
                     {tabLabel[k]} <span className="crm-num opacity-70">{fmt.number(tabCount[k])}</span>
@@ -244,6 +307,72 @@ export function OutboxQueue({
               />
             )}
           </div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <Seg
+              label={t('messages.assign.filterLabel')}
+              value={assign.who}
+              items={(['all', 'mine', 'unassigned'] as const).map((w) => ({
+                value: w,
+                href: href(tab, w),
+                label: (
+                  <>
+                    {t(`messages.assign.filter.${w}`)}{' '}
+                    <span className="crm-num opacity-70">{fmt.number(assign.counts[w])}</span>
+                  </>
+                ),
+              }))}
+            />
+            {!readOnly && visible.length > 0 && (
+              <label className="crm-muted inline-flex min-h-9 items-center gap-2 text-[length:var(--crm-fs-sub)]">
+                <Checkbox
+                  checked={visible.every((r) => picked.has(r.id))}
+                  onChange={(e) =>
+                    setPicked(e.currentTarget.checked ? new Set(visible.map((r) => r.id)) : new Set())
+                  }
+                />
+                {t('messages.assign.selectAll')}
+              </label>
+            )}
+          </div>
+          {assign.autoAssign && !readOnly && (
+            <Note tone="acc" icon={<UserRound />} className="mb-3">
+              {t('messages.assign.autoNote')}
+            </Note>
+          )}
+          {!readOnly && picked.size > 0 && (
+            <div
+              className="mb-3 flex flex-wrap items-center gap-2 rounded-[10px] border border-[var(--crm-line)] bg-[var(--crm-surface2)] p-2"
+              data-testid="bulk-assign"
+            >
+              <span className="crm-num px-1 text-[length:var(--crm-fs-sub)] font-semibold">
+                {t('messages.assign.selected', { count: picked.size })}
+              </span>
+              <Select
+                aria-label={t('messages.assign.assignTo')}
+                value={bulkTo}
+                onChange={(e) => setBulkTo(e.currentTarget.value)}
+                className="h-9 w-auto min-w-40"
+              >
+                <option value="">{t('messages.assign.assignTo')}</option>
+                <option value="none">{t('messages.assign.nobody')}</option>
+                {assign.options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                size="sm"
+                disabled={!bulkTo}
+                onClick={() => assignRows([...picked], bulkTo === 'none' ? null : bulkTo)}
+              >
+                {t('messages.assign.apply')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                <X /> {t('messages.assign.clear')}
+              </Button>
+            </div>
+          )}
           {visible.length === 0 ? (
             <EmptyState icon={EMPTY_ICON[tab]} title={empty[0]} description={empty[1]} />
           ) : (
@@ -272,6 +401,11 @@ export function OutboxQueue({
                       onOpen={() => open(row)}
                       onSent={() => finish(row, 'sent')}
                       onSkip={() => finish(row, 'skipped')}
+                      assign={assign}
+                      assignee={assigneeOf(row)}
+                      picked={picked.has(row.id)}
+                      onPick={() => togglePick(row.id)}
+                      onAssign={(memberId) => assignRows([row.id], memberId)}
                     />
                   </motion.li>
                 ))}
@@ -346,6 +480,11 @@ function MessageCard({
   onOpen,
   onSent,
   onSkip,
+  assign,
+  assignee,
+  picked,
+  onPick,
+  onAssign,
 }: {
   row: OutboxRow
   mode: WaMode
@@ -356,6 +495,11 @@ function MessageCard({
   onOpen: () => void
   onSent: () => void
   onSkip: () => void
+  assign: AssignProps
+  assignee: string | null
+  picked: boolean
+  onPick: () => void
+  onAssign: (memberId: string | null) => void
 }) {
   const { t, fmt } = useI18n()
   const [expanded, setExpanded] = useState(false)
@@ -373,6 +517,15 @@ function MessageCard({
         selected && 'border-[var(--crm-accent)] ring-4 ring-[var(--crm-glow)]',
       )}
     >
+      {!readOnly && (
+        <Checkbox
+          checked={picked}
+          onChange={onPick}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-1.5 shrink-0"
+          aria-label={t('messages.assign.selectRow', { name: row.clientName })}
+        />
+      )}
       <span className="crm-qi" aria-hidden>
         <MessageCircle />
       </span>
@@ -381,6 +534,11 @@ function MessageCard({
           <b className="truncate">{row.clientName}</b>
           <Pill tone={row.campaign ? 'acc' : KIND_TONE[row.kind]}>{label}</Pill>
           {opened && !readOnly && <Pill tone="warn">{t('messages.card.opened')}</Pill>}
+          {assignee && assignee === assign.meId && (
+            <Pill tone="acc" dot>
+              {t('messages.assign.filter.mine')}
+            </Pill>
+          )}
           <span className="crm-muted ms-auto text-[length:var(--crm-fs-sub)]">
             {readOnly ? t('messages.card.sentLabel') : t('messages.card.due')}{' '}
             <span className="crm-num">{when}</span>
@@ -410,6 +568,12 @@ function MessageCard({
           >
             {expanded ? t('messages.card.showLess') : t('messages.card.showFull')}
           </button>
+        )}
+        {readOnly && assignee && (
+          <p className="crm-muted mt-1 text-[length:var(--crm-fs-sub)]">
+            <UserRound className="me-1.5 inline size-3.5" strokeWidth={1.5} />
+            {t('messages.assign.label')}: {assign.names[assignee] ?? '—'}
+          </p>
         )}
         {readOnly ? (
           <p className="crm-muted mt-2 text-[length:var(--crm-fs-sub)]">
@@ -455,6 +619,25 @@ function MessageCard({
             >
               <SkipForward /> {t('messages.card.skip')}
             </Button>
+            <Select
+              aria-label={t('messages.assign.label')}
+              value={assignee ?? ''}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => onAssign(e.currentTarget.value || null)}
+              className="ms-auto h-8 w-auto min-w-36 text-[length:var(--crm-fs-sub)]"
+              data-testid="assignee"
+            >
+              <option value="">{t('messages.assign.nobody')}</option>
+              {assignee && !assign.options.some((o) => o.id === assignee) && (
+                <option value={assignee}>{assign.names[assignee] ?? '—'}</option>
+              )}
+              {assign.options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                  {o.id === assignee && row.assignedAuto ? ` · ${t('messages.assign.auto')}` : ''}
+                </option>
+              ))}
+            </Select>
           </div>
         )}
       </div>

@@ -615,6 +615,20 @@
   box-shadow: none;
   color: #fff;
 }
+/* F28: messages assigned to the viewer — dark green, next to (or instead of) the lime count */
+.crm-ncount.crm-nmine {
+  background: var(--crm-accent);
+  box-shadow: none;
+  color: #fff;
+}
+.crm-ncount + .crm-ncount.crm-nmine {
+  margin-inline-start: 4px;
+}
+.crm-nlink[aria-current="page"] > .crm-ncount.crm-nmine {
+  background: var(--crm-surface);
+  box-shadow: inset 0 0 0 1px var(--crm-accent);
+  color: var(--crm-accent);
+}
 /* Active item: lime wash + a short green bar at the start edge */
 .crm-nactive {
   position: absolute;

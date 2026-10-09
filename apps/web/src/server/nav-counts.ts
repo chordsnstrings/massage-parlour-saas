@@ -5,7 +5,7 @@ import { type NavCounts, navCounts } from '@spa/services'
 import { cache } from 'react'
 import { can, type MemberContext } from '@/server/access'
 
-const NONE: NavCounts = { today: 0, pending: 0, outboxDue: 0, igUnread: 0 }
+const NONE: NavCounts = { today: 0, pending: 0, outboxDue: 0, igUnread: 0, outboxMine: 0 }
 
 export const navBadgeCounts = cache(async (ctx: MemberContext): Promise<NavCounts> => {
   const calendar = can(ctx, 'calendar.view')
@@ -23,6 +23,7 @@ export const navBadgeCounts = cache(async (ctx: MemberContext): Promise<NavCount
       calendar,
       outbox: send,
       instagram: send,
+      assigneeMemberId: send ? (m?.id ?? null) : null,
     }),
   )
 })

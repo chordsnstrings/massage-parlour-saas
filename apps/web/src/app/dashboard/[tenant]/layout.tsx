@@ -142,7 +142,11 @@ export default async function TenantLayout({
         ]),
         counts.outboxDue + counts.igUnread,
         'inbox',
-      ),
+      ).map((i) => ({
+        ...i,
+        // F28: the viewer's own due WhatsApp messages (Mine filter on the messages page).
+        mine: { value: counts.outboxMine, label: t('nav.count.mine', { count: counts.outboxMine }) },
+      })),
     ]),
     ...group(t('nav.group.people'), [
       ...single('clients', 'clients.view', '/clients', t('nav.clients')),

@@ -138,7 +138,7 @@ export const clients = {
       file: 'PDF SHA-256',
       ok: 'Record unchanged since signing',
       changed: 'Record changed since signing — the hash no longer matches',
-      unknown: 'Signed before hashes were kept; stored now',
+      unknown: 'Signed before hashes were kept — creating the PDF stores one now',
     },
   },
   memberships: {

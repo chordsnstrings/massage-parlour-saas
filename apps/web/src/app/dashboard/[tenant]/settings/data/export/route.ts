@@ -5,8 +5,13 @@ import {
   exportRows,
   fullExportReadme,
   fullExportTables,
+  getFile,
+  intakePdfExportList,
+  intakePdfFilename,
   isExportDataset,
   parseDate,
+  type ZipEntry,
+  zipStream,
 } from '@spa/services'
 import { notFound } from 'next/navigation'
 import { canExportAll, localHeader, xlsxDownload } from '@/components/data/server'
@@ -54,6 +59,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
     }
   }
 
+  if (type === 'intake_pdfs') {
+    if (!can(ctx, 'clients.export') || !can(ctx, 'clients.view')) notFound()
+    return intakePdfZip(ctx, stamp, base)
+  }
+
   if (!isExportDataset(type)) notFound()
   const meta = EXPORT_DATASETS[type]
   if (!can(ctx, meta.permission)) notFound()
@@ -86,6 +96,38 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
         rows: [(rows[0] ?? []).map((h) => header(String(h))), ...rows.slice(1)],
       },
     ],
+  })
+}
+
+/**
+ * F27: every stored signed intake PDF as one .zip (STORE; PDFs are already compressed), streamed one file at a
+ * time so memory stays at one PDF. Names: `intake-<client>-<date>-<ref>.pdf`, unique per submission.
+ */
+async function intakePdfZip(
+  ctx: MemberContext,
+  stamp: string,
+  base: { tenantId: string; actorUserId: string; impersonatorUserId?: string },
+) {
+  const list = await withTenant(ctx.tenant.id, (tx) => intakePdfExportList(tx))
+  await audit({ ...base, action: 'data.export', entity: 'intake_pdfs', data: { files: list.length } })
+  async function* entries(): AsyncGenerator<ZipEntry> {
+    for (const row of list) {
+      if (!row.fileId) continue
+      const file = await withTenant(ctx.tenant.id, (tx) => getFile(tx, row.fileId!))
+      if (!file) continue
+      yield {
+        name: intakePdfFilename(row.clientName, row.signedAt, row.id),
+        bytes: file.bytes,
+        date: new Date(row.signedAt.getTime() + 4 * 3600_000),
+      }
+    }
+  }
+  return new Response(zipStream(entries()), {
+    headers: {
+      'content-type': 'application/zip',
+      'content-disposition': `attachment; filename="intake-forms-${ctx.tenant.slug}-${stamp}.zip"`,
+      'cache-control': 'private, no-store',
+    },
   })
 }
 

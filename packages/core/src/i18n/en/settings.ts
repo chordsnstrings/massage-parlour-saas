@@ -533,6 +533,11 @@ export const settings = {
       logged: 'Each download is recorded in the activity log.',
       download: 'Download .xlsx',
     },
+    intakePdfs: {
+      title: 'Signed intake forms',
+      body: 'Every signed intake and waiver as its PDF (signature, answers and record hash), in one .zip.',
+      download: 'Download PDFs (.zip)',
+    },
     history: {
       title: 'Recent imports',
       sub: 'The last ten imports and what happened to each row.',

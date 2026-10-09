@@ -69,7 +69,21 @@ export type OutboxRow = {
   bookingAt: string | null
   sentAt: string | null
   sentBy: string | null
+  /** F28: member responsible for sending it; `assignedAuto` = picked by the auto-assign rule. */
+  assignedTo: string | null
+  assignedAuto: boolean
   links: Record<WaMode, string>
+}
+
+export type AssigneeFilter = 'all' | 'mine' | 'unassigned'
+/** Assignment data for the queue (F28). `options` = who a message can go to; `names` also covers former senders. */
+export type AssignProps = {
+  who: AssigneeFilter
+  counts: Record<AssigneeFilter, number>
+  options: { id: string; name: string }[]
+  names: Record<string, string>
+  meId: string | null
+  autoAssign: boolean
 }
 
 export const rowLabel = (t: Translator, row: Pick<OutboxRow, 'kind' | 'campaign'>) =>
