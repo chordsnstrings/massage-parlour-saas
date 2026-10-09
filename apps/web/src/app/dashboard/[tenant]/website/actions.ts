@@ -1,15 +1,18 @@
 'use server'
-import { withTenant } from '@spa/db'
+import { type Tx, withTenant } from '@spa/db'
 import {
   addPage,
   applySiteCopy,
   applySiteCopyToPages,
+  assertEditStamp,
   DomainError,
+  editStamp,
   extractSiteCopy,
   getEditablePage,
   getSite,
   hasCopySlots,
   listPages,
+  lockSite,
   type PageData,
   publishAll,
   publishPage,
@@ -29,7 +32,7 @@ import { BACKDROPS, EMBLEMS, normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { publishAllErrors } from '@/server/site-preflight'
+import { editStampSchema, publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
 import { SiteCopySchema, siteWriterReady, writerError, writeSiteCopy } from '@/server/site-writer'
 
@@ -298,33 +301,43 @@ export async function saveThemeAction(
   const parsed = themeSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
+  let changed: string[] = []
+  let hasDraft = false
   try {
     await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
       const site = await getSite(tx, ctx.tenant.id)
       if (!site) throw new DomainError('Choose a template first', 'not_found')
       const current = normalizeTheme(site.theme)
-      // The accent tint follows the accent so tinted bands stay in harmony with the page background.
-      await updateTheme(tx, ctx.tenant.id, {
-        ...current,
-        ...d,
-        accentSoft: mixHex(d.accent, current.bg, 0.14),
-      })
-      // An unpublished AI theme draft keeps its other changes but takes these values too (else it would hide them).
+      // The panel shows the LIVE theme; only the fields the owner changed are written — live, and into an unpublished
+      // AI theme draft (else the draft would hide them) — so saving never takes the rest of a draft live.
+      const same = (a: unknown, b: unknown) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase()
+      const live = current as unknown as Record<string, unknown>
+      changed = Object.entries(d)
+        .filter(([k, v]) => v !== undefined && !same(v, live[k]))
+        .map(([k]) => k)
+      hasDraft = site.themeDraft !== null
+      if (!changed.length) return
+      const picked = Object.fromEntries(changed.map((k) => [k, d[k as keyof typeof d]]))
+      const tint = (bg: string) =>
+        changed.includes('accent') ? { accentSoft: mixHex(d.accent, bg, 0.14) } : {}
+      await updateTheme(tx, ctx.tenant.id, { ...current, ...picked, ...tint(current.bg) })
       if (site.themeDraft) {
         const draft = normalizeTheme(site.themeDraft)
-        await updateDraftTheme(tx, ctx.tenant.id, {
-          ...draft,
-          ...d,
-          accentSoft: mixHex(d.accent, draft.bg, 0.14),
-        })
+        await updateDraftTheme(tx, ctx.tenant.id, { ...draft, ...picked, ...tint(draft.bg) })
       }
     })
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, 'site.theme_updated', 'site', undefined, d)
+  if (!changed.length) return ok('Nothing changed')
+  await auditAs(ctx, 'site.theme_updated', 'site', undefined, { ...d, changed })
   revalidate(slug)
-  return ok('Theme saved — it is live on your site')
+  return ok(
+    hasDraft
+      ? 'Theme saved — your changes are live; the unpublished theme draft goes live when you publish'
+      : 'Theme saved — it is live on your site',
+  )
 }
 
 function mixHex(a: string, b: string, weight: number) {
@@ -353,53 +366,94 @@ function checkData(pageId: string, data: unknown) {
 
 /**
  * Saves editor JSON as the page draft. Members with only `site.content` may change text and images but not
- * the layout: the design signature must match what's stored.
+ * the layout: the design signature must match what's stored. With the editor's `stamp`, refuses when the draft
+ * changed since the editor loaded it (Claude MCP, Ask AI, another tab) instead of overwriting that work.
  */
-async function storeDraft(ctx: MemberContext, pageId: string, data: Record<string, unknown>) {
-  return withTenant(ctx.tenant.id, async (tx) => {
-    const current = await getEditablePage(tx, ctx.tenant.id, pageId)
-    if (!current) throw new DomainError('Page not found', 'not_found')
-    if (!can(ctx, 'site.design') && designSignature(current.data) !== designSignature(data)) {
-      throw new DomainError(
-        "You can edit text and images, but layout changes need the 'Edit design' permission.",
-      )
-    }
-    return saveDraft(tx, { tenantId: ctx.tenant.id, pageId, data, userId: ctx.user.id })
-  })
+async function storeDraft(
+  tx: Tx,
+  ctx: MemberContext,
+  pageId: string,
+  data: Record<string, unknown>,
+  stamp: EditStampInput,
+) {
+  await lockSite(tx, ctx.tenant.id)
+  await assertEditStamp(tx, ctx.tenant.id, pageId, stamp)
+  const current = await getEditablePage(tx, ctx.tenant.id, pageId)
+  if (!current) throw new DomainError('Page not found', 'not_found')
+  if (!can(ctx, 'site.design') && designSignature(current.data) !== designSignature(data)) {
+    throw new DomainError(
+      "You can edit text and images, but layout changes need the 'Edit design' permission.",
+    )
+  }
+  return saveDraft(tx, { tenantId: ctx.tenant.id, pageId, data, userId: ctx.user.id })
 }
 
-export async function saveDraftAction(slug: string, pageId: string, data: unknown): Promise<ActionResult> {
+type EditStampInput = { page: string; site: string } | undefined
+const parseStamp = (stamp: unknown): EditStampInput | null => {
+  if (stamp === undefined || stamp === null) return undefined
+  const parsed = editStampSchema.safeParse(stamp)
+  return parsed.success ? parsed.data : null
+}
+
+export async function saveDraftAction(
+  slug: string,
+  pageId: string,
+  data: unknown,
+  stamp?: unknown,
+): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
   const check = checkData(pageId, data)
   if (check.error) return fail(check.error)
+  const expected = parseStamp(stamp)
+  if (expected === null) return fail('This page could not be read. Reload the editor and try again.')
+  let saved: { versionId: string; stamp: Awaited<ReturnType<typeof editStamp>> }
   try {
-    const version = await storeDraft(ctx, pageId, data as Record<string, unknown>)
-    await auditAs(ctx, 'site.page.draft_saved', 'site_page', pageId, { versionId: version.id })
+    saved = await withTenant(ctx.tenant.id, async (tx) => {
+      const version = await storeDraft(tx, ctx, pageId, data as Record<string, unknown>, expected)
+      return { versionId: version.id, stamp: await editStamp(tx, ctx.tenant.id, pageId) }
+    })
   } catch (e) {
     return domainFail(e)
   }
+  await auditAs(ctx, 'site.page.draft_saved', 'site_page', pageId, { versionId: saved.versionId })
   revalidate(slug)
-  return ok('Draft saved')
+  return ok('Draft saved', { stamp: saved.stamp })
 }
 
-/** Publishes the editor state for one page (saving it first when the member may edit content). */
-export async function publishPageAction(slug: string, pageId: string, data: unknown): Promise<ActionResult> {
+/**
+ * Publishes the editor state for one page (saving it first when the member may edit content), in one transaction.
+ * The publish also takes the draft theme and this page's pending rename live, so with a stamp it is refused when
+ * either changed since the editor loaded.
+ */
+export async function publishPageAction(
+  slug: string,
+  pageId: string,
+  data: unknown,
+  stamp?: unknown,
+): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
   const check = checkData(pageId, data)
   if (check.error) return fail(check.error)
+  const expected = parseStamp(stamp)
+  if (expected === null) return fail('This page could not be read. Reload the editor and try again.')
+  let published: { versionId: string; stamp: Awaited<ReturnType<typeof editStamp>> }
   try {
-    if (can(ctx, 'site.content')) await storeDraft(ctx, pageId, data as Record<string, unknown>)
-    const version = await withTenant(ctx.tenant.id, (tx) =>
-      publishPage(tx, { tenantId: ctx.tenant.id, pageId, userId: ctx.user.id }),
-    )
-    await auditAs(ctx, 'site.page.published', 'site_page', pageId, { versionId: version.id })
+    published = await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
+      await assertEditStamp(tx, ctx.tenant.id, pageId, expected, { site: true })
+      if (can(ctx, 'site.content'))
+        await storeDraft(tx, ctx, pageId, data as Record<string, unknown>, undefined)
+      const version = await publishPage(tx, { tenantId: ctx.tenant.id, pageId, userId: ctx.user.id })
+      return { versionId: version.id, stamp: await editStamp(tx, ctx.tenant.id, pageId) }
+    })
   } catch (e) {
     return domainFail(e)
   }
+  await auditAs(ctx, 'site.page.published', 'site_page', pageId, { versionId: published.versionId })
   revalidate(slug)
-  return ok('Published — your page is live')
+  return ok('Published — your page is live', { stamp: published.stamp })
 }
 
 export async function publishSiteAction(
@@ -409,17 +463,29 @@ export async function publishSiteAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
-  let count = 0
+  let result: Awaited<ReturnType<typeof publishAll>>
   try {
-    const blocked = await withTenant(ctx.tenant.id, (tx) => publishAllErrors(tx, ctx.tenant.id))
-    if (blocked) return fail(blocked)
-    count = await withTenant(ctx.tenant.id, (tx) => publishAll(tx, ctx.tenant.id, ctx.user.id))
+    result = await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
+      const blocked = await publishAllErrors(tx, ctx.tenant.id)
+      if (blocked) throw new DomainError(blocked)
+      return publishAll(tx, ctx.tenant.id, ctx.user.id)
+    })
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, 'site.published', 'site', undefined, { pages: count })
+  await auditAs(ctx, 'site.published', 'site', undefined, result)
   revalidate(slug)
-  return ok(count ? `Published ${count} ${count === 1 ? 'page' : 'pages'}` : 'Everything is already live')
+  const pages = result.pages ? `${result.pages} ${result.pages === 1 ? 'page' : 'pages'}` : ''
+  return ok(
+    pages && result.theme
+      ? `Published ${pages} and the site theme`
+      : pages
+        ? `Published ${pages}`
+        : result.theme
+          ? 'Published the site theme'
+          : 'Everything is already live',
+  )
 }
 
 export async function setPageVisibleAction(

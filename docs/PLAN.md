@@ -1320,3 +1320,18 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
     preview_link — no publish tool. Per call: token → allow-list → live consent → 60 calls/min per token; audit
     `site.mcp.<tool>` "via Claude (MCP)". Console → Websites "Connect Claude" card: URL + copy, connected clients,
     Revoke (deletes consent + tokens → next call 401). Owner setup: deploy/droplet/README.md "Connect Claude".
+  - **Review fixes (2026-10-09):** OAuth — clients may only register Claude's callbacks (`mcpRedirectUris()`:
+    claude.ai / claude.com `…/api/mcp/auth_callback`, env `MCP_REDIRECT_URIS` replaces; loopback only while APP_URL is
+    http); `validateRedirectUri` holds every authorize to the same list (no consent phishing, no open redirect, legacy
+    rows included); client admin endpoints disabled, `clientPrivileges` = listed editor; consent page shows the
+    redirect host (no "Claude" fallback name); grants audited `platform.mcp.client_authorized`; worker
+    `oauth-clients-prune` (hourly) drops clients without consent after 24 h; Caddy trusts Cf-Connecting-Ip /
+    X-Forwarded-For only from Cloudflare ranges and overwrites Cf-Connecting-Ip (forged-IP rate-limit bypass).
+    Drafts — **decisions:** the Theme panel shows the LIVE theme and saves only changed fields (live + into a draft
+    theme); every draft writer takes `lockSite` (row lock on `sites`); the Studio editor sends an `EditStamp` (page
+    version + draft theme/rename hash) with save / publish / Ask AI apply / undo and is refused ("changed elsewhere —
+    reload") when stale; editor publish = one transaction and its dialog lists what also goes live (+ contrast of
+    other live pages under the draft theme); "Publish site" and the overview count/publish theme-only and rename-only
+    changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
+    publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
+    (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).

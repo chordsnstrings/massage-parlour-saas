@@ -147,6 +147,9 @@ export const domain = {
   pageTitleLength: 'Page titles need 1–80 characters',
   homeSlugFixed: 'The home page address can’t change',
   pageSlugTaken: 'Another page already uses that address',
+  pendingSlugTaken: 'Another page now uses /{slug} — rename this page to a free address before publishing',
+  editedElsewhere:
+    'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',
   templateKeyFormat: 'Use lowercase letters, numbers and dashes for the key',
   templateKeyExists: 'A template with the key "{key}" already exists',
   publishHomeFirst: 'Publish the home page before saving this site as a template',

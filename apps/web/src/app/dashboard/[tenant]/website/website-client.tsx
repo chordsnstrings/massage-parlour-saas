@@ -435,11 +435,26 @@ export function AiWriterSheet({
   )
 }
 
-export function PublishSiteSheet({ slug, pending }: { slug: string; pending: number }) {
+export function PublishSiteSheet({
+  slug,
+  pending,
+  theme = false,
+  themeWarnings = [],
+}: {
+  slug: string
+  pending: number
+  /** An unpublished draft theme (Ask AI / Claude) goes live with it, on every page. */
+  theme?: boolean
+  themeWarnings?: string[]
+}) {
+  const what = [
+    pending ? `${pending} ${pending === 1 ? 'page has' : 'pages have'} unpublished changes` : null,
+    theme ? `${pending ? 'the' : 'The'} site theme has unpublished changes (every page)` : null,
+  ].filter(Boolean)
   return (
     <FormSheet
       title="Publish your site?"
-      description={`${pending} ${pending === 1 ? 'page has' : 'pages have'} unpublished changes. Visitors will see them immediately.`}
+      description={`${what.join('; ')}. Visitors will see them immediately.`}
       trigger={
         <Button>
           <Rocket /> Publish site
@@ -451,6 +466,13 @@ export function PublishSiteSheet({ slug, pending }: { slug: string; pending: num
       <p className="text-sm text-muted">
         Prices, team and opening hours always show live data from your dashboard.
       </p>
+      {themeWarnings.length > 0 && (
+        <ul aria-label="Theme checks" className="mt-3 space-y-1 text-xs text-muted">
+          {themeWarnings.map((w) => (
+            <li key={w}>⚠ {w}</li>
+          ))}
+        </ul>
+      )}
     </FormSheet>
   )
 }
@@ -506,7 +528,19 @@ export function VisibilityToggle({
   )
 }
 
-export function ThemeSheet({ slug, theme }: { slug: string; theme: SiteTheme }) {
+/**
+ * The LIVE theme. With an unpublished AI theme draft (Ask AI / Claude MCP) the panel says so: only the fields
+ * changed here are saved (live, and into the draft too), the rest of the draft waits for a publish.
+ */
+export function ThemeSheet({
+  slug,
+  theme,
+  draft = false,
+}: {
+  slug: string
+  theme: SiteTheme
+  draft?: boolean
+}) {
   return (
     <FormSheet
       title="Theme"
@@ -519,6 +553,12 @@ export function ThemeSheet({ slug, theme }: { slug: string; theme: SiteTheme }) 
       action={saveThemeAction.bind(null, slug)}
       submitLabel="Save theme"
     >
+      {draft && (
+        <p role="note" className="mb-4 rounded-xl border bg-subtle/50 p-3 text-sm">
+          An unpublished theme draft (Ask AI / Claude) is waiting. This shows the live theme: what you change
+          here goes live now and into the draft; the rest of the draft goes live when you publish.
+        </p>
+      )}
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Accent colour" name="accent">
           <span className="flex items-center gap-2">

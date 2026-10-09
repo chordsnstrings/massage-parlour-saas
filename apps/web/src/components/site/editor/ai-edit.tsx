@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils'
 import type { SiteTheme } from '../theme'
 
 type PageJson = Record<string, unknown>
-type Snapshot = { data: PageJson; theme: SiteTheme | null }
+/** Before an applied change: the page + theme to show again, and `restore` (opaque, sent back with the undo). */
+type Snapshot = { data: PageJson; theme: SiteTheme | null; restore?: unknown }
 type Plan = {
   data: PageJson
   theme: SiteTheme | null
@@ -24,7 +25,7 @@ const HISTORY = 5
 export type AiEditApi = {
   plan: (input: { instruction: string; data: PageJson }) => Promise<ActionResult>
   apply: (input: { instruction: string; ops: { op: string }[]; data: PageJson }) => Promise<ActionResult>
-  undo: (input: { summary: string[]; data: PageJson; theme: SiteTheme | null }) => Promise<ActionResult>
+  undo: (input: { summary: string[]; data: PageJson; restore?: unknown }) => Promise<ActionResult>
 }
 
 /**
@@ -98,7 +99,7 @@ export function AiEditPanel({
       const latest = history[0]
       if (!latest) return
       const prev = latest.previous
-      const r = await api.undo({ summary: latest.summary, data: prev.data, theme: prev.theme })
+      const r = await api.undo({ summary: latest.summary, data: prev.data, restore: prev.restore })
       if (!r?.ok) {
         if (r) toast.error(r.error)
         return

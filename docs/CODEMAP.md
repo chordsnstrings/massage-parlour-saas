@@ -579,6 +579,18 @@ i18n namespace `automations`.
   deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
   `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
   tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`).
+- **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
+  `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
+  authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on
+  `/oauth2/consent` audits grants. Prune: services `oauth-clients.ts` `pruneUnusedOAuthClients` (worker
+  `oauth-clients-prune`, hourly). Real client IP: Caddyfile `trusted_proxies` (Cloudflare ranges) +
+  `header_up Cf-Connecting-Ip {client_ip}`.
+- **Draft concurrency + publish** (services sites.ts): `lockSite` (FOR UPDATE on `sites`, re-entrant) at the start of
+  saveDraft / publishPage / publishAll / addPage / renamePage / restoreVersion / runSiteEdit (non-dry) /
+  restoreSiteEdit and the Theme panel action. `editStamp` / `assertEditStamp` / `EDITED_ELSEWHERE`: the editor page
+  passes the stamp; editor.tsx `takeStamp` refreshes it from every save / publish / restore / Ask AI reply.
+  `promoteDraftTheme` + `applyPendingRename` (re-checks the slug) run in publishPage and publishAll. Preflight:
+  `server/site-preflight.ts` `themeDraftWarnings` (editor `publishNotesAction`, overview Publish site sheet).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

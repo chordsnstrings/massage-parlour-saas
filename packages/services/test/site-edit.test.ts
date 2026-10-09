@@ -13,16 +13,27 @@ import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  addPage,
+  assertEditStamp,
   blockCatalogue,
+  DomainError,
+  EDITED_ELSEWHERE,
+  editStamp,
   ensureSite,
   getEditablePage,
   getPublishedPage,
+  getSite,
   getSiteForEdit,
+  listPages,
+  publishAll,
   publishPage,
   restoreSiteEdit,
   runSiteEdit,
   type SiteEditSchema,
+  saveDraft,
   siteEditAuditData,
+  updateDraftTheme,
+  updateTheme,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -279,6 +290,210 @@ describe('site edit ops layer', () => {
       ops: ['update'],
       summary: ['Home: Updated Heading'],
     })
+  })
+})
+
+/** A fresh spa with a live home page and a live /services page (each test gets its own). */
+async function liveSpa(slug: string) {
+  const [t] = await platform.insert(tenants).values({ slug, name: slug }).returning()
+  const tenant = t!.id
+  await tx(
+    (db) =>
+      ensureSite(db, tenant, {
+        key: 'zen',
+        name: 'Zen',
+        theme: { accent: '#111111' },
+        pages: [
+          { slug: '', title: { en: 'Home' }, data: home },
+          { slug: 'services', title: { en: 'Services' }, data: home },
+        ],
+      }),
+    tenant,
+  )
+  await tx((db) => publishAll(db, tenant), tenant)
+  const pages = await tx((db) => listPages(db, tenant), tenant)
+  return {
+    tenant,
+    home: pages.find((p) => p.slug === '')!.id,
+    services: pages.find((p) => p.slug === 'services')!.id,
+    run: (ops: unknown[], dryRun = false) =>
+      tx((db) => runSiteEdit(db, { tenantId: tenant, ops, dryRun }, deps), tenant),
+    draft: async (pageId: string) =>
+      JSON.stringify((await tx((db) => getEditablePage(db, tenant, pageId), tenant))!.data),
+    site: async () => (await tx((db) => getSite(db, tenant), tenant))!,
+    pages: () => tx((db) => listPages(db, tenant), tenant),
+    in: <T>(fn: Parameters<typeof withTenant<T>>[1]) => tx(fn, tenant),
+  }
+}
+const heading = (text: string) => ({
+  op: 'add',
+  page: 'home',
+  type: 'Heading',
+  props: { text: { en: text } },
+})
+
+describe('site edit drafts: concurrency, undo, renames, publish', () => {
+  it('serialises concurrent edits of one spa: both parallel tool calls land', async () => {
+    const spa = await liveSpa('edit-race')
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    let firstSaved!: () => void
+    const saved = new Promise<void>((r) => {
+      firstSaved = r
+    })
+    // A saves and holds its transaction open; B starts meanwhile. Without the per-spa lock B would read the draft
+    // A hasn't committed yet and its save would silently drop A's block (last write wins).
+    const a = spa.in(async (db) => {
+      const r = await runSiteEdit(
+        db,
+        { tenantId: spa.tenant, ops: [heading('First block')], dryRun: false },
+        deps,
+      )
+      firstSaved()
+      await gate
+      return r
+    })
+    await saved
+    const b = spa.run([heading('Second block')])
+    await new Promise((r) => setTimeout(r, 300))
+    release()
+    expect((await a).ok).toBe(true)
+    expect((await b).ok).toBe(true)
+    const draft = await spa.draft(spa.home)
+    expect(draft).toContain('First block')
+    expect(draft).toContain('Second block')
+  })
+
+  it('edit stamps refuse a stale editor (page draft, and draft theme / rename for a publish)', async () => {
+    const spa = await liveSpa('edit-stamp')
+    const loaded = (await spa.in((db) => editStamp(db, spa.tenant, spa.home)))!
+    expect(loaded).toMatchObject({ themeDraft: false, pendingRename: false })
+    await spa.in((db) => assertEditStamp(db, spa.tenant, spa.home, loaded, { site: true }))
+    // Claude (MCP) changes the theme draft: a page save still fits, a publish does not.
+    await spa.run([{ op: 'theme', tokens: { accent: '#c9a227' } }])
+    await spa.in((db) => assertEditStamp(db, spa.tenant, spa.home, loaded))
+    await expect(
+      spa.in((db) => assertEditStamp(db, spa.tenant, spa.home, loaded, { site: true })),
+    ).rejects.toThrow(EDITED_ELSEWHERE)
+    expect((await spa.in((db) => editStamp(db, spa.tenant, spa.home)))!.themeDraft).toBe(true)
+    // …and then the page draft: every check fails.
+    await spa.run([heading('From Claude')])
+    await expect(spa.in((db) => assertEditStamp(db, spa.tenant, spa.home, loaded))).rejects.toBeInstanceOf(
+      DomainError,
+    )
+    // No stamp = no check (callers without an editor view).
+    await spa.in((db) => assertEditStamp(db, spa.tenant, spa.home, undefined, { site: true }))
+  })
+
+  it('undo puts back the exact earlier state: no draft theme and no page draft when there were none', async () => {
+    const spa = await liveSpa('edit-undo')
+    const r = await spa.run([
+      { op: 'update', page: 'home', id: 'h1', props: { text: { en: 'Golden calm' } } },
+      { op: 'theme', tokens: { accent: '#c9a227' } },
+    ])
+    if (!r.ok) throw new Error(r.errors.join())
+    expect(r.previous.theme).toMatchObject({ draft: null, shown: { accent: '#111111' } })
+    expect(r.previous.pages[0]!.addedVersionId).toEqual(expect.any(String))
+    expect((await spa.pages()).find((p) => p.id === spa.home)!.hasDraft).toBe(true)
+    // Meanwhile the Theme panel puts a blue accent live (and into the draft).
+    await spa.in(async (db) => {
+      await updateTheme(db, spa.tenant, { accent: '#2244aa' })
+      await updateDraftTheme(db, spa.tenant, { accent: '#2244aa' })
+    })
+    await spa.in((db) =>
+      restoreSiteEdit(db, { tenantId: spa.tenant, pages: r.previous.pages, theme: r.previous.theme }),
+    )
+    expect((await spa.site()).themeDraft).toBeNull()
+    expect((await spa.pages()).find((p) => p.id === spa.home)!.hasDraft).toBe(false)
+    expect(await spa.draft(spa.home)).toContain('Slow down')
+    // A later publish keeps the live Theme panel change (no stale snapshot to promote).
+    await spa.in((db) => publishPage(db, { tenantId: spa.tenant, pageId: spa.home }))
+    expect((await spa.site()).theme).toMatchObject({ accent: '#2244aa' })
+  })
+
+  it('undo of an edit over an existing draft theme restores that draft', async () => {
+    const spa = await liveSpa('edit-undo-draft')
+    await spa.run([{ op: 'theme', tokens: { accent: '#aa0000' } }])
+    const r = await spa.run([{ op: 'theme', tokens: { accent: '#00aa00' } }])
+    if (!r.ok) throw new Error(r.errors.join())
+    expect(r.previous.theme?.draft).toMatchObject({ accent: '#aa0000' })
+    await spa.in((db) => restoreSiteEdit(db, { tenantId: spa.tenant, pages: [], theme: r.previous.theme }))
+    expect((await spa.site()).themeDraft).toMatchObject({ accent: '#aa0000' })
+  })
+
+  it('dry run validates renames like the save does', async () => {
+    const spa = await liveSpa('edit-rename-dry')
+    const errorsOf = async (ops: unknown[]) => {
+      const r = await spa.run(ops, true)
+      return r.ok ? [] : r.errors
+    }
+    expect(await errorsOf([{ op: 'rename_page', page: 'services', slug: '' }])).toEqual([
+      expect.stringMatching(/Change 1: Use lowercase letters/),
+    ])
+    expect(await errorsOf([{ op: 'rename_page', page: 'services', slug: 'Bad Slug' }])).toEqual([
+      expect.stringMatching(/lowercase letters, numbers and dashes/),
+    ])
+    expect(await errorsOf([{ op: 'rename_page', page: 'home', slug: 'start' }])).toEqual([
+      expect.stringMatching(/home page address can’t change/),
+    ])
+    expect(await errorsOf([{ op: 'rename_page', page: 'home', slug: 'book' }])).toEqual([
+      expect.stringMatching(/home page address/),
+    ])
+    expect(await errorsOf([{ op: 'rename_page', page: 'services', slug: 'book' }])).toEqual([
+      expect.stringMatching(/Another page already uses that address/),
+    ])
+    // Inside one batch: a new page and a rename can't both take /team.
+    expect(
+      await errorsOf([
+        { op: 'add_page', slug: 'team', title: { en: 'Team' } },
+        { op: 'rename_page', page: 'services', slug: 'team' },
+      ]),
+    ).toEqual([expect.stringMatching(/Change 2: Another page already uses that address/)])
+    const ok = await spa.run([{ op: 'rename_page', page: 'services', slug: 'treatments' }], true)
+    expect(ok.ok && ok.renamed).toEqual([{ id: spa.services, slug: 'treatments', pending: true }])
+  })
+
+  it('a pending rename reserves its address; publish re-checks it instead of failing on the constraint', async () => {
+    const spa = await liveSpa('edit-rename-slug')
+    expect((await spa.run([{ op: 'rename_page', page: 'services', slug: 'treatments' }])).ok).toBe(true)
+    expect((await spa.pages()).find((p) => p.id === spa.services)!.pending).toEqual({ slug: 'treatments' })
+    const added = await spa.run([{ op: 'add_page', slug: 'treatments', title: { en: 'Treatments' } }])
+    expect(added.ok ? [] : added.errors).toEqual([expect.stringMatching(/a page already uses \/treatments/)])
+    const studio = await spa.in((db) =>
+      addPage(db, { tenantId: spa.tenant, slug: 'treatments', title: { en: 'Treatments' }, data: home }),
+    )
+    expect(studio.slug).toBe('treatments-2')
+    // A page that took the address some other way (older data): publishing explains instead of a raw 23505.
+    const site = await spa.site()
+    await spa.in((db) =>
+      db
+        .insert(sitePages)
+        .values({ tenantId: spa.tenant, siteId: site.id, slug: 'treatments', title: { en: 'X' } }),
+    )
+    await expect(
+      spa.in((db) => publishPage(db, { tenantId: spa.tenant, pageId: spa.services })),
+    ).rejects.toThrow(
+      'Another page now uses /treatments — rename this page to a free address before publishing',
+    )
+    await expect(spa.in((db) => publishAll(db, spa.tenant))).rejects.toBeInstanceOf(DomainError)
+  })
+
+  it('Publish site also publishes a theme-only or rename-only edit', async () => {
+    const spa = await liveSpa('edit-publish-all')
+    await spa.run([{ op: 'theme', tokens: { accent: '#c9a227' } }])
+    expect((await spa.pages()).some((p) => p.hasDraft)).toBe(false)
+    expect(await spa.in((db) => publishAll(db, spa.tenant))).toEqual({ pages: 0, theme: true })
+    expect(await spa.site()).toMatchObject({ theme: { accent: '#c9a227' }, themeDraft: null })
+    await spa.run([{ op: 'rename_page', page: 'services', slug: 'treatments', title: { en: 'Treatments' } }])
+    expect(await spa.in((db) => publishAll(db, spa.tenant))).toEqual({ pages: 1, theme: false })
+    const services = (await spa.pages()).find((p) => p.id === spa.services)!
+    expect(services).toMatchObject({ slug: 'treatments', title: { en: 'Treatments' }, pending: null })
+    expect(await spa.in((db) => publishAll(db, spa.tenant))).toEqual({ pages: 0, theme: false })
+    // A page draft saved by hand still counts as before.
+    await spa.in((db) => saveDraft(db, { tenantId: spa.tenant, pageId: spa.home, data: home }))
+    expect(await spa.in((db) => publishAll(db, spa.tenant))).toEqual({ pages: 1, theme: false })
   })
 })
 

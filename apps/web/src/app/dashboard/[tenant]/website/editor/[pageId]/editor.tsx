@@ -56,6 +56,7 @@ import type { SiteTheme } from '@/components/site/theme'
 import type { Device, Locale, SiteMeta } from '@/components/site/types'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
+import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
 import { saveDraftAction } from '../../actions'
 import {
@@ -66,6 +67,7 @@ import {
   listVersionsAction,
   previewLinkAction,
   publishCheckedAction,
+  publishNotesAction,
   renameSectionAction,
   restoreVersionAction,
   saveSectionAction,
@@ -90,6 +92,8 @@ const DEVICES = [
 
 type Status = 'draft' | 'published'
 type Insights = NonNullable<InsightsMeta['insights']>
+/** Services EditStamp: what this editor loaded (sent with saves / publish / Ask AI; refreshed from each reply). */
+export type EditStamp = { page: string; site: string; themeDraft: boolean; pendingRename: boolean }
 type Chrome = {
   props: EditorProps
   locale: Locale
@@ -106,6 +110,11 @@ type Chrome = {
   /** Theme on the canvas (an AI edit preview may change it before it is saved). */
   theme: SiteTheme
   setTheme: (t: SiteTheme) => void
+  stamp: EditStamp
+  /** Latest stamp for action calls (callbacks read it without re-rendering). */
+  stampRef: { readonly current: EditStamp }
+  /** Takes the stamp from an action reply (`r.data.stamp`), when there is one. */
+  takeStamp: <R extends ActionResult | undefined>(r: R) => R
 }
 const ChromeContext = createContext<Chrome | null>(null)
 const useChrome = () => useContext(ChromeContext)!
@@ -119,6 +128,7 @@ type EditorProps = {
   meta: SiteMeta
   status: Status
   savedAt: string | null
+  stamp: EditStamp
   canDesign: boolean
   canPublish: boolean
   canInsights: boolean
@@ -151,6 +161,16 @@ export function SiteEditor(props: EditorProps) {
   const [insights, setInsights] = useState<Insights | null>(null)
   const [theme, setTheme] = useState<SiteTheme>(props.meta.theme)
   const baseline = useRef<string | null>(null)
+  const stampRef = useRef<EditStamp>(props.stamp)
+  const [stamp, setStamp] = useState<EditStamp>(props.stamp)
+  const takeStamp = useCallback(<R extends ActionResult | undefined>(r: R): R => {
+    const next = (r?.ok ? r.data?.stamp : undefined) as EditStamp | null | undefined
+    if (next) {
+      stampRef.current = next
+      setStamp(next)
+    }
+    return r
+  }, [])
   const { slug } = props
 
   const baseConfig = useMemo(() => editorConfig(props.canDesign), [props.canDesign])
@@ -176,11 +196,12 @@ export function SiteEditor(props: EditorProps) {
   }, [])
   const preflightContext = useMemo(
     () => ({
-      colors: preflightColors(props.meta.theme),
+      // The canvas theme: the draft theme (and an applied Ask AI theme change) is what this publish takes live.
+      colors: preflightColors(theme),
       pages: props.pages,
       currentSlug: props.pageSlug,
     }),
-    [props.meta.theme, props.pages, props.pageSlug],
+    [theme, props.pages, props.pageSlug],
   )
   const chrome: Chrome = {
     props,
@@ -197,6 +218,9 @@ export function SiteEditor(props: EditorProps) {
     preflight: preflightContext,
     theme,
     setTheme,
+    stamp,
+    stampRef,
+    takeStamp,
   }
 
   const setSections = useCallback(
@@ -368,7 +392,7 @@ function EditorHeader() {
   const [saving, startSave] = useTransition()
 
   // Baseline for "unsaved changes" once Puck has normalised the initial data.
-  const { setBaseline, markSaved } = chrome
+  const { setBaseline, markSaved, stampRef, takeStamp } = chrome
   useEffect(() => {
     const t = setTimeout(() => setBaseline(JSON.stringify(getPuck().appState.data)), 400)
     return () => clearTimeout(t)
@@ -386,7 +410,7 @@ function EditorHeader() {
   const save = () =>
     startSave(async () => {
       const data = current()
-      const r = await saveDraftAction(props.slug, props.pageId, data)
+      const r = takeStamp(await saveDraftAction(props.slug, props.pageId, data, stampRef.current))
       if (r?.ok) {
         markSaved(JSON.stringify(data), 'draft')
         toast.success('Draft saved')
@@ -402,18 +426,31 @@ function EditorHeader() {
     () => ({
       list: () => listVersionsAction(props.slug, props.pageId),
       label: (versionId: string, label: string) => labelVersionAction(props.slug, versionId, label),
-      restore: (versionId: string) => restoreVersionAction(props.slug, props.pageId, versionId),
+      restore: async (versionId: string) =>
+        takeStamp(await restoreVersionAction(props.slug, props.pageId, versionId)),
       previewLink: (days: 1 | 7 | 30) => previewLinkAction(props.slug, props.pageId, days),
     }),
-    [props.slug, props.pageId],
+    [props.slug, props.pageId, takeStamp],
   )
   const aiEditApi = useMemo(
     () => ({
       plan: (input: unknown) => aiEditPlanAction(props.slug, props.pageId, input),
-      apply: (input: unknown) => aiEditApplyAction(props.slug, props.pageId, input),
-      undo: (input: unknown) => aiEditUndoAction(props.slug, props.pageId, input),
+      apply: async (input: object) =>
+        takeStamp(await aiEditApplyAction(props.slug, props.pageId, { ...input, stamp: stampRef.current })),
+      undo: async (input: object) =>
+        takeStamp(await aiEditUndoAction(props.slug, props.pageId, { ...input, stamp: stampRef.current })),
     }),
-    [props.slug, props.pageId],
+    [props.slug, props.pageId, stampRef, takeStamp],
+  )
+  // What else this publish takes live (a draft theme is site-wide; a pending rename changes the menu / address).
+  const alsoPublishes = [
+    ...(chrome.stamp.themeDraft ? ['the unpublished site theme (every page)'] : []),
+    ...(chrome.stamp.pendingRename ? ['this page’s new menu title / address'] : []),
+  ]
+  const themeDraft = chrome.stamp.themeDraft
+  const loadNotes = useMemo(
+    () => (themeDraft ? () => publishNotesAction(props.slug, props.pageId) : undefined),
+    [themeDraft, props.slug, props.pageId],
   )
 
   const state = chrome.dirty ? 'Unsaved changes' : chrome.status === 'published' ? 'Live' : 'Draft saved'
@@ -513,8 +550,12 @@ function EditorHeader() {
             pageTitle={props.pageTitle}
             liveHref={props.liveHref}
             context={chrome.preflight}
-            publish={(data) => publishCheckedAction(props.slug, props.pageId, data)}
+            publish={async (data) =>
+              takeStamp(await publishCheckedAction(props.slug, props.pageId, data, stampRef.current))
+            }
             onPublished={(data) => markSaved(JSON.stringify(data), 'published')}
+            alsoPublishes={alsoPublishes}
+            loadNotes={loadNotes}
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
-import { auditLog, pageVersions, sitePages } from '@spa/db'
+import { auditLog, oauthClient, pageVersions, sitePages } from '@spa/db'
 import { ensureSite } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import {
@@ -119,6 +119,16 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
   })
   expect(reg.status(), await reg.text()).toBeLessThan(300)
   const clientId = ((await reg.json()) as { client_id: string }).client_id
+  // Only Claude's callback can be registered: nobody can register "Claude" with their own redirect and phish consent.
+  const evil = await request.post(viaNode(as.registration_endpoint), {
+    data: {
+      client_name: 'Claude',
+      redirect_uris: ['https://evil.example/cb'],
+      token_endpoint_auth_method: 'none',
+    },
+  })
+  expect(evil.status()).toBe(400)
+  expect(await evil.text()).toContain('invalid_redirect_uri')
 
   // A fresh browser (as when Claude opens the sign-in window): sign-in + 2FA, then the flow resumes to consent.
   const ctx = await browser.newContext()
@@ -136,6 +146,8 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
   await passTwoFactor(p, email)
   await expect(p.getByRole('heading', { name: 'Connect Claude' })).toBeVisible()
   await expect(p.getByText('Claude wants to edit spa websites for you.')).toBeVisible()
+  // Where the code goes is shown, not only the name the client picked.
+  await expect(p.getByTestId('oauth-redirect-host')).toHaveText('Approving sends access to claude.ai.')
   // Clicked again if the first click landed before hydration (dev server).
   await expect(async () => {
     if (!p.url().startsWith(CALLBACK)) await p.getByRole('button', { name: 'Allow' }).click({ timeout: 2000 })
@@ -156,6 +168,15 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
   })
   expect(tokenRes.ok()).toBe(true)
   const token = ((await tokenRes.json()) as { access_token: string }).access_token
+  // The grant itself is audited (the console revoke is too).
+  const granted = await db
+    .select()
+    .from(auditLog)
+    .where(eq(auditLog.action, 'platform.mcp.client_authorized'))
+  expect(granted.find((g) => (g.data as { clientId?: string }).clientId === clientId)?.data).toMatchObject({
+    redirectHost: 'claude.ai',
+    client: 'Claude',
+  })
 
   await test.step('MCP: initialize, tools, get_site, update_block â†’ draft only', async () => {
     const init = await rpc(request, token, 'initialize', {
@@ -243,4 +264,61 @@ test('Claude MCP connector: a super-admin outside SITE_AI_EDITOR_EMAILS cannot a
     return r.status
   })
   expect(status).toBe(403)
+  // The client admin API is off, and registering with a session needs a listed editor.
+  const admin = await page.evaluate(async (cb) => {
+    const post = (path: string, body: unknown) =>
+      fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((r) => r.status)
+    return {
+      create: await post('/api/auth/oauth2/create-client', {
+        client_name: 'Claude',
+        redirect_uris: ['https://evil.example/cb'],
+      }),
+      register: await post('/api/auth/oauth2/register', {
+        client_name: 'Claude',
+        redirect_uris: [cb],
+        token_endpoint_auth_method: 'none',
+      }),
+    }
+  }, CALLBACK)
+  expect(admin).toEqual({ create: 404, register: 401 })
+})
+
+test('Claude MCP connector: authorize never redirects to a non-Claude callback (no open redirect)', async ({
+  request,
+}) => {
+  // A client stored before registration was held to Claude's callbacks (or written some other way).
+  const id = `legacy-${randomBytes(6).toString('hex')}`
+  await testDb()
+    .insert(oauthClient)
+    .values({
+      id,
+      clientId: id,
+      name: 'Claude',
+      redirectUris: ['https://evil.example/cb'],
+      tokenEndpointAuthMethod: 'none',
+      grantTypes: ['authorization_code'],
+      responseTypes: ['code'],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  const as = await discover(request)
+  // An invalid scope used to bounce straight to the registered URI, before any sign-in.
+  const res = await request.get(
+    viaNode(
+      `${as.authorization_endpoint}?${new URLSearchParams({
+        client_id: id,
+        redirect_uri: 'https://evil.example/cb',
+        response_type: 'code',
+        scope: 'nope',
+        state: 's',
+      })}`,
+    ),
+    { maxRedirects: 0 },
+  )
+  expect(res.headers().location ?? '').not.toContain('evil.example')
+  expect(await res.text()).not.toContain('evil.example/cb?')
 })

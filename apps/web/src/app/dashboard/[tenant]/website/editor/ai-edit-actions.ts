@@ -8,9 +8,12 @@ import {
   withTenant,
 } from '@spa/db'
 import {
+  assertEditStamp,
   DomainError,
+  editStamp,
   getEditablePage,
   getSite,
+  lockSite,
   restoreSiteEdit,
   runSiteEdit,
   type SiteEditDeps,
@@ -26,6 +29,7 @@ import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
 import { can, type MemberContext, studioGuard } from '@/server/access'
 import { aiFixturesOn, fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
+import { editStampSchema } from '@/server/site-preflight'
 
 /*
  * Studio "Ask AI" (R16 + PLAN §14.4 prompt box; super-admin tooling, EN UI): instruction → planned ops (site_editor
@@ -161,6 +165,8 @@ const applySchema = z.object({
     .min(1)
     .max(40),
   data: z.unknown(),
+  /** What the editor loaded: refused when the page draft changed elsewhere since (Claude MCP, another tab). */
+  stamp: editStampSchema.optional(),
 })
 
 /** Saves a previewed plan: the same ops on the same starting page, through the ops layer → DRAFT only. */
@@ -175,9 +181,12 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
   if (ops.some((o) => !['add', 'preset', 'move', 'remove', 'update', 'theme'].includes(o.op)))
     return fail('Only changes to this page and the theme can be applied here.')
   let result: SiteEditResult
+  let stamp: Awaited<ReturnType<typeof editStamp>> = null
   try {
-    result = await withTenant(ctx.tenant.id, (tx) =>
-      runSiteEdit(
+    result = await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
+      await assertEditStamp(tx, ctx.tenant.id, pageId, parsed.data.stamp)
+      const r = await runSiteEdit(
         tx,
         {
           tenantId: ctx.tenant.id,
@@ -187,8 +196,10 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
           base: { [pageId]: parsed.data.data },
         },
         deps(ctx),
-      ),
-    )
+      )
+      stamp = await editStamp(tx, ctx.tenant.id, pageId)
+      return r
+    })
   } catch (e) {
     if (e instanceof DomainError) return failDomain(e)
     throw e
@@ -200,16 +211,33 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
     theme: result.theme !== null,
   })
   revalidatePath(`/dashboard/${slug}/website`, 'layout')
-  const before = result.previous.pages.find((p) => p.id === pageId)?.data ?? parsed.data.data
+  const before = result.previous.pages.find((p) => p.id === pageId)
+  const { theme } = result.previous
   return ok('AI changes saved as a draft', {
-    previous: { data: before, theme: result.previous.theme ? normalizeTheme(result.previous.theme) : null },
+    stamp,
+    previous: {
+      data: before?.data ?? parsed.data.data,
+      // Shown on the canvas after an undo; `restore` comes back with the undo (the exact state to put back).
+      theme: theme ? normalizeTheme(theme.shown) : null,
+      restore: {
+        theme: theme ? { draft: theme.draft } : null,
+        addedVersionId: before?.addedVersionId ?? null,
+      },
+    },
   })
 }
 
 const undoSchema = z.object({
   summary: z.array(z.string().max(300)).max(60).default([]),
   data: z.unknown(),
-  theme: z.record(z.string(), z.unknown()).nullable().default(null),
+  restore: z
+    .object({
+      /** null = the edit left the theme alone; draft null = there was no draft theme (cleared again). */
+      theme: z.object({ draft: z.record(z.string(), z.unknown()).nullable() }).nullable(),
+      addedVersionId: z.string().uuid().nullable(),
+    })
+    .default({ theme: null, addedVersionId: null }),
+  stamp: editStampSchema.optional(),
 })
 
 /** Undo of an applied AI change: restores the page draft (and draft theme) from before it. Never publishes. */
@@ -220,9 +248,18 @@ export async function aiEditUndoAction(slug: string, pageId: string, input: unkn
   if (!parsed.success) return fromZod(parsed.error)
   const bad = pageError(pageId, parsed.data.data)
   if (bad) return fail(bad)
-  const theme = parsed.data.theme ? (normalizeTheme(parsed.data.theme) as unknown as ThemeTokens) : null
+  const { restore } = parsed.data
+  const theme = restore.theme
+    ? {
+        draft: restore.theme.draft ? (normalizeTheme(restore.theme.draft) as unknown as ThemeTokens) : null,
+      }
+    : null
+  let stamp: Awaited<ReturnType<typeof editStamp>> = null
   try {
     await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
+      // A theme undo would overwrite a draft theme changed since (e.g. by Claude): checked with the site stamp too.
+      await assertEditStamp(tx, ctx.tenant.id, pageId, parsed.data.stamp, { site: theme !== null })
       const current = await getEditablePage(tx, ctx.tenant.id, pageId)
       if (!current) throw new DomainError('Page not found', 'not_found')
       const designChanged =
@@ -231,9 +268,10 @@ export async function aiEditUndoAction(slug: string, pageId: string, input: unkn
       await restoreSiteEdit(tx, {
         tenantId: ctx.tenant.id,
         userId: ctx.user.id,
-        pages: [{ id: pageId, data: parsed.data.data }],
+        pages: [{ id: pageId, data: parsed.data.data, addedVersionId: restore.addedVersionId }],
         theme,
       })
+      stamp = await editStamp(tx, ctx.tenant.id, pageId)
     })
   } catch (e) {
     if (e instanceof DomainError) return failDomain(e)
@@ -245,5 +283,5 @@ export async function aiEditUndoAction(slug: string, pageId: string, input: unkn
     theme: theme !== null,
   })
   revalidatePath(`/dashboard/${slug}/website`, 'layout')
-  return ok('AI change undone')
+  return ok('AI change undone', { stamp })
 }

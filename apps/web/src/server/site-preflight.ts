@@ -3,15 +3,24 @@ import type { Tx } from '@spa/db'
 import {
   editingTheme,
   getEditablePage,
+  getPublishedPage,
   getSite,
   globalSectionsFor,
   listPages,
   listSavedSections,
+  type PageSummary,
   preflight,
   preflightErrors,
 } from '@spa/services'
+import { z } from 'zod'
 import { preflightColors } from '@/components/site/editor/colors'
 import { normalizeTheme } from '@/components/site/theme'
+
+/** The editor's optimistic-concurrency stamp as it comes back from the client (services EditStamp). */
+export const editStampSchema = z.object({
+  page: z.string().min(1).max(200),
+  site: z.string().min(1).max(100),
+})
 
 /**
  * Server-side preflight errors for `data` (plus the global sections it shows, whose content goes live with
@@ -43,6 +52,40 @@ export async function publishErrors(
   ]
   if (!errors.length) return null
   return `Fix ${errors.length === 1 ? 'the error' : `${errors.length} errors`} before ${verb}: ${errors[0]!.message}`
+}
+
+/**
+ * With a draft theme waiting (Ask AI / Claude MCP), any publish takes it live on EVERY page: the pages' contrast
+ * under it (warnings, as in the publish dialog — they don't block), as "<page>: <message>" lines. Live content is
+ * checked; with `drafts` (Publish site) a page's draft instead, since it goes live too. `skip` = checked elsewhere.
+ */
+export async function themeDraftWarnings(
+  tx: Tx,
+  tenantId: string,
+  { skip = () => false, drafts = false }: { skip?: (p: PageSummary) => boolean; drafts?: boolean } = {},
+): Promise<string[]> {
+  const site = await getSite(tx, tenantId)
+  if (!site?.themeDraft) return []
+  const pages = await listPages(tx, tenantId)
+  const context = {
+    colors: preflightColors(normalizeTheme(site.themeDraft)),
+    pages: pages.map((p) => ({ slug: p.slug, visible: p.visible, published: Boolean(p.publishedAt) })),
+    currentSlug: '',
+  }
+  const out: string[] = []
+  for (const p of pages) {
+    if (skip(p)) continue
+    const data =
+      drafts && p.hasDraft
+        ? (await getEditablePage(tx, tenantId, p.id))?.data
+        : p.publishedAt && p.visible
+          ? (await getPublishedPage(tx, tenantId, p.slug))?.data
+          : undefined
+    if (!data) continue
+    for (const i of preflight(data, { ...context, currentSlug: p.slug }))
+      if (i.rule === 'contrast') out.push(`${p.title.en || 'Home'}: ${i.message}`)
+  }
+  return out
 }
 
 /** Preflight for every page with unpublished changes; the first blocking message, or null. */

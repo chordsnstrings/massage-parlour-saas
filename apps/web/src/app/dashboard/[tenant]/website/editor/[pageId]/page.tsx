@@ -1,5 +1,5 @@
 import { platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
-import { getEditablePage, listPages, listSavedSections } from '@spa/services'
+import { editStamp, getEditablePage, listPages, listSavedSections } from '@spa/services'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { z } from 'zod'
@@ -29,9 +29,9 @@ export default async function EditorPage({
       listPages(tx, ctx.tenant.id),
       listSavedSections(tx, ctx.tenant.id),
     ])
-    return { editable, pages, sections }
+    return { editable, pages, sections, stamp: await editStamp(tx, ctx.tenant.id, pageId) }
   })
-  if (!loaded) notFound()
+  if (!loaded?.stamp) notFound()
   const { site, data } = await loadSite(ctx.tenant, { published: false })
   if (!site) notFound()
   const slug = ctx.tenant.slug
@@ -61,6 +61,7 @@ export default async function EditorPage({
       meta={meta}
       status={version?.status ?? 'draft'}
       savedAt={version?.createdAt.toISOString() ?? null}
+      stamp={loaded.stamp}
       canDesign={can(ctx, 'site.design')}
       canPublish={can(ctx, 'site.publish')}
       canInsights={can(ctx, 'reports.view')}

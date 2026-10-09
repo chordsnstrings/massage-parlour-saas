@@ -1,4 +1,4 @@
-import { verifyOAuthQueryParams } from '@spa/auth'
+import { isAllowedMcpRedirectUri, verifyOAuthQueryParams } from '@spa/auth'
 import { oauthClient, platformDb, siteAiEditorStatus } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
@@ -29,6 +29,9 @@ export default async function ConsentPage({
     Boolean(process.env.BETTER_AUTH_SECRET) &&
     (await verifyOAuthQueryParams(params.toString(), process.env.BETTER_AUTH_SECRET ?? '').catch(() => false))
   const clientId = params.get('client_id')
+  // Where the code goes (signed query; the authorize endpoint already held it to Claude's callbacks): shown, so the
+  // owner sees who they are approving — never just a name the client picked itself.
+  const redirect = params.get('redirect_uri')
   // Sent here by the authorize hook (packages/auth) when the signed-in account may not connect Claude.
   if (session && params.get('not_enabled') === '1') {
     const status = await siteAiEditorStatus(platformDb(), session.user.id)
@@ -41,7 +44,7 @@ export default async function ConsentPage({
       </AuthLayout>
     )
   }
-  if (!session || !signed || !clientId)
+  if (!session || !signed || !clientId || !redirect || !isAllowedMcpRedirectUri(redirect))
     return (
       <AuthLayout title={t('auth.oauth.title')}>
         <p className="text-sm text-muted">{t('auth.oauth.expired')}</p>
@@ -53,10 +56,14 @@ export default async function ConsentPage({
     .from(oauthClient)
     .where(eq(oauthClient.clientId, clientId))
     .limit(1)
-  const name = client?.name?.trim() || 'Claude'
+  const host = new URL(redirect).host
+  const name = client?.name?.trim() || host
   return (
     <AuthLayout title={t('auth.oauth.title')} subtitle={t('auth.oauth.subtitle', { client: name })}>
       <div className="space-y-5">
+        <p className="text-sm" data-testid="oauth-redirect-host">
+          {t('auth.oauth.sendsTo', { host })}
+        </p>
         <p className="text-sm text-muted">{t('auth.oauth.account', { email: session.user.email })}</p>
         {status === 'ok' ? (
           <>

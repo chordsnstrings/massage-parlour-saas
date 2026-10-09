@@ -6,6 +6,7 @@ import {
   createSavedSection,
   DomainError,
   deleteSavedSection,
+  editStamp,
   GLOBAL_SECTION,
   getEditablePage,
   getPage,
@@ -34,7 +35,7 @@ import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
-import { publishErrors } from '@/server/site-preflight'
+import { publishErrors, themeDraftWarnings } from '@/server/site-preflight'
 import { publishPageAction } from '../actions'
 
 const uuid = z.string().uuid()
@@ -243,6 +244,7 @@ export async function restoreVersionAction(
   const parsed = z.object({ pageId: uuid, versionId: uuid }).safeParse({ pageId, versionId })
   if (!parsed.success) return fail('Version not found')
   let data: Record<string, unknown>
+  let stamp: Awaited<ReturnType<typeof editStamp>> = null
   try {
     data = await withTenant(ctx.tenant.id, async (tx) => {
       const [current, version] = await Promise.all([
@@ -262,6 +264,7 @@ export async function restoreVersionAction(
         versionId,
         userId: ctx.user.id,
       })
+      stamp = await editStamp(tx, ctx.tenant.id, pageId)
       return restored.data
     })
   } catch (e) {
@@ -269,7 +272,7 @@ export async function restoreVersionAction(
   }
   await auditAs(ctx, 'site.page.version_restored', 'site_page', pageId, { versionId })
   revalidate(slug)
-  return ok('Restored as your draft — publish when you’re ready', { data })
+  return ok('Restored as your draft — publish when you’re ready', { data, stamp })
 }
 
 const previewSchema = z.object({ pageId: uuid, days: z.union([z.literal(1), z.literal(7), z.literal(30)]) })
@@ -450,12 +453,14 @@ export async function blockStatsAction(
 
 /**
  * Publishes after a server-side preflight: errors (e.g. images not served over https) block, warnings
- * don't. The checks are the same ones the publish dialog shows, plus the page's global sections.
+ * don't. The checks are the same ones the publish dialog shows, plus the page's global sections. `stamp` = what the
+ * editor loaded (see publishPageAction).
  */
 export async function publishCheckedAction(
   slug: string,
   pageId: string,
   data: unknown,
+  stamp?: unknown,
 ): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.publish')
   if (error) return fail(error)
@@ -466,5 +471,19 @@ export async function publishCheckedAction(
     return publishErrors(tx, ctx.tenant.id, data, { currentSlug: page.slug })
   })
   if (blocked) return fail(blocked)
-  return publishPageAction(slug, pageId, data)
+  return publishPageAction(slug, pageId, data, stamp)
+}
+
+/**
+ * For the publish dialog when a draft theme is waiting: contrast warnings it causes on the other live pages (the
+ * publish takes it live site-wide; this page is checked in the dialog itself).
+ */
+export async function publishNotesAction(slug: string, pageId: string): Promise<ActionResult> {
+  const { ctx, error } = await studioGuard(slug, 'site.publish')
+  if (error) return fail(error)
+  if (!uuid.safeParse(pageId).success) return fail('Page not found')
+  const themeWarnings = await withTenant(ctx.tenant.id, (tx) =>
+    themeDraftWarnings(tx, ctx.tenant.id, { skip: (p) => p.id === pageId }),
+  )
+  return ok(undefined, { themeWarnings: themeWarnings.slice(0, 8) })
 }

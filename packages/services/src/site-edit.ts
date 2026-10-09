@@ -5,7 +5,8 @@
 // web app and passed in). Like every service: takes the caller's tx, no permission checks or audit rows inside —
 // callers audit with `siteEditAuditData`.
 import { fixHtmlDesign } from '@spa/core'
-import type { ThemeTokens, Tx } from '@spa/db'
+import { pageVersions, sites, type ThemeTokens, type Tx } from '@spa/db'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
 import {
@@ -19,16 +20,19 @@ import {
 import { isNode } from './site-kit/tree'
 import {
   addPage,
+  checkPageRename,
   editingTheme,
   getEditablePage,
   getSite,
   listPages,
+  lockSite,
   PAGE_SLUG,
   type PageData,
   type PageSummary,
   renamePage,
   type SiteText,
   saveDraft,
+  takenSlugs,
   updateDraftTheme,
 } from './sites'
 
@@ -112,16 +116,28 @@ export type SiteEditResult =
       /** The resulting draft theme, or null when no theme op ran. */
       theme: ThemeTokens | null
       renamed: { id: string; title?: SiteText; slug?: string; pending: boolean }[]
-      /** What was there before (for undo): page drafts by id and the editing theme. */
-      previous: { pages: { id: string; data: EditPageData }[]; theme: ThemeTokens | null }
+      /** What was there before, for an exact undo (restoreSiteEdit). */
+      previous: SiteEditPrevious
     }
   | { ok: false; errors: string[] }
+
+/**
+ * State before an edit. Pages: the data the edit started from, and the draft row the save ADDED (when the page had no
+ * unnamed draft — e.g. it was live), so undo can drop it instead of leaving a draft behind. Theme (null = untouched):
+ * the raw draft theme before (null = there was none) and the theme the editor showed.
+ */
+export type SiteEditPrevious = {
+  pages: { id: string; data: EditPageData; addedVersionId: string | null }[]
+  theme: { draft: ThemeTokens | null; shown: ThemeTokens } | null
+}
 
 type Working = {
   id: string
   slug: string
   title: SiteText
   isNew: boolean
+  /** Newest version row when loaded (null for new pages / no versions). */
+  beforeVersionId: string | null
   before: EditPageData
   data: EditPageData
   changed: boolean
@@ -187,6 +203,8 @@ export async function runSiteEdit(
   })
   if (errors.length) return { ok: false, errors }
 
+  // Read-modify-write of the drafts: serialised per spa, so parallel tool calls / editors never drop each other's work.
+  if (!input.dryRun) await lockSite(tx, input.tenantId)
   const site = await getSite(tx, input.tenantId)
   if (!site)
     return {
@@ -197,8 +215,16 @@ export async function runSiteEdit(
   let theme: Record<string, unknown> | null = null
   const summaries: PageSummary[] = await listPages(tx, input.tenantId)
   const working = new Map<string, Working>()
-  const renamed: { id: string; title?: SiteText; slug?: string }[] = []
+  /** Renames of existing pages, merged per page (validated like renamePage, so dry runs report the same errors). */
+  const renames = new Map<string, { title?: SiteText; slug?: string }>()
   const summary: string[] = []
+  /** Addresses in use besides `exceptId`'s: live + pending slugs, reserved routes, and this batch's new/renamed pages. */
+  const slugsInUse = (exceptId?: string) => {
+    const taken = takenSlugs(summaries, exceptId)
+    for (const w of working.values()) if (w.isNew && w.id !== exceptId) taken.add(w.slug)
+    for (const [id, r] of renames) if (id !== exceptId && r.slug !== undefined) taken.add(r.slug)
+    return taken
+  }
 
   const resolve = (ref: string): PageSummary | Working | null => {
     const slug = ref === 'home' || ref === '/' ? '' : ref.replace(/^\//, '')
@@ -217,6 +243,7 @@ export async function runSiteEdit(
       slug: found.slug,
       title: found.title,
       isNew: false,
+      beforeVersionId: editable?.version?.id ?? null,
       before: structuredClone(start),
       data: start,
       changed: false,
@@ -242,7 +269,8 @@ export async function runSiteEdit(
         case 'add_page': {
           if (!PAGE_SLUG.test(op.slug) || !op.slug)
             throw new OpFail(`${at}: use lowercase letters, numbers and dashes`)
-          if (resolve(op.slug)) throw new OpFail(`${at}: a page already uses /${op.slug}`)
+          if (resolve(op.slug) || slugsInUse().has(op.slug))
+            throw new OpFail(`${at}: a page already uses /${op.slug}`)
           const from = op.copy_from !== undefined ? await load(op.copy_from, at) : null
           const data: EditPageData = from
             ? structuredClone(from.data)
@@ -252,24 +280,39 @@ export async function runSiteEdit(
               }
           const title = { en: op.title.en, ...(op.title.ar ? { ar: op.title.ar } : {}) }
           const key = `new:${op.slug}`
-          working.set(key, { id: key, slug: op.slug, title, isNew: true, before: data, data, changed: true })
+          working.set(key, {
+            id: key,
+            slug: op.slug,
+            title,
+            isNew: true,
+            beforeVersionId: null,
+            before: data,
+            data,
+            changed: true,
+          })
           summary.push(`Added the page "${title.en}" (/${op.slug}) as a draft`)
           break
         }
         case 'rename_page': {
           const w = await load(op.page, at)
           if (!op.title && op.slug === undefined) throw new OpFail(`${at}: nothing to rename`)
+          const title = op.title
+            ? { en: op.title.en, ...(op.title.ar ? { ar: op.title.ar } : {}) }
+            : undefined
+          const live = summaries.find((p) => p.id === w.id)
+          const prior = renames.get(w.id)
+          const checked = checkPageRename(
+            w.isNew || !live
+              ? { slug: w.slug, pending: null }
+              : { slug: live.slug, pending: { ...live.pending, ...prior } },
+            { title, slug: op.slug },
+            slugsInUse(w.id),
+          )
+          if (!checked.ok) throw new OpFail(`${at}: ${checked.error}`)
           if (w.isNew) {
-            if (op.title) w.title = { en: op.title.en, ...(op.title.ar ? { ar: op.title.ar } : {}) }
-            if (op.slug) w.slug = op.slug
-          } else
-            renamed.push({
-              id: w.id,
-              ...(op.title
-                ? { title: { en: op.title.en, ...(op.title.ar ? { ar: op.title.ar } : {}) } }
-                : {}),
-              ...(op.slug !== undefined ? { slug: op.slug } : {}),
-            })
+            if (checked.next.title) w.title = checked.next.title
+            if (checked.next.slug) w.slug = checked.next.slug
+          } else renames.set(w.id, { ...prior, ...checked.next })
           summary.push(
             `Renamed ${pageLabel(w)}${op.title ? ` to "${op.title.en}"` : ''}${op.slug ? ` (/${op.slug})` : ''}`,
           )
@@ -320,10 +363,11 @@ export async function runSiteEdit(
   if (policy) return { ok: false, errors: [policy] }
 
   const nextTheme = theme ? (deps.normalizeTheme ? deps.normalizeTheme(theme) : (theme as ThemeTokens)) : null
-  const previous = {
-    pages: changed.filter((w) => !w.isNew).map((w) => ({ id: w.id, data: w.before })),
-    theme: nextTheme ? (startTheme as ThemeTokens) : null,
+  const previous: SiteEditPrevious = {
+    pages: changed.filter((w) => !w.isNew).map((w) => ({ id: w.id, data: w.before, addedVersionId: null })),
+    theme: nextTheme ? { draft: site.themeDraft, shown: startTheme as ThemeTokens } : null,
   }
+  const renamed = [...renames].map(([id, r]) => ({ id, ...r }))
   const view = (w: Working, idOverride?: string): SiteEditPage => ({
     id: idOverride ?? w.id,
     slug: w.slug,
@@ -338,7 +382,10 @@ export async function runSiteEdit(
       summary,
       pages: changed.map((w) => view(w)),
       theme: nextTheme,
-      renamed: renamed.map((r) => ({ ...r, pending: true })),
+      renamed: renamed.map((r) => ({
+        ...r,
+        pending: Boolean(summaries.find((p) => p.id === r.id)?.publishedAt),
+      })),
       previous,
     }
 
@@ -354,12 +401,14 @@ export async function runSiteEdit(
       })
       pages.push(view({ ...w, slug: row.slug }, row.id))
     } else {
-      await saveDraft(tx, {
+      const written = await saveDraft(tx, {
         tenantId: input.tenantId,
         pageId: w.id,
         data: w.data as unknown as PageData,
         userId: input.userId,
       })
+      const before = previous.pages.find((p) => p.id === w.id)
+      if (before && written.id !== w.beforeVersionId) before.addedVersionId = written.id
       pages.push(view(w))
     }
   }
@@ -377,27 +426,62 @@ export async function runSiteEdit(
   return { ok: true, dryRun: false, summary, pages, theme: nextTheme, renamed: renameResults, previous }
 }
 
-/** Restores page drafts and the draft theme captured in `previous` (undo of an AI edit). Never publishes. */
+/**
+ * Undo of an AI edit: puts back exactly what `previous` captured. A page whose edit added a draft row (it had none)
+ * loses that row again while it is still the newest unnamed draft and the version under it holds the data being
+ * restored; otherwise the data is saved as the draft. The draft theme is set back as it was — cleared when there was
+ * none. Never publishes.
+ */
 export async function restoreSiteEdit(
   tx: Tx,
   input: {
     tenantId: string
     userId?: string
-    pages: { id: string; data: unknown }[]
-    theme: ThemeTokens | null
+    pages: { id: string; data: unknown; addedVersionId?: string | null }[]
+    theme: { draft: ThemeTokens | null } | null
   },
 ) {
+  await lockSite(tx, input.tenantId)
   for (const p of input.pages) {
     if (JSON.stringify(p.data).length > SITE_EDIT_MAX_PAGE_BYTES)
       throw new DomainError('This page is too large to save.')
+    const data = asPageData(p.data)
+    if (p.addedVersionId && (await dropAddedDraft(tx, input.tenantId, p.id, p.addedVersionId, data))) continue
     await saveDraft(tx, {
       tenantId: input.tenantId,
       pageId: p.id,
-      data: asPageData(p.data) as unknown as PageData,
+      data: data as unknown as PageData,
       userId: input.userId,
     })
   }
-  if (input.theme) await updateDraftTheme(tx, input.tenantId, input.theme)
+  if (input.theme)
+    await tx.update(sites).set({ themeDraft: input.theme.draft }).where(eq(sites.tenantId, input.tenantId))
+}
+
+/** Deletes the draft row an edit added when that restores `data` exactly (see restoreSiteEdit). */
+async function dropAddedDraft(
+  tx: Tx,
+  tenantId: string,
+  pageId: string,
+  versionId: string,
+  data: EditPageData,
+) {
+  const [newest, under] = await tx
+    .select({ id: pageVersions.id, status: pageVersions.status, label: pageVersions.label })
+    .from(pageVersions)
+    .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.pageId, pageId)))
+    .orderBy(desc(pageVersions.createdAt))
+    .limit(2)
+  if (!newest || !under || newest.id !== versionId || newest.status !== 'draft' || newest.label) return false
+  const [same] = await tx
+    .select({ ok: sql<boolean>`${pageVersions.data} = ${JSON.stringify(data)}::jsonb` })
+    .from(pageVersions)
+    .where(eq(pageVersions.id, under.id))
+  if (!same?.ok) return false
+  await tx
+    .delete(pageVersions)
+    .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.id, versionId)))
+  return true
 }
 
 export type SiteEditView = {

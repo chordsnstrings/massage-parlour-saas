@@ -86,6 +86,14 @@ either place.
    preview and publish in the Website Studio as usual (Claude can also give a preview link).
 4. Disconnect any time: console → Websites → Connect Claude → **Revoke** (takes effect on Claude's next call).
    Removing your email from `SITE_AI_EDITOR_EMAILS` also stops it at once.
+5. Only Claude's own callback (claude.ai / claude.com) can be registered and receive sign-in codes; the consent page
+   shows where access goes ("Approving sends access to claude.ai"). Registrations nobody approves are deleted after a
+   day. Every approval is in the audit log (`platform.mcp.client_authorized`).
+
+The Caddyfile trusts `Cf-Connecting-Ip` / `X-Forwarded-For` only from Cloudflare's IP ranges (copied from
+https://www.cloudflare.com/ips/ — update them there if Cloudflare ever changes the list) and overwrites
+`Cf-Connecting-Ip` for the app, so per-IP sign-in / registration limits can't be bypassed by hitting the droplet
+directly.
 
 ## Secrets without SSH
 
