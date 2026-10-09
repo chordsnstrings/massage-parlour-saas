@@ -51,7 +51,9 @@ describe('automation switches (B3) in worker jobs', () => {
   it('outbox auto-assign runs only for spas that switched it on (off by default)', async () => {
     await owner
       .update(tenants)
-      .set({ settings: { automations: { packageExpiry: false, dailyDigest: false, outboxAutoAssign: true } } })
+      .set({
+        settings: { automations: { packageExpiry: false, dailyDigest: false, outboxAutoAssign: true } },
+      })
       .where(eq(tenants.id, off))
     await autoAssignOutbox()
     const spy = vi.mocked(autoAssignDueOutbox)

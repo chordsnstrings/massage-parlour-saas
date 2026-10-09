@@ -294,4 +294,6 @@ export const domain = {
   adminAlready: 'You are already a super-admin.',
   adminConfirmNeeds2fa: 'Only a super-admin with two-step verification can confirm super-admins.',
   adminConfirmNotListed: 'Only a login whose email is in PLATFORM_ADMIN_EMAILS can be confirmed here.',
+  intakeNotFound: 'Intake form not found',
+  outboxNotAssignable: 'That team member cannot send WhatsApp messages',
 } as const

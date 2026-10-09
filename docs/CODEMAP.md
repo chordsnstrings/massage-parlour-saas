@@ -11,7 +11,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
-| `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
+| `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → `assertAiAllowed` (platform + per-spa kill switch `ai_enabled`, monthly budget `tenants.ai_budget_usd`, Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage` → 80 %/100 % bell notification once per month (G18). Aggregation of `ai_usage` lives only in `services/ai-usage.ts` (console AI usage, Performance, dashboard meter). Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`), `meta` (R7 Meta tools assistant). `tool-loop.ts` `runToolLoop` = the shared OpenAI-style tool loop (local tools + MCP sources, every step through `runChat`, so budget + `ai_usage` per step; the DM agent uses it). `mcp/`: Meta MCP (see "Meta MCP" below). |
 | `@spa/web` (apps/web) | Next.js 16; one app serves every surface. |
 | `@spa/worker` (apps/worker) | pg-boss 12 on `DATABASE_URL_OWNER`; job registry `src/jobs/index.ts`. |
@@ -45,7 +45,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
   delete `deleteTenantObjects` (storage.ts), `autoPurgeDeletedTenants` (worker `tenant-auto-purge`, off unless
   `platform_settings.auto_purge_days`), `eraseClient` (anonymise, keep financial rows; a new client FK in
-  `CLIENT_REFERENCES` must also be decided here: keep or delete on erase).
+  `CLIENT_REFERENCES` must also be decided here: keep or delete on erase). Erase deletes the signed intake PDFs
+  (`deleteClientIntakePdfs`, file row + bucket object) before the submissions; purge removes them with `stored_files`.
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
@@ -163,7 +164,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
   - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
-    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG.
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG;
+    `outboxMine` (F28) = due messages assigned to the viewer → second, dark-green Inbox badge (`ShellItem.mine`).
   - Calendar ranges: `calendar/page.tsx` `?range=week|month` → `loadCalendarSpan` (data.ts) → services
     `loadCalendarRange` → `components/calendar/span-view.tsx`; Day view takes `?open=<bookingId>` (PLAN §14.6 Phase 3).
   - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
@@ -203,7 +205,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
-  receipt: accounting, staff/business document: staff.manage — under requireMember's rules (deleted spa closed,
+  receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
   "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=`.
   e2e matrix: `files-access.spec.ts`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
@@ -555,6 +557,33 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     Gated by the `bookingMessages` automation + client mobile. Queues hide rows of cancelled/no-show bookings
     (`outboxBookingLive()`: messages page, dashboard count, `navCounts`).
   - `queueCampaign` takes a row lock plus a per-tenant advisory lock.
+  - Assignment (F28, services `outbox-assign.ts`): `outbox.assigned_to` (members.id, set null on delete) /
+    `assigned_at` / `assigned_by` (user; null with an assignee = the auto rule). `assignableMembers` = active
+    members whose role resolves `marketing.send` (+ branch scope); `assignOutbox` changes unsent rows only and skips
+    rows of a branch the assignee can't see; web `assignMessagesAction` audits `outbox.assigned` / `outbox.unassigned`
+    per row (from → to). Messages page: `?who=all|mine|unassigned` (`outboxAssigneeWhere`, counts
+    `outboxAssigneeCounts`), per-card select, select-all + bulk bar. Auto rule = automation `outboxAutoAssign`
+    (the only default-off switch: core `DEFAULT_OFF_AUTOMATIONS`, `automationOn` / `automationOnSql` honour it):
+    worker `outbox-auto-assign` every minute → `autoAssignDueOutbox` (advisory lock per spa; due + unassigned rows,
+    round-robin by member id after the last auto pick, among receptionist-role members whose linked staff has a shift
+    covering now in the message's branch; nobody on shift → stays unassigned).
+- **Intake PDFs (F27)**: services `intake.ts` (main entry: `intakeContentHash` = SHA-256 of the canonical record —
+  ids, template version, sorted answers, waiver, signature, signed_at, ip — stored as `content_sha256` at signing;
+  `intakeAnswerRows`, export list, filenames) + `pdf/intake-pdf.ts` (subpath `@spa/services/intake-pdf`):
+  `renderIntakePdf` (pdfkit 0.17.2 pinned, A4, no headless browser; spa logo via sharp → JPEG, answers, consent,
+  signature path, footer = submission id + record hash + page n/N) and `generateIntakePdf(tx, id)` (stores a private
+  `stored_files` row, purpose `intake_pdf`; sets `pdf_file_id`, `pdf_sha256`, `pdf_generated_at`; deletes the old
+  file on regenerate; fills `content_sha256` for pre-F27 rows). Web: `submitIntakeAction` renders right after the
+  insert commits (failure → page offers "Create PDF"); `regenerateIntakePdfAction` (clients.manage); submission page
+  Download / Regenerate + Integrity card (stored vs recomputed hash); profile list PDF icon; Settings → Data
+  `export?type=intake_pdfs` = streamed STORE zip (`zip.ts`, needs clients.export + clients.view).
+  Text (`pdf/text.ts`): fonts are base64 OFL subsets in `pdf/fonts.generated.ts` (DM Sans / Noto Sans Thai / Noto
+  Naskh Arabic, 400 + 700; rebuilt by `packages/services/scripts/pdf-fonts.py` from the installed @fontsource
+  packages; licence `pdf/FONTS-OFL.txt`; biome-ignored), per-character font fallback, reduced UBA (W4/W5/W7, N0
+  brackets, N1/N2, L2 reorder), Intl.Segmenter word breaks (Thai). pdfkit gotchas: pass `features` (else it lays
+  out word by word and reverses RTL word order); Noto Naskh shares skeleton/dot glyphs between letters, so Arabic
+  pieces carry `/ActualText` spans (copy text in Acrobat/PDFium; pdf.js shows near-letters) and glyphs without text
+  map to U+034F; `font: null` (no Helvetica AFM read).
 - **Secrets**: AES-256-GCM, stored as `v1.<iv>.<tag>.<ct>`. The key is `APP_ENCRYPTION_KEY`, else HKDF from
   `BETTER_AUTH_SECRET`.
 - **Storage**:
@@ -582,6 +611,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `instagram-token-refresh` | 03:40 |
 | `gbp-reviews-sync` | every 2 h at :15 |
 | `campaigns-housekeeping` | hourly at :15 |
+| `outbox-auto-assign` (F28; spas with the default-off switch on; logged only when it assigned something) | every minute |
 | `document-reminders` | 09:00 |
 | `weekly-insights` | Mon 08:00 |
 | `daily-digest` | 09:30 |

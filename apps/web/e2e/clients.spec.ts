@@ -108,7 +108,43 @@ test('client profile: preferences, treatment note, intake template and a signed 
     await expect(page.getByRole('heading', { name: 'Consent', exact: true })).toBeVisible()
     await expect(page.getByTestId('signature').locator('path')).toHaveAttribute('d', /^M[\d.]+ [\d.]+ L/)
     await expect(page.getByText('Nut oils')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Print or save PDF' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Print' })).toBeVisible()
+  })
+
+  await test.step('F27: the signed PDF is stored and downloadable (private, with the record hash)', async () => {
+    const link = page.getByTestId('intake-pdf-download')
+    await expect(link).toBeVisible()
+    await expect(page.getByTestId('intake-integrity')).toContainText('Record unchanged since signing')
+    const href = await link.getAttribute('href')
+    expect(href).toMatch(/^\/files\/[0-9a-f-]{36}$/)
+    const pdf = await page.evaluate(async (u) => {
+      const r = await fetch(u)
+      const bytes = new Uint8Array(await r.arrayBuffer())
+      return {
+        status: r.status,
+        type: r.headers.get('content-type'),
+        cache: r.headers.get('cache-control'),
+        head: String.fromCharCode(...bytes.slice(0, 5)),
+        size: bytes.length,
+      }
+    }, href!)
+    expect(pdf).toMatchObject({
+      status: 200,
+      type: 'application/pdf',
+      cache: 'private, no-cache',
+      head: '%PDF-',
+    })
+    expect(pdf.size).toBeGreaterThan(5_000)
+    const download = page.waitForEvent('download')
+    await link.click()
+    expect((await download).suggestedFilename()).toMatch(
+      /^intake-Fatima-Al-Mansoori-\d{4}-\d{2}-\d{2}-[0-9a-f]{8}\.pdf$/,
+    )
+    // Regenerating replaces the file (new id), the record hash stays.
+    await page.getByRole('button', { name: 'Regenerate PDF' }).click()
+    await expect(page.getByText('PDF ready')).toBeVisible()
+    await expect(page.getByTestId('intake-pdf-download')).not.toHaveAttribute('href', href!)
+    expect(await page.evaluate(async (u) => (await fetch(u)).status, href!)).toBe(404)
   })
 
   await test.step('the signed intake is listed on the profile', async () => {
@@ -116,6 +152,22 @@ test('client profile: preferences, treatment note, intake template and a signed 
     const list = page.getByTestId('intake-list')
     await expect(list).toContainText('Massage intake & consent')
     await expect(list).toContainText('v1')
+    await expect(list.getByTestId('intake-pdf-link')).toHaveAttribute('href', /^\/files\/[0-9a-f-]{36}$/)
     await screenshotAt(page, 'client-profile')
+  })
+
+  await test.step('F27: Settings > Data exports the signed PDFs as one zip', async () => {
+    await page.goto(`${app}/${slug}/settings/data`)
+    const zipLink = page.getByTestId('intake-pdfs-export')
+    await expect(zipLink).toBeVisible()
+    const zip = await page.evaluate(
+      async (u) => {
+        const r = await fetch(u)
+        const bytes = new Uint8Array(await r.arrayBuffer())
+        return { status: r.status, type: r.headers.get('content-type'), sig: Array.from(bytes.slice(0, 4)) }
+      },
+      (await zipLink.getAttribute('href'))!,
+    )
+    expect(zip).toEqual({ status: 200, type: 'application/zip', sig: [0x50, 0x4b, 0x03, 0x04] })
   })
 })

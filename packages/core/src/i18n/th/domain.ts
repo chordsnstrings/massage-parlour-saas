@@ -266,4 +266,6 @@ export const domain: Messages['errors']['domain'] = {
   adminAlready: 'คุณเป็นผู้ดูแลระบบสูงสุดอยู่แล้ว',
   adminConfirmNeeds2fa: 'เฉพาะผู้ดูแลระบบสูงสุดที่เปิดการยืนยันสองขั้นตอนเท่านั้นที่ยืนยันผู้ดูแลระบบสูงสุดได้',
   adminConfirmNotListed: 'ยืนยันได้เฉพาะบัญชีที่อีเมลอยู่ใน PLATFORM_ADMIN_EMAILS เท่านั้น',
+  intakeNotFound: 'ไม่พบแบบฟอร์มสุขภาพ',
+  outboxNotAssignable: 'พนักงานคนนี้ส่งข้อความ WhatsApp ไม่ได้',
 }
