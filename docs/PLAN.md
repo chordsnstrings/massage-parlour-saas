@@ -1182,7 +1182,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
-  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
@@ -1211,3 +1211,13 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   production without `RESEND_API_KEY` (no links in logs — also closes the log-leak half of G9).
 - **G3:** super-admin powers (console, impersonation, studio, file access, template export) need TOTP 2FA; without it →
   account page `?admin2fa=1` to enrol (reachable on app + admin hosts; sign-out in the user menu). e2e enrols for real.
+- **G15:** memberships sold/renewed in POS (sale line kind `membership`, one one-month period per line, client
+  required; selling a plan the client still holds = renewal starting the day after the current period). Price →
+  2110 with no VAT at sale (like packages); included sessions move their share to revenue + VAT when used; whatever
+  is left when the period ends is recognised then (`membership_expiry`, 2110 → 4000 + VAT — earned, not breakage).
+  Checkout: member discount % auto-applies to treatments (untick per line), "use an included session" checkbox;
+  both show on the receipt as typed suffixes. Daily job `memberships-renew` (automation switch `membershipRenewals`):
+  ≤ 7 days before the end → status `due` + WhatsApp renewal reminder queued in /messages (click-to-send; opted-out /
+  blocklisted clients skipped), ended → `expired`. Refund = unused value (as packages), period `refunded`; sales with
+  a membership or a membership session can't be voided. Discounts already given aren't clawed back on refund.
+  Client profile lists memberships.

@@ -122,6 +122,7 @@ export const messages: Messages['messages'] = {
     slot_offer: 'เพื่อเติมช่วงเวลาว่างที่เพิ่งเกิดขึ้นในวันนั้น',
     waitlist_slot: 'เมื่อมีช่วงเวลาว่างสำหรับลูกค้าในคิวรอ',
     custom: 'ข้อความอิสระ',
+    membership_renewal: 'หนึ่งสัปดาห์ก่อนรอบสมาชิกสิ้นสุด หากยังไม่ได้ต่ออายุ',
   },
   variables: {
     first_name: 'ชื่อ',

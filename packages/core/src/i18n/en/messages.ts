@@ -123,6 +123,7 @@ export const messages = {
     slot_offer: 'To fill a gap that just opened in the day.',
     waitlist_slot: 'When a slot frees up for a client on the waitlist.',
     custom: 'Free text.',
+    membership_renewal: 'A week before a membership period ends, if it has not been renewed.',
   },
   variables: {
     first_name: 'First name',

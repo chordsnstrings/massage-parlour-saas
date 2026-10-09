@@ -259,8 +259,18 @@ export const membershipPlans = pgTable(
   () => tenantPolicies(),
 )
 
-export const membershipStatus = pgEnum('membership_status', ['active', 'paused', 'cancelled', 'lapsed'])
+/** `due` = renewal reminder queued (period ends soon, not renewed yet); `expired` = period over. */
+export const membershipStatus = pgEnum('membership_status', [
+  'active',
+  'paused',
+  'cancelled',
+  'lapsed',
+  'due',
+  'expired',
+  'refunded',
+])
 
+/** One row per paid period; a renewal is a new row starting the day after the previous period ends. */
 export const clientMemberships = pgTable(
   'client_memberships',
   {
@@ -272,15 +282,45 @@ export const clientMemberships = pgTable(
     planId: uuid('plan_id')
       .notNull()
       .references(() => membershipPlans.id),
+    /** Plan name and discount when sold (later plan edits don't change sold periods). */
+    name: text('name').notNull().default(''),
+    discountPct: numeric('discount_pct', { precision: 5, scale: 2 }).notNull().default('0'),
     status: membershipStatus('status').notNull().default('active'),
     currentPeriodStart: date('current_period_start').notNull(),
     currentPeriodEnd: date('current_period_end').notNull(),
     /** Sessions left this period per service id. */
     balances: jsonb('balances').$type<Record<string, number>>().notNull().default({}),
+    /** Paid for the period, and the part not yet recognised as revenue (2110 liability). */
+    pricePaidAed: aed('price_paid_aed').notNull().default('0'),
+    remainingValueAed: aed('remaining_value_aed').notNull().default('0'),
+    saleId: uuid('sale_id').references(() => sales.id, { onDelete: 'set null' }),
+    saleLineId: uuid('sale_line_id').references(() => saleLines.id, { onDelete: 'set null' }),
     lastPaidAt: ts('last_paid_at'),
     createdAt: createdAt(),
   },
-  (t) => [index('client_memberships_client').on(t.clientId), ...tenantPolicies()],
+  (t) => [
+    index('client_memberships_client').on(t.clientId),
+    index('client_memberships_sale').on(t.saleId),
+    ...tenantPolicies(),
+  ],
+)
+
+/** Included sessions used from a membership period (value moved 2110 → revenue). */
+export const membershipRedemptions = pgTable(
+  'membership_redemptions',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    clientMembershipId: uuid('client_membership_id')
+      .notNull()
+      .references(() => clientMemberships.id, { onDelete: 'cascade' }),
+    serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+    saleId: uuid('sale_id').references(() => sales.id, { onDelete: 'set null' }),
+    valueAed: aed('value_aed').notNull(),
+    createdBy: text('created_by').references(() => user.id),
+    createdAt: createdAt(),
+  },
+  () => tenantPolicies(),
 )
 
 export const promoKind = pgEnum('promo_kind', ['percent', 'amount'])
