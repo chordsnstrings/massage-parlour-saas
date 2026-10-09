@@ -81,6 +81,7 @@ export const AREAS: Area[] = [
     tint: 'sage',
     features: [
       'Roles for owner, manager, receptionist, therapist and accountant, or your own',
+      'Dashboard in English or Thai — each person picks their own language',
       'Therapists never see client phone numbers',
       'Staff and business documents tracked, with expiry reminders to your phone',
       'Two-factor sign-in and an audit log of every change',
@@ -156,7 +157,7 @@ export const FAQ = [
   },
   {
     q: 'Is it in Arabic?',
-    a: 'Your website, booking page and client messages work in English and Arabic. The dashboard is in English.',
+    a: 'Your website, booking page and client messages work in English and Arabic. The dashboard your team uses — the spa CRM — is in English and Thai; each person picks their own language.',
   },
   {
     q: 'Can I bring my existing data?',

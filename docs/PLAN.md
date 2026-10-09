@@ -1397,3 +1397,29 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
     publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
     (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+### 18.5 Marketing: Spa CRM page (owner 2026-10-09)
+- Owner request: the marketing site sells the spa CRM (the dashboard we build and run for each spa), not only websites,
+  and says it is in English **and Thai**. New page `/crm` (`app/marketing/crm/page.tsx`, metadata + OG): hero (CTAs
+  "Apply for your spa" → app `/signup` via `requestUrls`, "See pricing"), "In English or ภาษาไทย" EN/TH toggle demo, 12
+  modules (each verified against §14.6–§18: calendar & rooms/EXCLUDE, all channels on one calendar, POS with packages,
+  gift cards, memberships (G15), full tax invoice (G16), staff/commission/tips + WPS, therapist own day + earnings
+  (G14), WhatsApp click-to-send, clients + intake forms, reports/KPIs, multi-branch (G22), roles + audit log, 2FA on by
+  default (G23)), "Set up for you" (apply → we build menu/rooms/staff/hours with you → first import → team invites;
+  matches the Contact copy), closing CtaBand.
+- **Demo rule:** the mock's labels are the dashboard's real catalogue strings (`@spa/core/i18n`, resolved on the server in
+  `components/marketing/crm-demo-copy.ts`; the client gets only those strings) — never hand-typed Thai. Typed names
+  (clients, therapists, treatments, products) stay untranslated and are dotted-underlined; "Walk-in" is a label, so it
+  translates. Swap animation is CSS and off under `prefers-reduced-motion`. Marketing copy itself is English; it does
+  not claim the Thai is native-reviewed (it still needs that review, §14.6).
+- Home: new "Spa CRM" section (EN/TH label pairs from the catalogues, link to /crm); hero notes now "Sites in English &
+  Arabic · Dashboard in English & Thai". Features: "Your team's language" band (link to /crm) + team-area bullet.
+  FAQ "Is it in Arabic?" no longer says the dashboard is English-only. Thai font: the marketing layout loads
+  `@fontsource-variable/noto-sans-thai` (Thai unicode-range only), `.mkt :lang(th)` uses it.
+- **Pending (shell.tsx is being rebuilt on another branch):** add `| 'crm'` to `MarketingPage`, NAV entry
+  `{ key: 'crm', href: '/crm', label: 'Spa CRM' }` before 'Website studio', footer Product column `NAV.slice(0, 4)`
+  (else Pricing drops out), then `/crm` uses `active="crm"` (today `active="home"`, so no nav item is marked).
+  No sitemap exists yet (G19), so nothing to register there.
+- e2e: `marketing-crm.spec` (page, CTAs, toggle → Thai catalogue strings, typed names stay, home/features links);
+  `platform-domains.spec` also checks /crm links on the second domain.
+
