@@ -157,7 +157,7 @@ export async function acquirePageLock(
   if (!row) {
     const holder = await getPageLock(tx, input.tenantId, input.pageId, now)
     if (holder) return { ok: false, lock: holder }
-    throw new DomainError('Please try again')
+    throw new DomainError('Another editor opened this page at the same moment — please try again')
   }
   return {
     ok: true,
