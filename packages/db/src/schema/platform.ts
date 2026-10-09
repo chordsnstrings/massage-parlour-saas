@@ -14,6 +14,7 @@ import {
   pgPolicy,
   pgSequence,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -91,6 +92,15 @@ export const platformSettings = pgTable(
     resendApiKeyEnc: text('resend_api_key_enc'),
     resendApiKeyLast4: text('resend_api_key_last4'),
     emailFrom: text('email_from'),
+    /**
+     * F9 bot check (Cloudflare Turnstile) set in the console; each wins over TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY /
+     * TURNSTILE_CUSTOM_DOMAINS env. Secret AES-GCM encrypted when an encryption key exists (like the Resend key).
+     * `turnstile_custom_domains` null = env decides.
+     */
+    turnstileSiteKey: text('turnstile_site_key'),
+    turnstileSecretEnc: text('turnstile_secret_enc'),
+    turnstileSecretLast4: text('turnstile_secret_last4'),
+    turnstileCustomDomains: boolean('turnstile_custom_domains'),
     /**
      * G12: days after a soft delete when the worker permanently purges a spa (`tenant-auto-purge`).
      * Null = off (default); the console only accepts 30 or more.
@@ -557,4 +567,23 @@ export const contactEnquiries = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('contact_enquiries_status_created').on(t.status, t.createdAt), ...platformPolicies()],
+)
+
+/**
+ * F10: Content-Security-Policy violations reported by browsers (/api/csp-report), counted per day, surface, directive
+ * and blocked source (an origin or 'inline'/'eval'/…; never a full URL). The console's Server health card sums them.
+ */
+export const cspViolations = pgTable(
+  'csp_violations',
+  {
+    day: date('day').notNull(),
+    surface: text('surface').notNull(),
+    directive: text('directive').notNull(),
+    blocked: text('blocked').notNull(),
+    count: integer('count').notNull().default(0),
+    /** Path (no query) of the latest page that reported it. */
+    lastPath: text('last_path'),
+    lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.surface, t.directive, t.blocked] }), ...platformPolicies()],
 )

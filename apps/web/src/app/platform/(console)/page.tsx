@@ -8,7 +8,7 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
-import { aiUsageOverview } from '@spa/services'
+import { aiUsageOverview, cspViolationSummary } from '@spa/services'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -21,6 +21,7 @@ import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { formatAed, formatDate, todayDubai } from '@/lib/utils'
 import { registerEmailSettings } from '@/server/email-settings'
+import { currentTurnstile } from '@/server/turnstile'
 import { pauseTenantAction } from './actions'
 
 export default async function PlatformOverview() {
@@ -111,7 +112,10 @@ export default async function PlatformOverview() {
   // G9: config health — presence only, never a value.
   registerEmailSettings()
   const mail = await resolveEmailConfig()
-  const checks = configChecks()
+  // F9: the bot check row shows where each Turnstile key comes from (console / env / missing).
+  const checks = configChecks(process.env, { turnstile: await currentTurnstile() })
+  // F10: CSP violations browsers reported in the last 7 days (api/csp-report).
+  const csp = await cspViolationSummary(db, 7)
   // F11: the restore drill's least-privilege role (created by compose service db-roles); pg_roles is world-readable.
   const { rows: drillRoles } = await db.execute<DrillRole>(
     sql`select rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication from pg_roles where rolname = 'spa_drill'`,
@@ -195,6 +199,22 @@ export default async function PlatformOverview() {
               label="Disk"
               ok={Boolean(disk) && (disk?.usedPct ?? 100) <= 85}
               text={disk ? `${disk.usedPct}% used · ${disk.freeGb} GB free` : 'Unknown'}
+            />
+            <HealthRow
+              testId="health-csp"
+              label="Content-Security-Policy"
+              ok={csp.total === 0}
+              warnOnly
+              text={
+                csp.total === 0
+                  ? 'No blocked scripts, frames or styles reported in 7 days'
+                  : `${csp.total} blocked in 7 days · ${csp.top
+                      .map(
+                        (v) =>
+                          `${v.directive} ${v.blocked} (${v.surface}${v.lastPath ? ` ${v.lastPath}` : ''}) ×${v.count}`,
+                      )
+                      .join(' · ')}`
+              }
             />
             {deploy && (
               <HealthRow

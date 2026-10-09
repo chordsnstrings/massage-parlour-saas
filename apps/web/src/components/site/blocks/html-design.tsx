@@ -1,5 +1,6 @@
 import type { ComponentConfig } from '@puckeditor/core'
-import { type HtmlDesignLink, type HtmlImageAdjust, htmlDesignDocument } from '@spa/core'
+import { HTML_DESIGN_SANDBOX, type HtmlDesignLink, type HtmlImageAdjust, htmlDesignDocument } from '@spa/core'
+import { HtmlDesignFrame } from '../html-design-frame'
 import { ui } from '../i18n'
 import { bookHref, mapHref, pageHref, phoneHref, whatsappHref } from '../links'
 import type { SiteMeta } from '../types'
@@ -49,7 +50,8 @@ type Props = { html: string; images?: HtmlImageAdjust[] }
 
 /**
  * An uploaded HTML design shown exactly as built (its CSS, fonts, motion and scripts), full screen. It runs in a
- * sandboxed frame with an opaque origin, so its scripts can't reach the platform's pages, cookies or APIs.
+ * sandboxed frame with an opaque origin, so its scripts can't reach the platform's pages, cookies or APIs, under the
+ * design shell's own CSP (F10, html-design-frame.tsx) instead of the page's strict one.
  */
 export const HtmlDesign: ComponentConfig<Props> = {
   label: 'HTML design',
@@ -62,16 +64,16 @@ export const HtmlDesign: ComponentConfig<Props> = {
   render: ({ html, images, puck }) => {
     const meta = puck.metadata as SiteMeta
     return (
-      <iframe
+      <HtmlDesignFrame
         title={meta.data.tenant.name}
-        srcDoc={htmlDesignDocument(
+        html={htmlDesignDocument(
           html,
           htmlDesignValues(meta),
           Boolean(meta.editing),
           images ?? [],
           htmlDesignLinks(meta),
         )}
-        sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+        sandbox={HTML_DESIGN_SANDBOX}
         className="site-html-design"
         style={{ display: 'block', width: '100%', height: '100dvh', border: 0 }}
       />

@@ -26,6 +26,7 @@ import { EARLY_PROMPT_SCRIPT } from '@/lib/sw'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
 import { navBadgeCounts } from '@/server/nav-counts'
+import { getNonce } from '@/server/nonce'
 import { bellData } from '@/server/notifications'
 import { canonicalUrls } from '@/server/origin'
 import { PWA_THEME, pwaFor } from '@/server/pwa'
@@ -264,6 +265,8 @@ export default async function TenantLayout({
   return (
     <div className="crm" lang={locale}>
       <script
+        nonce={await getNonce()}
+        suppressHydrationWarning
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline listener, no user input
         dangerouslySetInnerHTML={{ __html: EARLY_PROMPT_SCRIPT }}
       />

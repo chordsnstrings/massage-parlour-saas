@@ -15,6 +15,7 @@ import {
   recordPlatformPayment,
   resumeTenant,
   saveEmailSettings,
+  saveTurnstileSettings,
   setInvoicePaid,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -28,6 +29,7 @@ import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
 import { invalidateEmailSettings, registerEmailSettings } from '@/server/email-settings'
 import { canonicalUrls } from '@/server/origin'
+import { invalidateTurnstileSettings } from '@/server/turnstile'
 
 const money = z.coerce
   .number({ error: 'Enter an amount' })
@@ -382,6 +384,48 @@ export async function saveEmailSettingsAction(_p: ActionResult, fd: FormData): P
   revalidatePath('/platform/settings')
   revalidatePath('/platform')
   return ok('Email settings saved')
+}
+
+const turnstileKey = (what: string) =>
+  z
+    .string()
+    .trim()
+    .max(200)
+    .refine((v) => !v || /^[0-3]x[A-Za-z0-9_-]{16,120}$/.test(v), `A Turnstile ${what} looks like 0x4AAAA…`)
+
+/**
+ * Bot check (Cloudflare Turnstile, F9) from the console (owner, 2026-10-09): wins over TURNSTILE_* env. The site key
+ * is public; the secret is write-only (blank = keep), sealed like the Resend key and never logged or audited.
+ */
+export async function saveTurnstileSettingsAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      siteKey: turnstileKey('site key'),
+      secretKey: turnstileKey('secret key').optional(),
+      customDomains: bool,
+      clearKeys: bool,
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  const input = d.clearKeys
+    ? { siteKey: null, secretKey: null, customDomains: null }
+    : { siteKey: d.siteKey || null, secretKey: d.secretKey || undefined, customDomains: d.customDomains }
+  await saveTurnstileSettings(platformDb(), input, user.id)
+  invalidateTurnstileSettings()
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.turnstile.updated',
+    data: {
+      siteKey: input.siteKey,
+      secretKey: input.secretKey === null ? 'cleared' : input.secretKey ? 'replaced' : 'kept',
+      customDomains: input.customDomains,
+    },
+  })
+  revalidatePath('/platform/settings')
+  revalidatePath('/platform')
+  return ok('Bot check settings saved')
 }
 
 /** Sends a test email to the signed-in super-admin with the effective settings (console first, then env). */

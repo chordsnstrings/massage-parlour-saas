@@ -10,6 +10,7 @@ import {
 import { ImageIcon, Monitor, RotateCcw, Smartphone } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MediaPicker } from '@/components/media/media-picker'
+import { HtmlDesignFrame } from '@/components/site/html-design-frame'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/form'
 import { Input, Select } from '@/components/ui/input'
@@ -329,10 +330,10 @@ function Preview({
         ))}
       </div>
       <div ref={wrap} className="overflow-hidden rounded-lg border" style={{ height: height * scale }}>
-        <iframe
+        <HtmlDesignFrame
           title="Design preview"
           data-testid="html-images-preview"
-          srcDoc={htmlDesignDocument(html, {}, true, adjust)}
+          html={htmlDesignDocument(html, {}, true, adjust)}
           sandbox="allow-scripts"
           style={{ width, height, border: 0, transform: `scale(${scale})`, transformOrigin: '0 0' }}
         />

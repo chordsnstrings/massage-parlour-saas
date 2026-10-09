@@ -103,7 +103,7 @@ export async function BookingPage({
       langHref={langHref}
       initialServiceId={service}
       embed={embed}
-      turnstileSiteKey={turnstileSiteKey({ customDomain: 'hostname' in site })}
+      turnstileSiteKey={await turnstileSiteKey({ customDomain: 'hostname' in site })}
     />
   )
 }

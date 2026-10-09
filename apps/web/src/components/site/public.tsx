@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { ScrollScenes } from '@/components/scroll-scenes'
 import { PlaceholderSite } from '@/components/site/placeholder-site'
+import { getNonce } from '@/server/nonce'
 import { heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { siteData } from '@/server/sites'
 import { siteConfig } from './config'
@@ -173,6 +174,8 @@ export async function PublicSite({
     <>
       <script
         type="application/ld+json"
+        nonce={await getNonce()}
+        suppressHydrationWarning
         // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD escaped by jsonLdString (no tag breakout)
         dangerouslySetInnerHTML={{ __html: ld }}
       />

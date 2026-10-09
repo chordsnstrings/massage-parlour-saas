@@ -19,6 +19,60 @@ export function turnstileConfig(env: Env = process.env): TurnstileConfig | null 
 export const turnstileOnCustomDomains = (env: Env = process.env) =>
   ['on', '1', 'true'].includes(env.TURNSTILE_CUSTOM_DOMAINS?.trim().toLowerCase() ?? '')
 
+/** Keys + switch saved in the super-admin console (platform_settings; secret already decrypted). Null = not set there. */
+export type TurnstileSettings = {
+  siteKey?: string | null
+  secretKey?: string | null
+  customDomains?: boolean | null
+}
+
+export type SettingSource = 'console' | 'env' | 'missing'
+
+export type ResolvedTurnstile = {
+  /** Both keys present → bot checks on. */
+  config: TurnstileConfig | null
+  customDomains: boolean
+  siteKeySource: SettingSource
+  secretKeySource: SettingSource
+  customDomainsSource: 'console' | 'env'
+}
+
+/** Console values win over env, each setting on its own (owner, 2026-10-09: keys are entered in the console). */
+export function resolveTurnstile(
+  saved: TurnstileSettings | null | undefined,
+  env: Env = process.env,
+): ResolvedTurnstile {
+  const pick = (db: string | null | undefined, envKey: string): [string | null, SettingSource] => {
+    const fromDb = db?.trim()
+    if (fromDb) return [fromDb, 'console']
+    const fromEnv = env[envKey]?.trim()
+    return fromEnv ? [fromEnv, 'env'] : [null, 'missing']
+  }
+  const [siteKey, siteKeySource] = pick(saved?.siteKey, 'TURNSTILE_SITE_KEY')
+  const [secretKey, secretKeySource] = pick(saved?.secretKey, 'TURNSTILE_SECRET_KEY')
+  const consoleSwitch = typeof saved?.customDomains === 'boolean'
+  return {
+    config: siteKey && secretKey ? { siteKey, secretKey } : null,
+    customDomains: consoleSwitch ? Boolean(saved?.customDomains) : turnstileOnCustomDomains(env),
+    siteKeySource,
+    secretKeySource,
+    customDomainsSource: consoleSwitch ? 'console' : 'env',
+  }
+}
+
+/** Configuration-card text for the bot check row: where each key comes from (never a value). */
+export function turnstileStatusText(r: ResolvedTurnstile): string {
+  if (!r.config) {
+    if (r.siteKeySource === 'missing' && r.secretKeySource === 'missing') return 'keys missing'
+    return r.siteKeySource === 'missing' ? 'site key missing' : 'secret key missing'
+  }
+  const src =
+    r.siteKeySource === r.secretKeySource
+      ? `from ${r.siteKeySource}`
+      : `site key from ${r.siteKeySource}, secret from ${r.secretKeySource}`
+  return `${src} · ${r.customDomains ? 'incl. custom domains' : 'platform hosts (custom domains off)'}`
+}
+
 export type TurnstileVerdict = { ok: boolean; codes: string[] }
 
 /**

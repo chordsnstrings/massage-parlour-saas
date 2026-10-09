@@ -152,6 +152,16 @@ function insertAtHead(html: string, text: string) {
   return text + html
 }
 
+/**
+ * F10: designs run in a shell document (`HTML_DESIGN_FRAME_PATH`) instead of `srcdoc`, so relative links would resolve
+ * against the shell's URL. A `<base>` with the hosting page's URL keeps them as before (a design's own <base> wins).
+ */
+export function withBaseHref(html: string, href: string): string {
+  if (/<base\b[^>]*\bhref\s*=/i.test(html)) return html
+  const safe = href.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return insertAtHead(html, `<base href="${safe}">`)
+}
+
 const hasViewport = (html: string) => /<meta\b[^>]*\bname\s*=\s*["']?viewport\b/i.test(html)
 
 export type HtmlDesignFix = 'viewport' | 'wide-image'
