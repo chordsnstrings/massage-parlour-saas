@@ -180,7 +180,8 @@ test('a new enquiry emails the super-admins (reply-to = sender); its audit row k
       const mails = await Promise.all(
         files.map(async (f) => JSON.parse(await readFile(join(outbox, f), 'utf8'))),
       )
-      return mails.find((m) => m.replyTo === email)
+      // One mail per PLATFORM_ADMIN_EMAILS address (the suite lists several): pick the test super-admin's.
+      return mails.find((m) => m.replyTo === email && m.to === ADMIN.email)
     }
     await expect.poll(async () => (await sentTo())?.to ?? null).toBe(ADMIN.email) // after() runs post-reply
     const mail = await sentTo()
