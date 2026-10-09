@@ -526,3 +526,31 @@ export const spaApplications = pgTable(
     ...platformPolicies(),
   ],
 )
+
+/** Contact enquiries (PLAN §18.4): the marketing Contact form; the owner works them in the console (Enquiries). */
+export const contactEnquiryStatus = pgEnum('contact_enquiry_status', ['new', 'contacted', 'closed'])
+
+export const contactEnquiries = pgTable(
+  'contact_enquiries',
+  {
+    id: id(),
+    status: contactEnquiryStatus('status').notNull().default('new'),
+    name: text('name').notNull(),
+    /** E.164 with '+' (+971501234567, +447700900123). */
+    phone: text('phone').notNull(),
+    email: text('email').notNull(),
+    spaName: text('spa_name').notNull(),
+    message: text('message').notNull(),
+    /** Internal console note (never shown to the sender). */
+    adminNote: text('admin_note'),
+    /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address). */
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    /** Last super-admin who changed the status or note. */
+    handledBy: text('handled_by').references(() => user.id, { onDelete: 'set null' }),
+    handledAt: timestamp('handled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('contact_enquiries_status_created').on(t.status, t.createdAt), ...platformPolicies()],
+)

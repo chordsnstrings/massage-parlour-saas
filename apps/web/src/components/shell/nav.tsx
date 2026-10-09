@@ -18,6 +18,7 @@ import {
   Landmark,
   Layers,
   LayoutTemplate,
+  Mail,
   Megaphone,
   MessageCircle,
   MessagesSquare,
@@ -72,6 +73,7 @@ const icons = {
   templates: LayoutTemplate,
   studio: PanelsTopLeft,
   applications: Inbox,
+  enquiries: Mail,
 } as const
 
 export type NavItem = {

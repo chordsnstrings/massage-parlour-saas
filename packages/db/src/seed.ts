@@ -109,7 +109,8 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
 ]
 
 export async function seedPlatform(db: Db, adminEmails: string[] = []) {
-  await db.insert(platformSettings).values({ id: 1 }).onConflictDoNothing()
+  // New installs: the public contact address (= PLATFORM_CONTACT_EMAIL in @spa/core); a saved company email is kept.
+  await db.insert(platformSettings).values({ id: 1, email: 'ask@spamanagement.co' }).onConflictDoNothing()
   await db
     .insert(plans)
     .values({

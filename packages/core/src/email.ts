@@ -6,6 +6,8 @@ export const PLATFORM_NAME = 'spamanagement.co'
  */
 export const EMAIL_DOMAIN = 'spamanagement.ae'
 export const DEFAULT_EMAIL_FROM = `${EMAIL_DOMAIN} <no-reply@${EMAIL_DOMAIN}>`
+/** Public contact address (marketing Contact page, PLAN §18.4); the console's company email wins when set. */
+export const PLATFORM_CONTACT_EMAIL = 'ask@spamanagement.co'
 
 /** Email settings saved in the super-admin console (platform_settings); either field may be unset. */
 export type EmailSettings = { apiKey?: string | null; from?: string | null }
@@ -16,7 +18,8 @@ export type ResolvedEmail = {
   keySource: EmailKeySource
   fromSource: EmailKeySource
 }
-export type StaffEmail = { to: string; subject: string; text: string }
+/** `replyTo`: e.g. a contact enquiry's sender, so the owner can answer from the notification. */
+export type StaffEmail = { to: string; subject: string; text: string; replyTo?: string }
 /** Sends one resolved message; the default posts to Resend. Overridable for e2e (never set in deploy env). */
 export type EmailTransport = (m: StaffEmail & { from: string; apiKey: string }) => Promise<void>
 
@@ -70,7 +73,13 @@ async function resend(m: StaffEmail & { from: string; apiKey: string }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${m.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: m.from, to: m.to, subject: m.subject, text: m.text }),
+    body: JSON.stringify({
+      from: m.from,
+      to: m.to,
+      subject: m.subject,
+      text: m.text,
+      ...(m.replyTo ? { reply_to: m.replyTo } : {}),
+    }),
   })
   if (!res.ok) throw new Error(`email send failed: ${res.status} ${await res.text()}`)
 }

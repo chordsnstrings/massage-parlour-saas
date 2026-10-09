@@ -239,6 +239,13 @@
       "when": 1791561417210,
       "tag": "0033_youthful_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791562942059,
+      "tag": "0034_shallow_guardian",
+      "breakpoints": true
     }
   ]
 }

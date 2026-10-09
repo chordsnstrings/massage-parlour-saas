@@ -1397,3 +1397,35 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
     publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
     (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+### 18.4 Contact enquiries (owner 2026-10-09)
+Marketing **Contact** page (`marketing/contact`) gets an enquiry form; the owner works enquiries in the console.
+- **Form** (English only, like all marketing): your name, phone (UAE mobile 05…/5…/9715… or international with + / 00,
+  `toE164` in core whatsapp.ts → stored `+…`; UAE landlines with the trunk 0 too), email (lowercased), spa name, "What
+  do you need?" (required, ≤ 2000 chars, live counter) — all required. Server-side zod (`enquirySchema`, services
+  enquiries.ts; the service re-parses, never stores invalid input); errors inline per field (`aria-invalid` +
+  `aria-describedby`) + a summary line; typed values stay on error (transition submit, not `action=`); success panel
+  "Thanks — we'll reply within one working day." (focused). 360 px safe; styles `.mkt-enq*` / `.mkt-input` in marketing.css.
+- **Spam:** honeypot `extra_details` (off-screen, `aria-hidden`, no tab stop) → answered like a success, nothing stored /
+  counted / sent; then per-IP limit **5/hour, 20/day** (`ENQUIRY_LIMITS`, web `withinIpLimit('enquiry', …)` → services
+  `withinRateLimits` over `rate_limits`; production only, `AUTH_RATE_LIMIT=off` like apply) — counted after validation
+  so fixing typos doesn't use the quota; refused → "email us at <contact email>".
+- **Stored:** `contact_enquiries` (platform-only RLS, no `tenant_id`): name, phone, email, spa_name, message, status
+  `new | contacted | closed`, admin_note, ip_hash (HMAC-SHA256 of the IP with BETTER_AUTH_SECRET, 32 hex — the raw IP is
+  only in the day-long rate-limit keys), user_agent (≤ 300), handled_by/at, timestamps. Audit
+  `platform.enquiry.received` (no actor) and `platform.enquiry.updated` (changed, status from→to, note).
+- **Notify:** after the reply (`after()`), `sendStaffEmail` to every `PLATFORM_ADMIN_EMAILS` address with
+  **reply-to = the sender** (`StaffEmail.replyTo` → Resend `reply_to`) + console link; failures are logged, never
+  fail the submission. Console nav **Enquiries** (after Applications) with the count of `new` (`newEnquiryCount`).
+- **Console `/enquiries`** (`requirePlatformAdmin` in pages + action): newest first, filter New / Contacted / Closed /
+  All (default All, with counts), search name / email / spa (and phone digits, 4+). Detail page: message, all fields,
+  **Call** (`tel:`), **WhatsApp** (`wa.me` click-to-send draft, locked comms rule), **Email** (`mailto:` with subject),
+  last handled (who/when); Follow-up form = status radio + internal note (≤ 2000) → `updateEnquiry` (row-locked, stamps
+  handled_by/at only when something changed; "No changes" otherwise). No "convert to application" (not needed).
+- **Contact email:** the page shows the console's company email when set, else `PLATFORM_CONTACT_EMAIL` =
+  **ask@spamanagement.co** (core email.ts; replaces the old hello@ fallback); the seed sets it for new installs.
+  **Owner:** if Console → Company → Email holds another address, change it there to ask@spamanagement.co. Make sure
+  ask@spamanagement.co receives mail (mailbox/forwarding at the domain's email provider).
+- **Tests:** core `toE164`; services `enquiries.test.ts` (store/normalise, validation, 5/hour limit, list/search/
+  counts, status + note, spa role can't read/write); e2e `enquiries.spec.ts` (360 px, inline error keeps values →
+  sent → super-admin badge + search + links → contacted + note, badge drops, audit; honeypot dropped; console needs sign-in).

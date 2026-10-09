@@ -21,6 +21,7 @@
     --dark-text: #c2c2cc;
     --line: #e6e6ec;
     --line2: rgba(11, 11, 15, 0.14);
+    --danger: #b42318;
     --head: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, sans-serif;
     --font: "DM Sans Variable", "DM Sans", ui-sans-serif, sans-serif;
     --shadow: 0 30px 60px rgba(11, 11, 15, 0.18);
@@ -909,5 +910,83 @@
     border-top: 1px solid var(--line);
     font-size: 14px;
     color: var(--mute);
+  }
+
+  /* contact enquiry form (PLAN §18.4) */
+  .mkt-enq {
+    padding: 30px;
+  }
+  .mkt-enq:hover {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  @media (max-width: 639px) {
+    .mkt-enq {
+      padding: 22px 18px;
+    }
+  }
+  .mkt-enq label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .mkt-input {
+    display: block;
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 14px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 16px; /* no zoom on iOS */
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
+  }
+  textarea.mkt-input {
+    min-height: 150px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .mkt-input::placeholder {
+    color: var(--mute);
+    opacity: 0.8;
+  }
+  .mkt-input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(15, 107, 75, 0.18);
+  }
+  .mkt-input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .mkt-enq .mkt-enq-hint {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--mute);
+  }
+  .mkt-enq .mkt-enq-err {
+    margin-top: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--danger);
+  }
+  .mkt-enq .mkt-enq-alert {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: #fdecea;
+    color: var(--danger);
+    font-size: 14px;
+  }
+  .mkt-enq-hp {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
   }
 }
