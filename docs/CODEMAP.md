@@ -134,7 +134,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `platform.admin.email_verified`; no removal). `listedAdminEmails` drops empty segments/duplicates (compose appends).
 - **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
   `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
-  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`; top bar: group crumb + title (home = greeting), EN | ไทย;
+  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`, platform badge `Logo` → marketing site (PLAN §18.6); top bar: group crumb + title (home = greeting), EN | ไทย;
   ≤860 px drawer). Look = `crm.css` (tokens on `:root:has(.crm)`, lifted under `[data-crm-off]` = site editor/preview
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):

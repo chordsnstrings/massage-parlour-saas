@@ -844,6 +844,7 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   Meta webhooks/deauthorize/data-deletion, worker jobs.
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
+- **Colours + fonts superseded 2026-10-09 (owner): brand look, see §18.6.** Layout, density and menu stay as below.
 - Design `docs/design/be-relax-crm.html`, spec + gap analysis `docs/design/crm-spec.md`. Same design for every spa; the
   sidebar shows the spa's own logo + name (logo captured at onboarding/settings). Super-admin console unchanged.
 - ~15–20% more compact than the HTML; light only. Menu per the design + a Sales entry.
@@ -1501,3 +1502,29 @@ automatically). Only existing pages/sections are linked
 (no multi-branch section exists, so none); section `id`s are stable link targets. Layout: brand + 5 cols ≥ 1100 px,
 brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, the mailto address
 (Settings email or the default), that every footer link answers 200 and that every `#anchor` exists.
+### 18.6 Spa CRM look + PWA (owner 2026-10-09)
+- **Look ✅ (branch feat/crm-brand-theme)** — replaces the blue Be Relax colours (§14.6 layout/density unchanged):
+  the sign-in brand (`components/brand-app.css`) made lighter, every spa's CRM identical. Tokens only, in
+  `app/dashboard/[tenant]/crm.css` `:root:has(.crm)`: fonts `--crm-font` (DM Sans) / `--crm-head` (Space Grotesk:
+  h1–h3, top-bar title, spa name) / `--crm-num` (Space Grotesk for KPI/stat figures in both languages); Thai puts
+  Noto Sans Thai Variable first in `--crm-font` + `--crm-head` (no tofu, Thai headings in Noto). Colours: frame
+  `--crm-bg` #E7EFE6 mint, page `--crm-page` #F8FAF5, sidebar `--crm-side-bg` #F5F8F1, cards white, primary
+  `--crm-accent` #0F6B4B (ink #0A4F37), lime `--crm-lime` #D9F26A only for the active menu item (lime wash + green
+  start bar), nav count badges, `acc` pills (`--crm-lime-soft`) and the keyboard focus halo (green 2 px ring + lime
+  inside). Semantic colours darkened to pass AA on their tints: ok #13773F, warn #8A5A00, bad #B93B1B, info teal
+  #1B6684. Avatars and chart palette re-picked (white initials AA; chart: green, mint, blue, amber, orange, violet,
+  magenta `--crm-magenta` #B03F78 — no second green, 7 booking sources). WCAG AA: text pairs ≥ 4.5:1; form-control
+  edges `--crm-ctl-line` #848E88 ≥ 3:1 (1.4.11, kit Input/Select/Textarea via `--ui-ctl-border`, `.crm-inp`); card
+  dividers `--crm-line` stay soft (decorative). The html element takes `--crm-font` too (`font-sans` unused in the CRM).
+- **Platform badge ✅** — `Logo` (components/brand.tsx, 28 px tall) at the sidebar foot under the plan card (also in
+  the phone drawer), links to `canonicalUrls().marketing()` in a new tab (`rel=noopener`, aria-label "Spa
+  Management", brand name not translated). The whole sidebar (and phone drawer) scrolls as one at every height — the
+  menu never scrolls inside its own box; the foot sits at the bottom when everything fits (`margin-top:auto`) and
+  after the menu when it doesn't, so it never covers a menu item (shell e2e checks it). Badge 24 px on ≤700 px tall
+  screens. Not on the no-spa/locked pages.
+- **Open owner question (2026-10-09):** "same theme as the log in like fonts sizeing" — the CRM has the sign-in font
+  families + colours but keeps the compact type scale (titles 18–20 px, 13 px body, 34 px buttons) vs sign-in
+  (28–36 px titles, 15 px body, 44 px controls, 700 headings). Raise the CRM type tokens only if the owner says so;
+  record the answer here.
+- **PWA** — separate branch (manifest, icons = spa logo + "<first word> Management", service worker, install item
+  in the user menu).

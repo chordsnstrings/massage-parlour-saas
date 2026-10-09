@@ -5,6 +5,9 @@ Gallery: `app.localhost:3000/dev/kit/crm` (`?lang=th` for Thai sizes). CSS: `app
 in `crm.css`, incl. Thai ≥12 px and coarse-pointer ≥40 px overrides). Base UI kit (`components/ui/*`) is themed
 via `--ui-*` hooks inside `.crm` only — keep using `Button`, `Input`/`Select`/`Textarea`, `Field`, `ActionForm`,
 `FormSheet`, `Sheet`, `DataTable` (stacks ≤768 px), `EmptyState`, `PageHeader`, `toast`.
+Colours + fonts (brand look, PLAN §18.6): use the tokens, never literals — `--crm-text/-muted`, `--crm-surface/-surface2`,
+`--crm-page`, `--crm-accent/-accent-ink` (green), `--crm-lime/-lime-soft/-lime-ink` (small highlights only),
+`--crm-ok/-warn/-bad/-info` + `-bg`, `--crm-ctl-line` for form-control edges (≥ 3:1; `--crm-line` only for dividers); fonts `--crm-font` / `--crm-head` / `--crm-num` (Thai stacks swap in by `lang`).
 
 ## Components (`import { … } from '@/components/crm'`; server-safe unless noted; never contain English)
 | Component | Props | Classes |

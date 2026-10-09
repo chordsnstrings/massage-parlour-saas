@@ -1,6 +1,7 @@
 'use client'
-// Spa dashboard shell ("Be Relax CRM" design, docs/design/crm-spec.md §2): framed window with the spa's sidebar
-// (logo + name, profile menu, grouped nav, plan card) and a top bar (crumb + title, EN | ไทย). Styles: crm.css.
+// Spa dashboard shell ("Be Relax CRM" layout, crm-spec.md §2; brand look + platform badge: PLAN §18.6): framed
+// window with the spa's sidebar (logo + name, profile menu, grouped nav, plan card, "Spa Management" badge) and a
+// top bar (crumb + title, EN | ไทย). Styles: crm.css.
 // Super-admin keeps AppShell. Global search = the `search` slot (components/search); the bell = `bell` (NotificationBell); Ask AI later.
 import { authClient } from '@spa/auth/client'
 import type { Locale } from '@spa/core/i18n/types'
@@ -33,6 +34,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { DropdownMenu } from 'radix-ui'
 import { Fragment, useEffect, useState, useTransition } from 'react'
+import { Logo } from '@/components/brand'
 import { setLocaleAction } from '@/i18n/actions'
 import { useI18n } from '@/i18n/client'
 import { spring } from '@/lib/motion'
@@ -116,6 +118,7 @@ export function SpaShell({
   search,
   accountHref,
   switchHref,
+  platformHref,
   children,
 }: {
   spa: { name: string; tagline: string | null; logoUrl: string | null; homeHref: string }
@@ -131,6 +134,8 @@ export function SpaShell({
   search?: React.ReactNode
   accountHref: string
   switchHref: string
+  /** The platform's marketing site (canonical) for the "Spa Management" badge at the foot of the sidebar. */
+  platformHref: string
   children: React.ReactNode
 }) {
   const { t, locale } = useI18n()
@@ -283,8 +288,8 @@ export function SpaShell({
             ))}
           </nav>
 
-          {plan && (
-            <div className="crm-side-foot">
+          <div className="crm-side-foot">
+            {plan && (
               <div className="crm-plan">
                 {plan.name && <b>{plan.name}</b>}
                 {plan.ai && (
@@ -297,8 +302,18 @@ export function SpaShell({
                 )}
                 {plan.renewal && <small>{plan.renewal}</small>}
               </div>
-            </div>
-          )}
+            )}
+            {/* Platform badge (owner 2026-10-09): brand name, never translated. */}
+            <a
+              href={platformHref}
+              target="_blank"
+              rel="noopener"
+              aria-label="Spa Management"
+              className="crm-platform"
+            >
+              <Logo className="crm-platform-logo" />
+            </a>
+          </div>
         </aside>
 
         <div className="crm-main">

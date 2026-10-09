@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 
 const control =
-  'w-full rounded-[var(--ui-ctl-radius,0.5rem)] border bg-[var(--ui-ctl-bg,var(--surface))] px-3 text-[length:var(--ui-ctl-fs,0.875rem)] text-fg placeholder:text-muted/70 transition-[border-color,box-shadow] duration-150 hover:border-fg/20 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:opacity-60 aria-[invalid=true]:border-danger'
+  'w-full rounded-[var(--ui-ctl-radius,0.5rem)] border border-[var(--ui-ctl-border,var(--border))] bg-[var(--ui-ctl-bg,var(--surface))] px-3 text-[length:var(--ui-ctl-fs,0.875rem)] text-fg placeholder:text-muted/70 transition-[border-color,box-shadow] duration-150 hover:border-[var(--ui-ctl-border-hover,color-mix(in_oklab,var(--fg)_20%,transparent))] focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15 disabled:opacity-60 aria-[invalid=true]:border-danger'
 
 export function Input({ className, ...props }: React.ComponentProps<'input'>) {
   return <input className={cn(control, 'h-[var(--ui-ctl-h,2.5rem)]', className)} {...props} />

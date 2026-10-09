@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 
-/** Platform brand (spamanagement.co) — owner "SM" badge logo, public/brand/spamanagement-logo.svg. Not for spa dashboards. */
+/** Platform brand (spamanagement.co) — owner "SM" badge logo, public/brand/spamanagement-logo.svg. In spa dashboards
+ *  only as the small platform badge at the sidebar foot (SpaShell, PLAN §18.6). */
 const FONT = '"Helvetica Neue", Arial, "Inter Variable", sans-serif'
 const LIME = '#D9F26A'
 const INK = '#17181A'

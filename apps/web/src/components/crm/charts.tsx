@@ -123,13 +123,13 @@ export function SegBar({
   )
 }
 
-/** Stage colours for SegBar/Legend/charts, in design order. */
+/** Stage colours for SegBar/Legend/charts: brand green first, then distinct hues (brand theme, PLAN §18.6). */
 export const CHART_COLOURS = [
   'var(--crm-accent)',
-  'var(--crm-tint3)',
   'var(--crm-tint1)',
-  'var(--crm-green)',
+  'var(--crm-blue)',
   'var(--crm-amber)',
   'var(--crm-orange)',
   'var(--crm-violet)',
+  'var(--crm-magenta)', // 7 = booking sources; never a second green
 ] as const

@@ -318,7 +318,7 @@ export function OutboxQueue({
                       {ks.map((k) => (
                         <kbd
                           key={k}
-                          className="min-w-6 rounded-md border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-1.5 py-0.5 text-center font-sans text-xs"
+                          className="min-w-6 rounded-md border border-[var(--crm-line)] bg-[var(--crm-surface2)] px-1.5 py-0.5 text-center font-[inherit] text-xs"
                         >
                           {k}
                         </kbd>
