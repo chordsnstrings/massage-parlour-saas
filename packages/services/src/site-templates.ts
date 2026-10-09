@@ -391,7 +391,13 @@ export async function saveStudioTemplate(
 export async function updateStudioTemplate(
   db: Db,
   id: string,
-  patch: { name?: string; description?: string | null; sort?: number; active?: boolean },
+  patch: {
+    name?: string
+    description?: string | null
+    sort?: number
+    active?: boolean
+    pages?: TemplatePage[]
+  },
 ) {
   const [row] = await db.update(siteTemplates).set(patch).where(eq(siteTemplates.id, id)).returning()
   if (!row) throw new DomainError('Template not found', 'not_found')
