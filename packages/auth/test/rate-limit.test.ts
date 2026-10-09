@@ -29,11 +29,11 @@ afterAll(async () => {
   await closeAllDbs()
 })
 
-const post = (path: string, body: unknown, ip: string) =>
+const post = (path: string, body: unknown, ip: string, extra: Record<string, string> = {}) =>
   handler(
     new Request(`${ORIGIN}/api/auth${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: ORIGIN, 'cf-connecting-ip': ip },
+      headers: { 'content-type': 'application/json', origin: ORIGIN, ...extra, 'cf-connecting-ip': ip },
       body: JSON.stringify(body),
     }),
   )
@@ -73,5 +73,31 @@ describe('auth rate limits (per client IP)', () => {
     )
     expect(backup.slice(0, 5).every((s) => s === 401)).toBe(true)
     expect(backup[5]).toBe(429)
+  })
+
+  // F26 (G6): Caddy overwrites Cf-Connecting-Ip on every request; the other headers stay client-writable.
+  it('keys on Cf-Connecting-Ip only: rotating X-Forwarded-For / Do-Connecting-Ip / X-Real-Ip earns no new bucket', async () => {
+    const body = { email: 'nobody@e2e.test', redirectTo: '/reset-password' }
+    const got: number[] = []
+    for (let i = 1; i <= 6; i++) {
+      const fake = `198.51.100.${i}`
+      const extra = {
+        'x-forwarded-for': fake,
+        'do-connecting-ip': fake,
+        'x-real-ip': fake,
+        'true-client-ip': fake,
+      }
+      got.push((await post('/request-password-reset', body, '203.0.113.40', extra)).status)
+    }
+    expect(got).toEqual([200, 200, 200, 200, 200, 429])
+  })
+
+  it('IPv6: addresses in one /64 share a bucket, the next /64 does not', async () => {
+    const body = { email: 'nobody@e2e.test', redirectTo: '/reset-password' }
+    const got: number[] = []
+    for (let i = 1; i <= 6; i++)
+      got.push((await post('/request-password-reset', body, `2001:db8:40::${i}`)).status)
+    expect(got).toEqual([200, 200, 200, 200, 200, 429])
+    expect((await post('/request-password-reset', body, '2001:db8:41::1')).status).toBe(200)
   })
 })

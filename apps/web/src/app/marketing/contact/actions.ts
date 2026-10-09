@@ -31,8 +31,9 @@ export async function sendEnquiryAction(_prev: ActionResult, fd: FormData): Prom
   if (!(await passesBotCheck(form[TURNSTILE_FIELD], 'contact')))
     return fail("We couldn't confirm you're not a robot. Please try again.")
   const h = await headers()
+  const ip = await clientIp()
   const enquiry = await submitEnquiry(platformDb(), parsed.data, {
-    ipHash: hashIp(await clientIp()),
+    ipHash: ip ? hashIp(ip) : null,
     userAgent: h.get('user-agent'),
   })
   await audit({

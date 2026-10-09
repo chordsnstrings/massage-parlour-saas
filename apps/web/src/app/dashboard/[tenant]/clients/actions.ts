@@ -1,5 +1,5 @@
 'use server'
-import { toUaeE164 } from '@spa/core'
+import { clientIpFrom, toUaeE164 } from '@spa/core'
 import {
   bookings,
   clients,
@@ -301,8 +301,7 @@ export async function submitIntakeAction(
   const raw = formObject(formData)
   const signature = typeof raw.signature === 'string' ? raw.signature.trim() : ''
   const agreed = raw.agree === 'on'
-  const h = await headers()
-  const ip = h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+  const ip = clientIpFrom(await headers())
   const ar = lang === 'ar'
   try {
     const id = await withTenant(ctx.tenant.id, async (tx) => {

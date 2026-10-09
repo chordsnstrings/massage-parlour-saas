@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto'
-import { webEntrySource } from '@spa/core'
+import { clientIpFrom, ipRateLimitKey, webEntrySource } from '@spa/core'
 import { platformDb, webEvents } from '@spa/db'
 import { z } from 'zod'
 import { resolveSiteTenant } from '@/server/sites'
@@ -42,11 +42,8 @@ const limited = (ip: string) => {
 export async function POST(req: Request) {
   const raw = await req.text()
   if (raw.length > 4096) return new Response(null, { status: 413 })
-  const ip =
-    req.headers.get('cf-connecting-ip') ??
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    '0.0.0.0'
-  if (limited(ip)) return new Response(null, { status: 429 })
+  const ip = clientIpFrom(req.headers) ?? '0.0.0.0'
+  if (limited(ipRateLimitKey(ip))) return new Response(null, { status: 429 })
   let parsed: z.infer<typeof Body>
   try {
     parsed = Body.parse(JSON.parse(raw))

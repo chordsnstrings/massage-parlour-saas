@@ -1,5 +1,5 @@
 'use server'
-import { bookingAttribution, businessDateOf, toUaeE164, whatsappLink } from '@spa/core'
+import { bookingAttribution, businessDateOf, ipRateLimitKey, toUaeE164, whatsappLink } from '@spa/core'
 import { services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
 import {
   availableSlots,
@@ -181,7 +181,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   const lang: Locale = input?.lang === 'ar' ? 'ar' : 'en'
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
-  const ip = await clientIp()
+  const ip = ipRateLimitKey(await clientIp())
   if (recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS)
     return fail(
       lang === 'ar'

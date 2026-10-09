@@ -1,5 +1,5 @@
 import { mcp } from '@better-auth/mcp'
-import { parseRoots, sendStaffEmail } from '@spa/core'
+import { CLIENT_IP_HEADER, clientIpFrom, parseRoots, sendStaffEmail } from '@spa/core'
 import { isLocale } from '@spa/core/i18n'
 import {
   account,
@@ -90,7 +90,7 @@ async function auditConsentGranted(ctx: Parameters<Parameters<typeof createAuthM
         redirectHost: back.host,
         scopes: (query.get('scope') ?? '').split(' ').filter(Boolean),
       },
-      ip: h?.get('cf-connecting-ip') ?? h?.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      ip: clientIpFrom(h),
     })
 }
 
@@ -214,9 +214,10 @@ function createAuth() {
         }
       },
     },
-    // Behind Cloudflare / DO App Platform the client IP arrives in these headers (first match wins).
+    // F26: only the header Caddy overwrites on every request (@spa/core clientIpFrom; deploy/droplet/Caddyfile).
+    // IPv6 is limited per /64, the same buckets as the app's own limits (`ipRateLimitKey`).
     advanced: {
-      ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'do-connecting-ip', 'x-forwarded-for'] },
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER], ipv6Subnet: 64 },
     },
     databaseHooks: {
       session: { create: { before: async (s) => refuseDisabled(s.userId) } },
