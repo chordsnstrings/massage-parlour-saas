@@ -1,4 +1,4 @@
-import { toUaeE164 } from '@spa/core'
+import { planPriceLine, toUaeE164 } from '@spa/core'
 import {
   auditLog,
   branches,
@@ -12,7 +12,7 @@ import {
   tenants,
   user,
 } from '@spa/db'
-import { billingAlert } from '@spa/services'
+import { billingAlert, offeredPlans, tenantEntitlements } from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { ArrowLeft, ArrowUpRight, Download } from 'lucide-react'
 import Link from 'next/link'
@@ -40,6 +40,7 @@ import {
   setTenantStatusAction,
   updateSubscriptionAction,
 } from '../../actions'
+import { PlanCard } from './plan-card'
 import { PaymentReminder } from './reminder'
 
 const UUID = /^[0-9a-f-]{36}$/i
@@ -51,7 +52,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) })
   if (!tenant) notFound()
   const today = todayDubai()
-  const [sub, planRows, invoices, payments, team, events, branch, alert] = await Promise.all([
+  const [sub, planRows, invoices, payments, team, events, branch, alert, ent, offered] = await Promise.all([
     db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
     db.select().from(plans).orderBy(asc(plans.sort)),
     db
@@ -79,7 +80,10 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
     db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
     db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
     billingAlert(db, id, today),
+    tenantEntitlements(db, id),
+    offeredPlans(db),
   ])
+  const currentPlan = planRows.find((p) => p.id === (sub?.planId ?? tenant.planId))
   const ownerPhone =
     (branch?.whatsappE164 && toUaeE164(branch.whatsappE164)) ||
     (branch?.phone && toUaeE164(branch.phone)) ||
@@ -133,6 +137,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         }
       />
       <PageBody>
+        <PlanCard tenantId={id} sub={sub} current={currentPlan} offered={offered} ent={ent} today={today} />
         <div className="grid gap-6 xl:grid-cols-12">
           <Card className="xl:col-span-7">
             <CardHeader
@@ -144,19 +149,25 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                 action={updateSubscriptionAction.bind(null, id)}
                 className="grid gap-5 sm:grid-cols-2"
               >
-                <Field label="Plan" name="planId">
-                  <Select
-                    id="planId"
-                    name="planId"
-                    defaultValue={sub?.planId ?? tenant.planId ?? planRows[0]?.id}
-                  >
-                    {planRows.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — {formatAed(p.priceAed)}/{p.billingInterval}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                {sub && currentPlan ? (
+                  // PLAN §18.8: the plan changes with "Switch plan" (Plan & features), not here.
+                  <Field label="Plan" name="planId" hint="Change it with Switch plan above.">
+                    <input type="hidden" name="planId" value={sub.planId} />
+                    <p className="pt-2 text-sm font-medium">
+                      {currentPlan.name} · {planPriceLine(currentPlan)}
+                    </p>
+                  </Field>
+                ) : (
+                  <Field label="Plan" name="planId">
+                    <Select id="planId" name="planId" defaultValue={tenant.planId ?? offered[0]?.id}>
+                      {offered.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {planPriceLine(p)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
                 <Field label="Status" name="status">
                   <Select id="status" name="status" defaultValue={sub?.status ?? 'trialing'}>
                     {['trialing', 'active', 'past_due', 'cancelled'].map((s) => (
@@ -166,7 +177,11 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     ))}
                   </Select>
                 </Field>
-                <Field label="Annual price (AED)" name="priceAed" hint="Agreed yearly price for this spa.">
+                <Field
+                  label="Price per 12 months (AED)"
+                  name="priceAed"
+                  hint="Agreed price for the period (monthly plans: 12 × the monthly fee, e.g. 3,000 → 36,000)."
+                >
                   <Input
                     id="priceAed"
                     name="priceAed"
@@ -391,6 +406,13 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                       {/* A setup invoice accepted without VAT (PLAN §18.3). */}
                       {Number(r.vatAed) === 0 && Number(r.totalAed) > 0 && (
                         <span className="text-muted"> · no VAT</span>
+                      )}
+                      {/* A per-spa discount (PLAN §18.8): list amount and what came off. */}
+                      {r.discountAed && Number(r.discountAed) > 0 && (
+                        <span className="block text-xs text-muted" data-testid="invoice-discount">
+                          list {formatAed(r.listAed ?? 0)} · discount {r.discountLabel} −
+                          {formatAed(r.discountAed)}
+                        </span>
                       )}
                     </span>
                   ),

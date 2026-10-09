@@ -18,6 +18,12 @@ export const billing: Messages['billing'] = {
     f3: 'เว็บไซต์ จองออนไลน์ และโดเมนของคุณเอง',
     f4: 'เครื่องมือ AI พร้อมโควตารายเดือน',
     f5: 'ซัพพอร์ตทาง WhatsApp จากคนจริง',
+    f1Standard: 'ระบบ CRM สปาครบชุด — ปฏิทิน การจอง POS บัญชี พนักงาน และเงินเดือน',
+    premiumAdds: 'แพ็กเกจ Premium เพิ่ม AI และระบบอัตโนมัติ Instagram เครื่องมือการตลาด และสาขาเพิ่มเติม',
+    premiumGranted: 'เปิดใช้ฟีเจอร์ Premium ให้สปาของคุณแล้ว',
+    discount: 'ส่วนลดของคุณ: {items}',
+    discountSetup: 'ค่าติดตั้ง {label}',
+    discountMonthly: 'ค่าบริการรายเดือน {label}',
     payHint: 'หรือชำระโดยโอนผ่านธนาคารหรือเงินสด',
   },
   pay: {
@@ -45,6 +51,7 @@ export const billing: Messages['billing'] = {
     due: 'ครบกำหนด',
     total: 'ยอดรวม',
     status: 'สถานะ',
+    discount: 'ราคาปกติ {list} · ส่วนลด {label} −{amount}',
   },
   payments: {
     title: 'การชำระเงินที่ได้รับ',

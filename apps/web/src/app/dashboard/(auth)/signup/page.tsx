@@ -1,5 +1,6 @@
-import { UAE_EMIRATES } from '@spa/core'
+import { monthlyAed, UAE_EMIRATES } from '@spa/core'
 import { plans, platformDb } from '@spa/db'
+import { isLegacyPlan } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
@@ -26,7 +27,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /**
  * "Apply for your spa" (PLAN §18.3). Signed in: the same form without the login fields ("another spa" copy only for a
- * login that already has one). `?plan=<id>` (pricing page cards) preselects that plan.
+ * login that already has one). `?plan=<code>` (pricing page cards: premium / standard; an id still works) preselects
+ * that plan.
  */
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const session = await getSession()
@@ -37,22 +39,27 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   if (state?.listedAdmin) redirect(await adminUrl())
   const { plan: wanted } = await searchParams
   const { t, fmt } = await getI18n()
-  const planRows = await platformDb()
-    .select()
-    .from(plans)
-    .where(eq(plans.active, true))
-    .orderBy(asc(plans.sort), asc(plans.createdAt))
-  const planOptions = planRows.map((p) => ({
-    id: p.id,
-    label:
-      Number(p.setupFeeAed) > 0
-        ? t('auth.signup.planOption', {
-            name: p.name,
-            price: fmt.aed(p.priceAed),
-            fee: fmt.aed(p.setupFeeAed),
-          })
-        : t('auth.signup.planOptionNoFee', { name: p.name, price: fmt.aed(p.priceAed) }),
-  }))
+  // PLAN §18.8: the offered plans (Premium, Standard: setup + monthly, excl. VAT); never the legacy yearly plan.
+  const planRows = (
+    await platformDb()
+      .select()
+      .from(plans)
+      .where(eq(plans.active, true))
+      .orderBy(asc(plans.sort), asc(plans.createdAt))
+  ).filter((p) => !isLegacyPlan(p))
+  const planOptions = planRows.map((p) => {
+    const monthly = p.billingInterval === 'month'
+    const price = fmt.aed(monthly ? monthlyAed(p.priceAed) : p.priceAed)
+    const per = t(`auth.signup.planPer.${monthly ? 'month' : 'year'}`)
+    return {
+      id: p.id,
+      code: p.code,
+      label:
+        Number(p.setupFeeAed) > 0
+          ? t('auth.signup.planOption', { name: p.name, price, per, fee: fmt.aed(p.setupFeeAed) })
+          : t('auth.signup.planOptionNoFee', { name: p.name, price, per }),
+    }
+  })
   return (
     <AuthLayout
       title={state?.hasSpa ? t('auth.signup.titleAdd') : t('auth.signup.title')}
@@ -62,7 +69,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
         address={siteAddress()}
         signedIn={Boolean(session)}
         plans={planOptions}
-        planId={planOptions.find((p) => p.id === wanted)?.id ?? planOptions[0]?.id}
+        planId={planOptions.find((p) => p.code === wanted || p.id === wanted)?.id ?? planOptions[0]?.id}
         emirates={UAE_EMIRATES.map((key) => ({ key, label: t(`auth.emirate.${key}`) }))}
         today={todayDubai()}
         logo={{

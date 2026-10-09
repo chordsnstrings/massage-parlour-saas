@@ -17,6 +17,13 @@ export const billing = {
     f3: 'Website, online booking and your own domain',
     f4: 'AI tools with a monthly allowance',
     f5: 'WhatsApp support from a real person',
+    // PLAN §18.8: Standard plan card (no AI / marketing / extra branches).
+    f1Standard: 'The full spa CRM — calendar, booking, POS, accounts, staff and payroll',
+    premiumAdds: 'Premium adds AI & Instagram automation, marketing tools and more branches',
+    premiumGranted: 'Premium features are switched on for your spa',
+    discount: 'Your discount: {items}',
+    discountSetup: 'setup fee {label}',
+    discountMonthly: 'monthly fee {label}',
     payHint: 'Or pay by bank transfer or cash',
   },
   pay: {
@@ -44,6 +51,7 @@ export const billing = {
     due: 'Due',
     total: 'Total',
     status: 'Status',
+    discount: 'List {list} · discount {label} −{amount}',
   },
   payments: {
     title: 'Payments received',

@@ -1,5 +1,6 @@
+import { planPriceLine } from '@spa/core'
 import { plans, platformDb, platformSettings, spaApplications, user } from '@spa/db'
-import { invoiceTotals, slugStatus } from '@spa/services'
+import { isLegacyPlan, slugStatus } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
 import { ArrowLeft } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -43,14 +44,14 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
   // Live check, on every view: the address may have been taken since the application was sent.
   const slug = SLUG_TEXT[await slugStatus(db, app.slug, { exceptApplicationId: app.id })]
   const today = todayDubai()
+  // PLAN §18.8: new spas start on an offered plan (Premium / Standard); the legacy yearly plan is never offered.
   const choices: PlanChoice[] = planRows
-    .filter((p) => p.active || p.id === app.planId)
+    .filter((p) => p.active && !isLegacyPlan(p))
     .map((p) => ({
       id: p.id,
-      label: `${p.name} · ${formatAed(p.priceAed)} / year${Number(p.setupFeeAed) > 0 ? ` · setup ${formatAed(p.setupFeeAed)}` : ''}${p.active ? '' : ' (inactive)'}`,
+      label: `${p.name} · ${planPriceLine(p)} (excl. VAT)`,
       feeAed: p.setupFeeAed,
-      totalVatAed: invoiceTotals(Number(p.setupFeeAed), settings).totalAed,
-      totalNoVatAed: invoiceTotals(Number(p.setupFeeAed), settings, false).totalAed,
+      monthlyAed: p.billingInterval === 'month' ? (Number(p.priceAed) / 12).toFixed(2) : null,
     }))
   const logo =
     app.logoBytes && app.logoContentType
@@ -81,9 +82,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
     ['Street address', app.streetAddress],
     [
       'Plan',
-      plan
-        ? `${plan.name} · ${formatAed(plan.priceAed)} / year · setup fee ${formatAed(plan.setupFeeAed)}`
-        : '—',
+      plan ? `${plan.name} · ${planPriceLine(plan)}${isLegacyPlan(plan) ? ' (no longer offered)' : ''}` : '—',
     ],
     ['Preferred start', formatDate(app.preferredStart)],
     ['Notes', app.notes ?? '—'],
@@ -146,10 +145,11 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                   <AcceptSheet
                     action={acceptApplicationAction.bind(null, app.id)}
                     plans={choices}
-                    planId={app.planId ?? choices[0]?.id ?? ''}
+                    planId={choices.find((c) => c.id === app.planId)?.id ?? choices[0]?.id ?? ''}
                     startDate={app.preferredStart}
                     today={today}
                     vatRate={Number(settings?.vatRate ?? 5)}
+                    pricesIncludeVat={Boolean(settings?.pricesIncludeVat)}
                   />
                   <RejectSheet action={rejectApplicationAction.bind(null, app.id)} />
                 </CardBody>
@@ -180,12 +180,21 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                       {pay.method ? METHOD[pay.method] : '—'}
                       {pay.reference ? ` (ref ${pay.reference})` : ''} · invoice {pay.invoiceNumber}
                       {pay.vat === false ? ' (no VAT)' : ''}
+                      {pay.discountAed
+                        ? ` · discount ${pay.discountLabel} (−${formatAed(pay.discountAed)})`
+                        : ''}
                       {Number(pay.balanceAed ?? 0) > 0
                         ? ` · balance due ${formatAed(pay.balanceAed!)}${pay.dueDate ? ` by ${formatDate(pay.dueDate)}` : ''}`
                         : ''}
                     </p>
                   )}
-                  {pay?.kind === 'none' && <p>No setup fee on this plan.</p>}
+                  {pay?.kind === 'none' && (
+                    <p>
+                      {pay.discountAed
+                        ? `Setup fee waived (discount ${pay.discountLabel}).`
+                        : 'No setup fee on this plan.'}
+                    </p>
+                  )}
                   {app.status === 'rejected' && (
                     <p>
                       {app.rejectionReason

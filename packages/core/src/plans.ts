@@ -4,6 +4,7 @@
 // branch). The yearly AED 24,000 plan stays as an inactive legacy plan (every feature) until each spa's renewal.
 
 import type { AutomationKey } from './automations'
+import { createFormat } from './i18n/format'
 
 /** Plan codes (`plans.code`); code never hard-codes plan ids. */
 export const PLAN_CODES = {
@@ -92,6 +93,18 @@ export function branchCap(features: readonly Feature[], limits: PlanLimits): num
 /** Monthly amount of a plan or subscription price (stored per 12-month period, R3: 12 monthly invoices). */
 export const monthlyAed = (yearlyAed: string | number) => (Number(yearlyAed) / 12).toFixed(2)
 
+const aedEn = createFormat('en').aed
+
+/**
+ * English price line of a plan (console, emails): monthly plans "setup AED 14,000 + AED 3,000/month", the legacy
+ * yearly plan "AED 24,000/year" (+ setup when it has one). Prices are excl. VAT.
+ */
+export function planPriceLine(p: { priceAed: string; setupFeeAed: string; billingInterval: string }) {
+  const price =
+    p.billingInterval === 'month' ? `${aedEn(monthlyAed(p.priceAed))}/month` : `${aedEn(p.priceAed)}/year`
+  return Number(p.setupFeeAed) > 0 ? `setup ${aedEn(p.setupFeeAed)} + ${price}` : price
+}
+
 /**
  * The comparison table on the pricing page (and the Premium upsell): every row is true on Premium; `feature: null`
  * rows are on every plan. Keep it truthful — Standard keeps everything that isn't gated by a feature key.
@@ -164,6 +177,21 @@ export function applyDiscount(amountAed: string | number, d: Discount | null | u
         d.kind === 'percent' ? Math.round((base * Number(d.value)) / 100) : cents(d.value) * months,
       )
   return { netAed: ((base - off) / 100).toFixed(2), discountAed: (off / 100).toFixed(2) }
+}
+
+/**
+ * Subtotal / VAT / total of an entered amount per the platform's VAT settings (`vatRate` %, prices incl. VAT or
+ * not); `chargeVat: false` → no VAT (PLAN §18.3). Services' `invoiceTotals` and the console's live hints use it.
+ */
+export function vatTotals(
+  amount: number,
+  s?: { vatRate: string; pricesIncludeVat: boolean } | null,
+  chargeVat = true,
+) {
+  const rate = chargeVat ? Number(s?.vatRate ?? 5) : 0
+  const vat = s?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
+  const subtotal = s?.pricesIncludeVat ? amount - vat : amount
+  return { subtotalAed: subtotal.toFixed(2), vatAed: vat.toFixed(2), totalAed: (subtotal + vat).toFixed(2) }
 }
 
 /** "10%" / "AED 500.00" (per month for the monthly fee). */

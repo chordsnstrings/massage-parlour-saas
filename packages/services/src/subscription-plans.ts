@@ -15,7 +15,7 @@ import {
 import { and, eq, gte, inArray, ne, or } from 'drizzle-orm'
 import { isLegacyPlan } from './entitlements'
 import { DomainError } from './errors'
-import { addMonths, generateBillingScheduleTx } from './platform-billing'
+import { addMonths, createPlatformInvoice, discounted, generateBillingScheduleTx } from './platform-billing'
 
 /** The console asks for a new plan this many days before a legacy subscription's period ends. */
 export const RENEWAL_WINDOW_DAYS = 30
@@ -36,13 +36,14 @@ async function lockSubscription(tx: Tx, tenantId: string) {
 
 /**
  * Re-issues the spa's UNPAID invoices that aren't due yet (plan installments of the current period due from today,
- * and an unpaid setup invoice) at the subscription's current price + discounts: they are voided (numbers kept) and the
- * schedule code issues fresh ones. Invoices with any money received, and those already due, keep their amounts.
+ * and an unpaid setup invoice) at the subscription's current price + discounts: they are voided (numbers kept) and
+ * issued again — the setup invoice keeps its due date and VAT choice, plan installments come from the schedule
+ * code. Invoices with any money received (even reversed), and installments already due, keep their amounts.
  */
 export async function reissueUnpaidInvoices(tx: Tx, tenantId: string, today: string) {
   const sub = await lockSubscription(tx, tenantId)
   const candidates = await tx
-    .select({ id: platformInvoices.id })
+    .select()
     .from(platformInvoices)
     .where(
       and(
@@ -70,11 +71,37 @@ export async function reissueUnpaidInvoices(tx: Tx, tenantId: string, today: str
     )
   // Any payment row (even one reversed to 0 by "Mark unpaid") keeps the invoice: its history stays readable.
   const withPayments = new Set(paid.map((p) => p.invoiceId))
-  const ids = candidates.map((c) => c.id).filter((id) => !withPayments.has(id))
-  if (!ids.length) return { voided: 0, created: 0 }
-  await tx.update(platformInvoices).set({ status: 'void' }).where(inArray(platformInvoices.id, ids))
+  const open = candidates.filter((c) => !withPayments.has(c.id))
+  if (!open.length) return { voided: 0, created: 0 }
+  await tx
+    .update(platformInvoices)
+    .set({ status: 'void' })
+    .where(
+      inArray(
+        platformInvoices.id,
+        open.map((c) => c.id),
+      ),
+    )
+  let created = 0
+  // The setup invoice first (same due date + VAT choice), so the schedule code below finds it and skips its own.
+  const setup = open.find((c) => c.kind === 'setup')
+  if (setup) {
+    const d = discounted(sub.setupFeeAed, sub.discounts?.setup)
+    if (Number(d.amountAed) > 0) {
+      const row = await createPlatformInvoice(tx, tenantId, {
+        description: `One-time setup fee${d.note}`,
+        amountAed: d.amountAed,
+        issueDate: today,
+        dueDate: setup.dueDate,
+        kind: 'setup',
+        vat: Number(setup.vatAed) > 0,
+        discount: d.discount,
+      })
+      if (row) created++
+    }
+  }
   const r = await generateBillingScheduleTx(tx, tenantId, today)
-  return { voided: ids.length, created: r.created }
+  return { voided: open.length, created: created + r.created }
 }
 
 const planView = (
@@ -102,7 +129,7 @@ export async function switchPlan(
   return db.transaction(async (tx) => {
     const sub = await lockSubscription(tx, r.tenantId)
     const [target] = await tx.select().from(plans).where(eq(plans.id, r.planId))
-    if (!target || !target.active || isLegacyPlan(target))
+    if (!target?.active || isLegacyPlan(target))
       throw new DomainError('Choose a plan that is offered to spas', 'not_found')
     const [current] = await tx.select().from(plans).where(eq(plans.id, sub.planId))
     if (current?.id === target.id) throw new DomainError('The spa is already on this plan')
@@ -130,11 +157,7 @@ export async function switchPlan(
         : {}),
       updatedAt: new Date(),
     }
-    const [updated] = await tx
-      .update(subscriptions)
-      .set(set)
-      .where(eq(subscriptions.id, sub.id))
-      .returning()
+    const [updated] = await tx.update(subscriptions).set(set).where(eq(subscriptions.id, sub.id)).returning()
     await tx.update(tenants).set({ planId: target.id }).where(eq(tenants.id, r.tenantId))
     const reissued = r.reissue && !legacy ? await reissueUnpaidInvoices(tx, r.tenantId, r.today) : null
     return {
@@ -186,6 +209,9 @@ export async function setFeatureTier(db: DbOrTx, tenantId: string, tier: Feature
 
 /** Plans a super-admin may move a spa to (offered, not legacy), in pricing order. */
 export async function offeredPlans(db: DbOrTx) {
-  const rows = await db.select().from(plans).where(and(eq(plans.active, true), ne(plans.code, PLAN_CODES.legacyYearly)))
+  const rows = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.active, true), ne(plans.code, PLAN_CODES.legacyYearly)))
   return rows.sort((a, b) => a.sort - b.sort)
 }

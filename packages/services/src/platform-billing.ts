@@ -1,7 +1,7 @@
 // SaaS billing for spas (PLAN §14.3, §14.8 R3/R11/R12). Payments are recorded by a super-admin (cash / bank
 // transfer), or settled by Stripe Checkout for platform invoices; nothing here moves money.
 // All functions run on the platform role (or a tenant-scoped tx for the read-only helpers) and take `tenantId`.
-import { addDays, applyDiscount, type Discount, discountLabel } from '@spa/core'
+import { applyDiscount, type Discount, discountLabel, vatTotals } from '@spa/core'
 import {
   type Db,
   type DbOrTx,
@@ -70,16 +70,7 @@ export function planSchedule(sub: {
  * Subtotal / VAT / total for an entered amount, per the platform's VAT settings. `chargeVat: false` (a setup invoice
  * accepted without VAT, PLAN §18.3) → no VAT: the amount is the total.
  */
-export function invoiceTotals(
-  amount: number,
-  s?: { vatRate: string; pricesIncludeVat: boolean } | null,
-  chargeVat = true,
-) {
-  const rate = chargeVat ? Number(s?.vatRate ?? 5) : 0
-  const vat = s?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
-  const subtotal = s?.pricesIncludeVat ? amount - vat : amount
-  return { subtotalAed: subtotal.toFixed(2), vatAed: vat.toFixed(2), totalAed: (subtotal + vat).toFixed(2) }
-}
+export const invoiceTotals = vatTotals
 
 type InvoiceInput = {
   description: string
@@ -212,7 +203,11 @@ export async function generateBillingScheduleTx(tx: Tx, tenantId: string, today:
   if (Number(sub.priceAed) > 0)
     for (const r of schedule) {
       // The monthly-fee discount (PLAN §18.8) applies per month: a one-time yearly invoice gets 12 × an amount.
-      const d = discounted(r.amountAed, sub.discounts?.monthly, r.installments === 1 ? MONTHLY_INSTALLMENTS : 1)
+      const d = discounted(
+        r.amountAed,
+        sub.discounts?.monthly,
+        r.installments === 1 ? MONTHLY_INSTALLMENTS : 1,
+      )
       const row = await createPlatformInvoice(tx, tenantId, {
         description: scheduleLabel(r, sub.currentPeriodStart) + d.note,
         amountAed: d.amountAed,

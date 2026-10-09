@@ -10,9 +10,9 @@ import {
   depositRule,
   EMIRATE_NAMES,
   isEmirate,
+  type SubscriptionDiscounts,
   SYSTEM_ROLES,
   type SystemRoleKey,
-  type SubscriptionDiscounts,
   setupBalanceDueDate,
 } from '@spa/core'
 import {
@@ -199,10 +199,11 @@ export async function submitApplication(
   if (input.preferredStart < input.today) throw new DomainError('Choose a start date from today on')
   if (input.planId) {
     const [plan] = await db
-      .select({ id: plans.id })
+      .select({ id: plans.id, code: plans.code })
       .from(plans)
       .where(and(eq(plans.id, input.planId), eq(plans.active, true)))
-    if (!plan) throw new DomainError('Plan not found', 'not_found')
+    // PLAN §18.8: the legacy yearly plan is never offered to a new spa.
+    if (!plan || isLegacyPlan(plan)) throw new DomainError('Plan not found', 'not_found')
   }
   const [open] = await db
     .select({ id: spaApplications.id })
@@ -351,7 +352,14 @@ export async function acceptApplication(
       tenant.logoFileId = logo.fileId
     }
 
-    let summary: SetupPaymentSummary = { kind: 'none', feeAed: plan.setupFeeAed }
+    let summary: SetupPaymentSummary = {
+      kind: 'none',
+      feeAed: plan.setupFeeAed,
+      // A setup fee discounted to 0 (PLAN §18.8): no invoice, the discount is still on record.
+      ...(setup.discount
+        ? { discountAed: setup.discount.discountAed, discountLabel: setup.discount.label }
+        : {}),
+    }
     let invoice: Awaited<ReturnType<typeof createPlatformInvoice>> = null
     let balanceAed = '0.00'
     if (pay) {
