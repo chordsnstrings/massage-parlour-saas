@@ -31,7 +31,7 @@ async function Header({ active }: { active: MarketingPage }) {
     <header data-mkt-nav className="mkt-nav">
       <div className="mkt-wrap mkt-bar">
         <Link href="/" className="mkt-logo">
-          <Logo className="h-10 sm:h-12" />
+          <Logo className="h-8 sm:h-12" />
         </Link>
         <nav aria-label="Main" className="mkt-links hidden items-center md:flex">
           {NAV.map((n) => (
@@ -40,11 +40,11 @@ async function Header({ active }: { active: MarketingPage }) {
             </Link>
           ))}
         </nav>
-        <div className="mkt-links ms-auto flex items-center gap-2">
-          <a href={urls.app('/login')} className="px-2 text-[14px] font-semibold">
+        <div className="mkt-links ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+          <a href={urls.app('/login')} className="whitespace-nowrap px-2 text-[14px] font-semibold">
             Sign in
           </a>
-          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm">
+          <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm whitespace-nowrap">
             Get started
           </a>
         </div>
@@ -138,11 +138,11 @@ function footColumns(app: (path: string) => string, email: string): { title: str
       title: 'Features',
       links: [
         { label: 'Bookings & calendar', href: '/features#bookings' },
-        { label: 'Reminders & follow-ups', href: '/features#follow-up' },
+        { label: 'Client follow-ups', href: '/features#follow-up' },
         { label: 'Sales & accounts', href: '/features#money' },
         { label: 'Instagram & Google', href: '/features#marketing' },
         { label: 'Roles & security', href: '/features#team' },
-        { label: 'Background automations', href: '/features#automations' },
+        { label: 'Automations', href: '/features#automations' },
       ],
     },
     {
@@ -152,17 +152,17 @@ function footColumns(app: (path: string) => string, email: string): { title: str
         { label: 'How we build it', href: '/website-builder#how-we-build-it' },
         { label: 'Section designs', href: '/website-builder#section-designs' },
         { label: 'Changes after launch', href: '/website-builder#after-launch' },
-        { label: 'Included in every site', href: '/website-builder#included' },
+        { label: "What's included", href: '/website-builder#included' },
       ],
     },
     {
       title: 'Built for the UAE',
       links: [
         { label: 'Plans in AED', href: '/pricing#plans' },
-        { label: 'VAT for your FTA return', href: '/features#money' },
-        { label: 'WhatsApp from your own number', href: '/features#follow-up' },
+        { label: 'VAT-ready invoices', href: '/features#money' },
+        { label: 'WhatsApp reminders', href: '/features#follow-up' },
         { label: 'English & Arabic sites', href: '/website-builder#included' },
-        { label: 'Dashboard in English & Thai', href: '/crm' },
+        { label: 'Thai & English CRM', href: '/crm' },
         { label: 'Questions', href: '/pricing#faq' },
       ],
     },
@@ -177,20 +177,6 @@ function footColumns(app: (path: string) => string, email: string): { title: str
   ]
 }
 
-/** Lets an email address wrap after the @ instead of mid-domain in a narrow column. */
-const wrapAt = (s: string) => {
-  const i = s.indexOf('@')
-  return i < 0 ? (
-    s
-  ) : (
-    <>
-      {s.slice(0, i + 1)}
-      <wbr />
-      {s.slice(i + 1)}
-    </>
-  )
-}
-
 async function Footer() {
   const urls = await requestUrls()
   const email = (await companyContact())?.email || DEFAULT_CONTACT_EMAIL
@@ -203,9 +189,10 @@ async function Footer() {
             <div className="mkt-logo">
               <Logo className="h-11" />
             </div>
-            <p className="mkt-ftag">Calm software for busy spas.</p>
+            <p className="mkt-ftag">Less admin. More calm.</p>
             <p className="mkt-fdesc">
-              Bookings, POS, staff and your website in one place. Built for the UAE, priced in AED.
+              <span className="mkt-fline">Bookings, POS, staff &amp; website.</span>
+              <span className="mkt-fline">Built for the UAE, priced in AED.</span>
             </p>
           </div>
           <nav aria-label="Footer" className="mkt-fnav">
@@ -217,11 +204,7 @@ async function Footer() {
                 <ul aria-labelledby={`mkt-f${i}`}>
                   {c.links.map((l) => (
                     <li key={l.label}>
-                      {l.external ? (
-                        <a href={l.href}>{wrapAt(l.label)}</a>
-                      ) : (
-                        <Link href={l.href}>{l.label}</Link>
-                      )}
+                      {l.external ? <a href={l.href}>{l.label}</a> : <Link href={l.href}>{l.label}</Link>}
                     </li>
                   ))}
                 </ul>
@@ -230,7 +213,7 @@ async function Footer() {
           </nav>
         </div>
         <div className="mkt-fbot">
-          <span>
+          <span className="mkt-fline">
             © {new Date().getFullYear()} {LEGAL.companyName} · {LEGAL.brand}
           </span>
         </div>

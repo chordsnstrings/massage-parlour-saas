@@ -34,7 +34,8 @@ fix backlog F1–F8 ✅, **F9–F15 open** (§17, remind the owner); production 
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
 - Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Everything uses it (copy, auth appName/TOTP issuer,
   `PLATFORM_NAME`/`DEFAULT_EMAIL_FROM` in core/email.ts, env examples); old spamanagement.ae stays live via `EXTRA_ROOT_DOMAINS`
-  (B1 done; owner DNS/env checklist: deploy/droplet/README.md "Move to a new domain").
+  (B1 done; owner DNS/env checklist: deploy/droplet/README.md "Move to a new domain"). **The only spamanagement.co email
+  address anywhere (site, legal pages, sender once .co is verified, ops contacts) is `ask@spamanagement.co`** (owner 2026-10-09).
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.

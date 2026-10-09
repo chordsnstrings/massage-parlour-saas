@@ -166,9 +166,9 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
    ```dotenv
    SITE_HOST=spamanagement.co             # canonical: ROOT_DOMAIN derives from it; shared/stored links use it
    EXTRA_ROOT_DOMAINS=spamanagement.ae    # old domain keeps serving the whole platform (keep while links live)
-   EMAIL_FROM="spamanagement.co <no-reply@spamanagement.co>"   # only after step 0 is verified
-   ACME_EMAIL=ops@spamanagement.co
-   VAPID_SUBJECT=mailto:support@spamanagement.co
+   EMAIL_FROM="spamanagement.co <ask@spamanagement.co>"   # only after step 0 is verified
+   ACME_EMAIL=ask@spamanagement.co
+   VAPID_SUBJECT=mailto:ask@spamanagement.co
    CF_CNAME_TARGET=customers.spamanagement.co   # only if Cloudflare for SaaS is in use
    # Host routing: add only once the step 1 records resolve for app./admin./*.
    ROUTING=host
@@ -201,7 +201,7 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
    Commit and push only `secrets.env.enc` (never `overlay.env` or the key). The droplet applies it within ~2 min
    (or run `spa-update --force`).
 6. **Verify**: `https://spamanagement.co/_status/deploy.json` (user `ops`) shows the new commit; sign-in works on
-   both domains; a password-reset email arrives from `no-reply@spamanagement.co`; a spa site loads on
+   both domains; a password-reset email arrives from `ask@spamanagement.co`; a spa site loads on
    `{slug}.spamanagement.co` and on the old `{slug}.spamanagement.ae`; new 2FA enrolments show issuer
    "spamanagement.co" (existing authenticator entries keep their old label and still work).
 7. Super-admin → Platform settings: update the company name / contact email if they still say `.ae` (the DB column
