@@ -208,7 +208,8 @@ export type RevPath = {
   byTherapist: TherapistRevPath[]
 }
 
-const exVat = (gross: SQL, rate: SQL = sql`5`) => sql`(${gross} - round(${gross} * ${rate} / (100 + ${rate}), 2))`
+const exVat = (gross: SQL, rate: SQL = sql`5`) =>
+  sql`(${gross} - round(${gross} * ${rate} / (100 + ${rate}), 2))`
 
 export async function revPath(tx: Tx, range: ReportRange, now = new Date()): Promise<RevPath> {
   const { branchId, from, to } = range
@@ -359,13 +360,26 @@ export async function roomUtilisation(tx: Tx, range: ReportRange): Promise<RoomU
   for (const r of row.rooms) {
     let b = branches.find((x) => x.branchId === r.branch_id)
     if (!b) {
-      b = { branchId: r.branch_id, name: r.branch, openMinutes: 0, bookedMinutes: 0, utilisation: null, rooms: [] }
+      b = {
+        branchId: r.branch_id,
+        name: r.branch,
+        openMinutes: 0,
+        bookedMinutes: 0,
+        utilisation: null,
+        rooms: [],
+      }
       branches.push(b)
       openByBranch.set(r.branch_id, openMinutes(r.hours, from, to))
     }
     const open = openByBranch.get(r.branch_id) ?? 0
     const booked = n(r.booked)
-    b.rooms.push({ roomId: r.id, name: r.name, openMinutes: open, bookedMinutes: booked, utilisation: ratio(booked, open) })
+    b.rooms.push({
+      roomId: r.id,
+      name: r.name,
+      openMinutes: open,
+      bookedMinutes: booked,
+      utilisation: ratio(booked, open),
+    })
     b.openMinutes += open
     b.bookedMinutes += booked
   }
