@@ -1179,8 +1179,8 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
   G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
   components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
-- **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
-  G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
+- **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
+  ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
@@ -1211,3 +1211,15 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   production without `RESEND_API_KEY` (no links in logs — also closes the log-leak half of G9).
 - **G3:** super-admin powers (console, impersonation, studio, file access, template export) need TOTP 2FA; without it →
   account page `?admin2fa=1` to enrol (reachable on app + admin hosts; sign-out in the user menu). e2e enrols for real.
+- **G7:** the droplet deploys only CI-green commits: CI job `promote` moves branch `deploy/green` (forward only,
+  `GITHUB_TOKEN`, no new secret); `update.sh` deploys it (tip fallback only until it first exists), dumps
+  `pre-migrate-<sha>.dump` (keep 5), migrates with lock/statement timeouts, health-checks and rolls back to
+  `/opt/spa/last-good` on any failure (state `failed`, not retried without `--force`). `updater-sync` keeps the
+  installed updater current. Owner steps: deploy/droplet/README.md "One-time owner steps for the CI gate".
+- **G8:** worker `worker-heartbeat` every 5 min (disk, deploy state, config flags) + compose healthcheck; console
+  "Server health" (red: beat > 10 min, disk > 85 %, deploy failed); one email per incident to
+  `PLATFORM_ADMIN_EMAILS`; Docker log rotation (compose per service + daemon.json in cloud-init/update.sh).
+- **G9:** log-leak closed by G2; console "Configuration" card (green/red per production setting, no values,
+  RESEND first with its source). Owner add-on (2026-10-09): console Settings → Email (Resend key write-only, last 4
+  shown; From; "Send test email to me"); DB value wins over env in web + worker; key AES-GCM when an encryption key
+  exists, else stored as entered (owner: never refuse to save); never logged/audited.

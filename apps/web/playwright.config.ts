@@ -5,6 +5,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 const PORT = Number(process.env.E2E_PORT ?? 3100)
 const aiFixtureDir = path.join(tmpdir(), `spa-e2e-ai-${PORT}`)
+// Staff emails land here as JSON once a Resend key is saved (email-settings.spec); never set in deploy env.
+const emailOutboxDir = path.join(tmpdir(), `spa-e2e-mail-${PORT}`)
+process.env.EMAIL_E2E_OUTBOX_DIR = emailOutboxDir
 const local = (role: string) =>
   `postgres://${role}:${role}_dev@localhost:5432/${process.env.TEST_DB_NAME ?? 'spa_test'}`
 // Use a preinstalled Chromium when present (cloud sandbox); CI installs its own.
@@ -55,6 +58,7 @@ export default defineConfig({
       AUTH_RATE_LIMIT: 'off',
       // Canned AI replies per spa slug (ai-edit.spec): the gateway still meters and validates; no ModelArk call.
       AI_E2E_FIXTURE_DIR: aiFixtureDir,
+      EMAIL_E2E_OUTBOX_DIR: emailOutboxDir,
     },
   },
 })

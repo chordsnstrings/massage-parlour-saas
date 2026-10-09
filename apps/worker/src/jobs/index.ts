@@ -4,6 +4,7 @@ import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
 import { syncAllGbpReviews } from './gbp'
+import { heartbeat } from './heartbeat'
 import {
   publishScheduledInstagramPosts,
   refreshInstagramAccessTokens,
@@ -29,6 +30,8 @@ export type JobDef = {
 
 /** Every background job. Integration jobs no-op until their credentials are configured. */
 export const jobs: JobDef[] = [
+  // G8: liveness + disk/backup/deploy alerts (console overview turns red after 10 min without a beat).
+  { name: 'worker-heartbeat', cron: '*/5 * * * *', handler: () => heartbeat() },
   { name: 'db-backup', cron: '30 3 * * *', handler: () => backupDatabase() },
   // Monthly, the day after the monthly dump (PLAN §3.5).
   { name: 'restore-drill', cron: '0 5 2 * *', handler: () => restoreDrill() },

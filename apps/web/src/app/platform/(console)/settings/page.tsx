@@ -1,16 +1,23 @@
+import { emailDomain, resolveEmailConfig } from '@spa/core'
 import { platformDb, platformSettings } from '@spa/db'
+import { emailSettingsStatus } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Input, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
-import { saveCompanyAction } from '../actions'
+import { registerEmailSettings } from '@/server/email-settings'
+import { saveCompanyAction, saveEmailSettingsAction, sendTestEmailAction } from '../actions'
 
 export const metadata: Metadata = { title: 'Company' }
 
 export default async function CompanyPage() {
   const s = await platformDb().query.platformSettings.findFirst({ where: eq(platformSettings.id, 1) })
+  registerEmailSettings()
+  const mail = await emailSettingsStatus(platformDb())
+  const eff = await resolveEmailConfig()
   const v = (k: keyof NonNullable<typeof s>) => (s?.[k] as string | null | undefined) ?? ''
   const text = (name: keyof NonNullable<typeof s>, label: string, hint?: string, cls?: string) => (
     <Field label={label} name={name} hint={hint} className={cls}>
@@ -24,6 +31,61 @@ export default async function CompanyPage() {
         description="Your operating company — shown on invoices, the billing page and in Meta/Google applications."
       />
       <PageBody>
+        <Card data-testid="email-settings">
+          <CardHeader
+            title="Email (Resend)"
+            description="Staff email: invites, password resets, verification, alerts. Values saved here win over RESEND_API_KEY / EMAIL_FROM in the server env. Without a key, production refuses to send (sign-up verification and password reset fail)."
+            action={
+              <Badge tone={eff.apiKey ? 'success' : 'danger'}>
+                {eff.keySource === 'console'
+                  ? 'key from console'
+                  : eff.keySource === 'env'
+                    ? 'key from env'
+                    : 'key missing'}
+              </Badge>
+            }
+          />
+          <CardBody className="space-y-5">
+            <ActionForm action={saveEmailSettingsAction} className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label="Resend API key"
+                name="apiKey"
+                hint={
+                  mail.hasKey
+                    ? `Set ✓ (…${mail.keyLast4 ?? '????'}). Leave blank to keep it.`
+                    : eff.keySource === 'env'
+                      ? 'Not set here; the server env key is used.'
+                      : 'Not set. Create one in Resend → API Keys (sending access).'
+                }
+              >
+                <Input id="apiKey" name="apiKey" type="password" autoComplete="off" placeholder="re_…" />
+              </Field>
+              <Field
+                label="From address"
+                name="emailFrom"
+                hint={`Blank = env / default. Sending now as ${eff.from} (domain ${emailDomain(eff.from) ?? '?'}, must be verified in Resend).`}
+              >
+                <Input
+                  id="emailFrom"
+                  name="emailFrom"
+                  defaultValue={mail.from ?? ''}
+                  placeholder="spamanagement.co <no-reply@spamanagement.co>"
+                />
+              </Field>
+              {mail.hasKey && (
+                <label className="flex items-center gap-2.5 text-sm sm:col-span-2">
+                  <Checkbox name="clearKey" /> Remove the stored key (fall back to env)
+                </label>
+              )}
+              <div className="sm:col-span-2">
+                <SubmitButton>Save email settings</SubmitButton>
+              </div>
+            </ActionForm>
+            <ActionForm action={sendTestEmailAction} className="border-t pt-5">
+              <SubmitButton variant="secondary">Send test email to me</SubmitButton>
+            </ActionForm>
+          </CardBody>
+        </Card>
         <ActionForm action={saveCompanyAction} className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader title="Company" />

@@ -86,6 +86,10 @@ export const platformSettings = pgTable(
     metaMcpKeyEnc: text('meta_mcp_key_enc'),
     /** External tool names the agents may use (still filtered: WhatsApp send-like tools are never exposed). */
     metaMcpTools: text('meta_mcp_tools').array().notNull().default([]),
+    /** Staff email (Resend) set in the console; wins over RESEND_API_KEY / EMAIL_FROM env. Key AES-GCM encrypted. */
+    resendApiKeyEnc: text('resend_api_key_enc'),
+    resendApiKeyLast4: text('resend_api_key_last4'),
+    emailFrom: text('email_from'),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },

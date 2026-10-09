@@ -1,5 +1,6 @@
 export * from './automations'
 export * from './booking'
+export * from './config-health'
 export * from './email'
 export * from './hosts'
 export * from './html-design'

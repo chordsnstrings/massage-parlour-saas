@@ -21,6 +21,11 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y ca-certificates curl git ufw unattended-upgrades
+# G8: rotate container logs (5 × 10 MB per container) from the first Docker start; update.sh re-applies it.
+mkdir -p /etc/docker
+[ -f /etc/docker/daemon.json ] || cat > /etc/docker/daemon.json <<'JSON'
+{ "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "5" } }
+JSON
 curl -fsSL https://get.docker.com | sh
 systemctl enable --now docker
 
@@ -66,7 +71,7 @@ for _ in $(seq 1 60); do docker compose --env-file /opt/spa/.env exec -T postgre
 # One-time data copy from the previous database (as its owner role, so row-level security doesn't hide rows).
 if [ -n "$SOURCE_DATABASE_URL" ] && [ ! -f /opt/spa/status/data-copied ]; then
   echo '{"state":"provisioning","message":"copying data"}' > /opt/spa/status/deploy.json
-  for attempt in $(seq 1 40); do
+  for _ in $(seq 1 40); do
     if docker compose --env-file /opt/spa/.env exec -T postgres sh -c \
       "pg_dump --format=custom --no-owner --no-privileges -d '$SOURCE_DATABASE_URL' -f /backups/source.dump"; then
       docker compose --env-file /opt/spa/.env exec -T postgres sh -c \

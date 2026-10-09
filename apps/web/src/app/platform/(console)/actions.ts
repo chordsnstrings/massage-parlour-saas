@@ -1,4 +1,5 @@
 'use server'
+import { sendStaffEmail } from '@spa/core'
 import {
   aiModelConfig,
   plans,
@@ -18,6 +19,7 @@ import {
   generateBillingSchedule,
   pauseTenant,
   resumeTenant,
+  saveEmailSettings,
   setInvoicePaid,
 } from '@spa/services'
 import { eq, sum } from 'drizzle-orm'
@@ -27,6 +29,7 @@ import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { invalidateEmailSettings, registerEmailSettings } from '@/server/email-settings'
 import { canonicalUrls } from '@/server/origin'
 
 const money = z.coerce
@@ -322,6 +325,66 @@ export async function saveMetaMcpConfigAction(_p: ActionResult, fd: FormData): P
   })
   revalidatePath('/platform/ai')
   return ok('Meta MCP server saved')
+}
+
+/**
+ * Staff email (Resend) from the console: wins over RESEND_API_KEY / EMAIL_FROM env. The key is write-only (blank =
+ * keep), stored encrypted when an encryption key exists, and never logged or audited (only "replaced/kept/cleared").
+ */
+export async function saveEmailSettingsAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      apiKey: z
+        .string()
+        .trim()
+        .max(200)
+        .refine((v) => !v || /^re_[A-Za-z0-9_-]{8,}$/.test(v), 'A Resend API key starts with re_')
+        .optional(),
+      clearKey: bool,
+      emailFrom: z
+        .string()
+        .trim()
+        .max(200)
+        .refine(
+          (v) => !v || /^([^<>@]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/.test(v),
+          'Use name <address@domain> or address@domain',
+        )
+        .transform((v) => v || null),
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  const apiKey = d.clearKey ? null : d.apiKey || undefined
+  await saveEmailSettings(platformDb(), { apiKey, from: d.emailFrom }, user.id)
+  registerEmailSettings()
+  invalidateEmailSettings()
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.email.updated',
+    data: { key: apiKey === null ? 'cleared' : apiKey ? 'replaced' : 'kept', emailFrom: d.emailFrom },
+  })
+  revalidatePath('/platform/settings')
+  revalidatePath('/platform')
+  return ok('Email settings saved')
+}
+
+/** Sends a test email to the signed-in super-admin with the effective settings (console first, then env). */
+export async function sendTestEmailAction(_p: ActionResult): Promise<ActionResult> {
+  const user = await admin()
+  registerEmailSettings()
+  try {
+    await sendStaffEmail({
+      to: user.email,
+      subject: 'spamanagement test email',
+      text: 'This is a test email from the super-admin console. Staff emails (invites, password resets, alerts) are working.',
+    })
+  } catch (e) {
+    // The Resend error text never contains the key.
+    return fail(`Test email failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300))
+  }
+  await audit({ actorUserId: user.id, action: 'platform.email.test_sent', data: { to: user.email } })
+  return ok(`Test email sent to ${user.email}`)
 }
 
 /** Revalidates the console pages and the spa's dashboard (red bar + Billing page). */

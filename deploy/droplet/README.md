@@ -13,11 +13,37 @@ such as Namecheap.
   4. optionally copies data once from a previous database (`SOURCE_DATABASE_URL`, connecting as its owner role)
   5. installs the updater and runs the first deploy
 - **Updates are pull-based:** the `spa-update.timer` systemd timer runs `/usr/local/bin/spa-update` every 2 minutes.
-  - On a new commit on the branch it rebuilds the images on the droplet, runs migrations (`migrate` service) and restarts.
-  - Pushing to the branch is all it takes. No SSH or CI secrets are needed.
+  - **Only CI-green commits deploy (G7).** CI (`.github/workflows/ci.yml`, job `promote`) moves the branch
+    `deploy/green` to each commit of the deploy branch whose checks passed (forward only, with the built-in
+    `GITHUB_TOKEN`; no extra secret). The updater deploys `deploy/green`, never the raw branch tip, and refuses a
+    `deploy/green` that is not part of the deploy branch. Until `deploy/green` exists for the first time it deploys the
+    branch tip (status `gate: none`); once seen, it never falls back (`/opt/spa/ci-gated`). A push therefore reaches
+    production when CI finishes (~20 min), not 2 min later. Override the ref name in `/opt/spa/green-ref`.
+  - **Each deploy:** build the images → `pg_dump -Fc` to `/opt/spa/backups/pre-migrate-<sha>.dump` (newest 5 kept)
+    → `migrate` service (with `lock_timeout=10s`, `statement_timeout=15min`; tune with `MIGRATE_LOCK_TIMEOUT` /
+    `MIGRATE_STATEMENT_TIMEOUT` in the env overlay) → restart → `/api/health` for up to 5 min.
+  - **Automatic rollback:** if any step fails, the updater redeploys the last good commit (`/opt/spa/last-good`) and
+    reports `state: failed` with the reason in `deploy.json`; the failed commit is not retried every 2 minutes (push a
+    fix or `sudo spa-update --force`). Migrations are not reverted (keep them additive). To restore data from before
+    a deploy:
+    ```sh
+    cd /opt/spa/repo/deploy/droplet && docker compose --env-file /opt/spa/.env stop web worker
+    docker compose --env-file /opt/spa/.env exec -T postgres pg_restore -U postgres -d spa --clean --if-exists /backups/pre-migrate-<sha>.dump
+    docker compose --env-file /opt/spa/.env up -d
+    ```
+  - The `updater-sync` compose service copies `deploy/droplet/update.sh` to `/usr/local/bin/spa-update` on every
+    deploy, so updater changes need no SSH (the first deploy of a new updater still runs with the previous copy).
   - Force a redeploy with `sudo spa-update --force`.
+- **One-time owner steps for the CI gate:**
+  1. GitHub → repo Settings → Actions → General → Workflow permissions: the job asks for `contents: write` itself;
+     only if the organisation/repo forces read-only tokens, choose "Read and write permissions".
+  2. If branch protection or rulesets cover `deploy/*` (or all branches), allow GitHub Actions to push `deploy/green`.
+  3. After the next green CI run on the deploy branch, check that the `deploy/green` branch exists on GitHub and
+     `/_status/gate.json` shows `"gate":"ci"`.
 - **Status:**
-  - `https://<host>/_status/deploy.json`, `build.log` and `runtime.txt` (container states and the last log lines, credentials redacted)
+  - `https://<host>/_status/deploy.json` (state ok / building / rolling_back / failed, commit, gate), `gate.json`
+    (branch tip vs CI-green commit), `build.log` and `runtime.txt` (container states and the last log lines,
+    credentials redacted)
   - basic auth, user `ops`, password = `STATUS_PASSWORD` from the render step
 - **Backups:**
   - nightly `pg_dump` into `/opt/spa/backups` (7 rolling days)
@@ -26,6 +52,28 @@ such as Namecheap.
     with lifecycle rules `backups/daily/` 30 days and `backups/monthly/` 365 days.
   - every run (ok / skipped / failed) shows on the super-admin overview; it warns when the last good backup is > 36 h old
   - enable DigitalOcean droplet backups for whole-machine snapshots
+
+## Health and alerts (G8)
+
+- The worker records a heartbeat every 5 minutes (`platform_job_runs`, job `worker-heartbeat`, one day kept) with
+  root-disk use, the updater's `deploy.json` (`/opt/spa/status` mounted read-only) and which settings the worker sees
+  (presence only). Its compose healthcheck checks the heartbeat file (unhealthy shows in `runtime.txt`).
+- Super-admin console → Overview: **Server health** (red when the last heartbeat is > 10 min old, disk > 85 %, or
+  the last deploy failed) and **Configuration** (green/red per production setting, never the values;
+  `RESEND_API_KEY` first, with where it comes from: console / env / missing).
+- Alert email to every `PLATFORM_ADMIN_EMAILS` address once per incident (disk > 85 %, no successful off-site backup
+  in 36 h, deploy failed); rows `ops-alert` record open/closed. A dead worker cannot email: the console shows it.
+- Docker logs rotate (json-file, 5 × 10 MB): per service in `compose.yml` (immediate) and in
+  `/etc/docker/daemon.json` (cloud-init; `update.sh` adds it on existing droplets, effective after the next Docker
+  restart or reboot).
+
+## Staff email (Resend)
+
+Super-admin console → Settings → **Email (Resend)**: API key (write-only; shows "Set ✓ (…last 4)") and From
+address, plus **Send test email to me**. Console values win over `RESEND_API_KEY` / `EMAIL_FROM` in the env (web and
+worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTION_KEY` (or `BETTER_AUTH_SECRET`)
+is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
+either place.
 
 ## Secrets without SSH
 
@@ -141,7 +189,7 @@ The secrets file needs these keys:
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
 - strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),
-  `RESEND_API_KEY` (password reset + email verification fail loudly in production without it)
+  `RESEND_API_KEY` (password reset + email verification fail loudly in production without it; it can also be set later in the console → Settings → Email)
 - super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
   sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens
 
