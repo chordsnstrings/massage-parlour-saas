@@ -75,16 +75,25 @@ test('website studio: the super-admin builds and publishes; the spa edits only s
 
   await test.step('spa: calling the approve action directly is rejected server-side', async () => {
     expect(sendForReview?.body).toContain('"review"')
-    const res = await page.request.post(sendForReview!.url, {
-      headers: {
-        'next-action': sendForReview!.headers['next-action']!,
-        'content-type': sendForReview!.headers['content-type'] ?? 'text/plain;charset=UTF-8',
-        accept: 'text/x-component',
-        origin: new URL(sendForReview!.url).origin,
+    // From the spa owner's own page (same origin + session; the browser resolves *.localhost, the API client doesn't).
+    await page.goto(`${app}/${slug}/website`)
+    const text = await page.evaluate(
+      async ({ url, action, type, body }) => {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'next-action': action, 'content-type': type, accept: 'text/x-component' },
+          body,
+        })
+        return r.text()
       },
-      data: sendForReview!.body.replace('"review"', '"approved"'),
-    })
-    expect(await res.text()).toContain('Only our studio team can change the website design or publish it.')
+      {
+        url: sendForReview!.url,
+        action: sendForReview!.headers['next-action']!,
+        type: sendForReview!.headers['content-type'] ?? 'text/plain;charset=UTF-8',
+        body: sendForReview!.body.replace('"review"', '"approved"'),
+      },
+    )
+    expect(text).toContain('Only our studio team can change the website design or publish it.')
     await studio.reload()
     await expect(studio.getByTestId('studio-status').getByText('Ready for review')).toBeVisible()
   })
