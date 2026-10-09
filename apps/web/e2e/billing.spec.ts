@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { subscriptions, tenants } from '@spa/db'
+import { platformInvoices, subscriptions, tenants } from '@spa/db'
 import { addMonths } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { admin, seedBooking, seedCatalog, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
@@ -32,6 +32,8 @@ test('platform billing: schedule, overdue bar, mark paid, pause and reminder', a
       currentPeriodEnd: addMonths(start, 12),
     })
     .where(eq(subscriptions.tenantId, tenant!.id))
+  // The accept issued the plan's invoices from its start date (PLAN §18.3); this spec re-dates the subscription.
+  await db.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.tenantId, tenant!.id))
   const bar = owner.getByText('Please pay your invoice to avoid your account being paused.')
 
   await test.step('super-admin generates the 12-month schedule', async () => {

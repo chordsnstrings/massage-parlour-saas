@@ -285,7 +285,11 @@ export const domain = {
   setupPaymentMissing: 'Record how the setup fee was paid',
   paymentDateFuture: 'The payment date can’t be in the future',
   paymentMethodMissing: 'Choose how it was paid',
-  depositRange: 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
+  depositRange:
+    'A deposit must be more than AED 0 and less than the setup invoice total ({total} incl. VAT).',
+  depositRangeNoVat:
+    'A deposit must be more than AED 0 and less than the setup invoice total ({total}, no VAT).',
+  balanceDueMissing: 'Choose when the balance is due',
   adminJoinRefused: 'This email address cannot create a super-admin account.',
   adminAlready: 'You are already a super-admin.',
   adminConfirmNeeds2fa: 'Only a super-admin with two-step verification can confirm super-admins.',

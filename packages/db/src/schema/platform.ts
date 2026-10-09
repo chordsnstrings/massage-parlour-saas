@@ -481,6 +481,10 @@ export type SetupPaymentSummary = {
   note?: string | null
   invoiceId?: string
   invoiceNumber?: string
+  /** false = the setup invoice was issued without VAT (owner, 2026-10-09). Older rows: VAT charged. */
+  vat?: boolean
+  /** The setup invoice's due date (start date or 10 days after it). */
+  dueDate?: string
 }
 
 export const spaApplications = pgTable(

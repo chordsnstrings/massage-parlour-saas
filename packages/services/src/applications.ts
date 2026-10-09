@@ -2,7 +2,18 @@
 // locked); the platform owner accepts — the spa is provisioned with an ACTIVE subscription from the agreed start date
 // and the setup-fee invoice + the recorded payment (full or deposit) — or rejects (the login is disabled and its
 // sessions revoked). Platform role only (`platformDb()`); permission checks and audit stay in the caller.
-import { checkSlug, EMIRATE_NAMES, isEmirate, SYSTEM_ROLES, type SystemRoleKey } from '@spa/core'
+import {
+  BALANCE_DUE_CHOICES,
+  type BalanceDue,
+  checkSlug,
+  DEFAULT_BALANCE_DUE,
+  depositRule,
+  EMIRATE_NAMES,
+  isEmirate,
+  SYSTEM_ROLES,
+  type SystemRoleKey,
+  setupBalanceDueDate,
+} from '@spa/core'
 import {
   branches,
   type Db,
@@ -26,7 +37,13 @@ import {
 import { and, asc, eq, ne, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { setTenantLogo } from './logo'
-import { addMonths, createPlatformInvoice, invoiceTotals, recordPlatformPayment } from './platform-billing'
+import {
+  addMonths,
+  createPlatformInvoice,
+  generateBillingScheduleTx,
+  invoiceTotals,
+  recordPlatformPayment,
+} from './platform-billing'
 
 const addDays = (isoDate: string, days: number) => {
   const d = new Date(`${isoDate}T00:00:00Z`)
@@ -225,13 +242,17 @@ export type SetupPaymentMethod = (typeof SETUP_PAYMENT_METHODS)[number]
 
 export type SetupPaymentInput = {
   kind: 'full' | 'deposit'
-  /** Deposit only: more than 0 and less than the setup-fee invoice total. */
+  /** Deposit only: more than 0 and less than the setup-fee invoice total (incl. VAT only when VAT is charged). */
   amountAed?: string | null
   /** Asia/Dubai date the money was received (≤ today). */
   paidOn: string
   method: SetupPaymentMethod
   reference?: string | null
   note?: string | null
+  /** VAT on the setup invoice (owner, 2026-10-09: optional). Default: as every platform invoice (the settings' rate). */
+  chargeVat?: boolean
+  /** When the balance is due: the start date or 10 days after it (default). */
+  balanceDue?: BalanceDue
 }
 
 const money = (n: number) => n.toFixed(2)
@@ -239,9 +260,11 @@ const money = (n: number) => n.toFixed(2)
 /**
  * Accepts a pending application in ONE platform transaction: provisions the spa (tenant, default branch with the
  * emirate/address/phone, system roles, owner membership, logo) with an ACTIVE subscription from `startDate` for one
- * year, issues the setup-fee platform invoice (numbering + VAT as every platform invoice) and records the setup
- * payment (full → paid; deposit → stays issued with a balance due, settled later with Record payment).
- * A plan without a setup fee skips the invoice and payment.
+ * year, issues the setup-fee platform invoice (numbering as every platform invoice; VAT optional; due on the start
+ * date or 10 days after it), records the setup payment (full → paid; deposit → stays issued with a balance due,
+ * settled later with Record payment) and issues the plan's payment schedule from the start date — the same code as
+ * console "Generate payment schedule" (12 monthly or one annual invoice), so pressing it later creates nothing.
+ * A plan without a setup fee skips the setup invoice and payment.
  */
 export async function acceptApplication(
   db: Db,
@@ -278,7 +301,7 @@ export async function acceptApplication(
 
     // Validate the setup payment before anything is numbered (invoice numbers come from a sequence: no gaps).
     const fee = Number(plan.setupFeeAed)
-    let pay: { amount: number; total: number; input: SetupPaymentInput } | null = null
+    let pay: { amount: number; total: number; vat: boolean; input: SetupPaymentInput } | null = null
     if (fee > 0) {
       const p = r.payment
       if (!p) throw new DomainError('Record how the setup fee was paid')
@@ -286,14 +309,15 @@ export async function acceptApplication(
         throw new DomainError('The payment date can’t be in the future')
       if (!(SETUP_PAYMENT_METHODS as readonly string[]).includes(p.method))
         throw new DomainError('Choose how it was paid')
+      if (p.balanceDue && !(BALANCE_DUE_CHOICES as readonly string[]).includes(p.balanceDue))
+        throw new DomainError('Choose when the balance is due')
       const [settings] = await tx.select().from(platformSettings).where(eq(platformSettings.id, 1))
-      const total = Number(invoiceTotals(fee, settings).totalAed)
+      const vat = p.chargeVat ?? true
+      const total = Number(invoiceTotals(fee, settings, vat).totalAed)
       const amount = p.kind === 'full' ? total : Number(p.amountAed)
       if (p.kind === 'deposit' && !(Number.isFinite(amount) && amount > 0 && amount < total))
-        throw new DomainError(
-          'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
-        )
-      pay = { amount: Math.round(amount * 100) / 100, total, input: p }
+        throw new DomainError(depositRule(total, vat))
+      pay = { amount: Math.round(amount * 100) / 100, total, vat, input: p }
     }
 
     const emirate = isEmirate(app.emirate) ? EMIRATE_NAMES[app.emirate] : app.emirate
@@ -306,17 +330,29 @@ export async function acceptApplication(
       branch: { address: `${app.streetAddress}, ${emirate}`, phone: app.phone },
     })
 
+    // Before any invoice: numbers come from a sequence, so a step failing after them would leave gaps.
+    if (app.logoBytes && app.logoContentType) {
+      const logo = await setTenantLogo(tx, {
+        tenantId: tenant.id,
+        // Stored as processed by `processLogo` (always WebP).
+        image: { bytes: app.logoBytes, contentType: app.logoContentType as 'image/webp' },
+        createdBy: app.userId,
+      })
+      tenant.logoFileId = logo.fileId
+    }
+
     let summary: SetupPaymentSummary = { kind: 'none', feeAed: plan.setupFeeAed }
     let invoice: Awaited<ReturnType<typeof createPlatformInvoice>> = null
     let balanceAed = '0.00'
     if (pay) {
+      const dueDate = setupBalanceDueDate(r.startDate, pay.input.balanceDue ?? DEFAULT_BALANCE_DUE, r.today)
       invoice = await createPlatformInvoice(tx, tenant.id, {
         description: 'One-time setup fee',
         amountAed: plan.setupFeeAed,
         issueDate: r.today,
-        // The balance of a deposit is due by the start date (today when the spa starts at once).
-        dueDate: r.startDate > r.today ? r.startDate : r.today,
+        dueDate,
         kind: 'setup',
+        vat: pay.vat,
       })
       if (!invoice) throw new Error('setup invoice already exists')
       const recorded = await recordPlatformPayment(tx, {
@@ -344,18 +380,13 @@ export async function acceptApplication(
         note: pay.input.note ?? null,
         invoiceId: invoice.id,
         invoiceNumber: invoice.number,
+        vat: pay.vat,
+        dueDate: invoice.dueDate,
       }
     }
 
-    if (app.logoBytes && app.logoContentType) {
-      const logo = await setTenantLogo(tx, {
-        tenantId: tenant.id,
-        // Stored as processed by `processLogo` (always WebP).
-        image: { bytes: app.logoBytes, contentType: app.logoContentType as 'image/webp' },
-        createdBy: app.userId,
-      })
-      tenant.logoFileId = logo.fileId
-    }
+    // Subscription fees start from the start date: the plan's schedule, exactly as the console button issues it.
+    const schedule = await generateBillingScheduleTx(tx, tenant.id, r.today)
 
     const [application] = await tx
       .update(spaApplications)
@@ -370,7 +401,15 @@ export async function acceptApplication(
       })
       .where(eq(spaApplications.id, app.id))
       .returning()
-    return { application: application!, tenant, plan, invoice, balanceAed, setupPayment: summary }
+    return {
+      application: application!,
+      tenant,
+      plan,
+      invoice,
+      balanceAed,
+      setupPayment: summary,
+      planInvoices: schedule.created,
+    }
   })
 }
 

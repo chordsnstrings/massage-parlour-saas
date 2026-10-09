@@ -118,8 +118,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Signup = **spa application** (PLAN §18.3): `signup/actions.ts` creates the login (Better Auth) + a pending
     `spa_applications` row (`submitApplication`); `/application` is the applicant's waiting page (locked logins:
     `server/applications.ts` `applicantState`). The console accepts (`acceptApplication` → `provisionTenantTx` in
-    services/applications.ts: tenant, default branch, the 6 system roles, owner member, active subscription, setup
-    invoice + `recordPlatformPayment`) or rejects (`rejectApplication`: `user.disabled_at`, sessions deleted; Better
+    services/applications.ts: tenant, default branch, the 6 system roles, owner member, active subscription, logo,
+    setup invoice (VAT optional: `createPlatformInvoice({ vat })` / `invoiceTotals(…, chargeVat)`; due date
+    `setupBalanceDueDate` = start or start + 10 days, never before today) + `recordPlatformPayment`, then the plan's
+    schedule from the start date via `generateBillingScheduleTx` = the console button's code, so the button later
+    creates nothing; deposit bounds/wording `depositRule` + due choices in `@spa/core` `setup-fee.ts`, shared with the
+    Accept dialog) or rejects (`rejectApplication`: `user.disabled_at`, sessions deleted; Better
     Auth session hook + `getSession` refuse disabled logins). `provisionTenant` without `subscription` = old trial path. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
     platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
     `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,

@@ -1346,15 +1346,16 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   oldest first), detail = every field + logo + live slug check. **Reject**: optional reason + "Show reason to
   applicant" → login **disabled** (`user.disabled_at`) and its sessions deleted — unless the login is also an active
   member of another spa or a super-admin (then only the application closes). **Accept**: plan + start date (prefilled)
-  + setup payment when the plan's fee > 0: Paid in full / Deposit (amount > 0 and < the setup-fee invoice total incl.
-  VAT), payment date (≤ today), cash / bank transfer / credit card (`card`), optional reference + note.
+  + setup payment when the plan's fee > 0: Charge VAT (default on), Paid in full / Deposit (amount > 0 and < the
+  setup-fee invoice total, incl. VAT only when charged; balance due on the start date or 10 days after), payment date
+  (≤ today), cash / bank transfer / credit card (`card`), optional reference + note.
 - **Accept = one platform transaction** (`acceptApplication`, services/applications.ts): `provisionTenantTx` (tenant
   **active**, default branch with "street, Emirate" + mobile, system roles, owner membership, `require2fa: true`), the
   subscription **active** from the start date for one year (`current_period_end` = start + 12 months, plan price/fee/
-  interval), the setup-fee platform invoice via `createPlatformInvoice` (numbering + VAT; validated before numbering;
-  due = start date or today), the payment via `recordPlatformPayment` (shared with console "Record a payment") → full =
-  paid, deposit = issued with a balance due; logo → `setTenantLogo`. Plan invoices are still issued with "Generate
-  payment schedule". The rest of a deposit is recorded later with Record a payment. Payments are recorded, never processed.
+  interval), the setup-fee platform invoice via `createPlatformInvoice` (numbering, VAT optional; validated before numbering;
+  due = start date or 10 days after it — see "Owner answers" below), the payment via `recordPlatformPayment` (shared with console "Record a payment") → full =
+  paid, deposit = issued with a balance due; logo → `setTenantLogo`. Plan invoices are issued at acceptance too
+  (same code as "Generate payment schedule"). The rest of a deposit is recorded later with Record a payment. Payments are recorded, never processed.
 - **Balance due** shows on the console spa page (Paid / Balance columns, "part paid" = net received > 0, header
   "Due now" (due date ≤ today) + "Outstanding" (all open, incl. later installments)) and the spa's Billing page
   ("Paid AED x · balance due AED y", pill "Balance due"); Pay-by-card is hidden on a partly paid invoice and refused by
@@ -1440,6 +1441,19 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   start/delivery date or 10 days after start (chosen at acceptance, default 10 days); subscription fees (monthly AED 2,000
   or yearly AED 24,000 per the plan) start from the start date; rejected-login rule and apply-form limits (5/h, 20/day per IP) agreed.
   Thai + Arabic copy natively reviewed by the owner's team (2026-10-09). Features page: built "Coming next" items move to the main list.
+  **Implemented (2026-10-09):** Accept dialog: "Charge VAT (5%)" checkbox on the setup invoice (default on = the
+  platform's VAT rate, as every platform invoice; hidden when the rate is 0; plan invoices keep VAT per the settings);
+  no-VAT invoice = subtotal = total, VAT 0 (console Total shows "· no VAT"; spa Billing shows totals only). Deposit:
+  > 0 and < the invoice total, one wording `depositRule` (dialog hint = service error, catalogue `domain.depositRange`
+  / `depositRangeNoVat`). Deposit → "Balance due: On the start / delivery date | 10 days after start" (default 10
+  days; date shown; never before today; full payment uses the default). Acceptance then issues the plan's invoices
+  from the start date with the existing schedule code (`generateBillingScheduleTx`): **all of them at once** like the
+  button (12 monthly × AED 2,000 + VAT due monthly from the start, or one yearly invoice due on it) — "Generate payment
+  schedule" afterwards = "already up to date", no numbers drawn. The logo step now runs before any invoice is numbered
+  (a failing accept leaves no number gap). Summary (`setup_payment` jsonb) gains `vat` + `dueDate`; audit
+  `platform.application.accepted` gains `planInvoices`. Features page: waitlist, equipment, booking widget →
+  "Bookings"; time clock + leave, client merge → "Control without the admin"; "Coming next" = Reserve with Google
+  only (P4 partner integration, not built).
 
 ### 18.5 Marketing: Spa CRM page (owner 2026-10-09)
 - Owner request: the marketing site sells the spa CRM (the dashboard we build and run for each spa), not only websites,

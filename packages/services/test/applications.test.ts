@@ -1,6 +1,9 @@
 // Spa applications (PLAN §18.3): submit → accept (spa provisioned, active subscription, setup invoice + payment,
-// full and deposit) / reject (login disabled, sessions revoked), slug held by a pending application, platform-only
+// full and deposit, VAT on/off, balance due on the start date or 10 days after, the plan's schedule from the start
+// date, idempotent with "Generate payment schedule") / reject (login disabled, sessions revoked), slug held by a pending application, platform-only
 // table (a spa's app role can neither read nor write it).
+
+import { depositRule } from '@spa/core'
 import {
   branches,
   closeAllDbs,
@@ -39,7 +42,19 @@ const { platform, app } = testDbs()
 const today = '2026-10-09'
 const ids: Record<string, string> = {}
 const seq = (number: string) => Number(number.slice(-4))
-const DEPOSIT_RANGE = 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)'
+// Money prints with a no-break space after "AED".
+const plain = (s: string) => s.replace(/ /g, ' ')
+const DEPOSIT_RANGE = depositRule(5250, true)
+const drawn = async () =>
+  Number(
+    (await platform.execute<{ n: string }>(sql`select last_value as n from platform_invoice_seq`)).rows[0]!.n,
+  )
+const invoicesOf = (tenantId: string, kind: 'plan' | 'setup') =>
+  platform
+    .select()
+    .from(platformInvoices)
+    .where(and(eq(platformInvoices.tenantId, tenantId), eq(platformInvoices.kind, kind)))
+    .orderBy(platformInvoices.installment)
 
 async function newUser(key: string) {
   const id = `u-${key}`
@@ -78,8 +93,20 @@ beforeAll(async () => {
     .insert(plans)
     .values({ code: 'nofee', name: 'No fee', priceAed: '24000', setupFeeAed: '0', sort: 5 })
     .returning()
+  const [monthly] = await platform
+    .insert(plans)
+    .values({
+      code: 'monthly',
+      name: 'Monthly',
+      priceAed: '24000',
+      setupFeeAed: '5000',
+      billingInterval: 'month',
+      sort: 6,
+    })
+    .returning()
   ids.feePlan = fee!.id
   ids.freePlan = free!.id
+  ids.monthlyPlan = monthly!.id
   ids.admin = await newUser('admin')
 })
 afterAll(closeAllDbs)
@@ -176,13 +203,30 @@ describe('spa applications', () => {
       .innerJoin(roles, eq(roles.id, members.roleId))
       .where(eq(members.userId, ids.u1!))
     expect(owner?.key).toBe('owner')
-    const [inv] = await platform.select().from(platformInvoices).where(eq(platformInvoices.tenantId, t.id))
+    const [inv] = await invoicesOf(t.id, 'setup')
+    // Defaults: VAT as every platform invoice; due 10 days after the start date.
     expect(inv).toMatchObject({
       kind: 'setup',
       subtotalAed: '5000.00',
       vatAed: '250.00',
       totalAed: '5250.00',
+      dueDate: '2026-10-25',
     })
+    // Subscription fees start from the start date: the yearly plan's one invoice, due on it.
+    expect(res.planInvoices).toBe(1)
+    expect(await invoicesOf(t.id, 'plan')).toMatchObject([
+      {
+        periodStart: '2026-10-15',
+        installment: 1,
+        installments: 1,
+        dueDate: '2026-10-15',
+        issueDate: today,
+        subtotalAed: '24000.00',
+        vatAed: '1200.00',
+        totalAed: '25200.00',
+        status: 'issued',
+      },
+    ])
     expect(inv?.status).toBe('paid')
     expect(inv?.number).toMatch(/^SM-2026-\d{4}$/)
     const pays = await platform.select().from(platformPayments).where(eq(platformPayments.tenantId, t.id))
@@ -193,7 +237,13 @@ describe('spa applications', () => {
       receivedAt: '2026-10-08',
       reference: 'R-1',
     })
-    expect(res.setupPayment).toMatchObject({ kind: 'full', amountAed: '5250.00', balanceAed: '0.00' })
+    expect(res.setupPayment).toMatchObject({
+      kind: 'full',
+      amountAed: '5250.00',
+      balanceAed: '0.00',
+      vat: true,
+      dueDate: '2026-10-25',
+    })
     expect(res.balanceAed).toBe('0.00')
     // The logo is a public file of the new spa.
     const [file] = await platform.select().from(storedFiles).where(eq(storedFiles.id, t.logoFileId!))
@@ -211,31 +261,16 @@ describe('spa applications', () => {
     ).rejects.toThrow('This application was already reviewed')
   })
 
-  it('the first "Generate payment schedule" after an accept skips the setup invoice without burning a number', async () => {
+  it('"Generate payment schedule" after an accept creates nothing and draws no number (same schedule)', async () => {
     const [t] = await platform.select().from(tenants).where(eq(tenants.slug, 'serenity'))
-    const [setup] = await platform
-      .select()
-      .from(platformInvoices)
-      .where(and(eq(platformInvoices.tenantId, t!.id), eq(platformInvoices.kind, 'setup')))
-    const res = await generateBillingSchedule(platform, t!.id, today)
-    const planRows = await platform
-      .select()
-      .from(platformInvoices)
-      .where(and(eq(platformInvoices.tenantId, t!.id), eq(platformInvoices.kind, 'plan')))
-    expect(res.created).toBe(planRows.length)
-    expect(planRows.length).toBeGreaterThan(0)
-    // Gap-free: the plan invoices follow the setup invoice's number directly.
-    const nums = planRows.map((r) => seq(r.number)).sort((a, b) => a - b)
-    expect(nums).toEqual(nums.map((_, i) => seq(setup!.number) + 1 + i))
-    // …and the skipped setup invoice drew no number either (the sequence stops at the last issued one).
-    const drawn = async () =>
-      Number(
-        (await platform.execute<{ n: string }>(sql`select last_value as n from platform_invoice_seq`))
-          .rows[0]!.n,
-      )
-    expect(await drawn()).toBe(nums.at(-1))
+    const [setup] = await invoicesOf(t!.id, 'setup')
+    const planRows = await invoicesOf(t!.id, 'plan')
+    // Gap-free: the plan invoice follows the setup invoice's number directly.
+    expect(planRows.map((r) => seq(r.number))).toEqual([seq(setup!.number) + 1])
+    expect(await drawn()).toBe(seq(planRows[0]!.number))
     expect(await generateBillingSchedule(platform, t!.id, today)).toEqual({ created: 0, voided: 0 })
-    expect(await drawn()).toBe(nums.at(-1))
+    expect(await drawn()).toBe(seq(planRows[0]!.number))
+    expect(await invoicesOf(t!.id, 'plan')).toHaveLength(1)
   })
 
   it('accepts with a deposit by bank transfer: invoice stays open with the balance; later payment settles it', async () => {
@@ -275,6 +310,7 @@ describe('spa applications', () => {
         paidOn: today,
         method: 'bank_transfer',
         reference: 'TT-77',
+        balanceDue: 'start',
       },
     })
     expect(res.invoice).toMatchObject({ status: 'issued', totalAed: '5250.00', dueDate: '2026-10-20' })
@@ -288,7 +324,7 @@ describe('spa applications', () => {
     })
     // The spa sees its own invoice with the balance (tenant role).
     const seen = await withTenant(res.tenant.id, (tx) => tx.select().from(platformInvoices), app)
-    expect(seen.map((i) => i.status)).toEqual(['issued'])
+    expect(seen.map((i) => `${i.kind}:${i.status}`).sort()).toEqual(['plan:issued', 'setup:issued'])
     // The rest arrives later through Record payment.
     const later = await platform.transaction((tx) =>
       recordPlatformPayment(tx, {
@@ -319,7 +355,84 @@ describe('spa applications', () => {
     ).rejects.toBeInstanceOf(DomainError)
   })
 
-  it('an accept that fails late (after the invoice + payment are written) creates nothing', async () => {
+  it('accepts without VAT, balance due 10 days after start, monthly plan: 12 installments from the start date', async () => {
+    ids.u6 = await newUser('u6')
+    const a = await submitApplication(platform, form(ids.u6, 'novat', { planId: ids.monthlyPlan! }))
+    const accept = (amountAed: string) =>
+      acceptApplication(platform, {
+        applicationId: a.id,
+        reviewerId: ids.admin!,
+        planId: ids.monthlyPlan!,
+        startDate: '2026-11-30',
+        today,
+        payment: {
+          kind: 'deposit',
+          amountAed,
+          paidOn: today,
+          method: 'bank_transfer',
+          chargeVat: false,
+          balanceDue: 'start_plus_10',
+        },
+      })
+    // Without VAT the bound is the fee itself (5,000), and the wording says so.
+    const noVat = depositRule(5000, false)
+    expect(plain(DEPOSIT_RANGE)).toBe(
+      'A deposit must be more than AED 0 and less than the setup invoice total (AED 5,250 incl. VAT).',
+    )
+    expect(plain(noVat)).toBe(
+      'A deposit must be more than AED 0 and less than the setup invoice total (AED 5,000, no VAT).',
+    )
+    await expect(accept('5000')).rejects.toThrow(noVat)
+    await expect(accept('0')).rejects.toThrow(noVat)
+    await expect(accept('-1')).rejects.toThrow(noVat)
+    const before = await drawn()
+    const res = await accept('4999.99')
+    expect(res.invoice).toMatchObject({
+      kind: 'setup',
+      subtotalAed: '5000.00',
+      vatAed: '0.00',
+      totalAed: '5000.00',
+      status: 'issued',
+      dueDate: '2026-12-10',
+    })
+    expect(res.balanceAed).toBe('0.01')
+    expect(res.setupPayment).toMatchObject({ vat: false, dueDate: '2026-12-10', invoiceTotalAed: '5000.00' })
+    // Monthly: 12 x AED 2,000 (+ VAT per the settings; the choice is for the setup invoice only) from 30 Nov.
+    const rows = await invoicesOf(res.tenant.id, 'plan')
+    expect(res.planInvoices).toBe(12)
+    expect(rows).toHaveLength(12)
+    expect(rows.map((r) => r.dueDate).slice(0, 4)).toEqual([
+      '2026-11-30',
+      '2026-12-30',
+      '2027-01-30',
+      '2027-02-28',
+    ])
+    expect(new Set(rows.map((r) => r.totalAed))).toEqual(new Set(['2100.00']))
+    expect(new Set(rows.map((r) => r.periodStart))).toEqual(new Set(['2026-11-30']))
+    // 13 numbers drawn, in order, none burnt; the button afterwards changes nothing.
+    expect(await drawn()).toBe(before + 13)
+    expect(await generateBillingSchedule(platform, res.tenant.id, today)).toEqual({ created: 0, voided: 0 })
+    expect(await drawn()).toBe(before + 13)
+    expect(await invoicesOf(res.tenant.id, 'plan')).toHaveLength(12)
+    expect(await invoicesOf(res.tenant.id, 'setup')).toHaveLength(1)
+  })
+
+  it('a start date before today keeps the setup invoice due today at the earliest', async () => {
+    ids.u7 = await newUser('u7')
+    const a = await submitApplication(platform, form(ids.u7, 'backdated'))
+    const res = await acceptApplication(platform, {
+      applicationId: a.id,
+      reviewerId: ids.admin!,
+      planId: ids.feePlan!,
+      startDate: '2026-09-25',
+      today,
+      payment: { kind: 'deposit', amountAed: '100', paidOn: today, method: 'cash', balanceDue: 'start' },
+    })
+    expect(res.invoice?.dueDate).toBe(today)
+    expect((await invoicesOf(res.tenant.id, 'plan'))[0]?.dueDate).toBe('2026-09-25')
+  })
+
+  it('an accept that fails (logo step) creates nothing and draws no invoice number', async () => {
     ids.u5 = await newUser('u5')
     // An empty stored logo makes the logo step (the last one) fail: "The file is empty".
     const a = await submitApplication(platform, {
@@ -329,6 +442,7 @@ describe('spa applications', () => {
     const count = async (table: typeof platformInvoices | typeof platformPayments | typeof subscriptions) =>
       (await platform.select({ n: sql<number>`count(*)::int` }).from(table))[0]!.n
     const before = [await count(platformInvoices), await count(platformPayments), await count(subscriptions)]
+    const seqBefore = await drawn()
     await expect(
       acceptApplication(platform, {
         applicationId: a.id,
@@ -346,6 +460,8 @@ describe('spa applications', () => {
       await count(platformPayments),
       await count(subscriptions),
     ]).toEqual(before)
+    // The logo step runs before any invoice is numbered: no gap.
+    expect(await drawn()).toBe(seqBefore)
     const [still] = await platform.select().from(spaApplications).where(eq(spaApplications.id, a.id))
     expect(still).toMatchObject({ status: 'pending', createdTenantId: null, setupPayment: null })
   })
@@ -363,9 +479,9 @@ describe('spa applications', () => {
     })
     expect(res.invoice).toBeNull()
     expect(res.setupPayment).toMatchObject({ kind: 'none' })
-    expect(
-      await platform.select().from(platformInvoices).where(eq(platformInvoices.tenantId, res.tenant.id)),
-    ).toEqual([])
+    expect(await invoicesOf(res.tenant.id, 'setup')).toEqual([])
+    // The subscription invoice is still issued from the start date.
+    expect(await invoicesOf(res.tenant.id, 'plan')).toMatchObject([{ dueDate: today, totalAed: '25200.00' }])
   })
 
   it('refuses a setup-fee plan without the payment', async () => {
