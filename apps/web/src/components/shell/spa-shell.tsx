@@ -116,6 +116,7 @@ export function SpaShell({
   search,
   accountHref,
   switchHref,
+  install,
   children,
 }: {
   spa: { name: string; tagline: string | null; logoUrl: string | null; homeHref: string }
@@ -131,6 +132,8 @@ export function SpaShell({
   search?: React.ReactNode
   accountHref: string
   switchHref: string
+  /** "Install app" profile-menu item (components/pwa InstallMenuItem); renders nothing where it can't install. */
+  install?: React.ReactNode
   children: React.ReactNode
 }) {
   const { t, locale } = useI18n()
@@ -237,6 +240,7 @@ export function SpaShell({
                     <ArrowLeftRight /> {t('shell.switchSpa')}
                   </Link>
                 </DropdownMenu.Item>
+                {install}
                 <DropdownMenu.Separator className="crm-menu-sep" />
                 <DropdownMenu.Item
                   className="crm-menu-item"
