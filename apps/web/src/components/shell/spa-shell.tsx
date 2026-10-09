@@ -62,7 +62,12 @@ export type ShellIcon = keyof typeof icons
 /** A destination. `match` = extra path prefixes that also mark it active (e.g. /ai/try under AI studio). */
 export type ShellLink = { href: string; label: string; exact?: boolean; match?: string[] }
 /** Menu item; with `pages`, its section's pages show as tabs under the top bar (href = the first page). */
-export type ShellItem = ShellLink & { icon: ShellIcon; pages?: ShellLink[] }
+export type ShellItem = ShellLink & {
+  icon: ShellIcon
+  pages?: ShellLink[]
+  /** Count badge (hidden when 0) + its screen-reader text. */
+  count?: { value: number; label: string }
+}
 export type ShellGroup = { label: string; items: ShellItem[] }
 export type ShellPlan = {
   name: string | null
@@ -265,6 +270,12 @@ export function SpaShell({
                       )}
                       <Icon strokeWidth={1.6} />
                       <span>{item.label}</span>
+                      {item.count && item.count.value > 0 && (
+                        <span className="crm-ncount" title={item.count.label}>
+                          <span aria-hidden>{item.count.value > 99 ? '99+' : item.count.value}</span>
+                          <span className="sr-only">{item.count.label}</span>
+                        </span>
+                      )}
                     </Link>
                   )
                 })}

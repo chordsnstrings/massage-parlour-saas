@@ -41,5 +41,15 @@ export const notifications: Messages['notifications'] = {
       overdue: { title: 'ใบแจ้งหนี้เกินกำหนด', body: '{number} · {amount} ครบกำหนดเมื่อ {date}' },
       reminder: { title: 'แจ้งเตือนการชำระเงิน', body: 'ยอด {amount} ถึงกำหนดชำระ — เปิดหน้าการชำระเงินเพื่อจ่าย' },
     },
+    weekly_insights: { title: 'สรุปข้อมูลเชิงลึกประจำสัปดาห์พร้อมแล้ว', body: '{headline}' },
+    daily_digest: {
+      title: { other: 'วันนี้: {count} การจอง' },
+      body: '{detail}',
+    },
+  },
+  digest: {
+    insightsFallback: 'ดูว่าสัปดาห์ที่แล้วมีอะไรเปลี่ยนไป และสองสิ่งที่ควรลองในสัปดาห์นี้',
+    pending: { other: 'ยังรอการยืนยัน {count} รายการ — ยืนยันทาง WhatsApp' },
+    allConfirmed: 'ยืนยันครบทุกรายการแล้ว ขอให้เป็นวันที่สบาย ๆ',
   },
 }

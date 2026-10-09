@@ -22,6 +22,7 @@ export const domain = {
   commissionRange: 'Enter a commission between 0 and 100,000 AED',
   commissionEveryone: 'Enter the commission for every therapist',
   branchNotFound: 'Branch not found',
+  invalidDateRange: 'Invalid date range',
   campaignNotFound: 'Campaign not found',
   conversationNotFound: 'Conversation not found',
   domainNotFound: 'Domain not found',
