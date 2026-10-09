@@ -17,6 +17,7 @@ export const nav = {
   marketing: 'Marketing',
   website: 'Website studio',
   reviews: 'Reviews',
+  reports: 'Reports',
   accounts: 'Accounts',
   vatPayroll: 'VAT & payroll',
   billing: 'Billing',

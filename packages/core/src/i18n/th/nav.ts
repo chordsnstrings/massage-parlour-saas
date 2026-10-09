@@ -19,6 +19,7 @@ export const nav: Messages['nav'] = {
   marketing: 'การตลาด',
   website: 'สตูดิโอเว็บไซต์',
   reviews: 'รีวิว',
+  reports: 'รายงาน',
   accounts: 'บัญชี',
   vatPayroll: 'ภาษีและเงินเดือน',
   billing: 'ค่าบริการระบบ',
