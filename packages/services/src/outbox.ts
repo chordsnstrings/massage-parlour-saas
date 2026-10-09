@@ -1,4 +1,4 @@
-import { type WhatsAppMode, whatsappLink } from '@spa/core'
+import { type AutomationKey, automationOn, type WhatsAppMode, whatsappLink } from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -47,27 +47,39 @@ export const DEFAULT_TEMPLATES: Record<MessageKind, { en: string; ar: string }> 
     en: 'Hi {first_name}, we have a free slot {day} at {time} at {spa}. Would you like it?',
     ar: 'مرحباً {first_name}، لدينا موعد متاح {day} الساعة {time} في {spa}. هل ترغب بحجزه؟',
   },
+  waitlist_slot: {
+    en: 'Hi {first_name}, good news: a {service} slot just opened at {spa} on {day} at {time}. Reply here if you would like it.',
+    ar: 'مرحباً {first_name}، خبر سار: أصبح موعد {service} متاحاً في {spa} يوم {day} الساعة {time}. راسلنا هنا إذا كنت ترغب بحجزه.',
+  },
   custom: { en: '{text}', ar: '{text}' },
 }
 
 export const renderTemplate = (body: string, vars: Record<string, string>) =>
   body.replace(/\{(\w+)\}/g, (m, key: string) => vars[key] ?? m)
 
-const fmtDay = (d: Date, lang: string) =>
+export const fmtDay = (d: Date, lang: string) =>
   d.toLocaleDateString(lang === 'ar' ? 'ar-AE' : 'en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     timeZone: 'Asia/Dubai',
   })
-const fmtTime = (d: Date, lang: string) =>
+export const fmtTime = (d: Date, lang: string) =>
   d.toLocaleTimeString(lang === 'ar' ? 'ar-AE' : 'en-GB', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Asia/Dubai',
   })
 
-async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
+/** Automation switch that gates each booking message kind (others are queued by their own flows). */
+const BOOKING_MESSAGE_AUTOMATION: Partial<Record<MessageKind, AutomationKey>> = {
+  booking_confirmation: 'bookingMessages',
+  reminder: 'bookingMessages',
+  thank_you: 'thankYou',
+  review_request: 'thankYou',
+}
+
+export async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
   const [row] = await tx
     .select({ body: messageTemplates.body })
     .from(messageTemplates)
@@ -77,7 +89,8 @@ async function templateFor(tx: Tx, kind: MessageKind, lang: string) {
 
 /**
  * Queues a WhatsApp message about a booking (idempotent per booking + kind). Returns null when the
- * client has no mobile number. `dueAt` lets reminders appear in the outbox at the right time.
+ * client has no mobile number or the spa switched that automation off (B3). `dueAt` lets reminders appear in the
+ * outbox at the right time.
  */
 export async function enqueueBookingMessage(
   tx: Tx,
@@ -86,13 +99,21 @@ export async function enqueueBookingMessage(
   dueAt = new Date(),
 ) {
   const [row] = await tx
-    .select({ booking: bookings, client: clients, spa: tenants.name, branch: branches })
+    .select({
+      booking: bookings,
+      client: clients,
+      spa: tenants.name,
+      settings: tenants.settings,
+      branch: branches,
+    })
     .from(bookings)
     .innerJoin(tenants, eq(tenants.id, bookings.tenantId))
     .innerJoin(branches, eq(branches.id, bookings.branchId))
     .leftJoin(clients, eq(clients.id, bookings.clientId))
     .where(eq(bookings.id, bookingId))
   if (!row?.client?.phoneE164) return null
+  const automation = BOOKING_MESSAGE_AUTOMATION[kind]
+  if (automation && !automationOn(row.settings, automation)) return null
   const [first] = await tx
     .select()
     .from(bookingItems)

@@ -10,7 +10,13 @@ export const permissions: Messages['permissions'] = {
     },
     clients: {
       label: 'ลูกค้า',
-      actions: { view: 'ดูข้อมูลลูกค้า', manage: 'แก้ไขข้อมูลลูกค้า', phone: 'ดูเบอร์โทรศัพท์', export: 'ส่งออกรายชื่อลูกค้า' },
+      actions: {
+        view: 'ดูข้อมูลลูกค้า',
+        manage: 'แก้ไขข้อมูลลูกค้า',
+        phone: 'ดูเบอร์โทรศัพท์',
+        export: 'ส่งออกรายชื่อลูกค้า',
+        merge: 'รวมรายชื่อลูกค้าที่ซ้ำกัน',
+      },
     },
     pos: {
       label: 'จุดขาย (POS)',
@@ -18,6 +24,14 @@ export const permissions: Messages['permissions'] = {
     },
     services: { label: 'บริการและห้อง', actions: { manage: 'จัดการบริการ ห้อง และทรัพยากร' } },
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },
+    timeclock: {
+      label: 'ลงเวลาและการลา',
+      actions: {
+        kiosk: 'เปิดหน้าลงเวลาเข้า-ออกงาน',
+        leave: 'ขอลางานของตัวเอง',
+        approve: 'อนุมัติการลาและแก้ไขเวลาเข้า-ออก',
+      },
+    },
     inventory: {
       label: 'คลังสินค้า',
       actions: {
@@ -40,6 +54,7 @@ export const permissions: Messages['permissions'] = {
     team: { label: 'ทีมและบทบาท', actions: { manage: 'เชิญสมาชิกและแก้ไขบทบาท' } },
     settings: { label: 'ตั้งค่าธุรกิจ', actions: { manage: 'แก้ไขข้อมูลธุรกิจและสาขา' } },
     billing: { label: 'การสมัครใช้งาน', actions: { view: 'ดูใบแจ้งหนี้และการชำระเงิน' } },
+    audit: { label: 'บันทึกการตรวจสอบ', actions: { view: 'ดูบันทึกการตรวจสอบ' } },
   },
   roleDescription: {
     owner: 'เข้าถึงได้ทั้งหมด รวมถึงการสมัครใช้งานและบทบาท',

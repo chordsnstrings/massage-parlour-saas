@@ -1,5 +1,5 @@
 'use client'
-import { PERMISSION_GROUPS } from '@spa/core'
+import { PERMISSION_GROUPS, RESTRICTED_PERMISSION } from '@spa/core'
 import { permissionGroupLabel, permissionLabel } from '@spa/core/i18n/labels'
 import { Plus } from 'lucide-react'
 import { useState, useTransition } from 'react'
@@ -62,6 +62,8 @@ export function RoleSheet({ slug, role }: { slug: string; role?: Role }) {
               </legend>
               {Object.keys(group.actions).map((action) => {
                 const key = `${resource}.${action}`
+                // Client phones can't be given to a custom role (owner rule); system roles still show it read-only.
+                if (key === RESTRICTED_PERMISSION && !readOnly) return null
                 return (
                   <label key={key} className="flex items-center gap-2.5 text-sm">
                     <Checkbox

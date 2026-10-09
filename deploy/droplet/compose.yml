@@ -7,8 +7,9 @@ name: spa
 x-app-env: &app-env
   NODE_ENV: production
   ROOT_DOMAIN: ${SITE_HOST}
-  APP_URL: https://${SITE_HOST}
-  ADMIN_URL: https://${SITE_HOST}/admin
+  # Host routing (ROUTING=host): set APP_URL=https://app.<domain> and ADMIN_URL=https://admin.<domain> in the overlay.
+  APP_URL: ${APP_URL:-https://${SITE_HOST}}
+  ADMIN_URL: ${ADMIN_URL:-https://${SITE_HOST}/admin}
   # More platform domains (comma or space separated) — each serves the whole platform with its own links + TLS.
   EXTRA_ROOT_DOMAINS: ${EXTRA_ROOT_DOMAINS:-}
   PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
@@ -39,7 +40,7 @@ x-app-env: &app-env
   S3_REGION: ${S3_REGION:-auto}
   SENTRY_DSN: ${SENTRY_DSN:-}
   RESEND_API_KEY: ${RESEND_API_KEY:-}
-  EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>}
+  EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>} # B1: .ae until .co is verified in Resend
   APP_RELEASE: ${APP_RELEASE:-}
 
 x-db: &db
@@ -105,6 +106,8 @@ services:
     environment:
       <<: [*app-env, *db]
       DB_POOL_MAX: "4"
+      # Monthly restore drill: creates/drops a scratch database (needs CREATEDB; spa_owner has none).
+      RESTORE_DRILL_ADMIN_URL: postgres://postgres:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/postgres
     depends_on:
       migrate: { condition: service_completed_successfully }
     mem_limit: 512m

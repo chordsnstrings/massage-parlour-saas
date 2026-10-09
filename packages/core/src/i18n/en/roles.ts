@@ -19,6 +19,7 @@ export const roles = {
     saved: 'Role saved',
     deleted: 'Role deleted',
     notFound: 'Role not found.',
+    phoneRestricted: 'Client phone numbers are only for the owner, managers and receptionists.',
     systemLocked: 'System roles can’t be edited — create a custom role instead.',
     duplicate: 'A role with this name already exists.',
     onlyCustom: 'Only custom roles can be deleted.',

@@ -1,8 +1,9 @@
 import { draftReviewReply } from '@spa/ai'
 import { platformDb, socialAccounts, tenants } from '@spa/db'
-import { GBP_PENDING_ID, googleConfig, syncGbpReviews } from '@spa/services'
+import { automationOnSql, GBP_PENDING_ID, googleConfig, syncGbpReviews } from '@spa/services'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { log } from '../log'
+import { LIVE_STATUSES, recordRun } from './runs'
 
 /**
  * Every 2 hours: pull Google reviews for each spa with a connected Business Profile location. New reviews get an AI
@@ -19,7 +20,8 @@ export async function syncAllGbpReviews() {
         eq(socialAccounts.platform, 'gbp'),
         eq(socialAccounts.status, 'connected'),
         ne(socialAccounts.externalId, GBP_PENDING_ID),
-        inArray(tenants.status, ['trial', 'active', 'past_due']),
+        inArray(tenants.status, [...LIVE_STATUSES]),
+        automationOnSql('googleReviews'),
       ),
     )
   let synced = 0
@@ -31,6 +33,7 @@ export async function syncAllGbpReviews() {
       })
       if (res.ok) {
         synced++
+        await recordRun(tenantId, 'gbp-reviews-sync', 'ok', { count: res.created, posted: res.posted })
         if (res.created || res.posted || res.failed)
           log('info', 'gbp reviews synced', {
             tenant: slug,
@@ -41,12 +44,14 @@ export async function syncAllGbpReviews() {
           })
       } else {
         log('warn', 'gbp review sync failed', { tenant: slug, error: res.error })
+        await recordRun(tenantId, 'gbp-reviews-sync', 'failed')
       }
     } catch (error) {
       log('error', 'gbp review sync crashed', {
         tenant: slug,
         error: error instanceof Error ? error.message : 'unexpected error',
       })
+      await recordRun(tenantId, 'gbp-reviews-sync', 'failed')
     }
   }
   return { tenants: connected.length, synced }

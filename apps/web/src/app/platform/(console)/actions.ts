@@ -14,6 +14,7 @@ import {
   createPlatformInvoice,
   DomainError,
   deleteTenant,
+  encryptSecret,
   generateBillingSchedule,
   pauseTenant,
   resumeTenant,
@@ -266,6 +267,61 @@ export async function saveAiModelAction(_p: ActionResult, fd: FormData): Promise
   await audit({ actorUserId: user.id, action: 'platform.ai_model.updated', entityId: agentKey, data: d })
   revalidatePath('/platform/ai')
   return ok('Model saved')
+}
+
+/**
+ * R7: optional external Meta MCP server for the AI agents. The key is stored AES-GCM encrypted (blank = keep);
+ * only the listed tool names are ever offered, and WhatsApp send-like tools are dropped regardless (@spa/ai tools.ts).
+ */
+export async function saveMetaMcpConfigAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      enabled: bool,
+      url: z
+        .string()
+        .trim()
+        .max(500)
+        .refine((v) => !v || /^https:\/\/[^\s]+$/i.test(v), 'Use an https:// URL')
+        .transform((v) => v || null),
+      key: z.string().trim().max(2000).optional(),
+      clearKey: bool,
+      tools: z.string().max(4000).optional(),
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  if (d.enabled && !d.url) return fail('Enter the server URL first', { url: 'Enter the server URL first' })
+  const tools = [
+    ...new Set(
+      (d.tools ?? '')
+        .split(/[\s,]+/)
+        .map((s) => s.trim())
+        .filter((s) => /^[A-Za-z0-9_.\-/]{1,128}$/.test(s)),
+    ),
+  ]
+  const set: Partial<typeof platformSettings.$inferInsert> = {
+    metaMcpEnabled: d.enabled,
+    metaMcpUrl: d.url,
+    metaMcpTools: tools,
+    updatedBy: user.id,
+  }
+  if (d.clearKey) set.metaMcpKeyEnc = null
+  else if (d.key) set.metaMcpKeyEnc = encryptSecret(d.key)
+  await platformDb().insert(platformSettings).values({ id: 1 }).onConflictDoNothing()
+  await platformDb().update(platformSettings).set(set).where(eq(platformSettings.id, 1))
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.meta_mcp.updated',
+    data: {
+      enabled: d.enabled,
+      url: d.url,
+      tools,
+      key: d.clearKey ? 'cleared' : d.key ? 'replaced' : 'kept',
+    },
+  })
+  revalidatePath('/platform/ai')
+  return ok('Meta MCP server saved')
 }
 
 /** Revalidates the console pages and the spa's dashboard (red bar + Billing page). */

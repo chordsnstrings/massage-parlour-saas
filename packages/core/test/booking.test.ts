@@ -116,6 +116,30 @@ describe('findSlots', () => {
     })
     expect(slots.map((s) => s.staffIds)).toEqual([['ploy']])
   })
+
+  it('needs one free unit per required equipment type (B5.3)', () => {
+    const stones = [
+      { id: 'k1', type: 'Hot stones', busy: [{ start: at('10:00'), end: at('11:15') }] },
+      { id: 'k2', type: 'Hot stones', busy: [] },
+    ]
+    const q = { ...base, staff: [maya], rooms: [room], equipmentTypes: ['Hot stones'] }
+    const ten = findSlots({ ...q, equipment: stones })[0]!
+    expect(ten.equipmentIds).toEqual(['k2'])
+    // Two kits needed but k1 is held until 11:15 -> the first slot moves to 11:30.
+    const two = findSlots({ ...q, equipmentTypes: ['Hot stones', 'Hot stones'], equipment: stones })
+    expect(two[0]!.start.getTime()).toBe(at('11:30').getTime())
+    expect(two[0]!.equipmentIds.sort()).toEqual(['k1', 'k2'])
+    expect(findSlots({ ...q, equipment: [] })).toEqual([])
+    expect(findSlots({ ...base, staff: [maya], rooms: [room] })[0]!.equipmentIds).toEqual([])
+  })
+
+  it('never offers a therapist on approved leave (B5.4)', () => {
+    const away = { ...maya, leave: [{ start: at('00:00'), end: at('23:59') }] }
+    expect(findSlots({ ...base, staff: [away], rooms: [room] })).toEqual([])
+    const halfDay = { ...maya, leave: [{ start: at('12:00'), end: at('23:59') }] }
+    const starts = findSlots({ ...base, staff: [halfDay], rooms: [room] }).map((s) => s.start.getTime())
+    expect(starts).toEqual([at('10:00').getTime(), at('10:30').getTime()])
+  })
 })
 
 describe('helpers', () => {

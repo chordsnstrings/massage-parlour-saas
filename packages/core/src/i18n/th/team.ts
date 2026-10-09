@@ -32,7 +32,7 @@ export const team: Messages['team'] = {
     create: 'สร้างคำเชิญ',
     copy: 'คัดลอกลิงก์',
     whatsapp: 'แชร์ทาง WhatsApp',
-    message: 'คุณได้รับเชิญให้เข้าร่วม {spa} บน spamanagement.ae: {link}',
+    message: 'คุณได้รับเชิญให้เข้าร่วม {spa} บน spamanagement.co: {link}',
   },
   edit: {
     description: 'เปลี่ยนบทบาทหรือสิทธิ์การเข้าใช้',

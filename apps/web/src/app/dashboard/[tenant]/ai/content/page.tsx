@@ -225,6 +225,7 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                           </Pill>
                         )}
                         {p.platform === 'gbp' && <Pill>{t('marketing.google')}</Pill>}
+                        {p.platform === 'facebook' && <Pill>{t('marketing.facebook')}</Pill>}
                       </span>
                       <span className="crm-muted text-xs">
                         {p.scheduledAt

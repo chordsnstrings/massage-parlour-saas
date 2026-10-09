@@ -15,7 +15,13 @@ export const pgConstraint = (e: unknown): string | undefined =>
 export class DomainError extends Error {
   constructor(
     message: string,
-    readonly code: 'slot_taken' | 'not_found' | 'invalid' | 'no_room' | 'no_staff' = 'invalid',
+    readonly code:
+      | 'slot_taken'
+      | 'not_found'
+      | 'invalid'
+      | 'no_room'
+      | 'no_staff'
+      | 'no_equipment' = 'invalid',
     readonly i18n?: MessageRef,
   ) {
     super(message)

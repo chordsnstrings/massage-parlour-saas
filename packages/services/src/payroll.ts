@@ -18,6 +18,7 @@ import {
 import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { post } from './ledger'
+import { overlapDays, unpaidLeaveDays, workedMinutes } from './timeclock'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -199,7 +200,9 @@ export async function therapistTipsAdvances(tx: Tx, p: { periodStart: string; pe
 /**
  * Builds a draft payroll run per person. Therapists (`booking_commission`): unpaid booking commissions only —
  * tips and advances settle in the Tips & advances payout. Everyone else: base (salary only) + unpaid %
- * commissions (incl. older accruals) + receptionist booking fees (`booking_fee`) + tips − unrecovered advances.
+ * commissions (incl. older accruals) + receptionist booking fees (`booking_fee`) + tips − unrecovered advances −
+ * unpaid leave (salary only: base ÷ days in the period × approved unpaid days). Lines also carry the clocked
+ * minutes and unpaid leave days (information; WPS leave days).
  */
 export async function buildPayroll(
   tx: Tx,
@@ -222,6 +225,10 @@ export async function buildPayroll(
     periodStart: p.periodStart,
     periodEnd: p.periodEnd,
   })
+  const everyone = { staffIds: people.map((x) => x.id), periodStart: p.periodStart, periodEnd: p.periodEnd }
+  const leaveDays = await unpaidLeaveDays(tx, everyone)
+  const worked = await workedMinutes(tx, everyone)
+  const periodDays = overlapDays(p.periodStart, p.periodEnd, p.periodStart, p.periodEnd)
   const sum = async (q: Promise<{ v: string | null }[]>) => Number((await q)[0]?.v ?? 0)
   for (const s of people) {
     const therapist = s.payType === 'booking_commission'
@@ -282,6 +289,10 @@ export async function buildPayroll(
     const base = s.payType === 'salary' ? Number(s.baseSalaryAed) : 0
     const earned = commission + perBooking
     const fee = s.payType === 'booking_fee' ? r2(feeEach * (created.get(s.id) ?? 0)) : 0
+    // Unpaid leave (B5.4): salaried staff lose base ÷ days in the period per approved unpaid day.
+    const unpaid = leaveDays.get(s.id) ?? 0
+    const deduction = base && periodDays ? Math.min(base, r2((base / periodDays) * unpaid)) : 0
+    const workedMin = worked.get(s.id) ?? 0
     if (!base && !earned && !fee && !tipTotal && !advances) continue
     await tx.insert(payrollLines).values({
       tenantId: p.tenantId,
@@ -292,7 +303,10 @@ export async function buildPayroll(
       feeAed: fee.toFixed(2),
       tipsAed: r2(tipTotal).toFixed(2),
       advancesAed: r2(advances).toFixed(2),
-      netAed: r2(base + earned + fee + tipTotal - advances).toFixed(2),
+      deductionsAed: deduction.toFixed(2),
+      unpaidLeaveDays: unpaid,
+      workedMinutes: workedMin,
+      netAed: r2(base + earned + fee + tipTotal - advances - deduction).toFixed(2),
     })
   }
   return run!

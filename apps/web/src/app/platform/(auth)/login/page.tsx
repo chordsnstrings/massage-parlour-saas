@@ -11,7 +11,7 @@ export default async function PlatformLogin({ searchParams }: { searchParams: Pr
   const next = safeNext((await searchParams).next, adminPath())
   if (await getSession()) redirect(next)
   return (
-    <AuthLayout title="Super-admin" subtitle="Platform console for spamanagement.ae.">
+    <AuthLayout title="Super-admin" subtitle="Platform console for spamanagement.co.">
       <LoginForm next={next} />
     </AuthLayout>
   )

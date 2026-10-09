@@ -25,7 +25,7 @@ export const accounts: Messages['accounts'] = {
     totalRevenue: 'รายได้รวม',
     totalExpenses: 'ค่าใช้จ่ายรวม',
     net: 'กำไรสุทธิ',
-    csv: 'CSV',
+    csv: 'Excel',
   },
   trend: { title: '4 เดือนล่าสุด', sub: 'รายได้ต่อเดือน ไม่รวม VAT', chart: 'รายได้ต่อเดือน' },
   mix: { title: 'เงินออกไปที่ไหน', sub: 'ค่าใช้จ่ายตามหมวด', empty: 'เดือนนี้ยังไม่มีการจ่ายเงิน' },
@@ -142,7 +142,7 @@ export const accounts: Messages['accounts'] = {
   journal: {
     title: 'สมุดรายวัน',
     description: 'ทุกรายการบัญชีคู่ รายการจะไม่ถูกแก้ไข — ข้อผิดพลาดแก้ด้วยการลงรายการกลับ',
-    export: 'ส่งออก CSV',
+    export: 'ส่งออก Excel',
     emptyTitle: 'ไม่มีรายการใน {month}',
     emptyBody: 'การขาย การคืนเงิน และค่าใช้จ่ายจะแสดงที่นี่เมื่อบันทึก',
     account: 'บัญชี',

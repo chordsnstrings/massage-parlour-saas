@@ -225,6 +225,7 @@ export const messageKind = pgEnum('message_kind', [
   'birthday',
   'winback',
   'slot_offer',
+  'waitlist_slot',
   'custom',
 ])
 export const outboxStatus = pgEnum('outbox_status', ['queued', 'opened', 'sent', 'skipped'])

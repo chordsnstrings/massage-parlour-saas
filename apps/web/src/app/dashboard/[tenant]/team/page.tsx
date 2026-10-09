@@ -96,7 +96,11 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
   }
   const matrix = [...roleRows]
     .sort((a, b) => rank(a.key) - rank(b.key))
-    .map((r) => ({ id: r.id, name: roleName(t, r), granted: resolvePermissions(r) }))
+    .map((r) => ({
+      id: r.id,
+      name: roleName(t, r),
+      granted: resolvePermissions(r),
+    }))
   const expiring = docs
     .filter((d) => d.ownerActive && d.days !== null && d.days <= EXPIRY_WINDOW)
     .sort((a, b) => (a.days ?? 0) - (b.days ?? 0))

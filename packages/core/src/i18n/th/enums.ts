@@ -21,7 +21,9 @@ export const enums: Messages['enums'] = {
     gbp: 'Google',
   },
   rotationStatus: { available: 'ว่าง', busy: 'ไม่ว่าง', break: 'พัก', off: 'หยุด' },
-  resourceKind: { staff: 'พนักงาน', room: 'ห้อง' },
+  resourceKind: { staff: 'พนักงาน', room: 'ห้อง', equipment: 'อุปกรณ์' },
+  leaveType: { annual: 'ลาพักร้อน', sick: 'ลาป่วย', unpaid: 'ลาไม่รับค่าจ้าง' },
+  leaveStatus: { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ' },
   staffGender: { female: 'หญิง', male: 'ชาย', other: 'อื่น ๆ' },
   staffPayType: {
     booking_commission: 'ค่าคอมมิชชันต่อการจอง',
@@ -54,8 +56,10 @@ export const enums: Messages['enums'] = {
     birthday: 'วันเกิด',
     winback: 'ชวนกลับมา',
     slot_offer: 'เสนอช่วงเวลาว่าง',
+    waitlist_slot: 'คิวรอ: มีช่วงว่าง',
     custom: 'กำหนดเอง',
   },
+  waitlistStatus: { waiting: 'รอคิว', notified: 'แจ้งแล้ว', booked: 'จองแล้ว', cancelled: 'นำออกแล้ว' },
   outboxStatus: { queued: 'อยู่ในคิว', opened: 'เปิดแล้ว', sent: 'ส่งแล้ว', skipped: 'ข้าม' },
   accountType: {
     asset: 'สินทรัพย์',

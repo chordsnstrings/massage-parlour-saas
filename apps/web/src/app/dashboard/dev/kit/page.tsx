@@ -43,7 +43,7 @@ export default async function KitPage() {
       title="Design system"
       subtitle="Component kit"
       homeHref={appPath('/dev/kit')}
-      user={session?.user ?? { name: 'Preview User', email: 'preview@spamanagement.ae' }}
+      user={session?.user ?? { name: 'Preview User', email: 'preview@spamanagement.co' }}
       nav={[
         { href: appPath('/dev/kit'), label: 'Kit', icon: 'home' },
         { href: appPath('/dev/kit#forms'), label: 'Forms', icon: 'settings' },

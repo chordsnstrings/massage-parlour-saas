@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { app, screenshotAt, signUpOwner } from './helpers'
+import { app, openXlsx, screenshotAt, sheetRows, signUpOwner } from './helpers'
 
 test('accounts: record an expense, see it in P&L, VAT and journal, void it, close a period', async ({
   page,
@@ -29,9 +29,18 @@ test('accounts: record an expense, see it in P&L, VAT and journal, void it, clos
   await screenshotAt(page, 'accounts')
 
   const download = page.waitForEvent('download')
-  await page.getByRole('link', { name: 'CSV' }).click()
-  const file = await (await download).path()
-  expect(readFileSync(file, 'utf8')).toContain('"6100","Rent","10000.00"')
+  await page.getByRole('link', { name: 'Excel' }).click()
+  const d = await download
+  expect(d.suggestedFilename()).toMatch(/^journal-.+-\d{4}-\d{2}\.xlsx$/)
+  const journal = (await openXlsx(readFileSync((await d.path())!))).worksheets[0]!
+  expect(String(journal.getCell('A1').value)).toContain('General journal')
+  expect(sheetRows(journal)[3]).toEqual(
+    expect.arrayContaining(['Date', 'Account', 'Debit AED', 'Credit AED']),
+  )
+  const rent = sheetRows(journal).find((r) => r[4] === '6100')!
+  expect(rent[5]).toBe('Rent')
+  expect(rent[6]).toBe(10000)
+  expect(rent[0]).toBeInstanceOf(Date)
 
   await page.getByRole('navigation', { name: 'Accounts' }).getByRole('link', { name: 'Journal' }).click()
   await expect(page.getByText('Expense', { exact: true })).toBeVisible()

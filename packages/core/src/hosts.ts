@@ -47,7 +47,7 @@ export function resolveSurface(hostHeader: string, rootDomain: string | readonly
   return { kind: 'custom', hostname: host }
 }
 
-/** Public URL of a tenant site, e.g. https://pilot.spamanagement.ae (http for localhost dev). */
+/** Public URL of a tenant site, e.g. https://pilot.spamanagement.co (http for localhost dev). */
 export function siteUrl(slug: string, rootDomain: string): string {
   const protocol = rootDomain.startsWith('localhost') ? 'http' : 'https'
   return `${protocol}://${slug}.${rootDomain}`

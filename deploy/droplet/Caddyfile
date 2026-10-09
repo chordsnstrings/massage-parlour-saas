@@ -1,5 +1,5 @@
 {
-	email {$ACME_EMAIL:ops@spamanagement.ae}
+	email {$ACME_EMAIL:ops@spamanagement.co}
 	# Spa custom domains: certificates are issued on first visit, only for hostnames the app has registered.
 	on_demand_tls {
 		ask http://web:3000/api/domains/allowed

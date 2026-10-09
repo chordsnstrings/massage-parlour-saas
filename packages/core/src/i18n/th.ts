@@ -7,16 +7,20 @@ import { account } from './th/account'
 import { accounts } from './th/accounts'
 import { ai } from './th/ai'
 import { analytics } from './th/analytics'
+import { audit } from './th/audit'
 import { auth } from './th/auth'
+import { automations } from './th/automations'
 import { billing } from './th/billing'
 import { bookings } from './th/bookings'
 import { calendar } from './th/calendar'
 import { campaigns } from './th/campaigns'
 import { clients } from './th/clients'
+import { clientsMerge } from './th/clientsMerge'
 import { common } from './th/common'
 import { documents } from './th/documents'
 import { domain } from './th/domain'
 import { enums } from './th/enums'
+import { equipment } from './th/equipment'
 import { errors } from './th/errors'
 import { inbox } from './th/inbox'
 import { inventory } from './th/inventory'
@@ -25,6 +29,7 @@ import { marketing } from './th/marketing'
 import { media } from './th/media'
 import { messages } from './th/messages'
 import { nav } from './th/nav'
+import { notifications } from './th/notifications'
 import { overview } from './th/overview'
 import { packages } from './th/packages'
 import { payroll } from './th/payroll'
@@ -34,15 +39,20 @@ import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
 import { sales } from './th/sales'
+import { search } from './th/search'
 import { services } from './th/services'
 import { settings } from './th/settings'
+import { sheets } from './th/sheets'
 import { shell } from './th/shell'
 import { staff } from './th/staff'
 import { team } from './th/team'
+import { timeclock } from './th/timeclock'
 import { ui } from './th/ui'
 import { validation } from './th/validation'
+import { waitlist } from './th/waitlist'
 import { warehouse } from './th/warehouse'
 import { website } from './th/website'
+import { widget } from './th/widget'
 import type { Messages } from './types'
 
 export const th: Messages = {
@@ -58,14 +68,18 @@ export const th: Messages = {
   calendar,
   bookings,
   clients,
+  clientsMerge,
   sales,
   services,
+  equipment,
   packages,
   inventory,
   purchases,
   warehouse,
+  waitlist,
   team,
   staff,
+  timeclock,
   documents,
   roles,
   inbox,
@@ -76,13 +90,19 @@ export const th: Messages = {
   analytics,
   reviews,
   website,
+  widget,
   media,
   accounts,
   payroll,
   billing,
+  automations,
   settings,
+  sheets,
   account,
   auth,
   enums,
   permissions,
+  notifications,
+  search,
+  audit,
 }

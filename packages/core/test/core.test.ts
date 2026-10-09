@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_PERMISSIONS,
+  CUSTOM_ROLE_PERMISSIONS,
   checkSlug,
+  DEFAULT_EMAIL_FROM,
   matchRoot,
   normalizeSlug,
+  PHONE_ROLES,
   parseRoots,
   resolvePermissions,
   resolveSurface,
+  roleMayHold,
   SYSTEM_ROLES,
   toUaeE164,
   whatsappLink,
@@ -49,6 +53,19 @@ describe('platform roots', () => {
     expect(matchRoot('www.serenityspa.ae', roots)).toBeNull()
   })
 
+  it('serves spamanagement.co (canonical) and the old spamanagement.ae side by side', () => {
+    const roots = parseRoots('spamanagement.co', 'spamanagement.ae')
+    expect(roots).toEqual(['spamanagement.co', 'spamanagement.ae'])
+    for (const root of roots) {
+      expect(resolveSurface(root, roots)).toEqual({ kind: 'marketing' })
+      expect(resolveSurface(`app.${root}`, roots)).toEqual({ kind: 'app' })
+      expect(resolveSurface(`admin.${root}`, roots)).toEqual({ kind: 'admin' })
+      expect(resolveSurface(`pilot.${root}`, roots)).toEqual({ kind: 'site', slug: 'pilot' })
+    }
+    expect(matchRoot('spamanagement.com', roots)).toBeNull()
+    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.ae <no-reply@spamanagement.ae>') // B1: .ae until .co is verified
+  })
+
   it('resolves surfaces on every platform domain', () => {
     const roots = ['spamanagement.ae', 'spa-old.example.com']
     expect(resolveSurface('app.spa-old.example.com', roots)).toEqual({ kind: 'app' })
@@ -76,7 +93,7 @@ describe('permissions', () => {
   it('owner has everything and system roles resolve from code', () => {
     expect(resolvePermissions({ key: 'owner', permissions: [] }).size).toBe(ALL_PERMISSIONS.length)
     expect(resolvePermissions({ key: 'therapist', permissions: ['billing.view'] })).toEqual(
-      new Set(['calendar.view']),
+      new Set(['calendar.view', 'timeclock.leave']),
     )
   })
   it('custom roles keep only known permissions', () => {
@@ -86,6 +103,20 @@ describe('permissions', () => {
   })
   it('therapists never see client phones', () => {
     expect(SYSTEM_ROLES.therapist.permissions).not.toContain('clients.phone')
+  })
+  it('client phones: only owner, manager and receptionist — never other system roles or custom roles', () => {
+    for (const key of Object.keys(SYSTEM_ROLES))
+      expect(resolvePermissions({ key, permissions: [] }).has('clients.phone')).toBe(
+        (PHONE_ROLES as readonly string[]).includes(key),
+      )
+    expect([...PHONE_ROLES].sort()).toEqual(['manager', 'owner', 'receptionist'])
+    // A custom role row that somehow stores it (old data, hand edit) still never gets it.
+    expect(resolvePermissions({ key: 'custom_x', permissions: ['clients.phone', 'clients.view'] })).toEqual(
+      new Set(['clients.view']),
+    )
+    expect(CUSTOM_ROLE_PERMISSIONS).not.toContain('clients.phone')
+    expect(roleMayHold('therapist', 'clients.phone')).toBe(false)
+    expect(roleMayHold('receptionist', 'clients.phone')).toBe(true)
   })
 })
 

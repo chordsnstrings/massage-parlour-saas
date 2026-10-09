@@ -138,6 +138,7 @@ const serviceSchema = z
     bufferAfterMin: z.coerce.number().int().min(0, 'services.v.min0').max(120, 'services.v.max120'),
     therapistsRequired: z.coerce.number().int().min(1).max(2),
     roomTypes: z.preprocess(asArray, z.array(z.enum(ROOM_TYPES))),
+    equipmentTypes: z.preprocess(asArray, z.array(z.string().trim().min(1).max(40)).max(5)),
     onlineBookable: bool,
     // '' = spa default (settings), 'show' / 'hide' = this service overrides it (R4).
     showPrice: z
@@ -190,6 +191,7 @@ export async function saveServiceAction(
     bufferAfterMin: d.bufferAfterMin,
     therapistsRequired: d.therapistsRequired,
     roomTypes: d.roomTypes,
+    equipmentTypes: [...new Set(d.equipmentTypes)],
     onlineBookable: d.onlineBookable,
     showPrice: d.showPrice,
     active: d.active,

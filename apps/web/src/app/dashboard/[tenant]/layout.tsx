@@ -6,6 +6,8 @@ import { isSystemRole, type Permission } from '@spa/core'
 import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { billingAlert, logoUrl } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
+import { SearchPalette } from '@/components/search/search-palette'
+import { NotificationBell } from '@/components/shell/notification-bell'
 import {
   type ShellGroup,
   type ShellItem,
@@ -18,6 +20,7 @@ import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { bellData } from '@/server/notifications'
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
 async function shellData(ctx: MemberContext) {
@@ -69,11 +72,13 @@ export default async function TenantLayout({
 }) {
   const { tenant: slug } = await params
   const ctx = await requireMember(slug)
-  const [{ locale, t, fmt, messages }, data] = await Promise.all([getI18n(), shellData(ctx)])
+  const i18n = await getI18n()
+  const { locale, t, fmt, messages } = i18n
+  const [data, bell] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt)])
   const base = appPath(`/${ctx.tenant.slug}`)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
-  // Automations and Coming next stay hidden until Phase 3 builds them.
+  // Coming next stays hidden until Phase 3 builds it.
   const allowed = (perm: Permission | Permission[] | null) =>
     perm === null || (Array.isArray(perm) ? perm.some((p) => can(ctx, p)) : can(ctx, perm))
   const page = (
@@ -113,6 +118,11 @@ export default async function TenantLayout({
       ]),
       ...item('team', t('nav.team'), [
         ...page('staff.view', '/staff', t('nav.staff')),
+        ...page(
+          ['timeclock.kiosk', 'timeclock.leave', 'timeclock.approve'],
+          '/timeclock',
+          t('timeclock.title'),
+        ),
         ...page('team.manage', '/team', t('nav.access')),
         ...page('staff.manage', '/documents', t('nav.documents')),
       ]),
@@ -139,6 +149,7 @@ export default async function TenantLayout({
       ...single('billing', 'billing.view', '/billing', t('nav.billing')),
     ]),
     ...group(t('nav.group.system'), [
+      ...single('automations', 'settings.manage', '/automations', t('nav.automations')),
       ...single('settings', 'settings.manage', '/settings', t('nav.settings')),
     ]),
   ]
@@ -215,6 +226,8 @@ export default async function TenantLayout({
           plan={plan}
           banner={notice}
           alert={alert}
+          bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
+          search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
         >

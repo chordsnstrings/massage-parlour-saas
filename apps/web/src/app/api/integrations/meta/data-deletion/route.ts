@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     .slice(0, 16)
   if (!code) return new Response('Missing confirmation code', { status: 400 })
   return new Response(
-    `Deletion request ${code}: processed. spamanagement.ae no longer holds an Instagram access token or profile details for this account (any it held were removed when the request arrived).`,
+    `Deletion request ${code}: processed. spamanagement.co no longer holds an Instagram access token or profile details for this account (any it held were removed when the request arrived).`,
     { headers: { 'content-type': 'text/plain; charset=utf-8' } },
   )
 }

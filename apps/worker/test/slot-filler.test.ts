@@ -1,6 +1,7 @@
 import { queueSlotOffers } from '@spa/ai'
 import { aiAgentSettings, branches, closeAllDbs, outbox, tenants } from '@spa/db'
 import { resetTestDatabase, testDbs, testUrls } from '@spa/db/testing'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runSlotFiller } from '../src/jobs/tenant-jobs'
 
@@ -50,6 +51,16 @@ describe('runSlotFiller (worker job)', () => {
     await runSlotFiller()
     expect(spy).toHaveBeenCalledTimes(1)
     expect(spy).toHaveBeenCalledWith({ tenantId: a.tenantId, branchId: a.branchId })
+  })
+
+  it('skips a spa with the quiet-slot automation switched off (B3)', async () => {
+    const c = await seedSpa('slot-c')
+    await owner
+      .update(tenants)
+      .set({ settings: { automations: { slotFiller: false } } })
+      .where(eq(tenants.id, c.tenantId))
+    await runSlotFiller()
+    expect(spy.mock.calls.map(([o]) => o.tenantId)).not.toContain(c.tenantId)
   })
 
   it('skips a spa that already sent a slot offer today', async () => {

@@ -88,7 +88,7 @@ test('domains: owner requests a domain to buy, cancels one, support declines the
 
   // No Namecheap credentials in e2e: search explains purchases aren't on yet.
   await page.getByLabel('Search for a name').fill('serenity spa')
-  await page.getByRole('button', { name: 'Search' }).click()
+  await page.locator('button[type="submit"]', { hasText: 'Search' }).click() // not the top-bar ⌘K search
   await expect(page.getByText(/Buying domains isn’t switched on yet/)).toBeVisible()
 
   // Requests (as if made with live prices) show with their status; an open one can be cancelled.
