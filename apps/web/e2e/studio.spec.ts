@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
-import { admin, app, seedCatalog, signInPlatformAdmin, signUpOwner } from './helpers'
+import { ADMIN, admin, app, passTwoFactor, seedCatalog, signInPlatformAdmin, signUpOwner } from './helpers'
 
 const REQUEST = 'Please use our new rooftop photo on the home page.'
 
@@ -8,9 +8,12 @@ async function signInOnApp(page: Page, path: string) {
   const target = `${app}${path}`
   await page.goto(`${app}/login?next=${encodeURIComponent(new URL(target).pathname)}`)
   if (await page.getByLabel('Email').isVisible()) {
-    await page.getByLabel('Email').fill('admin@e2e.test')
-    await page.getByLabel('Password').fill('platform-admin-pass')
+    await page.getByLabel('Email').fill(ADMIN.email)
+    await page.getByLabel('Password').fill(ADMIN.password)
     await page.getByRole('button', { name: 'Sign in' }).click()
+    // Super-admins have 2FA (G3): the sign-in continues on the two-step page, then goes to `next`.
+    await page.waitForURL(/\/two-factor/)
+    await passTwoFactor(page)
   }
   // Signing in (or an existing session) redirects to `next`; wait for it rather than racing a second goto.
   await page.waitForURL(target)

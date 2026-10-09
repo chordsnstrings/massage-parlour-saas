@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -16,10 +17,13 @@ import {
   staff,
   staffServices,
   tenants,
+  twoFactor,
   user,
 } from '@spa/db'
 import { testUrls } from '@spa/db/testing'
 import { createBooking } from '@spa/services'
+import { createEmailVerificationToken } from 'better-auth/api'
+import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto'
 import { eq } from 'drizzle-orm'
 import type ExcelJSType from 'exceljs'
 
@@ -51,36 +55,99 @@ export async function signUpOwner(page: Page, opts: { slug?: string; name?: stri
   return { slug, dashboard: `${app}/${slug}` }
 }
 
+/** BETTER_AUTH_SECRET of the e2e server (playwright.config.ts). */
+const AUTH_SECRET = 'e2e-secret-e2e-secret-e2e-secret-e2e'
+export const ADMIN = { email: 'admin@e2e.test', password: 'platform-admin-pass' }
+
+/** The current TOTP code of a user with 2FA set up: decrypts the stored secret the way Better Auth does. */
+export async function totpCode(email: string) {
+  const [row] = await testDb()
+    .select({ secret: twoFactor.secret })
+    .from(twoFactor)
+    .innerJoin(user, eq(user.id, twoFactor.userId))
+    .where(eq(user.email, email))
+  if (!row) throw new Error(`no 2FA secret for ${email}`)
+  const secret = await symmetricDecrypt({ key: AUTH_SECRET, data: row.secret.replace(/^\$ba\$\d+\$/, '') })
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)))
+  const h = createHmac('sha1', secret).update(counter).digest()
+  return String((h.readUInt32BE(h[h.length - 1]! & 15) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}
+
+/** On the two-step page after a password sign-in: enters the authenticator code. */
+export async function passTwoFactor(page: Page, email = ADMIN.email) {
+  await page.getByLabel('6-digit code').fill(await totpCode(email))
+  await page.getByRole('button', { name: 'Verify', exact: true }).click()
+}
+
+/** Turns on TOTP 2FA from the account page the browser is on (Set up → password → code from the app). */
+export async function enrolTwoFactor(page: Page, email: string, password: string) {
+  await page.getByLabel('Confirm your password').fill(password)
+  await page.getByRole('button', { name: 'Set up' }).click()
+  const code = page.getByLabel('6-digit code')
+  await expect(code).toBeVisible()
+  await code.fill(await totpCode(email))
+  await page.getByRole('button', { name: 'Verify & turn on' }).click()
+  await expect(page.getByText('Two-step verification is on')).toBeVisible()
+}
+
+/** Where a password sign-in landed: the console, the 2FA step, the 2FA enrolment page, or nowhere (bad login). */
+async function signInOutcome(page: Page) {
+  const overview = page.getByRole('heading', { name: 'Overview' })
+  for (let i = 0; i < 60; i++) {
+    const url = page.url()
+    if (url.includes('admin2fa=1')) return 'enrol' as const
+    if (url.includes('/two-factor')) return 'twoFactor' as const
+    if (await overview.isVisible()) return 'in' as const
+    await page.waitForTimeout(250)
+  }
+  return 'failed' as const
+}
+
 /**
  * Signs the page in as the e2e super-admin (admin@e2e.test, in PLATFORM_ADMIN_EMAILS), creating the account through
- * spa sign-up the first time any spec needs it.
+ * spa sign-up the first time any spec needs it. G2/G3: the address is promoted only once verified (the spec opens
+ * the real verification link) and the console demands TOTP 2FA, which the first sign-in enrols.
  */
 export async function signInPlatformAdmin(page: Page) {
-  const email = 'admin@e2e.test'
-  const password = 'platform-admin-pass'
+  const { email, password } = ADMIN
   const overview = page.getByRole('heading', { name: 'Overview' })
   const signIn = async () => {
     await page.goto(`${admin}/login`)
-    if (await overview.isVisible()) return true
+    if (await overview.isVisible()) return 'in' as const
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
     await page.getByRole('button', { name: 'Sign in' }).click()
-    return overview.waitFor({ timeout: 8_000 }).then(
-      () => true,
-      () => false,
-    )
+    return signInOutcome(page)
   }
-  if (await signIn()) return
-  const slug = uniqueSlug('admin')
-  await page.goto(`${app}/signup`)
-  await page.getByLabel('Your name').fill('Platform Admin')
-  await page.getByLabel('Work email').fill(email)
-  await page.getByLabel('Password').fill(password)
-  await page.getByLabel('Spa name').fill('Admin Test Spa')
-  await page.getByLabel('Web address').fill(slug)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await page.waitForURL(`${app}/${slug}`)
-  expect(await signIn()).toBe(true)
+  let outcome = await signIn()
+  if (outcome === 'failed') {
+    const slug = uniqueSlug('admin')
+    await page.goto(`${app}/signup`)
+    await page.getByLabel('Your name').fill('Platform Admin')
+    await page.getByLabel('Work email').fill(email)
+    await page.getByLabel('Password').fill(password)
+    await page.getByLabel('Spa name').fill('Admin Test Spa')
+    await page.getByLabel('Web address').fill(slug)
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await page.waitForURL(`${app}/${slug}`)
+    // Unverified: the listed email is not a super-admin yet (G2).
+    await page.goto(`${admin}/`)
+    await expect(overview).toHaveCount(0)
+    // Open the emailed verification link (same token Better Auth sends).
+    const token = await createEmailVerificationToken(AUTH_SECRET, email)
+    await page.goto(`${app}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`)
+    outcome = await signIn()
+  }
+  if (outcome === 'enrol') {
+    // G3: a super-admin without 2FA is sent to set it up; the console opens afterwards.
+    await expect(page.getByText('Super-admin access needs two-step verification')).toBeVisible()
+    await enrolTwoFactor(page, email, password)
+    await page.goto(`${admin}/`)
+  } else if (outcome === 'twoFactor') {
+    await passTwoFactor(page, email)
+  }
+  await expect(overview).toBeVisible()
 }
 
 /** Screenshots a view at phone, tablet and desktop widths into test-results/screens. */
@@ -114,6 +181,20 @@ export async function makeStudio(slug: string) {
     .from(user)
     .where(eq(user.email, `owner-${slug}@e2e.test`))
   await db.insert(platformAdmins).values({ userId: owner!.id }).onConflictDoNothing()
+  // Super-admin powers need 2FA (G3); the UI enrolment is covered by signInPlatformAdmin. Here a verified TOTP
+  // secret is stored directly (as Better Auth would), so a later sign-in passes with passTwoFactor().
+  const enc = (data: string) => symmetricEncrypt({ key: AUTH_SECRET, data })
+  await db
+    .insert(twoFactor)
+    .values({
+      id: `tf-${owner!.id}`,
+      userId: owner!.id,
+      secret: await enc(`e2e-totp-${owner!.id}`),
+      backupCodes: await enc('[]'),
+      verified: true,
+    })
+    .onConflictDoNothing()
+  await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, owner!.id))
 }
 
 /** Today's business date in Dubai (05:00 cutoff). */

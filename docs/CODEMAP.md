@@ -80,6 +80,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      member gets owner permissions and `impersonating: true`. Anyone else gets a 404.
    - `guard(slug, perm)`: permission check plus writable status (trial / active / past_due).
    - `studioGuard` (Website Studio) and `requirePlatformAdmin`.
+   - G3: super-admin powers (`isPlatformAdmin`, impersonation, console) need TOTP 2FA on (fresh DB read). Without it
+     the console/impersonation redirect to the account page on the current host with `?admin2fa=1`
+     (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
      `audit()` (`server/audit.ts`, platformDb `audit_log`) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
@@ -103,8 +106,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 - **`dashboard/(auth)`**: login, signup, invite/[token], 2FA, forgot/reset password.
   - Signup calls `provisionTenant`, which creates the tenant, a default branch, the 6 system roles, the owner member
-    and a trial subscription on the first active plan. An email listed in `PLATFORM_ADMIN_EMAILS` also becomes a
-    platform admin.
+    and a trial subscription on the first active plan. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
+    platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
+    `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
+    sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
 - **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
   `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
   with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`; top bar: group crumb + title (home = greeting), EN | ไทย;
@@ -410,7 +415,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 | Job | Schedule |
 |---|---|
-| `db-backup` (pg_dump → R2 when `R2_*` is set) | 03:30 |
+| `db-backup` (pg_dump → off-site bucket: `R2_*`, else the `S3_*` bucket under `backups/` (`offsiteConfig`; a half-set `R2_*` = not configured); every ok/skipped/failed run in `platform_job_runs`; console overview warns when the last ok run is missing or > 36 h old) | 03:30 |
 | `restore-drill` (latest R2 daily dump → scratch DB via `RESTORE_DRILL_ADMIN_URL` (CREATEDB; compose uses the postgres superuser) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
 | `instagram-reply` (DB queue `instagram_reply_queue`, RLS, PK = message id: the Meta webhook's `ingestInstagramWebhook` inserts the row in the message's transaction for live spas; the job finds spas with due rows (`tenantsWithDueReplies`, platform role), `claimDueReplies` (5-min lease, SKIP LOCKED), `inboundAnswered` skips threads already answered, `finishReply` deletes, `failReply` backs off 30 s ×2 … 30 min, `failed_at` after 5 tries. Web has no pg-boss / owner URL / `after()`) | every minute |
 | `analytics-rollup` | hourly at :07 |

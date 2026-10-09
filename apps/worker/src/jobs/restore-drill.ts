@@ -3,9 +3,8 @@ import { rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { createDb, platformJobRuns } from '@spa/db'
-import { AwsClient } from 'aws4fetch'
 import { log } from '../log'
+import { type OffsiteConfig, offsiteClient, offsiteConfig, recordPlatformRun } from './backup'
 
 const run = promisify(execFile)
 type Env = Record<string, string | undefined>
@@ -40,15 +39,10 @@ export function latestBackupKey(listXml: string): string | null {
   return keys.sort().at(-1) ?? null
 }
 
-/** Same R2 config as db-backup. Downloads the latest daily dump to `dest`; returns its key. */
-async function downloadLatestFromR2(env: Env, dest: string) {
-  const r2 = new AwsClient({
-    accessKeyId: env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
-    service: 's3',
-    region: 'auto',
-  })
-  const base = `${env.R2_ENDPOINT!.replace(/\/$/, '')}/${env.R2_BUCKET}`
+/** Same off-site bucket as db-backup. Downloads the latest daily dump to `dest`; returns its key. */
+async function downloadLatest(cfg: OffsiteConfig, dest: string) {
+  const r2 = offsiteClient(cfg)
+  const base = `${cfg.endpoint}/${cfg.bucket}`
   const list = await r2.fetch(`${base}?list-type=2&prefix=backups/daily/`)
   if (!list.ok) throw new Error(`R2 list failed: ${list.status}`)
   const key = latestBackupKey(await list.text())
@@ -69,17 +63,8 @@ const psql = (url: string, sql: string) =>
     maxBuffer: 1 << 20,
   })
 
-async function record(env: Env, startedAt: Date, r: DrillResult) {
-  if (!env.DATABASE_URL_PLATFORM) return
-  try {
-    const { status, ...details } = r
-    await createDb(env.DATABASE_URL_PLATFORM)
-      .insert(platformJobRuns)
-      .values({ job: 'restore-drill', status, details, startedAt })
-  } catch (e) {
-    log('error', 'restore drill: could not record result', { error: String(e) })
-  }
-}
+const record = (env: Env, startedAt: Date, { status, ...details }: DrillResult) =>
+  recordPlatformRun(env, 'restore-drill', startedAt, status, details)
 
 /**
  * Monthly restore drill (PLAN §3.5): latest pg_dump from R2 → scratch database → sanity counts → drop.
@@ -91,8 +76,8 @@ export async function restoreDrill(
   deps: { download?: (dest: string) => Promise<string> } = {},
 ): Promise<DrillResult> {
   const startedAt = new Date()
-  const { R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = env
-  if (!deps.download && (!R2_ENDPOINT || !R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY)) {
+  const cfg = offsiteConfig(env)
+  if (!deps.download && !cfg) {
     log('warn', 'restore drill skipped: R2 not configured')
     const r = { status: 'skipped' as const, reason: 'r2_not_configured' }
     await record(env, startedAt, r)
@@ -107,7 +92,7 @@ export async function restoreDrill(
   let bytes: number | undefined
   let result: DrillResult
   try {
-    key = await (deps.download ?? ((d) => downloadLatestFromR2(env, d)))(file)
+    key = await (deps.download ?? ((d) => downloadLatest(cfg!, d)))(file)
     bytes = (await stat(file)).size
     await psql(admin, `CREATE DATABASE "${scratch}"`)
     await run('pg_restore', ['--no-owner', '--no-acl', '--exit-on-error', `--dbname=${scratchUrl}`, file], {

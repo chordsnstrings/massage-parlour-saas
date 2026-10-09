@@ -6,6 +6,7 @@ import { resetTestDatabase, testDbs, testUrls } from '@spa/db/testing'
 import { eq, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { jobs } from '../src/jobs'
+import { backupDatabase } from '../src/jobs/backup'
 import { latestBackupKey, restoreDrill } from '../src/jobs/restore-drill'
 
 const run = promisify(execFile)
@@ -35,6 +36,12 @@ describe('restore drill (B6)', () => {
 
   it('skips cleanly when R2 is not configured', async () => {
     expect(await restoreDrill({})).toEqual({ status: 'skipped', reason: 'r2_not_configured' })
+  })
+
+  it('records a skipped off-site backup for the console (G1)', async () => {
+    await backupDatabase({ DATABASE_URL_PLATFORM: testUrls.platform })
+    const [row] = await owner.select().from(platformJobRuns).where(eq(platformJobRuns.job, 'db-backup'))
+    expect(row).toMatchObject({ status: 'skipped', details: { reason: 'offsite_not_configured' } })
   })
 
   it('restores the dump into a scratch database, counts, drops it and records the run', async () => {
