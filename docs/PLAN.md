@@ -1186,7 +1186,10 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 ### 18.1 Owner decisions (2026-10-09)
 - Order: G1–G5 first, then the access change below.
 - Super-admin access stays exactly as today (impersonation, data export, fixing a spa's setup) until the owner decides otherwise.
-- Add a per-spa performance view in the console: revenue totals, booking counts, marketing analytics (web visits, sources AI/IG/GBP/QR, campaigns).
+- ✅ Add a per-spa performance view in the console: revenue totals, booking counts, marketing analytics (web visits, sources AI/IG/GBP/QR, campaigns).
+  Done 2026-10-09: console `/performance` (all-spas table, sortable; 7/30/90 days, this/last month, capped 92 days)
+  + `/performance/[id]` (daily/weekly revenue + bookings bars, funnel visits → started → booked, web entry sources,
+  booking channels, campaigns, social posts/conversations/reviews counts, AI spend vs budget). Aggregates only.
 - Spa logins (owner, manager, receptionist, therapist) keep the dashboard/CRM. On the website the spa edits **only services + prices**
   (name, description, duration, price → live site); no design approval / change requests — super-admin edits and publishes directly.
 - Online booking from tenant sites stays.

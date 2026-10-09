@@ -135,7 +135,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `settings/audit` = audit log viewer (`audit.view`).
 - **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
 - **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
-  (studio templates), websites (studio overview).
+  (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via
+  `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
+  `tenantPerformance`; detail adds `tenantPerformanceDetail`). Revenue there = sales (paid|refunded) by sale business
+  date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
 - **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
   scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
