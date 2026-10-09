@@ -233,10 +233,6 @@ async function Footer() {
           <span>
             © {new Date().getFullYear()} {LEGAL.companyName} · {LEGAL.brand}
           </span>
-          <span>
-            Client payments are recorded, never processed. WhatsApp reminders and follow-ups are sent by you,
-            from your own number.
-          </span>
         </div>
       </div>
     </footer>
