@@ -1,1 +1,0 @@
-ALTER TABLE "branches" ADD COLUMN "maps_url" text;

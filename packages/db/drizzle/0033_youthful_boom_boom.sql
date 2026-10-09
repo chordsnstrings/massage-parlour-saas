@@ -1,3 +1,4 @@
+CREATE TYPE "public"."spa_application_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
 CREATE TABLE "jwks" (
 	"id" text PRIMARY KEY NOT NULL,
 	"public_key" text NOT NULL,
@@ -141,8 +142,44 @@ CREATE TABLE "oauth_resource" (
 );
 --> statement-breakpoint
 ALTER TABLE "oauth_resource" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "rate_limits" (
+	"key" text PRIMARY KEY NOT NULL,
+	"window_start" timestamp with time zone DEFAULT now() NOT NULL,
+	"count" integer DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "rate_limits" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE TABLE "spa_applications" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"status" "spa_application_status" DEFAULT 'pending' NOT NULL,
+	"user_id" text NOT NULL,
+	"applicant_name" text NOT NULL,
+	"email" text NOT NULL,
+	"phone" text NOT NULL,
+	"spa_name" text NOT NULL,
+	"slug" text NOT NULL,
+	"emirate" text NOT NULL,
+	"street_address" text NOT NULL,
+	"plan_id" uuid,
+	"preferred_start" date NOT NULL,
+	"notes" text,
+	"logo_bytes" "bytea",
+	"logo_content_type" text,
+	"reviewed_by" text,
+	"reviewed_at" timestamp with time zone,
+	"rejection_reason" text,
+	"share_reason" boolean DEFAULT false NOT NULL,
+	"created_tenant_id" uuid,
+	"setup_payment" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "spa_applications" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "user" ADD COLUMN "disabled_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "site_pages" ADD COLUMN "pending" jsonb;--> statement-breakpoint
 ALTER TABLE "sites" ADD COLUMN "theme_draft" jsonb;--> statement-breakpoint
+ALTER TABLE "branches" ADD COLUMN "maps_url" text;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -155,6 +192,10 @@ ALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_user_id_user_id_fk" FO
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "spa_applications" ADD CONSTRAINT "spa_applications_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "spa_applications" ADD CONSTRAINT "spa_applications_plan_id_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."plans"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "spa_applications" ADD CONSTRAINT "spa_applications_reviewed_by_user_id_fk" FOREIGN KEY ("reviewed_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "spa_applications" ADD CONSTRAINT "spa_applications_created_tenant_id_tenants_id_fk" FOREIGN KEY ("created_tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "oauth_access_token_client" ON "oauth_access_token" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauth_access_token_user" ON "oauth_access_token" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "oauth_access_token_session" ON "oauth_access_token" USING btree ("session_id");--> statement-breakpoint
@@ -169,6 +210,9 @@ CREATE INDEX "oauth_refresh_token_client" ON "oauth_refresh_token" USING btree (
 CREATE INDEX "oauth_refresh_token_user" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "oauth_refresh_token_session" ON "oauth_refresh_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauth_refresh_token_code" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "spa_applications_pending_slug" ON "spa_applications" USING btree ("slug") WHERE "spa_applications"."status" = 'pending';--> statement-breakpoint
+CREATE UNIQUE INDEX "spa_applications_pending_user" ON "spa_applications" USING btree ("user_id") WHERE "spa_applications"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX "spa_applications_status_created" ON "spa_applications" USING btree ("status","created_at");--> statement-breakpoint
 CREATE POLICY "platform_all" ON "jwks" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
 CREATE POLICY "platform_all" ON "oauth_access_token" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
 CREATE POLICY "platform_all" ON "oauth_client" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
@@ -176,4 +220,6 @@ CREATE POLICY "platform_all" ON "oauth_client_assertion" AS PERMISSIVE FOR ALL T
 CREATE POLICY "platform_all" ON "oauth_client_resource" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
 CREATE POLICY "platform_all" ON "oauth_consent" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
 CREATE POLICY "platform_all" ON "oauth_refresh_token" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
-CREATE POLICY "platform_all" ON "oauth_resource" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);
+CREATE POLICY "platform_all" ON "oauth_resource" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
+CREATE POLICY "platform_all" ON "rate_limits" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);--> statement-breakpoint
+CREATE POLICY "platform_all" ON "spa_applications" AS PERMISSIVE FOR ALL TO "spa_platform" USING (true) WITH CHECK (true);
