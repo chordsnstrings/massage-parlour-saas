@@ -190,6 +190,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   scoped `.mkt`; Space Grotesk + DM Sans; Noto Sans Thai as the Thai-glyph fallback in `--font`/`--head`) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. `/crm` EN/TH demo: labels resolved
   server-side from the dashboard catalogues (`components/marketing/crm-demo-copy.ts`) → client `crm-demo.tsx`; PLAN §18.5.
+  Home CRM showcase = `crm-showcase.tsx` (same mock, `overview`, + 4 floating cards): CSS scroll-driven 3D
+  (`.mkt-show*` in marketing.css; timelines on untransformed wrappers, unitless `--show-*` amounts the JS fallback
+  reads) — keep it out of MarketingMotion (no `data-tilt`/`data-rise` inside); PLAN §18.8.
 - **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
   scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.

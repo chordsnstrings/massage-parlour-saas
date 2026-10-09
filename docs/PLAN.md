@@ -1506,7 +1506,8 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   (clients, therapists, treatments, products) stay untranslated and are dotted-underlined; "Walk-in" is a label, so it
   translates. Swap animation is CSS and off under `prefers-reduced-motion`. Marketing copy itself is English; it does
   not claim the Thai is native-reviewed (it still needs that review, §14.6).
-- Home: new "Spa CRM" section (EN/TH label pairs from the catalogues, link to /crm); hero notes now "Sites in English &
+- Home: new "Spa CRM" section (EN/TH label pairs from the catalogues, link to /crm; since replaced by the §18.8
+  showcase); hero notes now "Sites in English &
   Arabic · Dashboard in English & Thai". Features: "Your team's language" band (link to /crm) + team-area bullet.
   FAQ "Is it in Arabic?" no longer says the dashboard is English-only. Thai font: the marketing layout loads
   `@fontsource-variable/noto-sans-thai`; it sits after DM Sans/Space Grotesk in `--font`/`--head`, so it supplies Thai
@@ -1644,3 +1645,19 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
   feature-tier override (e.g. Premium features while billed at the Standard rate). Audited.
 - Marketing pricing headline: "Pick your plan. We handle the rest." Home page gets a CRM showcase section with 3D
   scrolling (respecting reduced motion).
+- **Home CRM showcase ✅** (2026-10-09, replaces the §18.5 home "Spa CRM" label table): headline + 3 benefits + CTAs
+  "See the Spa CRM" (/crm) and "Apply for your spa" (app /signup); EN/ภาษาไทย toggle; the large dashboard mock
+  (`CrmDashboard overview`: sidebar with the shell's icons, KPI row, Up next, Check out; real catalogue strings, CRM
+  look) lies back in 3D (rotateX 24°, rotateZ −4°, scale 0.9; phones 12° / −2° / 0.95) and is flat once its centre
+  reaches the viewport centre (phones: top in the upper third); 4 cards (calendar clash = `errors.domain.timeClashes`,
+  tax invoice, WhatsApp queue "Open in WhatsApp", therapist "My earnings") drift at 4 depths around it, stacked
+  below it under 1024 px. Motion = CSS scroll-driven animations (`animation-timeline` on untransformed wrappers'
+  `view-timeline`s, transform/opacity only, inside `@supports` + `prefers-reduced-motion: no-preference`); browsers
+  without it get the same curves from an IntersectionObserver-gated, scroll-scheduled rAF in `crm-showcase.tsx`
+  (cached offsets, no per-frame layout reads). Reduced motion → static flat layout (an exception to the "motion for
+  everyone" rule of motion.tsx, as the owner asked here). The /crm demo shares the mock, so it got the CRM look too;
+  phones show the mock's menu as one fading row so EN/TH keep the same height (mock grid columns are
+  `minmax(0,1fr)`, else that row's min-content widens the phone mock). ≥ 1024 px the earnings card hangs below the
+  till total; ≥ 1440 px the cards sit further out beside the page column. Probe (production build, 390 px slow
+  scroll + 4 address-bar resizes, CSS and JS-fallback paths): 0 frames > 50 ms, 0 blank frames, CLS 0, no
+  horizontal scroll. e2e: `marketing-crm.spec`.
