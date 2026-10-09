@@ -8,7 +8,8 @@
  * Radix portals (sheets, menus) and the root Toaster get them too. They are lifted while the site editor or site
  * preview overlay is open ([data-crm-off]) so that chrome stays unchanged. Super-admin and auth never render .crm.
  * The UI kit reads `--ui-*` density hooks whose fallbacks are its original sizes (components/ui/*).
- * Contrast: the text/control pairs below pass WCAG AA (checked 2026-10-09; re-check when changing a colour).
+ * Contrast: text pairs pass WCAG AA 4.5:1 and form-control edges (--crm-ctl-line) 3:1 (checked 2026-10-09; re-check
+ * when changing a colour). Card dividers (--crm-line) are decorative and stay soft.
  */
 :root:has(.crm):not(:has([data-crm-off])) {
   color-scheme: light;
@@ -19,8 +20,8 @@
     "Space Grotesk Variable", "DM Sans Variable", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
   /* KPI / stat figures are digits + "AED": Space Grotesk in both languages, Noto Sans Thai catches any Thai glyph. */
   --crm-num: "Space Grotesk Variable", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
-  /* Tailwind's `font-sans` + preflight html font follow the brand stack too */
-  --font-sans: var(--crm-font);
+  /* The html font too (beats the preflight rule, which holds a literal Inter stack; `font-sans` is not used in the CRM) */
+  font-family: var(--crm-font);
 
   /* Colour tokens: brand green #0F6B4B + lime #D9F26A (marketing.css), lightened for all-day use */
   --crm-bg: #e7efe6;
@@ -38,6 +39,9 @@
   --crm-lime-ink: #1d2a06;
   --crm-line: rgb(17 40 28 / 0.08);
   --crm-line2: rgb(17 40 28 / 0.14);
+  /* Form control edges: >= 3:1 on white, page and surface2 (WCAG 1.4.11); --crm-line stays for card dividers */
+  --crm-ctl-line: #848e88;
+  --crm-ctl-line-hover: #59645d;
   --crm-glow: rgb(15 107 75 / 0.18);
   --crm-ok: #13773f;
   --crm-ok-bg: rgb(32 160 92 / 0.12);
@@ -58,6 +62,7 @@
   --crm-orange: #f2603c;
   --crm-green: #28c877;
   --crm-violet: #7a6ce0;
+  --crm-magenta: #b03f78;
   --crm-wa: #25d366;
   --crm-shadow-kpi: 0 1px 2px rgb(17 40 28 / 0.04), 0 4px 14px rgb(17 40 28 / 0.04);
 
@@ -121,6 +126,8 @@
   --ui-ctl-fs: 13px;
   --ui-ctl-radius: 9px;
   --ui-ctl-bg: var(--crm-surface2);
+  --ui-ctl-border: var(--crm-ctl-line);
+  --ui-ctl-border-hover: var(--crm-ctl-line-hover);
   --ui-label-fs: 11.5px;
   --ui-label-color: var(--crm-muted);
   --ui-card-radius: 12px;
@@ -252,6 +259,9 @@
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 2 * var(--crm-gap));
+  /* The whole sidebar scrolls as one (menu never scrolls inside itself), so the foot never covers a menu item. */
+  overflow-y: auto;
+  scrollbar-width: thin;
   background: var(--crm-side-bg);
   border-inline-end: 1px solid var(--crm-line);
 }
@@ -537,10 +547,8 @@
 
 /* Nav */
 .crm-nav {
-  flex: 1;
-  overflow-y: auto;
+  flex: none;
   padding: 2px 10px 16px;
-  scrollbar-width: thin;
 }
 .crm-ngroup {
   padding: 12px 10px 5px;
@@ -624,8 +632,9 @@
   background: var(--crm-accent);
 }
 
-/* Sidebar foot: plan card + platform badge, pinned under the scrolling menu */
+/* Sidebar foot: plan card + platform badge, at the bottom when the menu fits, after it when the sidebar scrolls */
 .crm-side-foot {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -658,19 +667,8 @@
   width: auto;
   height: 28px;
 }
-/* Short screens: the whole sidebar scrolls as one, so the foot never squeezes the menu. */
+/* Short screens: a slightly smaller badge */
 @media (max-height: 700px) {
-  .crm-side {
-    overflow-y: auto;
-    scrollbar-width: thin;
-  }
-  .crm-nav {
-    flex: none;
-    overflow: visible;
-  }
-  .crm-side-foot {
-    margin-top: auto;
-  }
   .crm-platform-logo {
     height: 24px;
   }

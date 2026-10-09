@@ -1409,10 +1409,19 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   `--crm-accent` #0F6B4B (ink #0A4F37), lime `--crm-lime` #D9F26A only for the active menu item (lime wash + green
   start bar), nav count badges, `acc` pills (`--crm-lime-soft`) and the keyboard focus halo (green 2 px ring + lime
   inside). Semantic colours darkened to pass AA on their tints: ok #13773F, warn #8A5A00, bad #B93B1B, info teal
-  #1B6684. Avatars and chart palette re-picked (white initials AA). WCAG AA checked over all text/control pairs.
+  #1B6684. Avatars and chart palette re-picked (white initials AA; chart: green, mint, blue, amber, orange, violet,
+  magenta `--crm-magenta` #B03F78 — no second green, 7 booking sources). WCAG AA: text pairs ≥ 4.5:1; form-control
+  edges `--crm-ctl-line` #848E88 ≥ 3:1 (1.4.11, kit Input/Select/Textarea via `--ui-ctl-border`, `.crm-inp`); card
+  dividers `--crm-line` stay soft (decorative). The html element takes `--crm-font` too (`font-sans` unused in the CRM).
 - **Platform badge ✅** — `Logo` (components/brand.tsx, 28 px tall) at the sidebar foot under the plan card (also in
   the phone drawer), links to `canonicalUrls().marketing()` in a new tab (`rel=noopener`, aria-label "Spa
-  Management", brand name not translated). Tall screens: pinned under the scrolling menu; ≤700 px tall the whole
-  sidebar scrolls as one so the foot never squeezes the menu. Not on the no-spa/locked pages.
+  Management", brand name not translated). The whole sidebar (and phone drawer) scrolls as one at every height — the
+  menu never scrolls inside its own box; the foot sits at the bottom when everything fits (`margin-top:auto`) and
+  after the menu when it doesn't, so it never covers a menu item (shell e2e checks it). Badge 24 px on ≤700 px tall
+  screens. Not on the no-spa/locked pages.
+- **Open owner question (2026-10-09):** "same theme as the log in like fonts sizeing" — the CRM has the sign-in font
+  families + colours but keeps the compact type scale (titles 18–20 px, 13 px body, 34 px buttons) vs sign-in
+  (28–36 px titles, 15 px body, 44 px controls, 700 headings). Raise the CRM type tokens only if the owner says so;
+  record the answer here.
 - **PWA** — separate branch (manifest, icons = spa logo + "<first word> Management", service worker, install item
   in the user menu).

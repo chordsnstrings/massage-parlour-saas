@@ -26,6 +26,20 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
   })
 
   const menu = page.getByRole('navigation', { name: 'Main menu' })
+  // The whole sidebar scrolls as one (PLAN §18.6): the menu never scrolls inside its own box, and the last item can be
+  // scrolled into view without the plan card + badge covering it.
+  const lastItemReachable = async () => {
+    expect(await menu.evaluate((n) => n.scrollHeight - n.clientHeight)).toBeLessThanOrEqual(1)
+    const last = menu.getByRole('link', { name: 'Settings', exact: true })
+    await last.scrollIntoViewIfNeeded()
+    await expect(last).toBeInViewport({ ratio: 1 })
+    expect(
+      await last.evaluate((a) => {
+        const r = a.getBoundingClientRect()
+        return a.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
+      }),
+    ).toBe(true)
+  }
   await test.step('sidebar: logo, profile, grouped menu, plan card', async () => {
     const mark = page.getByRole('img', { name: 'Lotus Garden Spa logo' })
     await expect(mark).toBeVisible()
@@ -64,6 +78,12 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await expect(platform).toHaveAttribute('href', /^http:\/\/localhost:\d+\/?$/)
     await expect(platform).toHaveAttribute('target', '_blank')
     await expect(platform).toHaveAttribute('rel', /noopener/)
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await lastItemReachable()
+    // Brand fonts reach the html element too, not only body.
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontFamily)).toMatch(
+      /^"DM Sans/,
+    )
   })
 
   await test.step('section tabs group the pages of a menu item', async () => {
@@ -80,6 +100,8 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
 
   await test.step('ไทย: the shell switches, the choice is saved for the user', async () => {
     await page.goto(`${dashboard}/settings`)
+    // Form controls have a >= 3:1 edge (WCAG 1.4.11), not the soft card divider.
+    await expect(page.locator('input#name')).toHaveCSS('border-top-color', 'rgb(132, 142, 136)')
     await page.getByRole('button', { name: 'ไทย' }).click()
     const menuTh = page.getByRole('navigation', { name: 'เมนูหลัก' })
     await expect(menuTh.getByRole('link', { name: 'ปฏิทิน' })).toBeVisible()
@@ -112,6 +134,7 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await page.getByRole('button', { name: 'Open menu' }).click()
     // The badge sits in the drawer, below the menu.
     await expect(page.getByRole('complementary').getByRole('link', { name: 'Spa Management' })).toBeVisible()
+    await lastItemReachable()
     await menu.getByRole('link', { name: 'Clients' }).click()
     await page.waitForURL(`${dashboard}/clients`)
     await expect(menu).toBeHidden()

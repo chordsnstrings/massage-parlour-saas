@@ -7,7 +7,7 @@ via `--ui-*` hooks inside `.crm` only — keep using `Button`, `Input`/`Select`/
 `FormSheet`, `Sheet`, `DataTable` (stacks ≤768 px), `EmptyState`, `PageHeader`, `toast`.
 Colours + fonts (brand look, PLAN §18.6): use the tokens, never literals — `--crm-text/-muted`, `--crm-surface/-surface2`,
 `--crm-page`, `--crm-accent/-accent-ink` (green), `--crm-lime/-lime-soft/-lime-ink` (small highlights only),
-`--crm-ok/-warn/-bad/-info` + `-bg`; fonts `--crm-font` / `--crm-head` / `--crm-num` (Thai stacks swap in by `lang`).
+`--crm-ok/-warn/-bad/-info` + `-bg`, `--crm-ctl-line` for form-control edges (≥ 3:1; `--crm-line` only for dividers); fonts `--crm-font` / `--crm-head` / `--crm-num` (Thai stacks swap in by `lang`).
 
 ## Components (`import { … } from '@/components/crm'`; server-safe unless noted; never contain English)
 | Component | Props | Classes |

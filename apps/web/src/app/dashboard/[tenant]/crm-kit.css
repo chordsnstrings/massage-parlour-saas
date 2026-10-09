@@ -1103,7 +1103,7 @@
     width: 100%;
     height: var(--crm-h-ctl);
     padding: 0 12px;
-    border: 1px solid var(--crm-line);
+    border: 1px solid var(--crm-ctl-line);
     border-radius: 9px;
     background: var(--crm-surface2);
     font: inherit;

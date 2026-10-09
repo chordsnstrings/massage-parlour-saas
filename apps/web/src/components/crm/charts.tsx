@@ -131,5 +131,5 @@ export const CHART_COLOURS = [
   'var(--crm-amber)',
   'var(--crm-orange)',
   'var(--crm-violet)',
-  'var(--crm-tint3)',
+  'var(--crm-magenta)', // 7 = booking sources; never a second green
 ] as const
