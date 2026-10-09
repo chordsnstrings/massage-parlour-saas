@@ -9,6 +9,7 @@ export const auth: Messages['auth'] = {
     signup: 'สร้างสปาของคุณ',
     invite: 'คำเชิญ',
   },
+  legal: { terms: 'ข้อกำหนดการใช้งาน', privacy: 'นโยบายความเป็นส่วนตัว' },
   generic: 'เกิดข้อผิดพลาด',
   email: 'อีเมล',
   password: 'รหัสผ่าน',

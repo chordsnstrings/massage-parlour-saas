@@ -14,6 +14,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
       nav={[
         { href: adminPath(), label: 'Overview', icon: 'home', exact: true },
         { href: adminPath('/tenants'), label: 'Spas', icon: 'tenants' },
+        { href: adminPath('/performance'), label: 'Performance', icon: 'analytics' },
         { href: adminPath('/websites'), label: 'Websites', icon: 'studio' },
         { href: adminPath('/plans'), label: 'Plans & prices', icon: 'plans' },
         { href: adminPath('/settings'), label: 'Company', icon: 'company' },

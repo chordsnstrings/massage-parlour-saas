@@ -2,7 +2,7 @@ import { enumLabel } from '@spa/core/i18n'
 import { domains, withTenant } from '@spa/db'
 import { getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
 import { asc, sql } from 'drizzle-orm'
-import { ArrowRight, ExternalLink, Eye, FileText, Globe, MessageSquare, PencilLine, Send } from 'lucide-react'
+import { ArrowRight, ExternalLink, FileText, Globe, MessageSquare, PencilLine } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -12,8 +12,6 @@ import { ScaledFrame } from '@/components/site/scaled-frame'
 import { normalizeTheme } from '@/components/site/theme'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
-import { ActionForm, SubmitButton } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
@@ -23,13 +21,8 @@ import { can, isStudio, requireMember } from '@/server/access'
 import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
-import { requestChangeAction } from './studio-actions'
-import {
-  ApproveSiteSheet,
-  RequestChangeSheet,
-  ResolveRequestSheet,
-  StudioStatusButton,
-} from './studio-client'
+import { ServicesPrices } from './services-prices'
+import { ApproveSiteSheet, ResolveRequestSheet, StudioStatusButton } from './studio-client'
 import {
   AddPageSheet,
   AiWriterSheet,
@@ -50,6 +43,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function WebsitePage({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
+  // Website Studio (PLAN §14.4, §18.1): only a super-admin acting on the spa (impersonating or platform admin) edits
+  // and publishes the site; spa members only keep its services and prices current.
+  const studio = await isStudio(ctx)
+  if (!studio) {
+    if (!can(ctx, 'site.content') && !can(ctx, 'services.manage')) notFound()
+    return <ServicesPrices ctx={ctx} />
+  }
   if (!can(ctx, 'site.content') && !can(ctx, 'site.design') && !can(ctx, 'site.publish')) notFound()
   const slug = ctx.tenant.slug
   const reports = can(ctx, 'reports.view')
@@ -77,16 +77,11 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     },
   )
   const catalog = await templateCatalog()
-  // Website Studio (PLAN §14.4): only a super-admin acting on the spa edits, approves and publishes; the spa
-  // previews and requests changes (R1).
-  const studio = await isStudio(ctx)
-  const canDesign = studio && can(ctx, 'site.design')
-  const canPublish = studio && can(ctx, 'site.publish')
-  const canEdit = studio && can(ctx, 'site.content')
-  const canRequest = !studio && can(ctx, 'site.content')
+  const canDesign = can(ctx, 'site.design')
+  const canPublish = can(ctx, 'site.publish')
+  const canEdit = can(ctx, 'site.content')
   const studioStatus = site?.studioStatus ?? 'building'
   const openRequests = requests.filter((r) => r.status === 'open').length
-  const pageOptions = pages.map((p) => ({ id: p.id, title: p.title.en }))
   const aiReady = canDesign && (await siteWriterReady())
   const publicUrl = await publicSiteUrl(ctx.tenant)
   const pending = pages.filter((p) => p.hasDraft).length
@@ -191,8 +186,8 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     />
   )
 
-  const requestsCard = (requests.length > 0 || canRequest) && (
-    <Card title={t('website.requests')} sub={studio ? t('website.requestsStudio') : t('website.requestsSpa')}>
+  const requestsCard = requests.length > 0 && (
+    <Card title={t('website.requests')} sub={t('website.requestsStudio')}>
       {requests.length === 0 ? (
         <EmptyState
           icon={<MessageSquare className="size-5" />}
@@ -228,22 +223,6 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
             />
           ))}
         </div>
-      )}
-      {canRequest && (
-        <ActionForm action={requestChangeAction.bind(null, slug)} resetOnSuccess className="mt-3 flex gap-2">
-          <Input
-            name="body"
-            required
-            minLength={3}
-            maxLength={2000}
-            placeholder={t('website.describeChange')}
-            aria-label={t('website.describeChange')}
-            className="min-w-0 flex-1"
-          />
-          <SubmitButton size="sm" className="shrink-0">
-            <Send /> {t('ai.send')}
-          </SubmitButton>
-        </ActionForm>
       )}
     </Card>
   )
@@ -355,7 +334,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     <>
       <PageHeader
         title={t('website.title')}
-        description={studio ? t('website.descStudio') : t('website.descSpa')}
+        description={t('website.descStudio')}
         actions={
           <>
             {writer}
@@ -367,14 +346,6 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
               />
             )}
             {canPublish && site && site.studioStatus !== 'approved' && <ApproveSiteSheet slug={slug} />}
-            {!studio && site && (
-              <Button variant="secondary" asChild>
-                <a href={preview()} target="_blank" rel="noreferrer">
-                  <Eye /> {t('website.preview')}
-                </a>
-              </Button>
-            )}
-            {canRequest && <RequestChangeSheet slug={slug} pages={pageOptions} />}
             {site && (
               <Button variant="secondary" asChild>
                 <a href={publicUrl} target="_blank" rel="noreferrer">
@@ -409,13 +380,11 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                 {t(`website.status.${studioStatus}.label`)}
               </Pill>
               <p className="crm-muted min-w-0 flex-1 text-sm">
-                {studio
-                  ? site.studioStatus === 'review'
-                    ? t('website.studioReview')
-                    : site.studioStatus === 'approved'
-                      ? t('website.studioApproved')
-                      : t('website.studioBuilding')
-                  : t(`website.status.${studioStatus}.spa`)}
+                {site.studioStatus === 'review'
+                  ? t('website.studioReview')
+                  : site.studioStatus === 'approved'
+                    ? t('website.studioApproved')
+                    : t('website.studioBuilding')}
               </p>
               {openRequests > 0 && (
                 <span className="crm-muted text-sm">

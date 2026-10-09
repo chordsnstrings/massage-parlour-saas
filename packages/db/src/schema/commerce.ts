@@ -219,6 +219,7 @@ export const dayCloses = pgTable(
 export const messageKind = pgEnum('message_kind', [
   'booking_confirmation',
   'reminder',
+  'reminder_2h',
   'thank_you',
   'review_request',
   'rebook',

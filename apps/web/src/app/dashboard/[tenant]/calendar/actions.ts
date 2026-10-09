@@ -14,10 +14,10 @@ import {
 import {
   createBooking,
   DomainError,
-  enqueueBookingMessage,
   findOrCreateClient,
   loadDay,
   outboxLink,
+  planBookingMessages,
   rescheduleItem,
   rotationFor,
   setBookingStatus,
@@ -32,7 +32,6 @@ import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { allowedBranches } from './data'
 
-const DAY_MS = 24 * 3600_000
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'calendar.errors.pickDate')
 const time = z.string().regex(/^\d{2}:\d{2}$/, 'calendar.errors.pickTime')
 const optionalId = z
@@ -182,14 +181,8 @@ export async function createBookingAction(
           },
         ],
       })
-      const confirmation = await enqueueBookingMessage(tx, booking.id, 'booking_confirmation')
-      if (start.getTime() > Date.now())
-        await enqueueBookingMessage(
-          tx,
-          booking.id,
-          'reminder',
-          new Date(Math.max(Date.now(), start.getTime() - DAY_MS)),
-        )
+      // createBooking already planned confirmation + reminders (G4); this returns them for the WhatsApp link.
+      const confirmation = (await planBookingMessages(tx, booking.id)).booking_confirmation ?? null
       return { booking, confirmation }
     })
     await audit({

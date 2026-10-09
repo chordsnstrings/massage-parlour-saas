@@ -873,4 +873,41 @@
       height: 38px;
     }
   }
+
+  /* legal pages (components/marketing/legal.tsx) */
+  .mkt-prose {
+    max-width: 720px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.65;
+  }
+  .mkt-prose h2 {
+    color: var(--text);
+    font-size: 22px;
+    margin-top: 44px;
+    margin-bottom: 10px;
+  }
+  .mkt-prose ul {
+    list-style: disc;
+    padding-inline-start: 22px;
+  }
+  .mkt-prose p + p,
+  .mkt-prose p + ul,
+  .mkt-prose ul + p {
+    margin-top: 12px;
+  }
+  .mkt-prose li + li {
+    margin-top: 6px;
+  }
+  .mkt-prose strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .mkt-prose-meta {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    color: var(--mute);
+  }
 }

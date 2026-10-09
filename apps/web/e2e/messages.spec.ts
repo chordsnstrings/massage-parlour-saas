@@ -1,17 +1,13 @@
 import { expect, test } from '@playwright/test'
-import { enqueueBookingMessage } from '@spa/services'
-import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
+import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
 
-test('whatsapp outbox: send a confirmation, skip a reminder by keyboard, edit a template', async ({
+test('whatsapp outbox: send a confirmation, skip the reminders by keyboard, edit a template', async ({
   page,
 }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  const booking = await seedBooking(seed)
-  await testDb().transaction(async (tx) => {
-    await enqueueBookingMessage(tx, booking.id, 'booking_confirmation')
-    await enqueueBookingMessage(tx, booking.id, 'reminder', new Date(Date.now() + 3600_000))
-  })
+  // A confirmed booking 30 h out: confirmation now, reminders 24 h and 2 h before (planned by createBooking, G4).
+  await seedBooking(seed, 30)
 
   await page.goto(`${app}/${slug}/messages`)
   await expect(page.getByRole('heading', { name: 'WhatsApp', exact: true })).toBeVisible()
@@ -30,16 +26,19 @@ test('whatsapp outbox: send a confirmation, skip a reminder by keyboard, edit a 
   await expect(page.getByRole('article', { name: 'Confirmation for Fatima Al Mansoori' })).toBeVisible()
   await expect(page.getByText(/by Aisha Rahman/)).toBeVisible()
 
-  // Scheduled reminder: skip it with the keyboard.
+  // Scheduled reminders (day before, then 2 h before): skip both with the keyboard.
   await page.getByRole('link', { name: /Scheduled/ }).click()
   await expect(page.getByRole('article', { name: 'Reminder for Fatima Al Mansoori' })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Reminder (2 h) for Fatima Al Mansoori' })).toBeVisible()
   await page.keyboard.press('x')
   await expect(page.getByText('Skipped · Fatima Al Mansoori')).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Reminder for Fatima Al Mansoori' })).toHaveCount(0)
+  await page.keyboard.press('x')
   await expect(page.getByText('Nothing scheduled')).toBeVisible()
 
   await page.goto(`${app}/${slug}/messages/templates`)
   await expect(page.getByRole('heading', { name: 'Message templates' })).toBeVisible()
-  await page.getByRole('button', { name: 'Reminder' }).click()
+  await page.getByRole('button', { name: 'Reminder', exact: true }).click()
   const english = page.getByLabel('English')
   await english.fill('Hello  see you {day} at {time}.')
   await english.press('Home')

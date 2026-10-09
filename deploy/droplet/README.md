@@ -21,7 +21,10 @@ such as Namecheap.
   - basic auth, user `ops`, password = `STATUS_PASSWORD` from the render step
 - **Backups:**
   - nightly `pg_dump` into `/opt/spa/backups` (7 rolling days)
-  - off-site to R2 via the worker's `db-backup` job when `R2_*` is set
+  - off-site via the worker's `db-backup` job (03:30 Dubai) to the `R2_*` bucket; without `R2_*` it falls back to the
+    `S3_*` file bucket (`backups/` prefix). **Recommended:** a separate private R2 bucket + its own key in `R2_*`,
+    with lifecycle rules `backups/daily/` 30 days and `backups/monthly/` 365 days.
+  - every run (ok / skipped / failed) shows on the super-admin overview; it warns when the last good backup is > 36 h old
   - enable DigitalOcean droplet backups for whole-machine snapshots
 
 ## Secrets without SSH
@@ -98,6 +101,12 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
      `https://app.spamanagement.co/api/integrations/meta/callback` (path routing: on the bare domain). Then point the
      Webhooks callback, Deauthorize callback and Data deletion request URLs at the `.co` origin and add
      `spamanagement.co` to App domains.
+   - Legal URLs (both consoles; pages in apps/web/src/app/marketing, company details in
+     apps/web/src/components/marketing/legal-config.ts): Meta app → Settings → Basic → Privacy policy URL
+     `https://spamanagement.co/privacy`, Terms of service URL `https://spamanagement.co/terms`, User data deletion →
+     Data deletion instructions URL `https://spamanagement.co/data-deletion`. Google Cloud → OAuth consent screen →
+     Application privacy policy link `https://spamanagement.co/privacy`, terms of service link
+     `https://spamanagement.co/terms`.
 5. **Re-encrypt the overlay**: the updater replaces the previous overlay as a whole, so the plaintext must hold
    every key the current overlay holds (from your own copy) plus the ones above:
    ```sh
@@ -131,5 +140,9 @@ The secrets file needs these keys:
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
+- strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),
+  `RESEND_API_KEY` (password reset + email verification fail loudly in production without it)
+- super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
+  sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens
 
 Follow the boot from the droplet's console: `tail -f /var/log/spa-bootstrap.log`.

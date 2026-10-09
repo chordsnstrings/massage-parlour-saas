@@ -10,7 +10,7 @@ export const automations = {
   items: {
     bookingMessages: {
       name: 'Booking confirmations & reminders',
-      desc: 'Queues a WhatsApp confirmation for new bookings and a reminder the day before',
+      desc: 'Queues a WhatsApp confirmation when a booking is confirmed, plus reminders the day before and 2 hours before',
       schedule: 'On every booking',
     },
     thankYou: {

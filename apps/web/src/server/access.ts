@@ -1,5 +1,7 @@
 import { type Permission, resolvePermissions, SYSTEM_ROLES, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
 import {
+  grantListedPlatformAdmins,
+  listedAdminEmails,
   memberBranches,
   members,
   platformAdmins,
@@ -13,7 +15,7 @@ import { and, eq } from 'drizzle-orm'
 import { notFound, redirect } from 'next/navigation'
 import { cache } from 'react'
 import { getT } from '@/i18n/server'
-import { appPath } from '@/lib/paths'
+import { adminPath, appPath } from '@/lib/paths'
 import { requireUser } from './session'
 
 export type TenantRow = typeof tenants.$inferSelect
@@ -22,10 +24,22 @@ export const getTenantBySlug = cache(async (slug: string) =>
   platformDb().query.tenants.findFirst({ where: eq(tenants.slug, slug.toLowerCase()) }),
 )
 
-export const isPlatformAdmin = cache(async (userId: string) => {
-  const row = await platformDb().query.platformAdmins.findFirst({ where: eq(platformAdmins.userId, userId) })
-  return Boolean(row)
-})
+/** Super-admin row + whether 2FA is on, read fresh (not from the 5-minute session cookie cache). */
+async function queryAdminStatus(userId: string): Promise<'ok' | 'needs2fa' | null> {
+  const [row] = await platformDb()
+    .select({ on: users.twoFactorEnabled })
+    .from(platformAdmins)
+    .innerJoin(users, eq(users.id, platformAdmins.userId))
+    .where(eq(platformAdmins.userId, userId))
+  return row ? (row.on ? 'ok' : 'needs2fa') : null
+}
+const adminStatus = cache(queryAdminStatus)
+
+/** Super-admin powers (G3): a platform_admins row AND TOTP 2FA on. Without 2FA no super-admin power applies. */
+export const isPlatformAdmin = cache(async (userId: string) => (await adminStatus(userId)) === 'ok')
+
+/** G3: where a super-admin without 2FA is sent to enrol (the account page on this host; no admin rights needed). */
+const enrolAdmin2fa = (accountPath: string) => redirect(`${accountPath}?admin2fa=1`)
 
 export type MemberContext = {
   tenant: TenantRow
@@ -101,7 +115,9 @@ export const requireMember = cache(async (slug: string): Promise<MemberContext> 
       impersonating: false,
     }
   }
-  if (await isPlatformAdmin(user.id)) {
+  const status = await adminStatus(user.id)
+  if (status === 'needs2fa') enrolAdmin2fa(appPath('/account'))
+  if (status === 'ok') {
     return {
       tenant,
       user,
@@ -145,6 +161,15 @@ export async function studioGuard(slug: string, permission: Permission) {
 
 export async function requirePlatformAdmin() {
   const session = await requireUser()
-  if (!(await isPlatformAdmin(session.user.id))) notFound()
+  let status = await adminStatus(session.user.id)
+  // G2: a PLATFORM_ADMIN_EMAILS address is promoted here once its email is verified (no deploy needed).
+  if (
+    !status &&
+    listedAdminEmails().includes(session.user.email.toLowerCase()) &&
+    (await grantListedPlatformAdmins(platformDb(), listedAdminEmails(), session.user.id)) > 0
+  )
+    status = await queryAdminStatus(session.user.id)
+  if (!status) notFound()
+  if (status === 'needs2fa') enrolAdmin2fa(adminPath('/account'))
   return session
 }

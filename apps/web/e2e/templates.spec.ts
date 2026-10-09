@@ -3,7 +3,17 @@ import { type BlockSpec, checkNodes } from '@spa/services'
 import { siteConfig } from '../src/components/site/config'
 import { PAGE_TEMPLATES, SECTION_PRESETS } from '../src/components/site/presets'
 import { TEMPLATES } from '../src/components/site/templates'
-import { admin, app, makeStudio, PATH, screenshotAt, seedCatalog, signUpOwner, site } from './helpers'
+import {
+  admin,
+  app,
+  makeStudio,
+  PATH,
+  passTwoFactor,
+  screenshotAt,
+  seedCatalog,
+  signUpOwner,
+  site,
+} from './helpers'
 
 const NAMES = [
   'Zen Minimal',
@@ -192,6 +202,7 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
       await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)
       await page.getByLabel('Password').fill('correct-horse-battery')
       await page.getByRole('button', { name: 'Sign in' }).click()
+      await passTwoFactor(page, `owner-${slug}@e2e.test`) // studio owners are super-admins with 2FA (G3)
       await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
     }
     await page.goto(`${admin}/templates`)
@@ -234,6 +245,7 @@ test('HTML design upload: shown exactly as built on the spa site, with live plac
       await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)
       await page.getByLabel('Password').fill('correct-horse-battery')
       await page.getByRole('button', { name: 'Sign in' }).click()
+      await passTwoFactor(page, `owner-${slug}@e2e.test`) // studio owners are super-admins with 2FA (G3)
       await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
     }
     await page.goto(`${admin}/templates`)
@@ -309,6 +321,7 @@ body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;
       await page.getByLabel('Email').fill(`owner-${owner.slug}@e2e.test`)
       await page.getByLabel('Password').fill('correct-horse-battery')
       await page.getByRole('button', { name: 'Sign in' }).click()
+      await passTwoFactor(page, `owner-${owner.slug}@e2e.test`)
       await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
     }
     await page.goto(`${admin}/templates`)

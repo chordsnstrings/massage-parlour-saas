@@ -50,6 +50,7 @@ export const enums = {
   messageKind: {
     booking_confirmation: 'Confirmation',
     reminder: 'Reminder',
+    reminder_2h: 'Reminder (2 h)',
     thank_you: 'Thank you',
     review_request: 'Review request',
     rebook: 'Rebook nudge',

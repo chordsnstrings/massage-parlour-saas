@@ -43,6 +43,7 @@ import {
 } from './booking-commissions'
 import { DomainError, pgCode, pgConstraint } from './errors'
 import { consumeForBooking } from './inventory'
+import { planBookingMessages } from './outbox'
 import { notifyWaitlistForFreedSlot } from './waitlist'
 
 const DAY = 24 * 3600_000
@@ -382,6 +383,8 @@ export async function createBooking(tx: Tx, input: NewBooking) {
             })),
           ])
         }
+        // Confirmed on creation (staff, waitlist, walk-in): confirmation + reminders go to the outbox (G4).
+        if (booking!.status === 'confirmed') await planBookingMessages(sp, booking!.id)
         return booking!
       })
     } catch (e) {
@@ -486,6 +489,7 @@ export async function rescheduleItem(
     exceptItemId: itemId,
     prefer: item.equipmentIds,
   })
+  let movedTo = booking.startsAt
   try {
     await tx.transaction(async (sp) => {
       await sp.delete(reservations).where(eq(reservations.bookingItemId, itemId))
@@ -525,6 +529,7 @@ export async function rescheduleItem(
       const all = await sp.select().from(bookingItems).where(eq(bookingItems.bookingId, item.bookingId))
       const startsAt = new Date(Math.min(...all.map((i) => i.startsAt.getTime())))
       const endsAt = new Date(Math.max(...all.map((i) => i.endsAt.getTime())))
+      movedTo = startsAt
       await sp
         .update(bookings)
         .set({
@@ -538,6 +543,9 @@ export async function rescheduleItem(
     if (pgCode(e) === '23P01') throw new DomainError('That time clashes with another booking', 'slot_taken')
     throw e
   }
+  // Pending confirmation / reminders follow the booking to its new time (G4).
+  if (movedTo.getTime() !== booking.startsAt.getTime())
+    await planBookingMessages(tx, item.bookingId, { now: opts.now, rescheduled: true })
   // The old time is free now: offer it to the waitlist (B5.1).
   if (opts.notifyWaitlist !== false && to.start.getTime() !== item.startsAt.getTime())
     await notifyWaitlistForFreedSlot(
@@ -637,6 +645,9 @@ export async function setBookingStatus(
     .set({ status: to, cancelReason: to === 'cancelled' ? (reason ?? null) : b.cancelReason })
     .where(eq(bookings.id, bookingId))
     .returning()
+  // Confirming (e.g. an online / AI / Instagram request) queues its messages; cancel / no-show / arrival
+  // takes the unsent ones out of the outbox (G4).
+  await planBookingMessages(tx, bookingId, { now: opts.now })
   return updated!
 }
 

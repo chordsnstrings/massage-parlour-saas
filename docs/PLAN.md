@@ -813,6 +813,12 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   who is also a member). Flow: `sites.studio_status` building → review (studio sends) → approved (studio only); the
   studio can withdraw or reopen; a request made during review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
   the spa's existing editor. Live data blocks (prices, team, hours) keep the site current without edits.
+- **Superseded by §18.1 (2026-10-09):** spa members no longer preview/review or send change requests. Their Website
+  page is **Services & prices** (`website/services-prices.tsx`): each service with its durations/prices, a menu-only
+  edit sheet (name, description, durations, prices, price visibility — the shared `ServiceSheet`/`saveServiceAction`,
+  `services.manage`), a link to the live site. The site's service/price blocks read services live (`site/data.ts`), so
+  edits show without a republish. Studio status (review/approve) and publishing are studio-only and unchanged; the
+  old requests list stays visible to the studio for history; `requestChangeAction` is removed.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
 - Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
@@ -1018,7 +1024,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   button list every image (`<img>` + CSS backgrounds) with focal point (drag/arrow keys), Fill/Fit, realign
   (left/centre/right, undoes floats/offsets) and replace (a spa's media library via MediaPicker, or an https URL);
   stored as `images` next to `html` and applied as CSS/attributes inside the sandbox only.
-- **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
+- **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
@@ -1168,10 +1174,11 @@ CLAUDE.md). Rules for the work:
 
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
-- **Blockers:** G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
-  G2 super-admin granted to any signup whose email is in `PLATFORM_ADMIN_EMAILS` with no email verification (provision.ts, seed.ts) ·
-  G3 super-admins not forced to 2FA · G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
-  G5 no privacy/terms pages (needed for Meta/Google approval).
+- **Blockers:** ✅ G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
+  ✅ G2 super-admin granted to any signup whose email is in `PLATFORM_ADMIN_EMAILS` with no email verification (provision.ts, seed.ts) ·
+  ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
+  G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
+  components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
@@ -1185,7 +1192,22 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 ### 18.1 Owner decisions (2026-10-09)
 - Order: G1–G5 first, then the access change below.
 - Super-admin access stays exactly as today (impersonation, data export, fixing a spa's setup) until the owner decides otherwise.
-- Add a per-spa performance view in the console: revenue totals, booking counts, marketing analytics (web visits, sources AI/IG/GBP/QR, campaigns).
+- ✅ Add a per-spa performance view in the console: revenue totals, booking counts, marketing analytics (web visits, sources AI/IG/GBP/QR, campaigns).
+  Done 2026-10-09: console `/performance` (all-spas table, sortable; 7/30/90 days, this/last month, capped 92 days)
+  + `/performance/[id]` (daily/weekly revenue + bookings bars, funnel visits → started → booked, web entry sources,
+  booking channels, campaigns, social posts/conversations/reviews counts, AI spend vs budget). Aggregates only.
 - Spa logins (owner, manager, receptionist, therapist) keep the dashboard/CRM. On the website the spa edits **only services + prices**
   (name, description, duration, price → live site); no design approval / change requests — super-admin edits and publishes directly.
+  ✅ Done 2026-10-09 (see §14.4 note): editing needs `services.manage` (owner/manager); other roles with `site.content`
+  see the list read-only.
 - Online booking from tenant sites stays.
+
+### 18.2 Done (2026-10-09)
+- **G1:** compose passes `R2_*` to the worker; `offsiteConfig` falls back to the `S3_*` bucket (`backups/`) when no `R2_*`
+  is set (separate bucket recommended); `db-backup` records ok/skipped/failed in `platform_job_runs`; console overview
+  card "Off-site backup" warns when the last ok run is missing or > 36 h old.
+- **G2:** `PLATFORM_ADMIN_EMAILS` promotes only verified emails (`grantListedPlatformAdmins`: provision, seed, first
+  console visit); never demotes. Sign-up sends a verification email (sign-in not gated). `sendStaffEmail` throws in
+  production without `RESEND_API_KEY` (no links in logs — also closes the log-leak half of G9).
+- **G3:** super-admin powers (console, impersonation, studio, file access, template export) need TOTP 2FA; without it →
+  account page `?admin2fa=1` to enrol (reachable on app + admin hosts; sign-out in the user menu). e2e enrols for real.

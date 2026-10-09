@@ -7,6 +7,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { I18nProvider } from '@/i18n/client'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
+import { adminUrl } from '@/server/origin'
 import { requireUser } from '@/server/session'
 import { PasswordCard, ProfileCard, TwoFactorCard } from './account-client'
 
@@ -23,6 +24,8 @@ export default async function AccountPage({
   // Sent here by the spa's "Require 2FA" policy (server/access.ts requireMember).
   const required = (await searchParams).require2fa
   const requiredSlug = typeof required === 'string' && /^[a-z0-9-]{1,63}$/.test(required) ? required : null
+  // Sent here by the super-admin 2FA rule (server/access.ts enrolAdmin2fa, G3); this page needs no admin rights.
+  const adminRequired = (await searchParams).admin2fa === '1'
   const { locale, t, messages } = await getI18n()
   // Outside the spa shell: send only the namespaces these cards use.
   const { account, auth, common, errors, ui } = messages
@@ -48,6 +51,17 @@ export default async function AccountPage({
                 href={appPath(`/${requiredSlug}`)}
               >
                 {t('audit.security.backToSpa')}
+              </a>
+            </div>
+          )}
+          {adminRequired && (
+            <div role="alert" className="rounded-lg border border-warning bg-warning-soft p-4 text-sm">
+              <p>{t('audit.security.adminRequired')}</p>
+              <a
+                className="mt-2 inline-block font-medium text-accent hover:underline"
+                href={await adminUrl()}
+              >
+                {t('audit.security.backToConsole')}
               </a>
             </div>
           )}

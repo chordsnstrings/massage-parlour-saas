@@ -113,7 +113,8 @@ export const messages = {
   },
   kindHint: {
     booking_confirmation: 'Sent as soon as a booking is confirmed.',
-    reminder: 'Queued the day before, or a couple of hours ahead.',
+    reminder: 'Queued the day before the appointment.',
+    reminder_2h: 'Queued two hours before the appointment.',
     thank_you: 'After a completed visit.',
     review_request: 'After a completed visit, with your review link.',
     rebook: 'When a regular is due for their next treatment.',

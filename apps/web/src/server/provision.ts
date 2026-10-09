@@ -1,5 +1,15 @@
 import { checkSlug, SYSTEM_ROLES, type SystemRoleKey } from '@spa/core'
-import { branches, members, plans, platformAdmins, platformDb, roles, subscriptions, tenants } from '@spa/db'
+import {
+  branches,
+  grantListedPlatformAdmins,
+  listedAdminEmails,
+  members,
+  plans,
+  platformDb,
+  roles,
+  subscriptions,
+  tenants,
+} from '@spa/db'
 import { asc, eq } from 'drizzle-orm'
 import { todayDubai } from '@/lib/utils'
 
@@ -67,10 +77,8 @@ export async function provisionTenant(input: {
         currentPeriodEnd: addDays(start, plan.trialDays),
       })
     }
-    const admins = (process.env.PLATFORM_ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase())
-    if (admins.includes(input.email.toLowerCase())) {
-      await tx.insert(platformAdmins).values({ userId: input.userId }).onConflictDoNothing()
-    }
+    // G2: a listed email becomes super-admin only once verified (usually later, on first console visit).
+    await grantListedPlatformAdmins(tx, listedAdminEmails(), input.userId)
     return tenant
   })
 }

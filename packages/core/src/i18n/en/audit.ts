@@ -38,5 +38,8 @@ export const audit = {
     required:
       'Your spa requires two-step verification for your role. Set it up below, then open the dashboard again.',
     backToSpa: 'Back to the spa',
+    adminRequired:
+      'Super-admin access needs two-step verification. Set it up below, then open the platform console again.',
+    backToConsole: 'Open the platform console',
   },
 }

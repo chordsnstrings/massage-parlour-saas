@@ -36,9 +36,9 @@ export function AppShell({
     <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[272px_minmax(0,1fr)]">
       <aside className="mkt-app-dark sticky top-0 hidden h-dvh flex-col md:flex">
         <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
-          <LogoMark tone="light" className="lg:hidden" />
+          <LogoMark className="size-9 lg:hidden" />
           <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
-            <Logo className="mb-3.5 hidden h-7 lg:block" />
+            <Logo className="mb-3.5 hidden h-12 lg:block" />
             <span className="mkt-app-chip">{title}</span>
             {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
           </span>
@@ -54,7 +54,7 @@ export function AppShell({
         {banner}
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-bg/85 px-4 backdrop-blur-md md:hidden">
           <Link href={homeHref} className="flex min-w-0 items-center gap-2.5">
-            <LogoMark className="size-6" />
+            <LogoMark className="size-8" />
             <span className="truncate text-sm font-semibold tracking-tight">{title}</span>
           </Link>
           <UserMenu user={user} compact switchHref={switchHref} accountHref={accountHref} />

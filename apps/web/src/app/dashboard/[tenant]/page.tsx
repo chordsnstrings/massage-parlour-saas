@@ -16,6 +16,7 @@ import {
   type AgendaItem,
   campaignConsentWithdrawn,
   kpis,
+  outboxBookingLive,
   peakHours,
   revenueSeries,
   upcomingItems,
@@ -125,6 +126,7 @@ export default async function TenantHome({
               branchId ? or(isNull(outbox.branchId), eq(outbox.branchId, branchId)) : undefined,
               inArray(outbox.status, ['queued', 'opened']),
               not(campaignConsentWithdrawn()),
+              outboxBookingLive(),
               lte(outbox.dueAt, now),
             ),
           )

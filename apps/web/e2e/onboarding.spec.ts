@@ -95,6 +95,9 @@ test('unknown subdomains 404', async ({ page }) => {
 test('super-admin changes the plan price and the marketing page follows', async ({ page }) => {
   await signInPlatformAdmin(page)
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
+  // G1: no off-site backup has run on the test database — the console says so.
+  await expect(page.getByTestId('offsite-backup')).toContainText('No successful off-site backup yet')
+  await expect(page.getByTestId('offsite-backup')).toContainText('missing')
   await screenshotAt(page, 'platform-overview')
 
   await page.goto(`${admin}/plans`)

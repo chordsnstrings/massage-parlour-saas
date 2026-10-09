@@ -1,6 +1,6 @@
 'use client'
 import { enumLabel } from '@spa/core/i18n'
-import { CheckCircle2, MessageSquarePlus, Send, Undo2 } from 'lucide-react'
+import { CheckCircle2, Send, Undo2 } from 'lucide-react'
 import { useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/form'
@@ -8,56 +8,7 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Select, Textarea } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { resultText, useI18n, useT } from '@/i18n/client'
-import { requestChangeAction, resolveChangeAction, setStudioStatusAction } from './studio-actions'
-
-/** Spa → studio: "please change …", optionally about one page. */
-export function RequestChangeSheet({
-  slug,
-  pages,
-  label,
-}: {
-  slug: string
-  pages: { id: string; title: string }[]
-  label?: string
-}) {
-  const t = useT()
-  return (
-    <FormSheet
-      title={t('website.requestChange')}
-      description={t('website.requestChangeSub')}
-      trigger={
-        <Button variant="secondary">
-          <MessageSquarePlus /> {label ?? t('website.requestChange')}
-        </Button>
-      }
-      action={requestChangeAction.bind(null, slug)}
-      submitLabel={t('website.sendToStudio')}
-    >
-      {pages.length > 0 && (
-        <Field label={t('website.pageOptional')} name="pageId">
-          <Select id="pageId" name="pageId" defaultValue="">
-            <option value="">{t('website.wholeSite')}</option>
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
-      <Field label={t('website.whatChange')} name="body" hint={t('website.whatChangeHint')}>
-        <Textarea
-          id="body"
-          name="body"
-          required
-          minLength={3}
-          maxLength={2000}
-          placeholder={t('website.whatChangePh')}
-        />
-      </Field>
-    </FormSheet>
-  )
-}
+import { resolveChangeAction, setStudioStatusAction } from './studio-actions'
 
 /** Studio only: approve the site once it is final (spas can't approve — R1). */
 export function ApproveSiteSheet({ slug }: { slug: string }) {

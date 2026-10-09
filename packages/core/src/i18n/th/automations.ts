@@ -10,7 +10,7 @@ export const automations: Messages['automations'] = {
   items: {
     bookingMessages: {
       name: 'ยืนยันการจองและแจ้งเตือน',
-      desc: 'จัดคิวข้อความยืนยันการจองใหม่ใน WhatsApp และแจ้งเตือนล่วงหน้าหนึ่งวัน',
+      desc: 'จัดคิวข้อความยืนยันใน WhatsApp เมื่อยืนยันการจอง พร้อมแจ้งเตือนล่วงหน้าหนึ่งวันและก่อนนัด 2 ชั่วโมง',
       schedule: 'ทุกการจอง',
     },
     thankYou: {
