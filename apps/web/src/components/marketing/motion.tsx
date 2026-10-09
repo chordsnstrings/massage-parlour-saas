@@ -224,18 +224,27 @@ export function MarketingMotion() {
     /* relaxing aurora: long 24–40 s drifts, slight pull with scroll, drawn small and scaled up by CSS */
     let W = 0
     let H = 0
+    let drawn = false
+    // Sized from the canvas box (100vw × 100lvh), not innerHeight: Chrome's mobile URL bar fires `resize` mid-scroll,
+    // and assigning width/height wipes the bitmap. Only resize on a real box change, and repaint at once (the scroll
+    // pause below would otherwise leave the canvas blank until scrolling stops: a visible flash).
     const size = () => {
       const d = 0.4
-      W = vw
-      H = vh
+      const w = cv.clientWidth || vw
+      const h = cv.clientHeight || vh
+      if (w === W && h === H) return
+      W = w
+      H = h
       cv.width = Math.ceil(W * d)
       cv.height = Math.ceil(H * d)
       g.setTransform(d, 0, 0, d, 0, 0)
+      if (drawn) draw((performance.now() - T0) / 1000, scrollY)
     }
     size()
     let sp = 0
     const draw = (t: number, y: number) => {
       sp += (cl(y / Math.max(1, docH - vh)) - sp) * 0.04
+      drawn = true
       g.clearRect(0, 0, W, H)
       const R = Math.max(W, H)
       for (const [c, cx, cy, ax, ay, period, rad, alpha, pull] of BLOBS) {
@@ -255,7 +264,7 @@ export function MarketingMotion() {
 
     const T0 = performance.now()
     let lastBg = -1e9
-    let lastY = -1
+    let lastY = scrollY
     let lastScroll = -1e9
     const frame = (now: number) => {
       const y = scrollY
