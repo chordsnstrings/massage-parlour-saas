@@ -13,7 +13,7 @@ export function StatCard({
   hint?: string
 }) {
   return (
-    <Card className="p-[var(--ui-stat-pad,1.25rem)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-soft sm:p-[var(--ui-stat-pad-sm,1.5rem)]">
+    <Card className="h-full p-[var(--ui-stat-pad,1.25rem)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-soft sm:p-[var(--ui-stat-pad-sm,1.5rem)]">
       <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted">{label}</p>
       <p className="mt-3 text-[length:var(--ui-stat-fs,26px)] font-semibold tracking-tight">
         <NumberTicker value={value} format={format} />
