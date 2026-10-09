@@ -1,6 +1,6 @@
 import { queueSlotOffers } from '@spa/ai'
 import { aiAgentSettings, branches, outbox, platformDb, tenants, withTenant } from '@spa/db'
-import { automationOnSql, expirePackages, runMembershipRenewals } from '@spa/services'
+import { autoAssignDueOutbox, automationOnSql, expirePackages, runMembershipRenewals } from '@spa/services'
 import { and, eq, gte, ne } from 'drizzle-orm'
 import { log } from '../log'
 import { activeTenants, recordRun } from './runs'
@@ -15,6 +15,25 @@ export async function expireAllPackages() {
     } catch (error) {
       log('error', 'package expiry failed', { tenant: t.slug, error: String(error) })
       await recordRun(t.id, 'packages-expire', 'failed')
+    }
+  }
+}
+
+/**
+ * Every minute (F28): spas with "Assign WhatsApp messages" on (off by default) — due, unassigned messages go
+ * round-robin to the receptionists on shift. Only runs that assigned something are logged.
+ */
+export async function autoAssignOutbox() {
+  for (const t of await activeTenants('outboxAutoAssign')) {
+    try {
+      const n = await withTenant(t.id, (tx) => autoAssignDueOutbox(tx, t.id))
+      if (n) {
+        log('info', 'outbox auto-assigned', { tenant: t.slug, n })
+        await recordRun(t.id, 'outbox-auto-assign', 'ok', { count: n })
+      }
+    } catch (error) {
+      log('error', 'outbox auto-assign failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'outbox-auto-assign', 'failed')
     }
   }
 }
