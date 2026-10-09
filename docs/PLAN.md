@@ -1180,7 +1180,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G2 super-admin granted to any signup whose email is in `PLATFORM_ADMIN_EMAILS` with no email verification (provision.ts, seed.ts) ·
   ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
   G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
-  components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
+  components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
