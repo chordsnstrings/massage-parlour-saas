@@ -10,14 +10,8 @@ export const metadata: Metadata = {
     'Every automation in spamanagement.co: bookings, follow-ups, accounts, marketing and your website.',
 }
 
-const NEXT = [
-  'Waitlist for busy days',
-  'Merging duplicate clients',
-  'Equipment as a bookable resource',
-  'Staff time clock and leave',
-  'Booking widget for existing websites',
-  'Reserve with Google',
-]
+// Only what is not built yet (owner, 2026-10-09: built items live in AREAS above).
+const NEXT = ['Reserve with Google']
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties
 

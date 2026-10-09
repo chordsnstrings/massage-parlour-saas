@@ -9,6 +9,7 @@ import {
   platformReminders,
   platformSettings,
   subscriptions,
+  type Tx,
   tenants,
 } from '@spa/db'
 import { and, asc, eq, isNotNull, isNull, lt, ne, sql, sum } from 'drizzle-orm'
@@ -64,9 +65,16 @@ export function planSchedule(sub: {
   }))
 }
 
-/** Subtotal / VAT / total for an entered amount, per the platform's VAT settings. */
-export function invoiceTotals(amount: number, s?: { vatRate: string; pricesIncludeVat: boolean } | null) {
-  const rate = Number(s?.vatRate ?? 5)
+/**
+ * Subtotal / VAT / total for an entered amount, per the platform's VAT settings. `chargeVat: false` (a setup invoice
+ * accepted without VAT, PLAN §18.3) → no VAT: the amount is the total.
+ */
+export function invoiceTotals(
+  amount: number,
+  s?: { vatRate: string; pricesIncludeVat: boolean } | null,
+  chargeVat = true,
+) {
+  const rate = chargeVat ? Number(s?.vatRate ?? 5) : 0
   const vat = s?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
   const subtotal = s?.pricesIncludeVat ? amount - vat : amount
   return { subtotalAed: subtotal.toFixed(2), vatAed: vat.toFixed(2), totalAed: (subtotal + vat).toFixed(2) }
@@ -81,6 +89,8 @@ type InvoiceInput = {
   periodStart?: string | null
   installment?: number | null
   installments?: number | null
+  /** false = no VAT on this invoice (default: VAT per the platform settings). */
+  vat?: boolean
 }
 
 /**
@@ -122,7 +132,7 @@ export async function createPlatformInvoice(db: DbOrTx, tenantId: string, input:
       periodStart: input.periodStart ?? null,
       installment: input.installment ?? null,
       installments: input.installments ?? null,
-      ...invoiceTotals(Number(input.amountAed), settings),
+      ...invoiceTotals(Number(input.amountAed), settings, input.vat ?? true),
     })
     .onConflictDoNothing()
     .returning()
@@ -140,62 +150,65 @@ const scheduleLabel = (r: ScheduleRow, periodStart: string) => {
  * Issues the plan invoices for the current subscription period (12 monthly or one annual) plus the one-off setup
  * fee when set. Idempotent: existing invoices are kept. Switching the payment plan voids the unpaid invoices of the
  * other plan for the same period; if any of them is already paid it refuses (sort that out by hand first).
+ * Console "Generate payment schedule"; accepting an application runs the same code (`generateBillingScheduleTx`).
  */
-export async function generateBillingSchedule(db: Db, tenantId: string, today: string) {
-  return db.transaction(async (tx) => {
-    const [sub] = await tx
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.tenantId, tenantId))
-      .for('update')
-    if (!sub) throw new DomainError('Save a subscription for this spa first', 'not_found')
-    const schedule = planSchedule(sub)
-    const expected = schedule[0]!.installments
-    const other = await tx
-      .select()
-      .from(platformInvoices)
-      .where(
-        and(
-          eq(platformInvoices.tenantId, tenantId),
-          eq(platformInvoices.kind, 'plan'),
-          eq(platformInvoices.periodStart, sub.currentPeriodStart),
-          ne(platformInvoices.installments, expected),
-          ne(platformInvoices.status, 'void'),
-        ),
-      )
-    if (other.some((i) => i.status === 'paid'))
-      throw new DomainError(
-        'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
-      )
-    for (const inv of other)
-      await tx.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.id, inv.id))
-    let created = 0
-    if (Number(sub.priceAed) > 0)
-      for (const r of schedule) {
-        const row = await createPlatformInvoice(tx, tenantId, {
-          description: scheduleLabel(r, sub.currentPeriodStart),
-          amountAed: r.amountAed,
-          issueDate: today,
-          dueDate: r.dueDate,
-          kind: 'plan',
-          periodStart: sub.currentPeriodStart,
-          installment: r.installment,
-          installments: r.installments,
-        })
-        if (row) created++
-      }
-    if (Number(sub.setupFeeAed) > 0) {
+export const generateBillingSchedule = (db: Db, tenantId: string, today: string) =>
+  db.transaction((tx) => generateBillingScheduleTx(tx, tenantId, today))
+
+/** `generateBillingSchedule` inside the caller's platform transaction. */
+export async function generateBillingScheduleTx(tx: Tx, tenantId: string, today: string) {
+  const [sub] = await tx
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.tenantId, tenantId))
+    .for('update')
+  if (!sub) throw new DomainError('Save a subscription for this spa first', 'not_found')
+  const schedule = planSchedule(sub)
+  const expected = schedule[0]!.installments
+  const other = await tx
+    .select()
+    .from(platformInvoices)
+    .where(
+      and(
+        eq(platformInvoices.tenantId, tenantId),
+        eq(platformInvoices.kind, 'plan'),
+        eq(platformInvoices.periodStart, sub.currentPeriodStart),
+        ne(platformInvoices.installments, expected),
+        ne(platformInvoices.status, 'void'),
+      ),
+    )
+  if (other.some((i) => i.status === 'paid'))
+    throw new DomainError(
+      'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
+    )
+  for (const inv of other)
+    await tx.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.id, inv.id))
+  let created = 0
+  if (Number(sub.priceAed) > 0)
+    for (const r of schedule) {
       const row = await createPlatformInvoice(tx, tenantId, {
-        description: 'One-time setup fee',
-        amountAed: sub.setupFeeAed,
+        description: scheduleLabel(r, sub.currentPeriodStart),
+        amountAed: r.amountAed,
         issueDate: today,
-        dueDate: today,
-        kind: 'setup',
+        dueDate: r.dueDate,
+        kind: 'plan',
+        periodStart: sub.currentPeriodStart,
+        installment: r.installment,
+        installments: r.installments,
       })
       if (row) created++
     }
-    return { created, voided: other.length }
-  })
+  if (Number(sub.setupFeeAed) > 0) {
+    const row = await createPlatformInvoice(tx, tenantId, {
+      description: 'One-time setup fee',
+      amountAed: sub.setupFeeAed,
+      issueDate: today,
+      dueDate: today,
+      kind: 'setup',
+    })
+    if (row) created++
+  }
+  return { created, voided: other.length }
 }
 
 /**

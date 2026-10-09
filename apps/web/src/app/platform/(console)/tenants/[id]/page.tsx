@@ -385,7 +385,15 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   key: 't',
                   header: 'Total',
                   className: 'text-end',
-                  cell: (r) => <span className="tabular">{formatAed(r.totalAed)}</span>,
+                  cell: (r) => (
+                    <span className="tabular">
+                      {formatAed(r.totalAed)}
+                      {/* A setup invoice accepted without VAT (PLAN §18.3). */}
+                      {Number(r.vatAed) === 0 && Number(r.totalAed) > 0 && (
+                        <span className="text-muted"> · no VAT</span>
+                      )}
+                    </span>
+                  ),
                 },
                 {
                   key: 'p',

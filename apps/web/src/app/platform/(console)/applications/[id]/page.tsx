@@ -49,7 +49,8 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
       id: p.id,
       label: `${p.name} · ${formatAed(p.priceAed)} / year${Number(p.setupFeeAed) > 0 ? ` · setup ${formatAed(p.setupFeeAed)}` : ''}${p.active ? '' : ' (inactive)'}`,
       feeAed: p.setupFeeAed,
-      invoiceTotalAed: invoiceTotals(Number(p.setupFeeAed), settings).totalAed,
+      totalVatAed: invoiceTotals(Number(p.setupFeeAed), settings).totalAed,
+      totalNoVatAed: invoiceTotals(Number(p.setupFeeAed), settings, false).totalAed,
     }))
   const logo =
     app.logoBytes && app.logoContentType
@@ -139,7 +140,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
               <>
                 <CardHeader
                   title="Review"
-                  description="Accept creates the spa (owner login = this applicant, active subscription from the start date, setup invoice + payment). Reject closes the applicant's login."
+                  description="Accept creates the spa (owner login = this applicant, active subscription from the start date, setup invoice + payment, the plan's invoices from the start date). Reject closes the applicant's login."
                 />
                 <CardBody className="flex flex-wrap gap-3">
                   <AcceptSheet
@@ -148,6 +149,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                     planId={app.planId ?? choices[0]?.id ?? ''}
                     startDate={app.preferredStart}
                     today={today}
+                    vatRate={Number(settings?.vatRate ?? 5)}
                   />
                   <RejectSheet action={rejectApplicationAction.bind(null, app.id)} />
                 </CardBody>
@@ -177,7 +179,10 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                       {formatAed(pay.amountAed ?? '0')} on {formatDate(pay.paidOn ?? '')} by{' '}
                       {pay.method ? METHOD[pay.method] : '—'}
                       {pay.reference ? ` (ref ${pay.reference})` : ''} · invoice {pay.invoiceNumber}
-                      {Number(pay.balanceAed ?? 0) > 0 ? ` · balance due ${formatAed(pay.balanceAed!)}` : ''}
+                      {pay.vat === false ? ' (no VAT)' : ''}
+                      {Number(pay.balanceAed ?? 0) > 0
+                        ? ` · balance due ${formatAed(pay.balanceAed!)}${pay.dueDate ? ` by ${formatDate(pay.dueDate)}` : ''}`
+                        : ''}
                     </p>
                   )}
                   {pay?.kind === 'none' && <p>No setup fee on this plan.</p>}

@@ -49,4 +49,13 @@ test('the Spa CRM page sells the dashboard in English and Thai', async ({ page }
     await page.locator('main a[href="/crm"]').first().click()
     await expect(page).toHaveURL(`${base}/crm`)
   })
+
+  await test.step('features: built items are in the areas; "Coming next" lists only what is not built', async () => {
+    await page.goto(`${base}/features`)
+    await expect(page.locator('#bookings')).toContainText('Waitlist for busy days')
+    await expect(page.locator('#bookings')).toContainText('Booking widget for the website you already have')
+    await expect(page.locator('#team')).toContainText('Staff time clock')
+    const next = page.locator('section', { has: page.getByText('Coming next', { exact: true }) })
+    await expect(next.getByRole('listitem')).toHaveText(['Reserve with Google'])
+  })
 })

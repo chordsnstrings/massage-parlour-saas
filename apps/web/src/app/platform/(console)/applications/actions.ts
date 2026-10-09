@@ -1,11 +1,12 @@
 'use server'
 // Console: accept / reject spa applications (PLAN §18.3). Super-admin only — re-checked here, not just in the page.
+import { BALANCE_DUE_CHOICES } from '@spa/core'
 import { platformDb } from '@spa/db'
 import { acceptApplication, DomainError, rejectApplication, SETUP_PAYMENT_METHODS } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { todayDubai } from '@/lib/utils'
+import { formatDate, todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { emailApplicationAccepted, emailApplicationRejected } from '@/server/applications'
 import { audit } from '@/server/audit'
@@ -40,6 +41,9 @@ export async function acceptApplicationAction(
       depositAed: z.string().trim().optional(),
       paidOn: z.union([date, z.literal('')]).optional(),
       method: z.union([z.enum(SETUP_PAYMENT_METHODS), z.literal('')]).optional(),
+      // Unchecked boxes are not sent: absent = no VAT on the setup invoice.
+      chargeVat: z.preprocess((v) => v === 'on' || v === 'true', z.boolean()),
+      balanceDue: z.enum(BALANCE_DUE_CHOICES).optional(),
       reference: text(120),
       note: text(500),
     })
@@ -55,6 +59,8 @@ export async function acceptApplicationAction(
         method: (d.method || 'cash') as (typeof SETUP_PAYMENT_METHODS)[number],
         reference: d.reference,
         note: d.note,
+        chargeVat: d.chargeVat,
+        balanceDue: d.balanceDue,
       }
     : null
   if (payment && !d.method) return fail('Choose how it was paid.', { method: 'Choose how it was paid' })
@@ -75,7 +81,9 @@ export async function acceptApplicationAction(
         ? 'depositAed'
         : /payment date/i.test(e.message)
           ? 'paidOn'
-          : undefined
+          : /balance is due/i.test(e.message)
+            ? 'balanceDue'
+            : undefined
       return fail(e.message, field ? { [field]: e.message } : undefined)
     }
     throw e
@@ -91,17 +99,23 @@ export async function acceptApplicationAction(
       plan: res.plan.code,
       startDate: d.startDate,
       setupPayment: res.setupPayment,
+      planInvoices: res.planInvoices,
     },
   })
   await emailApplicationAccepted(res.application)
   revalidate(applicationId)
   revalidatePath(`/platform/tenants/${res.tenant.id}`)
+  const plan = res.planInvoices
+    ? ` · ${res.planInvoices} subscription invoice${res.planInvoices === 1 ? '' : 's'} from ${formatDate(d.startDate)}`
+    : ''
   return ok(
     res.invoice
       ? `${res.tenant.name} is live · invoice ${res.invoice.number}${
-          Number(res.balanceAed) > 0 ? ` · balance due AED ${res.balanceAed}` : ' paid'
-        }`
-      : `${res.tenant.name} is live`,
+          Number(res.balanceAed) > 0
+            ? ` · balance due AED ${res.balanceAed} by ${formatDate(res.invoice.dueDate)}`
+            : ' paid'
+        }${plan}`
+      : `${res.tenant.name} is live${plan}`,
     { tenantId: res.tenant.id },
   )
 }
