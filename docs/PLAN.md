@@ -880,6 +880,22 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   not faked (activity timeline, journey stages, week/month calendar, ratings, deposits, IG followers, AI chat stats,
   FTA export, 2FA policy, mask-phones toggle, audit viewer) — they need services (Phase 3 / §14.7–14.8). Verified: full
   e2e 36/36 on the production build. Thai copy still needs native review.
+- **Phase 3 — calendar Week/Month + nav badges + bell digests (2026-10-09)**:
+  - Calendar `?range=week|month` (Day = no param; `RangeSeg` Day/Week/Month links, Today, prev/next ±7 days / ±1 month).
+    Week = Mon–Sun business days × hours (therapist/room columns stay Day-only), status-coloured blocks (`blockStyle`);
+    click → Day view `?date=&open=<bookingId>` opens the booking sheet (then `open` is dropped from the URL). Month =
+    Mon-start grid (adjacent days muted): bookings count (amber when some are pending), booked value (AED), occupancy bar
+    (booked therapist-minutes ÷ shift minutes); click → Day view. Phones: Week = vertical day list, Month = counts only.
+    Data: services `loadCalendarRange` (one booking query by stored `business_date` range on `bookings_branch_day`, + one
+    shifts query clipped to cutoff windows; ≤ 62 days); therapists / non-managers with a linked profile = own only.
+  - Sidebar badges (crm-spec §2.1 ③): Calendar = today's bookings, Bookings = today's pending, Inbox & follow-ups = due
+    WhatsApp outbox + unread IG threads; services `navCounts` (one SQL of scalar subqueries, today per branch cutoff in SQL),
+    web `server/nav-counts.ts` (React `cache`, branch + own-only + permission filtered); hidden at 0; sr-only label
+    `nav.count.*`. Layout data, so it refreshes on full navigation / revalidate (not on every soft nav). Waitlist isn't
+    in the menu → no badge.
+  - Weekly insights + daily digest now also write bell rows (`weekly_insights` → reports.view, `daily_digest` →
+    calendar.manage; dedupe per Monday / business date; link = overview) via `notify()` → push in each recipient's
+    locale; the digest no longer needs push configured.
 
 ### 14.7 Work split (owner, 2026-10-08)
 - Track A (Claude): spa dashboard UI (`apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,

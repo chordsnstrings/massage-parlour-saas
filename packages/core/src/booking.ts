@@ -40,6 +40,29 @@ export const addDays = (date: string, days: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+/** Monday (ISO week start; UAE week Mon–Sun) of a YYYY-MM-DD date. */
+export const weekStartOf = (date: string) =>
+  addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7))
+
+/** Calendar month grid for the month containing `date`: Monday on/before the 1st → Sunday on/after the last day. */
+export function monthGridRange(date: string) {
+  const first = `${date.slice(0, 7)}-01`
+  const d = new Date(`${first}T00:00:00Z`)
+  d.setUTCMonth(d.getUTCMonth() + 1)
+  d.setUTCDate(0)
+  const last = d.toISOString().slice(0, 10)
+  return { first, last, from: weekStartOf(first), to: addDays(weekStartOf(last), 6) }
+}
+
+/** Same day-of-month in the month `months` away, clamped to its length (31 Jan + 1 → 28/29 Feb). */
+export function addMonths(date: string, months: number) {
+  const [y, m, day] = date.split('-').map(Number)
+  const target = new Date(Date.UTC(y!, m! - 1 + months, 1))
+  const len = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
+  target.setUTCDate(Math.min(day!, len))
+  return target.toISOString().slice(0, 10)
+}
+
 /** Business date of an instant given the branch cutoff ("HH:MM", e.g. "05:00"). */
 export function businessDateOf(instant: Date, cutoff = '05:00'): string {
   const { date, minutes } = dubaiParts(instant)

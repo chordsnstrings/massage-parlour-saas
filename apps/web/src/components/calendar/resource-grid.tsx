@@ -47,7 +47,7 @@ function useNowMinute(dayStartMs: number) {
 }
 
 /** Side-by-side lanes for overlapping blocks within one column. */
-function layoutLanes(list: CalItem[]) {
+export function layoutLanes(list: { id: string; startMin: number; endMin: number }[]) {
   const out = new Map<string, { lane: number; lanes: number }>()
   const sorted = [...list].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin)
   let cluster: string[] = []

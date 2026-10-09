@@ -43,7 +43,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
   `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
   10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
-  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest stay push-only.
+  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest (`jobs/engage.ts`)
+  write `weekly_insights` / `daily_digest` rows (dedupe per week Monday / business date) via `notify()`.
   **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
   expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
   stock, AI drafts waiting for review, billing) always run. `runNotificationScan(name, scan, now, {key, job})`.
@@ -120,6 +121,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
     (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
+  - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG.
+  - Calendar ranges: `calendar/page.tsx` `?range=week|month` → `loadCalendarSpan` (data.ts) → services
+    `loadCalendarRange` → `components/calendar/span-view.tsx`; Day view takes `?open=<bookingId>` (PLAN §14.6 Phase 3).
   - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
   - Settings → Security: require-2FA toggle (`saveSecurityAction`), recent audit rows;
     `settings/audit` = audit log viewer (`audit.view`).

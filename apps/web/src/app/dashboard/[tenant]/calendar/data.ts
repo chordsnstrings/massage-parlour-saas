@@ -1,9 +1,13 @@
 import {
+  addDays,
+  addMonths,
   businessDateOf,
   dubaiInstant,
+  monthGridRange,
   type OpeningHours,
   openIntervals,
   overlaps,
+  weekStartOf,
   whatsappLink,
 } from '@spa/core'
 import {
@@ -17,10 +21,17 @@ import {
   type Tx,
   withTenant,
 } from '@spa/db'
-import { equipmentStatus, loadDay, rotationFor } from '@spa/services'
+import { equipmentStatus, loadCalendarRange, loadDay, rotationFor } from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
-import type { BookingStatus, CalendarData, CalItem, RotationRow } from '@/components/calendar/types'
+import type {
+  BookingStatus,
+  CalendarData,
+  CalItem,
+  RotationRow,
+  SpanData,
+  SpanItem,
+} from '@/components/calendar/types'
 import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext } from '@/server/access'
@@ -53,7 +64,7 @@ export async function ownStaffId(tx: Tx, ctx: MemberContext) {
 
 export async function loadCalendar(
   ctx: MemberContext,
-  q: { date?: string; branch?: string; view?: string; cancelled?: string },
+  q: { date?: string; branch?: string; view?: string; cancelled?: string; open?: string },
 ): Promise<CalendarData | null> {
   const canManage = can(ctx, 'calendar.manage')
   const seePhone = can(ctx, 'clients.phone')
@@ -228,6 +239,127 @@ export async function loadCalendar(
       ownOnly,
       checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
       bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
+      calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
+      openBooking: items.some((i) => i.bookingId === q.open) ? q.open! : null,
+    }
+  })
+}
+
+/**
+ * Week (7 business days Mon–Sun) or Month (Mon-start grid) for one branch: one range query (business dates from the
+ * branch cutoff), therapists limited to their own bookings like the Day view.
+ */
+export async function loadCalendarSpan(
+  ctx: MemberContext,
+  q: { range: 'week' | 'month'; date?: string; branch?: string },
+): Promise<SpanData | null> {
+  const canManage = can(ctx, 'calendar.manage')
+  const { fmt } = await getI18n()
+  return withTenant(ctx.tenant.id, async (tx) => {
+    const branchRows = await allowedBranches(tx, ctx)
+    const branch = branchRows.find((b) => b.id === q.branch) ?? branchRows[0]
+    if (!branch) return null
+    const cutoff = branch.businessDayCutoff.slice(0, 5)
+    const cutoffMin = toMin(cutoff)
+    const today = businessDateOf(new Date(), cutoff)
+    const date = q.date && DATE.test(q.date) ? q.date : today
+    const month = monthGridRange(date)
+    const from = q.range === 'week' ? weekStartOf(date) : month.from
+    const to = q.range === 'week' ? addDays(from, 6) : month.to
+
+    const myStaff = await ownStaffId(tx, ctx)
+    const ownOnly = ctx.member?.roleKey === 'therapist' || (!canManage && myStaff !== null)
+    // A therapist without a linked profile sees nothing (same as the Day view's empty grid).
+    const staffFilter = ownOnly ? (myStaff ?? '00000000-0000-0000-0000-000000000000') : null
+    const range = await loadCalendarRange(tx, { branchId: branch.id, from, to, staffId: staffFilter })
+
+    const people = await tx.select({ id: staff.id, name: staff.displayName, color: staff.color }).from(staff)
+    const person = new Map(people.map((p) => [p.id, p]))
+    const items: SpanItem[] =
+      q.range === 'week'
+        ? range.items.map((r) => {
+            const dayStart = dubaiInstant(r.businessDate, 0).getTime()
+            const first = r.staffIds.map((id) => person.get(id)).find(Boolean)
+            return {
+              id: r.itemId,
+              bookingId: r.bookingId,
+              date: r.businessDate,
+              startMin: Math.round((r.startsAt.getTime() - dayStart) / 60_000),
+              endMin: Math.round((r.endsAt.getTime() - dayStart) / 60_000),
+              status: r.status,
+              title:
+                r.clientName ?? (r.notes?.startsWith('Walk-in: ') ? r.notes.slice(9) : null) ?? r.refCode,
+              serviceName: r.serviceName,
+              staffName: first?.name ?? null,
+              color: first?.color ?? '#5e7d6b',
+            }
+          })
+        : []
+
+    // Week rows span opening hours + bookings, clamped to the business day (as the Day view).
+    const spans: number[][] = []
+    if (q.range === 'week')
+      for (let d = from; d <= to; d = addDays(d, 1)) {
+        const base = dubaiInstant(d, 0).getTime()
+        for (const o of openIntervals(d, branch.openingHours as OpeningHours))
+          spans.push([(o.start.getTime() - base) / 60_000, (o.end.getTime() - base) / 60_000])
+      }
+    for (const i of items) spans.push([i.startMin, i.endMin])
+    const lo = Math.max(cutoffMin, Math.min(...spans.map((s) => s[0]!), 10 * 60))
+    const hi = Math.min(cutoffMin + 1440, Math.max(...spans.map((s) => s[1]!), lo + 8 * 60))
+    const gridStart = Math.floor(lo / 60) * 60
+    const gridEnd = Math.max(gridStart + 60, Math.ceil(hi / 60) * 60)
+
+    const noon = (d: string) => `${d}T12:00:00Z`
+    const ratio = (booked: number, shift: number) => (shift > 0 ? Math.min(1, booked / shift) : null)
+    const inView = (d: string) => q.range === 'week' || d.slice(0, 7) === date.slice(0, 7)
+    const sum = range.days
+      .filter((d) => inView(d.date))
+      .reduce(
+        (a, d) => ({
+          bookings: a.bookings + d.bookings,
+          revenue: a.revenue + d.revenueAed,
+          booked: a.booked + d.bookedMin,
+          shift: a.shift + d.shiftMin,
+        }),
+        { bookings: 0, revenue: 0, booked: 0, shift: 0 },
+      )
+    return {
+      range: q.range,
+      date,
+      today,
+      title:
+        q.range === 'week'
+          ? `${fmt.dateShort(noon(from))} – ${fmt.date(noon(to))}`
+          : fmt.monthYear(noon(month.first)),
+      from,
+      to,
+      prev: q.range === 'week' ? addDays(date, -7) : addMonths(date, -1),
+      next: q.range === 'week' ? addDays(date, 7) : addMonths(date, 1),
+      branchId: branch.id,
+      branches: branchRows.map((b) => ({ id: b.id, name: b.name })),
+      weekdays: Array.from({ length: 7 }, (_, i) => fmt.weekdayDate(noon(addDays(from, i))).split(' ')[0]!),
+      days: range.days.map((d) => ({
+        date: d.date,
+        label: fmt.weekdayDate(noon(d.date)),
+        dayNum: Number(d.date.slice(8)),
+        inMonth: inView(d.date),
+        bookings: d.bookings,
+        pending: d.pending,
+        revenue: fmt.aed(d.revenueAed),
+        occupancy: ratio(d.bookedMin, d.shiftMin),
+      })),
+      items,
+      cutoffMin,
+      gridStart,
+      gridEnd,
+      totals: {
+        bookings: sum.bookings,
+        revenue: fmt.aed(sum.revenue),
+        occupancy: ratio(sum.booked, sum.shift),
+      },
+      ownOnly,
+      canManage,
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
     }
   })

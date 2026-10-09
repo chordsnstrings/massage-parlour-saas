@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { Agenda } from './agenda'
 import { BookingSheet } from './booking-sheet'
 import { NewBookingSheet } from './new-booking-sheet'
+import { RangeSeg } from './range-seg'
 import { type MoveTarget, ResourceGrid } from './resource-grid'
 import { isHiddenStatus, minuteLabel } from './time'
 import type { CalendarData, CalItem } from './types'
@@ -31,7 +32,7 @@ export function CalendarView({ data }: { data: CalendarData }) {
   const [items, setItems] = useState(data.items)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [draftKey, setDraftKey] = useState(0)
-  const [openBooking, setOpenBooking] = useState<string | null>(null)
+  const [openBooking, setOpenBooking] = useState<string | null>(data.openBooking)
   const [walkInOpen, setWalkInOpen] = useState(false)
 
   useEffect(() => {
@@ -227,6 +228,15 @@ export function CalendarView({ data }: { data: CalendarData }) {
             <Loader2 className="size-4 animate-spin text-muted" aria-label={t('calendar.loading')} />
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:ms-auto">
+            <RangeSeg
+              value="day"
+              href={(range) => {
+                const q = new URLSearchParams({ date: data.date })
+                if (range !== 'day') q.set('range', range)
+                if (data.branches.length > 1) q.set('branch', data.branchId)
+                return `${data.calendarBase}?${q}`
+              }}
+            />
             {!data.ownOnly && (
               <Seg
                 className="hidden md:inline-flex"

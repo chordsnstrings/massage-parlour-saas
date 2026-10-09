@@ -39,4 +39,12 @@ export const nav = {
   site: 'Website',
   media: 'Media',
   aiStudio: 'AI studio',
+  count: {
+    calendar: { one: '{count} booking today', other: '{count} bookings today' },
+    bookings: {
+      one: '{count} booking today waiting for confirmation',
+      other: '{count} bookings today waiting for confirmation',
+    },
+    inbox: { one: '{count} message or chat to handle', other: '{count} messages or chats to handle' },
+  },
 } as const

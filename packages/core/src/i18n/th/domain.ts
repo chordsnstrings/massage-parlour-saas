@@ -20,6 +20,7 @@ export const domain: Messages['errors']['domain'] = {
   commissionRange: 'กรอกค่าคอมมิชชันระหว่าง 0 ถึง 100,000 AED',
   commissionEveryone: 'กรอกค่าคอมมิชชันให้นักบำบัดทุกคน',
   branchNotFound: 'ไม่พบสาขา',
+  invalidDateRange: 'ช่วงวันที่ไม่ถูกต้อง',
   campaignNotFound: 'ไม่พบแคมเปญ',
   conversationNotFound: 'ไม่พบบทสนทนา',
   domainNotFound: 'ไม่พบโดเมน',

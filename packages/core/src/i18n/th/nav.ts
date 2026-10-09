@@ -40,4 +40,9 @@ export const nav: Messages['nav'] = {
   site: 'เว็บไซต์',
   media: 'คลังสื่อ',
   aiStudio: 'สตูดิโอ AI',
+  count: {
+    calendar: { other: 'วันนี้มี {count} การจอง' },
+    bookings: { other: 'วันนี้มี {count} การจองที่รอการยืนยัน' },
+    inbox: { other: 'มี {count} ข้อความหรือแชตที่ต้องจัดการ' },
+  },
 }
