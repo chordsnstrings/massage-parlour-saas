@@ -1223,3 +1223,23 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   RESEND first with its source). Owner add-on (2026-10-09): console Settings → Email (Resend key write-only, last 4
   shown; From; "Send test email to me"); DB value wins over env in web + worker; key AES-GCM when an encryption key
   exists, else stored as entered (owner: never refuse to save); never logged/audited.
+- **G12 (data deletion, backs the /data-deletion "within 30 days" promise):** services `data-deletion.ts`.
+  - **Tenant purge:** console spa page → "Permanently delete" (only once soft-deleted; type the slug; "Download full
+    export" link next to it and next to Delete). `purgeTenant` (platform role): Cloudflare custom hostnames →
+    one transaction (row counts of every `tenant_id` table from the catalog, pg-boss jobs whose `data.tenantId`
+    matches — none today, best effort/privilege-checked — `DELETE tenants` → every tenant FK cascades) → bucket
+    objects under `<tenantId>/`. **Ledger exception (decision):** the ledger is append-only for live spas (triggers
+    block `spa_app` only); purging a whole deleted spa as the platform role is the one allowed deletion of journal rows
+    / booking commissions. Record: `tenant_purges` (no FK; slug, name, who, mode, counts, objects deleted, clean-up
+    errors) + a tenant-less `platform.tenant.purged` audit row; the spa's own audit rows go with it. Login accounts
+    (`user`) stay — they may belong to other spas. Integration tokens are rows (deleted), not revoked at Meta/Google.
+  - **Auto-purge (default off):** console Settings → Data retention "Auto-purge deleted spas after (days)"
+    (`platform_settings.auto_purge_days`, blank = off, ≥ 30 so the export window stays). Worker `tenant-auto-purge`
+    04:30 daily; skipped/ok/failed in `platform_job_runs`.
+  - **Client erase:** client profile → "Erase personal data" card (owner, or super-admin acting on the spa;
+    `clients.manage` + roleKey owner; tick-box confirm; export link). `eraseClient(tx)` keeps the client row as
+    "Erased client" (`clients.erased_at`; UI shows the translated label) with sales, ledger, bookings, packages,
+    memberships, gift cards; removes phone/email/birthday/nationality/gender/tags/preferences/notes/blocklist,
+    treatment notes, intake submissions (answers + signatures), outbox rows, conversations (+ messages), waitlist
+    entries and booking notes; sets marketing opt-out. Audit `client.erased` (counts only). No files link to
+    clients today. Not scrubbed: names inside old audit-log `data` and notification payloads.

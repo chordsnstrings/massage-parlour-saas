@@ -183,6 +183,7 @@ export const domain: Messages['errors']['domain'] = {
   invoiceVoid: 'ใบแจ้งหนี้นี้ถูกยกเลิกแล้ว',
   nothingToRemind: 'ไม่มีอะไรต้องแจ้งเตือน — สปานี้ไม่มีใบแจ้งหนี้ค้างชำระ',
   typeSlugToConfirm: 'พิมพ์ {slug} เพื่อยืนยัน',
+  purgeNotDeleted: 'ต้องลบสปาก่อน จึงจะลบถาวรได้',
   waitlistWindow: 'เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม',
   waitlistClosed: 'รายการคิวรอนี้ปิดไปแล้ว',
   waitlistNotFound: 'ไม่พบรายการคิวรอ',

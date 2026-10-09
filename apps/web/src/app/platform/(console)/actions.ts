@@ -17,15 +17,19 @@ import {
   deleteTenant,
   encryptSecret,
   generateBillingSchedule,
+  MIN_AUTO_PURGE_DAYS,
   pauseTenant,
+  purgeTenant,
   resumeTenant,
   saveEmailSettings,
   setInvoicePaid,
 } from '@spa/services'
 import { eq, sum } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { adminPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -234,6 +238,19 @@ export async function saveCompanyAction(_p: ActionResult, fd: FormData): Promise
         .min(0, 'Must be 0 or more')
         .max(1000)
         .transform((n) => n.toFixed(2)),
+      // G12: blank = automatic purge off (default).
+      autoPurgeDays: z
+        .string()
+        .trim()
+        .transform((v) => (v === '' ? null : Number(v)))
+        .pipe(
+          z
+            .number({ error: 'Enter a number of days or leave it blank' })
+            .int()
+            .min(MIN_AUTO_PURGE_DAYS, `At least ${MIN_AUTO_PURGE_DAYS} days`)
+            .max(3650)
+            .nullable(),
+        ),
     })
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
@@ -493,6 +510,35 @@ export async function deleteTenantAction(
     if (e instanceof DomainError) return fail(e.message, { confirm: e.message })
     throw e
   }
+}
+
+/**
+ * G12: permanently delete an already-deleted spa (every row, files, domains, jobs). The admin types its address.
+ * The tenant's own audit rows go with it; the `tenant_purges` row + a tenant-less audit entry are the record.
+ */
+export async function purgeTenantAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const confirm = String(fd.get('confirm') ?? '')
+  try {
+    const rec = await purgeTenant(platformDb(), tenantId, confirm, { actorUserId: user.id })
+    await audit({
+      actorUserId: user.id,
+      action: 'platform.tenant.purged',
+      entity: 'tenant',
+      entityId: tenantId,
+      data: { slug: rec.slug, name: rec.name, purgeId: rec.id, counts: rec.counts, errors: rec.errors },
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { confirm: e.message })
+    throw e
+  }
+  revalidatePath('/platform/tenants')
+  revalidatePath('/platform')
+  redirect(adminPath('/tenants'))
 }
 
 /** R12: a reminder the spa sees in its dashboard + the message text for a click-to-send WhatsApp link. */

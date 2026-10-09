@@ -90,6 +90,11 @@ export const platformSettings = pgTable(
     resendApiKeyEnc: text('resend_api_key_enc'),
     resendApiKeyLast4: text('resend_api_key_last4'),
     emailFrom: text('email_from'),
+    /**
+     * G12: days after a soft delete when the worker permanently purges a spa (`tenant-auto-purge`).
+     * Null = off (default); the console only accepts 30 or more.
+     */
+    autoPurgeDays: integer('auto_purge_days'),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -406,4 +411,30 @@ export const platformJobRuns = pgTable(
     finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('platform_job_runs_job_finished').on(t.job, t.finishedAt), ...platformPolicies()],
+)
+
+/**
+ * G12: one row per permanently purged spa. No FK to `tenants` (the tenant row is gone) so the record survives the
+ * purge: who, when, how many rows per table, and how many stored objects were removed.
+ */
+export const tenantPurges = pgTable(
+  'tenant_purges',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    /** Not `tenant_id`: that column name marks RLS tenant tables (db rls test). */
+    purgedTenantId: uuid('purged_tenant_id').notNull(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    /** Super-admin user id; null for the automatic purge. */
+    purgedBy: text('purged_by'),
+    mode: text('mode', { enum: ['manual', 'auto'] }).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /** Rows removed per table (table name → count). */
+    counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
+    objectsDeleted: integer('objects_deleted').notNull().default(0),
+    /** Clean-up steps outside Postgres that failed (bucket objects, Cloudflare hostnames). */
+    errors: jsonb('errors').$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  () => platformPolicies(),
 )

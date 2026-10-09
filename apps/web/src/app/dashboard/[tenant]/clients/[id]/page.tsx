@@ -13,7 +13,15 @@ import {
   withTenant,
 } from '@spa/db'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
-import { ArrowLeft, CalendarX2, FileSignature, MessageCircle, NotebookPen, ShieldAlert } from 'lucide-react'
+import {
+  ArrowLeft,
+  CalendarX2,
+  Eraser,
+  FileSignature,
+  MessageCircle,
+  NotebookPen,
+  ShieldAlert,
+} from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -26,7 +34,13 @@ import { EmptyState, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { BlocklistSheet, EditDetailsSheet, PreferencesSheet, TreatmentNoteForm } from './profile-client'
+import {
+  BlocklistSheet,
+  EditDetailsSheet,
+  EraseClientSheet,
+  PreferencesSheet,
+  TreatmentNoteForm,
+} from './profile-client'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT()
@@ -40,7 +54,9 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
   if (!z.uuid().safeParse(id).success) notFound()
   const slug = ctx.tenant.slug
   const seePhone = can(ctx, 'clients.phone')
-  const canManage = can(ctx, 'clients.manage')
+  // G12: erased clients keep their visits and sales; personal fields and edits are gone.
+  const canEdit = can(ctx, 'clients.manage')
+  const canErase = canEdit && (ctx.member?.roleKey === 'owner' || ctx.impersonating)
   const canNote = can(ctx, 'calendar.view')
   const { t, fmt } = await getI18n()
 
@@ -124,6 +140,9 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
   })
   if (!data) notFound()
   const { client, team, visits, items, totals, notes, intakes, template } = data
+  const erased = Boolean(client.erasedAt)
+  const canManage = canEdit && !erased
+  const clientName = erased ? t('clients.erase.erasedName') : client.name
 
   const staffName = new Map(team.map((s) => [s.id, s.name]))
   const authorIds = [...new Set(notes.filter((n) => !n.staffId && n.createdBy).map((n) => n.createdBy!))]
@@ -142,7 +161,7 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
   const prefs = client.preferences
   const phone = client.phoneE164
   const phoneLabel = phone ? (seePhone ? formatPhone(phone) : maskClientPhone(phone)) : null
-  const firstName = client.name.split(/\s+/)[0] ?? client.name
+  const firstName = clientName.split(/\s+/)[0] ?? clientName
   const latestIntake = intakes[0]
   const intakeStale = Boolean(template && latestIntake && latestIntake.version < template.version)
   const base = appPath(`/${slug}/clients/${client.id}`)
@@ -189,8 +208,8 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <Avatar name={client.name} size="lg" />
-            <span className="min-w-0 break-words">{client.name}</span>
+            <Avatar name={clientName} size="lg" />
+            <span className="min-w-0 break-words">{clientName}</span>
             {client.blocklisted && <Pill tone="bad">{t('clients.blocklisted')}</Pill>}
           </span>
         }
@@ -239,6 +258,13 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
         }
       />
       <Stack>
+        {client.erasedAt && (
+          <div role="status" data-testid="client-erased">
+            <Note tone="warn" icon={<Eraser aria-hidden strokeWidth={1.8} />}>
+              {t('clients.erase.erasedBanner', { date: fmt.date(client.erasedAt) })}
+            </Note>
+          </div>
+        )}
         {client.blocklisted && (
           <div role="status">
             <Note tone="warn" icon={<ShieldAlert aria-hidden strokeWidth={1.8} />}>
@@ -306,7 +332,7 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
 
             <Card title={t('clients.notes.title')} sub={t('clients.notes.sub')}>
               <div className="space-y-4">
-                {canNote && (
+                {canNote && !erased && (
                   <TreatmentNoteForm
                     slug={slug}
                     clientId={client.id}
@@ -452,6 +478,16 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
                   clientId={client.id}
                   blocklisted={client.blocklisted}
                   reason={client.blocklistReason ?? ''}
+                />
+              </Card>
+            )}
+
+            {canErase && !erased && (
+              <Card title={t('clients.erase.title')} sub={t('clients.erase.sub')}>
+                <EraseClientSheet
+                  slug={slug}
+                  clientId={client.id}
+                  exportHref={appPath(`/${slug}/settings/data/export?type=full`)}
                 />
               </Card>
             )}
