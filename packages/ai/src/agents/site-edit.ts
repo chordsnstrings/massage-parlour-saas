@@ -53,7 +53,7 @@ const kindText = (p: PropSpec): string => {
     case 'color':
       return '#hex'
     case 'image':
-      return 'image URL'
+      return 'image URL, or {"src"?,"frame":{"base":{"x":0..100,"y":0..100,"fit":"cover|contain","zoom":1..2},"md"?,"lg"?}} (x/y = focal point %, kept in view when cropped; omit src to reframe the current image)'
     case 'slot':
       return `blocks slot${p.disallow?.length ? ` (not ${p.disallow.join(', ')})` : ''}`
     case 'array':

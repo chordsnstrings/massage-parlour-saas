@@ -1,12 +1,21 @@
 'use server'
+import {
+  fixHtmlDesign,
+  HTML_IMAGE_ID,
+  HTML_IMAGE_URL,
+  type HtmlImageAdjust,
+  MAX_HTML_IMAGES,
+} from '@spa/core'
 import { platformDb, tenants, withTenant } from '@spa/db'
 import {
   DomainError,
+  getStudioTemplate,
   parseTemplateJson,
   sanitizeTemplatePages,
   saveStudioTemplate,
   snapshotSite,
   TEMPLATE_KEY,
+  type TemplatePage,
   templateKeyFrom,
   updateStudioTemplate,
 } from '@spa/services'
@@ -14,6 +23,7 @@ import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import {
+  HTML_DESIGN,
   HTML_DESIGN_PLACEHOLDERS,
   htmlDesignPages,
   MAX_HTML_DESIGN_BYTES,
@@ -193,10 +203,13 @@ export async function uploadHtmlTemplateAction(_p: ActionResult, fd: FormData): 
   if (!/\.html?$/i.test(file.name) && file.type !== 'text/html')
     return fail('Only .html files can be uploaded', { file: 'Choose an .html file' })
   const key = templateKeyFrom(parsed.data.name)
-  const html = await file.text()
-  if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(html))
+  const raw = await file.text()
+  if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(raw))
     return fail('This file does not look like an HTML page', { file: 'Choose an .html file' })
-  const pages = htmlDesignPages(key, html)
+  const images = parseImages(fd.get('images'))
+  if (!images) return fail('The image adjustments could not be read. Reopen the file and try again.')
+  const { html, fixes } = fixHtmlDesign(raw)
+  const pages = htmlDesignPages(key, html, images)
   // Checked as page JSON (quotes and newlines escaped), the shape it is saved and edited in.
   if (file.size > MAX_HTML_DESIGN_BYTES || JSON.stringify(pages[0]!.data).length > MAX_HTML_DESIGN_BYTES) {
     const error = `The file is ${Math.ceil(file.size / 1024)} KB; the limit is about ${MAX_HTML_DESIGN_BYTES / 1024} KB. Link fonts and images by URL instead of embedding them.`
@@ -231,12 +244,71 @@ export async function uploadHtmlTemplateAction(_p: ActionResult, fd: FormData): 
     action: 'platform.site_template.html_uploaded',
     entity: 'site_template',
     entityId: key,
-    data: { bytes: file.size, placeholders: used },
+    data: { bytes: file.size, placeholders: used, fixes, adjustedImages: images.length },
   })
   revalidate()
+  const fixed = fixes.length
+    ? ` Fixed for phones: ${fixes.map((f) => (f === 'viewport' ? 'added the mobile viewport' : 'fluid image widths')).join(', ')}.`
+    : ''
   return ok(
-    active
-      ? `${parsed.data.name} uploaded`
-      : `${parsed.data.name} uploaded — hidden from spas until you switch it on`,
+    `${active ? `${parsed.data.name} uploaded` : `${parsed.data.name} uploaded — hidden from spas until you switch it on`}${fixed}`,
   )
+}
+
+const ImageAdjust = z.object({
+  id: z.string().regex(HTML_IMAGE_ID),
+  src: z.string().max(300),
+  fit: z.enum(['cover', 'contain']).optional(),
+  align: z.enum(['left', 'center', 'right']).optional(),
+  x: z.number().min(0).max(100).optional(),
+  y: z.number().min(0).max(100).optional(),
+  replace: z.string().regex(HTML_IMAGE_URL).optional(),
+})
+
+/** The adjuster's hidden `images` field (JSON); null when it isn't valid. Missing = no adjustments. */
+function parseImages(v: FormDataEntryValue | null): HtmlImageAdjust[] | null {
+  if (v == null || v === '') return []
+  if (typeof v !== 'string' || v.length > 200_000) return null
+  try {
+    const r = z.array(ImageAdjust).max(MAX_HTML_IMAGES).safeParse(JSON.parse(v))
+    return r.success ? r.data : null
+  } catch {
+    return null
+  }
+}
+
+/** "Adjust images" on an uploaded HTML template: saves focal points / fill-fit / replacements next to the file. */
+export async function saveHtmlImagesAction(
+  id: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const { user } = await requirePlatformAdmin()
+  const images = parseImages(fd.get('images'))
+  if (!images) return fail('The image adjustments could not be read. Reopen the panel and try again.')
+  const db = platformDb()
+  const row = await getStudioTemplate(db, { id: z.string().uuid().parse(id) })
+  const page = (row?.pages as TemplatePage[] | undefined)?.[0]
+  const node = (page?.data.content as { type: string; props: Record<string, unknown> }[] | undefined)?.[0]
+  if (!row || !page || node?.type !== HTML_DESIGN) return fail('This is not an uploaded HTML design')
+  const pages: TemplatePage[] = [
+    { ...page, data: { ...page.data, content: [{ ...node, props: { ...node.props, images } }] } },
+    ...(row.pages as TemplatePage[]).slice(1),
+  ]
+  if (JSON.stringify(pages[0]!.data).length > MAX_HTML_DESIGN_BYTES)
+    return fail('Too many adjustments for this design (page size limit)')
+  try {
+    await updateStudioTemplate(db, row.id, { pages })
+  } catch (e) {
+    return domainFail(e)
+  }
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.site_template.html_images',
+    entity: 'site_template',
+    entityId: row.key,
+    data: { adjustedImages: images.length },
+  })
+  revalidate()
+  return ok(`Images saved for ${row.name}`)
 }

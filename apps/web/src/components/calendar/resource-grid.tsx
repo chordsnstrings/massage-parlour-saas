@@ -47,7 +47,7 @@ function useNowMinute(dayStartMs: number) {
 }
 
 /** Side-by-side lanes for overlapping blocks within one column. */
-function layoutLanes(list: CalItem[]) {
+export function layoutLanes(list: { id: string; startMin: number; endMin: number }[]) {
   const out = new Map<string, { lane: number; lanes: number }>()
   const sorted = [...list].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin)
   let cluster: string[] = []
@@ -149,17 +149,21 @@ export function ResourceGrid({
     return map
   }, [cols, items, view])
 
-  // Open the day scrolled to "now" (or the first booking).
+  // Open the day scrolled to "now" (or the first booking), once per day/branch. Reads the clock directly
+  // so it runs on hydration rather than a render later, and never overrides a scroll the visitor made
+  // before hydration (a late jump would move the block they are about to click).
   const scrolled = useRef('')
   useEffect(() => {
     const el = scroller.current
     const key = `${data.date}:${data.branchId}`
     if (!el || scrolled.current === key) return
-    if (now === null && data.date === data.today) return
+    const first = scrolled.current === ''
     scrolled.current = key
-    const target = nowVisible ? now! : (items[0]?.startMin ?? gridStart)
+    if (first && el.scrollTop > 0) return
+    const nowMin = (Date.now() - data.dayStartMs) / 60_000
+    const target = nowMin >= gridStart && nowMin <= gridEnd ? nowMin : (items[0]?.startMin ?? gridStart)
     el.scrollTop = Math.max(0, (target - gridStart) * PPM - 96)
-  }, [data.date, data.branchId, data.today, now, nowVisible, items, gridStart])
+  }, [data.date, data.branchId, data.dayStartMs, items, gridStart, gridEnd])
 
   const hours: number[] = []
   for (let m = gridStart; m <= gridEnd; m += 60) hours.push(m)

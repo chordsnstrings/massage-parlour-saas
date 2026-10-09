@@ -3,6 +3,7 @@
 import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
+import { isImageValue } from './site-kit/image'
 import type { PuckNode } from './site-kit/tree'
 import {
   getEditablePage,
@@ -221,7 +222,7 @@ function scrub(value: unknown, name: RegExp | null): unknown {
   const obj = value as Record<string, unknown>
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
-    if (IMAGE_KEYS.has(k) && typeof v === 'string') out[k] = ''
+    if (IMAGE_KEYS.has(k) && (typeof v === 'string' || isImageValue(v))) out[k] = ''
     // Links to other sites (the spa's Instagram, booking partners…) are the spa's own, not the template's.
     else if (k === 'target' && obj.action === 'url') out[k] = ''
     else out[k] = scrub(v, name)
@@ -391,7 +392,13 @@ export async function saveStudioTemplate(
 export async function updateStudioTemplate(
   db: Db,
   id: string,
-  patch: { name?: string; description?: string | null; sort?: number; active?: boolean },
+  patch: {
+    name?: string
+    description?: string | null
+    sort?: number
+    active?: boolean
+    pages?: TemplatePage[]
+  },
 ) {
   const [row] = await db.update(siteTemplates).set(patch).where(eq(siteTemplates.id, id)).returning()
   if (!row) throw new DomainError('Template not found', 'not_found')

@@ -1,5 +1,6 @@
 import { contrastRatio, MIN_TEXT_CONTRAST } from './contrast'
 import { scopeSectionCss } from './css'
+import { imageSrc, withImageSrc } from './image'
 import { type DataPath, GLOBAL_SECTION, isNode, isNodeArray, type PuckNode, walkNodes } from './tree'
 
 /**
@@ -143,8 +144,8 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
               message: `Heading is ${longest} characters — keep it under ${MAX_HEADING_CHARS} so it fits on phones`,
             })
         }
-      } else if (typeof value === 'string' && IMAGE_KEYS.has(key) && value.trim()) {
-        const url = value.trim()
+      } else if (IMAGE_KEYS.has(key) && imageSrc(value).trim()) {
+        const url = imageSrc(value).trim()
         if (!secureUrl(url))
           add({
             ...base,
@@ -154,7 +155,11 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
             path: at,
             message: 'Image address must start with https://',
             fix: /^http:\/\//i.test(url)
-              ? { kind: 'set', label: 'Use https', value: url.replace(/^http:/i, 'https:') }
+              ? {
+                  kind: 'set',
+                  label: 'Use https',
+                  value: withImageSrc(value, url.replace(/^http:/i, 'https:')),
+                }
               : undefined,
           })
         const altKey = ALT_FOR[key]

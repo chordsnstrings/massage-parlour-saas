@@ -126,3 +126,55 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
     await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toBeVisible()
   })
 })
+
+test('week + month views open the day; the sidebar counts today’s bookings', async ({ page }) => {
+  const { slug } = await signUpOwner(page)
+  const seed = await seedCatalog(slug)
+  await seedBooking(seed, '14:15')
+  const shots = process.env.CAL_SHOTS_DIR
+
+  await test.step('sidebar badge on Calendar', async () => {
+    await page.goto(`${app}/${slug}/calendar`)
+    const menu = page.getByRole('navigation', { name: 'Main menu' })
+    await expect(menu.getByRole('link', { name: /Calendar.*1 booking today/ })).toBeVisible()
+  })
+
+  await test.step('week view → click the booking → day view with its sheet', async () => {
+    await page.getByRole('group', { name: 'Calendar range' }).getByRole('link', { name: 'Week' }).click()
+    await expect(page).toHaveURL(/range=week/)
+    const week = page.getByTestId('calendar-week')
+    await expect(week).toBeVisible()
+    if (shots) {
+      await page.screenshot({ path: `${shots}/week-1280.png`, fullPage: true })
+      await page.setViewportSize({ width: 360, height: 780 })
+      await expect(page.getByTestId('calendar-week-list')).toBeVisible()
+      await page.waitForTimeout(600) // drawer slide-out after the resize
+      await page.screenshot({ path: `${shots}/week-360.png`, fullPage: true })
+      await page.setViewportSize({ width: 1280, height: 800 })
+    }
+    await week.getByRole('link', { name: /14:15 Fatima Al Mansoori/ }).click()
+    // The day view opens the sheet, then drops `open=` from the URL.
+    await expect(page).not.toHaveURL(/range=week/)
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Fatima Al Mansoori' })).toBeVisible()
+    await page.keyboard.press('Escape')
+  })
+
+  await test.step('month view → click today → day view', async () => {
+    await page.getByRole('group', { name: 'Calendar range' }).getByRole('link', { name: 'Month' }).click()
+    await expect(page).toHaveURL(/range=month/)
+    const month = page.getByTestId('calendar-month')
+    await expect(month).toBeVisible()
+    const cell = month.getByRole('link', { name: /1 booking, AED/ })
+    await expect(cell).toHaveCount(1)
+    if (shots) {
+      await page.screenshot({ path: `${shots}/month-1280.png`, fullPage: true })
+      await page.setViewportSize({ width: 360, height: 780 })
+      await page.waitForTimeout(600)
+      await page.screenshot({ path: `${shots}/month-360.png`, fullPage: true })
+      await page.setViewportSize({ width: 1280, height: 800 })
+    }
+    await cell.click()
+    await expect(page).not.toHaveURL(/range=/)
+    await expect(page.getByRole('group', { name: 'Maya' })).toBeVisible()
+  })
+})

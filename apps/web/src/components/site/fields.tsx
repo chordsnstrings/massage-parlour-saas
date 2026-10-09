@@ -363,7 +363,7 @@ export function ScheduleField({
   )
 }
 
-const DEVICES: { key: Device; label: string; Icon: typeof Smartphone }[] = [
+export const DEVICES: { key: Device; label: string; Icon: typeof Smartphone }[] = [
   { key: 'base', label: 'Mobile', Icon: Smartphone },
   { key: 'md', label: 'Tablet', Icon: Tablet },
   { key: 'lg', label: 'Desktop', Icon: Monitor },

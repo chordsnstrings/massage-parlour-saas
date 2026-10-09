@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Frame, type Locator, test } from '@playwright/test'
 import { type BlockSpec, checkNodes } from '@spa/services'
 import { siteConfig } from '../src/components/site/config'
 import { PAGE_TEMPLATES, SECTION_PRESETS } from '../src/components/site/presets'
@@ -267,5 +267,116 @@ test('HTML design upload: shown exactly as built on the spa site, with live plac
     await expect(doc.getByRole('heading', { name: 'Welcome to Mint Spa' })).toHaveCSS('color', 'rgb(1, 2, 3)')
     await expect(doc.locator('#t')).toHaveAttribute('data-ran', 'yes')
     await expect(doc.getByRole('link', { name: 'Book' })).toHaveAttribute('href', /\/book$/)
+  })
+})
+
+test('HTML design images: kept inside the screen, focal point adjusted on upload and later', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+  const owner = await signUpOwner(page, { spa: 'Frame Spa' })
+  await makeStudio(owner.slug)
+  const shots = process.env.SHOTS_DIR ?? 'test-results/screens'
+  const svg = (w: number, h: number, fill: string) =>
+    `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'%3E%3Crect width='100%25' height='100%25' fill='%23${fill}'/%3E%3Ccircle cx='20%25' cy='80%25' r='40' fill='%23fff'/%3E%3C/svg%3E`
+  // No viewport meta, a 1600 px image and a right-floated hero pushed past the edge: the owner's broken case.
+  const html = `<!doctype html><html><head><title>Frame</title><style>
+body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;margin-right:-160px}
+</style></head><body><h1>Frame</h1><img id="hero" class="hero" src="${svg(1200, 800, 'c96')}">
+<img id="wide" src="${svg(1600, 500, '369')}" style="width:1600px"><p style="clear:both">End</p></body></html>`
+  const frameOk = async (frame: Frame, position: string) => {
+    await expect
+      .poll(() => frame.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(0)
+    await expect
+      .poll(() => frame.evaluate(() => getComputedStyle(document.getElementById('hero')!).objectPosition))
+      .toBe(position)
+  }
+  const frameOf = async (el: Locator) => (await (await el.elementHandle())!.contentFrame())!
+
+  await test.step('before: the raw file overflows a phone screen', async () => {
+    await page.setViewportSize({ width: 360, height: 780 })
+    await page.setContent(html)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeGreaterThan(360)
+    await page.screenshot({ path: `${shots}/before-360.png`, fullPage: true })
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.screenshot({ path: `${shots}/before-1280.png`, fullPage: true })
+  })
+
+  await test.step('upload: images listed, focal point dragged, preview fits', async () => {
+    await page.goto(`${admin}/login`)
+    if (!PATH) {
+      await page.getByLabel('Email').fill(`owner-${owner.slug}@e2e.test`)
+      await page.getByLabel('Password').fill('correct-horse-battery')
+      await page.getByRole('button', { name: 'Sign in' }).click()
+      await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
+    }
+    await page.goto(`${admin}/templates`)
+    await page.getByRole('button', { name: 'Upload HTML' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Template name').fill('Frame Hero')
+    await dialog
+      .getByLabel('HTML file')
+      .setInputFiles({ name: 'frame.html', mimeType: 'text/html', buffer: Buffer.from(html) })
+    await expect(dialog.getByText('Adjust images (2)')).toBeVisible()
+    const dot = dialog.getByTestId('html-image-img-0').getByTestId('focal-dot')
+    const thumb = dot.locator('..')
+    await expect(thumb.locator('img')).toHaveJSProperty('complete', true)
+    await page.waitForTimeout(500) // sheet slide-in
+    const box = (await thumb.boundingBox())!
+    await thumb.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } })
+    await expect(dot).toHaveAccessibleName(/20% across, 80% down/)
+    const frame = await frameOf(dialog.getByTestId('html-images-preview'))
+    await frameOk(frame, '20% 80%')
+    await dialog.getByRole('button', { name: '1280px' }).click()
+    await frameOk(frame, '20% 80%')
+    await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
+    await dialog.getByRole('button', { name: 'Upload' }).click()
+    await expect(page.getByText(/Frame Hero uploaded.*Fixed for phones/)).toBeVisible({ timeout: 30_000 })
+  })
+
+  const href = await page.getByRole('link', { name: 'Preview Frame Hero' }).getAttribute('href')
+  const previewUrl = new URL(href!, page.url()).href
+  const checkPreview = async (position: string, name: string, centred = false) => {
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: width < 768 ? 780 : 900 })
+      await page.goto(previewUrl)
+      const el = page.locator('iframe.site-html-design')
+      await expect(el).not.toHaveAttribute('sandbox', /allow-same-origin/)
+      const frame = await frameOf(el)
+      await frameOk(frame, position)
+      if (centred) {
+        // Realigned: the whole hero is on screen (no longer pushed past the right edge).
+        const [left, right] = await frame.evaluate(() => {
+          const r = document.getElementById('hero')!.getBoundingClientRect()
+          return [r.left, window.innerWidth - r.right]
+        })
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(right).toBeGreaterThanOrEqual(0)
+      }
+      await page.waitForTimeout(300)
+      await page.screenshot({ path: `${shots}/${name}-${width}.png` })
+    }
+    await page.setViewportSize({ width: 1280, height: 800 })
+  }
+
+  await test.step('after: the template preview fits 360 and 1280 with the focal point', async () => {
+    await checkPreview('20% 80%', 'after')
+  })
+
+  await test.step('re-open "Adjust images" later, nudge and save', async () => {
+    await page.goto(`${admin}/templates`)
+    await page.getByRole('button', { name: 'Adjust images of Frame Hero' }).click()
+    const dialog = page.getByRole('dialog')
+    const dot = dialog.getByTestId('html-image-img-0').getByTestId('focal-dot')
+    await expect(dot).toHaveAccessibleName(/20% across, 80% down/)
+    await dot.focus()
+    await page.keyboard.press('Shift+ArrowRight')
+    await expect(dot).toHaveAccessibleName(/30% across, 80% down/)
+    await dialog.getByTestId('html-image-img-0').getByRole('button', { name: 'Centre' }).click()
+    await dialog.getByTestId('html-image-img-1').getByRole('button', { name: 'Fit' }).click()
+    await dialog.getByRole('button', { name: 'Save images' }).click()
+    await expect(page.getByText('Images saved for Frame Hero')).toBeVisible({ timeout: 30_000 })
+    await checkPreview('30% 80%', 'after-adjusted', true)
   })
 })

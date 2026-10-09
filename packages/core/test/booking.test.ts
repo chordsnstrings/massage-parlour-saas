@@ -161,3 +161,20 @@ describe('helpers', () => {
     expect(canTransition('cancelled', 'completed')).toBe(false)
   })
 })
+
+describe('week / month ranges', () => {
+  it('weekStartOf, monthGridRange, addMonths', async () => {
+    const { weekStartOf, monthGridRange, addMonths } = await import('../src/booking')
+    expect(weekStartOf('2026-10-08')).toBe('2026-10-05')
+    expect(weekStartOf('2026-10-11')).toBe('2026-10-05')
+    expect(weekStartOf('2026-10-05')).toBe('2026-10-05')
+    expect(monthGridRange('2026-10-08')).toEqual({
+      first: '2026-10-01',
+      last: '2026-10-31',
+      from: '2026-09-28',
+      to: '2026-11-01',
+    })
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28')
+    expect(addMonths('2026-01-15', -1)).toBe('2025-12-15')
+  })
+})

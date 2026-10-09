@@ -52,5 +52,18 @@ export const notifications = {
       overdue: { title: 'Invoice overdue', body: '{number} · {amount} was due on {date}' },
       reminder: { title: 'Payment reminder', body: '{amount} is due — open Billing to pay' },
     },
+    weekly_insights: { title: 'Your weekly insights are ready', body: '{headline}' },
+    daily_digest: {
+      title: { one: 'Today: {count} booking', other: 'Today: {count} bookings' },
+      body: '{detail}',
+    },
+  },
+  digest: {
+    insightsFallback: 'See what changed last week and two things to try this week.',
+    pending: {
+      one: '{count} still waiting for confirmation — confirm it on WhatsApp.',
+      other: '{count} still waiting for confirmation — confirm them on WhatsApp.',
+    },
+    allConfirmed: 'All confirmed. Have a calm day.',
   },
 } as const

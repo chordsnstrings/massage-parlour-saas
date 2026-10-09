@@ -1,5 +1,7 @@
 import type { PuckContext } from '@puckeditor/core'
+import { type ImageProp, imageFrameVars, imageSrc } from '@spa/services/site-kit'
 import { MessageCircle, Phone } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { tr } from '../i18n'
 import { actionHref, type LinkAction, linkProps } from '../links'
@@ -51,6 +53,37 @@ export function SiteButton({
 }
 
 /** Soft abstract artwork used when an image block has no picture yet (no external assets needed). */
+/**
+ * Every site-builder photo: an overflow-clipped frame (shape/radius/size classes go on it) around an image that
+ * follows the value's focal point, fit and zoom (`.sb-img` in site.css). Zoom is a transform, so no layout shift.
+ */
+export function FramedImage({
+  value,
+  alt,
+  className,
+  imgClassName = 'size-full',
+  lazy = true,
+}: {
+  value: ImageProp
+  alt: string
+  className?: string
+  imgClassName?: string
+  lazy?: boolean
+}) {
+  return (
+    <span className={cn('sb-frame', className)}>
+      {/* biome-ignore lint/performance/noImgElement: tenant-provided URL, no loader configured */}
+      <img
+        src={imageSrc(value)}
+        alt={alt}
+        loading={lazy ? 'lazy' : undefined}
+        className={cn('sb-img', imgClassName)}
+        style={imageFrameVars(value) as CSSProperties}
+      />
+    </span>
+  )
+}
+
 export function ArtPlaceholder({ seed = 0, className }: { seed?: number; className?: string }) {
   const r = (n: number) => ((seed * 9301 + n * 49297) % 233280) / 233280
   return (

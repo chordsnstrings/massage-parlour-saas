@@ -48,10 +48,11 @@ describe('instagram-reply job (B6, DB queue)', () => {
 
   const queue = () =>
     owner.select().from(instagramReplyQueue).where(eq(instagramReplyQueue.messageId, item.messageId))
+  // next_at from the JS clock (ms): the DB default now() has µs precision and can land after a same-ms `new Date()`.
   const enqueue = () =>
     owner
       .insert(instagramReplyQueue)
-      .values({ tenantId: item.tenantId, messageId: item.messageId })
+      .values({ tenantId: item.tenantId, messageId: item.messageId, nextAt: new Date() })
       .onConflictDoNothing()
 
   it('is a worker cron job (every minute), not a web-side queue', () => {

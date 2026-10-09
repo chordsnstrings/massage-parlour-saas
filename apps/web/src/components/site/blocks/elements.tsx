@@ -1,4 +1,5 @@
 import type { ComponentConfig } from '@puckeditor/core'
+import { type ImageProp, imageSrc } from '@spa/services/site-kit'
 import { cn } from '@/lib/utils'
 import { alignField, biField, buttonsField, hideField, imageField, radio, select } from '../field-defs'
 import { tr } from '../i18n'
@@ -6,7 +7,7 @@ import { type Align, responsiveStyle, type Visibility } from '../style'
 import type { Bi, Responsive } from '../types'
 import { Emphasis, HeroBackdrop, HeroEmblem } from './hero-art'
 import { type Background, bandFields, type SceneKey, SectionShell, type ShellProps } from './layout'
-import { ArtPlaceholder, type ButtonItem, metaOf, SiteButton } from './shared'
+import { ArtPlaceholder, type ButtonItem, FramedImage, metaOf, SiteButton } from './shared'
 
 const SIZES = {
   display: 'text-[clamp(2.5rem,7vw,4.75rem)]',
@@ -195,7 +196,7 @@ const ASPECT = {
 } as const
 
 export const Image: ComponentConfig<{
-  src: string
+  src: ImageProp
   alt: Bi
   caption: Bi
   aspect: keyof typeof ASPECT
@@ -227,14 +228,18 @@ export const Image: ComponentConfig<{
     const cap = tr(caption, meta)
     const shape = cn(
       'w-full overflow-hidden',
-      ASPECT[aspect] || (!src && 'aspect-[4/3]'),
+      ASPECT[aspect] || (!imageSrc(src) && 'aspect-[4/3]'),
       rounded && 'sb-card',
     )
     return (
       <figure {...s.attrs} className="m-0 w-full">
-        {src ? (
-          // biome-ignore lint/performance/noImgElement: tenant-provided URL
-          <img src={src} alt={tr(alt, meta)} loading="lazy" className={cn(shape, 'h-auto object-cover')} />
+        {imageSrc(src) ? (
+          <FramedImage
+            value={src}
+            alt={tr(alt, meta)}
+            className={shape}
+            imgClassName={ASPECT[aspect] ? 'size-full' : 'h-auto w-full'}
+          />
         ) : (
           <ArtPlaceholder seed={id.length} className={shape} />
         )}
@@ -244,7 +249,7 @@ export const Image: ComponentConfig<{
   },
 }
 
-type GalleryImage = { src: string; alt: Bi }
+type GalleryImage = { src: ImageProp; alt: Bi }
 export const Gallery: ComponentConfig<
   ShellProps & {
     title: Bi
@@ -297,16 +302,10 @@ export const Gallery: ComponentConfig<
       '4': 'sm:grid-cols-2 lg:grid-cols-4',
     }[columns]
     // Array items carry no ids; position + URL is stable enough for a static list.
-    const keys = images.map((img, n) => `${n}:${img.src}`)
+    const keys = images.map((img, n) => `${n}:${imageSrc(img.src)}`)
     const item = (img: GalleryImage, i: number, extra?: string) =>
-      img.src ? (
-        // biome-ignore lint/performance/noImgElement: tenant-provided URL
-        <img
-          src={img.src}
-          alt={tr(img.alt, meta)}
-          loading="lazy"
-          className={cn('sb-card size-full object-cover', extra)}
-        />
+      imageSrc(img.src) ? (
+        <FramedImage value={img.src} alt={tr(img.alt, meta)} className={cn('sb-card size-full', extra)} />
       ) : (
         <ArtPlaceholder seed={i + 3} className={cn('sb-card size-full', extra)} />
       )
@@ -352,7 +351,7 @@ export const Hero: ComponentConfig<{
   title: Bi
   subtitle: Bi
   buttons: ButtonItem[]
-  image: string
+  image: ImageProp
   imageAlt: Bi
   background: Background
   hide?: Responsive<Visibility>
@@ -430,7 +429,7 @@ export const Hero: ComponentConfig<{
       return (
         <SectionShell
           meta={meta}
-          background={image ? 'image' : 'inverse'}
+          background={imageSrc(image) ? 'image' : 'inverse'}
           bgImage={image}
           padding={{ base: 'xl', lg: 'xl' }}
           hide={hide}
@@ -477,11 +476,15 @@ export const Hero: ComponentConfig<{
       >
         <div className="grid items-center gap-10 md:grid-cols-[1.1fr_1fr] lg:gap-16">
           {copy(false, true)}
-          {!image && emblemKind !== 'none' ? (
+          {!imageSrc(image) && emblemKind !== 'none' ? (
             emblem
-          ) : image ? (
-            // biome-ignore lint/performance/noImgElement: tenant-provided URL
-            <img src={image} alt={tr(imageAlt, meta)} className="sb-card aspect-[4/5] w-full object-cover" />
+          ) : imageSrc(image) ? (
+            <FramedImage
+              value={image}
+              alt={tr(imageAlt, meta)}
+              lazy={false}
+              className="sb-card aspect-[4/5] w-full"
+            />
           ) : (
             <ArtPlaceholder
               seed={id.length + 7}

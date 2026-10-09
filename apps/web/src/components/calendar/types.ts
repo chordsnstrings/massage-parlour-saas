@@ -87,4 +87,62 @@ export type CalendarData = {
   checkoutBase: string
   bookingsBase: string
   calendarBase: string
+  /** Booking whose sheet opens on load (`?open=` from the Week view). */
+  openBooking: string | null
+}
+
+/** Calendar range in the URL (`?range=`); Day is the default. */
+export type CalRange = 'day' | 'week' | 'month'
+
+/** One booking item in the Week view (minutes relative to 00:00 Dubai of its business date). */
+export type SpanItem = {
+  id: string
+  bookingId: string
+  date: string
+  startMin: number
+  endMin: number
+  status: BookingStatus
+  title: string
+  serviceName: string
+  staffName: string | null
+  color: string
+}
+
+export type SpanDay = {
+  date: string
+  /** Server-formatted "Thu 8 Oct" (hydration-safe). */
+  label: string
+  dayNum: number
+  inMonth: boolean
+  bookings: number
+  pending: number
+  /** Server-formatted AED. */
+  revenue: string
+  /** Booked ÷ shift therapist-minutes (0–1), null without shifts. */
+  occupancy: number | null
+}
+
+export type SpanData = {
+  range: 'week' | 'month'
+  date: string
+  today: string
+  title: string
+  from: string
+  to: string
+  prev: string
+  next: string
+  branchId: string
+  branches: { id: string; name: string }[]
+  /** Short weekday names Mon…Sun in the viewer's language. */
+  weekdays: string[]
+  days: SpanDay[]
+  /** Week view only (Month shows per-day totals). */
+  items: SpanItem[]
+  cutoffMin: number
+  gridStart: number
+  gridEnd: number
+  totals: { bookings: number; revenue: string; occupancy: number | null }
+  ownOnly: boolean
+  canManage: boolean
+  calendarBase: string
 }

@@ -43,7 +43,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
   `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
   10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
-  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest stay push-only.
+  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest (`jobs/engage.ts`)
+  write `weekly_insights` / `daily_digest` rows (dedupe per week Monday / business date) via `notify()`.
   **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
   expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
   stock, AI drafts waiting for review, billing) always run. `runNotificationScan(name, scan, now, {key, job})`.
@@ -120,6 +121,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
     (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
+  - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG.
+  - Calendar ranges: `calendar/page.tsx` `?range=week|month` → `loadCalendarSpan` (data.ts) → services
+    `loadCalendarRange` → `components/calendar/span-view.tsx`; Day view takes `?open=<bookingId>` (PLAN §14.6 Phase 3).
   - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
   - Settings → Security: require-2FA toggle (`saveSecurityAction`), recent audit rows;
     `settings/audit` = audit log viewer (`audit.view`).
@@ -154,6 +159,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
   - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
   - `advanced` holds the schedule and scoped custom CSS.
+- **Photo framing**: every image prop (`imageField`) holds a URL (all older pages) or `{ src, frame: {base, md?, lg?} }`
+  with focal point x/y 0–100 %, fit `cover|contain`, zoom 1–2× (`@spa/services/site-kit/image.ts`: `imageSrc`,
+  `normalizeImage`, `toImageProp` — stores a plain URL again when unframed — `imageFrameVars`). Render =
+  `FramedImage` (`blocks/shared.tsx`: clipped `.sb-frame` wrapper + `.sb-img`, site.css vars → object-fit /
+  object-position / `transform: scale` with the focal point as origin; physical %, never mirrored in RTL); used by
+  Image, Gallery, Hero split, Section/Hero-banner backgrounds (Team photos are staff records, not framed). Editor:
+  `media/image-frame.tsx` under the image field (drag/click/arrow-key focal dot, Fill/Fit, zoom, Reset; base frame
+  by default, tablet/desktop tabs add overrides); picking a new photo resets framing. Preflight, template scrub and AI
+  ops (`{src?, frame}`, src omitted = reframe) accept both shapes. E2E: `image-frame.spec.ts`.
 - **Themes and templates**: theme tokens in `sites.theme`; 23 built-in templates — 8 classic (`templates.ts`) + 15
   design templates (R5, `templates-designs.ts`); 24 section presets + one "3D motion" preset per design scene, and 7
   page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
@@ -171,6 +185,19 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `allow-same-origin`: design scripts can't touch platform cookies/APIs); `{{placeholders}}` filled + HTML-escaped from
   `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
   when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
+  - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
+    `htmlDesignDocument` adds a viewport meta if missing + `HTML_DESIGN_BASE_CSS` (all `:where()`, first in <head> so
+    the design's rules win) + the link script; `fixHtmlDesign` (upload) adds the viewport and turns inline img
+    `width:Npx` > 360 into `width:100%;max-width:Npx`; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
+    `bg-<n>` (n-th `background(-image)` url in `<style>` + inline styles; scripts/comments/fonts skipped).
+  - Adjustments = block prop `images: HtmlImageAdjust[]` ({id, src (first 300 chars, must still match), fit, x, y,
+    align, replace}); applied by `applyHtmlImageAdjustments`: `data-spa-img` attr + `!important` rules at the end,
+    background position/size appended after the declaration, replace URL must match `HTML_IMAGE_URL` (https or
+    site path; srcset dropped). UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
+    client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview); saved via `uploadHtmlTemplateAction` (hidden
+    `images` JSON) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate` now takes `pages`).
+    Replacement uploads go into the chosen spa's media library (`/files/upload`, normal size cap; public files, so
+    they break if that spa is deleted). E2E: "HTML design images".
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
   - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,

@@ -20,6 +20,7 @@ import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { navBadgeCounts } from '@/server/nav-counts'
 import { bellData } from '@/server/notifications'
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
@@ -74,7 +75,7 @@ export default async function TenantLayout({
   const ctx = await requireMember(slug)
   const i18n = await getI18n()
   const { locale, t, fmt, messages } = i18n
-  const [data, bell] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt)])
+  const [data, bell, counts] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt), navBadgeCounts(ctx)])
   const base = appPath(`/${ctx.tenant.slug}`)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
@@ -94,18 +95,29 @@ export default async function TenantLayout({
   const single = (icon: ShellItem['icon'], perm: Permission | null, path: string, label: string) =>
     item(icon, label, page(perm, path, label))
   const group = (label: string, items: ShellItem[]): ShellGroup[] => (items.length ? [{ label, items }] : [])
+  // Count badges (crm-spec §2.1 ③), already permission-filtered by navBadgeCounts.
+  const badge = (items: ShellItem[], value: number, key: 'calendar' | 'bookings' | 'inbox') =>
+    items.map((i) => ({ ...i, count: { value, label: t(`nav.count.${key}`, { count: value }) } }))
 
   const nav: ShellGroup[] = [
     ...group(t('nav.group.workspace'), [
       { href: base, label: t('nav.dashboard'), icon: 'dashboard', exact: true },
-      ...single('calendar', 'calendar.view', '/calendar', t('nav.calendar')),
-      ...single('bookings', 'calendar.view', '/bookings', t('nav.bookings')),
+      ...badge(single('calendar', 'calendar.view', '/calendar', t('nav.calendar')), counts.today, 'calendar'),
+      ...badge(
+        single('bookings', 'calendar.view', '/bookings', t('nav.bookings')),
+        counts.pending,
+        'bookings',
+      ),
       ...single('sales', 'pos.use', '/sales', t('nav.sales')),
-      ...item('inbox', t('nav.inbox'), [
-        ...page('marketing.send', '/messages', t('nav.whatsapp')),
-        ...page('marketing.send', '/inbox', t('nav.instagram')),
-        ...page('marketing.campaigns', '/campaigns', t('nav.campaigns')),
-      ]),
+      ...badge(
+        item('inbox', t('nav.inbox'), [
+          ...page('marketing.send', '/messages', t('nav.whatsapp')),
+          ...page('marketing.send', '/inbox', t('nav.instagram')),
+          ...page('marketing.campaigns', '/campaigns', t('nav.campaigns')),
+        ]),
+        counts.outboxDue + counts.igUnread,
+        'inbox',
+      ),
     ]),
     ...group(t('nav.group.people'), [
       ...single('clients', 'clients.view', '/clients', t('nav.clients')),

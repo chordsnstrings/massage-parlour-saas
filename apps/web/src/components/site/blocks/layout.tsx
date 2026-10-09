@@ -1,4 +1,5 @@
 import type { ComponentConfig, CustomFieldRender, Field, PuckContext, Slot } from '@puckeditor/core'
+import { type ImageProp, imageSrc } from '@spa/services/site-kit'
 import { cn } from '@/lib/utils'
 import { alignField, hideField, imageField, padField, radio, select, text } from '../field-defs'
 import { CustomCssField, ScheduleField } from '../fields'
@@ -11,7 +12,7 @@ import {
   type Visibility,
 } from '../style'
 import type { Responsive, SiteMeta } from '../types'
-import { container, metaOf } from './shared'
+import { container, FramedImage, metaOf } from './shared'
 
 // biome-ignore lint/suspicious/noExplicitAny: Puck types props per component; the wrapper is prop-agnostic
 type AnyComponent = ComponentConfig<any>
@@ -167,7 +168,7 @@ export type ShellProps = {
   padding: Responsive<PadStep>
   hide?: Responsive<Visibility>
   width?: keyof typeof container
-  bgImage?: string
+  bgImage?: ImageProp
   anchor?: string
   scene?: SceneKey
 }
@@ -193,7 +194,7 @@ export function SectionShell({
   children: React.ReactNode
 }) {
   const s = responsiveStyle({ padding, hide }, { editing: meta.editing, padFallback: 'lg' })
-  const image = background === 'image' && bgImage
+  const image = background === 'image' && imageSrc(bgImage)
   const scripted = !meta.editing && scene !== 'auto' && scene !== 'none'
   return (
     <section
@@ -207,8 +208,7 @@ export function SectionShell({
     >
       {image && (
         <>
-          {/* biome-ignore lint/performance/noImgElement: tenant-provided URL, no loader configured */}
-          <img src={bgImage} alt="" className="absolute inset-0 -z-10 size-full object-cover" />
+          <FramedImage value={bgImage} alt="" lazy={false} className="absolute inset-0 -z-10" />
           <div className="absolute inset-0 -z-10 bg-black/45" />
         </>
       )}

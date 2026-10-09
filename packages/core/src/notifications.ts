@@ -14,6 +14,9 @@ export const NOTIFICATION_KINDS = {
   'ai.drafts': { permission: 'ai.approve' },
   'billing.overdue': { permission: 'billing.view' },
   'billing.reminder': { permission: 'billing.view' },
+  // Bell copies of the scheduled digests (push-only before): one row per week / business day.
+  weekly_insights: { permission: 'reports.view' },
+  daily_digest: { permission: 'calendar.manage' },
 } as const satisfies Record<string, { permission: Permission }>
 
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS
