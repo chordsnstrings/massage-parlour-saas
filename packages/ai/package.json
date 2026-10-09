@@ -11,7 +11,7 @@
     "smoke": "tsx --env-file-if-exists=../../.env src/smoke.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.1",
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@spa/core": "workspace:*",
     "@spa/db": "workspace:*",
     "@spa/services": "workspace:*",
