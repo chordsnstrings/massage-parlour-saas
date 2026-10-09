@@ -150,6 +150,8 @@ export const domain = {
   pendingSlugTaken: 'Another page now uses /{slug} — rename this page to a free address before publishing',
   editedElsewhere:
     'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',
+  pageLocked:
+    '{name} is editing this page in the Studio editor — changes are refused until they close it (the lock frees itself 2 minutes after they leave) or someone takes over in the editor',
   templateKeyFormat: 'Use lowercase letters, numbers and dashes for the key',
   templateKeyExists: 'A template with the key "{key}" already exists',
   publishHomeFirst: 'Publish the home page before saving this site as a template',

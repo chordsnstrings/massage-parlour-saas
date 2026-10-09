@@ -112,6 +112,31 @@ export const pageVersions = pgTable(
   () => tenantPolicies(),
 )
 
+/**
+ * Studio editor soft lock (F29): one editor per page at a time. The editor renews it with a heartbeat; it frees
+ * itself at `expires_at` (tab closed, network gone). Others see who holds it and may take over (audited). Draft
+ * writers (editor saves, Ask AI, Claude MCP) refuse a page locked by someone else (services `site-locks.ts`).
+ */
+export const sitePageLocks = pgTable(
+  'site_page_locks',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    pageId: uuid('page_id')
+      .notNull()
+      .references(() => sitePages.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** Display name at the time the lock was taken (shown to other editors). */
+    holderName: text('holder_name').notNull(),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [unique('site_page_locks_page').on(t.pageId), ...tenantPolicies()],
+)
+
 /** Web Push subscriptions per signed-in user (platform-level; a user can belong to several spas). */
 export const pushSubscriptions = pgTable(
   'push_subscriptions',

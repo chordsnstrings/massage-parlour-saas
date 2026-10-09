@@ -5,6 +5,7 @@ import {
   applySiteCopy,
   applySiteCopyToPages,
   assertEditStamp,
+  assertPagesUnlocked,
   DomainError,
   editStamp,
   extractSiteCopy,
@@ -378,6 +379,8 @@ async function storeDraft(
 ) {
   await lockSite(tx, ctx.tenant.id)
   await assertEditStamp(tx, ctx.tenant.id, pageId, stamp)
+  // F29: refused while another super-admin holds the page's editor lock (they took over, or it was theirs).
+  await assertPagesUnlocked(tx, { tenantId: ctx.tenant.id, pageIds: [pageId], userId: ctx.user.id })
   const current = await getEditablePage(tx, ctx.tenant.id, pageId)
   if (!current) throw new DomainError('Page not found', 'not_found')
   if (!can(ctx, 'site.design') && designSignature(current.data) !== designSignature(data)) {
@@ -386,6 +389,17 @@ async function storeDraft(
     )
   }
   return saveDraft(tx, { tenantId: ctx.tenant.id, pageId, data, userId: ctx.user.id })
+}
+
+const AUTOSAVE_AUDIT_MS = 10 * 60_000
+const autosaveAudited = new Map<string, number>()
+/** True when this page + editor had no audited autosave in the last 10 minutes (in-process; one web instance). */
+function autosaveAuditDue(key: string, now = Date.now()) {
+  const last = autosaveAudited.get(key)
+  if (last !== undefined && now - last < AUTOSAVE_AUDIT_MS) return false
+  if (autosaveAudited.size > 5000) autosaveAudited.clear()
+  autosaveAudited.set(key, now)
+  return true
 }
 
 type EditStampInput = { page: string; site: string } | undefined
@@ -400,6 +414,7 @@ export async function saveDraftAction(
   pageId: string,
   data: unknown,
   stamp?: unknown,
+  opts?: { overwrite?: boolean; autosave?: boolean },
 ): Promise<ActionResult> {
   const { ctx, error } = await studioGuard(slug, 'site.content')
   if (error) return fail(error)
@@ -407,18 +422,32 @@ export async function saveDraftAction(
   if (check.error) return fail(check.error)
   const expected = parseStamp(stamp)
   if (expected === null) return fail('This page could not be read. Reload the editor and try again.')
+  // F29 "Keep mine" after a conflict: the editor's version replaces what changed elsewhere (audited as such).
+  const overwrite = opts?.overwrite === true
   let saved: { versionId: string; stamp: Awaited<ReturnType<typeof editStamp>> }
   try {
     saved = await withTenant(ctx.tenant.id, async (tx) => {
-      const version = await storeDraft(tx, ctx, pageId, data as Record<string, unknown>, expected)
+      const version = await storeDraft(
+        tx,
+        ctx,
+        pageId,
+        data as Record<string, unknown>,
+        overwrite ? undefined : expected,
+      )
       return { versionId: version.id, stamp: await editStamp(tx, ctx.tenant.id, pageId) }
     })
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, 'site.page.draft_saved', 'site_page', pageId, { versionId: saved.versionId })
+  // Autosaves land after every pause in typing: one audit row per page + editor per 10 minutes is enough (the version
+  // row itself records who saved and when); manual saves and overwrites are always audited.
+  if (!opts?.autosave || overwrite || autosaveAuditDue(`${ctx.tenant.id}:${pageId}:${ctx.user.id}`))
+    await auditAs(ctx, 'site.page.draft_saved', 'site_page', pageId, {
+      versionId: saved.versionId,
+      ...(overwrite ? { overwroteChangesElsewhere: true } : {}),
+    })
   revalidate(slug)
-  return ok('Draft saved', { stamp: saved.stamp })
+  return ok('Draft saved', { stamp: saved.stamp, savedAt: new Date().toISOString() })
 }
 
 /**
@@ -443,6 +472,7 @@ export async function publishPageAction(
     published = await withTenant(ctx.tenant.id, async (tx) => {
       await lockSite(tx, ctx.tenant.id)
       await assertEditStamp(tx, ctx.tenant.id, pageId, expected, { site: true })
+      await assertPagesUnlocked(tx, { tenantId: ctx.tenant.id, pageIds: [pageId], userId: ctx.user.id })
       if (can(ctx, 'site.content'))
         await storeDraft(tx, ctx, pageId, data as Record<string, unknown>, undefined)
       const version = await publishPage(tx, { tenantId: ctx.tenant.id, pageId, userId: ctx.user.id })

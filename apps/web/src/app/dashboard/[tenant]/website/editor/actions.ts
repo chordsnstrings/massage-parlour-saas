@@ -2,6 +2,7 @@
 import { AiBudgetExceededError, AiDisabledError, loadSpaContext, runChat } from '@spa/ai'
 import { platformDb, user, withTenant } from '@spa/db'
 import {
+  assertPagesUnlocked,
   collectGlobalIds,
   createSavedSection,
   DomainError,
@@ -15,6 +16,7 @@ import {
   labelVersion,
   listSavedSections,
   listVersions,
+  lockSite,
   pageBlockStats,
   pagePaths,
   restoreVersion,
@@ -247,6 +249,8 @@ export async function restoreVersionAction(
   let stamp: Awaited<ReturnType<typeof editStamp>> = null
   try {
     data = await withTenant(ctx.tenant.id, async (tx) => {
+      await lockSite(tx, ctx.tenant.id)
+      await assertPagesUnlocked(tx, { tenantId: ctx.tenant.id, pageIds: [pageId], userId: ctx.user.id })
       const [current, version] = await Promise.all([
         getEditablePage(tx, ctx.tenant.id, pageId),
         getVersion(tx, ctx.tenant.id, versionId),

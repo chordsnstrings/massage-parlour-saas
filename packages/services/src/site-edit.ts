@@ -18,6 +18,7 @@ import {
   trimPageForPrompt,
 } from './site-kit/edit-ops'
 import { isNode } from './site-kit/tree'
+import { assertPagesUnlocked, pageLockedMessage, pageLocksHeldByOthers } from './site-locks'
 import {
   addPage,
   checkPageRename,
@@ -356,6 +357,17 @@ export async function runSiteEdit(
   for (const w of changed)
     if (JSON.stringify(w.data).length > SITE_EDIT_MAX_PAGE_BYTES)
       return { ok: false, errors: [`${pageLabel(w)} would be too large to save`] }
+  // F29: a page open in someone else's Studio editor is theirs until they close it (or it is taken over).
+  const touched = [...new Set([...changed.filter((w) => !w.isNew).map((w) => w.id), ...renames.keys()])]
+  const held = await pageLocksHeldByOthers(tx, input.tenantId, input.userId, touched)
+  if (held.size)
+    return {
+      ok: false,
+      errors: [...held].map(([id, lock]) => {
+        const w = working.get(id)
+        return `${w ? pageLabel(w) : 'This page'}: ${pageLockedMessage(lock.holderName)}`
+      }),
+    }
   const policy = deps.check?.(
     changed.map((w) => ({ before: w.before, after: w.data })),
     theme !== null,
@@ -442,6 +454,11 @@ export async function restoreSiteEdit(
   },
 ) {
   await lockSite(tx, input.tenantId)
+  await assertPagesUnlocked(tx, {
+    tenantId: input.tenantId,
+    pageIds: input.pages.map((p) => p.id),
+    userId: input.userId,
+  })
   for (const p of input.pages) {
     if (JSON.stringify(p.data).length > SITE_EDIT_MAX_PAGE_BYTES)
       throw new DomainError('This page is too large to save.')
@@ -499,6 +516,8 @@ export type SiteEditView = {
     hasDraft: boolean
     pendingRename: { title?: SiteText; slug?: string } | null
     htmlDesign: boolean
+    /** Open in a Studio editor (F29 lock): edits to this page are refused for anyone else until it frees. */
+    editing: { by: string; userId: string; until: string } | null
     /** Draft content: block ids, types and props (long text clipped unless `full`). */
     data: unknown
   }[]
@@ -516,7 +535,14 @@ export async function getSiteForEdit(
   const slug = opts.page === 'home' || opts.page === '/' ? '' : opts.page?.replace(/^\//, '')
   const chosen = opts.page === undefined ? all : all.filter((p) => p.id === opts.page || p.slug === slug)
   const pages: SiteEditView['pages'] = []
+  const locks = await pageLocksHeldByOthers(
+    tx,
+    tenantId,
+    undefined,
+    chosen.map((p) => p.id),
+  )
   for (const p of chosen) {
+    const lock = locks.get(p.id)
     const editable = await getEditablePage(tx, tenantId, p.id)
     const data = asPageData(editable?.data)
     pages.push({
@@ -528,6 +554,9 @@ export async function getSiteForEdit(
       hasDraft: p.hasDraft,
       pendingRename: p.pending ?? null,
       htmlDesign: isHtmlDesign(data),
+      editing: lock
+        ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() }
+        : null,
       data: opts.full ? data : trimPageForPrompt(data),
     })
   }
