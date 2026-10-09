@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Select } from '@/components/ui/input'
-import { formatDate } from '@/lib/utils'
+import { formatAed, formatDate } from '@/lib/utils'
 import { saveDiscountsAction, setFeatureTierAction, switchPlanAction } from '../../actions'
 
 type Plan = typeof plans.$inferSelect
@@ -63,7 +63,7 @@ export function PlanCard({
           >
             {due
               ? `Renewal on ${formatDate(sub.currentPeriodEnd)}: choose the spa’s new plan. It starts a new 12-month period on that date (no setup fee); nothing is charged or moved automatically — then use “Generate payment schedule”.`
-              : `Stays on the legacy yearly plan (AED 24,000/year) until its renewal on ${formatDate(sub.currentPeriodEnd)}. You can choose the new plan from ${formatDate(addDays(sub.currentPeriodEnd, -RENEWAL_WINDOW_DAYS))}.`}
+              : `Stays on the legacy yearly plan (${formatAed(sub.priceAed)} per year) until its renewal on ${formatDate(sub.currentPeriodEnd)}. You can choose the new plan from ${formatDate(addDays(sub.currentPeriodEnd, -RENEWAL_WINDOW_DAYS))}.`}
           </p>
         )}
 
