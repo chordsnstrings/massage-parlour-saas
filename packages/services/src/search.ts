@@ -1,7 +1,7 @@
 // Global search (PLAN §14.7 B4): one query across clients, bookings, receipts (sales), staff and services.
 // Tenant-scoped through the caller's `withTenant` tx (RLS); the caller decides what the member may see (`scope`) —
 // a group missing from the scope is never queried. Phone numbers are matched and returned only with `phone: true`
-// (`clients.phone`). Ranking: exact > prefix > substring, then pg_trgm similarity (migration 0022 indexes).
+// (`clients.phone`). Ranking: exact > prefix > substring, then pg_trgm similarity (migration 0024 indexes).
 import { bookingItems, bookings, clients, sales, services, staff, type Tx } from '@spa/db'
 import { and, eq, inArray, or, type SQL, sql } from 'drizzle-orm'
 

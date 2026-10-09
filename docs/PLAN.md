@@ -893,14 +893,14 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   See CODEMAP "Notifications".*
 - **B3 ✅ (2026-10-08):** 9 switches in `tenants.settings.automations` (missing = on; no new switches table), Automations
   page in the System menu (`settings.manage`; backups + domains/SSL shown "Always on"), tenant `job_runs` log (migration
-  0022) shown as "Last 24 hours". Switches only stop QUEUEING (outbox) / pushes — click-to-send unchanged. Details: CODEMAP
+  0023) shown as "Last 24 hours". Switches only stop QUEUEING (outbox) / pushes — click-to-send unchanged. Details: CODEMAP
   "Automation switches".
-  *B5.1 waitlist + B5.2 merge duplicate clients built (X6, migration 0022_waitlist_merge; CODEMAP "Waitlist" /
+  *B5.1 waitlist + B5.2 merge duplicate clients built (X6, migration 0025_waitlist_merge; CODEMAP "Waitlist" /
   "Merge duplicate clients"): waitlist per branch + business date + optional service and time window; a freed slot
   (cancel / no-show / reschedule) marks matching entries notified and queues a `waitlist_slot` WhatsApp message
   (click-to-send); staff book an entry through createBooking. Merge = suggest (phone key / name) → preview → one
   transaction moving every client FK, merged row deleted, ledger untouched, new permission `clients.merge`.*
-  *Built (X7, migration 0022_equipment_timeclock): B5.3 equipment as a bookable resource (Services & rooms →
+  *Built (X7, migration 0026_equipment_timeclock): B5.3 equipment as a bookable resource (Services & rooms →
   Equipment; services require types; reserved via `reservations` like rooms; calendar flags uncovered equipment) and
   B5.4 time clock + leave (`/timeclock` PIN kiosk, timesheet actual vs planned with manager fixes, leave requests
   annual/sick/unpaid approved by managers; approved leave blocks slots; unpaid days deducted from salaried pay,
@@ -916,6 +916,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **Client phone rule (owner, 2026-10-08, locked):** client phone numbers are visible ONLY to owner, manager and
   receptionist — always; never to therapist / accountant / content editor or any custom role, no tenant toggle
   (`@spa/core` `PHONE_ROLES`; details in §14.9 "Security toggles").
+- **X1–X9 integration (2026-10-08, branch x-integration):** migrations 0022 notifications · 0023 automations (tenant
+  `job_runs`) · 0024 search_audit_security (pg_trgm) · 0025 waitlist_merge · 0026 equipment_timeclock · 0027 job_runs
+  (platform-only `platform_job_runs` + `instagram_reply_queue`) · 0028 meta_mcp.
 - **R1 Website approvals:** only super-admins approve/publish; spas can only request changes (remove spa approve).
 - **R2 Bookings + pay:** "Bookings" in the sidebar (list + detail). Staff mark each booking Pending / Completed / Cancelled.
   When marking Completed the receptionist enters the therapist's commission in AED for that booking. A therapist's pay =
@@ -1010,7 +1013,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `clients.phone` — never matched or returned without it; local `05x` matches stored `9715x`), bookings (ref code,
   client; allowed branches; members without `calendar.manage` only their own), receipts (`sales.number`, client;
   needs `pos.use`), staff (`staff.view`), services (EN/AR name; `services.manage`). Rank: exact 3 > prefix 2 >
-  substring 1 + `word_similarity`; typos via `<%` (threshold 0.5, tx-local). Indexes: pg_trgm GIN (migration 0022,
+  substring 1 + `word_similarity`; typos via `<%` (threshold 0.5, tx-local). Indexes: pg_trgm GIN (migration 0024,
   hand-written; pg_trgm is trusted so `spa_owner` creates it; also in bootstrap.sql). UI: top-bar field + ⌘K/Ctrl+K
   palette (`components/search`, server action builds the scope), grouped, ↑↓/Enter/Esc, "Show more" per group.
 - **Audit viewer**: permission `audit.view` (new; owner + manager via code). Services `audit-log.ts`

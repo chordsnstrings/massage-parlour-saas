@@ -44,12 +44,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
   10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
   60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest stay push-only.
+  **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
+  expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
+  stock, AI drafts waiting for review, billing) always run. `runNotificationScan(name, scan, now, {key, job})`.
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
-    `staff | room | equipment` (equipment added in migration 0022, B5.3).
+    `staff | room | equipment` (equipment added in migration 0026, B5.3).
   - `time_entries`: unique partial index `time_entries_one_open` (one open clock entry per person) + EXCLUDE
     `time_entries_no_overlap`; `leave_requests`: EXCLUDE `leave_no_overlap` (same person, overlapping dates,
-    status ≠ rejected) — all migration 0022 (B5.4).
+    status ≠ rejected) — all migration 0026 (B5.4).
   - `shifts` has `EXCLUDE` per staff member over `[starts_at, ends_at)` (migration 0003).
   - Ledger (migration 0005):
     - a one-sided-line CHECK;
@@ -224,7 +227,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   visible sheet; `headerRowIndex` skips one-cell title rows, so our own files re-import; TH export headers are
   autoMap aliases `TH_EXPORT_ALIASES`). Legacy .xls is refused. CSV writer (`toCsv`) removed.
 - **Search / audit (X5)**: `globalSearch` takes a caller-built `scope` (missing group = not queried; phones only with
-  `scope.clients.phone`); trigram GIN indexes from migration 0022. `listAuditLog`/`auditFilterOptions` read
+  `scope.clients.phone`); trigram GIN indexes from migration 0024. `listAuditLog`/`auditFilterOptions` read
   `audit_log` via the tenant tx; names via platformDb for those ids only.
 - **Errors**: `DomainError(message, code)` with codes `slot_taken | not_found | invalid | no_room | no_staff`;
   `pgCode(e)` unwraps drizzle-wrapped errors.
@@ -326,7 +329,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
   manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
   monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
-- **Waitlist (B5.1, migration 0022, X6)**: `waitlist_entries` (branch, client, optional service/variant, business
+- **Waitlist (B5.1, migration 0025, X6)**: `waitlist_entries` (branch, client, optional service/variant, business
   date, optional `from_at`/`until_at` window — CHECK from < until, notes, status waiting · notified · booked ·
   cancelled, booking_id, created_by). services `waitlist.ts`: `addToWaitlist`, `cancelWaitlistEntry`,
   `listWaitlist`, `notifyWaitlistForFreedSlot` (called by `setBookingStatus` → cancelled/no_show and by
@@ -453,7 +456,7 @@ i18n namespace `automations`.
   listed names, prefixed `ext__`, only for agents allowing `external` (meta_agent) and spas with the group on.
 - **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
   autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
-  `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0022_meta_mcp (also `social_platform` += `facebook`).
+  `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

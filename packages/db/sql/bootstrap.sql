@@ -23,7 +23,7 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name') \gexec
 \connect :db_name
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 CREATE EXTENSION IF NOT EXISTS citext;
-CREATE EXTENSION IF NOT EXISTS pg_trgm; -- global search; migration 0022 also creates it (trusted extension)
+CREATE EXTENSION IF NOT EXISTS pg_trgm; -- global search; migration 0024 also creates it (trusted extension)
 GRANT USAGE ON SCHEMA public TO spa_platform, spa_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE spa_owner IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO spa_platform, spa_app;
