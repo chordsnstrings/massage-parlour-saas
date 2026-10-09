@@ -33,7 +33,7 @@ test('the Spa CRM page sells the dashboard in English and Thai', async ({ page }
     await expect(demo.getByText(th.overview.upNext.title, { exact: true })).toBeVisible()
     await expect(demo.getByText(th.sales.checkout.total, { exact: true })).toBeVisible()
     await expect(demo.getByText(en.nav.calendar, { exact: true })).toHaveCount(0)
-    await expect(demo.getByText('Layla H.', { exact: true })).toBeVisible()
+    await expect(demo.getByText('Layla', { exact: true })).toBeVisible()
     await expect(demo.getByText(th.overview.upNext.walkIn, { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'English' }).click()

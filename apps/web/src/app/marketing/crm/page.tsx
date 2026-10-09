@@ -36,12 +36,12 @@ const MODULES = [
   {
     icon: CalendarDays,
     title: 'Calendar & rooms',
-    text: 'Day, week and month views by therapist or room. Therapist and room are reserved together — the database itself blocks double booking.',
+    text: 'A day view by therapist or room, plus week and month overviews. Therapist and room are reserved together — the database itself blocks double booking.',
   },
   {
     icon: Globe,
     title: 'Every booking, one calendar',
-    text: 'Bookings from your website, the AI chat and Instagram messages land on the same calendar as walk-ins and phone bookings.',
+    text: 'Bookings from your website and from the AI receptionist in your Instagram messages land on the same calendar as walk-ins and phone bookings.',
   },
   {
     icon: Receipt,
@@ -56,7 +56,7 @@ const MODULES = [
   {
     icon: HandCoins,
     title: 'Staff, commission & tips',
-    text: 'Shifts, commission per booking and tips per therapist, carried into the monthly payroll run and the WPS salary file.',
+    text: 'Shifts, commission per booking and tips per therapist. Commission goes into the monthly payroll run and the WPS salary file; tips and advances are paid out separately.',
   },
   {
     icon: UserRound,

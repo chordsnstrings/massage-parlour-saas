@@ -94,7 +94,7 @@ export function CrmLanguageDemo({ copy }: { copy: Record<Locale, CrmDemoCopy> })
                   <span className="crm-demo-opt" data-on={locale === 'en' || undefined}>
                     EN
                   </span>
-                  <span className="crm-demo-opt" data-on={locale === 'th' || undefined}>
+                  <span lang="th" className="crm-demo-opt" data-on={locale === 'th' || undefined}>
                     ไทย
                   </span>
                 </span>
@@ -154,10 +154,6 @@ export function CrmLanguageDemo({ copy }: { copy: Record<Locale, CrmDemoCopy> })
                         <span className="shrink-0 tabular-nums">{l.amount}</span>
                       </li>
                     ))}
-                    <li className="flex justify-between gap-3 text-[var(--mute)]">
-                      <span>{c.checkout.tips}</span>
-                      <span className="shrink-0 tabular-nums">{c.checkout.tipAmount}</span>
-                    </li>
                   </ul>
                   <dl className="mt-3 space-y-1 border-t border-[var(--line)] pt-2.5 text-[12px] text-[var(--mute)]">
                     <div className="flex justify-between gap-3">
@@ -180,6 +176,10 @@ export function CrmLanguageDemo({ copy }: { copy: Record<Locale, CrmDemoCopy> })
                       </span>
                     ))}
                   </div>
+                  <p className="mt-3 flex justify-between gap-3 text-[12px] text-[var(--mute)]">
+                    <span>{c.checkout.tips}</span>
+                    <span className="tabular-nums">{c.checkout.tipAmount}</span>
+                  </p>
                   <p className="crm-demo-cta">{c.checkout.complete}</p>
                 </section>
               </div>

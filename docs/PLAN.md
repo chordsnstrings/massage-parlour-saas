@@ -1403,7 +1403,7 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   and says it is in English **and Thai**. New page `/crm` (`app/marketing/crm/page.tsx`, metadata + OG): hero (CTAs
   "Apply for your spa" → app `/signup` via `requestUrls`, "See pricing"), "In English or ภาษาไทย" EN/TH toggle demo, 12
   modules (each verified against §14.6–§18: calendar & rooms/EXCLUDE, all channels on one calendar, POS with packages,
-  gift cards, memberships (G15), full tax invoice (G16), staff/commission/tips + WPS, therapist own day + earnings
+  gift cards, memberships (G15), full tax invoice (G16), staff/commission (payroll + WPS; tips + advances paid out separately, R2), therapist own day + earnings
   (G14), WhatsApp click-to-send, clients + intake forms, reports/KPIs, multi-branch (G22), roles + audit log, 2FA on by
   default (G23)), "Set up for you" (apply → we build menu/rooms/staff/hours with you → first import → team invites;
   matches the Contact copy), closing CtaBand.
@@ -1415,7 +1415,8 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
 - Home: new "Spa CRM" section (EN/TH label pairs from the catalogues, link to /crm); hero notes now "Sites in English &
   Arabic · Dashboard in English & Thai". Features: "Your team's language" band (link to /crm) + team-area bullet.
   FAQ "Is it in Arabic?" no longer says the dashboard is English-only. Thai font: the marketing layout loads
-  `@fontsource-variable/noto-sans-thai` (Thai unicode-range only), `.mkt :lang(th)` uses it.
+  `@fontsource-variable/noto-sans-thai`; it sits after DM Sans/Space Grotesk in `--font`/`--head`, so it supplies Thai
+  glyphs only (typed Latin names keep their face in EN and TH; only the Thai subset loads), as in crm.css.
 - **Pending (shell.tsx is being rebuilt on another branch):** add `| 'crm'` to `MarketingPage`, NAV entry
   `{ key: 'crm', href: '/crm', label: 'Spa CRM' }` before 'Website studio', footer Product column `NAV.slice(0, 4)`
   (else Pricing drops out), then `/crm` uses `active="crm"` (today `active="home"`, so no nav item is marked).

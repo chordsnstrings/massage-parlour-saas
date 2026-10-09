@@ -6,7 +6,7 @@ import { createFormat, type Locale, translator } from '@spa/core/i18n'
 /** Typed by the spa: shown as-is in every language. */
 const BOOKINGS = [
   {
-    client: 'Layla H.',
+    client: 'Layla',
     service: 'Hot stone ritual',
     min: 90,
     therapist: 'Mei',
@@ -14,7 +14,7 @@ const BOOKINGS = [
     status: 'checked_in',
   },
   {
-    client: 'Sara K.',
+    client: 'Sara',
     service: 'Swedish massage',
     min: 60,
     therapist: 'Aya',
@@ -22,7 +22,7 @@ const BOOKINGS = [
     status: 'confirmed',
   },
   {
-    client: 'Noura A.',
+    client: 'Noura',
     service: 'Thai massage',
     min: 90,
     therapist: 'Ravi',
@@ -50,8 +50,8 @@ export type CrmDemoCopy = ReturnType<typeof build>
 function build(locale: Locale) {
   const t = translator(locale)
   const fmt = createFormat(locale)
-  const subtotal = SALE.reduce((s, l) => s + l.aed, 0)
-  const total = subtotal + TIP
+  // As on the real till: Total is the sale; tips show on their own line and only the button adds them.
+  const total = SALE.reduce((s, l) => s + l.aed, 0)
   return {
     locale,
     language: t('shell.language'),
@@ -104,15 +104,15 @@ function build(locale: Locale) {
       title: t('sales.checkout.title'),
       lines: SALE.map((l) => ({ name: l.name, amount: fmt.aed(l.aed) })),
       tips: t('sales.checkout.tipsLine'),
-      tipAmount: fmt.aed(TIP),
+      tipAmount: `+${fmt.aed(TIP)}`,
       subtotal: t('sales.checkout.subtotal'),
-      subtotalAmount: fmt.aed(subtotal),
+      subtotalAmount: fmt.aed(total),
       vat: t('sales.checkout.vatIncluded'),
-      vatAmount: fmt.aed(Math.round((subtotal - subtotal / 1.05) * 100) / 100),
+      vatAmount: fmt.aed(Math.round((total - total / 1.05) * 100) / 100),
       total: t('sales.checkout.total'),
       totalAmount: fmt.aed(total),
       methods: [t('enums.paymentMethodKind.cash'), t('enums.paymentMethodKind.card_terminal')],
-      complete: t('sales.checkout.complete', { amount: fmt.aed(total) }),
+      complete: t('sales.checkout.complete', { amount: fmt.aed(total + TIP) }),
     },
   }
 }

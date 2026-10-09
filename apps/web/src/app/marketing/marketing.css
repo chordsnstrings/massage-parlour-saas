@@ -21,8 +21,10 @@
     --dark-text: #c2c2cc;
     --line: #e6e6ec;
     --line2: rgba(11, 11, 15, 0.14);
-    --head: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, sans-serif;
-    --font: "DM Sans Variable", "DM Sans", ui-sans-serif, sans-serif;
+    /* Noto Sans Thai after the Latin faces: it only supplies Thai glyphs (ภาษาไทย labels, the /crm demo), so typed
+       Latin names keep the same typeface in EN and TH, and only its Thai subset is fetched (mirrors crm.css). */
+    --head: "Space Grotesk Variable", "Space Grotesk", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+    --font: "DM Sans Variable", "DM Sans", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
     --shadow: 0 30px 60px rgba(11, 11, 15, 0.18);
     --nav-h: 73px;
     /* names the marketing markup uses, mapped onto the C palette */
@@ -911,11 +913,6 @@
     color: var(--mute);
   }
 
-  /* Thai text (the /crm language demo, ภาษาไทย labels): Noto Sans Thai, loaded by the marketing layout (Thai unicode-range only). */
-  .mkt :lang(th) {
-    font-family: "Noto Sans Thai Variable", var(--font);
-  }
-
   /* /crm: EN/TH dashboard demo (components/marketing/crm-demo.tsx) */
   .crm-demo-seg {
     display: inline-flex;
@@ -976,6 +973,7 @@
   .crm-demo-group {
     padding: 8px 8px 4px;
     font-size: 10.5px;
+    line-height: 18px; /* fits the 12px Thai label too, so the demo keeps its height on every toggle */
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
