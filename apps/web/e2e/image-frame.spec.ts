@@ -69,10 +69,13 @@ test('site builder photos: focal point, fit and zoom from the editor reach the p
   const canvas = page.frameLocator('#preview-frame').first()
   // Puck keeps a hidden copy of the fields panel mounted; act on the visible one.
   const frameUi = () => page.getByTestId('image-frame').filter({ visible: true })
+  const published = page.getByText('Published — your page is live')
   const publish = async () => {
+    // Let the previous publish's toast (3.8 s) expire so this one is the only match.
+    await expect(published).toHaveCount(0)
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Publish now' }).click()
-    await expect(page.getByText('Published — your page is live')).toBeVisible()
+    await expect(published).toBeVisible()
     // The toast shows before the publish dialog has closed; its overlay would swallow the next pointer input.
     await expect(page.getByRole('dialog')).toHaveCount(0)
   }
