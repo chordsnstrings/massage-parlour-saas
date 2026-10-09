@@ -7,7 +7,7 @@ import { BottomNav, type NavItem, SidebarNav } from './nav'
 import { UserMenu } from './user-menu'
 
 /**
- * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 248px on lg, icon rail 72px on md, top bar + bottom tabs on phones.
+ * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 272px on lg, icon rail 72px on md, top bar + bottom tabs on phones.
  */
 export function AppShell({
   title,
@@ -33,15 +33,12 @@ export function AppShell({
   const primary = nav.slice(0, 4)
   const more = nav.slice(4)
   return (
-    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[248px_minmax(0,1fr)]">
+    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[272px_minmax(0,1fr)]">
       <aside className="mkt-app-dark sticky top-0 hidden h-dvh flex-col md:flex">
-        <Link
-          href={homeHref}
-          className="flex min-h-16 items-center gap-3 px-5 py-4 md:justify-center lg:justify-start"
-        >
+        <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
           <LogoMark tone="light" className="lg:hidden" />
-          <span className="min-w-0 md:hidden lg:block">
-            <Logo className="mb-2.5 hidden h-5 lg:block" />
+          <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
+            <Logo className="mb-3.5 hidden h-7 lg:block" />
             <span className="mkt-app-chip">{title}</span>
             {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
           </span>

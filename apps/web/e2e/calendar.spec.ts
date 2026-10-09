@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { dubaiInstant } from '@spa/core'
-import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, today } from './helpers'
+import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
 
 test('reception works the day calendar: check in, then book a client into a free slot', async ({ page }) => {
   const { slug } = await signUpOwner(page)
@@ -92,10 +91,8 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
 }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  // Keep the booking inside today's business day (05:00 → 05:00 Dubai): 2 h ahead while that (plus its length)
-  // still fits, otherwise 3 h ago — late at night "+2 h" would land on the next business day.
-  const dayEnd = dubaiInstant(today(), 29 * 60).getTime()
-  await seedBooking(seed, Date.now() + 4 * 3600_000 <= dayEnd ? 2 : -3)
+  // Clear of the walk-in (Maya must be free now) and on the business day the calendar shows.
+  await seedBooking(seed, hoursOnToday(2))
   await page.goto(`${app}/${slug}/calendar`)
   const panel = page.locator('section', { has: page.getByRole('heading', { name: 'Walk-ins' }) })
   await expect(panel.locator('[aria-current="true"]')).toContainText('Maya')

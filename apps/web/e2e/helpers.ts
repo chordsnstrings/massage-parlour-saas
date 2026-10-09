@@ -120,6 +120,13 @@ export async function makeStudio(slug: string) {
 export const today = () => businessDateOf(new Date(), '05:00')
 
 /**
+ * `hours` for seedBooking that keep the booking on today's calendar: ahead of now, or as far behind when ahead
+ * would cross the 05:00 business-day cutoff (a run between 03:00 and 05:00 Dubai put it on tomorrow's calendar).
+ */
+export const hoursOnToday = (hours: number) =>
+  businessDateOf(new Date(Date.now() + hours * 3600_000 + 900_000), '05:00') === today() ? hours : -hours
+
+/**
  * Gives a freshly signed-up spa a small menu, two therapists on shift all of today's and tomorrow's
  * business day (05:00–05:00, so walk-in/rotation specs don't depend on the clock),
  * two rooms and one client. Returns the ids tests need.
