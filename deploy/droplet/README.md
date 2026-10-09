@@ -133,10 +133,26 @@ per-IP limits. Until both keys are set the forms stay open and console → Overv
    shows where access goes ("Approving sends access to claude.ai"). Registrations nobody approves are deleted after a
    day. Every approval is in the audit log (`platform.mcp.client_authorized`).
 
-The Caddyfile trusts `Cf-Connecting-Ip` / `X-Forwarded-For` only from Cloudflare's IP ranges (copied from
-https://www.cloudflare.com/ips/ — update them there if Cloudflare ever changes the list) and overwrites
-`Cf-Connecting-Ip` for the app, so per-IP sign-in / registration limits can't be bypassed by hitting the droplet
-directly.
+## Client IP (rate limits, audit IPs)
+
+The app takes the visitor's IP from one header only, `Cf-Connecting-Ip`, and Caddy overwrites it on every request:
+- **Through Cloudflare** (orange-cloud hosts, or a spa domain proxied by its own Cloudflare account): the TCP peer is a
+  Cloudflare edge address, so Caddy keeps Cloudflare's `Cf-Connecting-Ip` (the real visitor).
+- **Direct to the droplet** (grey-cloud hosts, spa custom domains, anyone using the droplet IP): the peer is not
+  Cloudflare, so Caddy sets `Cf-Connecting-Ip` to the peer itself and a forged header is discarded.
+- `X-Real-Ip`, `True-Client-Ip` and `Do-Connecting-Ip` are stripped; `X-Forwarded-For` is rebuilt by Caddy and never
+  read for the IP (behind Cloudflare its first entry is whatever the client sent).
+
+Per-IP sign-in / registration / booking / contact limits therefore can't be bypassed by forging headers. IPv6 visitors
+are limited per /64. A deploy that changes the Caddyfile restarts Caddy so the change takes effect (`update.sh`).
+
+**Cloudflare's ranges** (the `trusted_proxies static` line) come from https://www.cloudflare.com/ips/. The
+"Cloudflare IP ranges" GitHub workflow checks them every Monday; when it fails, refresh and commit:
+```sh
+deploy/droplet/cloudflare-ips.sh --write   # rewrites the list from cloudflare.com/ips-v4 + ips-v6
+deploy/droplet/test-caddy-ip.sh            # needs caddy or docker; CI runs it on every push
+git commit -am "chore(caddy): refresh Cloudflare IP ranges"
+```
 
 ## Secrets without SSH
 

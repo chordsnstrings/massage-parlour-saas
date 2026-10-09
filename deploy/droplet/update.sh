@@ -119,6 +119,26 @@ pre_migrate_dump() {
   ls -1t "$BACKUPS"/pre-migrate-*.dump 2>/dev/null | tail -n +6 | xargs -r rm -f
 }
 
+# F26: Caddy reads the Caddyfile through a single-file bind mount. The hard reset below replaces that file, which the
+# running container never sees (it keeps the old inode) and `compose up -d` doesn't recreate it, so a changed
+# Caddyfile is applied by restarting caddy (the restart re-mounts the path). CI validated the file
+# (deploy/droplet/test-caddy-ip.sh); if Caddy still doesn't come up, the deploy fails and the rollback restores the
+# previous file the same way.
+caddy_sync() {
+  local want
+  want=$(sha256sum "$REPO/deploy/droplet/Caddyfile" | cut -d' ' -f1)
+  caddy_runs() {
+    [ "$(compose exec -T caddy sha256sum /etc/caddy/Caddyfile 2>/dev/null | cut -d' ' -f1)" = "$want" ] &&
+      compose exec -T caddy wget -qO- http://127.0.0.1:2019/config/ >/dev/null 2>&1
+  }
+  caddy_runs && return 0
+  echo "== Caddyfile changed: restarting caddy ==" >>"$STATUS/build.log"
+  compose restart caddy >>"$STATUS/build.log" 2>&1 || return 1
+  for _ in $(seq 1 15); do caddy_runs && return 0; sleep 2; done
+  compose logs --no-color --tail 30 caddy >>"$STATUS/build.log" 2>&1
+  return 1
+}
+
 # deploy_commit <sha> [--no-dump] → 0 ok · 10 build · 11 dump · 12 start/migrate · 13 health
 deploy_commit() {
   local sha=$1
@@ -128,6 +148,7 @@ deploy_commit() {
   compose build --pull >>"$STATUS/build.log" 2>&1 || return 10
   if [ "${2:-}" != "--no-dump" ]; then pre_migrate_dump "$sha" || return 11; fi
   compose up -d --remove-orphans >>"$STATUS/build.log" 2>&1 || return 12
+  caddy_sync || return 12
   health || return 13
 }
 
