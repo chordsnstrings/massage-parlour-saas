@@ -63,9 +63,10 @@ export function proxy(req: NextRequest) {
   return NextResponse.rewrite(url, { request: { headers } })
 }
 
-// /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten.
+// /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten; so is
+// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known).
 export const config = {
   matcher: [
-    '/((?!api/|_next/|files/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
+    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
   ],
 }

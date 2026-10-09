@@ -1,5 +1,5 @@
 // Tenant website: site settings, pages and Puck page versions (docs/PLAN.md §11).
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
   pageVersions,
   savedSections,
@@ -10,7 +10,7 @@ import {
   type Tx,
   tenants,
 } from '@spa/db'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { collectGlobalIds } from './site-kit/tree'
 
@@ -35,6 +35,15 @@ export const PAGE_SLUG = /^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/
 export async function getSite(tx: Tx, tenantId: string): Promise<SiteRow | null> {
   const [site] = await tx.select().from(sites).where(eq(sites.tenantId, tenantId)).limit(1)
   return site ?? null
+}
+
+/**
+ * Serialises draft edits of one spa's site for the rest of the transaction (row lock on its `sites` row): Studio
+ * editor saves/publishes, the Theme panel, Ask AI and Claude MCP edits read-modify-write the same drafts, so each
+ * takes this first and reads what the previous one committed. Re-entrant within a transaction; no-op without a site.
+ */
+export async function lockSite(tx: Tx, tenantId: string): Promise<void> {
+  await tx.select({ id: sites.id }).from(sites).where(eq(sites.tenantId, tenantId)).for('update')
 }
 
 /**
@@ -189,6 +198,7 @@ export async function saveDraft(
   tx: Tx,
   input: { tenantId: string; pageId: string; data: PageData; userId?: string },
 ): Promise<PageVersionRow> {
+  await lockSite(tx, input.tenantId)
   const page = await getPage(tx, input.tenantId, input.pageId)
   if (!page) throw new DomainError('Page not found', 'not_found')
   const latest = await latestVersion(tx, input.tenantId, input.pageId)
@@ -220,11 +230,15 @@ export async function publishPage(
   tx: Tx,
   input: { tenantId: string; pageId: string; data?: PageData; userId?: string; label?: string },
 ): Promise<PageVersionRow> {
+  await lockSite(tx, input.tenantId)
   const page = await getPage(tx, input.tenantId, input.pageId)
   if (!page) throw new DomainError('Page not found', 'not_found')
   const latest = await latestVersion(tx, input.tenantId, input.pageId)
   const data = input.data ?? latest?.data
   if (!data) throw new DomainError('Nothing to publish yet')
+  // Unpublished site settings go live with a publish: the draft theme (AI edits, site-wide) and this page's rename.
+  await promoteDraftTheme(tx, input.tenantId)
+  await applyPendingRename(tx, input.tenantId, page)
   // Promote the draft in place, unless it is a named draft that new content would overwrite.
   if (latest?.status === 'draft' && (!latest.label || !input.data)) {
     const [promoted] = await tx
@@ -253,6 +267,105 @@ export async function publishPage(
     })
     .returning()
   return created!
+}
+
+/** Makes the draft theme (AI edits — Ask AI, Claude MCP) the live theme. Returns whether there was one. */
+async function promoteDraftTheme(tx: Tx, tenantId: string): Promise<boolean> {
+  const rows = await tx
+    .update(sites)
+    .set({ theme: sql`${sites.themeDraft}`, themeDraft: null })
+    .where(and(eq(sites.tenantId, tenantId), isNotNull(sites.themeDraft)))
+    .returning({ id: sites.id })
+  return rows.length > 0
+}
+
+/**
+ * Applies a published page's pending rename. The address is re-checked first: a page added since may have taken it
+ * (the unique constraint would otherwise fail the whole publish with a raw error).
+ */
+async function applyPendingRename(tx: Tx, tenantId: string, page: SitePageRow): Promise<boolean> {
+  if (!page.pending) return false
+  const slug = page.pending.slug
+  if (slug !== undefined && slug !== page.slug) {
+    const [clash] = await tx
+      .select({ id: sitePages.id })
+      .from(sitePages)
+      .where(and(eq(sitePages.siteId, page.siteId), eq(sitePages.slug, slug), ne(sitePages.id, page.id)))
+      .limit(1)
+    if (clash)
+      throw new DomainError(
+        `Another page now uses /${slug} — rename this page to a free address before publishing`,
+      )
+  }
+  await tx
+    .update(sitePages)
+    .set({
+      ...(page.pending.title ? { title: page.pending.title } : {}),
+      ...(slug !== undefined ? { slug } : {}),
+      pending: null,
+    })
+    .where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.id, page.id)))
+  return true
+}
+
+/**
+ * Optimistic-concurrency stamp of what an editor loaded (Studio editor; PLAN §14.4): `page` = the newest version
+ * row + save time (any draft save changes it), `site` = what a publish of this page also promotes (the draft theme +
+ * this page's pending rename). The flags say what that publish will take live.
+ */
+export type EditStamp = { page: string; site: string; themeDraft: boolean; pendingRename: boolean }
+
+/** Refusal when a stamp no longer matches (Claude MCP / Ask AI / another tab changed the draft since it loaded). */
+export const EDITED_ELSEWHERE =
+  'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version'
+
+export async function editStamp(tx: Tx, tenantId: string, pageId: string): Promise<EditStamp | null> {
+  const site = await getSite(tx, tenantId)
+  const page = await getPage(tx, tenantId, pageId)
+  if (!site || !page) return null
+  const latest = await latestVersion(tx, tenantId, pageId)
+  return {
+    page: latest ? `${latest.id}@${latest.createdAt.getTime()}` : 'none',
+    site: createHash('sha256')
+      .update(JSON.stringify([site.themeDraft, page.pending]))
+      .digest('base64url')
+      .slice(0, 22),
+    themeDraft: site.themeDraft !== null,
+    pendingRename: page.pending !== null,
+  }
+}
+
+/**
+ * Throws EDITED_ELSEWHERE when the page (and with `site`, the draft theme / pending rename) changed since `expected`
+ * was issued. Callers take `lockSite` first. No stamp = no check (callers that don't hold an editor's view).
+ */
+export async function assertEditStamp(
+  tx: Tx,
+  tenantId: string,
+  pageId: string,
+  expected: Pick<EditStamp, 'page' | 'site'> | null | undefined,
+  opts: { site?: boolean } = {},
+): Promise<void> {
+  if (!expected) return
+  const now = await editStamp(tx, tenantId, pageId)
+  if (!now) throw new DomainError('Page not found', 'not_found')
+  if (now.page !== expected.page || (opts.site && now.site !== expected.site))
+    throw new DomainError(EDITED_ELSEWHERE)
+}
+
+/** The theme the editor and previews show: the unpublished draft theme when there is one, else the live theme. */
+export const editingTheme = (site: Pick<SiteRow, 'theme' | 'themeDraft'>): ThemeTokens =>
+  site.themeDraft ?? site.theme
+
+/** Saves theme tokens as the site's DRAFT theme (validated by the caller); live on the next publish. */
+export async function updateDraftTheme(tx: Tx, tenantId: string, theme: ThemeTokens): Promise<SiteRow> {
+  const [site] = await tx
+    .update(sites)
+    .set({ themeDraft: theme })
+    .where(eq(sites.tenantId, tenantId))
+    .returning()
+  if (!site) throw new DomainError('Choose a template first', 'not_found')
+  return site
 }
 
 /** Version history for a page, newest first (data omitted). */
@@ -321,7 +434,7 @@ export async function switchTemplate(
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: template.key, theme, ...(undo ? { templateUndo: undo } : {}) })
+    .set({ templateKey: template.key, theme, themeDraft: null, ...(undo ? { templateUndo: undo } : {}) })
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
@@ -393,26 +506,69 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: undo.templateKey, theme: undo.theme, templateUndo: null })
+    .set({ templateKey: undo.templateKey, theme: undo.theme, themeDraft: null, templateUndo: null })
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
 }
 
 /** Slugs the public site uses for its own routes. */
-const RESERVED_SLUGS = new Set(['book', 'api', 's'])
+export const RESERVED_SLUGS: ReadonlySet<string> = new Set(['book', 'api', 's'])
+
+/**
+ * Addresses other pages hold: their live slug and any pending rename's slug (reserved until it is published or
+ * changed), plus the public site's own routes.
+ */
+export function takenSlugs(pages: Pick<SitePageRow, 'id' | 'slug' | 'pending'>[], exceptPageId?: string) {
+  const taken = new Set(RESERVED_SLUGS)
+  for (const p of pages) {
+    if (p.id === exceptPageId) continue
+    taken.add(p.slug)
+    if (p.pending?.slug !== undefined) taken.add(p.pending.slug)
+  }
+  return taken
+}
+
+/**
+ * Validates a rename (pure; shared by renamePage and the site-edit ops layer, so a dry run reports what the save
+ * would refuse). `taken` = takenSlugs() of the other pages. Returns the normalised change or the refusal.
+ */
+export function checkPageRename(
+  page: Pick<SitePageRow, 'slug' | 'pending'>,
+  input: { title?: SiteText; slug?: string },
+  taken: ReadonlySet<string>,
+): { ok: true; next: { title?: SiteText; slug?: string } } | { ok: false; error: string } {
+  const next: { title?: SiteText; slug?: string } = {}
+  if (input.title) {
+    const en = input.title.en.trim()
+    if (!en || en.length > 80) return { ok: false, error: 'Page titles need 1–80 characters' }
+    const ar = input.title.ar?.trim().slice(0, 80)
+    next.title = { en, ...(ar ? { ar } : {}) }
+  }
+  const currentSlug = page.pending?.slug ?? page.slug
+  if (input.slug !== undefined && input.slug !== currentSlug) {
+    if (page.slug === '') return { ok: false, error: 'The home page address can’t change' }
+    if (!input.slug || !PAGE_SLUG.test(input.slug) || input.slug.length > 60)
+      return { ok: false, error: 'Use lowercase letters, numbers and dashes' }
+    if (taken.has(input.slug)) return { ok: false, error: 'Another page already uses that address' }
+    next.slug = input.slug
+  }
+  return { ok: true, next }
+}
 
 /** Adds a page (e.g. from a page template) with `data` as its first draft; the slug gets a suffix when taken. */
 export async function addPage(
   tx: Tx,
   input: { tenantId: string; slug: string; title: SiteText; data: PageData; userId?: string },
 ): Promise<SitePageRow> {
+  await lockSite(tx, input.tenantId)
   const site = await getSite(tx, input.tenantId)
   if (!site) throw new DomainError('Choose a template first', 'not_found')
   if (!input.slug || !PAGE_SLUG.test(input.slug))
     throw new DomainError('Use lowercase letters, numbers and dashes')
   const pages = await listPages(tx, input.tenantId)
-  const taken = new Set([...pages.map((p) => p.slug), ...RESERVED_SLUGS])
+  // A pending rename's address is reserved too (else its publish would collide with this page).
+  const taken = takenSlugs(pages)
   let slug = input.slug
   for (let i = 2; taken.has(slug); i++) slug = `${input.slug}-${i}`
   const [page] = await tx
@@ -435,6 +591,35 @@ export async function addPage(
   return page!
 }
 
+/**
+ * Renames a page (menu title and/or address; the home page keeps slug ''). A page that is live gets the rename as
+ * `pending`, applied by its next publish, so visitors never see an unpublished change; a never-published page is
+ * renamed directly. Returns the page row and whether the rename waits for a publish.
+ */
+export async function renamePage(
+  tx: Tx,
+  input: { tenantId: string; pageId: string; title?: SiteText; slug?: string },
+): Promise<{ page: SitePageRow; pending: boolean }> {
+  await lockSite(tx, input.tenantId)
+  const page = await getPage(tx, input.tenantId, input.pageId)
+  if (!page) throw new DomainError('Page not found', 'not_found')
+  const checked = checkPageRename(
+    page,
+    input,
+    input.slug !== undefined ? takenSlugs(await listPages(tx, input.tenantId), page.id) : new Set(),
+  )
+  if (!checked.ok) throw new DomainError(checked.error)
+  const { next } = checked
+  if (!Object.keys(next).length) return { page, pending: Boolean(page.pending) }
+  const live = Boolean(await latestVersion(tx, input.tenantId, page.id, 'published'))
+  const [updated] = await tx
+    .update(sitePages)
+    .set(live ? { pending: { ...(page.pending ?? {}), ...next } } : next)
+    .where(and(eq(sitePages.tenantId, input.tenantId), eq(sitePages.id, input.pageId)))
+    .returning()
+  return { page: updated!, pending: live }
+}
+
 /** Replaces the site's theme tokens (validated by the caller). Live immediately: tokens apply to published pages. */
 export async function updateTheme(tx: Tx, tenantId: string, theme: ThemeTokens): Promise<SiteRow> {
   const [site] = await tx.update(sites).set({ theme }).where(eq(sites.tenantId, tenantId)).returning()
@@ -442,16 +627,25 @@ export async function updateTheme(tx: Tx, tenantId: string, theme: ThemeTokens):
   return site
 }
 
-/** Publishes every page's current draft (the "Publish site" button). Returns how many pages changed. */
-export async function publishAll(tx: Tx, tenantId: string, userId?: string): Promise<number> {
-  const pages = await listPages(tx, tenantId)
-  let changed = 0
-  for (const p of pages) {
-    if (!p.hasDraft) continue
-    await publishPage(tx, { tenantId, pageId: p.id, userId })
-    changed++
+/**
+ * "Publish site": every page's current draft, every pending page rename and the draft theme go live. Returns how
+ * many pages changed and whether the draft theme went live.
+ */
+export async function publishAll(
+  tx: Tx,
+  tenantId: string,
+  userId?: string,
+): Promise<{ pages: number; theme: boolean }> {
+  await lockSite(tx, tenantId)
+  const theme = (await getSite(tx, tenantId))?.themeDraft != null
+  let pages = 0
+  for (const p of await listPages(tx, tenantId)) {
+    if (p.hasDraft) await publishPage(tx, { tenantId, pageId: p.id, userId })
+    else if (!(await applyPendingRename(tx, tenantId, p))) continue
+    pages++
   }
-  return changed
+  await promoteDraftTheme(tx, tenantId)
+  return { pages, theme }
 }
 
 /** Shows or hides a page from the public site and its navigation. */
@@ -497,6 +691,7 @@ export async function restoreVersion(
   tx: Tx,
   input: { tenantId: string; pageId: string; versionId: string; userId?: string },
 ) {
+  await lockSite(tx, input.tenantId)
   const version = await getVersion(tx, input.tenantId, input.versionId)
   if (!version || version.pageId !== input.pageId) throw new DomainError('Version not found', 'not_found')
   const latest = await latestVersion(tx, input.tenantId, input.pageId)

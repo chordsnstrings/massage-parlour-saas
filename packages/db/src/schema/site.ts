@@ -53,6 +53,11 @@ export const sites = pgTable(
     tenantId: tenantId().unique(),
     templateKey: text('template_key').notNull().default('zen'),
     theme: jsonb('theme').$type<ThemeTokens>().notNull().default({}),
+    /**
+     * Unpublished theme tokens (AI edits — Studio Ask AI, Claude MCP). Editor + previews show it; the next publish
+     * makes it live (`publishPage`) and clears it. null = no pending theme change.
+     */
+    themeDraft: jsonb('theme_draft').$type<ThemeTokens>(),
     locales: text('locales').array().notNull().default(['en']),
     defaultLocale: text('default_locale').notNull().default('en'),
     seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
@@ -78,6 +83,8 @@ export const sitePages = pgTable(
     title: jsonb('title').$type<{ en: string; ar?: string }>().notNull(),
     visible: boolean('visible').notNull().default(true),
     sort: integer('sort').notNull().default(0),
+    /** Rename of a published page waiting for its next publish (title shown in the menu, address). */
+    pending: jsonb('pending').$type<{ title?: { en: string; ar?: string }; slug?: string }>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

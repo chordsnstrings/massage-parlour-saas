@@ -8,7 +8,7 @@ import {
   setAt,
 } from '@spa/services/site-kit'
 import { AlertTriangle, Check, CircleAlert, ExternalLink, Languages, Rocket } from 'lucide-react'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetClose } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
@@ -24,16 +24,42 @@ type Props = {
   pageTitle: string
   liveHref: string
   context: Omit<PreflightContext, 'globalIds'>
-  publish: (data: Data) => Promise<ActionResult>
+  publish: (data: Data) => Promise<ActionResult | undefined>
   onPublished: (data: Data) => void
+  /** Unpublished site settings this publish also takes live (draft theme, this page's rename). */
+  alsoPublishes?: string[]
+  /** Server notes for the other live pages (contrast under the draft theme), loaded when the sheet opens. */
+  loadNotes?: () => Promise<ActionResult>
 }
 
 /**
  * Publish confirmation with preflight (PLAN §11.5): errors (images not on https) block, warnings don't. Every
  * issue has "Go to block"; safe one-click fixes apply in place (undoable), missing Arabic offers AI translation.
  */
-export function PublishSheet({ pageTitle, liveHref, context, publish, onPublished }: Props) {
+export function PublishSheet({
+  pageTitle,
+  liveHref,
+  context,
+  publish,
+  onPublished,
+  alsoPublishes = [],
+  loadNotes,
+}: Props) {
   const [open, setOpen] = useState(false)
+  const [themeWarnings, setThemeWarnings] = useState<string[]>([])
+  useEffect(() => {
+    if (!open || !loadNotes) {
+      setThemeWarnings([])
+      return
+    }
+    let live = true
+    loadNotes().then((r) => {
+      if (live && r?.ok) setThemeWarnings((r.data?.themeWarnings as string[] | undefined) ?? [])
+    })
+    return () => {
+      live = false
+    }
+  }, [open, loadNotes])
   const [publishing, startPublish] = useTransition()
   const [fixing, startFix] = useTransition()
   const services = useEditorServices()
@@ -144,6 +170,21 @@ export function PublishSheet({ pageTitle, liveHref, context, publish, onPublishe
         </Button>
       }
     >
+      {alsoPublishes.length > 0 && (
+        <section aria-label="Also goes live" className="mb-4 rounded-xl border bg-subtle/50 p-3 text-sm">
+          <p className="font-medium">Also goes live with this publish: {alsoPublishes.join(' · ')}</p>
+          {themeWarnings.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-muted">
+              {themeWarnings.map((w) => (
+                <li key={w} className="flex gap-2">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-label="Warning" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <section aria-label="Preflight checks" className="mb-6">
         {issues.length === 0 ? (
           <ul className="space-y-2 text-sm text-muted">

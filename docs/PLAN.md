@@ -819,6 +819,8 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   `services.manage`), a link to the live site. The site's service/price blocks read services live (`site/data.ts`), so
   edits show without a republish. Studio status (review/approve) and publishing are studio-only and unchanged; the
   old requests list stays visible to the studio for history; `requestChangeAction` is removed.
+- **Prompt editing (2026-10-09, §18.2):** Studio "Ask AI to edit" and the Claude MCP connector (`/api/mcp`) edit drafts
+  through one ops layer (`site-edit.ts`); only `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; theme/renames draftable.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
 - Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
@@ -1353,3 +1355,37 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   the super-admin's captured accept/reject calls replayed with the owner's session change nothing.
 - Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in,
   holding the slug / notifying only after email verification, expiring unverified pending applications.
+- **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT
+  only (never publish), both limited to `SITE_AI_EDITOR_EMAILS` (comma-separated, verified email, must also be a
+  super-admin with 2FA; empty = nobody; re-checked on every action/request, never hard-coded).
+  - **A — ops layer** `@spa/services` `site-edit.ts`: `runSiteEdit` (update / add (index, after/before, into slot) /
+    preset / move / remove block, theme, add_page, rename_page, html_design; zod shapes + `applySiteEditOps` against
+    the Puck block schema; all-or-nothing; `dryRun` returns the resulting drafts; saves via `saveDraft` / `addPage` /
+    `renamePage` / `updateDraftTheme`), `restoreSiteEdit` (undo), `getSiteForEdit`, `blockCatalogue`,
+    `siteEditAuditData` (callers audit). **Decision:** theme + renames are now draftable: `sites.theme_draft` (editor
+    and previews show it; `publishPage` makes it live) and `site_pages.pending` (rename of a live page, applied by its
+    next publish). The Theme panel stays live and also updates a pending draft theme.
+  - **B — Studio "Ask AI to edit"** (R16 panel): plan (`site_editor` agent, any instruction language) → dry run →
+    canvas preview → Apply (same ops through A) → history of the last 5 with Undo. Theme ops go to the draft theme.
+  - **C — Claude connector** `/api/mcp` (remote MCP, Streamable HTTP, `@modelcontextprotocol/sdk` 1.30.1): OAuth 2.1 =
+    Better Auth `@better-auth/mcp` 1.7.7 (+ jwt plugin): DCR, PKCE, RFC 9728/8414 metadata under `/.well-known`,
+    sign-in + 2FA + consent (`/oauth/consent`) on the app host. Tools: list_spas, get_site, list_block_types,
+    update_block, add_block, remove_block, move_block, set_theme, add_page, rename_page, replace_html_design,
+    preview_link — no publish tool. Per call: token → allow-list → live consent → 60 calls/min per token; audit
+    `site.mcp.<tool>` "via Claude (MCP)". Console → Websites "Connect Claude" card: URL + copy, connected clients,
+    Revoke (deletes consent + tokens → next call 401). Owner setup: deploy/droplet/README.md "Connect Claude".
+  - **Review fixes (2026-10-09):** OAuth — clients may only register Claude's callbacks (`mcpRedirectUris()`:
+    claude.ai / claude.com `…/api/mcp/auth_callback`, env `MCP_REDIRECT_URIS` replaces; loopback only while APP_URL is
+    http); `validateRedirectUri` holds every authorize to the same list (no consent phishing, no open redirect, legacy
+    rows included); client admin endpoints disabled, `clientPrivileges` = listed editor; consent page shows the
+    redirect host (no "Claude" fallback name); grants audited `platform.mcp.client_authorized`; worker
+    `oauth-clients-prune` (hourly) drops clients without consent after 24 h; Caddy trusts Cf-Connecting-Ip /
+    X-Forwarded-For only from Cloudflare ranges and overwrites Cf-Connecting-Ip (forged-IP rate-limit bypass).
+    Drafts — **decisions:** the Theme panel shows the LIVE theme and saves only changed fields (live + into a draft
+    theme); every draft writer takes `lockSite` (row lock on `sites`); the Studio editor sends an `EditStamp` (page
+    version + draft theme/rename hash) with save / publish / Ask AI apply / undo and is refused ("changed elsewhere —
+    reload") when stale; editor publish = one transaction and its dialog lists what also goes live (+ contrast of
+    other live pages under the draft theme); "Publish site" and the overview count/publish theme-only and rename-only
+    changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
+    publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
+    (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).

@@ -112,9 +112,9 @@ describe('sites service', () => {
   })
 
   it('publishes every pending draft at once and updates theme tokens', async () => {
-    expect(await tx((db) => publishAll(db, ids.tenant!))).toBe(3)
+    expect(await tx((db) => publishAll(db, ids.tenant!))).toEqual({ pages: 3, theme: false })
     expect((await tx((db) => getPublishedPage(db, ids.tenant!, '')))?.data).toEqual(page('Calm and clear'))
-    expect(await tx((db) => publishAll(db, ids.tenant!))).toBe(0)
+    expect(await tx((db) => publishAll(db, ids.tenant!))).toEqual({ pages: 0, theme: false })
     const site = await tx((db) => updateTheme(db, ids.tenant!, { accent: '#112233' }))
     expect(site.theme).toEqual({ accent: '#112233' })
     await expect(tx((db) => updateTheme(db, ids.other!, {}), ids.other)).rejects.toBeInstanceOf(DomainError)

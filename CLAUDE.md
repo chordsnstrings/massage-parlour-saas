@@ -44,6 +44,8 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
   **Website Studio:** only super-admins edit sites; spas review, approve and request changes (PLAN.md §14.4).
+  **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
+  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA (owner, 2026-10-09; PLAN §18.2, CODEMAP "Claude MCP connector").
 - **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM design (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
   identical for every spa (spa logo + name in the sidebar from onboarding), ~15–20% more compact, light only, EN + Thai
   (all UI text and system messages; typed names never translated). Plan: PLAN §14.6.

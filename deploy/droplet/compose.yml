@@ -13,6 +13,8 @@ x-app-env: &app-env
   # More platform domains (comma or space separated) — each serves the whole platform with its own links + TLS.
   EXTRA_ROOT_DOMAINS: ${EXTRA_ROOT_DOMAINS:-}
   PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
+  # Studio Ask AI + Claude MCP connector (/api/mcp): only these super-admins (with 2FA). Empty = off. Owner's email.
+  SITE_AI_EDITOR_EMAILS: ${SITE_AI_EDITOR_EMAILS:-}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
   ARK_API_KEY: ${ARK_API_KEY:-}

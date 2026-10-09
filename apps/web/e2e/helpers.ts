@@ -284,6 +284,18 @@ export async function makeStudio(slug: string) {
   await enableTotp(`owner-${slug}@e2e.test`)
 }
 
+/**
+ * Studio super-admin whose email counts for SITE_AI_EDITOR_EMAILS (prompt site editing: Studio Ask AI, Claude MCP):
+ * the allow-list only matches verified emails. Listed in playwright.config.ts: slugs `ai-editor`, `mcp-editor`.
+ */
+export async function makeSiteAiEditor(slug: string) {
+  await makeStudio(slug)
+  await testDb()
+    .update(user)
+    .set({ emailVerified: true })
+    .where(eq(user.email, `owner-${slug}@e2e.test`))
+}
+
 /** Today's business date in Dubai (05:00 cutoff). */
 export const today = () => businessDateOf(new Date(), '05:00')
 

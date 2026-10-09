@@ -18,6 +18,7 @@ const place = {
   after: z.string().nullish(),
   before: z.string().nullish(),
   into: z.object({ id: z.string(), slot: z.string() }).nullish(),
+  index: z.number().int().min(0).max(500).nullish(),
 }
 /** Shape check only; `applySiteEditOps` validates every op against the real block schema. */
 export const SiteEditOpSchema = z.discriminatedUnion('op', [
@@ -89,11 +90,11 @@ export function describeEditSchema(schema: SiteEditSchema) {
 
 export function siteEditSystemPrompt(schema: SiteEditSchema, about: string) {
   return `You are the website editing assistant inside the Website Studio of a spa website builder. The site belongs to ${about}
-A platform designer gives you an instruction; you change the site ONLY by returning operations. You never write HTML, CSS or code.
+A platform designer gives you an instruction (English, Arabic or any other language); you change the site ONLY by returning operations. You never write HTML, CSS or code.
 
 Operations (JSON objects in "ops", applied in order):
 - {"op":"update","id":"<block id>","props":{...}} — change props of an existing block. Bilingual text is {"en":"…","ar":"…"}; send only the language(s) you change. Per-device style is {"base":…,"md":…,"lg":…} (base = mobile, md = tablet, lg = desktop); send only the devices you change.
-- {"op":"add","type":"<block type>","props":{...},"after":"<id>"} — add a new block; use "before":"<id>", "into":{"id":"<id>","slot":"<slot prop>"} or no position (end of page).
+- {"op":"add","type":"<block type>","props":{...},"after":"<id>"} — add a new block; use "before":"<id>", "into":{"id":"<id>","slot":"<slot prop>"}, "index":<0-based position in the page or in the "into" slot> or no position (end of page).
 - {"op":"preset","key":"<preset key>","after":"<id>"} — insert a designed section preset (same position options). Prefer presets for whole new sections.
 - {"op":"move","id":"<id>","after":"<id>"} — move a block (same position options).
 - {"op":"remove","id":"<id>"}

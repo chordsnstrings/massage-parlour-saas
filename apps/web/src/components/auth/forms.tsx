@@ -12,6 +12,15 @@ const go = (next: string) => {
   window.location.href = next
 }
 
+/**
+ * Where to go after signing in. During a Claude connector authorization (OAuth) the sign-in response carries the
+ * next step of that flow (`{ redirect: true, url }`: consent page or back to Claude); otherwise `next`.
+ */
+const after = (data: unknown, next: string) => {
+  const d = data as { redirect?: boolean; url?: unknown } | undefined
+  return d?.redirect && typeof d.url === 'string' ? d.url : next
+}
+
 function useSubmit() {
   const t = useAuthT()
   const [pending, setPending] = useState(false)
@@ -77,7 +86,7 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
           // With 2FA on, the client plugin already sent the browser to /two-factor (keeping ?next); don't override it.
           (data) => {
             const d = data as { twoFactorRedirect?: boolean; closed?: boolean } | undefined
-            if (!d?.twoFactorRedirect && !d?.closed) go(next)
+            if (!d?.twoFactorRedirect && !d?.closed) go(after(data, next))
           },
         )
       }}
@@ -129,7 +138,7 @@ export function TwoFactorForm({ next }: { next: string }) {
             backup
               ? authClient.twoFactor.verifyBackupCode({ code, trustDevice })
               : authClient.twoFactor.verifyTotp({ code, trustDevice }),
-          () => go(next),
+          (data) => go(after(data, next)),
         )
       }}
     >

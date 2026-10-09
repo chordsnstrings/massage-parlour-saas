@@ -22,6 +22,18 @@ export const auth = {
     new: 'New to spamanagement?',
     create: 'Apply for your spa',
   },
+  oauth: {
+    title: 'Connect Claude',
+    subtitle: '{client} wants to edit spa websites for you.',
+    can: 'It can read spa websites and save changes as drafts. It can’t publish: you still preview and publish in the Website Studio.',
+    sendsTo: 'Approving sends access to {host}.',
+    account: 'Signed in as {email}',
+    allow: 'Allow',
+    deny: 'Deny',
+    notEnabled: 'Connecting Claude is not enabled for your account.',
+    needs2fa: 'Turn on two-step verification for this super-admin account first.',
+    expired: 'This connection request has expired. Start again from Claude.',
+  },
   twoFactor: {
     title: 'Two-step verification',
     subtitle: 'Enter the code from your authenticator app.',

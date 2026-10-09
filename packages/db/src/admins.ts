@@ -34,3 +34,35 @@ export async function grantListedPlatformAdmins(db: DbOrTx, emails: string[], on
     .returning({ id: platformAdmins.userId })
   return added.length
 }
+
+/**
+ * SITE_AI_EDITOR_EMAILS (comma separated, lower-cased): the only accounts that may edit spa sites with prompts —
+ * the Studio "Ask AI" panel and the Claude MCP connector (/api/mcp). Empty = nobody. Never hard-coded.
+ */
+export const siteAiEditorEmails = (raw = process.env.SITE_AI_EDITOR_EMAILS ?? '') => listedAdminEmails(raw)
+
+export type SiteAiEditorStatus = 'ok' | 'not_listed' | 'not_admin' | 'needs2fa'
+
+/**
+ * Read fresh on every use (no cache) so removing an email, the super-admin row or 2FA cuts access at once:
+ * allowed only for a listed, VERIFIED email that is also a super-admin with TOTP 2FA on (isPlatformAdmin).
+ */
+export async function siteAiEditorStatus(
+  db: DbOrTx,
+  userId: string,
+  emails: string[] = siteAiEditorEmails(),
+): Promise<SiteAiEditorStatus> {
+  const [row] = await db
+    .select({
+      email: user.email,
+      verified: user.emailVerified,
+      twoFactor: user.twoFactorEnabled,
+      admin: platformAdmins.userId,
+    })
+    .from(user)
+    .leftJoin(platformAdmins, eq(platformAdmins.userId, user.id))
+    .where(eq(user.id, userId))
+  if (!row?.verified || !emails.includes(row.email.toLowerCase())) return 'not_listed'
+  if (!row.admin) return 'not_admin'
+  return row.twoFactor ? 'ok' : 'needs2fa'
+}

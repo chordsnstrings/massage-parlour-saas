@@ -18,6 +18,7 @@ import { DataTable } from '@/components/ui/table'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, isStudio, requireMember } from '@/server/access'
+import { themeDraftWarnings } from '@/server/site-preflight'
 import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
@@ -54,7 +55,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const slug = ctx.tenant.slug
   const reports = can(ctx, 'reports.view')
   const { t, fmt } = await getI18n()
-  const { site, pages, undoBlocked, requests, hosts, glance } = await withTenant(
+  const { site, pages, undoBlocked, requests, hosts, glance, themeWarnings } = await withTenant(
     ctx.tenant.id,
     async (tx) => {
       const site = await getSite(tx, ctx.tenant.id)
@@ -73,6 +74,8 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
         requests: await listChangeRequests(tx, ctx.tenant.id),
         // Undo is only offered while nothing the switch wrote has been edited or published since.
         undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
+        // A waiting draft theme goes live on every page with "Publish site": its contrast there.
+        themeWarnings: site?.themeDraft ? await themeDraftWarnings(tx, ctx.tenant.id, { drafts: true }) : [],
       }
     },
   )
@@ -84,7 +87,10 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const openRequests = requests.filter((r) => r.status === 'open').length
   const aiReady = canDesign && (await siteWriterReady())
   const publicUrl = await publicSiteUrl(ctx.tenant)
-  const pending = pages.filter((p) => p.hasDraft).length
+  // Unpublished: page drafts, pending page renames (Claude MCP) and a draft theme (Ask AI / MCP, site-wide).
+  const unpublished = (p: (typeof pages)[number]) => p.hasDraft || p.pending !== null
+  const pending = pages.filter(unpublished).length
+  const themePending = Boolean(site?.themeDraft)
   const hasLive = pages.some((p) => p.publishedAt)
   const preview = (query = '') => appPath(`/${slug}/website/preview${query ? `?${query}` : ''}`)
   const current = site ? catalog.find((t) => t.key === site.templateKey) : null
@@ -231,7 +237,14 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     <Card
       flush
       title={t('website.pages')}
-      sub={pending > 0 ? t('website.pagesPending', { count: pending }) : t('website.allLive')}
+      sub={
+        [
+          pending > 0 ? t('website.pagesPending', { count: pending }) : null,
+          themePending ? t('website.themePending') : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || t('website.allLive')
+      }
       actions={
         canDesign && (
           <AddPageSheet
@@ -279,7 +292,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                 <span className="inline-flex flex-col items-end gap-1 md:items-start">
                   {!p.publishedAt ? (
                     <Pill tone="warn">{t('website.notPublished')}</Pill>
-                  ) : p.hasDraft ? (
+                  ) : unpublished(p) ? (
                     <Pill tone="info">{t('website.unpublished')}</Pill>
                   ) : (
                     <Pill tone="ok" dot>
@@ -353,7 +366,14 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                 </a>
               </Button>
             )}
-            {site && canPublish && pending > 0 && <PublishSiteSheet slug={slug} pending={pending} />}
+            {site && canPublish && (pending > 0 || themePending) && (
+              <PublishSiteSheet
+                slug={slug}
+                pending={pending}
+                theme={themePending}
+                themeWarnings={themeWarnings.slice(0, 8)}
+              />
+            )}
           </>
         }
       />
@@ -426,7 +446,13 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                     </div>
                     <span className="flex flex-wrap gap-2">
                       <CopyButton value={publicUrl} label={t('website.copyLink')} />
-                      {canDesign && <ThemeSheet slug={slug} theme={normalizeTheme(site.theme)} />}
+                      {canDesign && (
+                        <ThemeSheet
+                          slug={slug}
+                          theme={normalizeTheme(site.theme)}
+                          draft={site.themeDraft !== null}
+                        />
+                      )}
                     </span>
                   </div>
                 </Card>

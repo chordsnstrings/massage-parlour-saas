@@ -10,9 +10,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@better-auth/utils": "0.4.2",
     "@spa/core": "workspace:*",
     "@spa/db": "workspace:*",
     "better-auth": "1.7.7",
-    "drizzle-orm": "0.45.3"
+    "drizzle-orm": "0.45.3",
+    "jose": "6.2.12"
   }
 }
