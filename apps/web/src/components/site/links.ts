@@ -1,4 +1,4 @@
-import { whatsappLink } from '@spa/core'
+import { branchMapsHref, whatsappLink } from '@spa/core'
 import { tr, ui } from './i18n'
 import type { Bi, Locale, SiteMeta } from './types'
 
@@ -24,8 +24,19 @@ export function whatsappHref(meta: SiteMeta, message?: Bi | null) {
 export const phoneHref = (meta: SiteMeta) =>
   meta.data.branch?.phone ? `tel:${meta.data.branch.phone.replace(/[^\d+]/g, '')}` : null
 
-export const mapHref = (address: string) =>
-  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+/** Google Maps link for the branch: its exact pin when the spa set one, else a search for the address. */
+export const mapHref = (meta: Pick<SiteMeta, 'data'>) => branchMapsHref(meta.data.branch)
+
+/** Anchor props that make an address open Google Maps (new tab, labelled; inert in the editor). */
+export function addressLinkProps(meta: SiteMeta) {
+  const address = meta.data.branch?.address ?? ''
+  return {
+    ...linkProps(meta, mapHref(meta)),
+    'aria-label': `${address} (${ui('openInMaps', meta.locale)})`,
+    title: ui('openInMaps', meta.locale),
+    'data-maps-link': '',
+  }
+}
 
 export type LinkAction = 'book' | 'page' | 'whatsapp' | 'phone' | 'url'
 

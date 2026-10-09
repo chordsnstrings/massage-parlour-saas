@@ -767,7 +767,21 @@ function Summary({
         (catalog.branch.address || catalog.branch.name) && (
           <div className="flex items-start gap-2 border-t bg-subtle/40 px-5 py-3.5 text-[13px] text-muted sm:px-6">
             <MapPin className="mt-0.5 size-3.5 shrink-0" />
-            <span>{catalog.branch.address || catalog.branch.name}</span>
+            {catalog.branch.address && catalog.branch.mapsHref ? (
+              <a
+                href={catalog.branch.mapsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${catalog.branch.address} (${L('openInMaps')})`}
+                title={L('openInMaps')}
+                data-maps-link=""
+                className="text-inherit hover:underline"
+              >
+                {catalog.branch.address}
+              </a>
+            ) : (
+              <span>{catalog.branch.address || catalog.branch.name}</span>
+            )}
           </div>
         )
       )}

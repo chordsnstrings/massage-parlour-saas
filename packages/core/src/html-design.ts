@@ -42,7 +42,9 @@ export const HTML_DESIGN_BASE_CSS =
   ':where(html,body){max-width:100%;overflow-x:clip}' +
   ':where(img,picture,video,canvas,svg,iframe){max-width:100%}' +
   ':where(img,video){height:auto}' +
-  ':where(img){object-fit:cover;object-position:50% 50%}'
+  ':where(img){object-fit:cover;object-position:50% 50%}' +
+  ':where(a[data-spa-map]){color:inherit;text-decoration:none}' +
+  ':where(a[data-spa-map]:hover){text-decoration:underline}'
 
 const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 /** Narrowest screen the platform supports; a fixed image width above it overflows phones. */
@@ -241,8 +243,115 @@ export function applyHtmlImageAdjustments(html: string, adjust: HtmlImageAdjust[
   return end ? out.slice(0, end.index) + style + out.slice(end.index) : out + style
 }
 
+// Backslash and backtick too: a value ending in a backslash must not escape a design's closing JS/CSS quote.
 const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+  s.replace(
+    /[&<>"'\\`]/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '\\': '&#92;', '`': '&#96;' })[
+        c
+      ]!,
+  )
+
+/** A placeholder that renders as a link when it stands in text (e.g. `{{address}}` → its Google Maps pin). */
+export type HtmlDesignLink = { href: string | null; label: string }
+
+/** Only plain http(s) links of RFC 3986 characters are spliced in as markup. */
+const SAFE_HREF = /^https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/
+/** Raw-text / RCDATA elements (or content never shown) and elements an `<a>` must not nest in. */
+const RAW_TEXT = new Set([
+  'script',
+  'style',
+  'title',
+  'textarea',
+  'xmp',
+  'plaintext',
+  'iframe',
+  'noembed',
+  'noframes',
+  'noscript',
+])
+const NO_LINK = new Set(['a', 'select', 'button'])
+const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
+
+/** Index just past the `>` ending a tag whose attributes start at `j`; quoted values may hold `>`. */
+function tagEnd(src: string, j: number) {
+  const n = src.length
+  while (j < n) {
+    const c = src[j]
+    if (c === '>') return j + 1
+    j++
+    if (isWs(c) || c === '/') continue
+    // attribute name (its first character may be '=')
+    while (j < n && !isWs(src[j]) && src[j] !== '/' && src[j] !== '>' && src[j] !== '=') j++
+    while (isWs(src[j])) j++
+    if (src[j] !== '=') continue
+    j++
+    while (isWs(src[j])) j++
+    const q = src[j]
+    if (q === '"' || q === "'") {
+      const close = src.indexOf(q, j + 1)
+      if (close === -1) return n
+      j = close + 1
+    } else while (j < n && !isWs(src[j]) && src[j] !== '>') j++
+  }
+  return n
+}
+
+/**
+ * `[start, end)` ranges of plain page text, where a placeholder may become a link: outside tags (tokenized
+ * quote-aware like the HTML parser), comments, doctypes, raw-text elements and `<a>`/`<select>`/`<button>`.
+ * Anything unclear counts as not text (the value is then just escaped).
+ */
+function linkableTextRanges(src: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  const open = new Map<string, number>()
+  const n = src.length
+  let text = 0
+  let i = 0
+  const endText = (at: number) => {
+    if (at > text && ![...open.values()].some(Boolean)) ranges.push([text, at])
+  }
+  const tagRe = /<(\/?)([a-z][^\t\n\f\r />]*)/iy
+  while (i < n) {
+    const lt = src.indexOf('<', i)
+    if (lt === -1) break
+    const next = src[lt + 1] ?? ''
+    if (src.startsWith('<!--', lt)) {
+      endText(lt)
+      const close = /--!?>/g
+      close.lastIndex = lt + 2
+      const m = close.exec(src)
+      i = text = m ? m.index + m[0].length : n
+      continue
+    }
+    tagRe.lastIndex = lt
+    const tag = tagRe.exec(src)
+    if (!tag) {
+      if (next === '!' || next === '?' || next === '/') {
+        // doctype / bogus comment: up to the next '>'
+        endText(lt)
+        const gt = src.indexOf('>', lt + 2)
+        i = text = gt === -1 ? n : gt + 1
+      } else i = lt + 1 // a literal '<' in text
+      continue
+    }
+    endText(lt)
+    const name = tag[2]!.toLowerCase()
+    i = text = tagEnd(src, lt + tag[0].length)
+    if (NO_LINK.has(name)) open.set(name, Math.max(0, (open.get(name) ?? 0) + (tag[1] ? -1 : 1)))
+    if (tag[1] || !RAW_TEXT.has(name)) continue
+    if (name === 'plaintext') return ranges // the rest of the document is raw text
+    const close = new RegExp(`</${name}(?=[\\t\\n\\f\\r />]|$)`, 'gi')
+    close.lastIndex = i
+    i = text = close.exec(src)?.index ?? n
+  }
+  endText(n)
+  return ranges
+}
+
+const linkHtml = (text: string, link: HtmlDesignLink) =>
+  `<a href="${escapeHtml(link.href!)}" target="_blank" rel="noopener" title="${escapeHtml(link.label)}" aria-label="${escapeHtml(`${text} (${link.label})`)}" data-spa-map>${escapeHtml(text)}</a>`
 
 /**
  * The uploaded document as the frame's `srcdoc`: placeholders filled, image adjustments applied, a viewport
@@ -255,11 +364,18 @@ export function htmlDesignDocument(
   values: Record<string, string>,
   inert: boolean,
   images: HtmlImageAdjust[] = [],
+  links: Record<string, HtmlDesignLink> = {},
 ): string {
-  const filled = applyHtmlImageAdjustments(html, images).replace(
-    /\{\{\s*([a-z_]+)\s*\}\}/g,
-    (m, key: string) => (key in values ? escapeHtml(values[key]!) : m),
-  )
+  const adjusted = applyHtmlImageAdjustments(html, images)
+  const text = Object.keys(links).length ? linkableTextRanges(adjusted) : []
+  const inText = (at: number) => text.some(([start, end]) => at >= start && at < end)
+  const filled = adjusted.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, key: string, at: number) => {
+    if (!(key in values)) return m
+    const link = links[key]
+    return link?.href && SAFE_HREF.test(link.href) && inText(at)
+      ? linkHtml(values[key]!, link)
+      : escapeHtml(values[key]!)
+  })
   const script = `<script>(()=>{const inert=${inert};document.addEventListener('click',(e)=>{const a=e.target instanceof Element&&e.target.closest('a[href]');if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return;if(inert){e.preventDefault();return}if(!a.target){a.target=/^https?:/i.test(h)?'_blank':'_top';if(a.target==='_blank')a.rel='noopener'}},true)})()</script>`
   const head = `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>${script}`
   return insertAtHead(filled, head)

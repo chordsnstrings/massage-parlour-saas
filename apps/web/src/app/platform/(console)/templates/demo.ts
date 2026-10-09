@@ -7,6 +7,7 @@ export const DEMO_SITE: Omit<SiteData, 'pages'> = {
   branch: {
     name: 'Jumeirah',
     address: 'Jumeirah Beach Road, Dubai',
+    mapsUrl: null,
     phone: '+971 4 000 0000',
     whatsappE164: '971500000000',
     openingHours: DEFAULT_HOURS,

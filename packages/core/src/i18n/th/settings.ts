@@ -22,6 +22,8 @@ export const settings: Messages['settings'] = {
     editTitle: 'แก้ไขสาขา',
     name: 'ชื่อสาขา',
     address: 'ที่อยู่',
+    mapsUrl: 'ลิงก์ Google Maps',
+    mapsUrlHint: 'ไม่บังคับ เปิดร้านของคุณใน Google Maps แตะ แชร์ แล้ววางลิงก์ที่นี่ — ที่อยู่บนเว็บไซต์จะเปิดหมุดตำแหน่งนี้',
     phone: 'โทรศัพท์',
     whatsapp: 'หมายเลข WhatsApp',
     cutoff: 'วันทำการสิ้นสุดเวลา',
@@ -42,6 +44,7 @@ export const settings: Messages['settings'] = {
     archivedDone: 'เก็บถาวรสาขาแล้ว',
     restored: 'กู้คืนสาขาแล้ว',
     errors: {
+      mapsUrl: 'วางลิงก์ Google Maps (google.com/maps หรือ maps.app.goo.gl)',
       name: 'กรอกชื่อสาขา',
       time: 'ใช้รูปแบบเวลา เช่น 05:00',
       whatsapp: 'กรอกหมายเลขมือถือ UAE',
@@ -68,6 +71,8 @@ export const settings: Messages['settings'] = {
     cutoffHint: 'สำหรับร้านที่เปิดดึก เช่น 05:00',
     address: 'ที่อยู่',
     addressPlaceholder: 'Shop 4, Marina Walk, Dubai',
+    mapsUrl: 'ลิงก์ Google Maps',
+    mapsUrlHint: 'ไม่บังคับ เปิดร้านของคุณใน Google Maps แตะ แชร์ แล้ววางลิงก์ที่นี่ — ที่อยู่บนเว็บไซต์จะเปิดหมุดตำแหน่งนี้',
     phone: 'โทรศัพท์',
     whatsapp: 'เบอร์ WhatsApp',
     whatsappHint: 'ลูกค้าจะส่งข้อความมาที่เบอร์นี้',
@@ -77,6 +82,7 @@ export const settings: Messages['settings'] = {
     save: 'บันทึกการเปลี่ยนแปลง',
     saved: 'บันทึกการตั้งค่าแล้ว',
     errors: {
+      mapsUrl: 'วางลิงก์ Google Maps (google.com/maps หรือ maps.app.goo.gl)',
       name: 'กรอกชื่อสปา',
       trn: 'TRN ต้องมี 15 หลัก',
       branchName: 'กรอกชื่อสาขา',
