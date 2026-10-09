@@ -1383,6 +1383,9 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   Audited: `platform.admin.joined`, `platform.admin.verification_resent`, `platform.admin.email_verified`. No
   removal/demotion anywhere (and never on yourself). `listedAdminEmails` drops empty segments + duplicates and also
   splits on spaces/semicolons. e2e `admin-join.spec` (confirm path, link path + app-home redirect, refusals).
+  Also fixed: the admin sign-in's "Forgot password?" pointed at the admin host (404; its link prefetch never
+  completed, which stalled `networkidle` in site-mcp.spec once a second link was on the page) → now the app host's
+  reset page (`LoginForm forgotHref`).
 - Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in,
   holding the slug / notifying only after email verification, expiring unverified pending applications.
 - **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT

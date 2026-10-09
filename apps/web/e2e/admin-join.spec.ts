@@ -22,6 +22,11 @@ const PASSWORD = 'listed-admin-pass'
 
 async function join(page: Page, email: string, name = 'Listed Admin') {
   await page.goto(`${admin}/login`)
+  // Password reset lives on the app host (the admin host has no such page).
+  await expect(page.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute(
+    'href',
+    `${app}/forgot-password`,
+  )
   await page.getByRole('link', { name: 'Create a super-admin account' }).click()
   await expect(page.getByRole('heading', { name: 'Create a super-admin account' })).toBeVisible()
   await page.getByLabel('Your name').fill(name)
@@ -57,6 +62,8 @@ test('admin join: a listed email joins, an existing super-admin marks it verifie
   // Signed in, not verified: the join page says how to finish; the console sends it back there (no 404).
   const pending = page.getByTestId('admin-join-pending')
   await expect(pending).toContainText(email)
+  await pending.getByRole('button', { name: 'Send the link again' }).click()
+  await expect(page.getByText(`A new link is on its way to ${email}`)).toBeVisible()
   await pending.getByRole('link', { name: 'Open the console' }).click()
   await expect(page).toHaveURL(`${admin}/join`)
   await expect(pending).toBeVisible()

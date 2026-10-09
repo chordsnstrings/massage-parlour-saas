@@ -75,10 +75,16 @@ export async function resendAdminVerificationAction(_prev: ActionResult): Promis
   if (!session || !isListedAdminEmail(session.user.email)) return fail('Sign in first.')
   if (!(await withinIpLimit('admin-join-resend', JOIN_LIMITS)))
     return fail('Too many attempts from your network. Please try again later.')
-  await getAuth().api.sendVerificationEmail({
-    body: { email: session.user.email, callbackURL: CALLBACK },
-    headers: await headers(),
-  })
+  try {
+    await getAuth().api.sendVerificationEmail({
+      body: { email: session.user.email, callbackURL: CALLBACK },
+      headers: await headers(),
+    })
+  } catch (e) {
+    // e.g. already verified meanwhile: say so instead of failing the request.
+    if (e instanceof APIError) return fail(e.message)
+    throw e
+  }
   await audit({
     actorUserId: session.user.id,
     action: 'platform.admin.verification_resent',
