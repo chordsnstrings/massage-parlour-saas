@@ -1,8 +1,12 @@
+import { PLATFORM_CONTACT_EMAIL } from '@spa/core'
+import { ENQUIRY_MESSAGE_MAX } from '@spa/services'
 import { Mail, MessageCircle, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
+import { EnquiryForm } from '@/components/marketing/enquiry-form'
 import { companyContact } from '@/components/marketing/plans'
 import { MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/server/origin'
+import { sendEnquiryAction } from './actions'
 
 export const metadata: Metadata = {
   title: 'Contact',
@@ -15,7 +19,8 @@ const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 export default async function ContactPage() {
   const c = await companyContact()
   const wa = digits(c?.whatsapp) || digits(c?.phone)
-  const email = c?.email || 'hello@spamanagement.co'
+  // The console's company email wins when set (PLAN §18.4).
+  const email = c?.email || PLATFORM_CONTACT_EMAIL
   const cards = [
     wa && {
       icon: MessageCircle,
@@ -62,19 +67,22 @@ export default async function ContactPage() {
         <p data-depth="0.08" className="mkt-hsub mkt-rise" style={{ '--d': 2 } as React.CSSProperties}>
           We set up your spa with you — menu, staff, website and your first import — usually in one visit.
         </p>
-        <div className="mt-14 grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((k) => (
-            <a key={k.title} href={k.href} data-rise="card" className="mkt-card block">
-              <span className="mkt-mi">
-                <k.icon strokeWidth={1.7} />
-              </span>
-              <h2 className="text-[21px]">{k.title}</h2>
-              <p className="mt-2">{k.text}</p>
-              <p className="mt-6 inline-block text-[15px] font-semibold break-all text-[var(--accent-ink)]">
-                {k.label}
-              </p>
-            </a>
-          ))}
+        <div className="mt-14 grid items-start gap-[18px] lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <EnquiryForm action={sendEnquiryAction} maxLength={ENQUIRY_MESSAGE_MAX} />
+          <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-1">
+            {cards.map((k) => (
+              <a key={k.title} href={k.href} data-rise="card" className="mkt-card block">
+                <span className="mkt-mi">
+                  <k.icon strokeWidth={1.7} />
+                </span>
+                <h2 className="text-[21px]">{k.title}</h2>
+                <p className="mt-2">{k.text}</p>
+                <p className="mt-5 inline-block text-[15px] font-semibold break-all text-[var(--accent-ink)]">
+                  {k.label}
+                </p>
+              </a>
+            ))}
+          </div>
         </div>
         {c?.address && <p className="mt-12 text-[14px] text-[var(--mute)]">{c.address}</p>}
         <p className="mt-10 text-[15px] text-[var(--muted)]">

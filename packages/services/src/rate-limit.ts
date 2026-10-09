@@ -24,3 +24,19 @@ export async function hitRateLimit(db: DbOrTx, key: string, max: number, windowS
   const count = row?.count ?? 1
   return { allowed: count <= max, count }
 }
+
+/**
+ * Counts one hit per window for `subject` (e.g. an IP) under `scope` and says whether every window is still within
+ * its limit. `windows`: [max hits, window in seconds] pairs, e.g. 5 an hour and 20 a day.
+ */
+export async function withinRateLimits(
+  db: DbOrTx,
+  scope: string,
+  subject: string,
+  windows: readonly (readonly [max: number, seconds: number])[],
+) {
+  let ok = true
+  for (const [max, seconds] of windows)
+    if (!(await hitRateLimit(db, `${scope}:${seconds}:${subject}`, max, seconds)).allowed) ok = false
+  return ok
+}

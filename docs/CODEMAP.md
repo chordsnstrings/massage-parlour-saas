@@ -32,7 +32,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
   `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `spa_applications` (PLAN §18.3;
   `created_tenant_id`), `rate_limits` (fixed-window counters: services `hitRateLimit`, web `server/rate-limit.ts`
-  `withinIpLimit` — per-IP limits for public actions Better Auth's HTTP limiter never sees, e.g. apply), `tenant_purges` (G12 purge record; its column is
+  `withinIpLimit` → services `withinRateLimits` — per-IP limits for public actions Better Auth's HTTP limiter never sees,
+  e.g. apply, contact form), `contact_enquiries` (PLAN §18.4; marketing Contact form, services `enquiries.ts`), `tenant_purges` (G12 purge record; its column is
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
@@ -94,7 +95,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
-     `audit()` (`server/audit.ts`, platformDb `audit_log`) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
+     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
    - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
      rethrow to the error boundary.
    - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
@@ -158,7 +159,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `setOwnBookingStatus` (ownership check); TherapistHome "My earnings" → `staffEarnings` (payroll.ts).
     `settings/audit` = audit log viewer (`audit.view`).
 - **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
-- **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
+- **`platform/(console)`**: overview, applications (PLAN §18.3), enquiries (PLAN §18.4: list/search/filter, detail with
+  tel/wa.me/mailto, status + note via `updateEnquiry`; nav badge = `newEnquiryCount`), tenants, plans, settings, audit,
+  ai models, domains (order approval), templates
   (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via
   `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
   `tenantPerformance`; detail adds `tenantPerformanceDetail`). Revenue there = sales (paid|refunded) by sale business
@@ -167,6 +170,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   scoped `.mkt`; Space Grotesk + DM Sans; Noto Sans Thai as the Thai-glyph fallback in `--font`/`--head`) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. `/crm` EN/TH demo: labels resolved
   server-side from the dashboard catalogues (`components/marketing/crm-demo-copy.ts`) → client `crm-demo.tsx`; PLAN §18.5.
+- **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
+  scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
+  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
+  Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
+  `withinIpLimit`, `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
+  email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px

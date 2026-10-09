@@ -9,9 +9,14 @@ export async function audit(entry: {
   entity?: string
   entityId?: string
   data?: unknown
+  /** Overrides the request IP; `null` stores none (public, unauthenticated events such as a contact enquiry). */
+  ip?: string | null
 }) {
   const h = await headers()
-  const ip = h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+  const ip =
+    entry.ip !== undefined
+      ? entry.ip
+      : (h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null)
   await platformDb()
     .insert(auditLog)
     .values({ ...entry, data: entry.data ?? null, ip })
