@@ -1,5 +1,8 @@
 # Phase 2 page kit — how to convert a spa-dashboard screen (PLAN §14.6, crm-spec §3/§5/§6)
 
+> Look since 2026-10-09 (PLAN §18.6): the login's brand theme (fonts, sizing, lighter colours) replaces the blue Be Relax
+> palette — colours come only from the `crm.css` tokens, so screens built with this kit follow it unchanged.
+
 Gallery: `app.localhost:3000/dev/kit/crm` (`?lang=th` for Thai sizes). CSS: `app/dashboard/[tenant]/crm-kit.css`
 (scoped `:where(:root:has(.crm))`, `@layer components` so Tailwind utilities still override; sizes = `--crm-*` tokens
 in `crm.css`, incl. Thai ≥12 px and coarse-pointer ≥40 px overrides). Base UI kit (`components/ui/*`) is themed

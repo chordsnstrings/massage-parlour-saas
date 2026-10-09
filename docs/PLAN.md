@@ -1528,3 +1528,39 @@ brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks th
   record the answer here.
 - **PWA** — separate branch (manifest, icons = spa logo + "<first word> Management", service worker, install item
   in the user menu).
+### 18.6 Spa CRM look + PWA (owner 2026-10-09)
+Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look; the CRM layout/screens stay:
+- **Look:** the spa dashboard uses the login's brand theme (same fonts and sizing, colours lighter); the platform's
+  logo sits small in a premium spot of every spa's CRM without affecting the CRM UX (separate branch: crm.css tokens,
+  fonts, sidebar badge).
+- ✅ **Installable app for every spa's CRM** (done 2026-10-09, branch feat/spa-pwa):
+  - Manifest `{dashboard}/app.webmanifest` (host routing `app.…/{slug}/app.webmanifest`, path routing
+    `/app/{slug}/app.webmanifest`): `name` = `short_name` = first word of the spa name + " Management" (core
+    `pwaAppName`: edge punctuation, possessive "'s" and a leading article — the/a/an/al/el/le/la — dropped; Arabic/Thai
+    words kept as typed; empty → "Spa Management"); `id` = `start_url` = `scope` = the dashboard path (`/{slug}`), so
+    each spa installs separately (scope is a path prefix: `/tamara` also covers a `/tamara-x` slug — harmless);
+    standalone, theme `#0f6b4b` (dark green), background `#f6f6f9`, `lang` en, `dir` ltr (auto for Arabic names).
+  - Icons `{dashboard}/app-icon/{key}/{192|512|maskable-512|apple-180}` (PNG): logo trimmed + centred on a white
+    tile (any = rounded, maskable = full bleed inside the safe zone, apple = full bleed); no logo → initials (first
+    letters of the first two words; non-Latin names use the slug's) in ink `#0b0b0f` on lime `#d9f26a`. Key = hash of
+    `ICON_VERSION` + logo file id (or initials) → `immutable` 1-year cache; a new logo = new URLs; old keys get the
+    current icon for 5 min. Public, cookie-free, only the logo-derived image; rendered once per key (in-memory LRU,
+    shared in-flight renders, 30 s slug cache + separate miss cache) — no DB rate-limiter writes. An unknown key
+    re-reads the spa at most once per 10 s per slug. A logo that can't be read right now (storage error, bad file)
+    gets the initials with `no-store` and no ETag (kept in memory 60 s only), so installs never keep a stand-in.
+  - `<head>` of `dashboard/[tenant]` only: manifest link, apple-touch-icon, apple-mobile-web-app-title/capable,
+    theme-color. Console and marketing keep the root `/manifest.webmanifest`.
+  - Service worker `public/sw.js` (one registration, scope `/`, same URL as push → no second worker; registered on
+    every dashboard load by `components/pwa` `PwaSetup`): every GET page load in scope is answered with its
+    navigation-preload response (one server request each — marketing, console, sites and OAuth callbacks included);
+    offline → dashboard loads only get the page's localised offline page ("You're offline — reconnect to continue",
+    EN/TH via `pwa.*` keys, built-in bilingual copy as fallback). Nothing else is cached; API, server actions,
+    POSTs, RSC fetches and files pass through untouched. Notification clicks reuse a window of the same spa only
+    (`{base}/{slug}`), else open a new one (Chrome opens it in that spa's installed app).
+  - "Install app" in the profile menu (Chrome/Edge/Android `beforeinstallprompt`, kept from first paint by an inline
+    listener; iOS → Share → Add to Home Screen steps sheet with the app name); one-time dismissible tip on the
+    dashboard home for owners/managers (dismiss remembered per browser). Hidden when already running standalone.
+  - Tests: core `pwa.test.ts` (name rule, initials); e2e `pwa.spec.ts` (manifest/icons cookie-free for a logo spa and
+    a no-logo spa, 304/404, `<head>`, console/marketing manifests, SW control + Chrome installability via CDP,
+    offline page, one server request per page load via a counting proxy, same-spa notification windows, uncached
+    stand-in icon for an unreadable logo + throttled re-read, menu + tip + iOS steps).

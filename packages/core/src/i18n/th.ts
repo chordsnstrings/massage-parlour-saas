@@ -35,6 +35,7 @@ import { packages } from './th/packages'
 import { payroll } from './th/payroll'
 import { permissions } from './th/permissions'
 import { purchases } from './th/purchases'
+import { pwa } from './th/pwa'
 import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
@@ -91,6 +92,7 @@ export const th: Messages = {
   reviews,
   website,
   widget,
+  pwa,
   media,
   accounts,
   payroll,

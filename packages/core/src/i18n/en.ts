@@ -36,6 +36,7 @@ import { packages } from './en/packages'
 import { payroll } from './en/payroll'
 import { permissions } from './en/permissions'
 import { purchases } from './en/purchases'
+import { pwa } from './en/pwa'
 import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
@@ -91,6 +92,7 @@ export const en = {
   reviews,
   website,
   widget,
+  pwa,
   media,
   accounts,
   payroll,

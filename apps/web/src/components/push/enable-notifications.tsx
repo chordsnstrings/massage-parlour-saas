@@ -14,7 +14,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { toast } from '@/components/ui/toast'
 import { resultText, useT } from '@/i18n/client'
 import type { ActionResult } from '@/lib/action'
-import { appPath } from '@/lib/paths'
+import { registerWorker } from '@/lib/sw'
 
 type State = 'loading' | 'unconfigured' | 'unsupported' | 'denied' | 'off' | 'on'
 
@@ -39,12 +39,6 @@ const supported = () =>
   'serviceWorker' in navigator &&
   'PushManager' in window &&
   'Notification' in window
-
-// The worker prefixes notification links with the app surface base ("/app" with path routing).
-const workerUrl = () => {
-  const base = appPath('/') === '/' ? '' : appPath('/')
-  return `/sw.js${base ? `?base=${encodeURIComponent(base)}` : ''}`
-}
 
 async function currentSubscription() {
   const reg = await navigator.serviceWorker.getRegistration('/')
@@ -94,7 +88,7 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
         setState(permission === 'denied' ? 'denied' : 'off')
         return
       }
-      await navigator.serviceWorker.register(workerUrl(), { scope: '/' })
+      await registerWorker() // usually already registered by the dashboard (components/pwa); same URL + scope
       const reg = await navigator.serviceWorker.ready
       const sub =
         (await reg.pushManager.getSubscription()) ??

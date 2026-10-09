@@ -52,6 +52,10 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
   replaces the blue):** the sign-in brand made lighter — DM Sans text, Space Grotesk headings/figures (Thai: Noto Sans
   Thai first), mint/cream light surfaces, dark-green #0F6B4B primary, lime #D9F26A only for small highlights; small
   "SM Spa Management" badge at the sidebar foot → marketing site (PLAN §18.6). Tokens only in `crm.css`.
+  (all UI text and system messages; typed names never translated). Plan: PLAN §14.6. **Look since 2026-10-09
+  (replaces the blue Be Relax palette):** the login's brand theme — same fonts + sizing, lighter colours — with the
+  platform logo small in a premium spot that doesn't affect the CRM UX; every spa's CRM installs as its own PWA named
+  "{first word of spa name} Management" with the spa logo as icon (initials on lime without one). PLAN §18.6.
 - Super-admin console + editor chrome: minimal Swedish modern, airy well-padded 12-col grid, one accent,
   micro-animations via `motion`, fully responsive 360 px → wide desktop (PLAN.md §12). Tenant sites fully responsive too.
 - Legal/compliance is the operator's responsibility — don't add legal features beyond what PLAN.md lists.

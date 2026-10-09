@@ -119,6 +119,7 @@ export function SpaShell({
   accountHref,
   switchHref,
   platformHref,
+  install,
   children,
 }: {
   spa: { name: string; tagline: string | null; logoUrl: string | null; homeHref: string }
@@ -136,6 +137,8 @@ export function SpaShell({
   switchHref: string
   /** The platform's marketing site (canonical) for the "Spa Management" badge at the foot of the sidebar. */
   platformHref: string
+  /** "Install app" profile-menu item (components/pwa InstallMenuItem); renders nothing where it can't install. */
+  install?: React.ReactNode
   children: React.ReactNode
 }) {
   const { t, locale } = useI18n()
@@ -242,6 +245,7 @@ export function SpaShell({
                     <ArrowLeftRight /> {t('shell.switchSpa')}
                   </Link>
                 </DropdownMenu.Item>
+                {install}
                 <DropdownMenu.Separator className="crm-menu-sep" />
                 <DropdownMenu.Item
                   className="crm-menu-item"
