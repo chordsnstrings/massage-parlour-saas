@@ -47,6 +47,8 @@ async function record(
 const refresh = (slug: string) => {
   revalidatePath(`/dashboard/${slug}/services`)
   revalidatePath(`/dashboard/${slug}/staff`, 'layout')
+  // Website "Services & prices" (PLAN §18.1); the public site reads services live, so it needs no publish.
+  revalidatePath(`/dashboard/${slug}/website`)
 }
 
 // ---------------------------------------------------------------------------

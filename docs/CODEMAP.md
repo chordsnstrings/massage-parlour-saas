@@ -205,8 +205,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     they break if that spa is deleted). E2E: "HTML design images".
 - **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
   - Edit, design and publish need `isStudio` plus the matching permission.
-  - The spa can only preview and request a change (`site.content`). Every status move (send for review, withdraw,
-    approve, reopen) is `setStudioStatusAction` behind `studioGuard(…, 'site.publish')` (R1).
+  - Non-studio members (`site.content` or `services.manage`) get `ServicesPrices` (`website/services-prices.tsx`,
+    PLAN §18.1): services + prices with the menu-only `ServiceSheet` (`menuOnly`: operational fields posted as hidden
+    inputs) and a live-site link; no preview, status or change requests. Every status move (send for review,
+    withdraw, approve, reopen) is `setStudioStatusAction` behind `studioGuard(…, 'site.publish')` (R1); every
+    studio-actions.ts action is `studioGuard`ed. `createChangeRequest` (services) has no caller in the app now.
   - The editor route 404s for non-studio users.
 - **Saving and publishing**:
   - Draft JSON is capped at 512 KB.

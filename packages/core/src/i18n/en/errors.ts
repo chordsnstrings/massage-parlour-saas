@@ -2,7 +2,7 @@ export const errors = {
   generic: 'Something went wrong — please try again.',
   forbidden: "You don't have permission to do that.",
   readOnly: 'This account is read-only. Please contact support.',
-  studioOnly: 'Your website is built by our studio team — send them a change request.',
+  studioOnly: 'Only our studio team can change the website design or publish it.',
   checkFields: 'Please check the highlighted fields.',
   notFound: 'Not found.',
   signInAgain: 'Please sign in again.',

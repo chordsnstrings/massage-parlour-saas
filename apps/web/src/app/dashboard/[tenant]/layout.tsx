@@ -150,7 +150,7 @@ export default async function TenantLayout({
         }),
       ]),
       ...item('website', t('nav.website'), [
-        ...page('site.content', '/website', t('nav.site')),
+        ...page(['site.content', 'services.manage'], '/website', t('nav.site')),
         ...page('site.content', '/media', t('nav.media')),
       ]),
       ...single('reviews', 'ai.approve', '/ai/reviews', t('nav.reviews')),

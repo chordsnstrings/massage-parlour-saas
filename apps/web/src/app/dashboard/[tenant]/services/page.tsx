@@ -19,7 +19,7 @@ import { Card, ListRow, Pill, Stack } from '@/components/crm'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
-import { ROOM_TYPES, type RoomType } from './constants'
+import { ROOM_TYPES, type RoomType, toServiceInput } from './constants'
 import { EquipmentSheet } from './equipment-client'
 import { CategorySheet, RoomSheet, SampleMenuButton, ServiceSheet } from './services-client'
 
@@ -271,23 +271,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
                                 slug={slug}
                                 categories={categoryOptions}
                                 equipmentTypes={kitTypes}
-                                service={{
-                                  id: s.id,
-                                  categoryId: s.categoryId,
-                                  name: s.name,
-                                  description: s.description,
-                                  bufferBeforeMin: s.bufferBeforeMin,
-                                  bufferAfterMin: s.bufferAfterMin,
-                                  therapistsRequired: s.therapistsRequired,
-                                  roomTypes: s.roomTypes,
-                                  equipmentTypes: s.equipmentTypes,
-                                  onlineBookable: s.onlineBookable,
-                                  showPrice: s.showPrice,
-                                  active: s.active,
-                                  color: s.color,
-                                  imageUrl: s.imageUrl,
-                                  variants: s.variants,
-                                }}
+                                service={toServiceInput(s, s.variants)}
                               />
                             </td>
                           </tr>
