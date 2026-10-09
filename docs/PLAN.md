@@ -1186,6 +1186,21 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
 - **F14. Tests for 2FA + password reset** (G13 remainder): e2e for 2FA enrol/verify/require2fa redirect, password reset, files access matrix.
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
 
+
+### Remaining backlog F16–F32 (owner 2026-10-09: "after F15 start the others till end — finish everything")
+Same reminder rule. Batches run after the Premium/Standard plans land (gating). Batch A = Premium 'marketing'/'ai' gated.
+- **A:** F16 QR poster (reception/hotel partners) · F17 GBP "Book" button (Place Actions) + Search Console submit ·
+  F18 Instagram reels/stories/carousels + private replies to comments · F19 Facebook Page connect flow.
+- **B:** F20 feature flags + announcements to spas · F21 console tenant usage/last-activity columns · F22 billing
+  auto-transitions (overdue → grace → read-only, owner-tunable) · F23 slug rename with 301 from the old slug ·
+  F24 i18n error/404/global-error pages + correct `lang`/`dir` on <html> per surface · F25 CI schema-drift check,
+  dependency audit, CodeQL · F26 G6 confirmation: rate limits keyed on the trusted client IP everywhere (Caddy trust).
+- **C:** F27 intake/waiver PDFs stored · F28 outbox assignment to a receptionist · F29 editor autosave + editing lock ·
+  F30 dashboard "Ask AI" assistant (Premium) · F31 extra KPIs (rebooking rate, retention cohorts, revenue per treatment
+  hour, room utilisation, package/gift-card liability) · F32 Studio import of a spa's existing website content.
+- Not doable without Google partner approval: Reserve with Google (stays "Coming next").
+- Open owner question: monthly plans issue all 12 invoices at acceptance (current) vs one per month — default: keep current.
+
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
 - **Blockers:** ✅ G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
