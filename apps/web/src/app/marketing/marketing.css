@@ -21,11 +21,11 @@
     --dark-text: #c2c2cc;
     --line: #e6e6ec;
     --line2: rgba(11, 11, 15, 0.14);
+    --danger: #b42318;
     /* Noto Sans Thai after the Latin faces: it only supplies Thai glyphs (ภาษาไทย labels, the /crm demo), so typed
        Latin names keep the same typeface in EN and TH, and only its Thai subset is fetched (mirrors crm.css). */
     --head: "Space Grotesk Variable", "Space Grotesk", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
     --font: "DM Sans Variable", "DM Sans", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
-    --danger: #b42318;
     --shadow: 0 30px 60px rgba(11, 11, 15, 0.18);
     --nav-h: 73px;
     /* names the marketing markup uses, mapped onto the C palette */
@@ -1065,6 +1065,7 @@
     color: #fff;
     font-weight: 600;
     text-align: center;
+  }
   /* contact enquiry form (PLAN §18.4) */
   .mkt-enq {
     padding: 30px;
