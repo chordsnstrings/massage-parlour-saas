@@ -45,7 +45,7 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
   })
 
   await test.step('second domain: marketing pages link to the app on that domain', async () => {
-    for (const path of ['/', '/features', '/website-builder', '/pricing', '/contact']) {
+    for (const path of ['/', '/features', '/crm', '/website-builder', '/pricing', '/contact']) {
       await page.goto(`${altBase}${path}`)
       await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute(
         'href',
