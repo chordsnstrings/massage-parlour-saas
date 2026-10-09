@@ -47,7 +47,14 @@ export function Logo({ className, tone = 'auto' }: { className?: string; tone?: 
         <text x="470" y="205" fontSize="132" letterSpacing="-5">
           Spa
         </text>
-        <text x="470" y="347" fontSize="132" letterSpacing="-6" textLength="775" lengthAdjust="spacingAndGlyphs">
+        <text
+          x="470"
+          y="347"
+          fontSize="132"
+          letterSpacing="-6"
+          textLength="775"
+          lengthAdjust="spacingAndGlyphs"
+        >
           Management
         </text>
       </g>
