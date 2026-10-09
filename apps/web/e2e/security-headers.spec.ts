@@ -74,7 +74,9 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
     expect(h['x-content-type-options']).toBe('nosniff')
     expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin')
     expect(h['permissions-policy']).toContain('camera=()')
-    expect(h['cross-origin-opener-policy']).toBe(surface === 'app' ? 'same-origin-allow-popups' : 'same-origin')
+    expect(h['cross-origin-opener-policy']).toBe(
+      surface === 'app' ? 'same-origin-allow-popups' : 'same-origin',
+    )
     expect(h['strict-transport-security']).toBeUndefined() // plain http here
     const nonce = nonceOf(h['content-security-policy'])!
     expect(nonce).toMatch(/^[A-Za-z0-9+/]{22}==$/)
@@ -106,7 +108,9 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
     headers: { host: 'www.csp-headers-test.ae', 'x-forwarded-proto': 'https' },
     failOnStatusCode: false,
   })
-  expect(directives(custom.headers()['content-security-policy'])['report-uri']).toEqual(['/api/csp-report?s=domain'])
+  expect(directives(custom.headers()['content-security-policy'])['report-uri']).toEqual([
+    '/api/csp-report?s=domain',
+  ])
   expect(custom.headers()['strict-transport-security']).toBe('max-age=31536000')
   expect(directives(custom.headers()['content-security-policy'])['upgrade-insecure-requests']).toEqual([])
   // Behind Caddy (https): HSTS, with includeSubDomains on platform hosts only.
@@ -131,16 +135,23 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
   expect(shell['content-security-policy']).not.toContain("default-src 'none'")
 })
 
-test('F10: an injected script without the nonce never runs; the page itself still works', async ({ page }) => {
+test('F10: an injected script without the nonce never runs; the page itself still works', async ({
+  page,
+}) => {
   await page.route(`${base}/`, async (route) => {
     const res = await route.fetch()
     const headers = { ...res.headers() }
     delete headers['content-encoding']
     delete headers['content-length']
-    const body = (await res.text()).replace(
-      '</head>',
-      `<script>window.__injected = 1</script><script nonce="guessed">window.__guessed = 1</script></head>`,
-    ).replace('</body>', `<img src="/icon.svg" onerror="window.__attr = 1" onload="window.__attr = 1"></body>`)
+    const body = (await res.text())
+      .replace(
+        '</head>',
+        `<script>window.__injected = 1</script><script nonce="guessed">window.__guessed = 1</script></head>`,
+      )
+      .replace(
+        '</body>',
+        `<img src="/icon.svg" onerror="window.__attr = 1" onload="window.__attr = 1"></body>`,
+      )
     await route.fulfill({ status: res.status(), headers, body })
   })
   await page.addInitScript(() => {
@@ -152,7 +163,9 @@ test('F10: an injected script without the nonce never runs; the page itself stil
   })
   await page.goto(`${base}/`)
   // Next's own (nonced) runtime booted and our nonced inline bootstrap ran.
-  await page.waitForFunction(() => Boolean((window as unknown as { next?: { version?: string } }).next?.version))
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { next?: { version?: string } }).next?.version),
+  )
   expect(await page.evaluate(() => document.documentElement.classList.contains('scenes-on'))).toBe(true)
   const state = await page.evaluate(() => {
     const w = window as unknown as Record<string, unknown>
@@ -187,7 +200,31 @@ test('F10: no CSP violations on the main screens (marketing, Apply, spa site + b
             content: [
               {
                 type: 'Heading',
-                props: { id: 'h1', eyebrow: { en: '' }, text: { en: 'Clean policy' }, level: 'h2', size: 'lg' },
+                props: {
+                  id: 'h1',
+                  eyebrow: { en: '' },
+                  text: { en: 'Clean policy' },
+                  level: 'h2',
+                  size: 'lg',
+                },
+              },
+            ],
+          },
+        },
+        {
+          // An uploaded HTML design (R17) inside the editor's canvas frame: the design shell runs it there too.
+          slug: 'design',
+          title: { en: 'Design' },
+          data: {
+            root: { props: { htmlDesign: true, title: { en: 'Design' }, description: { en: '' } } },
+            content: [
+              {
+                type: 'HtmlDesign',
+                props: {
+                  id: 'design-1',
+                  images: [],
+                  html: '<!doctype html><html><head><style>h1{color:rgb(4, 5, 6)}</style></head><body><h1>Design of {{spa_name}}</h1><script>document.body.dataset.ran = "yes"</script></body></html>',
+                },
               },
             ],
           },
@@ -195,17 +232,34 @@ test('F10: no CSP violations on the main screens (marketing, Apply, spa site + b
       ],
     }),
   )
-  const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
+  const pages = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
+  const home = pages.find((p) => p.slug === '')
+  const design = pages.find((p) => p.slug === 'design')
 
   await page.goto(`${base}/contact`)
   await expect(page.getByRole('button', { name: /send/i }).first()).toBeVisible()
   await page.goto(`${app}/${slug}`)
   await expect(page.getByRole('navigation').first()).toBeVisible()
   await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
-  await expect(page.frameLocator('#preview-frame').first().getByText('Clean policy')).toBeVisible({ timeout: 30_000 })
+  await expect(page.frameLocator('#preview-frame').first().getByText('Clean policy')).toBeVisible({
+    timeout: 30_000,
+  })
+  await page.goto(`${app}/${slug}/website/editor/${design!.id}`)
+  const designDoc = page.frameLocator('#preview-frame').first().frameLocator('iframe.site-html-design')
+  await expect(designDoc.getByRole('heading', { name: 'Design of Clean Spa' })).toHaveCSS(
+    'color',
+    'rgb(4, 5, 6)',
+    {
+      timeout: 30_000,
+    },
+  )
+  await expect(designDoc.locator('body')).toHaveAttribute('data-ran', 'yes')
   await page.goto(`${site(slug)}/book`)
   await expect(page.getByRole('heading', { name: 'Book a treatment' })).toBeVisible()
-  await page.getByRole('region', { name: 'Swedish massage' }).getByRole('button', { name: /60 min/ }).click()
+  await page
+    .getByRole('region', { name: 'Swedish massage' })
+    .getByRole('button', { name: /60 min/ })
+    .click()
   await page.getByRole('button', { name: /^Tomorrow/ }).click()
   await page.getByTestId('slots').getByRole('button').first().click()
   await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
@@ -243,8 +297,12 @@ test('F10: CSP reports are counted and shown in the console; F9: Turnstile keys 
   })
   expect(report.status()).toBe(204)
   expect(
-    (await page.request.post(`${base}/api/csp-report`, { data: 'not json', headers: { 'content-type': 'text/plain' } }))
-      .status(),
+    (
+      await page.request.post(`${base}/api/csp-report`, {
+        data: 'not json',
+        headers: { 'content-type': 'text/plain' },
+      })
+    ).status(),
   ).toBe(400)
   const db = testDb()
   const [row] = await db
@@ -304,7 +362,9 @@ test('F10: CSP reports are counted and shown in the console; F9: Turnstile keys 
     await page.getByLabel('Your name').fill('Console Key')
     await page.getByLabel('UAE mobile').fill('050 777 6655')
     await page.getByRole('button', { name: 'Request booking' }).click()
-    await expect(page.getByText("We couldn't confirm you're not a robot").first()).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText("We couldn't confirm you're not a robot").first()).toBeVisible({
+      timeout: 30_000,
+    })
     expect(await db.select().from(bookings).where(eq(bookings.tenantId, seed.tenantId))).toHaveLength(0)
   } finally {
     // Back to the env keys for every later spec.

@@ -298,8 +298,10 @@ body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;
 <img id="wide" src="${svg(1600, 500, '369')}" style="width:1600px"><p style="clear:both">End</p></body></html>`
   // F10: the design arrives in its shell document after the page hydrates (and again after each adjustment), so wait
   // for it instead of reading the empty shell or a frame that is reloading.
-  const inDesign = <T,>(frame: Frame, read: () => T) =>
-    frame.evaluate(`document.getElementById('hero') ? (${read})() : null`).catch(() => null) as Promise<T | null>
+  const inDesign = <T>(frame: Frame, read: () => T) =>
+    frame
+      .evaluate(`document.getElementById('hero') ? (${read})() : null`)
+      .catch(() => null) as Promise<T | null>
   const frameOk = async (frame: Frame, position: string) => {
     await expect
       .poll(() => inDesign(frame, () => document.documentElement.scrollWidth - window.innerWidth))
