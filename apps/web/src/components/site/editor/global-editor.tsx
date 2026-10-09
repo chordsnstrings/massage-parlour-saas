@@ -1,4 +1,6 @@
 'use client'
+// Puck's styles without its external font import (F10, see website/editor/[pageId]/editor.tsx).
+import '@puckeditor/core/no-external.css'
 import { type Config, type Data, Puck, useGetPuck, type Viewports } from '@puckeditor/core'
 import type { PuckNode } from '@spa/services/site-kit'
 import { Globe2, Monitor, Smartphone, Tablet, X } from 'lucide-react'

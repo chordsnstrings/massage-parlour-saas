@@ -1,4 +1,6 @@
 'use client'
+// Puck's own styles without its rsms.me font import (F10: no outside stylesheets; the editor uses Inter Variable).
+import '@puckeditor/core/no-external.css'
 import '@/components/site/site.css'
 import {
   ActionBar,
