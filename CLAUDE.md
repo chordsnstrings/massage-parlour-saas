@@ -81,7 +81,10 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`. Full suite: build first and run
   with `E2E_SERVER=start` (production server, as CI does) — the dev server's on-demand compiles OOM past ~13 GB.
 - Targeted: `pnpm --filter @spa/<pkg> test` · `cd <pkg> && npx tsc --noEmit`
-- Super-admin locally: sign up with an email in `PLATFORM_ADMIN_EMAILS`, then use admin.localhost:3000.
+- Super-admin locally: create the login at admin.localhost:3000/join with an email in `PLATFORM_ADMIN_EMAILS` (the
+  public /signup is the spa application form and refuses listed emails), verify it (link, or another super-admin's
+  Company → Super-admins "Mark email verified"), then enrol 2FA. Production list = droplet base value + the two
+  owner-added admins appended in deploy/droplet/compose.yml (they are also the default `SITE_AI_EDITOR_EMAILS`).
 
 ## Gotchas
 - Biome reformats on `pnpm format`; patch the formatted code (prefer the Edit tool over string-replace scripts).

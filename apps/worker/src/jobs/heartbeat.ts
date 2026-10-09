@@ -1,7 +1,7 @@
 import { readFile, statfs, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { configFlags, sendStaffEmail } from '@spa/core'
-import { createDb, type Db, platformJobRuns } from '@spa/db'
+import { createDb, type Db, listedAdminEmails, platformJobRuns } from '@spa/db'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { log } from '../log'
 
@@ -43,11 +43,9 @@ export function alertChanges(current: Alert[], open: Set<string>) {
   }
 }
 
+/** PLATFORM_ADMIN_EMAILS, de-duplicated (compose appends extra admins to the base value). */
 const recipients = (env: Env) =>
-  (env.PLATFORM_ADMIN_EMAILS ?? '')
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.includes('@'))
+  listedAdminEmails(env.PLATFORM_ADMIN_EMAILS ?? '').filter((s) => s.includes('@'))
 
 async function openIncidents(db: Db) {
   const rows = await db.execute<{ key: string; open: boolean }>(sql`

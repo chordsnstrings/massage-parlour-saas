@@ -1211,6 +1211,12 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - Online booking from tenant sites stays.
 
 ### 18.2 Done (2026-10-09)
+- **Two more super-admins (owner decision 2026-10-09):** `ahmedabouseif1997@gmail.com` and `sefohh.aa45@gmail.com`
+  are super-admins and the **only** AI site editors; the existing production super-admin (`ahmed@arks.ae`, droplet
+  base env) stays. deploy/droplet/compose.yml appends both to `${PLATFORM_ADMIN_EMAILS:-}` for web, worker and
+  migrate/seed (the base env can't be edited without SSH) and defaults `SITE_AI_EDITOR_EMAILS` to exactly the two (an
+  env / secrets-overlay value replaces that default). They get a login through the new admin join page and the
+  console "Super-admins" card (§18.3 "Super-admin join").
 - **Map links (owner request 2026-10-09):** every spa-website address (all templates, footer, placeholder site,
   booking page, uploaded HTML designs via `{{address}}`) opens Google Maps in a new tab. Optional per-branch
   "Google Maps link" (`branches.maps_url`, Settings → Business + Settings → Branches; only Google Maps URLs) pins the
@@ -1361,6 +1367,22 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   "another spa" copy only for a login that has a spa; the waiting page shows the full web address; phones show the
   Applications count on the bottom tab. e2e: a signed-in owner on the console gets 404 for `/applications(/id)` and
   the super-admin's captured accept/reject calls replayed with the owner's session change nothing.
+- **Super-admin join (owner, 2026-10-09):** the public sign-up is the application form, so `PLATFORM_ADMIN_EMAILS`
+  addresses create their login on the admin host **`/join`** (linked "Create a super-admin account" from the admin
+  sign-in page only): name, email, password → Better Auth sign-up (no spa, no application) + verification email
+  (callback = console). Unlisted email → neutral "This email address cannot create a super-admin account." (per-IP
+  limit 5/h, 20/day counted before the check). Signed in but not verified → `/join` shows how to finish (+ "Send the
+  link again"), and the console redirects there instead of a 404. Verified → console → promoted (G2) → 2FA enrolment
+  (G3) → console. The application form refuses a listed email before creating anything ("…create its login on the
+  admin join page instead: <url>/join"; `submitApplication` refuses it too). Listed / super-admin logins are never
+  "locked" applicants: dashboard home, `/application` and `/signup` send them (no spa) to the console, so 2FA
+  enrolment is always reachable. **Bootstrap without email:** console Company → **Super-admins** card lists
+  super-admins (email, verified, 2FA, still listed) and listed emails that aren't yet (no login / not verified /
+  verified → promoted on first visit / login closed); a super-admin **with 2FA** can "Mark email verified" (or "Make
+  super-admin now") for a registered, not-disabled listed login only → promoted at once (it still enrols 2FA).
+  Audited: `platform.admin.joined`, `platform.admin.verification_resent`, `platform.admin.email_verified`. No
+  removal/demotion anywhere (and never on yourself). `listedAdminEmails` drops empty segments + duplicates and also
+  splits on spaces/semicolons. e2e `admin-join.spec` (confirm path, link path + app-home redirect, refusals).
 - Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in,
   holding the slug / notifying only after email verification, expiring unverified pending applications.
 - **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT

@@ -9,7 +9,7 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath, PATH_ROUTING } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { applicantState } from '@/server/applications'
-import { canonicalUrls } from '@/server/origin'
+import { adminUrl, canonicalUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
 import { SignupForm } from './signup-form'
 
@@ -33,6 +33,8 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   const state = session ? await applicantState(session.user.id) : null
   // One pending application per login: its waiting page instead of a second form.
   if (state?.application?.status === 'pending') redirect(appPath('/application'))
+  // A PLATFORM_ADMIN_EMAILS login never applies (owner, 2026-10-09): its place is the console.
+  if (state?.listedAdmin) redirect(await adminUrl())
   const { plan: wanted } = await searchParams
   const { t, fmt } = await getI18n()
   const planRows = await platformDb()

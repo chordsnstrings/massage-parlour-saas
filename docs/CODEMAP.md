@@ -123,6 +123,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
     `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
     sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
+  - **Super-admin join** (owner, 2026-10-09): listed emails never apply (`submitApplication` + `signupAction` refuse
+    them, before any login is created); they join on the admin host `platform/(auth)/join` (Better Auth sign-up, no
+    spa; `assertAdminJoinAllowed` = neutral refusal; per-IP limit; callback = console). Unverified listed login →
+    `requirePlatformAdmin` redirects to `/join` (how to finish + resend). `applicantState.listedAdmin`: never
+    `locked`; dashboard home / `/application` / `/signup` send listed or super-admin logins without a spa to the
+    console (`adminUrl()`). Console Company → **Super-admins** card (`superAdminRoster`, `markListedAdminVerified` in
+    services/platform-admins.ts: listed + not disabled + actor super-admin with 2FA + not yourself; audit
+    `platform.admin.email_verified`; no removal). `listedAdminEmails` drops empty segments/duplicates (compose appends).
 - **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
   `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
   with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`; top bar: group crumb + title (home = greeting), EN | ไทย;
@@ -547,7 +555,8 @@ i18n namespace `automations`.
   test → web build → Playwright e2e.
 - **e2e**:
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
-  - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test`.
+  - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
+    (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
   - Host routing by default; set `E2E_ROUTING=path` for path routing.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin.

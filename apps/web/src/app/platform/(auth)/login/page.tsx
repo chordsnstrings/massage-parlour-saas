@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { LoginForm } from '@/components/auth/forms'
@@ -13,6 +14,12 @@ export default async function PlatformLogin({ searchParams }: { searchParams: Pr
   return (
     <AuthLayout title="Super-admin" subtitle="Platform console for spamanagement.co.">
       <LoginForm next={next} />
+      {/* Admin host only: the public sign-up is the spa application form (owner, 2026-10-09). */}
+      <p className="mt-6 text-center text-sm text-muted">
+        <Link href={adminPath('/join')} className="font-medium text-fg underline-offset-4 hover:underline">
+          Create a super-admin account
+        </Link>
+      </p>
     </AuthLayout>
   )
 }

@@ -286,4 +286,8 @@ export const domain = {
   paymentDateFuture: 'The payment date can’t be in the future',
   paymentMethodMissing: 'Choose how it was paid',
   depositRange: 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
+  adminJoinRefused: 'This email address cannot create a super-admin account.',
+  adminAlready: 'You are already a super-admin.',
+  adminConfirmNeeds2fa: 'Only a super-admin with two-step verification can confirm super-admins.',
+  adminConfirmNotListed: 'Only a login whose email is in PLATFORM_ADMIN_EMAILS can be confirmed here.',
 } as const

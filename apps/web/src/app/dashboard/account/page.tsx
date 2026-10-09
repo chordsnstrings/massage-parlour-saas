@@ -24,6 +24,7 @@ export default async function AccountPage({
 }) {
   const { user } = await requireUser()
   // Spa applications (PLAN §18.3): until approved, an applicant only sees the waiting page.
+  // (`locked` is never set for a super-admin or a PLATFORM_ADMIN_EMAILS login: they must reach 2FA enrolment here.)
   if ((await applicantState(user.id)).locked) redirect(appPath('/application'))
   // Sent here by the spa's "Require 2FA" policy (server/access.ts requireMember).
   const required = (await searchParams).require2fa

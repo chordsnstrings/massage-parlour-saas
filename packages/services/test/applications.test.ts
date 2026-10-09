@@ -123,6 +123,22 @@ describe('spa applications', () => {
     ).rejects.toThrow('Choose an emirate')
   })
 
+  it('refuses a PLATFORM_ADMIN_EMAILS address (it joins on the admin host instead)', async () => {
+    ids.listed = await newUser('listed')
+    const listed = ['ahmed@arks.ae', 'u-listed@apply.test']
+    const err = await submitApplication(
+      platform,
+      form(ids.listed, 'admin-spa', { email: 'U-Listed@apply.test' }),
+      listed,
+    )
+      .then(() => null)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(DomainError)
+    expect((err as DomainError).i18n?.key).toBe('auth.signup.errors.adminEmailField')
+    expect(await latestApplication(platform, ids.listed)).toBeFalsy()
+    expect(await slugStatus(platform, 'admin-spa')).toBe('free')
+  })
+
   it('accepts with the setup fee paid in full: active spa, owner, invoice paid', async () => {
     const res = await acceptApplication(platform, {
       applicationId: ids.app1!,
@@ -271,7 +287,7 @@ describe('spa applications', () => {
       balanceAed: '3250.00',
     })
     // The spa sees its own invoice with the balance (tenant role).
-    const seen = await withTenant(res.tenant.id, (tx) => tx.select().from(platformInvoices))
+    const seen = await withTenant(res.tenant.id, (tx) => tx.select().from(platformInvoices), app)
     expect(seen.map((i) => i.status)).toEqual(['issued'])
     // The rest arrives later through Record payment.
     const later = await platform.transaction((tx) =>
@@ -409,13 +425,16 @@ describe('spa applications', () => {
 
   it('is a platform-only table: a spa (app role) can neither read nor write applications', async () => {
     const [t] = await platform.select().from(tenants).where(eq(tenants.slug, 'serenity'))
-    const rows = await withTenant(t!.id, (tx) => tx.select().from(spaApplications))
+    const rows = await withTenant(t!.id, (tx) => tx.select().from(spaApplications), app)
     expect(rows).toEqual([])
     await expect(
-      withTenant(t!.id, (tx) =>
-        tx.execute(
-          sql`update spa_applications set status = 'approved' where status = 'pending' returning id`,
-        ),
+      withTenant(
+        t!.id,
+        (tx) =>
+          tx.execute(
+            sql`update spa_applications set status = 'approved' where status = 'pending' returning id`,
+          ),
+        app,
       ),
     ).resolves.toMatchObject({ rows: [] })
     await expect(

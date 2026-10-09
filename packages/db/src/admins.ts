@@ -2,12 +2,22 @@ import { and, eq, inArray } from 'drizzle-orm'
 import type { DbOrTx } from './client'
 import { platformAdmins, user } from './schema'
 
-/** Lower-cased PLATFORM_ADMIN_EMAILS (comma separated). */
-export const listedAdminEmails = (raw = process.env.PLATFORM_ADMIN_EMAILS ?? '') =>
-  raw
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
+/**
+ * Lower-cased PLATFORM_ADMIN_EMAILS (comma / space / semicolon separated), duplicates and empty segments dropped —
+ * the droplet compose appends the owner's extra admins to the base value (`${PLATFORM_ADMIN_EMAILS:-},a@x,b@x`).
+ */
+export const listedAdminEmails = (raw = process.env.PLATFORM_ADMIN_EMAILS ?? '') => [
+  ...new Set(
+    raw
+      .split(/[\s,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  ),
+]
+
+/** Is this address in PLATFORM_ADMIN_EMAILS (case/space-insensitive)? */
+export const isListedAdminEmail = (email: string | null | undefined, listed = listedAdminEmails()) =>
+  !!email && listed.includes(email.trim().toLowerCase())
 
 /**
  * G2: users whose email is in `emails` become super-admins only once that email is verified (verification link, or

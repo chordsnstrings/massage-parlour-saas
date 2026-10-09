@@ -98,6 +98,9 @@ export const auth = {
       reserved: 'This name is reserved.',
       exists: 'An account with this email already exists. Sign in instead.',
       registered: 'Already registered',
+      adminEmail:
+        'This is a super-admin email address. Create its login on the admin join page instead: {url}',
+      adminEmailField: 'Super-admin address: use the admin join page instead',
       failed: 'Could not create your account.',
       tooMany: 'Too many applications from your network. Please try again later.',
       phone: 'Enter a UAE mobile number',

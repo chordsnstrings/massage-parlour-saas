@@ -1,12 +1,14 @@
 // Spa applications (PLAN §18.3): who may open what before approval, slug availability and the emails around it.
 import { EMIRATE_NAMES, isEmirate, sendStaffEmail } from '@spa/core'
 import {
+  isListedAdminEmail,
   listedAdminEmails,
   members,
   platformAdmins,
   platformDb,
   type spaApplications,
   tenants,
+  user,
 } from '@spa/db'
 import { latestApplication, slugStatus } from '@spa/services'
 import { and, eq, isNull } from 'drizzle-orm'
@@ -20,8 +22,9 @@ type Application = typeof spaApplications.$inferSelect
 export const isSlugAvailable = async (slug: string) => (await slugStatus(platformDb(), slug)) === 'free'
 
 /**
- * What a signed-in login is: member of a (live) spa, super-admin row, latest application. `locked` = applied, not
- * approved yet, nothing else to open → the waiting page is all it sees (no 2FA needed for it).
+ * What a signed-in login is: member of a (live) spa, super-admin row, PLATFORM_ADMIN_EMAILS address, latest
+ * application. `locked` = applied, not approved yet, nothing else to open → the waiting page is all it sees (no 2FA
+ * needed for it).
  */
 export const applicantState = cache(async (userId: string) => {
   const db = platformDb()
@@ -35,14 +38,19 @@ export const applicantState = cache(async (userId: string) => {
     .select({ id: platformAdmins.userId })
     .from(platformAdmins)
     .where(eq(platformAdmins.userId, userId))
+  const [login] = await db.select({ email: user.email }).from(user).where(eq(user.id, userId))
   const application = await latestApplication(db, userId)
   const hasSpa = Boolean(member)
   const isAdmin = Boolean(admin)
+  // A PLATFORM_ADMIN_EMAILS login (joined on the admin host, maybe not promoted yet) never applies and is never
+  // locked: without a spa it is sent to the console, which promotes it once verified and asks for 2FA.
+  const listedAdmin = isListedAdminEmail(login?.email)
   return {
     hasSpa,
     isAdmin,
+    listedAdmin,
     application,
-    locked: !hasSpa && !isAdmin && application?.status === 'pending',
+    locked: !hasSpa && !isAdmin && !listedAdmin && application?.status === 'pending',
   }
 })
 
