@@ -1016,7 +1016,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
-  **Built (2026-10-08):** hidden Puck block `HtmlDesign` (sandboxed `srcdoc` iframe, opaque origin, full screen; root
+  **Built (2026-10-08):** hidden Puck block `HtmlDesign` (sandboxed iframe — `srcdoc`, since F10 a shell document with its own CSP — opaque origin, full screen; root
   prop `htmlDesign` drops the site header/footer); placeholders `{{spa_name}}`, `{{book_url}}`, `{{whatsapp_url}}`,
   `{{phone}}`, `{{phone_url}}`, `{{address}}`, `{{map_url}}`, `{{site_url}}` filled live per spa; ≤ ~500 KB (fits the
   512 KB draft cap); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
@@ -1185,7 +1185,14 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   Custom spa domains opt in with `TURNSTILE_CUSTOM_DOMAINS=on` (domain must be on the widget first). No public AI
   booking endpoint exists (the DM agent runs on signed Meta webhooks / the staff test chat). Owner step:
   deploy/droplet/README.md "Bot check on public forms".
-- **F10. Security headers** (G11): `script-src` CSP (nonces) + standard headers on app, console, marketing and tenant sites; sandboxed HTML designs keep their own CSP.
+- ✅ **F10. Security headers** (G11): `script-src` CSP (nonces) + standard headers on app, console, marketing and tenant sites; sandboxed HTML designs keep their own CSP.
+  Shipped 2026-10-09 (enforced, not report-only): proxy sets a per-request nonce CSP (`'strict-dynamic'`, Turnstile
+  where a Turnstile form exists, widget embed frameable by any site, everything else `frame-ancestors 'self'`) + XFO,
+  COOP, HSTS on https; next.config adds nosniff/Referrer/Permissions-Policy everywhere and a `default-src 'none'` CSP on
+  API/OAuth/MCP. `style-src 'unsafe-inline'` kept (React style attributes, Radix/Puck/Turnstile style injection; decision
+  in CODEMAP "Security headers"). HTML designs run in their own shell document (`/api/html-design/frame`, own sandbox
+  CSP) instead of `srcdoc`. Violations → `/api/csp-report` → console Server health row. Also (owner request): Turnstile
+  keys + custom-domain switch editable in console Company → "Bot check" (secret write-only, console wins over env).
 - ✅ **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
   Done: role `spa_drill` (bootstrap.sql; compose one-shot `db-roles` re-runs the bootstrap every deploy, so existing
   droplets get it without SSH; password derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is set); worker
@@ -1223,8 +1230,8 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
-  ✅ G10 worker holds superuser URL (F11) · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
-  G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
+  ✅ G10 worker holds superuser URL (F11) · ✅ G11 no script-src CSP / security headers (F10) · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
+  G10 worker holds superuser URL · ✅ G11 no script-src CSP / security headers (F10) · G12 no tenant purge / client erase · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   ✅ G17 no Turnstile on public booking (F9) · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
