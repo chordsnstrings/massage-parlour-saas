@@ -1,8 +1,14 @@
+import { UAE_EMIRATES } from '@spa/core'
+import { plans, platformDb } from '@spa/db'
+import { asc, eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { LegalLinks } from '@/components/auth/legal-links'
-import { getT } from '@/i18n/server'
-import { PATH_ROUTING } from '@/lib/paths'
+import { getI18n, getT } from '@/i18n/server'
+import { appPath, PATH_ROUTING } from '@/lib/paths'
+import { todayDubai } from '@/lib/utils'
+import { applicantState } from '@/server/applications'
 import { canonicalUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
 import { SignupForm } from './signup-form'
@@ -18,9 +24,29 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('auth.meta.signup') }
 }
 
+/** "Apply for your spa" (PLAN §18.3). Signed in (e.g. adding another spa): the same form without the login fields. */
 export default async function SignupPage() {
   const session = await getSession()
-  const t = await getT()
+  // One pending application per login: its waiting page instead of a second form.
+  if (session && (await applicantState(session.user.id)).application?.status === 'pending')
+    redirect(appPath('/application'))
+  const { t, fmt } = await getI18n()
+  const planRows = await platformDb()
+    .select()
+    .from(plans)
+    .where(eq(plans.active, true))
+    .orderBy(asc(plans.sort), asc(plans.createdAt))
+  const planOptions = planRows.map((p) => ({
+    id: p.id,
+    label:
+      Number(p.setupFeeAed) > 0
+        ? t('auth.signup.planOption', {
+            name: p.name,
+            price: fmt.aed(p.priceAed),
+            fee: fmt.aed(p.setupFeeAed),
+          })
+        : t('auth.signup.planOptionNoFee', { name: p.name, price: fmt.aed(p.priceAed) }),
+  }))
   return (
     <AuthLayout
       title={session ? t('auth.signup.titleAdd') : t('auth.signup.title')}
@@ -29,6 +55,9 @@ export default async function SignupPage() {
       <SignupForm
         address={siteAddress()}
         signedIn={Boolean(session)}
+        plans={planOptions}
+        emirates={UAE_EMIRATES.map((key) => ({ key, label: t(`auth.emirate.${key}`) }))}
+        today={todayDubai()}
         logo={{
           label: t('logo.signupLabel'),
           hint: t('logo.hint'),

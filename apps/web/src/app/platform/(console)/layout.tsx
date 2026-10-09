@@ -1,3 +1,5 @@
+import { platformDb } from '@spa/db'
+import { pendingApplicationCount } from '@spa/services'
 import { AppShell } from '@/components/shell/app-shell'
 import { adminPath } from '@/lib/paths'
 import { requirePlatformAdmin } from '@/server/access'
@@ -5,6 +7,7 @@ import { appUrl } from '@/server/origin'
 
 export default async function ConsoleLayout({ children }: { children: React.ReactNode }) {
   const { user } = await requirePlatformAdmin()
+  const pending = await pendingApplicationCount(platformDb())
   return (
     <AppShell
       title="Platform console"
@@ -13,6 +16,7 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
       accountHref={await appUrl('/account')}
       nav={[
         { href: adminPath(), label: 'Overview', icon: 'home', exact: true },
+        { href: adminPath('/applications'), label: 'Applications', icon: 'applications', badge: pending },
         { href: adminPath('/tenants'), label: 'Spas', icon: 'tenants' },
         { href: adminPath('/performance'), label: 'Performance', icon: 'analytics' },
         { href: adminPath('/websites'), label: 'Websites', icon: 'studio' },

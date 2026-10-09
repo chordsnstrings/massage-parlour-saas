@@ -1,22 +1,41 @@
 'use server'
+// "Apply for your spa" (PLAN §18.3): the login is created now; the spa only once the platform owner accepts.
 import { getAuth } from '@spa/auth'
-import { checkSlug, normalizeSlug } from '@spa/core'
-import { withTenant } from '@spa/db'
-import { DomainError, type ProcessedImage, processLogo, setTenantLogo } from '@spa/services'
+import { checkSlug, isEmirate, normalizeSlug, toUaeE164 } from '@spa/core'
+import { plans, platformDb } from '@spa/db'
+import { DomainError, type ProcessedImage, processLogo, submitApplication } from '@spa/services'
 import { APIError } from 'better-auth/api'
+import { and, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod } from '@/lib/action'
 import { appPath } from '@/lib/paths'
+import { todayDubai } from '@/lib/utils'
+import { applicantState, emailNewApplication, isSlugAvailable } from '@/server/applications'
 import { audit } from '@/server/audit'
-import { isSlugAvailable, provisionTenant } from '@/server/provision'
 import { getSession } from '@/server/session'
 
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'auth.signup.errors.start')
 const business = z.object({
   businessName: z.string().trim().min(2, 'auth.signup.errors.businessName').max(80),
   slug: z.string().trim().min(1, 'auth.signup.errors.slug'),
+  phone: z
+    .string()
+    .trim()
+    .transform((v) => toUaeE164(v))
+    .refine((v): v is string => v !== null, 'auth.signup.errors.phone'),
+  emirate: z.string().refine(isEmirate, 'auth.signup.errors.emirate'),
+  street: z.string().trim().min(3, 'auth.signup.errors.street').max(200),
+  planId: z.string().optional(),
+  start: date,
+  notes: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .transform((v) => v || null),
 })
 const account = business.extend({
   name: z.string().trim().min(2, 'auth.signup.errors.name').max(80),
@@ -30,6 +49,7 @@ const SLUG_REASON: Record<string, 'auth.signup.errors.slugFormat' | 'auth.signup
   'This name is reserved.': 'auth.signup.errors.reserved',
 }
 
+/** Live availability: format/reserved, an existing spa, or a web address held by another pending application. */
 export async function checkSlugAction(
   input: string,
 ): Promise<{ slug: string; ok: boolean; reason?: string }> {
@@ -47,14 +67,33 @@ export async function checkSlugAction(
 
 export async function signupAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const session = await getSession()
+  if (session && (await applicantState(session.user.id)).application?.status === 'pending')
+    redirect(appPath('/application'))
   const parsed = (session ? business : account).safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
-  const slug = normalizeSlug(parsed.data.slug)
+  const d = parsed.data
+  const slug = normalizeSlug(d.slug)
   const slugCheck = await checkSlugAction(slug)
   if (!slugCheck.ok)
     return fail(slugCheck.reason ?? 'auth.signup.errors.chooseAnother', { slug: slugCheck.reason ?? '' })
+  const today = todayDubai()
+  if (d.start < today) return fail('auth.signup.errors.start', { start: 'auth.signup.errors.start' })
+  // A plan is chosen from the active ones (none configured yet → the owner picks one when accepting).
+  const active = await platformDb().select({ id: plans.id }).from(plans).where(eq(plans.active, true))
+  let planId: string | null = null
+  if (active.length) {
+    const chosen = z.uuid().safeParse(d.planId).data
+    const [plan] = chosen
+      ? await platformDb()
+          .select({ id: plans.id })
+          .from(plans)
+          .where(and(eq(plans.id, chosen), eq(plans.active, true)))
+      : []
+    if (!plan) return fail('auth.signup.errors.plan', { planId: 'auth.signup.errors.plan' })
+    planId = plan.id
+  }
 
-  // Optional logo: validated before the account exists, stored once the spa is provisioned.
+  // Optional logo: validated before the account exists, stored as the spa's logo once accepted.
   let logo: ProcessedImage | undefined
   const logoFile = formData.get('logo')
   if (logoFile instanceof File && logoFile.size > 0) {
@@ -66,15 +105,15 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
     }
   }
 
-  let user: { id: string; email: string } | undefined = session?.user
+  let user: { id: string; email: string; name: string } | undefined = session?.user
   if (!user) {
-    const data = parsed.data as z.infer<typeof account>
+    const data = d as z.infer<typeof account>
     try {
       const res = await getAuth().api.signUpEmail({
         body: { name: data.name, email: data.email, password: data.password },
         headers: await headers(),
       })
-      user = { id: res.user.id, email: res.user.email }
+      user = { id: res.user.id, email: res.user.email, name: res.user.name }
     } catch (e) {
       if (e instanceof APIError) {
         const exists = /exist/i.test(e.message)
@@ -88,32 +127,34 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   }
   if (!user) return fail('auth.signup.errors.failed')
 
-  let tenantId: string
+  let application: Awaited<ReturnType<typeof submitApplication>>
   try {
-    const tenant = await provisionTenant({
+    application = await submitApplication(platformDb(), {
       userId: user.id,
+      applicantName: user.name,
       email: user.email,
-      businessName: parsed.data.businessName,
+      phone: `+${d.phone}`,
+      spaName: d.businessName,
       slug,
+      emirate: d.emirate,
+      streetAddress: d.street,
+      planId,
+      preferredStart: d.start,
+      notes: d.notes,
+      logo: logo ? { bytes: logo.bytes, contentType: logo.contentType } : null,
+      today,
     })
-    tenantId = tenant.id
-    if (logo) {
-      const image = logo
-      const createdBy = user.id
-      await withTenant(tenant.id, (tx) => setTenantLogo(tx, { tenantId: tenant.id, image, createdBy }))
-    }
   } catch (e) {
-    if (String((e as { cause?: { code?: string } }).cause?.code) === '23505')
-      return fail('auth.signup.errors.taken', { slug: 'auth.signup.errors.taken' })
+    if (e instanceof DomainError) return failDomain(e)
     throw e
   }
   await audit({
-    tenantId,
     actorUserId: user.id,
-    action: 'tenant.created',
-    entity: 'tenant',
-    entityId: tenantId,
-    data: { slug, logo: Boolean(logo) },
+    action: 'platform.application.submitted',
+    entity: 'spa_application',
+    entityId: application.id,
+    data: { slug, spaName: d.businessName, planId, preferredStart: d.start, logo: Boolean(logo) },
   })
-  redirect(appPath(`/${slug}`))
+  await emailNewApplication(application)
+  redirect(appPath('/application'))
 }

@@ -35,7 +35,7 @@ export default async function MarketingPage() {
           </p>
           <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={await appUrl('/signup')} className="mkt-btn mkt-btn-primary">
-              Start your spa <ArrowRight />
+              Apply for your spa <ArrowRight />
             </a>
             <Link href="/features" className="mkt-btn mkt-btn-ghost">
               See every feature

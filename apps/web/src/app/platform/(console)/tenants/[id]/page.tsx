@@ -89,6 +89,13 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const site = await publicSiteUrl(tenant)
   const exportUrl = await appUrl(`/${tenant.slug}/settings/data/export?type=full`)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
+  // Partly paid invoices (e.g. a setup-fee deposit, PLAN §18.3) stay issued with a balance due.
+  const paidOn = new Map<string, number>()
+  for (const p of payments)
+    if (p.invoiceId) paidOn.set(p.invoiceId, (paidOn.get(p.invoiceId) ?? 0) + Number(p.amountAed))
+  const balanceOf = (i: { id: string; totalAed: string }) =>
+    Math.max(0, Number(i.totalAed) - (paidOn.get(i.id) ?? 0))
+  const balanceDue = openInvoices.reduce((s, i) => s + balanceOf(i), 0)
 
   return (
     <>
@@ -280,6 +287,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     <Select id="method" name="method" defaultValue="bank_transfer">
                       <option value="bank_transfer">Bank transfer</option>
                       <option value="cash">Cash</option>
+                      <option value="card">Credit card</option>
                       <option value="other">Other</option>
                     </Select>
                   </Field>
@@ -295,6 +303,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                       {openInvoices.map((i) => (
                         <option key={i.id} value={i.id}>
                           {i.number} · {formatAed(i.totalAed)}
+                          {paidOn.has(i.id) ? ` · balance ${formatAed(balanceOf(i))}` : ''}
                         </option>
                       ))}
                     </Select>
@@ -345,7 +354,9 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         <Card>
           <CardHeader
             title="Invoices"
-            description="Payment plan + setup fee invoices for the current period. Only you set Paid / Must pay."
+            description={`Payment plan + setup fee invoices for the current period. Only you set Paid / Must pay.${
+              balanceDue > 0 ? ` Balance due: ${formatAed(balanceDue)}.` : ''
+            }`}
             action={
               <ActionForm action={generateScheduleAction.bind(null, id)}>
                 <SubmitButton variant="secondary">Generate payment schedule</SubmitButton>
@@ -373,6 +384,24 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   cell: (r) => <span className="tabular">{formatAed(r.totalAed)}</span>,
                 },
                 {
+                  key: 'p',
+                  header: 'Paid',
+                  className: 'text-end',
+                  hideOnMobile: true,
+                  cell: (r) => <span className="tabular">{formatAed(paidOn.get(r.id) ?? 0)}</span>,
+                },
+                {
+                  key: 'b',
+                  header: 'Balance',
+                  className: 'text-end',
+                  cell: (r) =>
+                    r.status === 'issued' ? (
+                      <span className="tabular font-medium">{formatAed(balanceOf(r))}</span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    ),
+                },
+                {
                   key: 's',
                   header: 'Status',
                   className: 'text-end',
@@ -380,7 +409,11 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     <Badge
                       tone={r.status === 'issued' && r.dueDate < today ? 'danger' : statusTone(r.status)}
                     >
-                      {r.status === 'issued' && r.dueDate < today ? 'overdue' : r.status}
+                      {r.status === 'issued' && r.dueDate < today
+                        ? 'overdue'
+                        : r.status === 'issued' && paidOn.has(r.id)
+                          ? 'part paid'
+                          : r.status}
                     </Badge>
                   ),
                 },

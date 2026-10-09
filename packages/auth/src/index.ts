@@ -1,10 +1,34 @@
 import { parseRoots, sendStaffEmail } from '@spa/core'
 import { isLocale } from '@spa/core/i18n'
-import { account, platformDb, session, twoFactor, user, verification } from '@spa/db'
+import { account, platformDb, session, spaApplications, twoFactor, user, verification } from '@spa/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { APIError } from 'better-auth/api'
 import { nextCookies } from 'better-auth/next-js'
 import { twoFactor as twoFactorPlugin } from 'better-auth/plugins'
+import { and, desc, eq } from 'drizzle-orm'
+
+/**
+ * Spa applications (PLAN §18.3): a login whose application was rejected is disabled (`user.disabled_at`). No new
+ * session is created for it (password sign-in, email-verification auto sign-in); the error carries the rejection
+ * reason when the owner chose to share it, for the sign-in page's "not approved" notice.
+ */
+async function refuseDisabled(userId: string) {
+  const db = platformDb()
+  const [row] = await db.select({ disabledAt: user.disabledAt }).from(user).where(eq(user.id, userId))
+  if (!row?.disabledAt) return
+  const [app] = await db
+    .select({ reason: spaApplications.rejectionReason, share: spaApplications.shareReason })
+    .from(spaApplications)
+    .where(and(eq(spaApplications.userId, userId), eq(spaApplications.status, 'rejected')))
+    .orderBy(desc(spaApplications.reviewedAt))
+    .limit(1)
+  throw new APIError('FORBIDDEN', {
+    code: 'ACCOUNT_DISABLED',
+    message: 'This account is closed.',
+    ...(app?.share && app.reason ? { reason: app.reason } : {}),
+  })
+}
 
 function createAuth() {
   // Every platform domain (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS) signs people in on itself: the base URL follows the request
@@ -78,6 +102,9 @@ function createAuth() {
     // Behind Cloudflare / DO App Platform the client IP arrives in these headers (first match wins).
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'do-connecting-ip', 'x-forwarded-for'] },
+    },
+    databaseHooks: {
+      session: { create: { before: async (s) => refuseDisabled(s.userId) } },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,

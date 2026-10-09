@@ -9,11 +9,13 @@ import {
   branches,
   clients,
   createDb,
+  plans,
   platformAdmins,
   rooms,
   services,
   serviceVariants,
   shifts,
+  spaApplications,
   staff,
   staffServices,
   tenants,
@@ -21,10 +23,10 @@ import {
   user,
 } from '@spa/db'
 import { testUrls } from '@spa/db/testing'
-import { createBooking } from '@spa/services'
+import { acceptApplication, createBooking } from '@spa/services'
 import { createEmailVerificationToken } from 'better-auth/api'
 import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type ExcelJSType from 'exceljs'
 
 /** URL helpers that work in both routing modes (E2E_ROUTING=path → single host). */
@@ -40,26 +42,83 @@ export const site = (slug: string) => (PATH ? `${base}/s/${slug}` : `http://${sl
 export const uniqueSlug = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`
 
-/** Where the spa sign-up lands: G23 makes new owners enrol 2FA first (`/account?require2fa=<slug>`). */
+/** Where an owner's first dashboard visit lands: G23 makes new owners enrol 2FA first (`/account?require2fa=<slug>`). */
 export const enrolUrl = (slug: string) => new RegExp(`/account\\?require2fa=${slug}$`)
 
+export const OWNER_PASSWORD = 'correct-horse-battery'
+
 /**
- * Signs up a new owner + spa and lands on its dashboard. "Require 2FA for owner & managers" is on for new spas (G23):
- * sign-up lands on the enrol page, so a verified TOTP secret is stored directly (`enableTotp`; the UI enrolment is
- * covered in onboarding.spec) and a later password sign-in passes with `passTwoFactor(page, email)`.
+ * Fills and sends "Apply for your spa" (PLAN §18.3) and lands on the applicant's waiting page. Signed out: creates the
+ * login too. `base` = the app origin to use (the second platform domain in platform-domains.spec).
+ */
+export async function applyForSpa(
+  page: Page,
+  opts: {
+    slug: string
+    email: string
+    name?: string
+    spa?: string
+    password?: string
+    planId?: string
+    logo?: { name: string; mimeType: string; buffer: Buffer }
+    base?: string
+  },
+) {
+  const root = opts.base ?? app
+  await page.goto(`${root}/signup`)
+  await page.getByLabel('Your name').fill(opts.name ?? 'Aisha Rahman')
+  await page.getByLabel('Work email').fill(opts.email)
+  await page.getByLabel('Password').fill(opts.password ?? OWNER_PASSWORD)
+  await page.getByLabel('Mobile number').fill('050 123 4567')
+  await page.getByLabel('Spa name').fill(opts.spa ?? 'Serenity Spa')
+  await page.getByLabel('Web address').fill(opts.slug)
+  await expect(page.getByText(new RegExp(`${opts.slug}.* is available`))).toBeVisible()
+  await page.getByLabel('Emirate').selectOption('dubai')
+  await page.getByLabel('Street address').fill('Marina Walk, Tower 2')
+  if (opts.logo) await page.getByLabel('Logo (optional)').setInputFiles(opts.logo)
+  if (opts.planId) await page.getByLabel('Plan').selectOption(opts.planId)
+  await page.getByRole('button', { name: 'Send application' }).click()
+  await page.waitForURL(`${root}/application`)
+}
+
+/**
+ * Fast path for specs that just need a spa: accepts the applicant's pending application server-side with the same
+ * service the console uses (setup fee, if any, recorded as paid in full by bank transfer). The console flow itself
+ * (deposit, reject) is covered by applications.spec.
+ */
+export async function approveApplication(email: string) {
+  const db = testDb()
+  const [row] = await db
+    .select()
+    .from(spaApplications)
+    .where(and(eq(spaApplications.email, email), eq(spaApplications.status, 'pending')))
+  if (!row) throw new Error(`no pending application for ${email}`)
+  const [plan] = row.planId
+    ? await db.select().from(plans).where(eq(plans.id, row.planId))
+    : await db.select().from(plans).where(eq(plans.active, true)).orderBy(plans.sort)
+  if (!plan) throw new Error('no plan')
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' })
+  return acceptApplication(db, {
+    applicationId: row.id,
+    reviewerId: row.userId,
+    planId: plan.id,
+    startDate: row.preferredStart,
+    today,
+    payment: Number(plan.setupFeeAed) > 0 ? { kind: 'full', paidOn: today, method: 'bank_transfer' } : null,
+  })
+}
+
+/**
+ * Applies for a new owner + spa, has it accepted (fast path) and lands on its dashboard. "Require 2FA for owner &
+ * managers" is on for new spas (G23), so a verified TOTP secret is stored directly (`enableTotp`; the UI enrolment
+ * is covered in onboarding.spec / applications.spec) and a later password sign-in passes with
+ * `passTwoFactor(page, email)`.
  */
 export async function signUpOwner(page: Page, opts: { slug?: string; name?: string; spa?: string } = {}) {
   const slug = opts.slug ?? uniqueSlug('spa')
   const email = `owner-${slug}@e2e.test`
-  await page.goto(`${app}/signup`)
-  await page.getByLabel('Your name').fill(opts.name ?? 'Aisha Rahman')
-  await page.getByLabel('Work email').fill(email)
-  await page.getByLabel('Password').fill('correct-horse-battery')
-  await page.getByLabel('Spa name').fill(opts.spa ?? 'Serenity Spa')
-  await page.getByLabel('Web address').fill(slug)
-  await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await page.waitForURL(enrolUrl(slug))
+  await applyForSpa(page, { slug, email, name: opts.name, spa: opts.spa })
+  await approveApplication(email)
   await enableTotp(email)
   await page.goto(`${app}/${slug}`)
   await page.waitForURL(`${app}/${slug}`)
@@ -116,9 +175,10 @@ async function signInOutcome(page: Page) {
 }
 
 /**
- * Signs the page in as the e2e super-admin (admin@e2e.test, in PLATFORM_ADMIN_EMAILS), creating the account through
- * spa sign-up the first time any spec needs it. G2/G3: the address is promoted only once verified (the spec opens
- * the real verification link) and the console demands TOTP 2FA, which the first sign-in enrols.
+ * Signs the page in as the e2e super-admin (admin@e2e.test, in PLATFORM_ADMIN_EMAILS), creating the login (no spa —
+ * spas now come from accepted applications) the first time any spec needs it. G2/G3: the address is promoted only
+ * once verified (the spec opens the real verification link) and the console demands TOTP 2FA, which the first
+ * sign-in enrols.
  */
 export async function signInPlatformAdmin(page: Page) {
   const { email, password } = ADMIN
@@ -133,16 +193,21 @@ export async function signInPlatformAdmin(page: Page) {
   }
   let outcome = await signIn()
   if (outcome === 'failed') {
-    const slug = uniqueSlug('admin')
-    await page.goto(`${app}/signup`)
-    await page.getByLabel('Your name').fill('Platform Admin')
-    await page.getByLabel('Work email').fill(email)
-    await page.getByLabel('Password').fill(password)
-    await page.getByLabel('Spa name').fill('Admin Test Spa')
-    await page.getByLabel('Web address').fill(slug)
-    await page.getByRole('button', { name: 'Create account' }).click()
-    // G23: the new spa asks its owner to enrol 2FA first; the super-admin enrolment below covers it.
-    await page.waitForURL(enrolUrl(slug))
+    // The login only (Better Auth's sign-up endpoint, which the apply form uses too), from the browser so the
+    // session cookie lands in this context (Node can't resolve *.localhost hosts).
+    await page.goto(`${app}/login`)
+    const res = await page.evaluate(
+      async (body) => {
+        const r = await fetch('/api/auth/sign-up/email', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        return { ok: r.ok, text: await r.text() }
+      },
+      { name: 'Platform Admin', email, password },
+    )
+    expect(res.ok, res.text).toBe(true)
     // Unverified: the listed email is not a super-admin yet (G2).
     await page.goto(`${admin}/`)
     await expect(overview).toHaveCount(0)

@@ -265,4 +265,18 @@ export const domain = {
   billingName: 'Enter the customer’s billing name',
   billingTrn: 'A TRN has 15 digits',
   billingVoided: 'A voided sale has no tax invoice',
+  // Spa applications (PLAN §18.3)
+  planNotFound: 'Plan not found',
+  chooseEmirate: 'Choose an emirate',
+  startFromToday: 'Choose a start date from today on',
+  applicationPending: 'You already have an application waiting for approval',
+  applicationSlugFormat: 'Use 3–40 lowercase letters, numbers or hyphens.',
+  applicationSlugTaken: 'That address is taken.',
+  applicationNotFound: 'Application not found',
+  applicationReviewed: 'This application was already reviewed',
+  applicantClosed: 'The applicant’s login is closed',
+  setupPaymentMissing: 'Record how the setup fee was paid',
+  paymentDateFuture: 'The payment date can’t be in the future',
+  paymentMethodMissing: 'Choose how it was paid',
+  depositRange: 'A deposit must be more than 0 and less than the setup fee',
 } as const

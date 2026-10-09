@@ -65,6 +65,8 @@ export const billing = {
     due: 'Due {date}',
     paid: 'Paid',
     mustPay: 'Must pay',
+    partlyPaid: 'Balance due',
+    balance: 'Paid {paid} · balance due {balance}',
     overdue: 'Overdue',
     empty: 'Your schedule appears here once your account manager issues it.',
     reminder:

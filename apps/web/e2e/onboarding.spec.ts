@@ -1,5 +1,15 @@
 import { expect, type Page, test } from '@playwright/test'
-import { admin, app, base, enrolTwoFactor, enrolUrl, signInPlatformAdmin, site } from './helpers'
+import {
+  admin,
+  app,
+  applyForSpa,
+  approveApplication,
+  base,
+  enrolTwoFactor,
+  enrolUrl,
+  signInPlatformAdmin,
+  site,
+} from './helpers'
 
 const slug = `serenity-${Date.now().toString(36)}`
 const shots = (name: string) => `test-results/screens/${name}.png`
@@ -22,16 +32,11 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
     await expect(page.getByText(/AED\s?24,000/).first()).toBeVisible()
   })
 
-  await test.step('sign up creates the spa and its subdomain', async () => {
-    await page.goto(`${app}/signup`)
-    await page.getByLabel('Your name').fill('Aisha Rahman')
-    await page.getByLabel('Work email').fill(`owner-${slug}@e2e.test`)
-    await page.getByLabel('Password').fill('correct-horse-battery')
-    await page.getByLabel('Spa name').fill('Serenity Spa')
-    await page.getByLabel('Web address').fill(slug)
-    await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
-    await page.getByRole('button', { name: 'Create account' }).click()
+  await test.step('an accepted application creates the spa and its subdomain', async () => {
+    await applyForSpa(page, { slug, email: `owner-${slug}@e2e.test` })
+    await approveApplication(`owner-${slug}@e2e.test`)
     // G23: "Require 2FA for owner & managers" is on for new spas — the owner enrols TOTP before the dashboard.
+    await page.goto(`${app}/${slug}`)
     await page.waitForURL(enrolUrl(slug))
     await expect(page.getByText(/requires two-step verification/)).toBeVisible()
     await enrolTwoFactor(page, `owner-${slug}@e2e.test`, 'correct-horse-battery')

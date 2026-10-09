@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import sharp from 'sharp'
-import { app, enableTotp, enrolUrl, uniqueSlug } from './helpers'
+import { app, applyForSpa, approveApplication, enableTotp, uniqueSlug } from './helpers'
 
 // Spa dashboard shell (docs/PLAN.md §14.6 Phase 1): logo at sign-up, grouped menu, section tabs, plan card,
 // EN | ไทย toggle saved per user, logo managed in Settings, phone drawer.
@@ -16,18 +16,11 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
   const slug = uniqueSlug('shell')
   const dashboard = `${app}/${slug}`
 
-  await test.step('sign up with a logo', async () => {
-    await page.goto(`${app}/signup`)
-    await page.getByLabel('Your name').fill('Noor Haddad')
-    await page.getByLabel('Work email').fill(`owner-${slug}@e2e.test`)
-    await page.getByLabel('Password').fill('correct-horse-battery')
-    await page.getByLabel('Spa name').fill('Lotus Garden Spa')
-    await page.getByLabel('Web address').fill(slug)
-    await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
-    await page.getByLabel('Logo (optional)').setInputFiles(await logo())
-    await page.getByRole('button', { name: 'Create account' }).click()
-    await page.waitForURL(enrolUrl(slug)) // G23: 2FA first
-    await enableTotp(`owner-${slug}@e2e.test`)
+  await test.step('apply with a logo, get accepted', async () => {
+    const email = `owner-${slug}@e2e.test`
+    await applyForSpa(page, { slug, email, name: 'Noor Haddad', spa: 'Lotus Garden Spa', logo: await logo() })
+    await approveApplication(email) // the logo sent with the application becomes the spa's logo
+    await enableTotp(email) // G23: 2FA first
     await page.goto(dashboard)
     await page.waitForURL(dashboard)
   })
@@ -62,7 +55,8 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await expect(menu.getByRole('link', { name: 'Coming next' })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
     await expect(page.getByText('AI allowance · 0% used this month')).toBeVisible()
-    await expect(page.getByText(/^Trial ends \d{1,2} \w{3} \d{4}$/)).toBeVisible()
+    // Accepted spas start on an active yearly subscription (PLAN §18.3), not a trial.
+    await expect(page.getByText(/^Renews \d{1,2} \w{3} \d{4} · AED\s?[\d,]+\/yr$/)).toBeVisible()
     await expect(page.getByRole('banner')).toContainText('Workspace')
   })
 
@@ -85,7 +79,7 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await expect(menuTh.getByRole('link', { name: 'ปฏิทิน' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'ไทย' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.locator('.crm')).toHaveAttribute('lang', 'th')
-    await expect(page.getByText(/^ทดลองใช้ถึง \d{1,2} \S+ \d{4}$/)).toBeVisible() // Thai month, Gregorian year
+    await expect(page.getByText(/^ต่ออายุ \d{1,2} \S+ \d{4} · AED\s?[\d,]+\/\S+$/)).toBeVisible() // Thai month, Gregorian year
     await page.reload()
     await expect(menuTh.getByRole('link', { name: 'ตั้งค่า' })).toHaveAttribute('aria-current', 'page')
     // Catalogue-keyed action results render in the viewer's language.

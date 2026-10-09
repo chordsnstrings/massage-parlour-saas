@@ -1,4 +1,5 @@
 export * from './ai-usage'
+export * from './applications'
 export * from './audit-log'
 export * from './automations'
 export * from './booking-commissions'

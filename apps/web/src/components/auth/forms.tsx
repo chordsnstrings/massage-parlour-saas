@@ -33,8 +33,28 @@ function useSubmit() {
   return { pending, run, t }
 }
 
+/** Sign-in of a login whose spa application was rejected (PLAN §18.3): the account is closed; reason if shared. */
+function ClosedNotice({ reason, onBack }: { reason?: string; onBack: () => void }) {
+  const t = useAuthT()
+  return (
+    <div role="alert" data-testid="account-closed" className="anim-fade-in space-y-4">
+      <div className="space-y-2 rounded-lg border border-warning bg-warning-soft p-4 text-sm">
+        <p className="font-semibold">{t('auth.closed.title')}</p>
+        <p>{t('auth.closed.body')}</p>
+        {reason && <p>{t('auth.closed.reason', { reason })}</p>}
+      </div>
+      <p className="text-sm text-muted">{t('auth.closed.contact')}</p>
+      <Button type="button" variant="secondary" className="w-full" onClick={onBack}>
+        {t('auth.closed.back')}
+      </Button>
+    </div>
+  )
+}
+
 export function LoginForm({ next, signupHref }: { next: string; signupHref?: string }) {
   const { pending, run, t } = useSubmit()
+  const [closed, setClosed] = useState<{ reason?: string } | null>(null)
+  if (closed) return <ClosedNotice reason={closed.reason} onBack={() => setClosed(null)} />
   return (
     <form
       className="space-y-5"
@@ -42,11 +62,22 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
         e.preventDefault()
         const f = new FormData(e.currentTarget)
         run(
-          () =>
-            authClient.signIn.email({ email: String(f.get('email')), password: String(f.get('password')) }),
+          async () => {
+            const res = await authClient.signIn.email({
+              email: String(f.get('email')),
+              password: String(f.get('password')),
+            })
+            const err = res.error as { code?: string; reason?: string } | null
+            if (err?.code === 'ACCOUNT_DISABLED') {
+              setClosed({ reason: err.reason })
+              return { data: { closed: true } }
+            }
+            return res
+          },
           // With 2FA on, the client plugin already sent the browser to /two-factor (keeping ?next); don't override it.
           (data) => {
-            if (!(data as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) go(next)
+            const d = data as { twoFactorRedirect?: boolean; closed?: boolean } | undefined
+            if (!d?.twoFactorRedirect && !d?.closed) go(next)
           },
         )
       }}

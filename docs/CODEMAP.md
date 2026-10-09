@@ -30,7 +30,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - `withTenant(tenantId, fn)` rejects non-UUIDs, opens a transaction on `appDb()` and runs
   `set_config('app.tenant_id', id, true)`.
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
-  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `tenant_purges` (G12 purge record; its column is
+  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `spa_applications` (PLAN §18.3;
+  `created_tenant_id`), `tenant_purges` (G12 purge record; its column is
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
@@ -112,8 +113,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 ## Web routes (`apps/web/src/app`)
 
 - **`dashboard/(auth)`**: login, signup, invite/[token], 2FA, forgot/reset password.
-  - Signup calls `provisionTenant`, which creates the tenant, a default branch, the 6 system roles, the owner member
-    and a trial subscription on the first active plan. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
+  - Signup = **spa application** (PLAN §18.3): `signup/actions.ts` creates the login (Better Auth) + a pending
+    `spa_applications` row (`submitApplication`); `/application` is the applicant's waiting page (locked logins:
+    `server/applications.ts` `applicantState`). The console accepts (`acceptApplication` → `provisionTenantTx` in
+    services/applications.ts: tenant, default branch, the 6 system roles, owner member, active subscription, setup
+    invoice + `recordPlatformPayment`) or rejects (`rejectApplication`: `user.disabled_at`, sessions deleted; Better
+    Auth session hook + `getSession` refuse disabled logins). `provisionTenant` without `subscription` = old trial path. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
     platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
     `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
     sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
@@ -155,8 +160,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
-  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); uploaded by the signup action (optional, validated before the
-  account is created) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
+  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); kept on the application at sign-up (optional, validated before
+  the account is created; stored as the spa's logo on acceptance) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
   pick in the browser (server actions take ≤ 1 MB). Replaced logo files are kept (URL may be reused).
 - **`api/`**:
   - `auth`, `health`, `client-error`.

@@ -30,6 +30,8 @@ export const statusTone = (status: string): keyof typeof tones =>
     ({
       active: 'success',
       paid: 'success',
+      approved: 'success',
+      rejected: 'danger',
       trial: 'accent',
       trialing: 'accent',
       issued: 'accent',

@@ -14,6 +14,7 @@ import {
   HandHeart,
   House,
   Images,
+  Inbox,
   Landmark,
   Layers,
   LayoutTemplate,
@@ -70,6 +71,7 @@ const icons = {
   documents: FileBadge,
   templates: LayoutTemplate,
   studio: PanelsTopLeft,
+  applications: Inbox,
 } as const
 
 export type NavItem = {
@@ -79,6 +81,22 @@ export type NavItem = {
   exact?: boolean
   /** Section heading shown above the first item of each group. */
   group?: string
+  /** Count pill (e.g. pending spa applications); hidden when 0. */
+  badge?: number
+}
+
+function CountPill({ n, className }: { n?: number; className?: string }) {
+  if (!n) return null
+  return (
+    <span
+      className={cn(
+        'tabular min-w-5 rounded-full bg-accent px-1.5 text-center text-[11px] leading-5 font-semibold text-accent-fg',
+        className,
+      )}
+    >
+      {n}
+    </span>
+  )
 }
 
 function useActive() {
@@ -126,6 +144,10 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
               )}
               <Icon className="relative size-[18px] shrink-0" strokeWidth={1.5} />
               <span className="relative md:hidden lg:inline">{item.label}</span>
+              <CountPill
+                n={item.badge}
+                className="relative ms-auto md:absolute md:end-1 md:top-0.5 lg:static lg:ms-auto"
+              />
             </Link>
           </Fragment>
         )
@@ -201,6 +223,7 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
                     >
                       <Icon className="size-5 text-muted" strokeWidth={1.5} />
                       {item.label}
+                      <CountPill n={item.badge} className="ms-auto" />
                     </Link>
                   </Fragment>
                 )

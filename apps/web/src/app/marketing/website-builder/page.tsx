@@ -90,7 +90,7 @@ export default async function WebsiteStudioPage() {
           </p>
           <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={signup} className="mkt-btn mkt-btn-primary">
-              Start your spa <ArrowRight />
+              Apply for your spa <ArrowRight />
             </a>
             <a href="#make-it-yours" className="mkt-btn mkt-btn-ghost">
               Try the styles

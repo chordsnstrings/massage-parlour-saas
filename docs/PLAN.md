@@ -1299,3 +1299,45 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   bookings already had them; added on the overview (KPIs, "All branches" for unrestricted members) and the public
   booking page (`?branch=`, select when > 1 open branch; slots + booking use it). Archived branches drop out of
   pickers, rooms/hours screens and online booking. Services in services/branches.ts.
+
+### 18.3 Spa applications (owner decision 2026-10-09)
+New spas **apply**; the platform owner accepts or rejects. Self-serve instant sign-up (trial) is gone.
+- **Apply** (app host `/signup`, marketing CTAs "Apply for your spa" / "Get started"): name, work email, password (the
+  login is created now), UAE mobile (required, stored E.164 `+9715…`), spa name, web address (live check: format,
+  existing spa, **or held by another pending application**), emirate (7) + street address, optional logo (processed
+  512 px WebP, kept on the application), plan (active plans with yearly price + setup fee), preferred start (≥ today,
+  Dubai), notes. No trade licence / TRN / size. Terms/Privacy links stay. A signed-in login with no spa and no
+  application (e.g. OAuth later, or an existing owner adding a spa) gets the same form without the login fields.
+  One pending application per login (partial unique index); a pending application holds its slug (partial unique).
+- **Before approval** the login is **locked**: with no spa it only sees `/application` (EN + TH, auth layout: status +
+  everything sent, sign-out). **No 2FA** to apply or to see it; the G23 owner/manager 2FA rule (default on, unchanged)
+  applies once they open the dashboard. Dashboard index / account page send it to `/application`.
+- **Owner notified:** email to `PLATFORM_ADMIN_EMAILS` (`sendStaffEmail`, never fails the submission), console nav
+  "Applications" with a pending-count badge, overview card "Spa applications".
+- **Console `/applications`** (super-admin; `requirePlatformAdmin` in pages and actions): status filter (pending first,
+  oldest first), detail = every field + logo + live slug check. **Reject**: optional reason + "Show reason to
+  applicant" → login **disabled** (`user.disabled_at`) and its sessions deleted — unless the login is also an active
+  member of another spa or a super-admin (then only the application closes). **Accept**: plan + start date (prefilled)
+  + setup payment when the plan's fee > 0: Paid in full / Deposit (amount > 0 and < the setup-fee invoice total incl.
+  VAT), payment date (≤ today), cash / bank transfer / credit card (`card`), optional reference + note.
+- **Accept = one platform transaction** (`acceptApplication`, services/applications.ts): `provisionTenantTx` (tenant
+  **active**, default branch with "street, Emirate" + mobile, system roles, owner membership, `require2fa: true`), the
+  subscription **active** from the start date for one year (`current_period_end` = start + 12 months, plan price/fee/
+  interval), the setup-fee platform invoice via `createPlatformInvoice` (numbering + VAT; validated before numbering;
+  due = start date or today), the payment via `recordPlatformPayment` (shared with console "Record a payment") → full =
+  paid, deposit = issued with a balance due; logo → `setTenantLogo`. Plan invoices are still issued with "Generate
+  payment schedule". The rest of a deposit is recorded later with Record a payment. Payments are recorded, never processed.
+- **Balance due** shows on the console spa page (Paid / Balance columns, "part paid", header total) and the spa's
+  Billing page ("Paid AED x · balance due AED y", pill "Balance due"); Pay-by-card is hidden on a partly paid invoice
+  (Stripe charges a whole invoice).
+- **Disabled logins:** Better Auth `databaseHooks.session.create.before` refuses a session (`ACCOUNT_DISABLED`, + the
+  reason when shared) → the sign-in page shows "Application not approved" (+ reason); web `getSession` reads
+  `user.disabled_at` fresh, so a cached cookie session stops at once. Emails: accepted (sign-in link, 2FA note),
+  rejected (reason only if shared). Audit: `platform.application.submitted` / `accepted` (plan, start, setup payment
+  summary) / `rejected` (reason, share flag, login disabled, sessions revoked).
+- **Data:** `spa_applications` (platform-only RLS; `created_tenant_id`, never `tenant_id`; `setup_payment` jsonb
+  summary; logo bytes) + `user.disabled_at`. No console "create spa" existed; existing spas are unaffected.
+- **e2e:** `signUpOwner` = `applyForSpa` (UI) + `approveApplication` (services fast path); `applications.spec` covers
+  apply → waiting page → console accept with a deposit by bank transfer → sign-in → 2FA enrol → dashboard + billing
+  balance, and the reject path. `signInPlatformAdmin` creates its login through the auth API (no spa).
+- Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in.

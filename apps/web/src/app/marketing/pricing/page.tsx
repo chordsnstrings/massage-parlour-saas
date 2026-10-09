@@ -78,7 +78,7 @@ export default async function PricingPage() {
                 ))}
               </ul>
               <a href={signup} className="mkt-btn mkt-btn-primary mt-9 w-full">
-                Start your spa <ArrowRight />
+                Apply for your spa <ArrowRight />
               </a>
             </div>
           ))}

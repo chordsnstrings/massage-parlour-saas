@@ -42,7 +42,7 @@ async function Header({ active }: { active: MarketingPage }) {
             Sign in
           </a>
           <a href={urls.app('/signup')} className="mkt-btn mkt-btn-dark mkt-btn-sm">
-            Start
+            Get started
           </a>
         </div>
       </div>
@@ -104,7 +104,7 @@ export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: 
             </p>
             <div className="mkt-ctas justify-center">
               <a href={urls.app('/signup')} className="mkt-btn mkt-btn-primary">
-                Start your spa <ArrowRight />
+                Apply for your spa <ArrowRight />
               </a>
               <Link href="/contact" className="mkt-btn mkt-btn-ghost">
                 Talk to us
