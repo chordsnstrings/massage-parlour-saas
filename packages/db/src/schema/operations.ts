@@ -18,6 +18,7 @@ import {
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
+import { storedFiles } from './files'
 import { tenants } from './platform'
 import { branches, members } from './tenant'
 
@@ -414,6 +415,13 @@ export const intakeSubmissions = pgTable(
     signature: text('signature').notNull(),
     signedAt: ts('signed_at').notNull().defaultNow(),
     ip: text('ip'),
+    /** F27: SHA-256 of the signed record (services intake.ts `intakeContentHash`), printed on the PDF. */
+    contentSha256: text('content_sha256'),
+    /** F27: the signed PDF (private stored file, purpose `intake_pdf`; served to members with clients.view). */
+    pdfFileId: uuid('pdf_file_id').references(() => storedFiles.id, { onDelete: 'set null' }),
+    /** SHA-256 of the PDF bytes, so a downloaded copy can be checked against the record. */
+    pdfSha256: text('pdf_sha256'),
+    pdfGeneratedAt: ts('pdf_generated_at'),
   },
   () => tenantPolicies(),
 )

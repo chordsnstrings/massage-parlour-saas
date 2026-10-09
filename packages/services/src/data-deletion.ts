@@ -24,6 +24,7 @@ import {
 } from '@spa/db'
 import { and, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
+import { deleteClientIntakePdfs } from './intake'
 import { type CfConfig, cfDeleteHostname, cloudflareConfig } from './integrations/cloudflare'
 import { deleteTenantObjects } from './storage'
 
@@ -182,9 +183,9 @@ export const ERASED_CLIENT_NAME = 'Erased client'
 /**
  * Erases one client's personal data in the caller's tenant transaction (owner request / data-deletion request).
  * Removed: name, phone, email, birthday, nationality, gender, tags, preferences, notes, blocklist reason,
- * treatment notes, intake answers + signatures, WhatsApp outbox messages, conversations (+ their messages) and
- * waitlist entries; the client's booking notes are cleared. Kept for accounting: the (anonymised) client row,
- * bookings, sales, ledger, packages, memberships and gift cards. No files are linked to clients today.
+ * treatment notes, intake answers + signatures and their signed PDFs (stored files, F27), WhatsApp outbox messages,
+ * conversations (+ their messages) and waitlist entries; the client's booking notes are cleared. Kept for
+ * accounting: the (anonymised) client row, bookings, sales, ledger, packages, memberships and gift cards.
  */
 export async function eraseClient(tx: Tx, clientId: string, now = new Date()) {
   const [client] = await tx.select().from(clients).where(eq(clients.id, clientId)).for('update')
@@ -200,7 +201,10 @@ export async function eraseClient(tx: Tx, clientId: string, now = new Date()) {
         .from(conversationMessages)
         .where(inArray(conversationMessages.conversationId, convIds))
     : [{ n: 0 }]
+  // Signed intake PDFs first (their rows point at the files; the bucket object goes with the file row).
+  const intakePdfs = await deleteClientIntakePdfs(tx, clientId)
   const removed = {
+    intakePdfs,
     treatmentNotes:
       (await tx.delete(treatmentNotes).where(eq(treatmentNotes.clientId, clientId))).rowCount ?? 0,
     intakeSubmissions:

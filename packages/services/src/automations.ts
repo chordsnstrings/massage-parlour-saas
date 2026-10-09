@@ -1,10 +1,10 @@
-import { AUTOMATIONS, type AutomationKey, automationOn } from '@spa/core'
+import { AUTOMATIONS, type AutomationKey, automationOn, DEFAULT_OFF_AUTOMATIONS } from '@spa/core'
 import { jobRuns, type Tx, tenants } from '@spa/db'
 import { desc, eq, gte, lt, sql } from 'drizzle-orm'
 
-/** SQL predicate over `tenants`: the spa has this automation on (missing key = on). For cross-tenant job queries. */
+/** SQL predicate over `tenants`: the spa has this automation on (missing key = on, except default-off switches). */
 export const automationOnSql = (key: AutomationKey) =>
-  sql`coalesce((${tenants.settings} -> 'automations' ->> ${key})::boolean, true)`
+  sql`coalesce((${tenants.settings} -> 'automations' ->> ${key})::boolean, ${!DEFAULT_OFF_AUTOMATIONS.includes(key)}::boolean)`
 
 /** Current switch state for every automation of the spa (missing = on). */
 export async function getAutomations(tx: Tx, tenantId: string): Promise<Record<AutomationKey, boolean>> {
