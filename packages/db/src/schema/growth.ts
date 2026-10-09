@@ -184,7 +184,7 @@ export const savedSections = pgTable(
 )
 
 // ── Social accounts, posts, conversations, AI agents (Phase 3) ───────────────
-export const socialPlatform = pgEnum('social_platform', ['instagram', 'gbp'])
+export const socialPlatform = pgEnum('social_platform', ['instagram', 'gbp', 'facebook'])
 
 export const socialAccounts = pgTable(
   'social_accounts',
@@ -284,6 +284,31 @@ export const conversationMessages = pgTable(
     uniqueIndex('conversation_messages_external')
       .on(t.tenantId, t.externalId)
       .where(sql`${t.externalId} is not null`),
+    ...tenantPolicies(),
+  ],
+)
+
+/**
+ * Inbound Instagram messages waiting for an AI turn (B6 autopilot). The Meta webhook inserts a row in the same
+ * transaction that stores the message; the worker's `instagram-reply` job (every minute) claims due rows, answers and
+ * deletes them, or backs off (`attempts`, `next_at`) and gives up after a few tries (`failed_at`; the message then just
+ * stays unread for staff). One row per message (PK) = idempotent.
+ */
+export const instagramReplyQueue = pgTable(
+  'instagram_reply_queue',
+  {
+    messageId: uuid('message_id')
+      .primaryKey()
+      .references(() => conversationMessages.id, { onDelete: 'cascade' }),
+    tenantId: tenantId(),
+    attempts: integer('attempts').notNull().default(0),
+    nextAt: ts('next_at').notNull().defaultNow(),
+    lastError: text('last_error'),
+    failedAt: ts('failed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('instagram_reply_queue_due').on(t.nextAt).where(sql`${t.failedAt} is null`),
     ...tenantPolicies(),
   ],
 )

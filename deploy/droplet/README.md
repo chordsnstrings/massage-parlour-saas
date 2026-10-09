@@ -48,14 +48,74 @@ which domains are ours:
 - `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform. Caddy issues
   their certificates on demand (approved by `/api/domains/allowed`), so no Caddyfile edit is needed.
 
-Move to a new domain without downtime:
-1. point the new domain at the droplet (with host routing also `app.`, `admin.` and `*.`)
-2. add it to `EXTRA_ROOT_DOMAINS` (encrypted overlay, see above) — it works alongside the old one
-3. register its OAuth callback in the Meta and Google consoles (`https://<domain>/api/integrations/meta/callback`,
-   `…/google/callback`; with host routing on `app.<domain>`) — connecting runs on whichever domain you are on
-4. when ready, make it `SITE_HOST` (shared links switch to it) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
-   already sent keep working; point Meta's webhook / deauthorize / data-deletion URLs at the new domain
-5. for host routing (`app.example.ae`, `{slug}.example.ae`) also set `ROUTING=host`, then `spa-update --force`
+### Move to a new domain without downtime (spamanagement.ae → spamanagement.co)
+
+The code already speaks spamanagement.co (auth app name, TOTP issuer, copy); staff email still sends from
+spamanagement.ae (B1 decision) until step 0 is done. The old domain
+keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checklist, in order:
+
+0. **Email first.** Resend → Domains → add `spamanagement.co`, add the SPF/DKIM (TXT) and return-path (MX/TXT)
+   records it shows in Cloudflare DNS (DNS-only), wait for "Verified". Until then nothing to do: the compose default and `DEFAULT_EMAIL_FROM` stay
+   `spamanagement.ae <no-reply@spamanagement.ae>`; once verified set `EMAIL_FROM` (step 3).
+1. **DNS** (Cloudflare zone `spamanagement.co`, all at the droplet; start **DNS-only / grey cloud** so Caddy can get
+   its certificates directly):
+
+   | Type | Name | Content |
+   |---|---|---|
+   | A | `@` (apex) | droplet IPv4 |
+   | CNAME | `www` | `spamanagement.co` |
+   | CNAME | `app` | `spamanagement.co` |
+   | CNAME | `admin` | `spamanagement.co` |
+   | CNAME | `*` | `spamanagement.co` (spa sites `{slug}.spamanagement.co`) |
+   | CNAME | `customers` | `spamanagement.co` (CNAME target shown to spas for custom domains) |
+
+   Optionally AAAA records for IPv6. Keep the `.ae` records as they are.
+2. **TLS (Caddy, no Caddyfile edit):** the canonical `SITE_HOST` gets its certificate at start; every other host
+   (`www.`, `app.`, `admin.`, `{slug}.`, the old domain, spa custom domains) gets one **on demand** on its first
+   visit, approved by `/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing spa slugs,
+   registered custom domains). After each host has loaded once over HTTPS you may switch the records to **proxied**
+   (orange cloud) with SSL/TLS mode **Full (strict)**; leave "Always Use HTTPS" off so HTTP-01 renewals reach Caddy.
+3. **Env values**: write an overlay dotenv (see "Secrets without SSH"):
+   ```dotenv
+   SITE_HOST=spamanagement.co             # canonical: ROOT_DOMAIN derives from it; shared/stored links use it
+   EXTRA_ROOT_DOMAINS=spamanagement.ae    # old domain keeps serving the whole platform (keep while links live)
+   EMAIL_FROM="spamanagement.co <no-reply@spamanagement.co>"   # only after step 0 is verified
+   ACME_EMAIL=ops@spamanagement.co
+   VAPID_SUBJECT=mailto:support@spamanagement.co
+   CF_CNAME_TARGET=customers.spamanagement.co   # only if Cloudflare for SaaS is in use
+   # Host routing: add only once the step 1 records resolve for app./admin./*.
+   ROUTING=host
+   APP_URL=https://app.spamanagement.co
+   ADMIN_URL=https://admin.spamanagement.co
+   ```
+   With path routing (`ROUTING=path`, the default) leave `APP_URL`/`ADMIN_URL` out: they default to
+   `https://$SITE_HOST` and `…/admin`. `ROUTING` is a build arg, so the web image rebuilds on the next update.
+4. **OAuth callbacks**: add the new domain's URLs (keep the `.ae` ones until nobody connects from there):
+   - Google Cloud → Credentials → OAuth client → Authorized redirect URIs:
+     `https://app.spamanagement.co/api/integrations/google/callback` (path routing: on the bare domain); OAuth
+     consent screen → Authorized domains: add `spamanagement.co`.
+   - Meta app → Instagram API with Instagram login → Business login settings → OAuth redirect URIs:
+     `https://app.spamanagement.co/api/integrations/meta/callback` (path routing: on the bare domain). Then point the
+     Webhooks callback, Deauthorize callback and Data deletion request URLs at the `.co` origin and add
+     `spamanagement.co` to App domains.
+5. **Re-encrypt the overlay**: the updater replaces the previous overlay as a whole, so the plaintext must hold
+   every key the current overlay holds (from your own copy) plus the ones above:
+   ```sh
+   # secrets.key = a copy of /opt/spa/secrets.key
+   openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt -pass file:secrets.key \
+     -in overlay.env -out deploy/droplet/secrets.env.enc
+   ```
+   Commit and push only `secrets.env.enc` (never `overlay.env` or the key). The droplet applies it within ~2 min
+   (or run `spa-update --force`).
+6. **Verify**: `https://spamanagement.co/_status/deploy.json` (user `ops`) shows the new commit; sign-in works on
+   both domains; a password-reset email arrives from `no-reply@spamanagement.co`; a spa site loads on
+   `{slug}.spamanagement.co` and on the old `{slug}.spamanagement.ae`; new 2FA enrolments show issuer
+   "spamanagement.co" (existing authenticator entries keep their old label and still work).
+7. Super-admin → Platform settings: update the company name / contact email if they still say `.ae` (the DB column
+   default only applies to a fresh install).
+
+Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first, register its OAuth callbacks,
+then make it `SITE_HOST` and keep the old one in `EXTRA_ROOT_DOMAINS` so links already sent keep working.
 
 ## Creating the droplet
 

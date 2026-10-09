@@ -1,4 +1,11 @@
-import { businessDateOf, dubaiInstant, type OpeningHours, openIntervals, whatsappLink } from '@spa/core'
+import {
+  businessDateOf,
+  dubaiInstant,
+  type OpeningHours,
+  openIntervals,
+  overlaps,
+  whatsappLink,
+} from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -10,7 +17,7 @@ import {
   type Tx,
   withTenant,
 } from '@spa/db'
-import { loadDay, rotationFor } from '@spa/services'
+import { equipmentStatus, loadDay, rotationFor } from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import type { BookingStatus, CalendarData, CalItem, RotationRow } from '@/components/calendar/types'
@@ -81,6 +88,10 @@ export async function loadCalendar(
       .orderBy(asc(staff.sort), asc(staff.displayName))
     const staffNames = Object.fromEntries(allStaff.map((s) => [s.id, { name: s.name, color: s.color }]))
 
+    const kit = await equipmentStatus(
+      tx,
+      rows.map((r) => r.item),
+    )
     let items: CalItem[] = rows.map(({ item, booking, client }) => ({
       id: item.id,
       bookingId: booking.id,
@@ -104,6 +115,8 @@ export async function loadCalendar(
       clientWhatsapp: client?.phoneE164 && seePhone ? whatsappLink(client.phoneE164, '', 'mobile') : null,
       notes: booking.notes,
       cancelReason: booking.cancelReason,
+      equipment: kit.get(item.id)?.names ?? [],
+      equipmentMissing: kit.get(item.id)?.missing ?? [],
     }))
 
     // Shifts clipped to this business day (loadDay also returns the neighbouring days).
@@ -116,12 +129,19 @@ export async function loadCalendar(
       shifts: s.shifts
         .map((sh) => ({ start: Math.max(rel(sh.start), dayLo), end: Math.min(rel(sh.end), dayHi) }))
         .filter((sh) => sh.end > sh.start),
+      onLeave: (s.leave ?? []).some((l) => overlaps(l, day.window)),
     }))
     // Bookings with someone who is no longer bookable still need a column.
     for (const it of items)
       for (const sid of it.staffIds)
         if (!staffCols.some((c) => c.id === sid) && staffNames[sid])
-          staffCols.push({ id: sid, name: staffNames[sid].name, color: staffNames[sid].color, shifts: [] })
+          staffCols.push({
+            id: sid,
+            name: staffNames[sid].name,
+            color: staffNames[sid].color,
+            shifts: [],
+            onLeave: false,
+          })
     const roomCols = day.rooms.map((r) => ({ id: r.id, name: r.name }))
 
     if (ownOnly) {

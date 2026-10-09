@@ -67,7 +67,7 @@ export async function inviteAction(
   await sendStaffEmail({
     to: email,
     subject: `You're invited to ${ctx.tenant.name}`,
-    text: `${ctx.user.name} invited you to join ${ctx.tenant.name} on spamanagement.ae as ${result.roleName}.\n\nAccept: ${link}\n\nThis link expires in 7 days.`,
+    text: `${ctx.user.name} invited you to join ${ctx.tenant.name} on spamanagement.co as ${result.roleName}.\n\nAccept: ${link}\n\nThis link expires in 7 days.`,
   }).catch((e) => console.error('invite email failed', e))
   await audit({
     tenantId: ctx.tenant.id,

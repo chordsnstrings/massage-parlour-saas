@@ -1,5 +1,5 @@
 'use server'
-import { isPermission, normalizeSlug } from '@spa/core'
+import { isPermission, normalizeSlug, RESTRICTED_PERMISSION } from '@spa/core'
 import { invitations, members, roles, withTenant } from '@spa/db'
 import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -26,6 +26,8 @@ export async function saveRoleAction(
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
   const permissions = [d.permissions ?? []].flat().filter(isPermission)
+  // Owner rule (core PHONE_ROLES): a custom role can never see client phone numbers.
+  if (permissions.includes(RESTRICTED_PERMISSION)) return fail('roles.result.phoneRestricted')
   const problem = await withTenant(ctx.tenant.id, async (tx) => {
     if (d.id) {
       const [role] = await tx.select().from(roles).where(eq(roles.id, d.id))

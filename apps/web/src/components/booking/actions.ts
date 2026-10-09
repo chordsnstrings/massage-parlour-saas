@@ -7,7 +7,7 @@ import {
   DomainError,
   enqueueBookingMessage,
   findOrCreateClient,
-  notifyTenant,
+  notify,
   publicPrice,
   spaHidesPrices,
 } from '@spa/services'
@@ -144,6 +144,8 @@ const bookingInput = z.object({
   notes: z.string().trim().max(500).optional().default(''),
   /** Honeypot: humans never see this field. */
   website: z.string().optional().default(''),
+  /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
+  via: z.enum(['widget']).optional(),
   lang: locale,
 })
 
@@ -262,27 +264,29 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       action: 'booking.created',
       entity: 'booking',
       entityId: result.bookingId,
-      data: { ref: result.done.ref, source: 'online' },
+      data: { ref: result.done.ref, source: 'online', ...(v.via ? { via: v.via } : {}) },
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)
-    // Push to the front desk after the response; a failed push never affects the booking.
+    // Bell + push to the front desk after the response; a failed notification never affects the booking.
     after(() =>
-      notifyTenant(
-        tenant.id,
-        {
-          title: 'New online booking',
-          body: `${v.name} · ${result.serviceEn} · ${fmtDate(result.date, 'en')} ${fmtTime(result.done.start, 'en')} — waiting for confirmation`,
-          url: `/${tenant.slug}/calendar?date=${result.date}`,
-          tag: `booking-${result.done.ref}`,
-        },
-        { permission: 'calendar.manage' },
-      ).catch((e) => console.error('booking push failed', e)),
+      notify({
+        tenantId: tenant.id,
+        kind: 'booking.online',
+        params: { name: v.name, service: result.serviceEn, at: result.done.start },
+        url: `/${tenant.slug}/calendar?date=${result.date}`,
+        dedupeKey: `booking.online:${result.bookingId}`,
+      }).catch((e) => console.error('booking notification failed', e)),
     )
     return ok(undefined, { booking: result.done })
   } catch (e) {
     if (e instanceof DomainError) {
-      if (e.code === 'slot_taken' || e.code === 'no_staff' || e.code === 'no_room')
+      if (
+        e.code === 'slot_taken' ||
+        e.code === 'no_staff' ||
+        e.code === 'no_room' ||
+        e.code === 'no_equipment'
+      )
         return fail(t('slotTaken', lang), { start: t('slotTaken', lang) })
       return fail(e.message)
     }

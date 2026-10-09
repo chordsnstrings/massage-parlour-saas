@@ -1,6 +1,7 @@
 import { createTranslator, en } from '@spa/core/i18n'
 import { withTenant } from '@spa/db'
 import { notFound } from 'next/navigation'
+import { xlsxDownload } from '@/components/data/server'
 import { can, requireMember } from '@/server/access'
 import { journal } from '../journal-data'
 import { sourceLabel } from '../labels'
@@ -8,13 +9,7 @@ import { monthRange } from '../month'
 
 // The audit file keeps fixed English headers and labels whatever the viewer's language.
 const english = createTranslator('en', en)
-const csv = (v: unknown) => {
-  const s = v == null ? '' : String(v)
-  // Quote everything and neutralise spreadsheet formulas.
-  return `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replaceAll('"', '""')}"`
-}
-
-/** Journal lines for a month as CSV (for the accountant / FTA audit file). */
+/** Journal lines for a month as .xlsx (for the accountant / FTA audit file; English whatever the viewer's language). */
 export async function GET(req: Request, { params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'accounting.view')) notFound()
@@ -33,12 +28,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ tenant: 
         l.debit,
         l.credit,
       ])
-  const body = `﻿${rows.map((r) => r.map(csv).join(',')).join('\r\n')}\r\n`
-  return new Response(body, {
-    headers: {
-      'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="journal-${ctx.tenant.slug}-${range.month}.csv"`,
-      'cache-control': 'private, no-store',
-    },
+  return xlsxDownload(`journal-${ctx.tenant.slug}-${range.month}.xlsx`, {
+    title: `${ctx.tenant.name} — Journal ${range.month}`,
+    sheets: [
+      {
+        name: `Journal ${range.month}`,
+        title: `${ctx.tenant.name} — General journal`,
+        subtitle: `${range.from} to ${range.to} · ${rows.length - 1} lines · amounts in AED`,
+        rows,
+        kinds: ['date', undefined, 'text', 'text', 'text', 'text', 'money', 'money'],
+      },
+    ],
   })
 }

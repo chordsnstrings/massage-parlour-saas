@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, type Page } from '@playwright/test'
@@ -20,6 +21,7 @@ import {
 import { testUrls } from '@spa/db/testing'
 import { createBooking } from '@spa/services'
 import { eq } from 'drizzle-orm'
+import type ExcelJSType from 'exceljs'
 
 /** URL helpers that work in both routing modes (E2E_ROUTING=path → single host). */
 export const PORT = Number(process.env.E2E_PORT ?? 3100)
@@ -240,3 +242,17 @@ export async function seedBooking(seed: Awaited<ReturnType<typeof seedCatalog>>,
     }),
   )
 }
+
+/** A downloaded .xlsx workbook (R10: every export is Excel). */
+// Plain CommonJS require: Playwright's ESM loader cannot link exceljs' dependency tree.
+export const ExcelJS = createRequire(import.meta.url)('exceljs') as typeof ExcelJSType
+
+export async function openXlsx(bytes: Buffer) {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(bytes as unknown as ExcelJSType.Buffer)
+  return wb
+}
+
+/** A sheet's rows as plain values (index 0 = row 1; cell values as exceljs reads them). */
+export const sheetRows = (ws: ExcelJSType.Worksheet) =>
+  Array.from({ length: ws.rowCount }, (_, i) => (ws.getRow(i + 1).values as unknown[]).slice(1))

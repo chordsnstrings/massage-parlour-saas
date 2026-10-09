@@ -3,6 +3,7 @@ import {
   closeAllDbs,
   conversationMessages,
   conversations,
+  instagramReplyQueue,
   socialAccounts,
   socialPosts,
   tenants,
@@ -267,6 +268,9 @@ describe('ingest and replies', () => {
     )
     const msgs = await withTenant(ids.a!, (tx) => tx.select().from(conversationMessages), app)
     expect(msgs).toHaveLength(1)
+    // The AI turn is queued in the same transaction for the worker's instagram-reply job (live spa only).
+    const queued = await withTenant(ids.a!, (tx) => tx.select().from(instagramReplyQueue), app)
+    expect(queued.map((q) => q.messageId)).toEqual([first[0]!.messageId])
     expect(await withTenant(ids.b!, (tx) => tx.select().from(conversations), app)).toHaveLength(0)
     const [conv] = await withTenant(ids.a!, (tx) => tx.select().from(conversations), app)
     expect(conv).toMatchObject({ channel: 'instagram_dm', externalThreadId: CUSTOMER, mode: 'bot' })

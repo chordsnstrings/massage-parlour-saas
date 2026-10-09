@@ -8,16 +8,20 @@ import { account } from './en/account'
 import { accounts } from './en/accounts'
 import { ai } from './en/ai'
 import { analytics } from './en/analytics'
+import { audit } from './en/audit'
 import { auth } from './en/auth'
+import { automations } from './en/automations'
 import { billing } from './en/billing'
 import { bookings } from './en/bookings'
 import { calendar } from './en/calendar'
 import { campaigns } from './en/campaigns'
 import { clients } from './en/clients'
+import { clientsMerge } from './en/clientsMerge'
 import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
 import { enums } from './en/enums'
+import { equipment } from './en/equipment'
 import { errors } from './en/errors'
 import { inbox } from './en/inbox'
 import { inventory } from './en/inventory'
@@ -26,6 +30,7 @@ import { marketing } from './en/marketing'
 import { media } from './en/media'
 import { messages } from './en/messages'
 import { nav } from './en/nav'
+import { notifications } from './en/notifications'
 import { overview } from './en/overview'
 import { packages } from './en/packages'
 import { payroll } from './en/payroll'
@@ -35,14 +40,19 @@ import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
 import { sales } from './en/sales'
+import { search } from './en/search'
 import { services } from './en/services'
 import { settings } from './en/settings'
+import { sheets } from './en/sheets'
 import { shell } from './en/shell'
 import { staff } from './en/staff'
 import { team } from './en/team'
+import { timeclock } from './en/timeclock'
 import { validation } from './en/validation'
+import { waitlist } from './en/waitlist'
 import { warehouse } from './en/warehouse'
 import { website } from './en/website'
+import { widget } from './en/widget'
 import { ui } from './en-ui'
 
 export const en = {
@@ -58,14 +68,18 @@ export const en = {
   calendar,
   bookings,
   clients,
+  clientsMerge,
   sales,
   services,
+  equipment,
   packages,
   inventory,
   purchases,
   warehouse,
+  waitlist,
   team,
   staff,
+  timeclock,
   documents,
   roles,
   inbox,
@@ -76,13 +90,19 @@ export const en = {
   analytics,
   reviews,
   website,
+  widget,
   media,
   accounts,
   payroll,
   billing,
+  automations,
   settings,
+  sheets,
   account,
   auth,
   enums,
   permissions,
+  notifications,
+  search,
+  audit,
 } as const

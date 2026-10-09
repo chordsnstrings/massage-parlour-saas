@@ -32,6 +32,9 @@ export type CalItem = {
   clientWhatsapp: string | null
   notes: string | null
   cancelReason: string | null
+  /** Reserved equipment units (names, as typed) and required types not covered by one (B5.3 conflict). */
+  equipment: string[]
+  equipmentMissing: string[]
 }
 
 export type CalStaff = {
@@ -40,6 +43,8 @@ export type CalStaff = {
   color: string
   /** Shift intervals in grid minutes. */
   shifts: { start: number; end: number }[]
+  /** On approved leave during this business day (B5.4). */
+  onLeave?: boolean
 }
 
 export type CalRoom = { id: string; name: string }

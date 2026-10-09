@@ -10,7 +10,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import { enumLabel } from '@spa/core/i18n'
-import { CheckCircle2, Clock } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
@@ -24,7 +24,13 @@ const ROW = STEP * PPM
 
 export type MoveTarget = { startMin: number; staffIds?: string[]; roomId?: string }
 
-type Col = { id: string; name: string; color?: string; shifts?: { start: number; end: number }[] }
+type Col = {
+  id: string
+  name: string
+  color?: string
+  shifts?: { start: number; end: number }[]
+  onLeave?: boolean
+}
 
 const snapY: Modifier = ({ transform }) => ({ ...transform, y: Math.round(transform.y / ROW) * ROW })
 
@@ -224,6 +230,11 @@ export function ResourceGrid({
                   <span className="block truncate text-sm font-medium">{c.name}</span>
                   <span className="block text-xs text-muted tabular">
                     {t('calendar.grid.bookings', { count })}
+                    {c.onLeave && (
+                      <span className="ms-1.5 font-medium text-warning">
+                        {t('timeclock.calendar.onLeave')}
+                      </span>
+                    )}
                   </span>
                 </span>
               </div>
@@ -462,6 +473,17 @@ function Block({
           )}
           {item.status === 'completed' && <CheckCircle2 className="size-3" strokeWidth={1.75} />}
           {item.status === 'pending' && <Clock className="size-3" strokeWidth={1.75} />}
+          {item.equipmentMissing.length > 0 && (
+            <span
+              className="inline-flex text-danger"
+              title={t('equipment.calendar.conflict', { types: item.equipmentMissing.join(', ') })}
+            >
+              <AlertTriangle className="size-3" strokeWidth={2} aria-hidden />
+              <span className="sr-only">
+                {t('equipment.calendar.conflict', { types: item.equipmentMissing.join(', ') })}
+              </span>
+            </span>
+          )}
           {compact && (
             <span className={cn('truncate font-medium text-fg', struck && 'line-through')}>
               {item.clientName ?? t('calendar.walkIn')}

@@ -53,8 +53,11 @@ type Mode = 'update' | 'skip'
 
 type Translate = ReturnType<typeof useI18n>['t']
 
-function downloadText(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+/** Saves a server-built .xlsx (base64 in the JSON reply; the workbook library stays server-side). */
+function downloadXlsx(name: string, base64: string) {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+  const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  const url = URL.createObjectURL(new Blob([bytes], { type }))
   const a = document.createElement('a')
   a.href = url
   a.download = name
@@ -124,7 +127,7 @@ export function ImportWizard({
   const [mode, setMode] = useState<Mode>('update')
   const [busy, setBusy] = useState<'preview' | 'commit' | null>(null)
   const [drag, setDrag] = useState(false)
-  const [result, setResult] = useState<{ summary: Summary; errorCsv: string | null } | null>(null)
+  const [result, setResult] = useState<{ summary: Summary; errorXlsx: string | null } | null>(null)
   const request = useRef(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const fieldByKey = new Map(fields.map((f) => [f.key, f]))
@@ -144,7 +147,7 @@ export function ImportWizard({
     try {
       const res = await fetch(uploadUrl, { method: 'POST', body: fd })
       return (await res.json()) as
-        | { ok: true; preview?: Preview; summary?: Summary; errorCsv?: string | null }
+        | { ok: true; preview?: Preview; summary?: Summary; errorXlsx?: string | null }
         | { ok: false; error: string }
     } catch {
       return { ok: false as const, error: w('generic') }
@@ -191,7 +194,7 @@ export function ImportWizard({
       toast.error(res.ok ? w('failed') : res.error)
       return
     }
-    setResult({ summary: res.summary, errorCsv: res.errorCsv ?? null })
+    setResult({ summary: res.summary, errorXlsx: res.errorXlsx ?? null })
     toast.success(w('finished'))
   }
 
@@ -313,7 +316,7 @@ export function ImportWizard({
                   ref={inputRef}
                   id="csv-file"
                   type="file"
-                  accept=".csv,.txt,text/csv"
+                  accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   aria-label={w('csvFile')}
                   className="sr-only"
                   disabled={busy != null}
@@ -527,12 +530,12 @@ export function ImportWizard({
                 title={w('fix')}
                 sub={w('fixSub')}
                 actions={
-                  result.errorCsv && (
+                  result.errorXlsx && (
                     <Button
                       variant="secondary"
                       className="h-11 md:h-10"
                       onClick={() => {
-                        downloadText(`${kind}-import-errors.csv`, result.errorCsv!)
+                        downloadXlsx(`${kind}-import-errors.xlsx`, result.errorXlsx!)
                       }}
                     >
                       <Download strokeWidth={1.5} /> {w('downloadErrors')}

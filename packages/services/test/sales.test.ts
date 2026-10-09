@@ -35,12 +35,16 @@ import {
   createSale,
   DomainError,
   daySummary,
+  enqueueBookingMessage,
+  getAutomations,
+  isAutomationOn,
   nextCounter,
   profitAndLoss,
   publicPrice,
   receiveStock,
   refundOptions,
   refundSale,
+  setAutomation,
   voidSale,
 } from '../src'
 
@@ -207,6 +211,19 @@ describe('sales', () => {
         }),
       ),
     ).rejects.toThrow(/can't be checked out|already/)
+  })
+
+  it('queues no thank-you / review request while that automation is switched off (B3)', async () => {
+    const [thanks] = await tx((db) => db.select().from(outbox).where(eq(outbox.kind, 'thank_you')))
+    const bookingId = thanks!.bookingId!
+    await tx((db) => setAutomation(db, ids.tenant!, 'thankYou', false))
+    expect(await tx((db) => isAutomationOn(db, ids.tenant!, 'thankYou'))).toBe(false)
+    expect(await tx((db) => enqueueBookingMessage(db, bookingId, 'review_request'))).toBeNull()
+    await tx((db) => setAutomation(db, ids.tenant!, 'thankYou', true))
+    expect((await tx((db) => getAutomations(db, ids.tenant!))).thankYou).toBe(true)
+    expect((await tx((db) => enqueueBookingMessage(db, bookingId, 'review_request')))?.kind).toBe(
+      'review_request',
+    )
   })
 
   it('voids and refunds, and the day summary / close reflect them', async () => {

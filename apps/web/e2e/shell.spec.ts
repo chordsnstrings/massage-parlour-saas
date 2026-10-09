@@ -51,12 +51,12 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
       'Accounts',
       'VAT & payroll',
       'Billing',
+      'Automations',
       'Settings',
     ])
       await expect(menu.getByRole('link', { name: label, exact: true })).toBeVisible()
     // Pages Phase 3 builds stay out of the menu until they exist.
-    for (const label of ['Automations', 'Coming next'])
-      await expect(menu.getByRole('link', { name: label })).toHaveCount(0)
+    await expect(menu.getByRole('link', { name: 'Coming next' })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
     await expect(page.getByText('AI allowance · 0% used this month')).toBeVisible()
     await expect(page.getByText(/^Trial ends \d{1,2} \w{3} \d{4}$/)).toBeVisible()

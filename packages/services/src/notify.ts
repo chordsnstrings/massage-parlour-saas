@@ -19,7 +19,7 @@ export type PushPayload = {
 }
 
 export type PushKeys = { p256dh: string; auth: string }
-export type PushTarget = { id: string; endpoint: string; keys: PushKeys }
+export type PushTarget = { id: string; endpoint: string; keys: PushKeys; userId?: string }
 export type PushResult = { sent: number; pruned: number; failed: number }
 export type PushSender = (target: PushTarget, payload: string) => Promise<unknown>
 
@@ -128,7 +128,12 @@ export async function memberUserIds(tenantId: string, permission: Permission, ap
 export async function subscriptionsOf(userIds: string[], db: Db = platformDb()): Promise<PushTarget[]> {
   if (userIds.length === 0) return []
   return db
-    .select({ id: pushSubscriptions.id, endpoint: pushSubscriptions.endpoint, keys: pushSubscriptions.keys })
+    .select({
+      id: pushSubscriptions.id,
+      endpoint: pushSubscriptions.endpoint,
+      keys: pushSubscriptions.keys,
+      userId: pushSubscriptions.userId,
+    })
     .from(pushSubscriptions)
     .where(inArray(pushSubscriptions.userId, userIds))
 }

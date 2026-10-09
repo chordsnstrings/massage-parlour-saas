@@ -80,6 +80,12 @@ export const platformSettings = pgTable(
     pricesIncludeVat: boolean('prices_include_vat').notNull().default(false),
     /** Added once per domain order on top of the registrar price (USD), PLAN §14.8 R14. */
     domainMarkupUsd: numeric('domain_markup_usd', { precision: 10, scale: 2 }).notNull().default('10'),
+    /** R7: optional external Meta MCP server (future official servers); key AES-GCM encrypted. */
+    metaMcpEnabled: boolean('meta_mcp_enabled').notNull().default(false),
+    metaMcpUrl: text('meta_mcp_url'),
+    metaMcpKeyEnc: text('meta_mcp_key_enc'),
+    /** External tool names the agents may use (still filtered: WhatsApp send-like tools are never exposed). */
+    metaMcpTools: text('meta_mcp_tools').array().notNull().default([]),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -112,6 +118,12 @@ export type TenantSettings = {
   hidePrices?: boolean
   /** AED per completed booking a receptionist created (`booking_fee` pay type; owner's receptionist_booking_fee). */
   receptionistBookingFee?: string
+  /** Automation switches (B3): keys = `AUTOMATIONS` in @spa/core; missing = on. Written via setAutomation(). */
+  automations?: Record<string, boolean>
+  /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
+  require2fa?: boolean
+  /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
+  metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
 }
 
 export const tenants = pgTable(
@@ -280,7 +292,11 @@ export const auditLog = pgTable(
     ip: text('ip'),
     createdAt: createdAt(),
   },
-  () => tenantPolicies(),
+  // Owner-facing audit viewer (X5): newest first per tenant.
+  (t) => [
+    index('audit_log_tenant_created').on(t.tenantId, t.createdAt.desc(), t.id.desc()),
+    ...tenantPolicies(),
+  ],
 )
 
 /** Model per AI agent, chosen by super-admin. Model IDs never live in code. */
@@ -372,4 +388,18 @@ export const domainOrders = pgTable(
       .where(sql`${t.status} in ('requested', 'purchasing', 'purchased')`),
     ...tenantPolicies(),
   ],
+)
+
+/** Ops job outcomes the super-admin console shows (B6: monthly restore drill). Platform-only (like platform_settings); no tenant data. Spa job logs are the tenant `job_runs` (B3). */
+export const platformJobRuns = pgTable(
+  'platform_job_runs',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    job: text('job').notNull(),
+    status: text('status', { enum: ['ok', 'failed', 'skipped'] }).notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('platform_job_runs_job_finished').on(t.job, t.finishedAt), ...platformPolicies()],
 )

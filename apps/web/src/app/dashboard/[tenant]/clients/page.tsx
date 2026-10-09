@@ -1,6 +1,6 @@
 import { bookings, clientPackages, clients, refunds, sales, withTenant } from '@spa/db'
 import { and, arrayContains, asc, eq, gt, ilike, inArray, or, type SQL, sql } from 'drizzle-orm'
-import { ClipboardList, Contact, EyeOff, SearchX } from 'lucide-react'
+import { ClipboardList, Contact, EyeOff, SearchX, UsersRound } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -169,6 +169,13 @@ export default async function ClientsPage({
               <Button variant="secondary" asChild>
                 <Link href={appPath(`/${slug}/settings/intake`)}>
                   <ClipboardList /> {t('clients.intakeForm')}
+                </Link>
+              </Button>
+            )}
+            {can(ctx, 'clients.merge') && (
+              <Button variant="secondary" asChild>
+                <Link href={appPath(`/${slug}/clients/duplicates`)}>
+                  <UsersRound /> {t('clientsMerge.open')}
                 </Link>
               </Button>
             )}

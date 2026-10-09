@@ -30,7 +30,7 @@ export const team = {
     create: 'Create invitation',
     copy: 'Copy link',
     whatsapp: 'Share on WhatsApp',
-    message: 'You’re invited to join {spa} on spamanagement.ae: {link}',
+    message: 'You’re invited to join {spa} on spamanagement.co: {link}',
   },
   edit: {
     description: 'Change role or access.',

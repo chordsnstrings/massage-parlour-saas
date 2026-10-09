@@ -7,11 +7,11 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 
 | Package | Role |
 |---|---|
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0021` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
-| `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`). |
+| `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → monthly budget check against `tenants.ai_budget_usd` (Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage`. Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`), `meta` (R7 Meta tools assistant). `tool-loop.ts` `runToolLoop` = the shared OpenAI-style tool loop (local tools + MCP sources, every step through `runChat`, so budget + `ai_usage` per step; the DM agent uses it). `mcp/`: Meta MCP (see "Meta MCP" below). |
 | `@spa/web` (apps/web) | Next.js 16; one app serves every surface. |
 | `@spa/worker` (apps/worker) | pg-boss 12 on `DATABASE_URL_OWNER`; job registry `src/jobs/index.ts`. |
 
@@ -35,9 +35,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
   = soft delete (`requireMember` 404s members).
+- **Notifications (B2, migration 0022)**: `notifications` (tenant, `user_id` NULL = everyone holding `permission`,
+  `kind`, `payload {params,url}`, partial-unique `dedupe_key`, `read_at` for personal rows) + `notification_reads`
+  (per-user read of shared rows). Kinds → permission + text: `@spa/core` `NOTIFICATION_KINDS`/`notificationText`
+  (i18n ns `notifications.kind.*`; params `at`/`date`/`amount` formatted in the reader's locale). Services
+  `notifications.ts` (`notify` = create deduped → push per recipient locale via `notify.ts`; list/unread/markRead/
+  markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
+  `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
+  10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
+  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest stay push-only.
+  **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
+  expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
+  stock, AI drafts waiting for review, billing) always run. `runNotificationScan(name, scan, now, {key, job})`.
 - **DB-enforced invariants**:
   - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
-    `staff | room` only (no equipment yet).
+    `staff | room | equipment` (equipment added in migration 0026, B5.3).
+  - `time_entries`: unique partial index `time_entries_one_open` (one open clock entry per person) + EXCLUDE
+    `time_entries_no_overlap`; `leave_requests`: EXCLUDE `leave_no_overlap` (same person, overlapping dates,
+    status ≠ rejected) — all migration 0026 (B5.4).
   - `shifts` has `EXCLUDE` per staff member over `[starts_at, ends_at)` (migration 0003).
   - Ledger (migration 0005):
     - a one-sided-line CHECK;
@@ -79,7 +94,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    `setLocaleAction` (updateUser + cookie + `refresh()`). `lib/utils.ts` `formatAed/Date/DateTime` = English `fmt`.
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
-     shared, stored or sent.
+     shared, stored or sent. Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
+     (old spamanagement.ae); droplet compose lets `APP_URL`/`ADMIN_URL` be overridden for `ROUTING=host`.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
 ## Web routes (`apps/web/src/app`)
@@ -95,14 +111,19 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
   - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
-  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · team · documents).
+  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · timeclock · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
   - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
     Billing (Stripe Checkout for platform invoices only).
   - System: Settings (incl. logo, hours, intake, integrations, domains, data).
+  - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
+    (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
-- **`dashboard/account`** (profile, 2FA, push) and **`dashboard/dev/kit`** (design-system gallery).
+  - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
+  - Settings → Security: require-2FA toggle (`saveSecurityAction`), recent audit rows;
+    `settings/audit` = audit log viewer (`audit.view`).
+- **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
 - **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
   (studio templates), websites (studio overview).
 - **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
@@ -119,6 +140,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `collect`: analytics beacon; inserts into `web_events` via platformDb.
   - `domains/allowed`: Caddy's on-demand TLS "ask".
   - `integrations/meta|google`: OAuth, Meta webhook, deauthorize, data deletion.
+  - `mcp/meta`: first-party Meta MCP server (R7, `handleMetaMcpRequest`; bearer = 5-minute signed tenant token).
 
 ## Site builder
 
@@ -188,10 +210,32 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   2. `findOrCreateClient`; blocklisted clients are refused.
   3. `createBooking` with status `pending`, source `online`.
   4. `enqueueBookingMessage`.
+  5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
   5. Push to the spa via `after(notifyTenant)`.
+- **Embeddable widget (B5.5)**: `public/widget.js` (no deps, excluded from Biome like `t.js`) injects a button + iframe
+  modal; data attributes `data-spa`, `data-url` (spa site + `/book/embed`), `data-lang` en|ar, `data-color`, `data-text`.
+  Iframe route `site/[slug]/book/embed` + `domain/[hostname]/book/embed` = `BookingPage embed` (chrome-less
+  `BookingFlow`, noindex). postMessage to the parent: `spa-widget:resize` {height}, `spa-widget:booked` {ref,start,service}
+  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape). `next.config.ts` headers: only `/book/embed` and
+  `/s/:slug/book/embed` get `frame-ancestors *` and no X-Frame-Options; everything else stays SAMEORIGIN. Same
+  `bookOnline` (limits + honeypot) with `via: 'widget'` (audit data only; booking source stays `online`). Analytics
+  source `widget` comes from `?src=widget` (t.js: a tagged URL now starts a new session entry). Snippet:
+  Settings → Booking widget (`settings/widget`, i18n namespace `widget`). e2e `widget.spec.ts`.
 
 ## Service invariants (`packages/services`)
 
+- **Spreadsheets (R10)**: every export is .xlsx via `@spa/services/xlsx` (server-only subpath, exceljs, external in
+  next.config; the main entry stays client-safe). `toXlsx` = streaming writer, title + subtitle rows, bold frozen
+  header + autofilter, kinds inferred (`*AED` money, ISO dates/`YYYY-MM-DD HH:MM` → date cells, Date → Dubai wall
+  time, code/phone/SKU headers stay text); text > 32,767 chars is cut and kept whole on a `long_values` sheet.
+  Routes: data export (headers TH via `sheets.columns` when the viewer is th), full export = one workbook (README +
+  sheet per table, raw column names), import template (EN), import errors (upload reply base64 + past-import
+  route), accounts journal (EN audit file). WPS SIF keeps its bank format. Import takes CSV **or** .xlsx (first
+  visible sheet; `headerRowIndex` skips one-cell title rows, so our own files re-import; TH export headers are
+  autoMap aliases `TH_EXPORT_ALIASES`). Legacy .xls is refused. CSV writer (`toCsv`) removed.
+- **Search / audit (X5)**: `globalSearch` takes a caller-built `scope` (missing group = not queried; phones only with
+  `scope.clients.phone`); trigram GIN indexes from migration 0024. `listAuditLog`/`auditFilterOptions` read
+  `audit_log` via the tenant tx; names via platformDb for those ids only.
 - **Errors**: `DomainError(message, code)` with codes `slot_taken | not_found | invalid | no_room | no_staff`;
   `pgCode(e)` unwraps drizzle-wrapped errors.
 - **Bookings**:
@@ -200,6 +244,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `23P01` becomes `DomainError('slot_taken')`.
   - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
   - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
+  - Equipment (B5.3, `schema/workforce.ts` `equipment`; services `equipment.ts`): `services.equipment_types` lists
+    required types (one unit per entry; types typed by the spa); `findSlots` needs one free unit per type
+    (`pickEquipment`, `Slot.equipmentIds`); `createBooking`/`rescheduleItem` reserve them (`resource_kind =
+    'equipment'`, `booking_items.equipment_ids`) in the same savepoint → EXCLUDE makes concurrent bookings of the
+    last unit fail with `slot_taken`; none free → `DomainError('no_equipment')`. Delete refused while a unit holds a
+    future reservation (deactivate instead). `equipmentStatus` = calendar conflict (required type not covered by an
+    active reserved unit). UI: Services & rooms → Equipment card + "Equipment needed" chips in the service sheet.
+  - Leave (B5.4): `loadDay` adds approved leave as `StaffAvailability.leave` (business-day windows by the branch
+    cutoff); `findSlots` and the walk-in picker skip people on leave; explicit `staffIds` on leave → `DomainError
+    ('no_staff')` (create + reschedule; also with `allowOffShift`). Existing bookings keep their reservations:
+    `decideLeave` returns the clash count for the toast.
   - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
     internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
     cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
@@ -281,6 +336,37 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
   manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
   monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
+- **Waitlist (B5.1, migration 0025, X6)**: `waitlist_entries` (branch, client, optional service/variant, business
+  date, optional `from_at`/`until_at` window — CHECK from < until, notes, status waiting · notified · booked ·
+  cancelled, booking_id, created_by). services `waitlist.ts`: `addToWaitlist`, `cancelWaitlistEntry`,
+  `listWaitlist`, `notifyWaitlistForFreedSlot` (called by `setBookingStatus` → cancelled/no_show and by
+  `rescheduleItem` when the time moves; opt out with `notifyWaitlist: false`): same branch + business date,
+  service matches or is open, window overlaps the freed time, client has a mobile, slot not in the past; claims ≤ 5
+  oldest via `FOR UPDATE SKIP LOCKED` + status → `notified` (no double message under concurrent cancels), then queues
+  outbox kind `waitlist_slot` (EN/AR default template, click-to-send). `bookFromWaitlist` locks the entry and uses
+  `createBooking` (reservations EXCLUDE decides) → `booked`. Web: `dashboard/[tenant]/waitlist` (calendar.view;
+  edits calendar.manage).
+- **Merge duplicate clients (B5.2, X6)**: services `client-merge.ts`. `duplicateClientPairs` = same phone key (last 9
+  digits) or same normalised name (two equi-join unions). `mergePreview` counts; `mergeClients` locks both rows in id
+  order, re-points every FK in `CLIENT_REFERENCES` (bookings, sales, outbox, intake_submissions, treatment_notes,
+  client_packages, client_memberships, gift_cards.purchaser_client_id, conversations, waitlist_entries — the test
+  compares this list with `pg_constraint`, so a new FK to clients must be added there), combines fields (earliest
+  created_at / first visit, latest last visit, summed no-shows, union of tags, notes joined, kept values win, gaps
+  filled, opt-out/blocklist kept), deletes the merged row (hard delete). Ledger untouched. Permission `clients.merge`
+  (owner + manager); audit `client.merged` with keptId + mergedId.
+  Unpaid leave (B5.4): `buildPayroll` sets `deductions_aed` = salary base ÷ days in the period × approved unpaid
+  leave days in it (salary pay type only; capped at base; Cr 6900 at finalise as before), `unpaid_leave_days` and
+  `worked_minutes` (closed clock entries by business date; info only). WPS EDR: fixed = base − deduction, leave
+  days filled.
+- **Time clock (B5.4, services `timeclock.ts`)**: `staff.pin_hash` = scrypt `v1.<salt>.<hash>`; `punch` locks the
+  staff row, counts wrong PINs (returned, not thrown, so they commit; 5 → locked 5 min), toggles the open entry
+  (a second punch < 1 min after clock-in is refused, so double taps / two kiosks never clock straight out);
+  `business_date` = branch business date of the clock-in. `adjustTimeEntry` = manager fix (`source = 'manual'`).
+  `timesheet` = planned (shifts split per business day) vs worked per person/date + approved leave. Leave:
+  `requestLeave` (≤ 90 days), `decideLeave` (pending only), `cancelLeave` (own pending; approvers also approved
+  before it starts). Permissions `timeclock.kiosk` (receptionist), `timeclock.leave` (receptionist, therapist: own
+  staff record only), `timeclock.approve` (owner/manager). Route `/timeclock` (tabs Kiosk · Timesheet · Leave),
+  menu Team & roles; calendar marks staff "On leave".
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.
@@ -298,6 +384,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | Job | Schedule |
 |---|---|
 | `db-backup` (pg_dump → R2 when `R2_*` is set) | 03:30 |
+| `restore-drill` (latest R2 daily dump → scratch DB via `RESTORE_DRILL_ADMIN_URL` (CREATEDB; compose uses the postgres superuser) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
+| `instagram-reply` (DB queue `instagram_reply_queue`, RLS, PK = message id: the Meta webhook's `ingestInstagramWebhook` inserts the row in the message's transaction for live spas; the job finds spas with due rows (`tenantsWithDueReplies`, platform role), `claimDueReplies` (5-min lease, SKIP LOCKED), `inboundAnswered` skips threads already answered, `finishReply` deletes, `failReply` backs off 30 s ×2 … 30 min, `failed_at` after 5 tries. Web has no pg-boss / owner URL / `after()`) | every minute |
 | `analytics-rollup` | hourly at :07 |
 | `analytics-prune` | 04:20 |
 | `packages-expire` | 04:10 |
@@ -313,6 +401,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `daily-digest` | 09:30 |
 
 Integration jobs do nothing until their credentials are configured.
+
+**Automation switches (B3).** `tenants.settings.automations` = `{ [AutomationKey]: boolean }`, missing = on
+(`AUTOMATIONS` / `automationOn` in `packages/core/src/automations.ts`; `automationOnSql` / `setAutomation` (atomic
+jsonb merge) / `getAutomations` / `isAutomationOn` in `services/src/automations.ts`). Gates: `bookingMessages`
+(confirmation + reminder) and `thankYou` (thank_you + review_request) inside `enqueueBookingMessage` (returns null
+when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `instagram` (in
+`publishDueInstagramPosts`), `googleReviews`, `weeklyInsights`, `dailyDigest`, `documentAlerts` in the worker's
+tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). Backups + domain checks are locked on. Not
+switchable (housekeeping): analytics, media prune, campaigns housekeeping, Instagram token refresh. **Run log:**
+tenant-scoped `job_runs` (job, status ok·skipped·failed, `summary` counts; RLS) written by `recordRun()` (never
+throws; prunes > 7 days); Instagram logs only when it published/failed. UI: `/automations` (`settings.manage`),
+i18n namespace `automations`.
 
 ## Deploy, CI, e2e
 
@@ -338,6 +438,32 @@ Integration jobs do nothing until their credentials are configured.
   - Host routing by default; set `E2E_ROUTING=path` for path routing.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin.
+
+## Meta MCP (R7, AI tools)
+
+- **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.30.1, JSON
+  responses), one McpServer per request. Auth = `signMcpToken` (`mcp/token.ts`: HMAC of `META_MCP_SECRET` or
+  `BETTER_AUTH_SECRET`, domain-separated; claims tenant, agent, acting user; ≤ 5 min). Live tenants only.
+  Served at `/api/mcp/meta`; agents call it **in-process** through the same handler (`metaMcpSources`, real MCP client
+  + token) unless `META_MCP_URL` is set.
+- **Tools** (`mcp/tools.ts` registry, domain code in `@spa/services` `meta-mcp.ts` on the existing Graph client +
+  stored tokens): `instagram.list_comments|reply_comment|list_dms|draft_dm_reply|create_post_draft|publish_approved_post`,
+  `facebook_page.list_comments|reply_comment|create_post_draft|publish_approved_post` (only with a connected
+  `social_accounts` platform `facebook` row = Page id + Page token; **no Page connect flow yet**), `whatsapp.read_inbox_summary`,
+  `whatsapp.draft_message` (outbox row `custom`/`queued` for tap-send). **No WhatsApp send tool**; `isForbiddenTool`
+  drops any WhatsApp send-like tool from every server (name rules + description/schema mentioning WhatsApp).
+- **Exposure** = agent allow-list (`AGENT_META_TOOLS`: dm_agent, comment_agent, content_agent, slot_filler, meta_agent)
+  ∩ spa toggles (`tenants.settings.metaMcp.groups`: instagram_inbox, instagram_posts, facebook_page, whatsapp on by
+  default; external off) ∩ connections (publish needs Meta configured + IG connected). `instagram.reply_comment` sends
+  only when `metaMcp.autopilot` (else an `ai_draft` in the inbox); `facebook_page.reply_comment` only exists on autopilot.
+  Publish tools only publish `scheduled` (approved) posts whose time has come. Model function names map `.` → `__`.
+- **Audit**: every write tool inserts `audit_log` `ai.mcp.<tool>` (tenant, acting user, agent, clipped args, outcome);
+  the run itself `ai.mcp.run`; settings `ai.mcp.settings.updated`; console `platform.meta_mcp.updated`.
+- **External server** (super-admin AI page): `platform_settings.meta_mcp_enabled|url|key_enc (AES-GCM)|tools` — only
+  listed names, prefixed `ext__`, only for agents allowing `external` (meta_agent) and spas with the group on.
+- **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
+  autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
+  `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

@@ -21,7 +21,9 @@ export const enums = {
     gbp: 'Google',
   },
   rotationStatus: { available: 'Available', busy: 'Busy', break: 'On break', off: 'Off' },
-  resourceKind: { staff: 'Staff', room: 'Room' },
+  resourceKind: { staff: 'Staff', room: 'Room', equipment: 'Equipment' },
+  leaveType: { annual: 'Annual leave', sick: 'Sick leave', unpaid: 'Unpaid leave' },
+  leaveStatus: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' },
   staffGender: { female: 'Female', male: 'Male', other: 'Other' },
   staffPayType: {
     booking_commission: 'Commission per booking',
@@ -54,8 +56,10 @@ export const enums = {
     birthday: 'Birthday',
     winback: 'Win-back',
     slot_offer: 'Free slot offer',
+    waitlist_slot: 'Waitlist slot',
     custom: 'Custom',
   },
+  waitlistStatus: { waiting: 'Waiting', notified: 'Notified', booked: 'Booked', cancelled: 'Removed' },
   outboxStatus: { queued: 'Queued', opened: 'Opened', sent: 'Sent', skipped: 'Skipped' },
   accountType: {
     asset: 'Asset',

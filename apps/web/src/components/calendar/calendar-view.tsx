@@ -1,6 +1,6 @@
 'use client'
 import { addDays } from '@spa/core'
-import { ChevronLeft, ChevronRight, Footprints, Loader2, Plus, ShieldCheck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Footprints, ListTodo, Loader2, Plus, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
@@ -152,6 +152,16 @@ export function CalendarView({ data }: { data: CalendarData }) {
         actions={
           data.canManage ? (
             <>
+              <Button variant="secondary" asChild>
+                <Link
+                  href={`${data.calendarBase.replace(/\/calendar$/, '/waitlist')}?${new URLSearchParams({
+                    date: data.date,
+                    ...(data.branches.length > 1 ? { branch: data.branchId } : {}),
+                  })}`}
+                >
+                  <ListTodo /> {t('waitlist.open')}
+                </Link>
+              </Button>
               {showWalkIns && (
                 <Button variant="secondary" onClick={() => setWalkInOpen(true)}>
                   <Footprints /> {t('calendar.walkIn')}

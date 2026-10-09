@@ -3,7 +3,7 @@ import { enumLabel } from '@spa/core/i18n'
 import { bookings, staff, withTenant } from '@spa/db'
 import { listBookings } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
-import { ClipboardList, SearchX } from 'lucide-react'
+import { ClipboardList, ListTodo, SearchX } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -122,7 +122,17 @@ export default async function BookingsPage({
 
   return (
     <>
-      <PageHeader title={t('bookings.title')} description={t('bookings.description')} />
+      <PageHeader
+        title={t('bookings.title')}
+        description={t('bookings.description')}
+        actions={
+          <Button variant="secondary" asChild>
+            <Link href={appPath(`/${ctx.tenant.slug}/waitlist`)}>
+              <ListTodo /> {t('waitlist.open')}
+            </Link>
+          </Button>
+        }
+      />
       <Stack>
         <Card>
           <form method="get" action={base} aria-label={t('bookings.filter.label')}>

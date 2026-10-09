@@ -223,6 +223,7 @@ export type ServiceInput = {
   bufferAfterMin: number
   therapistsRequired: number
   roomTypes: string[]
+  equipmentTypes: string[]
   onlineBookable: boolean
   showPrice: boolean | null
   active: boolean
@@ -243,11 +244,14 @@ export function ServiceSheet({
   slug,
   categories,
   service,
+  equipmentTypes = [],
   variant = 'primary',
 }: {
   slug: string
   categories: Option[]
   service?: ServiceInput
+  /** Equipment types the spa has (B5.3), offered as requirements. */
+  equipmentTypes?: string[]
   variant?: 'primary' | 'secondary'
 }) {
   const [open, setOpen] = useState(false)
@@ -275,7 +279,13 @@ export function ServiceSheet({
         )
       }
     >
-      <ServiceForm slug={slug} categories={categories} service={service} onDone={() => setOpen(false)} />
+      <ServiceForm
+        slug={slug}
+        categories={categories}
+        service={service}
+        equipmentTypes={equipmentTypes}
+        onDone={() => setOpen(false)}
+      />
     </Sheet>
   )
 }
@@ -284,13 +294,16 @@ function ServiceForm({
   slug,
   categories,
   service,
+  equipmentTypes,
   onDone,
 }: {
   slug: string
   categories: Option[]
   service?: ServiceInput
+  equipmentTypes: string[]
   onDone: () => void
 }) {
+  const kitTypes = [...new Set([...equipmentTypes, ...(service?.equipmentTypes ?? [])])].sort()
   const [rows, setRows] = useState<VariantRow[]>(() =>
     service?.variants.length
       ? service.variants.map((v) => ({
@@ -501,6 +514,26 @@ function ServiceForm({
             />
           ))}
         </div>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <legend className="text-[13px] font-medium">{t('equipment.form.legend')}</legend>
+        <p className="text-[13px] text-muted">
+          {kitTypes.length ? t('equipment.form.hint') : t('equipment.form.none')}
+        </p>
+        {kitTypes.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {kitTypes.map((ty) => (
+              <ChipCheckbox
+                key={ty}
+                name="equipmentTypes"
+                value={ty}
+                label={ty}
+                defaultChecked={service?.equipmentTypes.includes(ty)}
+              />
+            ))}
+          </div>
+        )}
       </fieldset>
 
       <fieldset className="space-y-2">

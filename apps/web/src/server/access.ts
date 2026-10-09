@@ -1,9 +1,19 @@
-import { type Permission, resolvePermissions, SYSTEM_ROLES } from '@spa/core'
-import { memberBranches, members, platformAdmins, platformDb, roles, tenants, withTenant } from '@spa/db'
+import { type Permission, resolvePermissions, SYSTEM_ROLES, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
+import {
+  memberBranches,
+  members,
+  platformAdmins,
+  platformDb,
+  roles,
+  tenants,
+  user as users,
+  withTenant,
+} from '@spa/db'
 import { and, eq } from 'drizzle-orm'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { cache } from 'react'
 import { getT } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
 import { requireUser } from './session'
 
 export type TenantRow = typeof tenants.$inferSelect
@@ -19,7 +29,7 @@ export const isPlatformAdmin = cache(async (userId: string) => {
 
 export type MemberContext = {
   tenant: TenantRow
-  user: { id: string; name: string; email: string }
+  user: { id: string; name: string; email: string; twoFactorEnabled: boolean }
   member: { id: string; roleKey: string; roleName: string; allBranches: boolean; branchIds: string[] } | null
   permissions: Set<Permission>
   /** Super-admin viewing a tenant they're not a member of (every write is audited). */
@@ -31,7 +41,12 @@ export const requireMember = cache(async (slug: string): Promise<MemberContext> 
   const session = await requireUser()
   const tenant = await getTenantBySlug(slug)
   if (!tenant) notFound()
-  const user = { id: session.user.id, name: session.user.name, email: session.user.email }
+  const user = {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    twoFactorEnabled: Boolean((session.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled),
+  }
   const row = await withTenant(tenant.id, async (tx) => {
     const [m] = await tx
       .select({
@@ -58,6 +73,20 @@ export const requireMember = cache(async (slug: string): Promise<MemberContext> 
   })
   // A deleted spa (soft delete, R12) is closed to its members; super-admins can still open it.
   if (row && !tenant.deletedAt) {
+    // Security policy (Settings → Security, X5): owners and managers need TOTP 2FA before they get in.
+    if (
+      tenant.settings.require2fa &&
+      TWO_FACTOR_POLICY_ROLES.includes(row.roleKey) &&
+      !user.twoFactorEnabled
+    ) {
+      // The session cookie cache may be up to 5 minutes old: confirm against the row before sending them away.
+      const [fresh] = await platformDb()
+        .select({ on: users.twoFactorEnabled })
+        .from(users)
+        .where(eq(users.id, user.id))
+      if (fresh?.on) user.twoFactorEnabled = true
+      else redirect(`${appPath('/account')}?require2fa=${encodeURIComponent(tenant.slug)}`)
+    }
     return {
       tenant,
       user,

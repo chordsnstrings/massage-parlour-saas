@@ -1,4 +1,4 @@
-/* spamanagement.ae — cookieless, block-level site analytics. No cookies, no personal data. */
+/* spamanagement.co — cookieless, block-level site analytics. No cookies, no personal data. */
 ;(() => {
   var s = document.currentScript || document.querySelector('script[data-site]')
   var site = s && s.getAttribute('data-site')
@@ -9,13 +9,14 @@
   try {
     entry = JSON.parse(sessionStorage.getItem('spa_entry') || 'null')
   } catch (_) {}
-  if (!entry) {
-    var q = new URLSearchParams(location.search)
-    var utm = {}
-    ;['utm_source', 'utm_medium', 'utm_campaign', 'src'].forEach((k) => {
-      var v = q.get(k)
-      if (v) utm[k] = v.slice(0, 60)
-    })
+  var q = new URLSearchParams(location.search)
+  var utm = {}
+  ;['utm_source', 'utm_medium', 'utm_campaign', 'src'].forEach((k) => {
+    var v = q.get(k)
+    if (v) utm[k] = v.slice(0, 60)
+  })
+  // A tagged URL (campaign link, or the booking widget's iframe with src=widget) starts a new entry.
+  if (!entry || Object.keys(utm).length) {
     var ref = document.referrer
     try {
       if (ref && new URL(ref).hostname === location.hostname) ref = ''

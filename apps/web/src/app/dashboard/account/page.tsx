@@ -14,8 +14,15 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('account.meta') }
 }
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { user } = await requireUser()
+  // Sent here by the spa's "Require 2FA" policy (server/access.ts requireMember).
+  const required = (await searchParams).require2fa
+  const requiredSlug = typeof required === 'string' && /^[a-z0-9-]{1,63}$/.test(required) ? required : null
   const { locale, t, messages } = await getI18n()
   // Outside the spa shell: send only the namespaces these cards use.
   const { account, auth, common, errors, ui } = messages
@@ -33,6 +40,17 @@ export default async function AccountPage() {
       <I18nProvider locale={locale} messages={subset}>
         <PageHeader title={t('account.heading')} description={user.email} />
         <PageBody className="grid max-w-3xl gap-6 space-y-0 sm:space-y-0">
+          {requiredSlug && (
+            <div role="alert" className="rounded-lg border border-warning bg-warning-soft p-4 text-sm">
+              <p>{t('audit.security.required')}</p>
+              <a
+                className="mt-2 inline-block font-medium text-accent hover:underline"
+                href={appPath(`/${requiredSlug}`)}
+              >
+                {t('audit.security.backToSpa')}
+              </a>
+            </div>
+          )}
           <ProfileCard name={user.name} />
           <PasswordCard />
           <TwoFactorCard
