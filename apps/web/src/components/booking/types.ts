@@ -19,7 +19,8 @@ export type BookingDate = { date: string; closed: boolean }
 
 export type BookingCatalog = {
   spa: string
-  branch: { id: string; name: string; address: string | null; hasWhatsapp: boolean }
+  /** `mapsHref`: the branch's Google Maps link (exact pin, else an address search; null without an address). */
+  branch: { id: string; name: string; address: string | null; mapsHref: string | null; hasWhatsapp: boolean }
   /** Open branches; the page shows a picker when there is more than one (G22). */
   branches: { id: string; name: string; address: string | null }[]
   groups: BookingGroup[]

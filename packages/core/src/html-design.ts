@@ -42,7 +42,9 @@ export const HTML_DESIGN_BASE_CSS =
   ':where(html,body){max-width:100%;overflow-x:clip}' +
   ':where(img,picture,video,canvas,svg,iframe){max-width:100%}' +
   ':where(img,video){height:auto}' +
-  ':where(img){object-fit:cover;object-position:50% 50%}'
+  ':where(img){object-fit:cover;object-position:50% 50%}' +
+  ':where(a[data-spa-map]){color:inherit;text-decoration:none}' +
+  ':where(a[data-spa-map]:hover){text-decoration:underline}'
 
 const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 /** Narrowest screen the platform supports; a fixed image width above it overflows phones. */
@@ -244,6 +246,27 @@ export function applyHtmlImageAdjustments(html: string, adjust: HtmlImageAdjust[
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
+/** A placeholder that renders as a link when it stands in text (e.g. `{{address}}` → its Google Maps pin). */
+export type HtmlDesignLink = { href: string | null; label: string }
+
+/** Plain text position: not inside a tag, comment, `<a>`, or a raw-text element (script/style/title/textarea). */
+function isLinkableText(src: string, at: number) {
+  const before = src.slice(0, at).toLowerCase()
+  if (before.lastIndexOf('<') > before.lastIndexOf('>')) return false
+  if (before.lastIndexOf('<!--') > before.lastIndexOf('-->')) return false
+  const last = (re: RegExp) => {
+    let i = -1
+    for (const m of before.matchAll(re)) i = m.index
+    return i
+  }
+  for (const tag of ['a', 'script', 'style', 'title', 'textarea', 'select', 'button'])
+    if (last(new RegExp(`<${tag}[\\s>]`, 'g')) > last(new RegExp(`</${tag}[\\s>]`, 'g'))) return false
+  return true
+}
+
+const linkHtml = (text: string, link: HtmlDesignLink) =>
+  `<a href="${escapeHtml(link.href!)}" target="_blank" rel="noopener" title="${escapeHtml(link.label)}" aria-label="${escapeHtml(`${text} (${link.label})`)}" data-spa-map>${escapeHtml(text)}</a>`
+
 /**
  * The uploaded document as the frame's `srcdoc`: placeholders filled, image adjustments applied, a viewport
  * meta (if missing) + the responsive base sheet first in <head>, plus a small click handler — in-page `#anchors`
@@ -255,10 +278,15 @@ export function htmlDesignDocument(
   values: Record<string, string>,
   inert: boolean,
   images: HtmlImageAdjust[] = [],
+  links: Record<string, HtmlDesignLink> = {},
 ): string {
   const filled = applyHtmlImageAdjustments(html, images).replace(
     /\{\{\s*([a-z_]+)\s*\}\}/g,
-    (m, key: string) => (key in values ? escapeHtml(values[key]!) : m),
+    (m, key: string, at: number, src: string) => {
+      if (!(key in values)) return m
+      const link = links[key]
+      return link?.href && isLinkableText(src, at) ? linkHtml(values[key]!, link) : escapeHtml(values[key]!)
+    },
   )
   const script = `<script>(()=>{const inert=${inert};document.addEventListener('click',(e)=>{const a=e.target instanceof Element&&e.target.closest('a[href]');if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return;if(inert){e.preventDefault();return}if(!a.target){a.target=/^https?:/i.test(h)?'_blank':'_top';if(a.target==='_blank')a.rel='noopener'}},true)})()</script>`
   const head = `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>${script}`

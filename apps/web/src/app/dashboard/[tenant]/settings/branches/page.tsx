@@ -63,6 +63,7 @@ export default async function BranchesPage({ params }: { params: Promise<{ tenan
                     id: b.id,
                     name: b.name,
                     address: b.address,
+                    mapsUrl: b.mapsUrl,
                     phone: b.phone,
                     whatsapp: b.whatsappE164 ? `+${b.whatsappE164}` : null,
                     cutoff: b.businessDayCutoff.slice(0, 5),

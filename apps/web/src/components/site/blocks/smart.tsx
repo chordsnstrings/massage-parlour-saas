@@ -3,7 +3,7 @@ import { CalendarCheck, MapPin, MessageCircle, Phone, Plus, Quote, Store } from 
 import { cn, initials } from '@/lib/utils'
 import { biField, radio, text } from '../field-defs'
 import { clock, dayName, minutes, tr, ui, variantPrice, WEEKDAYS } from '../i18n'
-import { bookHref, linkProps, mapHref, pageHref, phoneHref, whatsappHref } from '../links'
+import { addressLinkProps, bookHref, linkProps, mapHref, pageHref, phoneHref, whatsappHref } from '../links'
 import type { Bi } from '../types'
 import { bandFields, SectionShell, type ShellProps } from './layout'
 import { metaOf, SectionTitle } from './shared'
@@ -395,7 +395,9 @@ export const OpeningHours: ComponentConfig<
               {branch?.address && (
                 <p className="flex gap-3">
                   <MapPin className="mt-0.5 size-5 shrink-0 text-muted" strokeWidth={1.5} />
-                  <span>{branch.address}</span>
+                  <a {...addressLinkProps(meta)} className="text-inherit hover:underline">
+                    {branch.address}
+                  </a>
                 </p>
               )}
               {branch?.phone && (
@@ -415,7 +417,7 @@ export const OpeningHours: ComponentConfig<
             </div>
             <div className="flex flex-wrap gap-3">
               {showMap && branch?.address && (
-                <a {...linkProps(meta, mapHref(branch.address))} className="sb-btn sb-btn-primary">
+                <a {...linkProps(meta, mapHref(meta))} className="sb-btn sb-btn-primary">
                   <MapPin strokeWidth={1.75} />
                   {ui('directions', meta.locale)}
                 </a>
@@ -789,7 +791,13 @@ export const Footer: ComponentConfig<
                 {ui('contact', meta.locale)}
               </p>
               <ul className="space-y-2 text-[15px]">
-                {branch?.address && <li className="text-muted">{branch.address}</li>}
+                {branch?.address && (
+                  <li className="text-muted">
+                    <a {...addressLinkProps(meta)} className="text-inherit hover:underline">
+                      {branch.address}
+                    </a>
+                  </li>
+                )}
                 {phone && (
                   <li>
                     <a {...linkProps(meta, phone)} dir="ltr" className="hover:text-muted">

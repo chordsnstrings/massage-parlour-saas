@@ -21,6 +21,9 @@ export const settings = {
     editTitle: 'Edit branch',
     name: 'Branch name',
     address: 'Address',
+    mapsUrl: 'Google Maps link',
+    mapsUrlHint:
+      'Optional. In Google Maps, open your shop, tap Share and paste the link — the address on your website then opens this exact pin.',
     phone: 'Phone',
     whatsapp: 'WhatsApp number',
     cutoff: 'Business day ends at',
@@ -41,6 +44,7 @@ export const settings = {
     archivedDone: 'Branch archived',
     restored: 'Branch restored',
     errors: {
+      mapsUrl: 'Paste a Google Maps link (google.com/maps or maps.app.goo.gl)',
       name: 'Enter the branch name',
       time: 'Use a time like 05:00',
       whatsapp: 'Enter a UAE mobile number',
@@ -67,6 +71,9 @@ export const settings = {
     cutoffHint: 'For late-night hours, e.g. 05:00.',
     address: 'Address',
     addressPlaceholder: 'Shop 4, Marina Walk, Dubai',
+    mapsUrl: 'Google Maps link',
+    mapsUrlHint:
+      'Optional. In Google Maps, open your shop, tap Share and paste the link — the address on your website then opens this exact pin.',
     phone: 'Phone',
     whatsapp: 'WhatsApp number',
     whatsappHint: 'Clients message this number.',
@@ -77,6 +84,7 @@ export const settings = {
     save: 'Save changes',
     saved: 'Settings saved',
     errors: {
+      mapsUrl: 'Paste a Google Maps link (google.com/maps or maps.app.goo.gl)',
       name: 'Enter the spa name',
       trn: 'A TRN has 15 digits',
       branchName: 'Enter a branch name',

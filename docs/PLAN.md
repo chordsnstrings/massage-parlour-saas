@@ -1209,6 +1209,10 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - Online booking from tenant sites stays.
 
 ### 18.2 Done (2026-10-09)
+- **Map links (owner request 2026-10-09):** every spa-website address (all templates, footer, placeholder site,
+  booking page, uploaded HTML designs via `{{address}}`) opens Google Maps in a new tab. Optional per-branch
+  "Google Maps link" (`branches.maps_url`, Settings → Business + Settings → Branches; only Google Maps URLs) pins the
+  exact place; else the address is searched. Details: CODEMAP "Site builder → Map links".
 - **G1:** compose passes `R2_*` to the worker; `offsiteConfig` falls back to the `S3_*` bucket (`backups/`) when no `R2_*`
   is set (separate bucket recommended); `db-backup` records ok/skipped/failed in `platform_job_runs`; console overview
   card "Off-site backup" warns when the last ok run is missing or > 36 h old.

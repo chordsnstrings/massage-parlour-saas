@@ -91,6 +91,22 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
                     placeholder={t('settings.profile.addressPlaceholder')}
                   />
                 </Field>
+                <Field
+                  label={t('settings.profile.mapsUrl')}
+                  name="mapsUrl"
+                  hint={t('settings.profile.mapsUrlHint')}
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    id="mapsUrl"
+                    name="mapsUrl"
+                    type="url"
+                    inputMode="url"
+                    dir="ltr"
+                    defaultValue={branch?.mapsUrl ?? ''}
+                    placeholder="https://maps.app.goo.gl/…"
+                  />
+                </Field>
                 <Field label={t('settings.profile.phone')} name="phone">
                   <Input id="phone" name="phone" type="tel" defaultValue={branch?.phone ?? ''} />
                 </Field>

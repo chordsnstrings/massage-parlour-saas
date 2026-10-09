@@ -32,6 +32,8 @@ export const branches = pgTable(
     tenantId: tenantId(),
     name: text('name').notNull(),
     address: text('address'),
+    /** Exact Google Maps pin (share link); site address links fall back to an address search when null. */
+    mapsUrl: text('maps_url'),
     phone: text('phone'),
     whatsappE164: text('whatsapp_e164'),
     openingHours: jsonb('opening_hours').$type<OpeningHours>().notNull().default({}),

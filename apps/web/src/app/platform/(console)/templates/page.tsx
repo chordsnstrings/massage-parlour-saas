@@ -180,6 +180,12 @@ export default async function TemplatesStudioPage() {
                     </code>
                   ))}
                 </p>
+                <p className="text-muted">
+                  <code>{'{{map_url}}'}</code> opens the spa&apos;s exact Google Maps pin (set in its branch
+                  settings), else a Maps search for its address. <code>{'{{address}}'}</code> in page text
+                  becomes a link to the same place; inside an attribute or an existing link it stays plain
+                  text.
+                </p>
               </div>
               <label className="flex items-start gap-3 rounded-xl border p-4 text-sm">
                 <Checkbox name="replace" className="mt-0.5" />

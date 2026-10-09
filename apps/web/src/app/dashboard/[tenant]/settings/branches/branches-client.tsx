@@ -13,6 +13,7 @@ type BranchForm = {
   id: string
   name: string
   address: string | null
+  mapsUrl: string | null
   phone: string | null
   whatsapp: string | null
   cutoff: string
@@ -54,6 +55,21 @@ export function BranchSheet({ slug, branch }: { slug: string; branch?: BranchFor
             name="address"
             defaultValue={branch?.address ?? ''}
             placeholder={t('settings.profile.addressPlaceholder')}
+          />
+        </Field>
+        <Field
+          label={t('settings.branches.mapsUrl')}
+          name="mapsUrl"
+          hint={t('settings.branches.mapsUrlHint')}
+        >
+          <Input
+            id="mapsUrl"
+            name="mapsUrl"
+            type="url"
+            inputMode="url"
+            dir="ltr"
+            defaultValue={branch?.mapsUrl ?? ''}
+            placeholder="https://maps.app.goo.gl/…"
           />
         </Field>
         <div className="grid gap-5 sm:grid-cols-2">

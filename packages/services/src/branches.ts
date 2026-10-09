@@ -7,6 +7,8 @@ import { DomainError } from './errors'
 export type BranchInput = {
   name: string
   address?: string | null
+  /** Exact Google Maps pin (validated by the caller); undefined leaves it unchanged on update. */
+  mapsUrl?: string | null
   phone?: string | null
   whatsappE164?: string | null
   /** HH:MM — the business day ends here (late-night shops), e.g. 05:00. */
@@ -57,6 +59,7 @@ export async function createBranch(
       tenantId,
       name: input.name.trim(),
       address: input.address?.trim() || null,
+      mapsUrl: input.mapsUrl?.trim() || null,
       phone: input.phone?.trim() || null,
       whatsappE164: input.whatsappE164 || null,
       businessDayCutoff: input.businessDayCutoff,
@@ -76,6 +79,7 @@ export async function updateBranch(tx: Tx, branchId: string, input: BranchInput)
     .set({
       name: input.name.trim(),
       address: input.address?.trim() || null,
+      ...(input.mapsUrl !== undefined && { mapsUrl: input.mapsUrl?.trim() || null }),
       phone: input.phone?.trim() || null,
       whatsappE164: input.whatsappE164 || null,
       businessDayCutoff: input.businessDayCutoff,

@@ -203,6 +203,13 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `allow-same-origin`: design scripts can't touch platform cookies/APIs); `{{placeholders}}` filled + HTML-escaped from
   `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
   when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
+- **Map links (owner, 2026-10-09)**: every rendered branch address links to Google Maps (new tab, label "Open in Google
+  Maps" EN/AR via `ui('openInMaps')`, `data-maps-link`): contact/hours block, footer, placeholder site, booking page.
+  Target = `branchMapsHref` (`@spa/core/maps.ts`): `branches.maps_url` (exact pin; validated by `isGoogleMapsUrl` —
+  google.<tld>/maps, maps.google.<tld>, maps.app.goo.gl, goo.gl/maps — in Settings → Business and Settings → Branches
+  actions) else an address search. Site: `mapHref(meta)` / `addressLinkProps(meta)` (`links.ts`). HTML designs:
+  `{{map_url}}` = same target; `{{address}}` in plain text becomes an escaped `<a data-spa-map>` (not inside tags,
+  comments, `<a>`, script/style/title/textarea/select/button — `htmlDesignDocument(…, links)`). E2E: `site.spec.ts`.
   - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
     `htmlDesignDocument` adds a viewport meta if missing + `HTML_DESIGN_BASE_CSS` (all `:where()`, first in <head> so
     the design's rules win) + the link script; `fixHtmlDesign` (upload) adds the viewport and turns inline img

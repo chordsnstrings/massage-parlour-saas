@@ -45,6 +45,7 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
       ? {
           name: branch.name,
           address: branch.address,
+          mapsUrl: branch.mapsUrl,
           phone: branch.phone,
           whatsappE164: branch.whatsappE164,
           openingHours: branch.openingHours,

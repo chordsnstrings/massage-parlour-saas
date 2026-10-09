@@ -1,4 +1,4 @@
-import { whatsappLink } from '@spa/core'
+import { branchMapsHref, whatsappLink } from '@spa/core'
 import { MapPin, MessageCircle, Phone } from 'lucide-react'
 import { Reveal } from '@/components/ui/motion'
 import type { siteData } from '@/server/sites'
@@ -35,7 +35,18 @@ export function PlaceholderSite({ data }: { data: Awaited<ReturnType<typeof site
         </div>
         {branch?.address && (
           <p className="mt-10 inline-flex items-center gap-2 text-sm text-muted">
-            <MapPin className="size-4" strokeWidth={1.5} /> {branch.address}
+            <MapPin className="size-4" strokeWidth={1.5} />{' '}
+            <a
+              href={branchMapsHref(branch) ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`${branch.address} (Open in Google Maps)`}
+              title="Open in Google Maps"
+              data-maps-link=""
+              className="text-inherit hover:underline"
+            >
+              {branch.address}
+            </a>
           </p>
         )}
       </Reveal>
