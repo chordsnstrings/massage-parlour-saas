@@ -2,7 +2,7 @@
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
-fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+fix backlog F1–F8 ✅, **F9–F15 open** (§17, remind the owner); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
 - Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
@@ -13,15 +13,15 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
   tx => service(tx, …))` → `audit()` → `revalidatePath` → `ok()`/`fail()` (lib/action.ts); `DomainError` → `failDomain`.
 - Spa dashboard (PLAN §14.6): `SpaShell` + scoped `crm.css` (super-admin keeps AppShell + globals.css look). UI text
   EN + TH only via `@spa/core/i18n` keys — server `getT()`, client `useT()`; `ok`/`fail` take keys; never translate
-  typed names; Thai copy needs native review.
+  typed names; Thai + Arabic copy natively reviewed by the owner's team 2026-10-09 (new strings still need review).
 - Phase 2 screen conversion: page kit `components/crm` + `crm-kit.css`, i18n per-namespace files, enum/permission/
   DomainError translation and the per-screen checklist → `docs/design/phase2-kit.md`.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** PLAN §17 F1–F8 are all fixed (backlog complete). If new items are added to §17, while any is open, remind the owner in one line in the first
-  reply of every session and at the end of every task. Name the open items and the next one in order. Don't fix them
-  until the owner says so.
+- **Fix backlog reminder:** PLAN §17: F1–F8 fixed; **F9–F15 open** (owner 2026-10-09: "always remind me"). While any is open,
+  remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
+  the next one in order. Don't fix them until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
   `docs/CODEMAP.md` / `docs/PLAN.md` in the same session, commit, and merge the docs into the deploy branch
   `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path).

@@ -1175,6 +1175,17 @@ CLAUDE.md). Rules for the work:
 - **Past refunds** posted before F1 stay as they are (no correcting entries). Amount-only refunds recorded before
   F2 have no `refund_lines`; they still count against the sale total.
 
+
+### Open backlog F9–F15 (owner 2026-10-09: "remind me later and always remind me" — not started; fix only when the owner says so)
+Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
+- **F9. Bot check on public booking** (G17): Cloudflare Turnstile on the booking page/widget + AI booking entry points; keep honeypot + per-IP limit.
+- **F10. Security headers** (G11): `script-src` CSP (nonces) + standard headers on app, console, marketing and tenant sites; sandboxed HTML designs keep their own CSP.
+- **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
+- **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
+- **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
+- **F14. Tests for 2FA + password reset** (G13 remainder): e2e for 2FA enrol/verify/require2fa redirect, password reset, files access matrix.
+- **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
+
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
 - **Blockers:** ✅ G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
@@ -1423,6 +1434,12 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
     publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
     (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+- **Owner answers (2026-10-09, after launch review):** VAT on the setup invoice is optional (chosen at acceptance);
+  deposit must be > 0 and < the setup invoice total (incl. VAT only when VAT is charged); the balance is due on the
+  start/delivery date or 10 days after start (chosen at acceptance, default 10 days); subscription fees (monthly AED 2,000
+  or yearly AED 24,000 per the plan) start from the start date; rejected-login rule and apply-form limits (5/h, 20/day per IP) agreed.
+  Thai + Arabic copy natively reviewed by the owner's team (2026-10-09). Features page: built "Coming next" items move to the main list.
 
 ### 18.5 Marketing: Spa CRM page (owner 2026-10-09)
 - Owner request: the marketing site sells the spa CRM (the dashboard we build and run for each spa), not only websites,
