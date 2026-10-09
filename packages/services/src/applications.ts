@@ -12,6 +12,7 @@ import {
   isEmirate,
   SYSTEM_ROLES,
   type SystemRoleKey,
+  type SubscriptionDiscounts,
   setupBalanceDueDate,
 } from '@spa/core'
 import {
@@ -35,11 +36,13 @@ import {
   user,
 } from '@spa/db'
 import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import { isLegacyPlan } from './entitlements'
 import { DomainError } from './errors'
 import { setTenantLogo } from './logo'
 import {
   addMonths,
   createPlatformInvoice,
+  discounted,
   generateBillingScheduleTx,
   invoiceTotals,
   recordPlatformPayment,
@@ -61,7 +64,7 @@ export type ProvisionInput = {
    * Default: a trial on the first active plan (the old self-serve sign-up). Accepted applications pass an active
    * subscription on the chosen plan that starts on the agreed date and runs one year.
    */
-  subscription?: { planId: string; status: 'active'; start: string }
+  subscription?: { planId: string; status: 'active'; start: string; discounts?: SubscriptionDiscounts }
   branch?: { address?: string | null; phone?: string | null }
 }
 
@@ -120,6 +123,7 @@ export async function provisionTenantTx(tx: Tx, input: ProvisionInput) {
       priceAed: plan.priceAed,
       setupFeeAed: plan.setupFeeAed,
       billingInterval: plan.billingInterval,
+      discounts: input.subscription?.discounts ?? {},
       currentPeriodStart: start,
       // The subscription price is annual (R3): an accepted spa's period is one year from its start date.
       currentPeriodEnd: active ? addMonths(start, 12) : addDays(start, plan.trialDays),
@@ -275,6 +279,8 @@ export async function acceptApplication(
     startDate: string
     today: string
     payment: SetupPaymentInput | null
+    /** PLAN §18.8 per-spa discounts, stored on the subscription: the setup invoice and the schedule use them. */
+    discounts?: SubscriptionDiscounts
   },
 ) {
   return db.transaction(async (tx) => {
@@ -287,6 +293,8 @@ export async function acceptApplication(
     if (app.status !== 'pending') throw new DomainError('This application was already reviewed')
     const [plan] = await tx.select().from(plans).where(eq(plans.id, r.planId))
     if (!plan) throw new DomainError('Plan not found', 'not_found')
+    // PLAN §18.8: the legacy yearly plan is for existing spas only (until their renewal), never a new spa.
+    if (isLegacyPlan(plan)) throw new DomainError('Choose a plan that is offered to spas', 'not_found')
     const [account] = await tx
       .select({ id: user.id, disabledAt: user.disabledAt })
       .from(user)
@@ -300,7 +308,9 @@ export async function acceptApplication(
     if (taken) throw new DomainError('That address is taken.')
 
     // Validate the setup payment before anything is numbered (invoice numbers come from a sequence: no gaps).
-    const fee = Number(plan.setupFeeAed)
+    const setup = discounted(plan.setupFeeAed, r.discounts?.setup)
+    // A setup fee discounted to 0 is no setup fee: no invoice, no payment.
+    const fee = Number(setup.amountAed)
     let pay: { amount: number; total: number; vat: boolean; input: SetupPaymentInput } | null = null
     if (fee > 0) {
       const p = r.payment
@@ -313,7 +323,7 @@ export async function acceptApplication(
         throw new DomainError('Choose when the balance is due')
       const [settings] = await tx.select().from(platformSettings).where(eq(platformSettings.id, 1))
       const vat = p.chargeVat ?? true
-      const total = Number(invoiceTotals(fee, settings, vat).totalAed)
+      const total = Number(invoiceTotals(Number(setup.amountAed), settings, vat).totalAed)
       const amount = p.kind === 'full' ? total : Number(p.amountAed)
       if (p.kind === 'deposit' && !(Number.isFinite(amount) && amount > 0 && amount < total))
         throw new DomainError(depositRule(total, vat))
@@ -326,7 +336,7 @@ export async function acceptApplication(
       businessName: app.spaName,
       slug: app.slug,
       today: r.today,
-      subscription: { planId: plan.id, status: 'active', start: r.startDate },
+      subscription: { planId: plan.id, status: 'active', start: r.startDate, discounts: r.discounts },
       branch: { address: `${app.streetAddress}, ${emirate}`, phone: app.phone },
     })
 
@@ -347,12 +357,13 @@ export async function acceptApplication(
     if (pay) {
       const dueDate = setupBalanceDueDate(r.startDate, pay.input.balanceDue ?? DEFAULT_BALANCE_DUE, r.today)
       invoice = await createPlatformInvoice(tx, tenant.id, {
-        description: 'One-time setup fee',
-        amountAed: plan.setupFeeAed,
+        description: `One-time setup fee${setup.note}`,
+        amountAed: setup.amountAed,
         issueDate: r.today,
         dueDate,
         kind: 'setup',
         vat: pay.vat,
+        discount: setup.discount,
       })
       if (!invoice) throw new Error('setup invoice already exists')
       const recorded = await recordPlatformPayment(tx, {
@@ -382,6 +393,9 @@ export async function acceptApplication(
         invoiceNumber: invoice.number,
         vat: pay.vat,
         dueDate: invoice.dueDate,
+        ...(setup.discount
+          ? { discountAed: setup.discount.discountAed, discountLabel: setup.discount.label }
+          : {}),
       }
     }
 

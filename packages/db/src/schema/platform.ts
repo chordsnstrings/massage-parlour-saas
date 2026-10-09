@@ -34,6 +34,8 @@ export const tenantStatus = pgEnum('tenant_status', [
   'cancelled',
 ])
 export const billingInterval = pgEnum('billing_interval', ['year', 'month'])
+/** Super-admin feature-tier override per spa (PLAN §18.8; keys = FEATURE_TIERS in @spa/core). */
+export const featureTier = pgEnum('feature_tier', ['premium', 'standard'])
 export const subscriptionStatus = pgEnum('subscription_status', [
   'trialing',
   'active',
@@ -158,6 +160,11 @@ export const tenants = pgTable(
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
     /** G18 per-spa AI kill switch (super-admin): false = the gateway refuses every AI call for this spa. */
     aiEnabled: boolean('ai_enabled').notNull().default(true),
+    /**
+     * PLAN §18.8: super-admin override of the plan's features ("Grant Premium features" while billed at Standard).
+     * NULL = the plan decides (`effectiveFeatures` in @spa/core).
+     */
+    featureTier: featureTier('feature_tier'),
     /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
@@ -205,6 +212,12 @@ export const domains = pgTable(
   () => tenantPolicies(),
 )
 
+/** Same shape as `SubscriptionDiscounts` in @spa/core (this package doesn't depend on core). */
+export type SubscriptionDiscountsRow = {
+  setup?: { kind: 'amount' | 'percent'; value: string } | null
+  monthly?: { kind: 'amount' | 'percent'; value: string } | null
+}
+
 export const subscriptions = pgTable(
   'subscriptions',
   {
@@ -220,6 +233,8 @@ export const subscriptions = pgTable(
     currentPeriodStart: date('current_period_start').notNull(),
     currentPeriodEnd: date('current_period_end').notNull(),
     graceDays: integer('grace_days').notNull().default(14),
+    /** PLAN §18.8 per-spa discounts (super-admin), applied when the setup / plan invoices are generated. */
+    discounts: jsonb('discounts').$type<SubscriptionDiscountsRow>().notNull().default({}),
     notes: text('notes'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -245,6 +260,10 @@ export const platformInvoices = pgTable(
     installment: smallint('installment'),
     installments: smallint('installments'),
     subtotalAed: numeric('subtotal_aed', { precision: 12, scale: 2 }).notNull(),
+    /** PLAN §18.8: a discounted invoice keeps its list amount, the discount (AED) and how it was set ("10%"). */
+    listAed: numeric('list_aed', { precision: 12, scale: 2 }),
+    discountAed: numeric('discount_aed', { precision: 12, scale: 2 }),
+    discountLabel: text('discount_label'),
     vatAed: numeric('vat_aed', { precision: 12, scale: 2 }).notNull(),
     totalAed: numeric('total_aed', { precision: 12, scale: 2 }).notNull(),
     status: invoiceStatus('status').notNull().default('issued'),
@@ -485,6 +504,9 @@ export type SetupPaymentSummary = {
   vat?: boolean
   /** The setup invoice's due date (start date or 10 days after it). */
   dueDate?: string
+  /** PLAN §18.8: discount on the setup fee (AED off the fee, and how it was set). */
+  discountAed?: string
+  discountLabel?: string
 }
 
 export const spaApplications = pgTable(

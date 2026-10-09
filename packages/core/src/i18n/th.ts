@@ -34,6 +34,7 @@ import { overview } from './th/overview'
 import { packages } from './th/packages'
 import { payroll } from './th/payroll'
 import { permissions } from './th/permissions'
+import { plan } from './th/plan'
 import { purchases } from './th/purchases'
 import { pwa } from './th/pwa'
 import { reviews } from './th/reviews'
@@ -104,6 +105,7 @@ export const th: Messages = {
   auth,
   enums,
   permissions,
+  plan,
   notifications,
   search,
   audit,
