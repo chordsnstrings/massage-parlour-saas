@@ -34,7 +34,7 @@ snapshot() {
     echo "== $(date -u +%FT%TZ) =="
     compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'
     echo; free -m | head -2; df -h / | tail -1
-    for s in migrate web worker caddy; do
+    for s in db-roles migrate web worker caddy; do
       echo; echo "== $s (last 60 lines) =="
       compose logs --no-color --tail 60 "$s" 2>&1 | sed -E 's/(password|secret|token|key)=[^ &"]+/\1=***/gI'
     done

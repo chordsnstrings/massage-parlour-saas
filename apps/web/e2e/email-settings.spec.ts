@@ -19,6 +19,9 @@ test('console email settings: masked Resend key, test email, config health (G9)'
   await expect(page.getByTestId('config-backups')).toBeVisible()
   // F9: the e2e server runs with Cloudflare's Turnstile test keys → green (unset would be red).
   await expect(page.getByTestId('config-TURNSTILE')).toHaveAttribute('data-ok', 'true')
+  // F11: the restore drill's role exists (bootstrap.sql) with CREATEDB only.
+  await expect(page.getByTestId('config-drill-role')).toHaveAttribute('data-ok', 'true')
+  await expect(page.getByTestId('config-drill-role')).toContainText('CREATEDB only')
 
   await page.goto(`${admin}/settings`)
   const card = page.getByTestId('email-settings')

@@ -1186,7 +1186,10 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   booking endpoint exists (the DM agent runs on signed Meta webhooks / the staff test chat). Owner step:
   deploy/droplet/README.md "Bot check on public forms".
 - **F10. Security headers** (G11): `script-src` CSP (nonces) + standard headers on app, console, marketing and tenant sites; sandboxed HTML designs keep their own CSP.
-- **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
+- ✅ **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
+  Done: role `spa_drill` (bootstrap.sql; compose one-shot `db-roles` re-runs the bootstrap every deploy, so existing
+  droplets get it without SSH; password derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is set); worker
+  refuses a superuser role; console Configuration row "Restore drill role (spa_drill)".
 - **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
 - ✅ **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
   Shipped 2026-10-09 as a separate `bookings.attribution` enum (instagram, gbp, google, qr, facebook, tiktok, whatsapp,
@@ -1206,7 +1209,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
-  G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
+  ✅ G10 worker holds superuser URL (F11) · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   ✅ G17 no Turnstile on public booking (F9) · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
