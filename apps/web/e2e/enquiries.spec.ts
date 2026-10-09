@@ -1,7 +1,9 @@
-import { expect, test } from '@playwright/test'
+import { readdir, readFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { expect, type Page, test } from '@playwright/test'
 import { auditLog, contactEnquiries } from '@spa/db'
 import { and, eq, sql } from 'drizzle-orm'
-import { admin, base, signInPlatformAdmin, testDb } from './helpers'
+import { ADMIN, admin, base, signInPlatformAdmin, testDb } from './helpers'
 
 // Contact enquiries (PLAN §18.4, owner 2026-10-09): the marketing Contact form (server-validated, values kept on
 // error, honeypot) → stored as `new` → the super-admin sees it in the console's Enquiries (nav badge), opens it
@@ -9,7 +11,7 @@ import { admin, base, signInPlatformAdmin, testDb } from './helpers'
 const tag = Date.now().toString(36)
 const MESSAGE = 'Online booking for our two branches, please call me after 4pm.'
 
-async function fillForm(page: import('@playwright/test').Page, email: string, spa: string, phone: string) {
+async function fillForm(page: Page, email: string, spa: string, phone: string) {
   await page.getByLabel('Your name', { exact: true }).fill('Layla Hassan')
   await page.getByLabel('Phone', { exact: true }).fill(phone)
   await page.getByLabel('Email', { exact: true }).fill(email)
@@ -117,6 +119,12 @@ test('contact form → super-admin Enquiries (badge) → marked contacted with a
     expect(audits).toHaveLength(1)
     expect(audits[0]?.data).toMatchObject({ status: { from: 'new', to: 'contacted' } })
   })
+
+  await test.step('an empty status filter names that status', async () => {
+    await p.goto(`${admin}/enquiries?status=closed`)
+    await expect(p.getByText('No closed enquiries')).toBeVisible()
+    await expect(p.getByText('No enquiries yet')).toHaveCount(0)
+  })
   await ctx.close()
 })
 
@@ -133,4 +141,65 @@ test('a filled honeypot looks sent but nothing is stored; the console needs a si
 
   await page.goto(`${admin}/enquiries`)
   await expect(page).toHaveURL(/\/login/)
+})
+
+// Saves (or removes) a console Resend key: staff email then lands in the e2e outbox (JSON files, no Resend call).
+async function consoleEmailKey(page: Page, key: string | null) {
+  await page.goto(`${admin}/settings`)
+  const card = page.getByTestId('email-settings')
+  if (key) await card.getByLabel('Resend API key').fill(key)
+  else await card.getByLabel('Remove the stored key').check()
+  await card.getByRole('button', { name: 'Save email settings' }).click()
+  await expect(page.getByText('Email settings saved')).toBeVisible()
+}
+
+test('a new enquiry emails the super-admins (reply-to = sender); its audit row keeps no raw IP', async ({
+  page,
+  browser,
+}) => {
+  const outbox = process.env.EMAIL_E2E_OUTBOX_DIR as string
+  const email = `ahmed-${tag}@e2e.test`
+  const spa = `Oasis ${tag}`
+  const ip = `203.0.113.${(Date.now() % 250) + 1}`
+  await rm(outbox, { recursive: true, force: true })
+  await signInPlatformAdmin(page)
+  await consoleEmailKey(page, 're_e2eEnquiryKey_ENQ1')
+  try {
+    const ctx = await browser.newContext({ extraHTTPHeaders: { 'cf-connecting-ip': ip } })
+    const visitor = await ctx.newPage()
+    await visitor.goto(`${base}/contact`)
+    await fillForm(visitor, email, spa, '+44 (0)20 7946 0958')
+    await visitor.getByRole('button', { name: 'Send message' }).click()
+    await expect(visitor.getByTestId('enquiry-sent')).toBeVisible()
+    await ctx.close()
+    const [row] = await testDb().select().from(contactEnquiries).where(eq(contactEnquiries.email, email))
+    expect(row?.phone).toBe('+442079460958')
+
+    const sentTo = async () => {
+      const files = await readdir(outbox).catch(() => [] as string[])
+      const mails = await Promise.all(
+        files.map(async (f) => JSON.parse(await readFile(join(outbox, f), 'utf8'))),
+      )
+      return mails.find((m) => m.replyTo === email)
+    }
+    await expect.poll(async () => (await sentTo())?.to ?? null).toBe(ADMIN.email) // after() runs post-reply
+    const mail = await sentTo()
+    expect(mail).toMatchObject({
+      to: ADMIN.email,
+      replyTo: email,
+      subject: `New enquiry: ${spa} (Layla Hassan)`,
+    })
+    expect(mail.text).toContain(MESSAGE)
+    expect(mail.text).toContain(`${admin}/enquiries/${row!.id}`)
+
+    const audits = await testDb()
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, row!.id), eq(auditLog.action, 'platform.enquiry.received')))
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.ip).toBeNull()
+    expect(JSON.stringify(audits[0])).not.toContain(ip)
+  } finally {
+    await consoleEmailKey(page, null)
+  }
 })

@@ -18,8 +18,21 @@ export const ENQUIRY_LIMITS = [
 ] as const
 export const ENQUIRY_MESSAGE_MAX = 2000
 
-const text = (required: string, max: number, tooLong: string) =>
-  z.string({ error: required }).trim().min(1, required).max(max, tooLong)
+// Control characters never reach the email Subject, logs or the database (Postgres refuses NUL): one-line fields
+// turn line breaks / controls into spaces and drop bidi overrides; the message keeps only newlines and tabs.
+const BIDI_OVERRIDES = /[\u202A-\u202E\u2066-\u2069]/gu
+const oneLine = (v: string) =>
+  v
+    .replace(BIDI_OVERRIDES, '')
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ')
+    .replace(/\s{2,}/g, ' ')
+const multiLine = (v: string) =>
+  v
+    .replace(BIDI_OVERRIDES, '')
+    .replace(/\r\n?|[\u2028\u2029]/g, '\n')
+    .replace(/(?![\n\t])\p{Cc}/gu, '')
+const text = (required: string, max: number, tooLong: string, clean = oneLine) =>
+  z.string({ error: required }).overwrite(clean).trim().min(1, required).max(max, tooLong)
 
 /** What the Contact form sends. Messages are English (the marketing site is English only). */
 export const enquirySchema = z.object({
@@ -47,6 +60,7 @@ export const enquirySchema = z.object({
     'Tell us what you need',
     ENQUIRY_MESSAGE_MAX,
     `Keep your message under ${ENQUIRY_MESSAGE_MAX} characters`,
+    multiLine,
   ),
 })
 export type EnquiryInput = z.input<typeof enquirySchema>
@@ -75,13 +89,30 @@ export async function submitEnquiry(
 /** `%q%` for ILIKE, with the wildcards in `q` taken literally. */
 const contains = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
 
-/** Newest first; `q` matches name, email or spa name (and the phone, when it has 4+ digits). */
+/**
+ * Newest first; `q` matches name, email or spa name, and the phone when it has 4+ digits: phones are stored as
+ * +E.164, so a local or 00 form (050 123 4567, 00971…) is matched as +971… too.
+ */
 export async function listEnquiries(
   db: DbOrTx,
   opts: { status?: EnquiryFilter; q?: string; limit?: number } = {},
 ) {
   const q = opts.q?.trim().slice(0, 100)
   const digits = q?.replace(/\D/g, '') ?? ''
+  const phones =
+    digits.length >= 4
+      ? [
+          ...new Set([
+            digits,
+            digits.startsWith('00')
+              ? digits.slice(2)
+              : digits.startsWith('0')
+                ? `971${digits.slice(1)}`
+                : digits,
+            (q && toE164(q)) || digits,
+          ]),
+        ]
+      : []
   const conds: (SQL | undefined)[] = [
     opts.status && opts.status !== 'all' ? eq(contactEnquiries.status, opts.status) : undefined,
     q
@@ -89,7 +120,7 @@ export async function listEnquiries(
           ilike(contactEnquiries.name, contains(q)),
           ilike(contactEnquiries.email, contains(q)),
           ilike(contactEnquiries.spaName, contains(q)),
-          digits.length >= 4 ? ilike(contactEnquiries.phone, contains(digits)) : undefined,
+          ...phones.map((p) => ilike(contactEnquiries.phone, contains(p))),
         )
       : undefined,
   ]

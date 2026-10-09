@@ -543,7 +543,7 @@ export const contactEnquiries = pgTable(
     message: text('message').notNull(),
     /** Internal console note (never shown to the sender). */
     adminNote: text('admin_note'),
-    /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address). */
+    /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address; its audit row has `ip` null). */
     ipHash: text('ip_hash'),
     userAgent: text('user_agent'),
     /** Last super-admin who changed the status or note. */

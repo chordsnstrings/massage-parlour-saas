@@ -95,7 +95,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
-     `audit()` (`server/audit.ts`, platformDb `audit_log`) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
+     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
    - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
      rethrow to the error boundary.
    - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`

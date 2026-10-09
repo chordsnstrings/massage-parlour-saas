@@ -84,7 +84,13 @@ export default async function EnquiriesPage({
             empty={
               <EmptyState
                 icon={<Mail className="size-5" />}
-                title={q ? 'No enquiries match' : filter === 'new' ? 'No new enquiries' : 'No enquiries yet'}
+                title={
+                  q
+                    ? 'No enquiries match'
+                    : filter === 'all'
+                      ? 'No enquiries yet'
+                      : `No ${ENQUIRY_STATUS[filter].label.toLowerCase()} enquiries`
+                }
               />
             }
             columns={[

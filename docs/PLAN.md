@@ -1413,12 +1413,17 @@ Marketing **Contact** page (`marketing/contact`) gets an enquiry form; the owner
 - **Stored:** `contact_enquiries` (platform-only RLS, no `tenant_id`): name, phone, email, spa_name, message, status
   `new | contacted | closed`, admin_note, ip_hash (HMAC-SHA256 of the IP with BETTER_AUTH_SECRET, 32 hex — the raw IP is
   only in the day-long rate-limit keys), user_agent (≤ 300), handled_by/at, timestamps. Audit
-  `platform.enquiry.received` (no actor) and `platform.enquiry.updated` (changed, status from→to, note).
+  `platform.enquiry.received` (no actor, **`ip: null`** — `audit()` takes an `ip` override, so the raw address is not
+  stored next to the enquiry) and `platform.enquiry.updated` (changed, status from→to, note). Name / spa name are one
+  line (line breaks, control chars → space, bidi overrides dropped: they go into the email Subject and logs); the
+  message keeps newlines/tabs only (NUL etc. dropped). Phones: `toE164` drops a trunk 0 — `(0)`, after +971, and
+  after a separately typed country code (+44 07700…, 0049 030…) except countries that keep it (+39 Italy, …).
 - **Notify:** after the reply (`after()`), `sendStaffEmail` to every `PLATFORM_ADMIN_EMAILS` address with
   **reply-to = the sender** (`StaffEmail.replyTo` → Resend `reply_to`) + console link; failures are logged, never
   fail the submission. Console nav **Enquiries** (after Applications) with the count of `new` (`newEnquiryCount`).
 - **Console `/enquiries`** (`requirePlatformAdmin` in pages + action): newest first, filter New / Contacted / Closed /
-  All (default All, with counts), search name / email / spa (and phone digits, 4+). Detail page: message, all fields,
+  All (default All, with counts), search name / email / spa (and phone digits, 4+; the local 05… / 00971… forms match
+  the stored +971…). Empty filter → "No <status> enquiries" ("No enquiries yet" only under All). Detail page: message, all fields,
   **Call** (`tel:`), **WhatsApp** (`wa.me` click-to-send draft, locked comms rule), **Email** (`mailto:` with subject),
   last handled (who/when); Follow-up form = status radio + internal note (≤ 2000) → `updateEnquiry` (row-locked, stamps
   handled_by/at only when something changed; "No changes" otherwise). No "convert to application" (not needed).
@@ -1426,6 +1431,8 @@ Marketing **Contact** page (`marketing/contact`) gets an enquiry form; the owner
   **ask@spamanagement.co** (core email.ts; replaces the old hello@ fallback); the seed sets it for new installs.
   **Owner:** if Console → Company → Email holds another address, change it there to ask@spamanagement.co. Make sure
   ask@spamanagement.co receives mail (mailbox/forwarding at the domain's email provider).
-- **Tests:** core `toE164`; services `enquiries.test.ts` (store/normalise, validation, 5/hour limit, list/search/
-  counts, status + note, spa role can't read/write); e2e `enquiries.spec.ts` (360 px, inline error keeps values →
-  sent → super-admin badge + search + links → contacted + note, badge drops, audit; honeypot dropped; console needs sign-in).
+- **Tests:** core `toE164` + Resend `reply_to`; services `enquiries.test.ts` (store/normalise, one-line fields,
+  validation, 5/hour limit, list/search incl. local UAE phone/counts, status + note, spa role can't read/write); e2e
+  `enquiries.spec.ts` (360 px, inline error keeps values → sent → super-admin badge + search + links → contacted + note,
+  badge drops, audit, empty Closed filter; honeypot dropped; console needs sign-in; with a console Resend key the
+  admin email lands in the e2e outbox with reply-to = sender + console link, received audit row has no IP).

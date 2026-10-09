@@ -84,6 +84,22 @@ describe('contact enquiries', () => {
       message: `Keep your message under ${ENQUIRY_MESSAGE_MAX} characters`,
     })
     expect(fieldErrors(form({ message: 'x'.repeat(ENQUIRY_MESSAGE_MAX) }))).toEqual({})
+    // One-line fields can't carry line breaks, controls or bidi overrides into the email Subject or logs; the
+    // message keeps its newlines (NUL and other controls dropped: Postgres refuses NUL).
+    expect(
+      enquirySchema.parse(
+        form({
+          name: 'Bob\r\n[auth] admin sign-in ok',
+          spaName: 'Spa\u202Egnp.exe\u0000 \u2028Two',
+          message: 'Line 1\r\nLine 2\u0000\u202E\tend',
+        }),
+      ),
+    ).toMatchObject({
+      name: 'Bob [auth] admin sign-in ok',
+      spaName: 'Spagnp.exe Two',
+      message: 'Line 1\nLine 2\tend',
+    })
+    expect(fieldErrors(form({ name: '\r\n\t' }))).toEqual({ name: 'Enter your name' })
     await expect(submitEnquiry(platform, form({ phone: 'call me' }))).rejects.toBeInstanceOf(ZodError)
     const [n] = await platform.select({ n: sql<number>`count(*)::int` }).from(contactEnquiries)
     expect(n?.n).toBe(2)
@@ -116,6 +132,9 @@ describe('contact enquiries', () => {
     expect((await listEnquiries(platform, { q: '100%' })).map((e) => e.name)).toEqual(['Omar 100%'])
     expect(await listEnquiries(platform, { q: '_' })).toEqual([])
     expect((await listEnquiries(platform, { q: '7700 900' })).map((e) => e.name)).toEqual(['Tom'])
+    // Stored +971…: the local UAE form (and a partial one) and the 00 form find it too.
+    for (const q of ['0501234567', '050 123', '00971 50 123 4567', '+971 50 123'])
+      expect((await listEnquiries(platform, { q })).map((e) => e.name)).toEqual(['Omar 100%', 'Layla Hassan'])
     expect(await listEnquiries(platform, { status: 'contacted' })).toEqual([])
     expect(await enquiryCounts(platform)).toEqual({ new: 3, contacted: 0, closed: 0, all: 3 })
     expect(await newEnquiryCount(platform)).toBe(3)

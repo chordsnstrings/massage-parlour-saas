@@ -36,6 +36,7 @@ export async function sendEnquiryAction(_prev: ActionResult, fd: FormData): Prom
     entity: 'contact_enquiry',
     entityId: enquiry.id,
     data: { spaName: enquiry.spaName },
+    ip: null, // public event: only the enquiry's keyed ip_hash is kept, never the raw address
   })
   after(() => emailNewEnquiry(enquiry))
   return ok(SENT)
