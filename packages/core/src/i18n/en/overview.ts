@@ -117,7 +117,7 @@ export const overview = {
       off: 'AI insights aren’t switched on yet.',
       cooldown: 'Insights were just refreshed — try again in a few minutes.',
       notEnoughData: 'Not enough activity in the last two weeks yet — insights start once bookings come in.',
-      budget: 'Your monthly AI budget is used up. Ask your account manager to raise it.',
+      budget: 'AI paused: monthly AI budget reached — contact us.',
       disabled: 'Weekly insights are switched off by the platform.',
       busy: 'The AI service is busy — please try again in a moment.',
     },

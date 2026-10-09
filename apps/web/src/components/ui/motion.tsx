@@ -62,11 +62,12 @@ export function StaggerItem({ children, className }: { children: React.ReactNode
 }
 
 /** Counts up to `value` when scrolled into view. */
-export function NumberTicker({ value, format }: { value: number; format?: 'aed' | 'int' | 'pct' }) {
+export function NumberTicker({ value, format }: { value: number; format?: 'aed' | 'int' | 'pct' | 'usd' }) {
   const ref = useRef<HTMLSpanElement>(null)
   const inView = useInView(ref, { once: true })
   const mv = useMotionValue(0)
   const text = useTransform(mv, (v) => {
+    if (format === 'usd') return `USD ${v.toFixed(2)}`
     if (format === 'aed') return `AED ${Math.round(v).toLocaleString('en-AE')}`
     if (format === 'pct') return `${Math.round(v)}%`
     return Math.round(v).toLocaleString('en-AE')

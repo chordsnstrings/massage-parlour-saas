@@ -84,12 +84,14 @@ export default async function SpaPerformancePage({
             <StatCard label="New clients" value={p.newClients} format="int" />
           </StaggerItem>
           <StaggerItem>
-            <StatCard
-              label="AI spend (month)"
-              value={Math.round(p.aiSpendUsd)}
-              format="int"
-              hint={`USD ${p.aiSpendUsd.toFixed(2)} of ${Number(spa.aiBudgetUsd).toFixed(0)} budget`}
-            />
+            <Link href={adminPath(`/ai/usage/${spa.id}`)} className="block" data-testid="perf-ai-link">
+              <StatCard
+                label="AI spend (month) →"
+                value={p.aiSpendUsd}
+                format="usd"
+                hint={`of USD ${Number(spa.aiBudgetUsd).toFixed(0)} budget · details in AI usage`}
+              />
+            </Link>
           </StaggerItem>
         </Stagger>
 

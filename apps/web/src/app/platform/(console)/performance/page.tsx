@@ -161,7 +161,11 @@ export default async function PerformancePage({
               },
               {
                 key: 'ai',
-                header: 'AI (month)',
+                header: (
+                  <Link href={adminPath('/ai/usage')} className="hover:text-fg">
+                    AI (month) →
+                  </Link>
+                ),
                 className: num,
                 hideOnMobile: true,
                 cell: (r) => (

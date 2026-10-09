@@ -9,7 +9,7 @@ export function StatCard({
 }: {
   label: string
   value: number
-  format?: 'aed' | 'int' | 'pct'
+  format?: 'aed' | 'int' | 'pct' | 'usd'
   hint?: string
 }) {
   return (

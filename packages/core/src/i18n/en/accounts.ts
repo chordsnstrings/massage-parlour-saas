@@ -119,7 +119,8 @@ export const accounts = {
     currency: 'Receipt is in {currency} — enter the AED amount you paid.',
     read: 'Receipt read — check the details before saving.',
     noTotal: 'Receipt attached, but the total wasn’t readable — please fill it in.',
-    budget: 'Receipt attached. Your monthly AI budget is used up — please fill in the details.',
+    budget:
+      'Receipt attached. AI paused: monthly AI budget reached — please fill in the details (contact us to raise it).',
     disabled: 'Receipt attached. Scanning is switched off — please fill in the details.',
     failed: 'Receipt attached, but it couldn’t be read. Please fill in the details.',
   },
