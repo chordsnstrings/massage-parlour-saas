@@ -194,7 +194,12 @@ export const shifts = pgTable(
     note: text('note'),
     createdAt: createdAt(),
   },
-  (t) => [index('shifts_staff_time').on(t.staffId, t.startsAt), ...tenantPolicies()],
+  (t) => [
+    index('shifts_staff_time').on(t.staffId, t.startsAt),
+    // Branch/period scans (KPIs: on-shift hours, RevPATH).
+    index('shifts_branch_time').on(t.branchId, t.startsAt),
+    ...tenantPolicies(),
+  ],
 )
 
 /** Customer billing details for a full UAE tax invoice (G16). `trn` only when the customer is VAT registered. */
@@ -356,7 +361,8 @@ export const bookingItems = pgTable(
     /** Equipment units reserved for this item (B5.3). */
     equipmentIds: uuid('equipment_ids').array().notNull().default([]),
   },
-  () => tenantPolicies(),
+  // Joins from bookings (reports: F31 room utilisation, rebooking by therapist).
+  (t) => [index('booking_items_booking').on(t.bookingId), ...tenantPolicies()],
 )
 
 export const resourceKind = pgEnum('resource_kind', ['staff', 'room', 'equipment'])
