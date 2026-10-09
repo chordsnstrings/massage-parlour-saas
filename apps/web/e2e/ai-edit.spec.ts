@@ -5,7 +5,16 @@ import { applySiteEditOps, type SiteEditOp } from '@spa/services/site-kit'
 import { and, desc, eq } from 'drizzle-orm'
 import { siteEditSchema } from '../src/components/site/ai-schema'
 import { SECTION_PRESETS } from '../src/components/site/presets'
-import { app, makeStudio, mockAiReply, screenshotAt, seedCatalog, signUpOwner, testDb } from './helpers'
+import {
+  app,
+  makeSiteAiEditor,
+  makeStudio,
+  mockAiReply,
+  screenshotAt,
+  seedCatalog,
+  signUpOwner,
+  testDb,
+} from './helpers'
 
 const HERO = 'Unwind in the heart of the city'
 const NEW_HERO = 'Golden calm in the city'
@@ -56,8 +65,9 @@ test('AI edit schema matches the real blocks: every section preset re-validates'
 })
 
 test('Website Studio: Ask AI previews an edit, applies it to the draft and undoes it', async ({ page }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Saffron Spa' })
-  await makeStudio(slug)
+  // SITE_AI_EDITOR_EMAILS (playwright.config.ts) lists this owner's email: owner-ai-editor@e2e.test.
+  const { slug } = await signUpOwner(page, { spa: 'Saffron Spa', slug: 'ai-editor' })
+  await makeSiteAiEditor(slug)
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db.transaction((tx) =>
@@ -78,9 +88,13 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
       .limit(1)
     return JSON.stringify(v!.data)
   }
+  /** Live theme accent, and the unpublished draft theme's accent (AI theme ops only touch the draft). */
   const accent = async () => {
     const [s] = await db.select().from(sites).where(eq(sites.tenantId, seed.tenantId))
-    return (s!.theme as { accent?: string }).accent
+    return {
+      live: (s!.theme as { accent?: string }).accent,
+      draft: (s!.themeDraft as { accent?: string } | null)?.accent,
+    }
   }
   const ops: SiteEditOp[] = [
     { op: 'update', id: 'hero-1', props: { title: { en: NEW_HERO, ar: 'هدوء ذهبي في المدينة' } } },
@@ -111,7 +125,10 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
     await expect(page.getByText('AI changes saved as a draft')).toBeVisible()
     await expect.poll(draft).toContain(NEW_HERO)
     expect(await draft()).toContain('"type":"FAQ"')
-    expect(await accent()).toBe('#b8892b')
+    expect(await accent()).toEqual({ live: '#5e7d6b', draft: '#b8892b' })
+    await expect(page.getByRole('list', { name: 'Recent AI changes' })).toContainText(
+      'Make it gold and add an FAQ after the hero',
+    )
     const published = await db
       .select()
       .from(pageVersions)
@@ -131,6 +148,30 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
     await expect(page.getByText('AI change undone')).toBeVisible()
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible()
     await expect.poll(draft).not.toContain(NEW_HERO)
-    expect(await accent()).toBe('#5e7d6b')
+    expect(await accent()).toEqual({ live: '#5e7d6b', draft: '#5e7d6b' })
+    await expect(page.getByRole('list', { name: 'Recent AI changes' })).toHaveCount(0)
   })
+})
+
+test('Website Studio: Ask AI is off for a super-admin outside SITE_AI_EDITOR_EMAILS', async ({ page }) => {
+  const { slug } = await signUpOwner(page, { spa: 'Other Studio Spa' })
+  await makeStudio(slug)
+  const seed = await seedCatalog(slug)
+  const db = testDb()
+  await db.transaction((tx) =>
+    ensureSite(tx, seed.tenantId, {
+      key: 'nordic',
+      name: 'Nordic Clean',
+      theme: { accent: '#5e7d6b' },
+      pages: [{ slug: '', title: { en: 'Home', ar: 'الرئيسية' }, data: homePage }],
+    }),
+  )
+  const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
+  await mockAiReply(slug, { ops: [{ op: 'remove', id: 'hero-1' }], note: 'Removed.' })
+  await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+  await page.getByRole('button', { name: 'Ask AI' }).click()
+  await expect(page.getByRole('note')).toHaveText('AI site editing isn’t enabled for your account.')
+  await expect(page.getByPlaceholder('What should change?')).toHaveCount(0)
+  const usage = await db.select().from(aiUsage).where(eq(aiUsage.tenantId, seed.tenantId))
+  expect(usage).toHaveLength(0)
 })

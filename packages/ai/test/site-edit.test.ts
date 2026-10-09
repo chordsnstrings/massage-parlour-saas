@@ -104,6 +104,18 @@ describe('planSiteEdit', () => {
     expect(Number(usage[0]!.costUsd)).toBeGreaterThan(0)
   })
 
+  it('keeps an index placement and drops ops of unknown shape (whole reply rejected)', async () => {
+    const ok = mockClient(
+      JSON.stringify({ ops: [{ op: 'add', type: 'FAQ', index: 0, after: null }], note: 'FAQ first.' }),
+    )
+    const res = await plan(ok.client)
+    expect(res.ops).toEqual([{ op: 'add', type: 'FAQ', index: 0 }])
+    const applied = applySiteEditOps({ data, theme: {}, ops: res.ops }, schema, (t) => `${t}-x`)
+    expect(applied.ok && applied.data.content.map((c) => c.type)).toEqual(['FAQ', 'Hero'])
+    const bad = mockClient(JSON.stringify({ ops: [{ op: 'publish' }], note: 'Published.' }))
+    await expect(plan(bad.client)).rejects.toBeInstanceOf(AiOutputError)
+  })
+
   it('rejects output that is not a list of ops (one retry, then an error)', async () => {
     const { fetch, client } = mockClient('{"html":"<div>new page</div>"}')
     await expect(plan(client)).rejects.toBeInstanceOf(AiOutputError)

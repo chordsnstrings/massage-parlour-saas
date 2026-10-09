@@ -10,7 +10,7 @@ import {
   type Tx,
   tenants,
 } from '@spa/db'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { collectGlobalIds } from './site-kit/tree'
 
@@ -225,6 +225,7 @@ export async function publishPage(
   const latest = await latestVersion(tx, input.tenantId, input.pageId)
   const data = input.data ?? latest?.data
   if (!data) throw new DomainError('Nothing to publish yet')
+  await publishPendingChanges(tx, input.tenantId, page)
   // Promote the draft in place, unless it is a named draft that new content would overwrite.
   if (latest?.status === 'draft' && (!latest.label || !input.data)) {
     const [promoted] = await tx
@@ -253,6 +254,41 @@ export async function publishPage(
     })
     .returning()
   return created!
+}
+
+/**
+ * Unpublished site settings go live with a publish: the draft theme (AI edits, site-wide) and this page's pending
+ * rename. Drafts never reach visitors before that.
+ */
+async function publishPendingChanges(tx: Tx, tenantId: string, page: SitePageRow) {
+  await tx
+    .update(sites)
+    .set({ theme: sql`${sites.themeDraft}`, themeDraft: null })
+    .where(and(eq(sites.tenantId, tenantId), isNotNull(sites.themeDraft)))
+  if (page.pending)
+    await tx
+      .update(sitePages)
+      .set({
+        ...(page.pending.title ? { title: page.pending.title } : {}),
+        ...(page.pending.slug !== undefined ? { slug: page.pending.slug } : {}),
+        pending: null,
+      })
+      .where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.id, page.id)))
+}
+
+/** The theme the editor and previews show: the unpublished draft theme when there is one, else the live theme. */
+export const editingTheme = (site: Pick<SiteRow, 'theme' | 'themeDraft'>): ThemeTokens =>
+  site.themeDraft ?? site.theme
+
+/** Saves theme tokens as the site's DRAFT theme (validated by the caller); live on the next publish. */
+export async function updateDraftTheme(tx: Tx, tenantId: string, theme: ThemeTokens): Promise<SiteRow> {
+  const [site] = await tx
+    .update(sites)
+    .set({ themeDraft: theme })
+    .where(eq(sites.tenantId, tenantId))
+    .returning()
+  if (!site) throw new DomainError('Choose a template first', 'not_found')
+  return site
 }
 
 /** Version history for a page, newest first (data omitted). */
@@ -321,7 +357,7 @@ export async function switchTemplate(
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: template.key, theme, ...(undo ? { templateUndo: undo } : {}) })
+    .set({ templateKey: template.key, theme, themeDraft: null, ...(undo ? { templateUndo: undo } : {}) })
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
@@ -393,7 +429,7 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: undo.templateKey, theme: undo.theme, templateUndo: null })
+    .set({ templateKey: undo.templateKey, theme: undo.theme, themeDraft: null, templateUndo: null })
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
@@ -433,6 +469,47 @@ export async function addPage(
     createdBy: input.userId ?? null,
   })
   return page!
+}
+
+/**
+ * Renames a page (menu title and/or address; the home page keeps slug ''). A page that is live gets the rename as
+ * `pending`, applied by its next publish, so visitors never see an unpublished change; a never-published page is
+ * renamed directly. Returns the page row and whether the rename waits for a publish.
+ */
+export async function renamePage(
+  tx: Tx,
+  input: { tenantId: string; pageId: string; title?: SiteText; slug?: string },
+): Promise<{ page: SitePageRow; pending: boolean }> {
+  const page = await getPage(tx, input.tenantId, input.pageId)
+  if (!page) throw new DomainError('Page not found', 'not_found')
+  const next: { title?: SiteText; slug?: string } = {}
+  if (input.title) {
+    const en = input.title.en.trim()
+    if (!en || en.length > 80) throw new DomainError('Page titles need 1–80 characters')
+    const ar = input.title.ar?.trim().slice(0, 80)
+    next.title = { en, ...(ar ? { ar } : {}) }
+  }
+  const currentSlug = page.pending?.slug ?? page.slug
+  if (input.slug !== undefined && input.slug !== currentSlug) {
+    if (page.slug === '') throw new DomainError('The home page address can’t change')
+    if (!input.slug || !PAGE_SLUG.test(input.slug) || input.slug.length > 60)
+      throw new DomainError('Use lowercase letters, numbers and dashes')
+    const others = (await listPages(tx, input.tenantId)).filter((p) => p.id !== page.id)
+    const taken = new Set([
+      ...others.flatMap((p) => [p.slug, ...(p.pending?.slug !== undefined ? [p.pending.slug] : [])]),
+      ...RESERVED_SLUGS,
+    ])
+    if (taken.has(input.slug)) throw new DomainError('Another page already uses that address')
+    next.slug = input.slug
+  }
+  if (!Object.keys(next).length) return { page, pending: Boolean(page.pending) }
+  const live = Boolean(await latestVersion(tx, input.tenantId, page.id, 'published'))
+  const [updated] = await tx
+    .update(sitePages)
+    .set(live ? { pending: { ...(page.pending ?? {}), ...next } } : next)
+    .where(and(eq(sitePages.tenantId, input.tenantId), eq(sitePages.id, input.pageId)))
+    .returning()
+  return { page: updated!, pending: live }
 }
 
 /** Replaces the site's theme tokens (validated by the caller). Live immediately: tokens apply to published pages. */

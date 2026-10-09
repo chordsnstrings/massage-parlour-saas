@@ -1,6 +1,6 @@
 import { enumLabel } from '@spa/core/i18n'
 import { domains, withTenant } from '@spa/db'
-import { getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
+import { editingTheme, getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
 import { asc, sql } from 'drizzle-orm'
 import { ArrowRight, ExternalLink, FileText, Globe, MessageSquare, PencilLine } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -426,7 +426,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                     </div>
                     <span className="flex flex-wrap gap-2">
                       <CopyButton value={publicUrl} label={t('website.copyLink')} />
-                      {canDesign && <ThemeSheet slug={slug} theme={normalizeTheme(site.theme)} />}
+                      {canDesign && <ThemeSheet slug={slug} theme={normalizeTheme(editingTheme(site))} />}
                     </span>
                   </div>
                 </Card>

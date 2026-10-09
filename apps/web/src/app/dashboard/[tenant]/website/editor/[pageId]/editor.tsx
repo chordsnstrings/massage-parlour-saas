@@ -125,6 +125,8 @@ type EditorProps = {
   aiReady: boolean
   /** R16 Ask AI (studio editor; ModelArk configured). */
   aiEditReady: boolean
+  /** SITE_AI_EDITOR_EMAILS super-admin with 2FA (else the panel only says it isn't enabled). */
+  aiEditAllowed: boolean
   sections: SavedSection[]
   pages: { slug: string; visible: boolean; published: boolean }[]
   backHref: string
@@ -485,6 +487,7 @@ function EditorHeader() {
         {props.aiEditReady && (
           <AiEditPanel
             api={aiEditApi}
+            enabled={props.aiEditAllowed}
             getData={() => current() as unknown as Record<string, unknown>}
             theme={chrome.theme}
             show={(data, theme) => {

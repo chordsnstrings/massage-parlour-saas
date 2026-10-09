@@ -1,4 +1,4 @@
-import { withTenant } from '@spa/db'
+import { platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
 import { getEditablePage, listPages, listSavedSections } from '@spa/services'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -66,6 +66,7 @@ export default async function EditorPage({
       canInsights={can(ctx, 'reports.view')}
       aiReady={Boolean(process.env.ARK_API_KEY)}
       aiEditReady={Boolean(process.env.ARK_API_KEY) || aiFixturesOn()}
+      aiEditAllowed={(await siteAiEditorStatus(platformDb(), ctx.user.id)) === 'ok'}
       sections={sections}
       pages={loaded.pages.map((p) => ({
         slug: p.slug,

@@ -9,32 +9,40 @@ import type { SiteTheme } from '../theme'
 
 type PageJson = Record<string, unknown>
 type Snapshot = { data: PageJson; theme: SiteTheme | null }
-type Plan = { data: PageJson; theme: SiteTheme | null; summary: string[]; note: string }
+type Plan = {
+  data: PageJson
+  theme: SiteTheme | null
+  summary: string[]
+  note: string
+  ops: { op: string }[]
+}
+type Applied = { at: number; instruction: string; summary: string[]; previous: Snapshot }
+
+/** How many applied AI changes the panel keeps for undo (newest first). */
+const HISTORY = 5
 
 export type AiEditApi = {
   plan: (input: { instruction: string; data: PageJson }) => Promise<ActionResult>
-  apply: (input: {
-    instruction: string
-    summary: string[]
-    data: PageJson
-    theme: SiteTheme | null
-  }) => Promise<ActionResult>
+  apply: (input: { instruction: string; ops: { op: string }[]; data: PageJson }) => Promise<ActionResult>
   undo: (input: { summary: string[]; data: PageJson; theme: SiteTheme | null }) => Promise<ActionResult>
 }
 
 /**
- * R16 "Ask AI" (Website Studio, super-admin tooling — English UI): an instruction becomes a previewed change on
- * the canvas (page + theme), then Apply saves it as the draft (never publishes) and Undo restores the previous
- * draft. `show` puts data/theme on the canvas; `saved` resets the editor's unsaved-changes baseline.
+ * "Ask AI" (Website Studio, super-admin tooling — English UI; instructions in any language): an instruction becomes
+ * a previewed change on the canvas (page + draft theme), then Apply saves it as the draft (never publishes). The last
+ * few applied changes stay listed; Undo reverts the newest to the draft before it. `show` puts data/theme on the
+ * canvas; `saved` resets the editor's unsaved-changes baseline. `enabled` = SITE_AI_EDITOR_EMAILS account.
  */
 export function AiEditPanel({
   api,
+  enabled,
   getData,
   theme,
   show,
   saved,
 }: {
   api: AiEditApi
+  enabled: boolean
   getData: () => PageJson
   theme: SiteTheme
   show: (data: PageJson, theme: SiteTheme) => void
@@ -42,8 +50,10 @@ export function AiEditPanel({
 }) {
   const [open, setOpen] = useState(false)
   const [instruction, setInstruction] = useState('')
-  const [plan, setPlan] = useState<(Plan & { before: Snapshot & { theme: SiteTheme } }) | null>(null)
-  const [applied, setApplied] = useState<{ summary: string[]; previous: Snapshot } | null>(null)
+  const [plan, setPlan] = useState<
+    (Plan & { instruction: string; before: Snapshot & { theme: SiteTheme } }) | null
+  >(null)
+  const [history, setHistory] = useState<Applied[]>([])
   const [pending, start] = useTransition()
 
   const preview = () =>
@@ -55,8 +65,7 @@ export function AiEditPanel({
         return
       }
       const next = r.data as Plan
-      setApplied(null)
-      setPlan({ ...next, before })
+      setPlan({ ...next, instruction, before })
       show(next.data, next.theme ?? theme)
     })
   const discard = () => {
@@ -67,34 +76,36 @@ export function AiEditPanel({
   const apply = () =>
     start(async () => {
       if (!plan) return
-      const r = await api.apply({
-        instruction,
-        summary: plan.summary,
-        data: plan.data,
-        theme: plan.theme,
-      })
+      const r = await api.apply({ instruction: plan.instruction, ops: plan.ops, data: plan.before.data })
       if (!r?.ok) {
         if (r) toast.error(r.error)
         return
       }
       saved()
-      setApplied({ summary: plan.summary, previous: r.data?.previous as Snapshot })
+      const previous = r.data?.previous as Snapshot
+      setHistory((h) =>
+        [{ at: Date.now(), instruction: plan.instruction, summary: plan.summary, previous }, ...h].slice(
+          0,
+          HISTORY,
+        ),
+      )
       setPlan(null)
       setInstruction('')
       toast.success(r.message ?? 'Saved')
     })
   const undo = () =>
     start(async () => {
-      if (!applied) return
-      const prev = applied.previous
-      const r = await api.undo({ summary: applied.summary, data: prev.data, theme: prev.theme })
+      const latest = history[0]
+      if (!latest) return
+      const prev = latest.previous
+      const r = await api.undo({ summary: latest.summary, data: prev.data, theme: prev.theme })
       if (!r?.ok) {
         if (r) toast.error(r.error)
         return
       }
       show(prev.data, prev.theme ?? theme)
       setTimeout(saved, 60)
-      setApplied(null)
+      setHistory((h) => h.slice(1))
       toast.success(r.message ?? 'Undone')
     })
 
@@ -118,12 +129,16 @@ export function AiEditPanel({
         >
           <header className="mb-3 flex items-center gap-2">
             <Sparkles className="size-4 text-accent" />
-            <h2 className="flex-1 text-sm font-semibold tracking-tight">Ask AI</h2>
+            <h2 className="flex-1 text-sm font-semibold tracking-tight">Ask AI to edit</h2>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Close Ask AI">
               <X />
             </Button>
           </header>
-          {plan ? (
+          {!enabled ? (
+            <p role="note" className="rounded-xl border bg-subtle/50 p-3 text-sm text-muted">
+              AI site editing isn’t enabled for your account.
+            </p>
+          ) : plan ? (
             <div className="space-y-3">
               <p className="text-xs text-muted">Previewing on the canvas — nothing is saved yet.</p>
               {plan.note && <p className="text-sm">{plan.note}</p>}
@@ -138,7 +153,7 @@ export function AiEditPanel({
               </ul>
               {plan.theme && (
                 <p className="text-xs text-muted">
-                  Theme changes apply to every page once saved (like the Theme panel).
+                  Theme changes are saved as a draft theme for every page; they go live when you publish.
                 </p>
               )}
               <div className="flex justify-end gap-2">
@@ -153,8 +168,8 @@ export function AiEditPanel({
           ) : (
             <div className="space-y-3">
               <label className="block text-xs text-muted" htmlFor="ai-edit-instruction">
-                Describe the change, e.g. “Add an FAQ after the services”, “Rewrite the hero in Arabic”, “Make
-                all pages gold”.
+                Describe the change (any language), e.g. “Add an FAQ after the services”, “Rewrite the hero in
+                Arabic”, “Make all pages gold”.
               </label>
               <textarea
                 id="ai-edit-instruction"
@@ -166,18 +181,33 @@ export function AiEditPanel({
                 placeholder="What should change?"
               />
               <div className="flex items-center justify-between gap-2">
-                {applied ? (
-                  <Button variant="ghost" onClick={undo} pending={pending}>
-                    {!pending && <Undo2 />}
-                    Undo AI change
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted">Saved as a draft. Publishing stays separate.</span>
-                )}
+                <span className="text-xs text-muted">Saved as a draft. Publishing stays separate.</span>
                 <Button onClick={preview} pending={pending} disabled={instruction.trim().length < 3}>
                   Preview change
                 </Button>
               </div>
+              {history.length > 0 && (
+                <div className="space-y-2 border-t pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-medium text-muted">Recent AI changes</h3>
+                    <Button variant="ghost" onClick={undo} pending={pending}>
+                      {!pending && <Undo2 />}
+                      Undo AI change
+                    </Button>
+                  </div>
+                  <ol aria-label="Recent AI changes" className="space-y-1 text-xs">
+                    {history.map((h, i) => (
+                      <li
+                        key={h.at}
+                        className={cn('truncate', i > 0 && 'text-muted')}
+                        title={h.summary.join(' · ')}
+                      >
+                        {h.instruction}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
             </div>
           )}
         </section>

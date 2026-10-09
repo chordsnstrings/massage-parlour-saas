@@ -18,6 +18,7 @@ import {
   setPageVisible,
   switchTemplate,
   undoTemplateSwitch,
+  updateDraftTheme,
   updateTheme,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -308,6 +309,15 @@ export async function saveThemeAction(
         ...d,
         accentSoft: mixHex(d.accent, current.bg, 0.14),
       })
+      // An unpublished AI theme draft keeps its other changes but takes these values too (else it would hide them).
+      if (site.themeDraft) {
+        const draft = normalizeTheme(site.themeDraft)
+        await updateDraftTheme(tx, ctx.tenant.id, {
+          ...draft,
+          ...d,
+          accentSoft: mixHex(d.accent, draft.bg, 0.14),
+        })
+      }
     })
   } catch (e) {
     return domainFail(e)

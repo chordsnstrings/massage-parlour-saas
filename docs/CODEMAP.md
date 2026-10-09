@@ -228,7 +228,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Draft JSON is capped at 512 KB.
   - Design changes need `site.design` (checked via `designSignature`).
   - Preflight runs before publish (`server/site-preflight.ts`); errors block publishing, warnings don't.
+- **Site-edit ops layer** (`@spa/services` `site-edit.ts`, shared by Ask AI and the Claude MCP connector): `runSiteEdit`
+  (zod op shapes → per-page `applySiteEditOps` against the block schema the caller passes, all-or-nothing, `dryRun`,
+  `base` = editor canvas data; writes `saveDraft` / `addPage` / `renamePage` / `updateDraftTheme`; `check` callback =
+  caller policy), `restoreSiteEdit`, `getSiteForEdit`, `blockCatalogue`, `siteEditAuditData`. Edit ops accept `index`.
+  Drafts only: `sites.theme_draft` (`editingTheme()`; editor, previews and preflight use it; `loadSite({published:
+  false})` swaps it in) and `site_pages.pending` (rename of a live page); `publishPage` applies both.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
+  Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed verified email + super-admin +
+  2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
+  (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
+  reverts the newest.
   - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the
     instruction, the trimmed page (`trimPageForPrompt`: ids/types/props, page text marked as data) and the vocabulary
     from `siteEditSchema()` (`components/site/ai-schema.ts`: built from the Puck config — custom fields carry
@@ -550,6 +560,25 @@ i18n namespace `automations`.
 - **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
   autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
   `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
+
+## Claude MCP connector (site editing, `/api/mcp`)
+
+- **OAuth** (packages/auth): Better Auth `jwt()` + `@better-auth/mcp` `mcp()` (oauth-provider 1.7.7; tables in
+  `@spa/db` `schema/oauth.ts`: jwks, oauth_client/resource/client_resource/refresh_token/access_token/consent/
+  client_assertion). Resource = `mcpResourceUrl()` (canonical APP_URL + `/api/mcp`; dev `*.localhost` → `localhost`).
+  Open DCR (rate-limited), PKCE, login `/login`, consent `/oauth/consent` (`(auth)/oauth/consent`, EN+TH keys
+  `auth.oauth.*`). Auth `hooks.before` on `/oauth2/authorize` (ineligible → consent page `?not_enabled=1`) and
+  `/oauth2/consent` (403). `oauthProviderClient()` in the browser client sends the signed query, so sign-in / 2FA
+  resume the flow (`forms.tsx` follows the returned `url`). Discovery: `app/.well-known/[...path]` → auth handler
+  (proxy no longer rewrites `/.well-known/*`). `verifyMcpAccessToken`: local JWKS (cached 5 min), audience-bound.
+- **Server** `packages/ai/src/mcp/site-server.ts` `handleSiteMcpRequest` (stateless, JSON): bearer → verify →
+  `siteAiEditorStatus` → consent row for (user, client) → 60/min per token (in memory) → tools (`SITE_MCP_TOOLS`) over
+  the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
+  Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
+- **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
+  deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
+  `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
+  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

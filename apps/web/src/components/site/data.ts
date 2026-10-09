@@ -1,6 +1,6 @@
 import { businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
 import { branches, serviceCategories, services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
-import { getSite, listPages, publicPrice, type SiteRow, spaHidesPrices } from '@spa/services'
+import { editingTheme, getSite, listPages, publicPrice, type SiteRow, spaHidesPrices } from '@spa/services'
 import { and, asc, eq } from 'drizzle-orm'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
@@ -80,9 +80,14 @@ export async function loadSite(tenant: TenantLite, opts: { published: boolean })
     const pages = (await listPages(tx, tenant.id)).filter(
       (p) => p.visible && (!opts.published || p.publishedAt),
     )
+    // Editor + previews (not published) show unpublished AI edits: the draft theme and pending page renames.
+    const draft = !opts.published
     return {
-      site: site as SiteRow | null,
-      data: { ...live, pages: pages.map((p) => ({ slug: p.slug, title: p.title })) } satisfies SiteData,
+      site: (site && draft ? { ...site, theme: editingTheme(site) } : site) as SiteRow | null,
+      data: {
+        ...live,
+        pages: pages.map((p) => ({ slug: p.slug, title: (draft && p.pending?.title) || p.title })),
+      } satisfies SiteData,
     }
   })
 }

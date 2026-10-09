@@ -75,6 +75,18 @@ worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTI
 is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
 either place.
 
+## Connect Claude (edit spa sites from Claude)
+
+1. Set `SITE_AI_EDITOR_EMAILS` to **your own email** (secrets file / env; comma-separated if ever more). That account
+   must be a super-admin with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
+2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
+   "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
+   with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
+3. Ask Claude e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ". Every change is a **draft**:
+   preview and publish in the Website Studio as usual (Claude can also give a preview link).
+4. Disconnect any time: console → Websites → Connect Claude → **Revoke** (takes effect on Claude's next call).
+   Removing your email from `SITE_AI_EDITOR_EMAILS` also stops it at once.
+
 ## Secrets without SSH
 
 `/opt/spa/.env` is written at first boot. To add or rotate secrets later:
@@ -185,6 +197,8 @@ python3 deploy/droplet/render-user-data.py /path/to/secrets.env > /tmp/user_data
 The secrets file needs these keys:
 - `BRANCH`, `REPO_URL`, `SITE_HOST=auto`
 - `PLATFORM_ADMIN_EMAILS`, `ACME_EMAIL`, `STATUS_PASSWORD`
+- `SITE_AI_EDITOR_EMAILS` = **the owner's own email** (Studio "Ask AI" + the Claude connector; that account must be a
+  super-admin with 2FA; empty = nobody; removing an address cuts access on the next request)
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`

@@ -1,6 +1,7 @@
 // Server-side site preflight shared by the editor and the website overview's "Publish all".
 import type { Tx } from '@spa/db'
 import {
+  editingTheme,
   getEditablePage,
   getSite,
   globalSectionsFor,
@@ -29,7 +30,7 @@ export async function publishErrors(
     globalSectionsFor(tx, tenantId, data),
   ])
   const context = {
-    colors: preflightColors(normalizeTheme(site?.theme)),
+    colors: preflightColors(normalizeTheme(site ? editingTheme(site) : undefined)),
     currentSlug,
     pages: pages.map((p) => ({ slug: p.slug, visible: p.visible, published: Boolean(p.publishedAt) })),
     globalIds: new Set(sections.filter((s) => s.isGlobal).map((s) => s.id)),
