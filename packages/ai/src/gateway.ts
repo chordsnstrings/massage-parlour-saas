@@ -1,4 +1,5 @@
-import { aiModelConfig, aiUsage, type Db, platformDb, tenants } from '@spa/db'
+import { aiModelConfig, aiUsage, type Db, platformDb, platformSettings, type Tx, tenants } from '@spa/db'
+import { aiBudgetLevel, aiMonth, createNotification } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
@@ -18,6 +19,12 @@ export class AiBudgetExceededError extends Error {
   }
 }
 export class AiDisabledError extends Error {}
+/** The super-admin switched AI off for this spa (`tenants.ai_enabled`) or for everyone (`platform_settings`). */
+export class AiPausedError extends AiDisabledError {
+  constructor(readonly scope: 'spa' | 'platform') {
+    super(scope === 'spa' ? 'AI disabled for this spa by the platform' : 'AI disabled platform-wide')
+  }
+}
 export class AiOutputError extends Error {}
 
 /** USD cost of one call from token usage and the configured prices (per 1M tokens). */
@@ -40,6 +47,68 @@ export function costOf(
 export function dubaiMonthStart(now = new Date()) {
   const dubai = new Date(now.getTime() + 4 * 3600_000)
   return new Date(Date.UTC(dubai.getUTCFullYear(), dubai.getUTCMonth(), 1) - 4 * 3600_000)
+}
+
+/**
+ * Kill switches + budget before a call (G18). Throws AiPausedError / AiBudgetExceededError; returns the budget
+ * so the caller can check thresholds after metering.
+ */
+export async function assertAiAllowed(db: Db, tenantId: string, now = new Date()) {
+  const [tenant, settings] = await Promise.all([
+    db.query.tenants.findFirst({
+      where: eq(tenants.id, tenantId),
+      columns: { aiBudgetUsd: true, aiEnabled: true, slug: true },
+    }),
+    db.query.platformSettings.findFirst({
+      where: eq(platformSettings.id, 1),
+      columns: { aiEnabled: true },
+    }),
+  ])
+  if (!tenant) throw new Error('unknown tenant')
+  if (settings && !settings.aiEnabled) throw new AiPausedError('platform')
+  if (!tenant.aiEnabled) throw new AiPausedError('spa')
+  const budget = Number(tenant.aiBudgetUsd)
+  const spend = await monthSpendUsd(db, tenantId, now)
+  if (aiBudgetLevel(spend, budget) === 'over') {
+    await noteBudgetThreshold(db, { tenantId, slug: tenant.slug, budget, spend, now })
+    throw new AiBudgetExceededError(tenantId)
+  }
+  return { budget, slug: tenant.slug }
+}
+
+/**
+ * Tells the spa's owner (bell, `billing.view`) once per threshold per Dubai month: 80 % → warning, 100 % → paused.
+ * The dedupe key makes repeats no-ops; the console reads the same state live from `ai_usage`.
+ */
+export async function noteBudgetThreshold(
+  db: Db,
+  o: { tenantId: string; slug: string; budget: number; spend?: number; now?: Date },
+) {
+  const now = o.now ?? new Date()
+  const spend = o.spend ?? (await monthSpendUsd(db, o.tenantId, now))
+  const level = aiBudgetLevel(spend, o.budget)
+  if (level === 'ok') return null
+  const pct = level === 'over' ? 100 : 80
+  return createNotification(db as unknown as Tx, {
+    tenantId: o.tenantId,
+    kind: level === 'over' ? 'ai.budget_reached' : 'ai.budget_warning',
+    params: {
+      percent: o.budget > 0 ? Math.min(Math.floor((spend / o.budget) * 100), 100) : 100,
+      spent: spend.toFixed(2),
+      budget: o.budget.toFixed(2),
+    },
+    url: `/${o.slug}/ai`,
+    dedupeKey: `ai.budget.${pct}.${aiMonth(0, now).month}`,
+  })
+}
+
+/** After metering: a failed notification must never fail the AI call that already ran. */
+async function afterSpend(db: Db, tenantId: string, gate: { budget: number; slug: string }) {
+  try {
+    await noteBudgetThreshold(db, { tenantId, ...gate })
+  } catch (e) {
+    console.error('ai budget notification failed', e)
+  }
 }
 
 export async function monthSpendUsd(db: Db, tenantId: string, now = new Date()) {
@@ -88,13 +157,7 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
   const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
   if (!cfg?.enabled || cfg.kind !== 'chat')
     throw new AiDisabledError(`AI agent "${opts.agentKey}" is disabled`)
-  const tenant = await db.query.tenants.findFirst({
-    where: eq(tenants.id, opts.tenantId),
-    columns: { aiBudgetUsd: true },
-  })
-  if (!tenant) throw new Error('unknown tenant')
-  if ((await monthSpendUsd(db, opts.tenantId)) >= Number(tenant.aiBudgetUsd))
-    throw new AiBudgetExceededError(opts.tenantId)
+  const gate = await assertAiAllowed(db, opts.tenantId)
 
   const jsonSchema = opts.schema ? z.toJSONSchema(opts.schema) : undefined
   // Image parts go over the wire as-is; the client's ChatMessage type only models text.
@@ -143,6 +206,7 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
       tokensCached: res.usage?.prompt_tokens_details?.cached_tokens ?? 0,
       costUsd: cost.toFixed(6),
     })
+    await afterSpend(db, opts.tenantId, gate)
     const message = res.choices[0]?.message
     if (!message) throw new AiOutputError('empty response')
     if (!opts.schema || message.tool_calls?.length) {
@@ -184,13 +248,7 @@ export async function runImage(opts: {
   const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
   if (!cfg?.enabled || cfg.kind !== 'image')
     throw new AiDisabledError(`AI image model "${opts.agentKey}" is disabled`)
-  const tenant = await db.query.tenants.findFirst({
-    where: eq(tenants.id, opts.tenantId),
-    columns: { aiBudgetUsd: true },
-  })
-  if (!tenant) throw new Error('unknown tenant')
-  if ((await monthSpendUsd(db, opts.tenantId)) >= Number(tenant.aiBudgetUsd))
-    throw new AiBudgetExceededError(opts.tenantId)
+  const gate = await assertAiAllowed(db, opts.tenantId)
   const res = await client.image({ model: cfg.modelId, prompt: opts.prompt, size: opts.size })
   const cost = Number(cfg.pricePerImage)
   await db.insert(aiUsage).values({
@@ -200,6 +258,7 @@ export async function runImage(opts: {
     images: 1,
     costUsd: cost.toFixed(6),
   })
+  await afterSpend(db, opts.tenantId, gate)
   const url = res.data[0]?.url
   if (!url) throw new AiOutputError('no image returned')
   return { url, costUsd: cost }

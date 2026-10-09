@@ -7,6 +7,7 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
+import { aiUsageOverview } from '@spa/services'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -111,6 +112,8 @@ export default async function PlatformOverview() {
   const mail = await resolveEmailConfig()
   const checks = configChecks()
   const backupStale = !okBackup || Date.now() - okBackup.finishedAt.getTime() > 36 * 3_600_000
+  // G18: spas at ≥ 80 % of their monthly AI budget (budget 0 = AI deliberately off, not flagged).
+  const aiFlags = (await aiUsageOverview(db)).filter((r) => r.budgetUsd > 0 && r.level !== 'ok')
 
   return (
     <>
@@ -223,6 +226,36 @@ export default async function PlatformOverview() {
               <Badge tone={backupStale ? 'danger' : 'success'}>
                 {backupStale ? (okBackup ? 'overdue' : 'missing') : 'ok'}
               </Badge>
+            }
+          />
+        </Card>
+        <Card data-testid="ai-budget-flags">
+          <CardHeader
+            title="AI budgets"
+            description={
+              aiFlags.length
+                ? aiFlags
+                    .map(
+                      (r) =>
+                        `${r.name} ${Math.round(r.ratio * 100)}%${r.level === 'over' ? ' (paused)' : ''}`,
+                    )
+                    .join(' · ')
+                : 'Every spa is under 80 % of its monthly AI budget.'
+            }
+            action={
+              <Link href={adminPath('/ai/usage')}>
+                <Badge
+                  tone={
+                    aiFlags.some((r) => r.level === 'over')
+                      ? 'danger'
+                      : aiFlags.length
+                        ? 'warning'
+                        : 'success'
+                  }
+                >
+                  {aiFlags.length ? `${aiFlags.length} at ≥ 80 %` : 'ok'}
+                </Badge>
+              </Link>
             }
           />
         </Card>

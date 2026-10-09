@@ -1,6 +1,7 @@
 import { dubaiInstant } from '@spa/core'
 import type { Tx } from '@spa/db'
 import { type SQL, sql } from 'drizzle-orm'
+import { aiMonth, aiUsageTotals } from './ai-usage'
 import { campaignResults } from './campaigns'
 
 /**
@@ -85,7 +86,6 @@ export async function tenantPerformance(
   now = new Date(),
 ): Promise<TenantPerformance> {
   const w = webWindow(from, to)
-  const monthStart = dubaiInstant(`${new Date(now.getTime() + 4 * 3600_000).toISOString().slice(0, 7)}-01`, 0)
   const dates = (col: SQL) => sql`${col} between ${from}::date and ${to}::date`
   const row = await one<{
     gross: string
@@ -95,7 +95,6 @@ export async function tenantPerformance(
     web: { visits: number; started: number; booked: number }
     booking_sources: SourceCount[]
     web_sources: { source: string; sessions: number; booked: number }[]
-    ai: string
   }>(
     tx,
     sql`with cut as (
@@ -127,9 +126,10 @@ export async function tenantPerformance(
             order by x.sessions desc, x.src), '[]')
           from (select e.src, count(distinct w.session_hash)::int as sessions,
               count(distinct w.session_hash) filter (where w.type = 'booking_complete')::int as booked
-            from web w join entry e using (session_hash) group by 1 order by 2 desc limit 10) x) as web_sources,
-        (select coalesce(sum(cost_usd), 0) from ai_usage where created_at >= ${monthStart.toISOString()}::timestamptz) as ai`,
+            from web w join entry e using (session_hash) group by 1 order by 2 desc limit 10) x) as web_sources`,
   )
+  // This month's AI spend: the shared aggregation (RLS limits it to this spa).
+  const [ai] = await aiUsageTotals(tx, aiMonth(0, now))
   const gross = n(row.gross)
   const refunds = n(row.refunds)
   const visits = n(row.web.visits)
@@ -153,7 +153,7 @@ export async function tenantPerformance(
       sessions: n(s.sessions),
       booked: n(s.booked),
     })),
-    aiSpendUsd: r2(n(row.ai)),
+    aiSpendUsd: r2(ai?.costUsd ?? 0),
   }
 }
 

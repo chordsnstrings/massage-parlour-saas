@@ -1,6 +1,7 @@
 import { aiModelConfig, platformDb, platformSettings } from '@spa/db'
 import { asc, eq, sql } from 'drizzle-orm'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
@@ -9,6 +10,7 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
+import { adminPath } from '@/lib/paths'
 import { saveAiModelAction, saveMetaMcpConfigAction } from '../actions'
 
 export const metadata: Metadata = { title: 'AI models' }
@@ -32,6 +34,11 @@ export default async function AiModelsPage() {
       <PageHeader
         title="AI models"
         description="BytePlus ModelArk model per agent. Seed 2.0 by default — model IDs change often, so update them here, no deploy needed."
+        actions={
+          <Link href={adminPath('/ai/usage')} className="text-sm text-accent hover:underline">
+            AI usage and budgets →
+          </Link>
+        }
       />
       <PageBody>
         <Card>

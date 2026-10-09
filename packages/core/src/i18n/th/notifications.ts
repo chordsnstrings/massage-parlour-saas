@@ -36,6 +36,14 @@ export const notifications: Messages['notifications'] = {
         title: { other: 'ร่างจาก AI {count} รายการรอการอนุมัติ' },
         body: 'โพสต์ Instagram: {posts} · คำตอบรีวิว: {replies}',
       },
+      budget_warning: {
+        title: 'ใช้งบ AI ไปแล้ว {percent}%',
+        body: 'ใช้ไป USD {spent} จาก USD {budget} ในเดือนนี้ AI จะหยุดเมื่อใช้งบครบ — ติดต่อเราเพื่อเพิ่มงบ',
+      },
+      budget_reached: {
+        title: 'AI หยุดชั่วคราว: ใช้งบ AI ประจำเดือนครบแล้ว',
+        body: 'ใช้งบครบ USD {budget} ในเดือนนี้ ฟีเจอร์ AI จะกลับมาในวันที่ 1 — ติดต่อเราเพื่อเพิ่มงบ',
+      },
     },
     billing: {
       overdue: { title: 'ใบแจ้งหนี้เกินกำหนด', body: '{number} · {amount} ครบกำหนดเมื่อ {date}' },

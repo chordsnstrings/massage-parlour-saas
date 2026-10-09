@@ -12,6 +12,9 @@ export const NOTIFICATION_KINDS = {
   'stock.low': { permission: 'inventory.manage' },
   'document.expiry': { permission: 'staff.manage' },
   'ai.drafts': { permission: 'ai.approve' },
+  // G18 monthly AI budget thresholds (80 % / 100 %), once per threshold per Dubai month.
+  'ai.budget_warning': { permission: 'billing.view' },
+  'ai.budget_reached': { permission: 'billing.view' },
   'billing.overdue': { permission: 'billing.view' },
   'billing.reminder': { permission: 'billing.view' },
   // Bell copies of the scheduled digests (push-only before): one row per week / business day.

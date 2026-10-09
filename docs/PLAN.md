@@ -1183,7 +1183,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
+  G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
@@ -1243,3 +1243,12 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
     treatment notes, intake submissions (answers + signatures), outbox rows, conversations (+ messages), waitlist
     entries and booking notes; sets marketing opt-out. Audit `client.erased` (counts only). No files link to
     clients today. Not scrubbed: names inside old audit-log `data` and notification payloads.
+- **G18:** console **AI usage** (`/ai/usage`, nav + links from AI models / Performance / overview card "AI budgets"):
+  every spa this + last month (calls, tokens, cost, % of budget; sortable), inline monthly budget edit, per-spa AI
+  on/off (`tenants.ai_enabled`) and a platform-wide switch (`platform_settings.ai_enabled`); `/ai/usage/[id]` = daily
+  cost + by agent + by model for this/last month. All changes audited (`platform.ai.*`). Shared aggregation
+  `services/ai-usage.ts` (also Performance + dashboard meter). Gateway (`assertAiAllowed`): kill switches →
+  `AiPausedError` (extends `AiDisabledError`); budget → `AiBudgetExceededError`; after metering, 80 % / 100 % bell
+  notifications (`ai.budget_warning` / `ai.budget_reached`, `billing.view`, dedupe `ai.budget.<80|100>.<YYYY-MM>` =
+  once per threshold per Dubai month). Dashboard: one AI banner (80 % warning / "AI paused: monthly AI budget
+  reached — contact us" / AI off), budget error messages EN + TH. Months reset at Asia/Dubai month start.

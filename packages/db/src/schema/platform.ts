@@ -95,6 +95,8 @@ export const platformSettings = pgTable(
      * Null = off (default); the console only accepts 30 or more.
      */
     autoPurgeDays: integer('auto_purge_days'),
+    /** G18 global AI kill switch: false = no AI call runs for any spa. */
+    aiEnabled: boolean('ai_enabled').notNull().default(true),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -148,6 +150,8 @@ export const tenants = pgTable(
     defaultLocale: text('default_locale').notNull().default('en'),
     timezone: text('timezone').notNull().default('Asia/Dubai'),
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
+    /** G18 per-spa AI kill switch (super-admin): false = the gateway refuses every AI call for this spa. */
+    aiEnabled: boolean('ai_enabled').notNull().default(true),
     /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
