@@ -1581,3 +1581,17 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
     a no-logo spa, 304/404, `<head>`, console/marketing manifests, SW control + Chrome installability via CDP,
     offline page, one server request per page load via a counting proxy, same-spa notification windows, uncached
     stand-in icon for an unreadable logo + throttled re-read, menu + tip + iOS steps).
+
+### 18.8 Plans + pricing (owner 2026-10-09, replaces "AED 24,000 per spa per year")
+- **Premium:** setup AED 14,000 + AED 3,000/month, excl. VAT (VAT optional per invoice). Every feature, incl. backlog F9–F15 when built.
+- **Standard:** setup AED 9,000 + AED 2,000/month, excl. VAT (optional). Core only — no AI & Instagram automation (AI
+  receptionist, IG DM replies/booking from chat, AI insights, receipt scan), no marketing tools (campaigns, Google
+  Business + Instagram posting, review requests, win-back/birthday drafts, F15 growth extras), single branch only.
+  Keeps: calendar & rooms, online booking, POS, tax invoices, packages/gift cards/memberships, clients & intake, staff,
+  commission, payroll/WPS, inventory, WhatsApp click-to-send reminders, website, reports, EN/TH, 2FA, PWA.
+- **Existing spas** keep their AED 24,000/year subscription until their annual renewal date, then move to a new plan.
+  New spas: setup + monthly. No yearly option for new plans.
+- **Super-admin overrides per spa:** custom discount on the setup fee and/or the monthly fee (amount or %), and a
+  feature-tier override (e.g. Premium features while billed at the Standard rate). Audited.
+- Marketing pricing headline: "Pick your plan. We handle the rest." Home page gets a CRM showcase section with 3D
+  scrolling (respecting reduced motion).

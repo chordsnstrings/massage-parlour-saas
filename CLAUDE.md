@@ -40,7 +40,9 @@ fix backlog F1–F8 ✅, **F9–F15 open** (§17, remind the owner); production 
   no unofficial WhatsApp automation libraries.
 - AI = BytePlus ModelArk, Seed 2.0 family by default; model IDs live in DB config (`ai_model_config`), never hard-coded.
 - Infra ≤ USD 50/month: one DO droplet (docker compose: postgres, migrate, web, worker, caddy — no cloudflared in the running stack) behind Cloudflare Free. No Redis.
-- Price: AED 24,000 per spa per year (manual cash/bank-transfer billing).
+- Price (owner 2026-10-09, PLAN §18.8): **Premium** AED 14,000 setup + 3,000/month; **Standard** AED 9,000 setup + 2,000/month
+  (no AI/Instagram automation, no marketing tools, one branch); excl. VAT, VAT optional; existing spas keep AED 24,000/yr
+  until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
   **Website Studio:** only super-admins edit and publish sites; spa users edit only services + prices (owner 2026-10-09, PLAN §18.1).
