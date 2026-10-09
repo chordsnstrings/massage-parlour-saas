@@ -1213,6 +1213,13 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   row past the cookie cache); `/files` let members of a deleted spa, and owners/managers held by "Require 2FA", read
   private files (now the same rules as `requireMember`).
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
+- ✅ **F31. Extra KPIs** (backlog F16–F32, batch C) — shipped 2026-10-09: Reports page (`/{slug}/reports`, Finance menu;
+  owner/manager/accountant via `reports.view`, RevPATH needs `dashboard.revenue`, liability `accounting.view`) with
+  rebooking rate (30/60/90 days, by therapist), retention cohorts (12 months × +1…+6), RevPATH (net treatment revenue
+  ex VAT ÷ therapist shift hours, time clock when no shifts; per therapist), room utilisation (per room/branch) and
+  outstanding prepaid liability as of a date vs ledger 2100/2110 with any difference; branch + period picker, Excel
+  export (R10 — .xlsx, not CSV); console Performance detail shows the whole-spa aggregates. Definitions: CODEMAP
+  "Reports (F31)". Migration 0037 (two indexes).
 
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
