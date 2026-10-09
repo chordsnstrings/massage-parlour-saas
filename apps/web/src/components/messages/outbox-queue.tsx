@@ -38,6 +38,7 @@ import {
 
 type Tab = 'due' | 'scheduled' | 'sent'
 type Counts = { due: number; scheduled: number; sentToday: number; sentWeek: number }
+const NO_ASSIGNEES = new Map<string, string | null>()
 
 const EMPTY_ICON: Record<Tab, React.ReactNode> = {
   due: <CheckCheck className="size-5" strokeWidth={1.5} />,
@@ -111,7 +112,14 @@ export function OutboxQueue({
   }
   const readOnly = tab === 'sent'
   // F28: per-row assignee (optimistic) and the bulk selection.
-  const [assigned, setAssigned] = useState<Map<string, string | null>>(new Map())
+  // Optimistic assignees, kept only until fresh rows arrive from the server.
+  const [optimistic, setOptimistic] = useState<{ rows: OutboxRow[]; map: Map<string, string | null> }>(
+    () => ({
+      rows,
+      map: new Map(),
+    }),
+  )
+  const assigned = optimistic.rows === rows ? optimistic.map : NO_ASSIGNEES
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [bulkTo, setBulkTo] = useState('')
   const assigneeOf = (row: OutboxRow) =>
@@ -119,28 +127,27 @@ export function OutboxQueue({
   const assignRows = useCallback(
     (ids: string[], memberId: string | null) => {
       if (!ids.length) return
-      setAssigned((m) => {
-        const copy = new Map(m)
-        for (const id of ids) copy.set(id, memberId)
-        return copy
+      setOptimistic((o) => {
+        const map = new Map(o.rows === rows ? o.map : undefined)
+        for (const id of ids) map.set(id, memberId)
+        return { rows, map }
       })
       startTransition(async () => {
         const res = await assignMessagesAction(slug, { ids, memberId })
         if (res?.ok) {
-          if (res.message) toast.success(resultText(t, res) ?? '')
+          const skipped = Number(res.data?.skipped ?? 0)
+          const text = resultText(t, res) ?? ''
+          if (text)
+            toast.success(skipped ? `${text} · ${t('messages.assign.skipped', { count: skipped })}` : text)
           setPicked(new Set())
         } else {
           toast.error((res && resultText(t, res)) || t('errors.generic'))
-          setAssigned((m) => {
-            const copy = new Map(m)
-            for (const id of ids) copy.delete(id)
-            return copy
-          })
+          setOptimistic({ rows, map: new Map() })
         }
         router.refresh()
       })
     },
-    [slug, t, router],
+    [slug, t, router, rows],
   )
   const togglePick = (id: string) =>
     setPicked((s) => {
