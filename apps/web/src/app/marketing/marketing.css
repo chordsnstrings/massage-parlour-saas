@@ -646,38 +646,72 @@
     background: #26262e;
   }
 
-  /* footer */
+  /* footer: brand block + five link columns (nav "Footer"), divider, bottom line */
   .mkt-foot {
     border-top: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.82);
-    padding: 52px 0 28px;
+    padding: 64px 0 28px;
     color: var(--mute);
     font-size: 14px;
   }
   .mkt-fgrid {
     display: grid;
-    grid-template-columns: 1.4fr 1fr 1fr 1fr;
-    gap: 30px;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 5fr);
+    gap: 48px;
   }
-  .mkt-fgrid b {
-    display: block;
+  .mkt-ftag {
+    max-width: 290px;
+    margin-top: 18px;
     color: var(--text);
-    margin-bottom: 12px;
-    font-size: 14px;
+    font-weight: 600;
   }
-  .mkt-fgrid a {
-    display: block;
-    padding: 4px 0;
+  .mkt-fdesc {
+    max-width: 290px;
+    margin-top: 6px;
+    line-height: 1.5;
   }
-  .mkt-fgrid a:hover {
+  .mkt-fnav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 32px 28px;
+  }
+  .mkt-foot .mkt-fhead {
+    margin-bottom: 14px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .mkt-fnav ul {
+    display: grid;
+    gap: 2px;
+  }
+  .mkt-fnav a {
+    display: inline-block;
+    padding-block: 4px;
+    font-size: 13.5px;
+    line-height: 1.35;
+    overflow-wrap: break-word;
+    transition: color 0.2s;
+  }
+  .mkt-fnav a:hover {
     color: var(--accent);
+  }
+  .mkt-fnav a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+    color: var(--text);
   }
   .mkt-fbot {
     display: flex;
     justify-content: space-between;
-    gap: 20px;
+    gap: 8px 24px;
     flex-wrap: wrap;
-    margin-top: 40px;
+    margin-top: 48px;
     padding-top: 20px;
     border-top: 1px solid var(--line);
     font-size: 13px;
@@ -754,9 +788,22 @@
     scroll-margin-top: 84px;
   }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1099px) {
     .mkt-fgrid {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 36px;
+    }
+    .mkt-fnav {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 640px) {
+    .mkt-foot {
+      padding-top: 48px;
+    }
+    .mkt-fnav {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 28px 20px;
     }
   }
   @media (max-width: 640px) {

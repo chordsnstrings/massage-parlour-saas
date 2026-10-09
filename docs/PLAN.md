@@ -1487,3 +1487,17 @@ Marketing **Contact** page (`marketing/contact`) gets an enquiry form; the owner
   `enquiries.spec.ts` (360 px, inline error keeps values → sent → super-admin badge + search + links → contacted + note,
   badge drops, audit, empty Closed filter; honeypot dropped; console needs sign-in; with a console Resend key the
   admin email lands in the e2e outbox with reply-to = sender + console link, received audit row has no IP).
+### 18.7 Marketing footer (owner 2026-10-09)
+Rich SaaS footer (`components/marketing/shell.tsx` `Footer`, `.mkt-foot/.mkt-fgrid/.mkt-fnav/.mkt-fhead/.mkt-fbot`):
+brand block (logo, "Calm software for busy spas.", one-line product summary) + `nav "Footer"` with five columns —
+Product (Features, Website studio, Pricing, Apply for your spa, Sign in), Features (`/features#bookings|follow-up|money|
+marketing|team|automations`), Website studio (`/website-builder#make-it-yours|how-we-build-it|section-designs|
+after-launch|included`), Built for the UAE (`/pricing#plans`, VAT + WhatsApp → features anchors, English & Arabic →
+`#included`, `/pricing#faq`), Company (Contact, the contact-page email (super-admin Settings, fallback
+`DEFAULT_CONTACT_EMAIL` = ask@spamanagement.co), Privacy, Terms, Data deletion) — then "© year {LEGAL.companyName} ·
+{LEGAL.brand}" + "Client payments are recorded, never processed. WhatsApp reminders and follow-ups are sent by you, from
+your own number." (scoped on purpose: the subscription can be paid by card via Stripe, and the Instagram DM agent replies
+automatically). Only existing pages/sections are linked
+(no multi-branch section exists, so none); section `id`s are stable link targets. Layout: brand + 5 cols ≥ 1100 px,
+brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, the mailto address
+(Settings email or the default), that every footer link answers 200 and that every `#anchor` exists.

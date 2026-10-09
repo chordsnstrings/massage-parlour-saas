@@ -93,7 +93,7 @@ export default function FeaturesPage() {
       </section>
 
       {/* Included in every plan */}
-      <section className="mkt-sec mkt-dark">
+      <section id="automations" className="mkt-sec mkt-dark">
         <div className="mkt-wrap grid gap-10 lg:grid-cols-2">
           <div data-rise>
             <p className="mkt-eyebrow">Runs on its own</p>

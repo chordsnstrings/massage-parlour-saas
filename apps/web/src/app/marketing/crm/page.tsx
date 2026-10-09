@@ -127,8 +127,7 @@ export default async function CrmPage() {
   const urls = await requestUrls()
   const copy = crmDemoCopy()
   return (
-    // 'crm' is not a MarketingPage key yet (shell.tsx is being rebuilt on another branch): no nav item is marked.
-    <MarketingShell active="home">
+    <MarketingShell active="crm">
       {/* Hero */}
       <section className="mkt-hero">
         <HeroDepth />
