@@ -1,5 +1,5 @@
 import { enumLabel } from '@spa/core/i18n'
-import { domains, withTenant } from '@spa/db'
+import { domains, platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
 import { getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
 import { asc, sql } from 'drizzle-orm'
 import { ArrowRight, ExternalLink, FileText, Globe, MessageSquare, PencilLine } from 'lucide-react'
@@ -18,10 +18,12 @@ import { DataTable } from '@/components/ui/table'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, isStudio, requireMember } from '@/server/access'
+import { aiFixturesOn } from '@/server/ai-fixture'
 import { themeDraftWarnings } from '@/server/site-preflight'
 import { templateCatalog } from '@/server/site-templates'
 import { siteWriterReady } from '@/server/site-writer'
 import { publicSiteUrl } from '@/server/sites'
+import { ImportSiteSheet } from './import-sheet'
 import { ServicesPrices } from './services-prices'
 import { ApproveSiteSheet, ResolveRequestSheet, StudioStatusButton } from './studio-client'
 import {
@@ -86,6 +88,11 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const studioStatus = site?.studioStatus ?? 'building'
   const openRequests = requests.filter((r) => r.status === 'open').length
   const aiReady = canDesign && (await siteWriterReady())
+  // F32 import: AI mapping for SITE_AI_EDITOR_EMAILS accounts when ModelArk is set up (re-checked by the action).
+  const importAi =
+    canDesign &&
+    (Boolean(process.env.ARK_API_KEY) || aiFixturesOn()) &&
+    (await siteAiEditorStatus(platformDb(), ctx.user.id)) === 'ok'
   const publicUrl = await publicSiteUrl(ctx.tenant)
   // Unpublished: page drafts, pending page renames (Claude MCP) and a draft theme (Ask AI / MCP, site-wide).
   const unpublished = (p: (typeof pages)[number]) => p.hasDraft || p.pending !== null
@@ -247,15 +254,18 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
       }
       actions={
         canDesign && (
-          <AddPageSheet
-            slug={slug}
-            templates={PAGE_TEMPLATES.map((tpl) => ({
-              key: tpl.key,
-              name: tpl.name,
-              description: tpl.description,
-              slug: tpl.slug,
-            }))}
-          />
+          <div className="flex flex-wrap gap-2">
+            <ImportSiteSheet slug={slug} aiAvailable={importAi} />
+            <AddPageSheet
+              slug={slug}
+              templates={PAGE_TEMPLATES.map((tpl) => ({
+                key: tpl.key,
+                name: tpl.name,
+                description: tpl.description,
+                slug: tpl.slug,
+              }))}
+            />
+          </div>
         )
       }
     >

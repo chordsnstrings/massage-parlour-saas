@@ -65,6 +65,8 @@ export default defineConfig({
       TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
       TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
       AI_E2E_FIXTURE_DIR: aiFixtureDir,
+      // F32 site import: the local fixture site (site-import.spec, port E2E_PORT + 1) is exempt from the SSRF rules.
+      SITE_IMPORT_E2E_ALLOW: `127.0.0.1:${PORT + 1}`,
       EMAIL_E2E_OUTBOX_DIR: emailOutboxDir,
     },
   },

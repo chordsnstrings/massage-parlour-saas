@@ -3,7 +3,11 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import zlib from 'node:zlib'
+import { closeAllDbs, pageVersions, sitePages, tenants, withTenant } from '@spa/db'
+import { resetTestDatabase, testDbs } from '@spa/db/testing'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { ensureSite, listPages, runSiteEdit, type SiteEditSchema } from '../src'
 import {
   buildImportOps,
   crawlSiteForImport,
@@ -30,6 +34,7 @@ async function serve(host: string, handler: http.RequestListener, port = 0) {
 const servers: http.Server[] = []
 afterAll(async () => {
   await Promise.all(servers.map((s) => new Promise((r) => s.close(r))))
+  await closeAllDbs()
 })
 
 const never: Resolver = async () => {
@@ -358,5 +363,95 @@ describe('crawl (local fixture server)', () => {
     ).rejects.toThrow(/robots\.txt .* asks bots not to read this page/)
     await expect(crawlSiteForImport(`http://127.0.0.1:${port}/`)).rejects.toThrow(/non-standard port|private/)
     await expect(crawlSiteForImport('localhost')).rejects.toThrow(/private network/)
+  })
+})
+
+describe('import ops through the site-edit layer (DB)', () => {
+  const { platform, app } = testDbs()
+  // The block props the import uses, as the web app's Puck schema describes them.
+  const bi = { kind: 'bi' } as const
+  const schema: SiteEditSchema = {
+    blocks: {
+      Hero: {
+        props: {
+          variant: { kind: 'enum', options: ['centered', 'split', 'banner'] },
+          eyebrow: bi,
+          title: bi,
+          subtitle: bi,
+          image: { kind: 'image' },
+          imageAlt: bi,
+        },
+        defaults: { variant: 'split', title: { en: 'Welcome' } },
+      },
+      Section: { props: { content: { kind: 'slot' } }, defaults: { content: [] } },
+      Heading: {
+        props: { text: bi, level: { kind: 'enum', options: ['h1', 'h2', 'h3'] } },
+        defaults: { text: { en: 'Heading' }, level: 'h2' },
+      },
+      RichText: {
+        props: { text: bi, tone: { kind: 'enum', options: ['default', 'muted'] } },
+        defaults: { text: { en: 'Text' }, tone: 'muted' },
+      },
+      Gallery: {
+        props: {
+          title: bi,
+          images: { kind: 'array', max: 12, item: { src: { kind: 'image' }, alt: bi } },
+          layout: { kind: 'enum', options: ['grid', 'mosaic', 'strip'] },
+          columns: { kind: 'enum', options: ['2', '3', '4'] },
+        },
+        defaults: { images: [] },
+      },
+    },
+    root: { title: bi, description: bi },
+    theme: {},
+    presets: [],
+  }
+  let tenantId = ''
+  const tx = <T>(fn: Parameters<typeof withTenant<T>>[1]) => withTenant(tenantId, fn, app)
+
+  beforeAll(async () => {
+    await resetTestDatabase()
+    const [t] = await platform.insert(tenants).values({ slug: 'import-spa', name: 'Import Spa' }).returning()
+    tenantId = t!.id
+    await tx((db) =>
+      ensureSite(db, tenantId, {
+        key: 'zen',
+        name: 'Zen',
+        theme: {},
+        pages: [{ slug: '', title: { en: 'Home' }, data: { root: { props: {} }, content: [] } }],
+      }),
+    )
+  })
+
+  it('dry run previews; apply adds ONE hidden draft page (never published) with the real image URLs', async () => {
+    const site = mergeImportPages([extractPage(fixture, 'https://lotusgarden.example/')])
+    const ops = buildImportOps(site, { slug: 'imported', title: 'Imported site' })
+    const dry = await tx((db) => runSiteEdit(db, { tenantId, ops, dryRun: true }, { schema }))
+    expect(dry.ok, JSON.stringify(dry)).toBe(true)
+    if (!dry.ok) return
+    expect(dry.summary[0]).toBe('Added the page "Imported site" (/imported) as a draft')
+    expect(await tx((db) => db.select().from(sitePages))).toHaveLength(1)
+
+    const resolved = resolveImportImages(
+      ops,
+      new Map(usedImportImages(ops).map((n) => [n, `/files/img-${n}`])),
+    )
+    const r = await tx((db) => runSiteEdit(db, { tenantId, ops: resolved, dryRun: false }, { schema }))
+    expect(r.ok).toBe(true)
+    const pages = await tx((db) => listPages(db, tenantId))
+    const imported = pages.find((p) => p.slug === 'imported')!
+    expect(imported.publishedAt).toBeNull()
+    const versions = await tx((db) =>
+      db.select().from(pageVersions).where(eq(pageVersions.pageId, imported.id)),
+    )
+    expect(versions.map((v) => v.status)).toEqual(['draft'])
+    const data = JSON.stringify(versions[0]!.data)
+    expect(data).toContain('Unwind at Lotus Garden')
+    expect(data).toContain('Thai massage · 60 min · AED 250')
+    expect(data).toContain('/files/img-0')
+    expect(data).not.toContain('import-image-')
+    // Importing again to the same address is refused (slug taken), nothing half-written.
+    const again = await tx((db) => runSiteEdit(db, { tenantId, ops: resolved, dryRun: false }, { schema }))
+    expect(again.ok).toBe(false)
   })
 })
