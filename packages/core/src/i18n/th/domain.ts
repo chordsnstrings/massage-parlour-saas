@@ -260,4 +260,8 @@ export const domain: Messages['errors']['domain'] = {
   paymentDateFuture: 'วันที่ชำระเงินต้องไม่เป็นวันในอนาคต',
   paymentMethodMissing: 'เลือกวิธีชำระเงิน',
   depositRange: 'เงินมัดจำต้องมากกว่า 0 และน้อยกว่ายอดรวมใบแจ้งหนี้ค่าติดตั้ง (รวม VAT)',
+  adminJoinRefused: 'อีเมลนี้ไม่สามารถสร้างบัญชีผู้ดูแลระบบสูงสุดได้',
+  adminAlready: 'คุณเป็นผู้ดูแลระบบสูงสุดอยู่แล้ว',
+  adminConfirmNeeds2fa: 'เฉพาะผู้ดูแลระบบสูงสุดที่เปิดการยืนยันสองขั้นตอนเท่านั้นที่ยืนยันผู้ดูแลระบบสูงสุดได้',
+  adminConfirmNotListed: 'ยืนยันได้เฉพาะบัญชีที่อีเมลอยู่ใน PLATFORM_ADMIN_EMAILS เท่านั้น',
 }

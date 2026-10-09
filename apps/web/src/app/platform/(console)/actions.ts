@@ -9,6 +9,7 @@ import {
   encryptSecret,
   generateBillingSchedule,
   MIN_AUTO_PURGE_DAYS,
+  markListedAdminVerified,
   pauseTenant,
   purgeTenant,
   recordPlatformPayment,
@@ -399,6 +400,36 @@ export async function sendTestEmailAction(_p: ActionResult): Promise<ActionResul
   }
   await audit({ actorUserId: user.id, action: 'platform.email.test_sent', data: { to: user.email } })
   return ok(`Test email sent to ${user.email}`)
+}
+
+/**
+ * Super-admins card (owner, 2026-10-09): confirm a registered PLATFORM_ADMIN_EMAILS login's email (no working email
+ * yet) → promoted at once; it still enrols 2FA before its console opens. Only listed logins; never yourself.
+ */
+export async function markAdminVerifiedAction(userId: string, _p: ActionResult): Promise<ActionResult> {
+  const me = await admin()
+  const id = z.string().trim().min(1).max(200).safeParse(userId)
+  if (!id.success) return fail('Unknown login.')
+  let result: Awaited<ReturnType<typeof markListedAdminVerified>>
+  try {
+    result = await markListedAdminVerified(platformDb(), { actorUserId: me.id, userId: id.data })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({
+    actorUserId: me.id,
+    action: 'platform.admin.email_verified',
+    entity: 'user',
+    entityId: id.data,
+    data: result,
+  })
+  revalidatePath('/platform/settings')
+  return ok(
+    result.promoted
+      ? `${result.email} is a super-admin now (two-step verification is set up on its first console visit).`
+      : `${result.email} is confirmed.`,
+  )
 }
 
 /** Revalidates the console pages and the spa's dashboard (red bar + Billing page). */

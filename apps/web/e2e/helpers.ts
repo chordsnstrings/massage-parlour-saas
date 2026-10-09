@@ -126,7 +126,7 @@ export async function signUpOwner(page: Page, opts: { slug?: string; name?: stri
 }
 
 /** BETTER_AUTH_SECRET of the e2e server (playwright.config.ts). */
-const AUTH_SECRET = 'e2e-secret-e2e-secret-e2e-secret-e2e'
+export const AUTH_SECRET = 'e2e-secret-e2e-secret-e2e-secret-e2e'
 export const ADMIN = { email: 'admin@e2e.test', password: 'platform-admin-pass' }
 
 /** The current TOTP code of a user with 2FA set up: decrypts the stored secret the way Better Auth does. */

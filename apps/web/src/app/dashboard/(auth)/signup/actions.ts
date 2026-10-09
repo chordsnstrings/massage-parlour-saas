@@ -2,7 +2,7 @@
 // "Apply for your spa" (PLAN §18.3): the login is created now; the spa only once the platform owner accepts.
 import { getAuth } from '@spa/auth'
 import { checkSlug, isEmirate, normalizeSlug, toUaeE164 } from '@spa/core'
-import { plans, platformDb } from '@spa/db'
+import { isListedAdminEmail, plans, platformDb } from '@spa/db'
 import { DomainError, type ProcessedImage, processLogo, submitApplication } from '@spa/services'
 import { APIError } from 'better-auth/api'
 import { and, eq } from 'drizzle-orm'
@@ -15,6 +15,7 @@ import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { applicantState, emailNewApplication, isSlugAvailable } from '@/server/applications'
 import { audit } from '@/server/audit'
+import { adminUrl } from '@/server/origin'
 import { withinIpLimit } from '@/server/rate-limit'
 import { getSession } from '@/server/session'
 
@@ -80,6 +81,13 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   const parsed = (session ? business : account).safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
+  // Owner, 2026-10-09: a PLATFORM_ADMIN_EMAILS address joins on the admin host; refused before any login is created.
+  const email = session?.user.email ?? (d as z.infer<typeof account>).email
+  if (isListedAdminEmail(email))
+    return fail(
+      { key: 'auth.signup.errors.adminEmail', params: { url: await adminUrl('/join') } },
+      { email: 'auth.signup.errors.adminEmailField' },
+    )
   const slug = normalizeSlug(d.slug)
   const slugCheck = await checkSlugAction(slug)
   if (!slugCheck.ok)

@@ -60,7 +60,16 @@ function ClosedNotice({ reason, onBack }: { reason?: string; onBack: () => void 
   )
 }
 
-export function LoginForm({ next, signupHref }: { next: string; signupHref?: string }) {
+/** `forgotHref`: the reset page lives on the app host only (the admin sign-in passes its absolute URL). */
+export function LoginForm({
+  next,
+  signupHref,
+  forgotHref = appPath('/forgot-password'),
+}: {
+  next: string
+  signupHref?: string
+  forgotHref?: string
+}) {
   const { pending, run, t } = useSubmit()
   const [closed, setClosed] = useState<{ reason?: string } | null>(null)
   if (closed) return <ClosedNotice reason={closed.reason} onBack={() => setClosed(null)} />
@@ -98,10 +107,7 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">{t('auth.password')}</Label>
-          <Link
-            href={appPath('/forgot-password')}
-            className="text-[13px] text-muted transition-colors hover:text-fg"
-          >
+          <Link href={forgotHref} className="text-[13px] text-muted transition-colors hover:text-fg">
             {t('auth.login.forgot')}
           </Link>
         </div>

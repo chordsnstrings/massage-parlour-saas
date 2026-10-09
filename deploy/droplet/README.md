@@ -75,10 +75,26 @@ worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTI
 is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
 either place.
 
+## Super-admins
+
+- **Who:** the droplet's base `PLATFORM_ADMIN_EMAILS` (`/opt/spa/.env`, e.g. `ahmed@arks.ae`) **plus**
+  `ahmedabouseif1997@gmail.com` and `sefohh.aa45@gmail.com`, appended in compose.yml for web, worker and
+  migrate/seed (owner, 2026-10-09; the base env can't be edited without SSH). To add or remove one later, edit those
+  three lines (or set the full list in the secrets overlay and drop the appended part). Empty segments and duplicates
+  are ignored. Removing an address never demotes an existing super-admin.
+- **Getting a login:** the public sign-up is the spa application form and refuses these addresses. Open
+  **`https://admin.<domain>/join`** (also linked "Create a super-admin account" on the admin sign-in page): name,
+  email, password. Only listed addresses are accepted.
+- **Verify:** open the emailed link (needs a Resend key: console → Company → Email). **Without email yet:** an
+  existing super-admin (with 2FA) opens console → Company → **Super-admins** and clicks **Mark email verified** next
+  to the new login; it becomes a super-admin at once. Every action is in the audit log (`platform.admin.*`).
+- **First visit:** the console asks for two-step verification (authenticator app) before it opens.
+
 ## Connect Claude (edit spa sites from Claude)
 
-1. Set `SITE_AI_EDITOR_EMAILS` to **your own email** (secrets file / env; comma-separated if ever more). That account
-   must be a super-admin with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
+1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to the two owner-chosen super-admins `ahmedabouseif1997@gmail.com`
+   and `sefohh.aa45@gmail.com`; a value in `/opt/spa/.env` or the secrets overlay replaces it (comma-separated). Those
+   accounts must be super-admins with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
 2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
    "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
    with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
@@ -205,14 +221,16 @@ python3 deploy/droplet/render-user-data.py /path/to/secrets.env > /tmp/user_data
 The secrets file needs these keys:
 - `BRANCH`, `REPO_URL`, `SITE_HOST=auto`
 - `PLATFORM_ADMIN_EMAILS`, `ACME_EMAIL`, `STATUS_PASSWORD`
-- `SITE_AI_EDITOR_EMAILS` = **the owner's own email** (Studio "Ask AI" + the Claude connector; that account must be a
-  super-admin with 2FA; empty = nobody; removing an address cuts access on the next request)
+- optional `SITE_AI_EDITOR_EMAILS` (Studio "Ask AI" + the Claude connector): unset = compose's default, the two
+  owner-chosen super-admins (see "Super-admins"); each must be a super-admin with 2FA; set it to replace the list;
+  removing an address cuts access on the next request
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
 - strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),
   `RESEND_API_KEY` (password reset + email verification fail loudly in production without it; it can also be set later in the console → Settings → Email)
 - super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
-  sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens
+  sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens. See
+  "Super-admins" below for the addresses compose appends and how a new one gets its login.
 
 Follow the boot from the droplet's console: `tail -f /var/log/spa-bootstrap.log`.

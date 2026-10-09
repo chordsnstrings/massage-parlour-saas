@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { applicantState } from '@/server/applications'
-import { canonicalUrls } from '@/server/origin'
+import { adminUrl, canonicalUrls } from '@/server/origin'
 import { requireUser } from '@/server/session'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,7 +24,7 @@ export default async function ApplicationPage() {
   const { user } = await requireUser()
   const state = await applicantState(user.id)
   const app = state.application
-  if (!app) redirect(appPath('/signup'))
+  if (!app) redirect(state.isAdmin || state.listedAdmin ? await adminUrl() : appPath('/signup'))
   const { t, fmt } = await getI18n()
   const plan = app.planId
     ? await platformDb().query.plans.findFirst({ where: eq(plans.id, app.planId) })

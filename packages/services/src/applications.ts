@@ -8,6 +8,7 @@ import {
   type Db,
   type DbOrTx,
   grantListedPlatformAdmins,
+  isListedAdminEmail,
   listedAdminEmails,
   members,
   plans,
@@ -154,6 +155,9 @@ export type ApplicationInput = {
   logo?: { bytes: Buffer; contentType: string } | null
 }
 
+export const ADMIN_EMAIL_APPLICATION =
+  'This is a super-admin email address: create its login on the admin join page instead of applying for a spa.'
+
 const isUniqueViolation = (e: unknown, constraint: string) => {
   const err = (e as { cause?: { code?: string; constraint?: string } }).cause ?? (e as { code?: string })
   return (
@@ -162,7 +166,14 @@ const isUniqueViolation = (e: unknown, constraint: string) => {
 }
 
 /** Stores a new application (status pending). The caller has created / signed in the login already. */
-export async function submitApplication(db: Db, input: ApplicationInput & { today: string }) {
+export async function submitApplication(
+  db: Db,
+  input: ApplicationInput & { today: string },
+  adminEmails = listedAdminEmails(),
+) {
+  // Owner, 2026-10-09: a PLATFORM_ADMIN_EMAILS address never applies for a spa; it joins on the admin host instead.
+  if (isListedAdminEmail(input.email, adminEmails))
+    throw new DomainError(ADMIN_EMAIL_APPLICATION, 'invalid', { key: 'auth.signup.errors.adminEmailField' })
   if (!isEmirate(input.emirate)) throw new DomainError('Choose an emirate')
   if (input.preferredStart < input.today) throw new DomainError('Choose a start date from today on')
   if (input.planId) {

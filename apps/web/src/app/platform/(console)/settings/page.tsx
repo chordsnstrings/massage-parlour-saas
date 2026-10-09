@@ -8,12 +8,15 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Checkbox, Input, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
+import { requirePlatformAdmin } from '@/server/access'
 import { registerEmailSettings } from '@/server/email-settings'
 import { saveCompanyAction, saveEmailSettingsAction, sendTestEmailAction } from '../actions'
+import { SuperAdminsCard } from './super-admins-card'
 
 export const metadata: Metadata = { title: 'Company' }
 
 export default async function CompanyPage() {
+  const { user } = await requirePlatformAdmin()
   const s = await platformDb().query.platformSettings.findFirst({ where: eq(platformSettings.id, 1) })
   registerEmailSettings()
   const mail = await emailSettingsStatus(platformDb())
@@ -86,6 +89,7 @@ export default async function CompanyPage() {
             </ActionForm>
           </CardBody>
         </Card>
+        <SuperAdminsCard meId={user.id} />
         <ActionForm action={saveCompanyAction} className="grid gap-6 xl:grid-cols-2">
           <Card>
             <CardHeader title="Company" />
