@@ -1,16 +1,18 @@
 import { createHmac } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { expect, type Page } from '@playwright/test'
-import { businessDateOf, dubaiInstant } from '@spa/core'
+import { businessDateOf, dubaiInstant, type SystemRoleKey } from '@spa/core'
 import {
   branches,
   clients,
   createDb,
+  members,
   plans,
   platformAdmins,
+  roles,
   rooms,
   services,
   serviceVariants,
@@ -46,6 +48,12 @@ export const uniqueSlug = (prefix: string) =>
 export const enrolUrl = (slug: string) => new RegExp(`/account\\?require2fa=${slug}$`)
 
 export const OWNER_PASSWORD = 'correct-horse-battery'
+
+/** A 1×1 PNG (stored-file fixtures: images open inline in the browser, unlike a PDF, which downloads). */
+export const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 /**
  * Fills and sends "Apply for your spa" (PLAN §18.3) and lands on the applicant's waiting page. Signed out: creates the
@@ -193,21 +201,7 @@ export async function signInPlatformAdmin(page: Page) {
   }
   let outcome = await signIn()
   if (outcome === 'failed') {
-    // The login only (Better Auth's sign-up endpoint, which the apply form uses too), from the browser so the
-    // session cookie lands in this context (Node can't resolve *.localhost hosts).
-    await page.goto(`${app}/login`)
-    const res = await page.evaluate(
-      async (body) => {
-        const r = await fetch('/api/auth/sign-up/email', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        return { ok: r.ok, text: await r.text() }
-      },
-      { name: 'Platform Admin', email, password },
-    )
-    expect(res.ok, res.text).toBe(true)
+    await createLogin(page, { name: 'Platform Admin', email, password })
     // Unverified: the listed email is not a super-admin yet (G2).
     await page.goto(`${admin}/`)
     await expect(overview).toHaveCount(0)
@@ -225,6 +219,57 @@ export async function signInPlatformAdmin(page: Page) {
     await passTwoFactor(page, email)
   }
   await expect(overview).toBeVisible()
+}
+
+/**
+ * Creates a login only (Better Auth's sign-up endpoint, which the apply form uses too; no spa, no application), from
+ * the browser so the session cookie lands in this context on the app host (Node can't resolve *.localhost hosts).
+ */
+export async function createLogin(page: Page, body: { name: string; email: string; password: string }) {
+  await page.goto(`${app}/login`)
+  const res = await page.evaluate(async (b) => {
+    const r = await fetch('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(b),
+    })
+    return { ok: r.ok, text: await r.text() }
+  }, body)
+  expect(res.ok, res.text).toBe(true)
+}
+
+/** Makes an existing login an active member of a spa with a system role (DB; the invitation flow is onboarding.spec). */
+export async function addMember(slug: string, email: string, roleKey: SystemRoleKey) {
+  const db = testDb()
+  const [t] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
+  const [u] = await db.select({ id: user.id }).from(user).where(eq(user.email, email))
+  const [r] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(and(eq(roles.tenantId, t!.id), eq(roles.key, roleKey)))
+  await db.insert(members).values({ tenantId: t!.id, userId: u!.id, roleId: r!.id })
+}
+
+/**
+ * Saves (or removes, `null`) a console Resend key on a signed-in super-admin page: staff email (password reset,
+ * enquiries) then lands in the e2e outbox as JSON files, no Resend call. Remove it again so later specs see no key.
+ */
+export async function consoleEmailKey(page: Page, key: string | null) {
+  await page.goto(`${admin}/settings`)
+  const card = page.getByTestId('email-settings')
+  if (key) await card.getByLabel('Resend API key').fill(key)
+  else await card.getByLabel('Remove the stored key').check()
+  await card.getByRole('button', { name: 'Save email settings' }).click()
+  await expect(page.getByText('Email settings saved')).toBeVisible()
+}
+
+export type OutboxMail = { to: string; from: string; subject: string; text: string; replyTo?: string }
+
+/** Every mail in the e2e outbox (EMAIL_E2E_OUTBOX_DIR, see playwright.config.ts), oldest first. */
+export async function outboxMails(): Promise<OutboxMail[]> {
+  const dir = process.env.EMAIL_E2E_OUTBOX_DIR as string
+  const files = (await readdir(dir).catch(() => [] as string[])).sort()
+  return Promise.all(files.map(async (f) => JSON.parse(await readFile(path.join(dir, f), 'utf8'))))
 }
 
 /** Screenshots a view at phone, tablet and desktop widths into test-results/screens. */

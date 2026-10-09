@@ -186,6 +186,9 @@ function createAuth() {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,
+      // A reset is how someone takes their account back: sign the login out everywhere (getSession also reads the
+      // session row, so the cookie cache can't keep a revoked one alive).
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user: u, url }) => {
         await sendStaffEmail({
           to: u.email,
