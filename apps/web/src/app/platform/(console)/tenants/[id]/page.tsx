@@ -14,7 +14,7 @@ import {
 } from '@spa/db'
 import { billingAlert } from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
-import { ArrowLeft, ArrowUpRight } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Download } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -34,6 +34,7 @@ import {
   generateScheduleAction,
   pauseTenantAction,
   paymentReminderAction,
+  purgeTenantAction,
   recordPaymentAction,
   setInvoicePaidAction,
   setTenantStatusAction,
@@ -86,6 +87,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const paused = tenant.status === 'read_only'
   const deleted = Boolean(tenant.deletedAt)
   const site = await publicSiteUrl(tenant)
+  const exportUrl = await appUrl(`/${tenant.slug}/settings/data/export?type=full`)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
 
   return (
@@ -465,13 +467,42 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
             </ul>
           </CardBody>
         </Card>
+        {deleted && (
+          <Card>
+            <CardHeader
+              title="Permanently delete"
+              description="Removes every record of this spa for good: clients, bookings, sales and the ledger, files, website, custom domains, integrations and the audit log. Cannot be undone. Download the export first; a purge record (who, when, row counts) is kept."
+            />
+            <CardBody className="space-y-4">
+              <Button variant="secondary" asChild>
+                <a href={exportUrl} target="_blank" rel="noreferrer">
+                  <Download /> Download full export
+                </a>
+              </Button>
+              <ActionForm
+                action={purgeTenantAction.bind(null, id)}
+                className="flex flex-wrap items-end gap-3"
+              >
+                <Field label={`Type ${tenant.slug} to permanently delete`} name="confirm">
+                  <Input id="confirm" name="confirm" autoComplete="off" required />
+                </Field>
+                <SubmitButton variant="danger">Permanently delete</SubmitButton>
+              </ActionForm>
+            </CardBody>
+          </Card>
+        )}
         {!deleted && (
           <Card>
             <CardHeader
               title="Delete spa"
-              description="Closes the dashboard, website and booking. Every record is kept; Restore brings it back."
+              description="Closes the dashboard, website and booking. Every record is kept; Restore brings it back. Permanent deletion is offered once the spa is deleted."
             />
-            <CardBody>
+            <CardBody className="space-y-4">
+              <Button variant="secondary" asChild>
+                <a href={exportUrl} target="_blank" rel="noreferrer">
+                  <Download /> Download full export
+                </a>
+              </Button>
               <ActionForm
                 action={deleteTenantAction.bind(null, id)}
                 className="flex flex-wrap items-end gap-3"

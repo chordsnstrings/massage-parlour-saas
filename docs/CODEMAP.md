@@ -29,8 +29,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - `withTenant(tenantId, fn)` rejects non-UUIDs, opens a transaction on `appDb()` and runs
   `set_config('app.tenant_id', id, true)`.
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
-  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`. `tenants` adds a `tenant_self` policy so a spa
-  sees its own row.
+  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `tenant_purges` (G12 purge record; its column is
+  `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
+  `tenants` adds a `tenant_self` policy so a spa sees its own row.
+- **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
+  tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
+  delete `deleteTenantObjects` (storage.ts), `autoPurgeDeletedTenants` (worker `tenant-auto-purge`, off unless
+  `platform_settings.auto_purge_days`), `eraseClient` (anonymise, keep financial rows; a new client FK in
+  `CLIENT_REFERENCES` must also be decided here: keep or delete on erase).
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`

@@ -1181,7 +1181,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
-  G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
+  G10 worker holds superuser URL · G11 no script-src CSP / security headers · ✅ G12 no tenant purge / client erase (§18.2) · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
@@ -1211,3 +1211,23 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   production without `RESEND_API_KEY` (no links in logs — also closes the log-leak half of G9).
 - **G3:** super-admin powers (console, impersonation, studio, file access, template export) need TOTP 2FA; without it →
   account page `?admin2fa=1` to enrol (reachable on app + admin hosts; sign-out in the user menu). e2e enrols for real.
+- **G12 (data deletion, backs the /data-deletion "within 30 days" promise):** services `data-deletion.ts`.
+  - **Tenant purge:** console spa page → "Permanently delete" (only once soft-deleted; type the slug; "Download full
+    export" link next to it and next to Delete). `purgeTenant` (platform role): Cloudflare custom hostnames →
+    one transaction (row counts of every `tenant_id` table from the catalog, pg-boss jobs whose `data.tenantId`
+    matches — none today, best effort/privilege-checked — `DELETE tenants` → every tenant FK cascades) → bucket
+    objects under `<tenantId>/`. **Ledger exception (decision):** the ledger is append-only for live spas (triggers
+    block `spa_app` only); purging a whole deleted spa as the platform role is the one allowed deletion of journal rows
+    / booking commissions. Record: `tenant_purges` (no FK; slug, name, who, mode, counts, objects deleted, clean-up
+    errors) + a tenant-less `platform.tenant.purged` audit row; the spa's own audit rows go with it. Login accounts
+    (`user`) stay — they may belong to other spas. Integration tokens are rows (deleted), not revoked at Meta/Google.
+  - **Auto-purge (default off):** console Settings → Data retention "Auto-purge deleted spas after (days)"
+    (`platform_settings.auto_purge_days`, blank = off, ≥ 30 so the export window stays). Worker `tenant-auto-purge`
+    04:30 daily; skipped/ok/failed in `platform_job_runs`.
+  - **Client erase:** client profile → "Erase personal data" card (owner, or super-admin acting on the spa;
+    `clients.manage` + roleKey owner; tick-box confirm; export link). `eraseClient(tx)` keeps the client row as
+    "Erased client" (`clients.erased_at`; UI shows the translated label) with sales, ledger, bookings, packages,
+    memberships, gift cards; removes phone/email/birthday/nationality/gender/tags/preferences/notes/blocklist,
+    treatment notes, intake submissions (answers + signatures), outbox rows, conversations (+ messages), waitlist
+    entries and booking notes; sets marketing opt-out. Audit `client.erased` (counts only). No files link to
+    clients today. Not scrubbed: names inside old audit-log `data` and notification payloads.

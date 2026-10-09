@@ -1,17 +1,18 @@
 'use client'
 import { enumLabel } from '@spa/core/i18n'
-import { Ban, Pencil, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Ban, Download, Eraser, Pencil, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { type ClientDetails, ClientDetailsFields } from '@/components/clients/details-fields'
 import { PRESSURE_OPTIONS } from '@/components/clients/shared'
 import { Button } from '@/components/ui/button'
-import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
+import { ActionForm, Field, FieldError, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
-import { Input, Select, Textarea } from '@/components/ui/input'
+import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { useT } from '@/i18n/client'
 import {
   addTreatmentNoteAction,
+  eraseClientAction,
   setBlocklistAction,
   updateClientAction,
   updatePreferencesAction,
@@ -196,6 +197,61 @@ export function BlocklistSheet({
         )}
         <SubmitButton className="w-full" variant={blocklisted ? 'primary' : 'danger'}>
           {blocklisted ? t('clients.blocklist.remove') : t('clients.blocklist.submit')}
+        </SubmitButton>
+      </ActionForm>
+    </Sheet>
+  )
+}
+
+/** G12: owner-only erase of one client's personal data (financial records stay). */
+export function EraseClientSheet({
+  slug,
+  clientId,
+  exportHref,
+}: {
+  slug: string
+  clientId: string
+  exportHref: string | null
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={setOpen}
+      title={t('clients.erase.button')}
+      description={t('clients.erase.sheetSub')}
+      trigger={
+        <Button variant="danger" className="w-full">
+          <Eraser /> {t('clients.erase.button')}
+        </Button>
+      }
+    >
+      <ActionForm
+        action={eraseClientAction.bind(null, slug, clientId)}
+        className="space-y-5"
+        onSuccess={() => setOpen(false)}
+      >
+        <div className="space-y-2.5 rounded-lg bg-subtle px-3.5 py-3 text-sm text-muted">
+          <p>{t('clients.erase.removes')}</p>
+          <p>{t('clients.erase.keeps')}</p>
+        </div>
+        {exportHref && (
+          <Button variant="secondary" className="w-full" asChild>
+            <a href={exportHref}>
+              <Download /> {t('clients.erase.export')}
+            </a>
+          </Button>
+        )}
+        <div className="space-y-1.5">
+          <label className="flex items-start gap-2.5 text-sm">
+            <Checkbox name="confirm" id="erase-confirm" className="mt-0.5" />
+            {t('clients.erase.confirm')}
+          </label>
+          <FieldError name="confirm" />
+        </div>
+        <SubmitButton className="w-full" variant="danger">
+          {t('clients.erase.submit')}
         </SubmitButton>
       </ActionForm>
     </Sheet>

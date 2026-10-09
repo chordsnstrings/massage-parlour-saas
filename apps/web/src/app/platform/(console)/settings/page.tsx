@@ -79,6 +79,27 @@ export default async function CompanyPage() {
                 </label>
               </CardBody>
             </Card>
+            <Card>
+              <CardHeader
+                title="Data retention"
+                description="Permanently delete spas some time after they were deleted (G12). Blank = off; purge by hand from the spa's page."
+              />
+              <CardBody>
+                <Field
+                  label="Auto-purge deleted spas after (days)"
+                  name="autoPurgeDays"
+                  hint="At least 30 days, so the spa can still get its data export. Runs daily at 04:30."
+                >
+                  <Input
+                    id="autoPurgeDays"
+                    name="autoPurgeDays"
+                    inputMode="numeric"
+                    placeholder="Off"
+                    defaultValue={s?.autoPurgeDays ?? ''}
+                  />
+                </Field>
+              </CardBody>
+            </Card>
           </div>
           <div className="flex justify-end xl:col-span-2">
             <SubmitButton size="lg">Save company details</SubmitButton>

@@ -229,6 +229,8 @@ export const clients = pgTable(
     marketingOptOutAt: ts('marketing_opt_out_at'),
     firstVisitAt: ts('first_visit_at'),
     lastVisitAt: ts('last_visit_at'),
+    /** G12: personal data erased on request (name → 'Erased client'); sales/bookings keep the reference. */
+    erasedAt: ts('erased_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

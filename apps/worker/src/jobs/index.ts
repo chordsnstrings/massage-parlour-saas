@@ -17,6 +17,7 @@ import {
   notifyPendingBookings,
   pruneAllNotifications,
 } from './notifications'
+import { autoPurgeTenants } from './purge'
 import { restoreDrill } from './restore-drill'
 import { expireAllPackages, runSlotFiller } from './tenant-jobs'
 
@@ -51,4 +52,6 @@ export const jobs: JobDef[] = [
   { name: 'notify-ai-drafts', cron: '0 10 * * *', handler: () => notifyAiDrafts() },
   { name: 'notify-billing', cron: '20 9 * * *', handler: () => notifyBilling() },
   { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
+  // G12: off until the owner sets the days in console Settings → Data retention.
+  { name: 'tenant-auto-purge', cron: '30 4 * * *', handler: () => autoPurgeTenants() },
 ]
