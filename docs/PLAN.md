@@ -1327,9 +1327,11 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   due = start date or today), the payment via `recordPlatformPayment` (shared with console "Record a payment") → full =
   paid, deposit = issued with a balance due; logo → `setTenantLogo`. Plan invoices are still issued with "Generate
   payment schedule". The rest of a deposit is recorded later with Record a payment. Payments are recorded, never processed.
-- **Balance due** shows on the console spa page (Paid / Balance columns, "part paid", header total) and the spa's
-  Billing page ("Paid AED x · balance due AED y", pill "Balance due"); Pay-by-card is hidden on a partly paid invoice
-  (Stripe charges a whole invoice).
+- **Balance due** shows on the console spa page (Paid / Balance columns, "part paid" = net received > 0, header
+  "Due now" (due date ≤ today) + "Outstanding" (all open, incl. later installments)) and the spa's Billing page
+  ("Paid AED x · balance due AED y", pill "Balance due"); Pay-by-card is hidden on a partly paid invoice and refused by
+  the action too (`cardPayableInvoice`: Stripe charges a whole invoice); a Checkout paid after another payment is still
+  recorded but its payment note says "OVERPAID by AED x: refund or credit it".
 - **Disabled logins:** Better Auth `databaseHooks.session.create.before` refuses a session (`ACCOUNT_DISABLED`, + the
   reason when shared) → the sign-in page shows "Application not approved" (+ reason); web `getSession` reads
   `user.disabled_at` fresh, so a cached cookie session stops at once. Emails: accepted (sign-in link, 2FA note),
@@ -1340,4 +1342,14 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
 - **e2e:** `signUpOwner` = `applyForSpa` (UI) + `approveApplication` (services fast path); `applications.spec` covers
   apply → waiting page → console accept with a deposit by bank transfer → sign-in → 2FA enrol → dashboard + billing
   balance, and the reject path. `signInPlatformAdmin` creates its login through the auth API (no spa).
-- Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in.
+- **Review fixes (2026-10-09):** apply is limited per IP (5/hour, 20/day; Postgres `rate_limits`, `hitRateLimit` +
+  web `withinIpLimit`; production only, off with `AUTH_RATE_LIMIT=off` like Better Auth's limiter) because the
+  action creates the login server-side, past Better Auth's HTTP limiter. `createPlatformInvoice` checks for an existing
+  setup / same plan installment before drawing a number (no gaps when "Generate payment schedule" runs after an
+  accept); `recordPlatformPayment` takes `today` (reminders resolve only when nothing is overdue today). Rejection
+  email says "account closed" only when the login was disabled. Pricing cards link `/signup?plan=<id>` (preselected);
+  "another spa" copy only for a login that has a spa; the waiting page shows the full web address; phones show the
+  Applications count on the bottom tab. e2e: a signed-in owner on the console gets 404 for `/applications(/id)` and
+  the super-admin's captured accept/reject calls replayed with the owner's session change nothing.
+- Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in,
+  holding the slug / notifying only after email verification, expiring unverified pending applications.

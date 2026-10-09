@@ -85,11 +85,13 @@ export async function emailApplicationAccepted(app: Application) {
   )
 }
 
-export async function emailApplicationRejected(app: Application) {
+/** `loginClosed`: the login was disabled (false when it still owns / works at a spa or is a super-admin). */
+export async function emailApplicationRejected(app: Application, opts: { loginClosed: boolean }) {
   const reason = app.shareReason && app.rejectionReason ? `\n\nReason: ${app.rejectionReason}` : ''
+  const closed = opts.loginClosed ? ', so the account you created has been closed' : ''
   await send(
     app.email,
     `Your spamanagement.co application for ${app.spaName}`,
-    `Hi ${app.applicantName},\n\nThank you for applying. We're sorry, but we could not approve your application for ${app.spaName}, so the account you created has been closed.${reason}\n\nIf you have questions, just reply to this email.`,
+    `Hi ${app.applicantName},\n\nThank you for applying. We're sorry, but we could not approve your application for ${app.spaName}${closed}.${reason}\n\nIf you have questions, just reply to this email.`,
   )
 }

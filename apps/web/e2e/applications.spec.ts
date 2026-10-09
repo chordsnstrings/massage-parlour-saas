@@ -1,14 +1,19 @@
 import { expect, type Page, test } from '@playwright/test'
-import { plans } from '@spa/db'
+import { plans, spaApplications, tenants, user } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import {
   admin,
   app,
   applyForSpa,
+  base,
   enrolTwoFactor,
   enrolUrl,
   OWNER_PASSWORD,
+  PATH,
+  passTwoFactor,
   signInPlatformAdmin,
+  signUpOwner,
+  site,
   testDb,
   uniqueSlug,
 } from './helpers'
@@ -63,6 +68,8 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
     await expect(status).toContainText('+971501234567')
     await expect(status).toContainText('Marina Walk, Tower 2')
     await expect(status).toContainText(`Setup plan ${tag}`)
+    // The web address as chosen (host / path), not the bare slug.
+    await expect(status).toContainText(site(slug).replace(/^https?:\/\//, ''))
   })
 
   await test.step('before approval nothing else opens (and no 2FA is asked)', async () => {
@@ -71,18 +78,28 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
     await page.goto(`${app}/account`)
     await page.waitForURL(`${app}/application`)
     expect((await page.goto(`${app}/${slug}`))?.status()).toBe(404)
-    // The console is not theirs: signed out there (own host), and never the list.
-    await page.goto(`${admin}/applications`)
-    await expect(page).toHaveURL(/\/login\?next=/)
+    // The console is not theirs: signed out there (own host) — or, with one host (path routing), not found.
+    // A signed-in non-admin on the console is covered by its own test below.
+    const res = await page.goto(`${admin}/applications`)
+    if (PATH) expect(res?.status()).toBe(404)
+    else await expect(page).toHaveURL(/\/login\?next=/)
     await expect(page.getByRole('heading', { name: 'Applications' })).toHaveCount(0)
   })
 
   await test.step('the address is held while the application is pending', async () => {
     const other = await page.context().browser()!.newContext()
     const visitor = await other.newPage()
-    await visitor.goto(`${app}/signup`)
+    // Each pricing card applies for its own plan (?plan=), preselected on the form.
+    await visitor.goto(`${base}/pricing`)
+    await expect(visitor.locator(`a[href$="/signup?plan=${planId}"]`)).toHaveCount(1)
+    await visitor.goto(`${app}/signup?plan=${planId}`)
+    await expect(visitor.getByLabel('Plan')).toHaveValue(planId)
     await visitor.getByLabel('Web address').fill(slug)
     await expect(visitor.getByText('That address is taken.')).toBeVisible()
+    // No emirate chosen (the placeholder is not sent): the translated message, not zod's default text.
+    await visitor.getByRole('button', { name: 'Send application' }).click()
+    await expect(visitor.locator('p.text-danger', { hasText: 'Choose an emirate' })).toBeVisible()
+    await expect(visitor.getByText(/Invalid input/)).toHaveCount(0)
     await other.close()
   })
 
@@ -90,6 +107,12 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
   await test.step('the owner sees it in the console and accepts with a deposit', async () => {
     await expect(owner.getByTestId('applications-card')).toContainText('pending')
     await expect(owner.getByRole('link', { name: /^Applications\s*\d+$/ }).first()).toBeVisible()
+    // Phones: the count is on the bottom tab too.
+    await owner.setViewportSize({ width: 360, height: 780 })
+    await expect(
+      owner.getByRole('link', { name: /^Applications\s*\d+/ }).filter({ visible: true }),
+    ).toBeVisible()
+    await owner.setViewportSize({ width: 1280, height: 800 })
     await owner.goto(`${admin}/applications`)
     await owner
       .getByRole('link', { name: /Jasmine Spa/ })
@@ -112,7 +135,7 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
     await expect(owner.getByTestId('setup-payment')).toContainText('Bank transfer')
     await expect(owner.getByTestId('setup-payment')).toContainText('(ref TT-123)')
     await owner.getByRole('link', { name: 'Open the spa' }).click()
-    await expect(owner.getByText(/Balance due: AED\s?3,250/)).toBeVisible()
+    await expect(owner.getByText(/Due now: AED\s?3,250/)).toBeVisible()
     await expect(owner.getByText('part paid').first()).toBeVisible()
   })
 
@@ -163,4 +186,95 @@ test('a rejected applicant is signed out and sees why', async ({ page }) => {
   await expect(notice).toContainText('Application not approved')
   await expect(notice).toContainText('Reason: We only serve licensed spas for now')
   expect((await page.goto(`${app}/account`))?.url()).toMatch(/\/login\?next=/)
+})
+
+// Spec item 9: only a super-admin reviews applications. A signed-in spa owner on the console gets 404 for the list and
+// the detail page, and the accept / reject server actions — the super-admin's own calls, captured and replayed with
+// the owner's session — change nothing. The same accept call replayed by the super-admin works (the replay is real).
+test('a signed-in non-admin can neither open nor accept or reject an application', async ({
+  page,
+  browser,
+}) => {
+  const { email: ownerEmail } = await signUpOwner(page)
+  if (!PATH) {
+    // Cookies are per host: sign the owner in on the console host too (2FA is on for owners, G23).
+    await page.goto(`${admin}/login`)
+    await page.getByLabel('Email').fill(ownerEmail)
+    await page.getByLabel('Password').fill(OWNER_PASSWORD)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL(/\/two-factor/)
+    await passTwoFactor(page, ownerEmail)
+    await page.waitForURL((url) => !url.pathname.includes('two-factor'))
+  }
+
+  const slug = uniqueSlug('guard')
+  const email = `owner-${slug}@e2e.test`
+  const applicantCtx = await browser.newContext()
+  await applyForSpa(await applicantCtx.newPage(), { slug, email, spa: 'Guarded Spa' })
+  await applicantCtx.close()
+  const db = testDb()
+  const [row] = await db.select().from(spaApplications).where(eq(spaApplications.email, email))
+  const detail = `${admin}/applications/${row!.id}`
+
+  await test.step('the pages are not found for a non-admin', async () => {
+    expect((await page.goto(`${admin}/applications`))?.status()).toBe(404)
+    expect((await page.goto(detail))?.status()).toBe(404)
+    await expect(page.getByText('Guarded Spa')).toHaveCount(0)
+  })
+
+  // The super-admin's accept and reject calls, captured on their way out (and not sent).
+  const ops = await adminPage(page)
+  type Call = { url: string; headers: Record<string, string>; body: string }
+  const calls: Call[] = []
+  await ops.route('**/*', (route) => {
+    const req = route.request()
+    if (req.method() !== 'POST' || !req.headers()['next-action']) return route.continue()
+    calls.push({ url: req.url(), headers: req.headers(), body: req.postData() ?? '' })
+    return route.abort()
+  })
+  await test.step('capture the accept and reject calls', async () => {
+    await ops.goto(detail)
+    await ops.getByRole('button', { name: 'Accept', exact: true }).click()
+    await ops.getByRole('button', { name: 'Accept and create spa' }).click()
+    await expect.poll(() => calls.length).toBe(1)
+    await ops.goto(detail)
+    await ops.getByRole('button', { name: 'Reject', exact: true }).click()
+    await ops.getByRole('button', { name: 'Reject application' }).click()
+    await expect.poll(() => calls.length).toBe(2)
+    await ops.unrouteAll()
+  })
+
+  const replay = (p: Page, call: Call) =>
+    p.evaluate(async (c) => {
+      const skip = ['cookie', 'content-length', 'host', 'origin', 'referer', 'user-agent']
+      const headers = Object.fromEntries(Object.entries(c.headers).filter(([k]) => !skip.includes(k)))
+      const r = await fetch(c.url, { method: 'POST', headers, body: c.body, redirect: 'manual' })
+      return { status: r.status, text: await r.text() }
+    }, call)
+
+  await test.step('the non-admin replaying them changes nothing', async () => {
+    await page.goto(detail) // on the console origin (its 404 page)
+    for (const call of calls) {
+      const res = await replay(page, call)
+      expect(res.text).not.toMatch(/is live|Application rejected/)
+    }
+    const [after] = await db.select().from(spaApplications).where(eq(spaApplications.id, row!.id))
+    expect(after).toMatchObject({ status: 'pending', reviewedBy: null, createdTenantId: null })
+    expect(await db.select().from(tenants).where(eq(tenants.slug, slug))).toHaveLength(0)
+    const [login] = await db.select().from(user).where(eq(user.email, email))
+    expect(login?.disabledAt).toBeNull()
+  })
+
+  await test.step('the same accept call by the super-admin goes through', async () => {
+    await ops.goto(detail)
+    const res = await replay(ops, calls[0]!)
+    expect(res.status).toBe(200)
+    await expect
+      .poll(
+        async () =>
+          (await db.select().from(spaApplications).where(eq(spaApplications.id, row!.id)))[0]?.status,
+      )
+      .toBe('approved')
+  })
+  await ops.context().close()
 })

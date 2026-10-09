@@ -31,7 +31,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `set_config('app.tenant_id', id, true)`.
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
   `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `spa_applications` (PLAN §18.3;
-  `created_tenant_id`), `tenant_purges` (G12 purge record; its column is
+  `created_tenant_id`), `rate_limits` (fixed-window counters: services `hitRateLimit`, web `server/rate-limit.ts`
+  `withinIpLimit` — per-IP limits for public actions Better Auth's HTTP limiter never sees, e.g. apply), `tenant_purges` (G12 purge record; its column is
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE

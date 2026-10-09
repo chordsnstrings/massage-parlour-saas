@@ -84,7 +84,7 @@ export function AcceptSheet({
             <Field
               label="Deposit amount (AED)"
               name="depositAed"
-              hint={`More than 0 and less than ${formatAed(chosen!.invoiceTotalAed)}; the rest stays due on the invoice.`}
+              hint={`More than 0 and less than the setup invoice total (${formatAed(chosen!.invoiceTotalAed)} incl. VAT); the rest stays due on the invoice.`}
             >
               <Input id="depositAed" name="depositAed" inputMode="decimal" required />
             </Field>
@@ -121,7 +121,7 @@ export function RejectSheet({ action }: { action: Action }) {
   return (
     <FormSheet
       title="Reject application"
-      description="The applicant's login is closed and signed out. They get a short email."
+      description="Closes and signs out the applicant's login unless it already belongs to a spa (or is a super-admin). They get a short email."
       trigger={<Button variant="secondary">Reject</Button>}
       action={action}
       submitLabel="Reject application"

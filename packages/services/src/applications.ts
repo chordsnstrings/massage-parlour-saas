@@ -279,7 +279,9 @@ export async function acceptApplication(
       const total = Number(invoiceTotals(fee, settings).totalAed)
       const amount = p.kind === 'full' ? total : Number(p.amountAed)
       if (p.kind === 'deposit' && !(Number.isFinite(amount) && amount > 0 && amount < total))
-        throw new DomainError('A deposit must be more than 0 and less than the setup fee')
+        throw new DomainError(
+          'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
+        )
       pay = { amount: Math.round(amount * 100) / 100, total, input: p }
     }
 
@@ -314,6 +316,7 @@ export async function acceptApplication(
         reference: pay.input.reference ?? null,
         receivedAt: pay.input.paidOn,
         recordedBy: r.reviewerId,
+        today: r.today,
         notes: pay.input.note || (pay.input.kind === 'full' ? 'Setup fee paid in full' : 'Setup fee deposit'),
       })
       balanceAed = recorded.balanceAed

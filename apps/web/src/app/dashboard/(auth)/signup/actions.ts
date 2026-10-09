@@ -15,6 +15,7 @@ import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { applicantState, emailNewApplication, isSlugAvailable } from '@/server/applications'
 import { audit } from '@/server/audit'
+import { withinIpLimit } from '@/server/rate-limit'
 import { getSession } from '@/server/session'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'auth.signup.errors.start')
@@ -26,7 +27,8 @@ const business = z.object({
     .trim()
     .transform((v) => toUaeE164(v))
     .refine((v): v is string => v !== null, 'auth.signup.errors.phone'),
-  emirate: z.string().refine(isEmirate, 'auth.signup.errors.emirate'),
+  // The placeholder option is disabled, so an unchosen emirate is missing from the form: same message as a wrong one.
+  emirate: z.string({ error: 'auth.signup.errors.emirate' }).refine(isEmirate, 'auth.signup.errors.emirate'),
   street: z.string().trim().min(3, 'auth.signup.errors.street').max(200),
   planId: z.string().optional(),
   start: date,
@@ -42,6 +44,12 @@ const account = business.extend({
   email: z.email('validation.email').transform((e) => e.toLowerCase()),
   password: z.string().min(10, 'auth.signup.errors.password').max(128),
 })
+
+/** Applications per IP: 5 an hour, 20 a day. */
+const SIGNUP_LIMITS: [number, number][] = [
+  [5, 3600],
+  [20, 86_400],
+]
 
 /** `checkSlug` (packages/core) reasons → auth keys. */
 const SLUG_REASON: Record<string, 'auth.signup.errors.slugFormat' | 'auth.signup.errors.reserved'> = {
@@ -104,6 +112,10 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
       throw e
     }
   }
+
+  // Public action that creates a login server-side (past Better Auth's HTTP limiter), files an application that holds
+  // a web address and emails the platform owner: a few per IP per hour/day (counted once the form is valid).
+  if (!(await withinIpLimit('signup', SIGNUP_LIMITS))) return fail('auth.signup.errors.tooMany')
 
   let user: { id: string; email: string; name: string } | undefined = session?.user
   if (!user) {

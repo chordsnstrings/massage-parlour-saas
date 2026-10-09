@@ -15,6 +15,7 @@ export function SignupForm({
   address,
   signedIn,
   plans,
+  planId,
   emirates,
   today,
   logo,
@@ -22,6 +23,8 @@ export function SignupForm({
   address: { prefix: string; suffix: string }
   signedIn: boolean
   plans: { id: string; label: string }[]
+  /** Preselected plan (`?plan=` from the pricing page, else the first). */
+  planId?: string
   emirates: { key: string; label: string }[]
   today: string
   logo: { label: string; hint: string; tooLarge: string }
@@ -168,7 +171,7 @@ export function SignupForm({
       </Field>
       {plans.length > 0 && (
         <Field label={t('auth.signup.plan')} name="planId">
-          <Select id="planId" name="planId" defaultValue={plans[0]?.id}>
+          <Select id="planId" name="planId" defaultValue={planId}>
             {plans.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}

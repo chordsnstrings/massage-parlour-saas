@@ -139,7 +139,13 @@ export async function recordPaymentAction(
   let res: Awaited<ReturnType<typeof recordPlatformPayment>>
   try {
     res = await platformDb().transaction((tx) =>
-      recordPlatformPayment(tx, { tenantId, invoiceId: invoiceId || null, recordedBy: user.id, ...d }),
+      recordPlatformPayment(tx, {
+        tenantId,
+        invoiceId: invoiceId || null,
+        recordedBy: user.id,
+        today: todayDubai(),
+        ...d,
+      }),
     )
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message)

@@ -87,6 +87,7 @@ export const auth = {
       exists: 'An account with this email already exists. Sign in instead.',
       registered: 'Already registered',
       failed: 'Could not create your account.',
+      tooMany: 'Too many applications from your network. Please try again later.',
       phone: 'Enter a UAE mobile number',
       emirate: 'Choose an emirate',
       street: 'Enter the street address',

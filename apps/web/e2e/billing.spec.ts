@@ -39,6 +39,8 @@ test('platform billing: schedule, overdue bar, mark paid, pause and reminder', a
     await ops.getByRole('button', { name: 'Generate payment schedule' }).click()
     await expect(ops.getByText('12 invoices created')).toBeVisible()
     await expect(ops.getByText('overdue', { exact: true }).filter({ visible: true })).toHaveCount(1)
+    // Only month 1 has fallen due; the other 11 installments are outstanding, not "due".
+    await expect(ops.getByText(/Due now: AED\s?2,100(\.00)?\. Outstanding: AED\s?25,200/)).toBeVisible()
   })
 
   await test.step('spa sees the red bar and the schedule with Must pay dots', async () => {
@@ -79,6 +81,18 @@ test('platform billing: schedule, overdue bar, mark paid, pause and reminder', a
     await owner.goto(`${dashboard}/billing`)
     await expect(owner.getByText('Must pay')).toHaveCount(11)
     await expect(bar).toHaveCount(0)
+  })
+
+  await test.step('paid then marked unpaid again is plain unpaid, not "part paid"', async () => {
+    await ops.reload()
+    const month2 = ops.getByRole('row', { name: /month 2 of 12/ })
+    await month2.getByRole('button', { name: 'Mark paid' }).click()
+    await expect(ops.getByText(/marked paid/)).toBeVisible()
+    await month2.getByRole('button', { name: 'Mark unpaid' }).click()
+    await expect(ops.getByText(/marked unpaid/)).toBeVisible()
+    await expect(month2.getByRole('button', { name: 'Mark paid' })).toBeVisible()
+    await expect(month2.getByText('part paid')).toHaveCount(0)
+    await expect(ops.locator('#invoiceId option', { hasText: 'balance' })).toHaveCount(0)
   })
 
   await ownerCtx.close()

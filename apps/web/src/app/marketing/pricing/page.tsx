@@ -77,7 +77,10 @@ export default async function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <a href={signup} className="mkt-btn mkt-btn-primary mt-9 w-full">
+              <a
+                href={plans.length ? `${signup}?plan=${p.id}` : signup}
+                className="mkt-btn mkt-btn-primary mt-9 w-full"
+              >
                 Apply for your spa <ArrowRight />
               </a>
             </div>

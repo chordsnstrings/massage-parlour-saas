@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { applicantState } from '@/server/applications'
+import { canonicalUrls } from '@/server/origin'
 import { requireUser } from '@/server/session'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -39,7 +40,13 @@ export default async function ApplicationPage() {
     [t('auth.email'), app.email],
     [t('auth.signup.phone'), app.phone],
     [t('auth.signup.spaName'), app.spaName],
-    [t('auth.signup.address'), app.slug],
+    // The address as chosen on the form (canonical domain: it is the spa's shared address).
+    [
+      t('auth.signup.address'),
+      canonicalUrls()
+        .site(app.slug)
+        .replace(/^https?:\/\//, ''),
+    ],
     [t('auth.signup.emirate'), t.maybe(`auth.emirate.${app.emirate}`) ?? app.emirate],
     [t('auth.signup.street'), app.streetAddress],
     [t('auth.signup.plan'), plan?.name ?? t('auth.application.noPlan')],

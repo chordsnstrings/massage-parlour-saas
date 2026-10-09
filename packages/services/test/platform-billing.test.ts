@@ -16,15 +16,20 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   addMonths,
   billingAlert,
+  cardPayableInvoice,
   createPaymentReminder,
+  createPlatformInvoice,
   DomainError,
   deleteTenant,
   generateBillingSchedule,
   invoiceTotals,
   pauseTenant,
   planSchedule,
+  recordPlatformPayment,
   resumeTenant,
   setInvoicePaid,
+  settleCheckoutSession,
+  toFils,
 } from '../src'
 
 describe('platform billing helpers', () => {
@@ -142,6 +147,17 @@ describe('platform billing (db)', () => {
     await sub('month', '5000')
     expect(await generateBillingSchedule(platform, ids.a, today)).toEqual({ created: 13, voided: 0 })
     expect(await generateBillingSchedule(platform, ids.a, today)).toEqual({ created: 0, voided: 0 })
+    // The idempotent re-run drew no invoice numbers: the next invoice continues the sequence without a gap.
+    const seq = (n: string) => Number(n.slice(-4))
+    const numbers = await platform.select({ n: platformInvoices.number }).from(platformInvoices)
+    const next = await createPlatformInvoice(platform, ids.a, {
+      description: 'Gap check',
+      amountAed: '10',
+      issueDate: today,
+      dueDate: today,
+    })
+    expect(seq(next!.number)).toBe(Math.max(...numbers.map((r) => seq(r.n))) + 1)
+    await platform.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.id, next!.id))
     const rows = await planInvoices()
     expect(rows).toHaveLength(12)
     expect(rows[0]).toMatchObject({
@@ -264,6 +280,96 @@ describe('platform billing (db)', () => {
     await expect(
       createPaymentReminder(platform, { tenantId: ids.b, userId: 'u-admin', today, billingUrl: 'x' }),
     ).rejects.toThrow(/no unpaid invoices/)
+  })
+
+  it('a back-dated payment keeps the reminder while another invoice is still overdue today', async () => {
+    const [c] = await platform
+      .insert(tenants)
+      .values({ slug: 'bill-c', name: 'Third', status: 'active' })
+      .returning()
+    const invoice = (description: string, dueDate: string) =>
+      createPlatformInvoice(platform, c!.id, {
+        description,
+        amountAed: '100',
+        issueDate: '2026-08-01',
+        dueDate,
+      })
+    const later = await invoice('A', '2026-10-01')
+    const earlier = await invoice('B', '2026-09-01')
+    const { reminder } = await createPaymentReminder(platform, {
+      tenantId: c!.id,
+      userId: 'u-admin',
+      today,
+      billingUrl: 'x',
+    })
+    const pay = (inv: typeof later, receivedAt: string) =>
+      platform.transaction((tx) =>
+        recordPlatformPayment(tx, {
+          tenantId: c!.id,
+          invoiceId: inv!.id,
+          amountAed: inv!.totalAed,
+          method: 'bank_transfer',
+          receivedAt,
+          recordedBy: 'u-admin',
+          today,
+        }),
+      )
+    const resolvedAt = async () =>
+      (await platform.select().from(platformReminders).where(eq(platformReminders.id, reminder.id)))[0]!
+        .resolvedAt
+    // B was paid on 15 Sep (nothing else due by then), but A is overdue today: the reminder stays.
+    expect((await pay(earlier, '2026-09-15')).invoice?.status).toBe('paid')
+    expect(await resolvedAt()).toBeNull()
+    await pay(later, '2026-10-05')
+    expect(await resolvedAt()).not.toBeNull()
+  })
+
+  it('card: only an untouched open invoice; a Checkout paid after a deposit is recorded and flagged', async () => {
+    const [d] = await platform
+      .insert(tenants)
+      .values({ slug: 'bill-d', name: 'Fourth', status: 'active' })
+      .returning()
+    const inv = (await createPlatformInvoice(platform, d!.id, {
+      description: 'One-time setup fee',
+      amountAed: '1000',
+      issueDate: today,
+      dueDate: today,
+      kind: 'setup',
+    }))!
+    expect(await cardPayableInvoice(platform, d!.id, inv.id)).toMatchObject({ invoice: { id: inv.id } })
+    expect(await cardPayableInvoice(platform, ids.b, inv.id)).toEqual({ error: 'notFound' })
+    await platform.transaction((tx) =>
+      recordPlatformPayment(tx, {
+        tenantId: d!.id,
+        invoiceId: inv.id,
+        amountAed: '400.00',
+        method: 'cash',
+        receivedAt: today,
+        recordedBy: 'u-admin',
+        today,
+      }),
+    )
+    // Checkout would charge the full total on top of the deposit.
+    expect(await cardPayableInvoice(platform, d!.id, inv.id)).toEqual({ error: 'partlyPaid' })
+    // A Checkout opened before the deposit was recorded and paid afterwards: kept, flagged for a refund.
+    const settled = await settleCheckoutSession(platform, inv, {
+      id: 'cs_test_late',
+      url: null,
+      status: 'complete',
+      payment_status: 'paid',
+      amount_total: toFils(inv.totalAed),
+      currency: 'aed',
+      payment_intent: 'pi_late',
+      metadata: { invoice_id: inv.id, tenant_id: d!.id },
+    })
+    expect(settled).toBe(true)
+    const pays = await platform.select().from(platformPayments).where(eq(platformPayments.invoiceId, inv.id))
+    const card = pays.find((p) => p.method === 'card')
+    expect(card).toMatchObject({ amountAed: '1050.00', reference: 'stripe:pi_late' })
+    expect(card?.notes).toContain('OVERPAID by AED 400.00')
+    const [after] = await platform.select().from(platformInvoices).where(eq(platformInvoices.id, inv.id))
+    expect(after?.status).toBe('paid')
+    expect(await cardPayableInvoice(platform, d!.id, inv.id)).toEqual({ error: 'notOpen' })
   })
 
   it('pauses, resumes and soft-deletes (slug confirmation, data kept)', async () => {

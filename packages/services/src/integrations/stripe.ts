@@ -1,7 +1,7 @@
 // Stripe Checkout for platform invoices (spas paying their subscription by card). REST via fetch, no SDK.
 // Only Checkout Sessions are used: card details never touch our servers, and a session is verified by
 // retrieving it from Stripe before anything is recorded.
-import { type Db, platformInvoices, platformPayments } from '@spa/db'
+import { type Db, type DbOrTx, platformInvoices, platformPayments } from '@spa/db'
 import { and, eq, sum } from 'drizzle-orm'
 
 export type StripeConfig = { secretKey: string; test: boolean }
@@ -47,6 +47,30 @@ export type CheckoutSession = {
 
 /** AED amounts are sent in fils (2 decimals). */
 export const toFils = (aed: string | number) => Math.round(Number(aed) * 100)
+
+/** Net AED received on one platform invoice (reversals included). */
+async function paidOnInvoice(db: DbOrTx, invoiceId: string) {
+  const [row] = await db
+    .select({ total: sum(platformPayments.amountAed) })
+    .from(platformPayments)
+    .where(eq(platformPayments.invoiceId, invoiceId))
+  return Number(row?.total ?? 0)
+}
+
+/**
+ * The spa's invoice when it can be paid by card now, else why not: Checkout charges the whole total, so only an
+ * issued invoice with nothing received on it yet (a setup deposit's balance is settled by transfer / cash).
+ */
+export async function cardPayableInvoice(db: DbOrTx, tenantId: string, invoiceId: string) {
+  const [invoice] = await db
+    .select()
+    .from(platformInvoices)
+    .where(and(eq(platformInvoices.id, invoiceId), eq(platformInvoices.tenantId, tenantId)))
+  if (!invoice) return { error: 'notFound' as const }
+  if (invoice.status !== 'issued') return { error: 'notOpen' as const }
+  if ((await paidOnInvoice(db, invoice.id)) > 0.005) return { error: 'partlyPaid' as const }
+  return { invoice }
+}
 
 export function createInvoiceCheckout(
   cfg: StripeConfig,
@@ -113,21 +137,25 @@ export async function settleCheckoutSession(
       .select({ id: platformPayments.id })
       .from(platformPayments)
       .where(and(eq(platformPayments.invoiceId, inv.id), eq(platformPayments.reference, reference)))
-    if (!seen)
+    if (!seen) {
+      // The card money is real, so it is always recorded; a Checkout opened before another payment was recorded
+      // (e.g. a deposit) overpays the invoice — flagged on the payment for the super-admin to refund or credit.
+      const amount = session.amount_total! / 100
+      const over = (await paidOnInvoice(tx, inv.id)) + amount - Number(inv.totalAed)
       await tx.insert(platformPayments).values({
         tenantId: inv.tenantId,
         invoiceId: inv.id,
-        amountAed: (session.amount_total! / 100).toFixed(2),
+        amountAed: amount.toFixed(2),
         method: 'card',
         reference,
         receivedAt: new Date().toISOString().slice(0, 10),
-        notes: 'Paid by card (Stripe Checkout)',
+        notes:
+          over > 0.005
+            ? `Paid by card (Stripe Checkout) · OVERPAID by AED ${over.toFixed(2)}: refund or credit it`
+            : 'Paid by card (Stripe Checkout)',
       })
-    const [paid] = await tx
-      .select({ total: sum(platformPayments.amountAed) })
-      .from(platformPayments)
-      .where(eq(platformPayments.invoiceId, inv.id))
-    if (Number(paid?.total ?? 0) >= Number(inv.totalAed) && inv.status !== 'paid') {
+    }
+    if ((await paidOnInvoice(tx, inv.id)) >= Number(inv.totalAed) - 0.005 && inv.status !== 'paid') {
       await tx
         .update(platformInvoices)
         .set({ status: 'paid', paidAt: new Date() })

@@ -253,5 +253,5 @@ export const domain: Messages['errors']['domain'] = {
   setupPaymentMissing: 'บันทึกวิธีชำระค่าติดตั้ง',
   paymentDateFuture: 'วันที่ชำระเงินต้องไม่เป็นวันในอนาคต',
   paymentMethodMissing: 'เลือกวิธีชำระเงิน',
-  depositRange: 'เงินมัดจำต้องมากกว่า 0 และน้อยกว่าค่าติดตั้ง',
+  depositRange: 'เงินมัดจำต้องมากกว่า 0 และน้อยกว่ายอดรวมใบแจ้งหนี้ค่าติดตั้ง (รวม VAT)',
 }

@@ -278,5 +278,5 @@ export const domain = {
   setupPaymentMissing: 'Record how the setup fee was paid',
   paymentDateFuture: 'The payment date can’t be in the future',
   paymentMethodMissing: 'Choose how it was paid',
-  depositRange: 'A deposit must be more than 0 and less than the setup fee',
+  depositRange: 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
 } as const

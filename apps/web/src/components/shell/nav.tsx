@@ -161,7 +161,15 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
   const [open, setOpen] = useState(false)
   const t = useT()
   const moreActive = more.some(isActive)
-  const tab = (key: string, active: boolean, Icon: (typeof icons)[keyof typeof icons], label: string) => (
+  // Counts of the items inside "More" show on its tab too (phones see no sidebar).
+  const moreBadge = more.reduce((n, item) => n + (item.badge ?? 0), 0)
+  const tab = (
+    key: string,
+    active: boolean,
+    Icon: (typeof icons)[keyof typeof icons],
+    label: string,
+    badge?: number,
+  ) => (
     <span
       className={cn(
         'relative flex flex-col items-center gap-1 py-1.5 text-[11px] transition-colors',
@@ -177,6 +185,7 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
       )}
       <Icon className="size-5" strokeWidth={1.5} />
       {label}
+      <CountPill n={badge} className="absolute -top-0.5 end-[calc(50%-1.25rem)]" />
       <span className="sr-only">{key}</span>
     </span>
   )
@@ -188,7 +197,7 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
       >
         {items.map((item) => (
           <Link key={item.href} href={item.href} className="pt-2">
-            {tab(item.href, isActive(item), icons[item.icon], item.label)}
+            {tab(item.href, isActive(item), icons[item.icon], item.label, item.badge)}
           </Link>
         ))}
         {more.length > 0 && (
@@ -198,7 +207,7 @@ export function BottomNav({ items, more }: { items: NavItem[]; more: NavItem[] }
             title={t('ui.more')}
             trigger={
               <button type="button" className="pt-2">
-                {tab('more', moreActive, Ellipsis, t('ui.more'))}
+                {tab('more', moreActive, Ellipsis, t('ui.more'), moreBadge)}
               </button>
             }
           >

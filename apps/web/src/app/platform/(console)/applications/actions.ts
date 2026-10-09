@@ -49,7 +49,8 @@ export async function acceptApplicationAction(
   const payment = d.paymentKind
     ? {
         kind: d.paymentKind,
-        amountAed: d.paymentKind === 'deposit' ? (d.depositAed ?? '') : null,
+        // "1,000" → 1000 (thousands separators typed by hand).
+        amountAed: d.paymentKind === 'deposit' ? (d.depositAed ?? '').replace(/,/g, '') : null,
         paidOn: d.paidOn ?? '',
         method: (d.method || 'cash') as (typeof SETUP_PAYMENT_METHODS)[number],
         reference: d.reference,
@@ -143,7 +144,7 @@ export async function rejectApplicationAction(
       sessionsRevoked: res.sessionsRevoked,
     },
   })
-  await emailApplicationRejected(res.application)
+  await emailApplicationRejected(res.application, { loginClosed: res.disabled })
   revalidate(applicationId)
   return ok(res.disabled ? 'Application rejected · login closed' : 'Application rejected')
 }

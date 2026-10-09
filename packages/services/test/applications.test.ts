@@ -19,12 +19,13 @@ import {
   withTenant,
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   acceptApplication,
   DomainError,
+  generateBillingSchedule,
   latestApplication,
   pendingApplicationCount,
   processLogo,
@@ -37,6 +38,8 @@ import {
 const { platform, app } = testDbs()
 const today = '2026-10-09'
 const ids: Record<string, string> = {}
+const seq = (number: string) => Number(number.slice(-4))
+const DEPOSIT_RANGE = 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)'
 
 async function newUser(key: string) {
   const id = `u-${key}`
@@ -192,6 +195,33 @@ describe('spa applications', () => {
     ).rejects.toThrow('This application was already reviewed')
   })
 
+  it('the first "Generate payment schedule" after an accept skips the setup invoice without burning a number', async () => {
+    const [t] = await platform.select().from(tenants).where(eq(tenants.slug, 'serenity'))
+    const [setup] = await platform
+      .select()
+      .from(platformInvoices)
+      .where(and(eq(platformInvoices.tenantId, t!.id), eq(platformInvoices.kind, 'setup')))
+    const res = await generateBillingSchedule(platform, t!.id, today)
+    const planRows = await platform
+      .select()
+      .from(platformInvoices)
+      .where(and(eq(platformInvoices.tenantId, t!.id), eq(platformInvoices.kind, 'plan')))
+    expect(res.created).toBe(planRows.length)
+    expect(planRows.length).toBeGreaterThan(0)
+    // Gap-free: the plan invoices follow the setup invoice's number directly.
+    const nums = planRows.map((r) => seq(r.number)).sort((a, b) => a - b)
+    expect(nums).toEqual(nums.map((_, i) => seq(setup!.number) + 1 + i))
+    // …and the skipped setup invoice drew no number either (the sequence stops at the last issued one).
+    const drawn = async () =>
+      Number(
+        (await platform.execute<{ n: string }>(sql`select last_value as n from platform_invoice_seq`))
+          .rows[0]!.n,
+      )
+    expect(await drawn()).toBe(nums.at(-1))
+    expect(await generateBillingSchedule(platform, t!.id, today)).toEqual({ created: 0, voided: 0 })
+    expect(await drawn()).toBe(nums.at(-1))
+  })
+
   it('accepts with a deposit by bank transfer: invoice stays open with the balance; later payment settles it', async () => {
     const a = await submitApplication(platform, form(ids.u2!, 'lotus', { spaName: 'Lotus' }))
     const bad = (amountAed: string) =>
@@ -203,8 +233,8 @@ describe('spa applications', () => {
         today,
         payment: { kind: 'deposit', amountAed, paidOn: today, method: 'bank_transfer' },
       })
-    await expect(bad('0')).rejects.toThrow('A deposit must be more than 0 and less than the setup fee')
-    await expect(bad('5250')).rejects.toThrow('A deposit must be more than 0 and less than the setup fee')
+    await expect(bad('0')).rejects.toThrow(DEPOSIT_RANGE)
+    await expect(bad('5250')).rejects.toThrow(DEPOSIT_RANGE)
     await expect(
       acceptApplication(platform, {
         applicationId: a.id,
@@ -252,6 +282,7 @@ describe('spa applications', () => {
         method: 'cash',
         receivedAt: '2026-10-19',
         recordedBy: ids.admin!,
+        today,
       }),
     )
     expect(later).toMatchObject({ balanceAed: '0.00', paidAed: '5250.00' })
@@ -266,9 +297,41 @@ describe('spa applications', () => {
           method: 'cash',
           receivedAt: today,
           recordedBy: ids.admin!,
+          today,
         }),
       ),
     ).rejects.toBeInstanceOf(DomainError)
+  })
+
+  it('an accept that fails late (after the invoice + payment are written) creates nothing', async () => {
+    ids.u5 = await newUser('u5')
+    // An empty stored logo makes the logo step (the last one) fail: "The file is empty".
+    const a = await submitApplication(platform, {
+      ...form(ids.u5, 'late-fail'),
+      logo: { bytes: Buffer.alloc(0), contentType: 'image/webp' },
+    })
+    const count = async (table: typeof platformInvoices | typeof platformPayments | typeof subscriptions) =>
+      (await platform.select({ n: sql<number>`count(*)::int` }).from(table))[0]!.n
+    const before = [await count(platformInvoices), await count(platformPayments), await count(subscriptions)]
+    await expect(
+      acceptApplication(platform, {
+        applicationId: a.id,
+        reviewerId: ids.admin!,
+        planId: ids.feePlan!,
+        startDate: today,
+        today,
+        payment: { kind: 'deposit', amountAed: '1000', paidOn: today, method: 'cash' },
+      }),
+    ).rejects.toThrow('The file is empty')
+    expect(await platform.select().from(tenants).where(eq(tenants.slug, 'late-fail'))).toHaveLength(0)
+    expect(await platform.select().from(members).where(eq(members.userId, ids.u5!))).toEqual([])
+    expect([
+      await count(platformInvoices),
+      await count(platformPayments),
+      await count(subscriptions),
+    ]).toEqual(before)
+    const [still] = await platform.select().from(spaApplications).where(eq(spaApplications.id, a.id))
+    expect(still).toMatchObject({ status: 'pending', createdTenantId: null, setupPayment: null })
   })
 
   it('skips the payment when the plan has no setup fee', async () => {

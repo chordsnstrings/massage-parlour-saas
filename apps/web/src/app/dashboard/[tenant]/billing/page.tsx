@@ -94,7 +94,8 @@ export default async function BillingPage({
   const paidOn = new Map<string, number>()
   for (const p of payments)
     if (p.invoiceId) paidOn.set(p.invoiceId, (paidOn.get(p.invoiceId) ?? 0) + Number(p.amountAed))
-  const partly = (i: { id: string; status: string }) => i.status === 'issued' && (paidOn.get(i.id) ?? 0) > 0
+  const partly = (i: { id: string; status: string }) =>
+    i.status === 'issued' && (paidOn.get(i.id) ?? 0) > 0.005
   const open = invoices.find((i) => i.status === 'issued' && !partly(i))
   // R11: the current period's plan invoices (12 monthly or one-time) + the setup fee; status is set by the super-admin.
   const schedule = [

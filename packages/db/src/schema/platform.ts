@@ -449,6 +449,20 @@ export const tenantPurges = pgTable(
   () => platformPolicies(),
 )
 
+/**
+ * Fixed-window request counters for public server actions (no Redis): e.g. `signup:ip:<ip>` for "Apply for your
+ * spa", which creates the login server-side, past Better Auth's HTTP rate limiter. Platform-only; no tenant data.
+ */
+export const rateLimits = pgTable(
+  'rate_limits',
+  {
+    key: text('key').primaryKey(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull().defaultNow(),
+    count: integer('count').notNull().default(0),
+  },
+  () => platformPolicies(),
+)
+
 /** Spa applications (PLAN §18.3): new spas apply, the platform owner accepts (provisions the spa) or rejects. */
 export const spaApplicationStatus = pgEnum('spa_application_status', ['pending', 'approved', 'rejected'])
 

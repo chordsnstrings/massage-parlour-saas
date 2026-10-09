@@ -24,12 +24,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('auth.meta.signup') }
 }
 
-/** "Apply for your spa" (PLAN §18.3). Signed in (e.g. adding another spa): the same form without the login fields. */
-export default async function SignupPage() {
+/**
+ * "Apply for your spa" (PLAN §18.3). Signed in: the same form without the login fields ("another spa" copy only for a
+ * login that already has one). `?plan=<id>` (pricing page cards) preselects that plan.
+ */
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const session = await getSession()
+  const state = session ? await applicantState(session.user.id) : null
   // One pending application per login: its waiting page instead of a second form.
-  if (session && (await applicantState(session.user.id)).application?.status === 'pending')
-    redirect(appPath('/application'))
+  if (state?.application?.status === 'pending') redirect(appPath('/application'))
+  const { plan: wanted } = await searchParams
   const { t, fmt } = await getI18n()
   const planRows = await platformDb()
     .select()
@@ -49,13 +53,14 @@ export default async function SignupPage() {
   }))
   return (
     <AuthLayout
-      title={session ? t('auth.signup.titleAdd') : t('auth.signup.title')}
-      subtitle={session ? t('auth.signup.subtitleAdd') : t('auth.signup.subtitle')}
+      title={state?.hasSpa ? t('auth.signup.titleAdd') : t('auth.signup.title')}
+      subtitle={state?.hasSpa ? t('auth.signup.subtitleAdd') : t('auth.signup.subtitle')}
     >
       <SignupForm
         address={siteAddress()}
         signedIn={Boolean(session)}
         plans={planOptions}
+        planId={planOptions.find((p) => p.id === wanted)?.id ?? planOptions[0]?.id}
         emirates={UAE_EMIRATES.map((key) => ({ key, label: t(`auth.emirate.${key}`) }))}
         today={todayDubai()}
         logo={{

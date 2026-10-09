@@ -95,7 +95,11 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
     if (p.invoiceId) paidOn.set(p.invoiceId, (paidOn.get(p.invoiceId) ?? 0) + Number(p.amountAed))
   const balanceOf = (i: { id: string; totalAed: string }) =>
     Math.max(0, Number(i.totalAed) - (paidOn.get(i.id) ?? 0))
-  const balanceDue = openInvoices.reduce((s, i) => s + balanceOf(i), 0)
+  // Net received (a "Mark unpaid" reversal brings it back to 0, so that invoice is plain unpaid again).
+  const partPaid = (i: { id: string }) => (paidOn.get(i.id) ?? 0) > 0.005
+  // Due now = open balances whose due date has come; outstanding also counts later installments.
+  const dueNow = openInvoices.filter((i) => i.dueDate <= today).reduce((s, i) => s + balanceOf(i), 0)
+  const outstanding = openInvoices.reduce((s, i) => s + balanceOf(i), 0)
 
   return (
     <>
@@ -303,7 +307,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                       {openInvoices.map((i) => (
                         <option key={i.id} value={i.id}>
                           {i.number} · {formatAed(i.totalAed)}
-                          {paidOn.has(i.id) ? ` · balance ${formatAed(balanceOf(i))}` : ''}
+                          {partPaid(i) ? ` · balance ${formatAed(balanceOf(i))}` : ''}
                         </option>
                       ))}
                     </Select>
@@ -355,8 +359,8 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
           <CardHeader
             title="Invoices"
             description={`Payment plan + setup fee invoices for the current period. Only you set Paid / Must pay.${
-              balanceDue > 0 ? ` Balance due: ${formatAed(balanceDue)}.` : ''
-            }`}
+              dueNow > 0 ? ` Due now: ${formatAed(dueNow)}.` : ''
+            }${outstanding > dueNow + 0.005 ? ` Outstanding: ${formatAed(outstanding)}.` : ''}`}
             action={
               <ActionForm action={generateScheduleAction.bind(null, id)}>
                 <SubmitButton variant="secondary">Generate payment schedule</SubmitButton>
@@ -411,7 +415,7 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     >
                       {r.status === 'issued' && r.dueDate < today
                         ? 'overdue'
-                        : r.status === 'issued' && paidOn.has(r.id)
+                        : r.status === 'issued' && partPaid(r)
                           ? 'part paid'
                           : r.status}
                     </Badge>
