@@ -7,6 +7,7 @@ export const overview: Messages['overview'] = {
     today: 'ภาพรวมของสปาคุณวันนี้',
     period: 'ภาพรวมของสปาคุณในช่วง {days} วันที่ผ่านมา',
   },
+  branch: { label: 'สาขา', all: 'ทุกสาขา' },
   period: { label: 'ช่วงเวลา', today: 'วันนี้', d7: '7 วัน', d30: '30 วัน' },
   website: 'เว็บไซต์',
   setup: {

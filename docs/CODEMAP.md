@@ -368,6 +368,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
+  - Full tax invoice (G16): `sales.billing` / `clients.billing` jsonb (`BillingDetails`); `taxInvoiceLines` splits
+    VAT-inclusive line totals into taxable + VAT (prepaid kinds 0 %), matching `sales.vat_aed`; invoice no. = sale
+    number. Route `dashboard/[tenant]/sales/[id]/invoice`, action `saveBillingAction` (pos.use + branch scope).
+- **Branches (G22)**: services/branches.ts — `createBranch` (copies main hours, plan cap), `updateBranch`,
+  `setBranchActive` (archive = `active=false`, never the default), `setMemberBranches` ('all' | ids, active only),
+  `memberBranchIds`, `branchesForMember`. UI: settings/branches, team edit/invite `BranchScope`. Member scope is read
+  in `requireMember` (access.ts) and filtered by `allowedBranches` (calendar/data.ts, also used by the overview).
+  Public booking: `bookingBranches` / `bookingBranch(tx, id?)` in components/booking/data.ts.
 - **Stock locations + purchases (R8/R9, migration 0017)**:
   - A location is a branch or the spa's central warehouse = `branch_id IS NULL` on `stock_levels` /
     `stock_movements` (unique `stock_levels_location` NULLS NOT DISTINCT on tenant+branch+product; PK dropped).

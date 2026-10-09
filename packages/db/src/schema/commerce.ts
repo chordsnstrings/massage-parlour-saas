@@ -18,7 +18,7 @@ import {
 import { createdAt, id } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
-import { bookings, clients, staff } from './operations'
+import { type BillingDetails, bookings, clients, staff } from './operations'
 import { tenants } from './platform'
 import { branches } from './tenant'
 
@@ -77,6 +77,8 @@ export const sales = pgTable(
     tipsAed: aed('tips_aed').notNull().default('0'),
     status: saleStatus('status').notNull().default('open'),
     voidReason: text('void_reason'),
+    /** Customer billing details printed on the full tax invoice (G16); null = simplified tax invoice only. */
+    billing: jsonb('billing').$type<BillingDetails>(),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
   },

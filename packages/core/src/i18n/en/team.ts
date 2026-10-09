@@ -9,6 +9,7 @@ export const team = {
   noMembers: 'No members yet',
   unknown: 'Unknown',
   col: {
+    branches: 'Branches',
     name: 'Name',
     role: 'Role',
     status: 'Status',
@@ -33,6 +34,10 @@ export const team = {
     message: 'You’re invited to join {spa} on spamanagement.co: {link}',
   },
   edit: {
+    branches: 'Branches',
+    allBranches: 'All branches',
+    branchesHint: 'They only see bookings, sales and messages of the branches ticked here.',
+    branchesRequired: 'Choose at least one branch',
     description: 'Change role or access.',
     access: 'Access',
     active: 'Active',

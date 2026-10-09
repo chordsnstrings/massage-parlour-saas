@@ -24,15 +24,19 @@ export const LEAD_MIN = 60
 export const acceptsBookings = (status: string) =>
   status === 'trial' || status === 'active' || status === 'past_due' || status === 'read_only'
 
-/** The branch online bookings go to: the default branch, else the first active one. */
-export async function bookingBranch(tx: Tx) {
-  const [branch] = await tx
+/** Open branches, main first (the public booking page lets clients pick one when there are several — G22). */
+export async function bookingBranches(tx: Tx) {
+  return tx
     .select()
     .from(branches)
     .where(eq(branches.active, true))
     .orderBy(desc(branches.isDefault), asc(branches.createdAt))
-    .limit(1)
-  return branch ?? null
+}
+
+/** The branch an online booking goes to: the chosen open branch, else the default, else the first open one. */
+export async function bookingBranch(tx: Tx, branchId?: string | null) {
+  const rows = await bookingBranches(tx)
+  return rows.find((b) => b.id === branchId) ?? rows[0] ?? null
 }
 
 /** The next N business dates (branch cutoff aware), starting with today's business date. */
@@ -45,12 +49,13 @@ export function bookingDates(branch: { businessDayCutoff: string; openingHours: 
 }
 
 /** Everything the public booking page renders, read under the tenant's RLS context. */
-export async function loadBookingCatalog(tenant: {
-  id: string
-  name: string
-}): Promise<BookingCatalog | null> {
+export async function loadBookingCatalog(
+  tenant: { id: string; name: string },
+  branchId?: string | null,
+): Promise<BookingCatalog | null> {
   return withTenant(tenant.id, async (tx) => {
-    const branch = await bookingBranch(tx)
+    const all = await bookingBranches(tx)
+    const branch = all.find((b) => b.id === branchId) ?? all[0]
     if (!branch) return null
     const [cats, svcRows] = await Promise.all([
       tx.select().from(serviceCategories).orderBy(asc(serviceCategories.sort)),
@@ -112,7 +117,13 @@ export async function loadBookingCatalog(tenant: {
 
     return {
       spa: tenant.name,
-      branch: { name: branch.name, address: branch.address, hasWhatsapp: Boolean(branch.whatsappE164) },
+      branch: {
+        id: branch.id,
+        name: branch.name,
+        address: branch.address,
+        hasWhatsapp: Boolean(branch.whatsappE164),
+      },
+      branches: all.map((b) => ({ id: b.id, name: b.name, address: b.address })),
       groups: [...groups.values(), other].filter((g) => g.services.length),
       therapists: staffRows.map((s) => ({
         id: s.id,

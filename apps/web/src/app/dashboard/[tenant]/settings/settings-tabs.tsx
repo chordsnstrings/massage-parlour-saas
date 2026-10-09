@@ -8,6 +8,7 @@ import { can, type MemberContext } from '@/server/access'
 
 export type SettingsTab =
   | 'profile'
+  | 'branches'
   | 'hours'
   | 'intake'
   | 'integrations'
@@ -26,6 +27,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
     canExportAll(ctx)
   const show: Record<SettingsTab, boolean> = {
     profile: manage,
+    branches: manage,
     hours: manage,
     intake: manage,
     integrations: manage || can(ctx, 'ai.manage'),
@@ -36,6 +38,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
   }
   const path: Record<SettingsTab, string> = {
     profile: 'settings',
+    branches: 'settings/branches',
     hours: 'settings/hours',
     intake: 'settings/intake',
     integrations: 'settings/integrations',

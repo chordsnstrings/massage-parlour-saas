@@ -60,6 +60,7 @@ export default async function ServicesPage({ params }: { params: Promise<{ tenan
         openingHours: branches.openingHours,
       })
       .from(branches)
+      .where(eq(branches.active, true))
       .orderBy(asc(branches.createdAt)),
     // Booked in the last 30 days, per duration (cancelled / no-shows excluded).
     booked: await tx

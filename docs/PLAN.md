@@ -1188,6 +1188,9 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G20 source attribution (ig/gbp/qr) not carried to bookings · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
+  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
+  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
@@ -1282,3 +1285,17 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ones that had turned it off). Owners may still turn it off (Settings → Security). Super-admin impersonation is
   unaffected (not a member → own G3 2FA rule). e2e: `signUpOwner` stores a verified TOTP secret (`enableTotp`) after
   sign-up lands on `/account?require2fa=`; onboarding.spec enrols through the UI.
+- **G16 (full tax invoice):** receipt → "Full tax invoice" (`sales/[id]/invoice`): "Tax Invoice / فاتورة ضريبية", supplier
+  legal name + branch address + TRN, customer billing name/address/TRN (`sales.billing`, prefilled from
+  `clients.billing`; "also save on the client's profile" needs `clients.manage`), invoice no. = sale number (gapless
+  per-tenant counter), issue date (sale created) + supply date (business date), per line qty / unit price incl. VAT /
+  discount (line + share of sale discount) / taxable / VAT % / VAT, totals + amount payable in AED; EN with AR labels,
+  A4 print CSS. Prepaid lines (packages, gift cards) show 0 % (VAT at redemption). `taxInvoiceLines` /
+  `saveSaleBilling` in services/tax-invoice.ts. Credit notes for refunds are not separate documents (listed on it).
+- **G22 (multi-branch):** Settings → Branches (`settings.manage`): add / edit (name, address, phone, WhatsApp, cutoff;
+  time zone fixed Asia/Dubai) / archive / restore; new branches copy the main branch's hours; main branch can't be
+  archived; plan `limits.branches` enforced on add/restore when the plan sets it. Team: per-member "All branches" or
+  ticked branches (edit + invite; invites now really create `member_branches` on accept). Pickers: calendar, POS,
+  bookings already had them; added on the overview (KPIs, "All branches" for unrestricted members) and the public
+  booking page (`?branch=`, select when > 1 open branch; slots + booking use it). Archived branches drop out of
+  pickers, rooms/hours screens and online booking. Services in services/branches.ts.

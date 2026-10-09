@@ -14,7 +14,7 @@ import {
 } from '@spa/db'
 import { METHOD_LABEL, refundOptions } from '@spa/services'
 import { and, asc, eq } from 'drizzle-orm'
-import { ArrowLeft, MessageCircle, Plus } from 'lucide-react'
+import { ArrowLeft, FileText, MessageCircle, Plus } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -240,7 +240,11 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
 
             <dl className="space-y-2 border-t pt-4 text-sm">
               <p className="text-xs font-medium uppercase tracking-[0.06em] text-muted">Paid</p>
-              {payRows.length === 0 && <p className="text-muted">Nothing to pay</p>}
+              {payRows.length === 0 && (
+                <p className="text-muted" lang={t.locale}>
+                  {t('sales.receipt.nothingToPay')}
+                </p>
+              )}
               {payRows.map((p) => (
                 <Row
                   key={p.id}
@@ -295,6 +299,16 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
                 </Note>
               )}
               <PrintButton />
+              {sale.status !== 'void' && (
+                <Button variant="secondary" className="w-full" asChild>
+                  <Link
+                    href={appPath(`/${slug}/sales/${sale.id}/invoice`)}
+                    title={t('sales.receipt.taxInvoiceHint')}
+                  >
+                    <FileText /> {t('sales.receipt.taxInvoice')}
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" className="w-full" asChild>
                 <Link href={appPath(`/${slug}/sales/new`)}>
                   <Plus /> {t('sales.newSale')}

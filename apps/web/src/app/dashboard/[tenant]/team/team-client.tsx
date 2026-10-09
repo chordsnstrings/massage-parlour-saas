@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
-import { Input, Select } from '@/components/ui/input'
+import { Checkbox, Input, Select } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import { resultText, useT } from '@/i18n/client'
@@ -13,8 +13,58 @@ import { inviteAction, revokeInviteAction, updateMemberAction } from './actions'
 
 /** `name` is already in the viewer's language (roleName on the server). */
 type RoleOption = { id: string; key: string; name: string }
+type BranchOption = { id: string; name: string }
 
-export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[] }) {
+/** "All branches" or a ticked list (G22). Renders nothing for single-branch spas. */
+function BranchScope({
+  branches,
+  allBranches = true,
+  branchIds = [],
+}: {
+  branches: BranchOption[]
+  allBranches?: boolean
+  branchIds?: string[]
+}) {
+  const t = useT()
+  const [all, setAll] = useState(allBranches)
+  if (branches.length < 2) return null
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-[13px] font-medium">{t('team.edit.branches')}</legend>
+      <input type="hidden" name="branchField" value="1" />
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          name="branchScope"
+          value="all"
+          checked={all}
+          onChange={(e) => setAll(e.currentTarget.checked)}
+        />
+        {t('team.edit.allBranches')}
+      </label>
+      {!all && (
+        <div className="space-y-2 ps-6">
+          {branches.map((b) => (
+            <label key={b.id} className="flex items-center gap-2 text-sm">
+              <Checkbox name="branchIds" value={b.id} defaultChecked={branchIds.includes(b.id)} />
+              {b.name}
+            </label>
+          ))}
+        </div>
+      )}
+      <p className="text-[13px] text-muted">{t('team.edit.branchesHint')}</p>
+    </fieldset>
+  )
+}
+
+export function InviteSheet({
+  slug,
+  roles,
+  branches,
+}: {
+  slug: string
+  roles: RoleOption[]
+  branches: BranchOption[]
+}) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [created, setCreated] = useState<{ link: string; email: string; tenantName: string } | null>(null)
@@ -80,6 +130,7 @@ export function InviteSheet({ slug, roles }: { slug: string; roles: RoleOption[]
                   ))}
                 </Select>
               </Field>
+              <BranchScope branches={branches} />
               <SubmitButton className="w-full">{t('team.invite.create')}</SubmitButton>
             </ActionForm>
           </motion.div>
@@ -93,10 +144,19 @@ export function EditMemberSheet({
   slug,
   member,
   roles,
+  branches,
 }: {
   slug: string
-  member: { id: string; name: string; roleId: string; status: 'active' | 'disabled' }
+  member: {
+    id: string
+    name: string
+    roleId: string
+    status: 'active' | 'disabled'
+    allBranches: boolean
+    branchIds: string[]
+  }
   roles: RoleOption[]
+  branches: BranchOption[]
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -133,6 +193,7 @@ export function EditMemberSheet({
             <option value="disabled">{t('team.edit.disabled')}</option>
           </Select>
         </Field>
+        <BranchScope branches={branches} allBranches={member.allBranches} branchIds={member.branchIds} />
         <SubmitButton className="w-full">{t('common.save')}</SubmitButton>
       </ActionForm>
     </Sheet>

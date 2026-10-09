@@ -8,7 +8,7 @@ import { localeOf, t } from './i18n'
 import type { SiteKey } from './types'
 
 type Tenant = { id: string; slug: string; name: string; status: string }
-type Search = { lang?: string | string[]; service?: string | string[] }
+type Search = { lang?: string | string[]; service?: string | string[]; branch?: string | string[] }
 
 export function bookingMetadata(tenant: Tenant | null, lang: Search['lang'], embed = false): Metadata {
   if (!tenant) return { title: 'Not found' }
@@ -44,7 +44,8 @@ export async function BookingPage({
   const langHref = embed
     ? `${base}/book/embed?src=widget&lang=${locale === 'ar' ? 'en' : 'ar'}`
     : `${base}/book${locale === 'ar' ? '' : '?lang=ar'}`
-  const catalog = acceptsBookings(tenant.status) ? await loadBookingCatalog(tenant) : null
+  const branch = Array.isArray(search.branch) ? search.branch[0] : search.branch
+  const catalog = acceptsBookings(tenant.status) ? await loadBookingCatalog(tenant, branch) : null
   const service = Array.isArray(search.service) ? search.service[0] : search.service
 
   if (!catalog || catalog.groups.length === 0) {

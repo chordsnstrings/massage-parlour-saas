@@ -11,6 +11,7 @@ export const team: Messages['team'] = {
   noMembers: 'ยังไม่มีสมาชิก',
   unknown: 'ไม่ทราบชื่อ',
   col: {
+    branches: 'สาขา',
     name: 'ชื่อ',
     role: 'บทบาท',
     status: 'สถานะ',
@@ -35,6 +36,10 @@ export const team: Messages['team'] = {
     message: 'คุณได้รับเชิญให้เข้าร่วม {spa} บน spamanagement.co: {link}',
   },
   edit: {
+    branches: 'สาขา',
+    allBranches: 'ทุกสาขา',
+    branchesHint: 'จะเห็นเฉพาะการจอง การขาย และข้อความของสาขาที่เลือกไว้',
+    branchesRequired: 'เลือกอย่างน้อยหนึ่งสาขา',
     description: 'เปลี่ยนบทบาทหรือสิทธิ์การเข้าใช้',
     access: 'การเข้าใช้',
     active: 'ใช้งานอยู่',

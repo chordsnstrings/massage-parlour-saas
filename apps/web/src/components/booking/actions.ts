@@ -83,6 +83,7 @@ const slotQuery = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  branchId: z.uuid().optional(),
   lang: locale,
 })
 
@@ -109,7 +110,7 @@ export async function getSlots(input: z.input<typeof slotQuery>): Promise<Action
   if (!tenant) return fail(t('unavailable', q.lang))
   try {
     const slots = await withTenant(tenant.id, async (tx) => {
-      const branch = await bookingBranch(tx)
+      const branch = await bookingBranch(tx, q.branchId)
       if (!branch || !(await bookableVariant(tx, q.variantId))) return null
       if (!bookingDates(branch).some((d) => d.date === q.date)) return []
       const found = await freeSlots(tx, branch, q)
@@ -146,6 +147,7 @@ const bookingInput = z.object({
   website: z.string().optional().default(''),
   /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
   via: z.enum(['widget']).optional(),
+  branchId: z.uuid().optional(),
   lang: locale,
 })
 
@@ -182,7 +184,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
 
   try {
     const result = await withTenant(tenant.id, async (tx) => {
-      const branch = await bookingBranch(tx)
+      const branch = await bookingBranch(tx, v.branchId)
       const row = await bookableVariant(tx, v.variantId)
       if (!branch || !row) return { kind: 'unavailable' as const }
       const date = businessDateOf(start, branch.businessDayCutoff.slice(0, 5))

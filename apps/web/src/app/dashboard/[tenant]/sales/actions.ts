@@ -1,5 +1,5 @@
 'use server'
-import { clientPackages, clients, withTenant } from '@spa/db'
+import { clientPackages, clients, sales, withTenant } from '@spa/db'
 import {
   closeDay,
   createSale,
@@ -9,6 +9,7 @@ import {
   PAY_METHODS,
   POS_METHODS,
   refundSale,
+  saveSaleBilling,
   voidSale,
 } from '@spa/services'
 import { and, asc, eq, gt, ilike, or } from 'drizzle-orm'
@@ -325,4 +326,42 @@ export async function clientPackagesAction(
       endsOn: m.currentPeriodEnd,
     })),
   })
+}
+
+const billingInput = z.object({
+  name: z.string().trim().min(2, 'sales.invoice.errors.name').max(160),
+  address: z.string().trim().max(400).optional().default(''),
+  trn: z.string().trim().max(40).optional().default(''),
+  saveToClient: z.literal('on').optional(),
+})
+
+/** Customer billing details for the full tax invoice (G16); optionally saved on the client's profile. */
+export async function saveBillingAction(slug: string, saleId: string, _p: ActionResult, formData: FormData) {
+  const { ctx, error } = await guard(slug, 'pos.use')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(saleId).success) return fail('sales.invoice.errors.notFound')
+  const parsed = billingInput.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const saveToClient = parsed.data.saveToClient === 'on' && can(ctx, 'clients.manage')
+  try {
+    const billing = await withTenant(ctx.tenant.id, async (tx) => {
+      const [sale] = await tx.select({ branchId: sales.branchId }).from(sales).where(eq(sales.id, saleId))
+      if (!sale || (ctx.member && !ctx.member.allBranches && !ctx.member.branchIds.includes(sale.branchId)))
+        throw new DomainError('Sale not found', 'not_found', { key: 'sales.invoice.errors.notFound' })
+      return saveSaleBilling(tx, saleId, parsed.data, { saveToClient })
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+      action: 'sale.billing_saved',
+      entity: 'sale',
+      entityId: saleId,
+      data: { ...billing, savedToClient: saveToClient },
+    })
+    revalidate(slug)
+    return ok('sales.invoice.saved')
+  } catch (e) {
+    return handle(e)
+  }
 }
