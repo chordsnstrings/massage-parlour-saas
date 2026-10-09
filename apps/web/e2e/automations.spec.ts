@@ -15,7 +15,7 @@ test('automations: switch one off (kept after reload), locked platform duties, l
   await page.goto(`${app}/${slug}`)
   await page.getByRole('link', { name: 'Automations' }).first().click()
   await expect(page.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible()
-  await expect(page.getByText('11 active')).toBeVisible()
+  await expect(page.getByText('12 active')).toBeVisible()
   await expect(page.getByText('Always on')).toHaveCount(2)
   await expect(page.getByRole('cell', { name: /Package expiry · 3 items/ })).toBeVisible()
 
@@ -25,7 +25,7 @@ test('automations: switch one off (kept after reload), locked platform duties, l
   await expect(page.getByText('Booking confirmations & reminders switched off')).toBeVisible()
   await page.reload()
   await expect(toggle).toHaveAttribute('aria-checked', 'false')
-  await expect(page.getByText('10 active')).toBeVisible()
+  await expect(page.getByText('11 active')).toBeVisible()
 
   const [row] = await testDb()
     .select({ settings: tenants.settings })
