@@ -154,7 +154,7 @@ export async function seedPlatform(db: Db, adminEmails: string[] = []) {
   await db.insert(platformSettings).values({ id: 1, email: 'ask@spamanagement.co' }).onConflictDoNothing()
   // PLAN §18.8 (owner 2026-10-09): Premium + Standard (setup + monthly, excl. VAT; price_aed = 12 months, paid as 12
   // monthly invoices) and the old yearly plan as an inactive legacy plan (existing spas keep it until renewal).
-  // Existing installs get the same rows from migration 0035 (the old `standard` row is renamed `legacy-yearly`).
+  // Existing installs get the same rows from migration 0036 (the old `standard` row is renamed `legacy-yearly`).
   await db.insert(plans).values(defaultPlans).onConflictDoNothing()
   await db.insert(aiModelConfig).values(defaultAiModels).onConflictDoNothing()
   // G2: listed emails are promoted only once verified; existing super-admins are never demoted.

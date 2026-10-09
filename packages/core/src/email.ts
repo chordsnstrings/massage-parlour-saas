@@ -2,7 +2,8 @@
 export const PLATFORM_NAME = 'spamanagement.co'
 /**
  * B1 decision (PLAN §14.8): staff emails keep sending from spamanagement.ae until spamanagement.co is verified in
- * Resend; then set EMAIL_FROM (and change this default).
+ * Resend; then set EMAIL_FROM to `spamanagement.co <ask@spamanagement.co>` (owner 2026-10-09: the only
+ * spamanagement.co address anywhere is ask@) and change this default.
  */
 export const EMAIL_DOMAIN = 'spamanagement.ae'
 export const DEFAULT_EMAIL_FROM = `${EMAIL_DOMAIN} <no-reply@${EMAIL_DOMAIN}>`

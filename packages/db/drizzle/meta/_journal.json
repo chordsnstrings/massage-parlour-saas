@@ -250,8 +250,15 @@
     {
       "idx": 35,
       "version": "7",
-      "when": 1791575068421,
-      "tag": "0035_plans_premium_standard",
+      "when": 1791575282827,
+      "tag": "0035_only_ask_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791584941207,
+      "tag": "0036_plans_premium_standard",
       "breakpoints": true
     }
   ]

@@ -72,7 +72,7 @@ export default async function CompanyPage() {
                   id="emailFrom"
                   name="emailFrom"
                   defaultValue={mail.from ?? ''}
-                  placeholder="spamanagement.co <no-reply@spamanagement.co>"
+                  placeholder="spamanagement.co <ask@spamanagement.co>"
                 />
               </Field>
               {mail.hasKey && (

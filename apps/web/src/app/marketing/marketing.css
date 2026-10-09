@@ -656,23 +656,22 @@
   }
   .mkt-fgrid {
     display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 5fr);
-    gap: 48px;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 56px;
   }
   .mkt-ftag {
-    max-width: 290px;
     margin-top: 18px;
     color: var(--text);
     font-weight: 600;
   }
   .mkt-fdesc {
-    max-width: 290px;
     margin-top: 6px;
-    line-height: 1.5;
+    line-height: 1.6;
   }
   .mkt-fnav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(5, max-content);
+    justify-content: space-between;
     gap: 32px 28px;
   }
   .mkt-foot .mkt-fhead {
@@ -692,9 +691,8 @@
   .mkt-fnav a {
     display: inline-block;
     padding-block: 4px;
-    font-size: 13.5px;
-    line-height: 1.35;
-    overflow-wrap: break-word;
+    font-size: 14px;
+    line-height: 1.4;
     transition: color 0.2s;
   }
   .mkt-fnav a:hover {
@@ -715,6 +713,13 @@
     padding-top: 20px;
     border-top: 1px solid var(--line);
     font-size: 13px;
+  }
+  /* footer lines never wrap (owner 2026-10-09): columns size to their longest label */
+  .mkt-fline,
+  .mkt-ftag,
+  .mkt-fnav a {
+    display: block;
+    white-space: nowrap;
   }
 
   /* soft tints for small accents inside cards and mocks */
@@ -794,7 +799,9 @@
       gap: 36px;
     }
     .mkt-fnav {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(3, max-content);
+      justify-content: start;
+      column-gap: 56px;
     }
   }
   @media (max-width: 640px) {
@@ -802,8 +809,8 @@
       padding-top: 48px;
     }
     .mkt-fnav {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 28px 20px;
+      grid-template-columns: repeat(2, max-content);
+      gap: 28px 32px;
     }
   }
   @media (max-width: 640px) {
