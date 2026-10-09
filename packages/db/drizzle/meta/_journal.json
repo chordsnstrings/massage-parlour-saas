@@ -253,6 +253,13 @@
       "when": 1791575282827,
       "tag": "0035_only_ask_email",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791584883705,
+      "tag": "0036_breezy_masque",
+      "breakpoints": true
     }
   ]
 }
