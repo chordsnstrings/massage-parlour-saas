@@ -1,14 +1,14 @@
 'use server'
 import { withTenant } from '@spa/db'
-import { createChangeRequest, DomainError, resolveChangeRequest, setStudioStatus } from '@spa/services'
+import { DomainError, resolveChangeRequest, setStudioStatus } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
-import { guard, type MemberContext, studioGuard } from '@/server/access'
+import { type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 
-// Website Studio workflow (PLAN §14.4): the spa reviews and asks for changes; the studio resolves them and alone
-// moves the site through review and approval (R1).
+// Website Studio workflow (PLAN §14.4, §18.1): every action here is studio-only (super-admin, `studioGuard`). Spa
+// members no longer review, approve or request changes — they only edit services and prices (services/actions.ts).
 
 const auditAs = (ctx: MemberContext, action: string, entityId?: string, data?: unknown) =>
   audit({
@@ -31,37 +31,6 @@ function domainFail(e: unknown): ActionResult {
   throw e
 }
 
-const requestSchema = z.object({
-  body: z.string().trim().min(3, 'website.tellUs').max(2000, 'website.tooLong'),
-  pageId: z.union([z.string().uuid(), z.literal('')]).optional(),
-})
-
-export async function requestChangeAction(
-  slug: string,
-  _prev: ActionResult,
-  formData: FormData,
-): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'site.content')
-  if (error) return fail(error)
-  const parsed = requestSchema.safeParse(formObject(formData))
-  if (!parsed.success) return fromZod(parsed.error)
-  let id: string
-  try {
-    id = await withTenant(ctx.tenant.id, (tx) =>
-      createChangeRequest(tx, ctx.tenant.id, {
-        body: parsed.data.body,
-        pageId: parsed.data.pageId || null,
-        userId: ctx.user.id,
-      }),
-    )
-  } catch (e) {
-    return domainFail(e)
-  }
-  await auditAs(ctx, 'site.change_requested', id)
-  revalidate(slug)
-  return ok('website.sent')
-}
-
 const STATUS_RESULT = {
   building: 'website.backInStudio',
   review: 'website.sentForReview',
@@ -73,7 +42,7 @@ const STATUS_AUDIT = {
   approved: 'site.approved',
 } as const
 
-/** Studio only (R1): send for review, pull back, approve or reopen. Spa members can only request changes. */
+/** Studio only (R1, §18.1): send for review, pull back, approve or reopen. Spa members are rejected. */
 export async function setStudioStatusAction(
   slug: string,
   to: keyof typeof STATUS_RESULT,

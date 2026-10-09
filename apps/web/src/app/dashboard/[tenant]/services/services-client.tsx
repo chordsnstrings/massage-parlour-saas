@@ -246,6 +246,7 @@ export function ServiceSheet({
   service,
   equipmentTypes = [],
   variant = 'primary',
+  menuOnly = false,
 }: {
   slug: string
   categories: Option[]
@@ -253,6 +254,8 @@ export function ServiceSheet({
   /** Equipment types the spa has (B5.3), offered as requirements. */
   equipmentTypes?: string[]
   variant?: 'primary' | 'secondary'
+  /** Website "Services & prices" (PLAN §18.1): only name, description, durations and prices; the rest is kept as is. */
+  menuOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const t = useT()
@@ -284,6 +287,7 @@ export function ServiceSheet({
         categories={categories}
         service={service}
         equipmentTypes={equipmentTypes}
+        menuOnly={menuOnly && !!service}
         onDone={() => setOpen(false)}
       />
     </Sheet>
@@ -295,12 +299,14 @@ function ServiceForm({
   categories,
   service,
   equipmentTypes,
+  menuOnly,
   onDone,
 }: {
   slug: string
   categories: Option[]
   service?: ServiceInput
   equipmentTypes: string[]
+  menuOnly: boolean
   onDone: () => void
 }) {
   const kitTypes = [...new Set([...equipmentTypes, ...(service?.equipmentTypes ?? [])])].sort()
@@ -360,39 +366,43 @@ function ServiceForm({
             defaultValue={service?.description?.ar}
           />
         </Field>
-        <div className="sm:col-span-2">
-          <ImageInput
-            slug={slug}
-            name="imageUrl"
-            label={t('services.form.photo')}
-            hint={t('services.form.photoHint')}
-            defaultValue={service?.imageUrl}
-          />
-        </div>
-        <Field label={t('services.form.category')} name="categoryId">
-          <Select
-            id="categoryId"
-            name="categoryId"
-            defaultValue={service?.categoryId ?? categories[0]?.id ?? ''}
-          >
-            <option value="">{t('services.uncategorised')}</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={t('services.form.therapists')} name="therapistsRequired">
-          <Select
-            id="therapistsRequired"
-            name="therapistsRequired"
-            defaultValue={String(service?.therapistsRequired ?? 1)}
-          >
-            <option value="1">{t('services.form.therapistsOne')}</option>
-            <option value="2">{t('services.form.therapistsTwo')}</option>
-          </Select>
-        </Field>
+        {!menuOnly && (
+          <>
+            <div className="sm:col-span-2">
+              <ImageInput
+                slug={slug}
+                name="imageUrl"
+                label={t('services.form.photo')}
+                hint={t('services.form.photoHint')}
+                defaultValue={service?.imageUrl}
+              />
+            </div>
+            <Field label={t('services.form.category')} name="categoryId">
+              <Select
+                id="categoryId"
+                name="categoryId"
+                defaultValue={service?.categoryId ?? categories[0]?.id ?? ''}
+              >
+                <option value="">{t('services.uncategorised')}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t('services.form.therapists')} name="therapistsRequired">
+              <Select
+                id="therapistsRequired"
+                name="therapistsRequired"
+                defaultValue={String(service?.therapistsRequired ?? 1)}
+              >
+                <option value="1">{t('services.form.therapistsOne')}</option>
+                <option value="2">{t('services.form.therapistsTwo')}</option>
+              </Select>
+            </Field>
+          </>
+        )}
       </div>
 
       <fieldset className="space-y-3">
@@ -467,93 +477,102 @@ function ServiceForm({
         </Button>
       </fieldset>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field
-          label={t('services.form.bufferBefore')}
-          name="bufferBeforeMin"
-          hint={t('services.form.bufferBeforeHint')}
-        >
-          <Input
-            id="bufferBeforeMin"
-            name="bufferBeforeMin"
-            type="number"
-            min={0}
-            max={120}
-            step={5}
-            defaultValue={service?.bufferBeforeMin ?? 0}
-          />
-        </Field>
-        <Field
-          label={t('services.form.bufferAfter')}
-          name="bufferAfterMin"
-          hint={t('services.form.bufferAfterHint')}
-        >
-          <Input
-            id="bufferAfterMin"
-            name="bufferAfterMin"
-            type="number"
-            min={0}
-            max={120}
-            step={5}
-            defaultValue={service?.bufferAfterMin ?? 10}
-          />
-        </Field>
-      </div>
-
-      <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">{t('services.form.roomTypes')}</legend>
-        <p className="text-[13px] text-muted">{t('services.form.roomTypesHint')}</p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          {ROOM_TYPES.map((rt) => (
-            <ChipCheckbox
-              key={rt}
-              name="roomTypes"
-              value={rt}
-              label={t(`services.roomType.${rt}`)}
-              defaultChecked={service?.roomTypes.includes(rt)}
-            />
-          ))}
-        </div>
-      </fieldset>
-
-      <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">{t('equipment.form.legend')}</legend>
-        <p className="text-[13px] text-muted">
-          {kitTypes.length ? t('equipment.form.hint') : t('equipment.form.none')}
-        </p>
-        {kitTypes.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {kitTypes.map((ty) => (
-              <ChipCheckbox
-                key={ty}
-                name="equipmentTypes"
-                value={ty}
-                label={ty}
-                defaultChecked={service?.equipmentTypes.includes(ty)}
+      {menuOnly && service ? (
+        <MenuOnlyHidden service={service} />
+      ) : (
+        <>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field
+              label={t('services.form.bufferBefore')}
+              name="bufferBeforeMin"
+              hint={t('services.form.bufferBeforeHint')}
+            >
+              <Input
+                id="bufferBeforeMin"
+                name="bufferBeforeMin"
+                type="number"
+                min={0}
+                max={120}
+                step={5}
+                defaultValue={service?.bufferBeforeMin ?? 0}
               />
-            ))}
+            </Field>
+            <Field
+              label={t('services.form.bufferAfter')}
+              name="bufferAfterMin"
+              hint={t('services.form.bufferAfterHint')}
+            >
+              <Input
+                id="bufferAfterMin"
+                name="bufferAfterMin"
+                type="number"
+                min={0}
+                max={120}
+                step={5}
+                defaultValue={service?.bufferAfterMin ?? 10}
+              />
+            </Field>
           </div>
-        )}
-      </fieldset>
 
-      <fieldset className="space-y-2">
-        <legend className="text-[13px] font-medium">{t('services.form.colour')}</legend>
-        <ColorPicker name="color" defaultValue={service?.color} />
-      </fieldset>
+          <fieldset className="space-y-2">
+            <legend className="text-[13px] font-medium">{t('services.form.roomTypes')}</legend>
+            <p className="text-[13px] text-muted">{t('services.form.roomTypesHint')}</p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {ROOM_TYPES.map((rt) => (
+                <ChipCheckbox
+                  key={rt}
+                  name="roomTypes"
+                  value={rt}
+                  label={t(`services.roomType.${rt}`)}
+                  defaultChecked={service?.roomTypes.includes(rt)}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="space-y-2">
+            <legend className="text-[13px] font-medium">{t('equipment.form.legend')}</legend>
+            <p className="text-[13px] text-muted">
+              {kitTypes.length ? t('equipment.form.hint') : t('equipment.form.none')}
+            </p>
+            {kitTypes.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {kitTypes.map((ty) => (
+                  <ChipCheckbox
+                    key={ty}
+                    name="equipmentTypes"
+                    value={ty}
+                    label={ty}
+                    defaultChecked={service?.equipmentTypes.includes(ty)}
+                  />
+                ))}
+              </div>
+            )}
+          </fieldset>
+
+          <fieldset className="space-y-2">
+            <legend className="text-[13px] font-medium">{t('services.form.colour')}</legend>
+            <ColorPicker name="color" defaultValue={service?.color} />
+          </fieldset>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Toggle
+              name="onlineBookable"
+              label={t('services.form.onlineBookable')}
+              hint={t('services.form.onlineBookableHint')}
+              defaultChecked={service?.onlineBookable ?? true}
+            />
+            <Toggle
+              name="active"
+              label={t('services.form.active')}
+              hint={t('services.form.activeHint')}
+              defaultChecked={service?.active ?? true}
+            />
+          </div>
+        </>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Toggle
-          name="onlineBookable"
-          label={t('services.form.onlineBookable')}
-          hint={t('services.form.onlineBookableHint')}
-          defaultChecked={service?.onlineBookable ?? true}
-        />
-        <Toggle
-          name="active"
-          label={t('services.form.active')}
-          hint={t('services.form.activeHint')}
-          defaultChecked={service?.active ?? true}
-        />
         <Field label={t('services.form.showPrice')} name="showPrice" hint={t('services.form.showPriceHint')}>
           <Select
             id="showPrice"
@@ -568,7 +587,7 @@ function ServiceForm({
       </div>
 
       <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-between">
-        {service ? (
+        {service && !menuOnly ? (
           <Button
             type="button"
             variant="ghost"
@@ -590,6 +609,27 @@ function ServiceForm({
         <SubmitButton>{t(service ? 'services.service.save' : 'services.service.add')}</SubmitButton>
       </div>
     </ActionForm>
+  )
+}
+
+/** The operational fields a menu-only edit doesn't show, posted unchanged (the save action takes the full form). */
+function MenuOnlyHidden({ service }: { service: ServiceInput }) {
+  return (
+    <>
+      <input type="hidden" name="categoryId" value={service.categoryId ?? ''} />
+      <input type="hidden" name="therapistsRequired" value={service.therapistsRequired} />
+      <input type="hidden" name="bufferBeforeMin" value={service.bufferBeforeMin} />
+      <input type="hidden" name="bufferAfterMin" value={service.bufferAfterMin} />
+      {service.roomTypes.map((v) => (
+        <input key={`r-${v}`} type="hidden" name="roomTypes" value={v} />
+      ))}
+      {service.equipmentTypes.map((v) => (
+        <input key={`e-${v}`} type="hidden" name="equipmentTypes" value={v} />
+      ))}
+      {service.color && <input type="hidden" name="color" value={service.color} />}
+      <input type="hidden" name="onlineBookable" value={String(service.onlineBookable)} />
+      <input type="hidden" name="active" value={String(service.active)} />
+    </>
   )
 }
 

@@ -813,6 +813,12 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   who is also a member). Flow: `sites.studio_status` building → review (studio sends) → approved (studio only); the
   studio can withdraw or reopen; a request made during review sends it back to building. Admin → Websites lists status, live pages and open requests; "Open studio" enters
   the spa's existing editor. Live data blocks (prices, team, hours) keep the site current without edits.
+- **Superseded by §18.1 (2026-10-09):** spa members no longer preview/review or send change requests. Their Website
+  page is **Services & prices** (`website/services-prices.tsx`): each service with its durations/prices, a menu-only
+  edit sheet (name, description, durations, prices, price visibility — the shared `ServiceSheet`/`saveServiceAction`,
+  `services.manage`), a link to the live site. The site's service/price blocks read services live (`site/data.ts`), so
+  edits show without a republish. Studio status (review/approve) and publishing are studio-only and unchanged; the
+  old requests list stays visible to the studio for history; `requestChangeAction` is removed.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
 - Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
@@ -1192,6 +1198,8 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   booking channels, campaigns, social posts/conversations/reviews counts, AI spend vs budget). Aggregates only.
 - Spa logins (owner, manager, receptionist, therapist) keep the dashboard/CRM. On the website the spa edits **only services + prices**
   (name, description, duration, price → live site); no design approval / change requests — super-admin edits and publishes directly.
+  ✅ Done 2026-10-09 (see §14.4 note): editing needs `services.manage` (owner/manager); other roles with `site.content`
+  see the list read-only.
 - Online booking from tenant sites stays.
 
 ### 18.2 Done (2026-10-09)
