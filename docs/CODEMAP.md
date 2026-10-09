@@ -349,6 +349,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Prepaid lines refund only the unused value (card balance / package remaining value as a share of what was
     paid), then void the card / set the package `refunded`; used-up ones are blocked. Cards/packages carry
     `sale_line_id` (older ones match by sale + definition).
+  - **Memberships (G15, migration 0030)**: line kind `membership` (prepaid like packages: 2110, no VAT at sale) →
+    `loyalty.issueMembership` = one `client_memberships` row per one-month period (`membershipPeriodEnd`; name,
+    `discount_pct`, balances, `price_paid_aed`/`remaining_value_aed`, `sale_id`/`sale_line_id` snapshotted); a live
+    period of the same plan makes it a renewal (starts the day after, old `due` → `active`, queued reminder skipped).
+    Service lines take `membership: {id, use: 'session'|'discount'}`: session = price 0, qty 1,
+    `redeemMembershipSession` (→ `membership_redemptions`, `postRedemption`, commission via `sessionCommission`,
+    shared with package sessions); discount = `round(gross × pct)` added to the typed line discount (client mirrors
+    it in checkout.tsx `memberOff`). Live = status `active|due` and period covers the business date.
+    `runMembershipRenewals` (job `memberships-renew`): ended → `expired` + `membership_expiry` (2110 → 4000 + VAT);
+    ≤ `RENEWAL_NOTICE_DAYS` (7) to the end and no later period → `due` + `membership_renewal` outbox row. Refund:
+    unused value, period `refunded` (balances cleared); void blocked like packages. Statuses `paused/cancelled/lapsed`
+    are unused legacy enum values.
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
   - `closeDay` runs once per branch and day.
@@ -442,6 +454,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `analytics-rollup` | hourly at :07 |
 | `analytics-prune` | 04:20 |
 | `packages-expire` | 04:10 |
+| `memberships-renew` (switch `membershipRenewals`; due + WhatsApp renewal reminder, expiry) | 04:25 |
 | `media-prune-ai` | 04:40 |
 | `slot-filler` | 10:30, 15:30 |
 | `verify-custom-domains` | every 10 min |
@@ -459,7 +472,7 @@ Integration jobs do nothing until their credentials are configured.
 (`AUTOMATIONS` / `automationOn` in `packages/core/src/automations.ts`; `automationOnSql` / `setAutomation` (atomic
 jsonb merge) / `getAutomations` / `isAutomationOn` in `services/src/automations.ts`). Gates: `bookingMessages`
 (confirmation + reminder) and `thankYou` (thank_you + review_request) inside `enqueueBookingMessage` (returns null
-when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `instagram` (in
+when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `membershipRenewals`, `instagram` (in
 `publishDueInstagramPosts`), `googleReviews`, `weeklyInsights`, `dailyDigest`, `documentAlerts` in the worker's
 tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). Backups + domain checks are locked on. Not
 switchable (housekeeping): analytics, media prune, campaigns housekeeping, Instagram token refresh. **Run log:**

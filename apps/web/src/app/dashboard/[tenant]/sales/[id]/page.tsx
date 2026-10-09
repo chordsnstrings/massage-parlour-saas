@@ -1,6 +1,7 @@
 import { whatsappLink } from '@spa/core'
 import {
   branches,
+  clientMemberships,
   clients,
   dayCloses,
   payments,
@@ -28,6 +29,7 @@ import { appPath } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
 import { refundSaleAction, voidSaleAction } from '../actions'
+import { dayDate } from '../data'
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('sales.receipt.title') }
@@ -82,11 +84,24 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
         ),
     ])
     const refundable = await refundOptions(tx, id)
-    return { ...row, lines, payRows, tipRows, refundRows, refundable, dayClosed: closed.length > 0 }
+    const periods = lines.some((l) => l.line.kind === 'membership')
+      ? await tx.select().from(clientMemberships).where(eq(clientMemberships.saleId, id))
+      : []
+    return {
+      ...row,
+      lines,
+      payRows,
+      tipRows,
+      refundRows,
+      refundable,
+      periods,
+      dayClosed: closed.length > 0,
+    }
   })
   if (!data) notFound()
 
-  const { sale, branch, client, lines, payRows, tipRows, refundRows, refundable } = data
+  const { sale, branch, client, lines, payRows, tipRows, refundRows, refundable, periods } = data
+  const periodOf = new Map(periods.map((m) => [m.saleLineId, m]))
   const tenant = ctx.tenant
   const refunded = refundRows.reduce((s, r) => s + n(r.amountAed), 0)
   const refundedQty = new Map(refundable.lines.map((l) => [l.saleLineId, l.refundedQty]))
@@ -189,6 +204,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ tenant
                       {n(line.discountAed) > 0 && ` · −${formatAed(line.discountAed)}`}
                       {therapist && ` · ${therapist}`}
                     </p>
+                    {periodOf.get(line.id) && (
+                      <p className="text-[13px] text-muted tabular">
+                        Membership {formatDate(dayDate(periodOf.get(line.id)!.currentPeriodStart))} –{' '}
+                        {formatDate(dayDate(periodOf.get(line.id)!.currentPeriodEnd))}
+                      </p>
+                    )}
                     {(refundedQty.get(line.id) ?? 0) > 0 && (
                       <p className="text-[13px] text-danger tabular">
                         {refundedQty.get(line.id) === line.qty

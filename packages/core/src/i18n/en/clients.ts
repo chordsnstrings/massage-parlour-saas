@@ -125,6 +125,13 @@ export const clients = {
     signedTitle: 'Signed intake',
     print: 'Print or save PDF',
   },
+  memberships: {
+    title: 'Memberships',
+    sub: 'Sold and renewed at checkout; benefits apply there automatically',
+    period: '{from} – {to}',
+    discount: '−{pct}% on treatments',
+    sessions: { one: '{count} included session left', other: '{count} included sessions left' },
+  },
   prefs: {
     title: 'Preferences',
     sub: 'What the therapist should know before the session.',

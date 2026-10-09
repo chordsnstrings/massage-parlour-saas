@@ -3,6 +3,7 @@ import {
   bookingItems,
   bookings,
   clients,
+  membershipPlans,
   packageDefinitions,
   products,
   services,
@@ -97,6 +98,11 @@ export default async function NewSalePage({
       .from(packageDefinitions)
       .where(eq(packageDefinitions.active, true))
       .orderBy(asc(packageDefinitions.createdAt))
+    const planRows = await tx
+      .select({ id: membershipPlans.id, name: membershipPlans.name, price: membershipPlans.monthlyAed })
+      .from(membershipPlans)
+      .where(eq(membershipPlans.active, true))
+      .orderBy(asc(membershipPlans.createdAt))
     const staffRows = await tx
       .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds })
       .from(staff)
@@ -164,6 +170,7 @@ export default async function NewSalePage({
         stock: `${Number(p.qty ?? 0)} ${p.unit}`,
       })),
       packages: packageRows.map((p) => ({ id: p.id, label: p.name.en, priceAed: Number(p.price) })),
+      plans: planRows.map((p) => ({ id: p.id, label: p.name.en, priceAed: Number(p.price) })),
       menu: menuRows.map((m) => ({
         variantId: m.variantId,
         serviceId: m.serviceId,
@@ -230,6 +237,7 @@ export default async function NewSalePage({
           menu={data.menu}
           products={data.products}
           packages={data.packages}
+          plans={data.plans}
           staff={data.staff}
           receiptBase={appPath(`/${slug}/sales`)}
         />

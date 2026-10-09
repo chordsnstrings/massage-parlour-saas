@@ -1,6 +1,6 @@
 import { queueSlotOffers } from '@spa/ai'
 import { aiAgentSettings, branches, outbox, platformDb, tenants, withTenant } from '@spa/db'
-import { automationOnSql, expirePackages } from '@spa/services'
+import { automationOnSql, expirePackages, runMembershipRenewals } from '@spa/services'
 import { and, eq, gte, ne } from 'drizzle-orm'
 import { log } from '../log'
 import { activeTenants, recordRun } from './runs'
@@ -15,6 +15,23 @@ export async function expireAllPackages() {
     } catch (error) {
       log('error', 'package expiry failed', { tenant: t.slug, error: String(error) })
       await recordRun(t.id, 'packages-expire', 'failed')
+    }
+  }
+}
+
+/**
+ * Daily: membership periods ending within 7 days → `due` + a WhatsApp renewal reminder queued in /messages
+ * (click-to-send); ended periods → `expired` with the unused value recognised (spas with the switch on).
+ */
+export async function renewAllMemberships() {
+  for (const t of await activeTenants('membershipRenewals')) {
+    try {
+      const r = await withTenant(t.id, (tx) => runMembershipRenewals(tx, t.id))
+      if (r.due || r.expired) log('info', 'memberships renewed', { tenant: t.slug, ...r })
+      await recordRun(t.id, 'memberships-renew', 'ok', { count: r.due + r.expired })
+    } catch (error) {
+      log('error', 'membership renewals failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'memberships-renew', 'failed')
     }
   }
 }

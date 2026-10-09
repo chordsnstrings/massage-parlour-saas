@@ -125,6 +125,13 @@ export const clients: Messages['clients'] = {
     signedTitle: 'แบบฟอร์มที่ลงนามแล้ว',
     print: 'พิมพ์หรือบันทึกเป็น PDF',
   },
+  memberships: {
+    title: 'สมาชิก',
+    sub: 'ขายและต่ออายุที่หน้าชำระเงิน สิทธิ์จะใช้ให้อัตโนมัติที่นั่น',
+    period: '{from} – {to}',
+    discount: 'ลด −{pct}% ทุกทรีตเมนต์',
+    sessions: { one: 'เหลือ {count} ครั้งที่รวมในสมาชิก', other: 'เหลือ {count} ครั้งที่รวมในสมาชิก' },
+  },
   prefs: {
     title: 'ความชอบ',
     sub: 'สิ่งที่พนักงานนวดควรรู้ก่อนเริ่มนวด',

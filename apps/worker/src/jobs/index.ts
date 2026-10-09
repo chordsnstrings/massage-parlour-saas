@@ -20,7 +20,7 @@ import {
 } from './notifications'
 import { autoPurgeTenants } from './purge'
 import { restoreDrill } from './restore-drill'
-import { expireAllPackages, runSlotFiller } from './tenant-jobs'
+import { expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
   name: string
@@ -39,6 +39,7 @@ export const jobs: JobDef[] = [
   { name: 'analytics-rollup', cron: '7 * * * *', handler: () => rollupAnalytics() },
   { name: 'analytics-prune', cron: '20 4 * * *', handler: () => pruneAnalytics() },
   { name: 'packages-expire', cron: '10 4 * * *', handler: () => expireAllPackages() },
+  { name: 'memberships-renew', cron: '25 4 * * *', handler: () => renewAllMemberships() },
   { name: 'media-prune-ai', cron: '40 4 * * *', handler: () => pruneExpiredAiImages() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
   { name: 'verify-custom-domains', cron: '*/10 * * * *', handler: () => verifyCustomDomains() },

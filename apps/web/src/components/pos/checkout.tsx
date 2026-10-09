@@ -18,7 +18,7 @@ import { cn, formatAed } from '@/lib/utils'
 
 export type CheckoutLine = {
   key: string
-  kind: 'service' | 'product' | 'package' | 'gift_card' | 'other'
+  kind: 'service' | 'product' | 'package' | 'gift_card' | 'other' | 'membership'
   refId: string | null
   description: string
   qty: number
@@ -27,6 +27,10 @@ export type CheckoutLine = {
   staffId: string | null
   /** Service covered by a session from this client package (price goes to 0). */
   clientPackageId?: string | null
+  /** Service covered by an included session of this membership (price goes to 0). */
+  memberSessionId?: string | null
+  /** The receptionist unticked the automatic member discount on this line. */
+  memberDiscountOff?: boolean
   listPriceAed?: number | string
   /** The service has no list price ("price on request", R4): the receptionist must type one. */
   priceRequired?: boolean
@@ -35,7 +39,8 @@ type Method = 'cash' | 'card_terminal' | 'bank_transfer' | 'other'
 type PayMethod = Method | 'gift_card'
 type Payment = { key: string; method: PayMethod; amount: string; reference: string }
 type ClientPkg = { id: string; name: string; balances: Record<string, number> }
-const PREPAID = new Set(['package', 'gift_card'])
+type ClientMember = ClientPkg & { discountPct: number; endsOn: string }
+const PREPAID = new Set(['package', 'gift_card', 'membership'])
 type Tip = { key: string; staffId: string; amount: string; method: Method }
 type ClientHit = { id: string; name: string; phone: string | null }
 
@@ -60,6 +65,7 @@ export function Checkout({
   menu,
   products = [],
   packages = [],
+  plans = [],
   staff,
   receiptBase,
 }: {
@@ -71,6 +77,8 @@ export function Checkout({
   menu: { variantId: string; serviceId?: string; label: string; priceAed: number | null }[]
   products?: { id: string; label: string; priceAed: number; stock: string }[]
   packages?: { id: string; label: string; priceAed: number }[]
+  /** Membership plans on sale (one period per line; sold to a client who has one = renewal). */
+  plans?: { id: string; label: string; priceAed: number }[]
   staff: { id: string; name: string }[]
   receiptBase: string
 }) {
@@ -93,24 +101,52 @@ export function Checkout({
   const [pending, start] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [clientPkgs, setClientPkgs] = useState<ClientPkg[]>([])
+  const [members, setMembers] = useState<ClientMember[]>([])
   const clientId = client?.id ?? null
   useEffect(() => {
     if (!clientId) {
       setClientPkgs([])
+      setMembers([])
       return
     }
     let live = true
-    clientPackagesAction(slug, clientId).then((r) => {
-      if (live && r?.ok) setClientPkgs((r.data?.packages as ClientPkg[]) ?? [])
+    clientPackagesAction(slug, clientId, branchId).then((r) => {
+      if (!live || !r?.ok) return
+      setClientPkgs((r.data?.packages as ClientPkg[]) ?? [])
+      setMembers((r.data?.memberships as ClientMember[]) ?? [])
     })
     return () => {
       live = false
     }
-  }, [slug, clientId])
+  }, [slug, clientId, branchId])
+  // The member discount applies automatically to treatments (the best % of the client's live memberships).
+  const discountMember = useMemo(
+    () => members.filter((m) => m.discountPct > 0).sort((a, b) => b.discountPct - a.discountPct)[0] ?? null,
+    [members],
+  )
+  const memberSessionFor = (l: CheckoutLine) => {
+    const serviceId = l.refId ? serviceOf.get(l.refId) : undefined
+    if (l.kind !== 'service' || !serviceId || l.clientPackageId) return null
+    const m =
+      members.find((x) => x.id === l.memberSessionId) ?? members.find((x) => (x.balances[serviceId] ?? 0) > 0)
+    return m ? { m, left: m.balances[serviceId] ?? 0 } : null
+  }
+  /** Member discount on a line, in fils: same rounding as the server (share of the gross, capped at it). */
+  const memberOff = (l: CheckoutLine) =>
+    l.kind === 'service' && discountMember && !l.clientPackageId && !l.memberSessionId && !l.memberDiscountOff
+      ? Math.round((f(l.unitPriceAed) * l.qty * discountMember.discountPct) / 100)
+      : 0
+  const toggleMemberSession = (l: CheckoutLine, id: string | null) =>
+    patchLine(
+      l.key,
+      id
+        ? { memberSessionId: id, listPriceAed: l.unitPriceAed, unitPriceAed: 0, discountAed: 0 }
+        : { memberSessionId: null, unitPriceAed: l.listPriceAed ?? l.unitPriceAed },
+    )
   const serviceOf = useMemo(() => new Map(menu.map((m) => [m.variantId, m.serviceId])), [menu])
   const pkgFor = (l: CheckoutLine) => {
     const serviceId = l.refId ? serviceOf.get(l.refId) : undefined
-    if (l.kind !== 'service' || !serviceId) return null
+    if (l.kind !== 'service' || !serviceId || l.memberSessionId) return null
     const pkg =
       clientPkgs.find((p) => p.id === l.clientPackageId) ??
       clientPkgs.find((p) => (p.balances[serviceId] ?? 0) > 0)
@@ -124,10 +160,13 @@ export function Checkout({
         : { clientPackageId: null, unitPriceAed: l.listPriceAed ?? l.unitPriceAed },
     )
 
-  const subtotal = lines.reduce((s, l) => s + Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed)), 0)
+  const lineNet = (l: CheckoutLine) => {
+    const gross = f(l.unitPriceAed) * l.qty
+    return Math.max(0, gross - Math.min(gross, f(l.discountAed) + memberOff(l)))
+  }
+  const subtotal = lines.reduce((s, l) => s + lineNet(l), 0)
   const discount = Math.min(f(saleDiscount), subtotal)
   const total = subtotal - discount
-  const lineNet = (l: CheckoutLine) => Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed))
   // Packages and gift cards carry no VAT at sale; the sale discount is spread pro rata.
   const taxable = lines.filter((l) => !PREPAID.has(l.kind)).reduce((s, l) => s + lineNet(l), 0)
   const vat = subtotal ? Math.round(((taxable * total) / subtotal) * (5 / 105)) : 0
@@ -161,8 +200,10 @@ export function Checkout({
       },
     ])
   }
-  const addItem = (kind: 'product' | 'package', id: string) => {
-    const item = (kind === 'product' ? products : packages).find((x) => x.id === id)
+  const addItem = (kind: 'product' | 'package' | 'membership', id: string) => {
+    const item = (kind === 'product' ? products : kind === 'package' ? packages : plans).find(
+      (x) => x.id === id,
+    )
     if (!item) return
     setLines((ls) => [
       ...ls,
@@ -222,7 +263,13 @@ export function Checkout({
   const canSubmit = lines.length > 0 && remaining === 0 && !pending
 
   const blankPrice = (l: CheckoutLine) =>
-    !l.clientPackageId && String(l.unitPriceAed).replace(/,/g, '').trim() === ''
+    !l.clientPackageId && !l.memberSessionId && String(l.unitPriceAed).replace(/,/g, '').trim() === ''
+  const membershipOf = (l: CheckoutLine) =>
+    l.memberSessionId
+      ? { id: l.memberSessionId, use: 'session' as const }
+      : memberOff(l) > 0 && discountMember
+        ? { id: discountMember.id, use: 'discount' as const }
+        : null
 
   const submit = () => {
     setErrors({})
@@ -242,6 +289,7 @@ export function Checkout({
           kind: l.kind,
           refId: l.refId,
           clientPackageId: l.clientPackageId ?? null,
+          membership: membershipOf(l),
           description: l.description,
           qty: l.qty,
           unitPriceAed: blankPrice(l) ? null : f(l.unitPriceAed) / 100,
@@ -371,11 +419,14 @@ export function Checkout({
                 <motion.li key={l.key} {...rowAnim} className="overflow-hidden">
                   <div className="grid grid-cols-2 gap-3 px-[var(--crm-pad-card)] py-3 sm:grid-cols-12 sm:items-end">
                     <div className="col-span-2 space-y-1.5 sm:col-span-12">
-                      {l.kind === 'service' || l.kind === 'product' || l.kind === 'package' ? (
+                      {l.kind === 'service' ||
+                      l.kind === 'product' ||
+                      l.kind === 'package' ||
+                      l.kind === 'membership' ? (
                         <p className="flex items-center justify-between gap-3 text-sm font-medium">
                           <span className="truncate">{l.description}</span>
-                          <span className="shrink-0 tabular">
-                            {aed(Math.max(0, f(l.unitPriceAed) * l.qty - f(l.discountAed)))}
+                          <span className="shrink-0 tabular" data-testid="line-net">
+                            {aed(lineNet(l))}
                           </span>
                         </p>
                       ) : (
@@ -412,6 +463,31 @@ export function Checkout({
                         </Label>
                       )
                     })()}
+                    {(() => {
+                      const match = memberSessionFor(l)
+                      if (!match) return null
+                      return (
+                        <Label className="col-span-2 flex items-center gap-2.5 rounded-lg bg-accent-soft/60 px-3 py-2.5 text-[13px] font-normal sm:col-span-12">
+                          <Checkbox
+                            checked={Boolean(l.memberSessionId)}
+                            onChange={(e) => toggleMemberSession(l, e.target.checked ? match.m.id : null)}
+                          />
+                          {t('sales.checkout.useMembership', { name: match.m.name, count: match.left })}
+                        </Label>
+                      )
+                    })()}
+                    {l.kind === 'service' && discountMember && !l.clientPackageId && !l.memberSessionId && (
+                      <Label className="col-span-2 flex items-center gap-2.5 rounded-lg bg-accent-soft/60 px-3 py-2.5 text-[13px] font-normal sm:col-span-12">
+                        <Checkbox
+                          checked={!l.memberDiscountOff}
+                          onChange={(e) => patchLine(l.key, { memberDiscountOff: !e.target.checked })}
+                        />
+                        {t('sales.checkout.memberDiscount', {
+                          name: discountMember.name,
+                          pct: discountMember.discountPct,
+                        })}
+                      </Label>
+                    )}
                     <div className="col-span-2 space-y-1.5 sm:col-span-5">
                       <Label htmlFor={`staff-${l.key}`}>{t('sales.checkout.therapist')}</Label>
                       <Select
@@ -438,7 +514,7 @@ export function Checkout({
                         placeholder={l.priceRequired ? t('sales.checkout.pricePh') : undefined}
                         required={l.priceRequired}
                         aria-invalid={Boolean(fieldError(`lines.${i}.unitPriceAed`)) || undefined}
-                        disabled={Boolean(l.clientPackageId)}
+                        disabled={Boolean(l.clientPackageId || l.memberSessionId)}
                         onChange={(e) => patchLine(l.key, { unitPriceAed: e.target.value })}
                         className="h-11 tabular"
                       />
@@ -520,6 +596,21 @@ export function Checkout({
                 {packages.map((p) => (
                   <option key={p.id} value={p.id}>
                     {t('sales.checkout.optionPrice', { name: p.label, price: formatAed(p.priceAed) })}
+                  </option>
+                ))}
+              </Select>
+            )}
+            {plans.length > 0 && (
+              <Select
+                aria-label={t('sales.checkout.sellMembership')}
+                value=""
+                onChange={(e) => addItem('membership', e.target.value)}
+                className="h-11 sm:max-w-xs"
+              >
+                <option value="">{t('sales.checkout.sellMembershipOption')}</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {t('sales.checkout.optionPricePerMonth', { name: p.label, price: formatAed(p.priceAed) })}
                   </option>
                 ))}
               </Select>

@@ -1184,6 +1184,8 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
+  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
@@ -1252,3 +1254,13 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   notifications (`ai.budget_warning` / `ai.budget_reached`, `billing.view`, dedupe `ai.budget.<80|100>.<YYYY-MM>` =
   once per threshold per Dubai month). Dashboard: one AI banner (80 % warning / "AI paused: monthly AI budget
   reached — contact us" / AI off), budget error messages EN + TH. Months reset at Asia/Dubai month start.
+- **G15:** memberships sold/renewed in POS (sale line kind `membership`, one one-month period per line, client
+  required; selling a plan the client still holds = renewal starting the day after the current period). Price →
+  2110 with no VAT at sale (like packages); included sessions move their share to revenue + VAT when used; whatever
+  is left when the period ends is recognised then (`membership_expiry`, 2110 → 4000 + VAT — earned, not breakage).
+  Checkout: member discount % auto-applies to treatments (untick per line), "use an included session" checkbox;
+  both show on the receipt as typed suffixes. Daily job `memberships-renew` (automation switch `membershipRenewals`):
+  ≤ 7 days before the end → status `due` + WhatsApp renewal reminder queued in /messages (click-to-send; opted-out /
+  blocklisted clients skipped), ended → `expired`. Refund = unused value (as packages), period `refunded`; sales with
+  a membership or a membership session can't be voided. Discounts already given aren't clawed back on refund.
+  Client profile lists memberships.

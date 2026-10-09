@@ -28,6 +28,11 @@ export const automations = {
       desc: 'Closes packages past their validity and books the unused value',
       schedule: 'Nightly',
     },
+    membershipRenewals: {
+      name: 'Membership renewals',
+      desc: 'Marks memberships ending within 7 days as due, queues a WhatsApp renewal reminder and closes ended periods',
+      schedule: 'Nightly',
+    },
     instagram: {
       name: 'Instagram posts',
       desc: 'Publishes approved posts at their scheduled time',

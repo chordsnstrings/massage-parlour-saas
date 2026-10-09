@@ -28,6 +28,11 @@ export const automations: Messages['automations'] = {
       desc: 'ปิดแพ็กเกจที่เกินอายุใช้งานและบันทึกมูลค่าที่ไม่ได้ใช้',
       schedule: 'ทุกคืน',
     },
+    membershipRenewals: {
+      name: 'ต่ออายุสมาชิก',
+      desc: 'ตั้งสถานะสมาชิกที่ใกล้ครบรอบเป็น “ถึงกำหนดต่ออายุ” จัดคิวข้อความเตือนทาง WhatsApp และปิดรอบที่หมดแล้ว',
+      schedule: 'ทุกคืน',
+    },
     instagram: {
       name: 'โพสต์ Instagram',
       desc: 'เผยแพร่โพสต์ที่อนุมัติแล้วตามเวลาที่ตั้งไว้',

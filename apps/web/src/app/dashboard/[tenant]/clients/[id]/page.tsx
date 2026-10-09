@@ -3,6 +3,7 @@ import { enumLabel } from '@spa/core/i18n'
 import {
   bookingItems,
   bookings,
+  clientMemberships,
   clients,
   intakeSubmissions,
   intakeTemplates,
@@ -136,13 +137,20 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
       .where(eq(intakeTemplates.active, true))
       .orderBy(desc(intakeTemplates.version))
       .limit(1)
-    return { client, team, visits, items, totals: totals!, notes, intakes, template }
+    const memberships = await tx
+      .select()
+      .from(clientMemberships)
+      .where(eq(clientMemberships.clientId, id))
+      .orderBy(desc(clientMemberships.currentPeriodEnd))
+      .limit(12)
+    return { client, team, visits, items, totals: totals!, notes, intakes, template, memberships }
   })
   if (!data) notFound()
   const { client, team, visits, items, totals, notes, intakes, template } = data
   const erased = Boolean(client.erasedAt)
   const canManage = canEdit && !erased
   const clientName = erased ? t('clients.erase.erasedName') : client.name
+  const { client, team, visits, items, totals, notes, intakes, template, memberships } = data
 
   const staffName = new Map(team.map((s) => [s.id, s.name]))
   const authorIds = [...new Set(notes.filter((n) => !n.staffId && n.createdBy).map((n) => n.createdBy!))]
@@ -409,6 +417,34 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
           </Stack>
 
           <Stack>
+            {memberships.length > 0 && (
+              <Card title={t('clients.memberships.title')} sub={t('clients.memberships.sub')}>
+                <ul className="divide-y divide-[var(--crm-line)]" data-testid="client-memberships">
+                  {memberships.map((m) => {
+                    const sessions = Object.values(m.balances).reduce((s, n) => s + Math.max(0, n), 0)
+                    return (
+                      <li key={m.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{m.name}</span>
+                          <span className="crm-muted block text-[length:var(--crm-fs-sub)]">
+                            {t('clients.memberships.period', {
+                              from: fmt.date(m.currentPeriodStart),
+                              to: fmt.date(m.currentPeriodEnd),
+                            })}
+                            {Number(m.discountPct) > 0 &&
+                              ` · ${t('clients.memberships.discount', { pct: Number(m.discountPct) })}`}
+                            {sessions > 0 && ` · ${t('clients.memberships.sessions', { count: sessions })}`}
+                          </span>
+                        </span>
+                        <Pill tone={m.status === 'due' ? 'warn' : statusTone(m.status)}>
+                          {enumLabel(t, 'membershipStatus', m.status)}
+                        </Pill>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </Card>
+            )}
             <Card title={t('clients.profile.details')}>
               <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5">
                 <Detail label={t('clients.field.gender')}>

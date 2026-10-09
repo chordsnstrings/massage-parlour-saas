@@ -56,6 +56,10 @@ export const DEFAULT_TEMPLATES: Record<MessageKind, { en: string; ar: string }> 
     ar: 'مرحباً {first_name}، خبر سار: أصبح موعد {service} متاحاً في {spa} يوم {day} الساعة {time}. راسلنا هنا إذا كنت ترغب بحجزه.',
   },
   custom: { en: '{text}', ar: '{text}' },
+  membership_renewal: {
+    en: 'Hi {first_name}, your {service} membership at {spa} ends on {day}. Would you like to renew it? Reply here or renew at your next visit.',
+    ar: 'مرحباً {first_name}، تنتهي عضويتك {service} في {spa} يوم {day}. هل ترغب بتجديدها؟ راسلنا هنا أو جدّدها في زيارتك القادمة.',
+  },
 }
 
 export const renderTemplate = (body: string, vars: Record<string, string>) =>

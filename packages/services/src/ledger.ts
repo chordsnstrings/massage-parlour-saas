@@ -182,7 +182,7 @@ export type SaleForPosting = {
   createdBy?: string | null
   vatRatePct?: number
   lines: {
-    kind: 'service' | 'product' | 'package' | 'gift_card' | 'other'
+    kind: 'service' | 'product' | 'package' | 'gift_card' | 'other' | 'membership'
     lineTotalAed: number
     description?: string
   }[]
@@ -200,7 +200,8 @@ export async function postSale(tx: Tx, s: SaleForPosting) {
   const credits: PostingLine[] = []
   let vat = 0
   for (const l of s.lines) {
-    if (l.kind === 'package') credits.push({ code: '2110', credit: l.lineTotalAed, memo: l.description })
+    if (l.kind === 'package' || l.kind === 'membership')
+      credits.push({ code: '2110', credit: l.lineTotalAed, memo: l.description })
     else if (l.kind === 'gift_card')
       credits.push({ code: '2100', credit: l.lineTotalAed, memo: l.description })
     else {
@@ -263,7 +264,8 @@ export async function postRefund(
   const debits: PostingLine[] = []
   let vat = 0
   for (const l of r.lines) {
-    if (l.kind === 'package') debits.push({ code: '2110', debit: l.amountAed, memo: l.description })
+    if (l.kind === 'package' || l.kind === 'membership')
+      debits.push({ code: '2110', debit: l.amountAed, memo: l.description })
     else if (l.kind === 'gift_card') debits.push({ code: '2100', debit: l.amountAed, memo: l.description })
     else {
       vat += l.vatAed
@@ -334,6 +336,9 @@ export async function postRedemption(
     valueAed: number
     vatRatePct?: number
     createdBy?: string | null
+    /** Default 'redemption'; a membership period that ends posts 'membership_expiry' (earned, VAT due). */
+    sourceType?: string
+    memo?: string
   },
 ) {
   const vat = includedVat(r.valueAed, r.vatRatePct ?? 5)
@@ -341,9 +346,9 @@ export async function postRedemption(
     tenantId: r.tenantId,
     branchId: r.branchId,
     date: r.date,
-    sourceType: 'redemption',
+    sourceType: r.sourceType ?? 'redemption',
     sourceId: r.sourceId,
-    memo: 'Package / membership session',
+    memo: r.memo ?? 'Package / membership session',
     createdBy: r.createdBy,
     lines: [
       { code: '2110', debit: r.valueAed },

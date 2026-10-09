@@ -5,6 +5,7 @@ import {
   createSale,
   DomainError,
   findOrCreateClient,
+  liveMemberships,
   PAY_METHODS,
   POS_METHODS,
   refundSale,
@@ -86,9 +87,10 @@ const saleSchema = z.object({
   lines: z
     .array(
       z.object({
-        kind: z.enum(['service', 'product', 'package', 'gift_card', 'other']),
+        kind: z.enum(['service', 'product', 'package', 'gift_card', 'other', 'membership']),
         refId: optionalUuid,
         clientPackageId: optionalUuid,
+        membership: z.object({ id: z.uuid(), use: z.enum(['session', 'discount']) }).nullish(),
         description: z.string().trim().min(1, 'sales.v.describe').max(200),
         qty: z.coerce.number().int().min(1).max(99),
         // No coercion: a blank price (service with "price on request", R4) arrives as null and must be typed.
@@ -284,13 +286,22 @@ export async function closeDayAction(
   }
 }
 
-/** Active packages of a client (for "use a package session" at checkout). */
-export async function clientPackagesAction(slug: string, clientId: string): Promise<ActionResult> {
+/**
+ * A client's active packages and memberships live on the branch's business date (for "use a package /
+ * membership session" and the automatic member discount at checkout).
+ */
+export async function clientPackagesAction(
+  slug: string,
+  clientId: string,
+  branchId: string,
+): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'pos.use')
   if (error) return fail(error)
-  if (!z.uuid().safeParse(clientId).success) return ok(undefined, { packages: [] })
-  const rows = await withTenant(ctx.tenant.id, (tx) =>
-    tx
+  if (!z.uuid().safeParse(clientId).success || !z.uuid().safeParse(branchId).success)
+    return ok(undefined, { packages: [], memberships: [] })
+  const { packages, memberships } = await withTenant(ctx.tenant.id, async (tx) => {
+    const picked = await pickBranch(tx, ctx, branchId)
+    const packages = await tx
       .select({ id: clientPackages.id, name: clientPackages.name, balances: clientPackages.balances })
       .from(clientPackages)
       .where(
@@ -300,7 +311,18 @@ export async function clientPackagesAction(slug: string, clientId: string): Prom
           gt(clientPackages.expiresAt, new Date()),
         ),
       )
-      .orderBy(asc(clientPackages.expiresAt)),
-  )
-  return ok(undefined, { packages: rows })
+      .orderBy(asc(clientPackages.expiresAt))
+    const memberships = picked ? await liveMemberships(tx, clientId, picked.today) : []
+    return { packages, memberships }
+  })
+  return ok(undefined, {
+    packages,
+    memberships: memberships.map((m) => ({
+      id: m.id,
+      name: m.name,
+      discountPct: Number(m.discountPct),
+      balances: m.balances,
+      endsOn: m.currentPeriodEnd,
+    })),
+  })
 }

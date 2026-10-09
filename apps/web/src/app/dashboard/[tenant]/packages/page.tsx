@@ -9,7 +9,7 @@ import {
   services,
   withTenant,
 } from '@spa/db'
-import { asc, count, desc, eq } from 'drizzle-orm'
+import { asc, count, desc, eq, inArray } from 'drizzle-orm'
 import { Gift, Package, Pencil, Plus, Repeat, ShoppingBag, TicketPercent, Users } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -151,7 +151,7 @@ export default async function PackagesPage({
     members: await tx
       .select({ id: clientMemberships.planId, n: count() })
       .from(clientMemberships)
-      .where(eq(clientMemberships.status, 'active'))
+      .where(inArray(clientMemberships.status, ['active', 'due']))
       .groupBy(clientMemberships.planId),
     cards:
       tab === 'gift-cards'
