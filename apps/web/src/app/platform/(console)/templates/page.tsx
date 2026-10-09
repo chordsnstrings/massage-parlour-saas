@@ -1,9 +1,10 @@
+import type { HtmlImageAdjust } from '@spa/core'
 import { platformDb, sites, tenants } from '@spa/db'
 import { listStudioTemplates, type StudioTemplateRow } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
-import { Download, Eye, FileCode, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
+import { Download, Eye, FileCode, Images, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
-import { HTML_DESIGN_PLACEHOLDERS } from '@/components/site/blocks/html-design'
+import { HTML_DESIGN, HTML_DESIGN_PLACEHOLDERS } from '@/components/site/blocks/html-design'
 import { TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,10 +20,12 @@ import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import {
   importTemplateAction,
+  saveHtmlImagesAction,
   saveSiteAsTemplateAction,
   updateTemplateAction,
   uploadHtmlTemplateAction,
 } from './actions'
+import { HtmlFileField, HtmlImageAdjuster } from './html-images'
 
 export const metadata: Metadata = { title: 'Site templates' }
 
@@ -81,6 +84,48 @@ function EditSheet({ row }: { row: StudioTemplateRow }) {
   )
 }
 
+type Spa = { slug: string; name: string }
+
+/** The uploaded file + image adjustments of an HTML-design template, or null for a block template. */
+function htmlDesignOf(row: StudioTemplateRow): { html: string; images: HtmlImageAdjust[] } | null {
+  const first = row.pages[0] as { data?: { content?: { type: string; props: Record<string, unknown> }[] } }
+  const node = first?.data?.content?.[0]
+  if (row.pages.length !== 1 || node?.type !== HTML_DESIGN || typeof node.props.html !== 'string') return null
+  return { html: node.props.html, images: (node.props.images as HtmlImageAdjust[] | undefined) ?? [] }
+}
+
+function ImagesSheet({
+  row,
+  design,
+  spas,
+}: {
+  row: StudioTemplateRow
+  design: ReturnType<typeof htmlDesignOf> & {}
+  spas: Spa[]
+}) {
+  return (
+    <FormSheet
+      title={`Adjust images · ${row.name}`}
+      description="Focal point, Fill / Fit and replacements for each image of the design. Spas already using it keep their own copy."
+      className="md:max-w-4xl"
+      trigger={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-11 min-w-11"
+          aria-label={`Adjust images of ${row.name}`}
+        >
+          <Images /> <span className="max-lg:sr-only">Images</span>
+        </Button>
+      }
+      action={saveHtmlImagesAction.bind(null, row.id)}
+      submitLabel="Save images"
+    >
+      <HtmlImageAdjuster html={design.html} initial={design.images} spas={spas} />
+    </FormSheet>
+  )
+}
+
 export default async function TemplatesStudioPage() {
   await requirePlatformAdmin()
   const db = platformDb()
@@ -92,6 +137,7 @@ export default async function TemplatesStudioPage() {
     .innerJoin(tenants, eq(tenants.id, sites.tenantId))
     .orderBy(asc(tenants.name))
     .limit(500)
+  const libraries: Spa[] = spas.map((s) => ({ slug: s.slug, name: s.name }))
 
   return (
     <>
@@ -102,6 +148,7 @@ export default async function TemplatesStudioPage() {
           <>
             <FormSheet
               title="Upload an HTML design"
+              className="md:max-w-4xl"
               description="A one-page design shown on the spa's site exactly as built: its styles, fonts, motion and scripts, full screen and isolated from the platform. It can't be changed in the drag-and-drop editor; upload a new file to update it."
               trigger={
                 <Button variant="secondary">
@@ -117,19 +164,10 @@ export default async function TemplatesStudioPage() {
               <Field label="Description" name="description" hint="Shown to spas under the template name.">
                 <Textarea id="description" name="description" maxLength={300} />
               </Field>
-              <Field
-                label="HTML file"
-                name="file"
-                hint="One .html file up to about 500 KB. Fonts and images load from their URLs (links to files on your computer won't work)."
-              >
-                <Input
-                  id="file"
-                  name="file"
-                  type="file"
-                  accept="text/html,.html,.htm"
-                  className="h-auto py-2.5"
-                />
-              </Field>
+              <HtmlFileField
+                spas={libraries}
+                hint="One .html file up to about 500 KB. Fonts and images load from their URLs (links to files on your computer won't work). Images are kept inside the screen automatically; adjust them below."
+              />
               <div className="space-y-2 rounded-xl border p-4 text-sm">
                 <p className="font-medium">Each spa's details (optional)</p>
                 <p className="text-muted">
@@ -292,6 +330,10 @@ export default async function TemplatesStudioPage() {
                         icon={<Download />}
                         download
                       />
+                      {(() => {
+                        const design = htmlDesignOf(r)
+                        return design && <ImagesSheet row={r} design={design} spas={libraries} />
+                      })()}
                       <EditSheet row={r} />
                     </span>
                   ),
