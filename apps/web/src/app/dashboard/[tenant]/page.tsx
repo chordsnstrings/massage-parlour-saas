@@ -60,6 +60,10 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext, requireMember } from '@/server/access'
 import { publicSiteUrl } from '@/server/sites'
+import { allowedBranches } from './calendar/data'
+
+/** Matches no branch: a member scoped to branches that are all archived sees empty figures, not the whole spa. */
+const NO_BRANCH = '00000000-0000-0000-0000-000000000000'
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('overview.metaTitle') }
@@ -79,13 +83,13 @@ export default async function TenantHome({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>
-  searchParams: Promise<{ period?: string }>
+  searchParams: Promise<{ period?: string; branch?: string }>
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'dashboard.view')) return <TherapistHome ctx={ctx} />
   const { t, fmt } = await getI18n()
 
-  const { period: periodParam } = await searchParams
+  const { period: periodParam, branch: branchParam } = await searchParams
   const period: PeriodKey =
     periodParam && Object.hasOwn(PERIODS, periodParam) ? (periodParam as PeriodKey) : 'today'
   const days = PERIODS[period].days
@@ -93,16 +97,19 @@ export default async function TenantHome({
   const showRevenue = can(ctx, 'dashboard.revenue')
   const showClients = can(ctx, 'clients.view')
   const showMessages = can(ctx, 'marketing.send')
-  // Members scoped to specific branches see their first branch; everyone else sees the whole spa.
-  const branchId = ctx.member && !ctx.member.allBranches ? ctx.member.branchIds[0] : undefined
+  // Branch picker (G22): members scoped to branches pick one of theirs (first by default); everyone else sees
+  // the whole spa or picks a branch. A scoped member without an open branch sees nothing.
+  const scoped = Boolean(ctx.member && !ctx.member.allBranches)
   const now = new Date()
 
   const data = await withTenant(tenant.id, async (tx) => {
-    const [branch] = await tx
-      .select()
-      .from(branches)
-      .where(branchId ? eq(branches.id, branchId) : eq(branches.isDefault, true))
-      .limit(1)
+    const allowed = await allowedBranches(tx, ctx)
+    const picked = allowed.find((b) => b.id === branchParam) ?? (scoped ? allowed[0] : undefined)
+    const branchId = picked?.id ?? (scoped ? NO_BRANCH : undefined)
+    const branch =
+      picked ??
+      (await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1))[0] ??
+      allowed[0]
     const cutoff = branch?.businessDayCutoff.slice(0, 5) ?? '05:00'
     const to = businessDateOf(now, cutoff)
     const from = addDays(to, 1 - days)
@@ -145,6 +152,8 @@ export default async function TenantHome({
         : []
     return {
       branch,
+      branchId: picked?.id,
+      branchOptions: allowed.map((b) => ({ id: b.id, name: b.name })),
       cutoff,
       teamSize: team?.n ?? 0,
       sub,
@@ -209,7 +218,13 @@ export default async function TenantHome({
   const live = k.bookings - (k.byStatus.cancelled ?? 0)
   const prevLive = prev.bookings - (prev.byStatus.cancelled ?? 0)
   const walkIns = k.bySource.find((s) => s.source === 'walk_in')?.count ?? 0
-  const periodHref = (key: PeriodKey) => appPath(key === 'today' ? `/${slug}` : `/${slug}?period=${key}`)
+  const homeHref = (key: PeriodKey, branch = data.branchId) => {
+    const q = new URLSearchParams()
+    if (key !== 'today') q.set('period', key)
+    if (branch) q.set('branch', branch)
+    return appPath(q.size ? `/${slug}?${q}` : `/${slug}`)
+  }
+  const periodHref = (key: PeriodKey) => homeHref(key)
   const cutoffHour = Number(data.cutoff.slice(0, 2))
   const viewDetails = t('common.viewDetails')
 
@@ -315,6 +330,22 @@ export default async function TenantHome({
         }
         actions={
           <>
+            {data.branchOptions.length > 1 && (
+              <Seg
+                label={t('overview.branch.label')}
+                value={data.branchId ?? 'all'}
+                items={[
+                  ...(scoped
+                    ? []
+                    : [{ value: 'all', label: t('overview.branch.all'), href: homeHref(period, '') }]),
+                  ...data.branchOptions.map((b) => ({
+                    value: b.id,
+                    label: b.name,
+                    href: homeHref(period, b.id),
+                  })),
+                ]}
+              />
+            )}
             <Seg
               label={t('overview.period.label')}
               value={period}

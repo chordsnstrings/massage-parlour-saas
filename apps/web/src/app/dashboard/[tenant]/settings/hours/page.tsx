@@ -1,6 +1,6 @@
 import { DEFAULT_HOURS } from '@spa/core'
 import { branches, withTenant } from '@spa/db'
-import { asc, desc } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Card, Stack } from '@/components/crm'
@@ -28,6 +28,7 @@ export default async function HoursPage({ params }: { params: Promise<{ tenant: 
         cutoff: branches.businessDayCutoff,
       })
       .from(branches)
+      .where(eq(branches.active, true))
       .orderBy(desc(branches.isDefault), asc(branches.createdAt)),
   )
   return (

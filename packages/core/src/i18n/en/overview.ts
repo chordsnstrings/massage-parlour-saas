@@ -5,6 +5,7 @@ export const overview = {
     today: "Here's how your spa is doing today.",
     period: "Here's how your spa is doing over the last {days} days.",
   },
+  branch: { label: 'Branch', all: 'All branches' },
   period: { label: 'Period', today: 'Today', d7: '7 days', d30: '30 days' },
   website: 'Website',
   setup: {

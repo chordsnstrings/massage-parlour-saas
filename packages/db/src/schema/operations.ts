@@ -197,6 +197,9 @@ export const shifts = pgTable(
   (t) => [index('shifts_staff_time').on(t.staffId, t.startsAt), ...tenantPolicies()],
 )
 
+/** Customer billing details for a full UAE tax invoice (G16). `trn` only when the customer is VAT registered. */
+export type BillingDetails = { name: string; address?: string | null; trn?: string | null }
+
 export const clients = pgTable(
   'clients',
   {
@@ -223,6 +226,8 @@ export const clients = pgTable(
       .notNull()
       .default({}),
     notes: text('notes'),
+    /** Saved billing details for tax invoices (G16); copied onto a sale when staff issue one. */
+    billing: jsonb('billing').$type<BillingDetails>(),
     blocklisted: boolean('blocklisted').notNull().default(false),
     blocklistReason: text('blocklist_reason'),
     noShowCount: integer('no_show_count').notNull().default(0),

@@ -17,6 +17,7 @@ const T = {
   },
   back: { en: 'Back', ar: 'رجوع' },
   backToSite: { en: 'Back to site', ar: 'العودة للموقع' },
+  branch: { en: 'Branch', ar: 'الفرع' },
   change: { en: 'Change', ar: 'تغيير' },
   continue: { en: 'Continue', ar: 'متابعة' },
   stepService: { en: 'Treatment', ar: 'العلاج' },

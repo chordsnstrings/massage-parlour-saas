@@ -246,4 +246,12 @@ export const domain = {
   metaImageNotPublic: 'The image is not on a public https link.',
   metaReplyFirst: 'Write a reply first',
   metaPhoneNeeded: 'A UAE mobile number or a client with one is needed',
+  // Branches + tax invoice (G22, G16)
+  branchPlanLimit: 'Your plan includes {limit} branches',
+  branchArchiveMain: "The main branch can't be archived",
+  memberNotFound: 'Member not found',
+  branchChooseOne: 'Choose at least one branch',
+  billingName: 'Enter the customer’s billing name',
+  billingTrn: 'A TRN has 15 digits',
+  billingVoided: 'A voided sale has no tax invoice',
 } as const

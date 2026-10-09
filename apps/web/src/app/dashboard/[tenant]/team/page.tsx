@@ -1,7 +1,7 @@
 import { type Permission, resolvePermissions } from '@spa/core'
 import { enumLabel, roleName } from '@spa/core/i18n'
-import { invitations, members, platformDb, roles, user, withTenant } from '@spa/db'
-import { dubaiToday, trackedDocuments } from '@spa/services'
+import { invitations, memberBranches, members, platformDb, roles, user, withTenant } from '@spa/db'
+import { dubaiToday, listBranches, trackedDocuments } from '@spa/services'
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm'
 import { BellRing, Check, Minus, ShieldCheck, Users } from 'lucide-react'
 import Link from 'next/link'
@@ -36,39 +36,49 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
   const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const showDocs = can(ctx, 'staff.manage')
-  const { memberRows, roleRows, inviteRows, docs } = await withTenant(ctx.tenant.id, async (tx) => ({
-    memberRows: await tx
-      .select({
-        id: members.id,
-        userId: members.userId,
-        status: members.status,
-        roleId: roles.id,
-        createdAt: members.createdAt,
-      })
-      .from(members)
-      .innerJoin(roles, eq(members.roleId, roles.id))
-      .orderBy(asc(members.createdAt)),
-    roleRows: await tx
-      .select({ id: roles.id, name: roles.name, key: roles.key, permissions: roles.permissions })
-      .from(roles)
-      .orderBy(asc(roles.createdAt)),
-    inviteRows: await tx
-      .select({
-        id: invitations.id,
-        email: invitations.email,
-        roleId: invitations.roleId,
-        expiresAt: invitations.expiresAt,
-      })
-      .from(invitations)
-      .where(
-        and(
-          isNull(invitations.acceptedAt),
-          isNull(invitations.revokedAt),
-          gt(invitations.expiresAt, new Date()),
+  const { memberRows, roleRows, inviteRows, docs, branchRows, scopes } = await withTenant(
+    ctx.tenant.id,
+    async (tx) => ({
+      memberRows: await tx
+        .select({
+          id: members.id,
+          userId: members.userId,
+          status: members.status,
+          roleId: roles.id,
+          allBranches: members.allBranches,
+          createdAt: members.createdAt,
+        })
+        .from(members)
+        .innerJoin(roles, eq(members.roleId, roles.id))
+        .orderBy(asc(members.createdAt)),
+      roleRows: await tx
+        .select({ id: roles.id, name: roles.name, key: roles.key, permissions: roles.permissions })
+        .from(roles)
+        .orderBy(asc(roles.createdAt)),
+      inviteRows: await tx
+        .select({
+          id: invitations.id,
+          email: invitations.email,
+          roleId: invitations.roleId,
+          expiresAt: invitations.expiresAt,
+        })
+        .from(invitations)
+        .where(
+          and(
+            isNull(invitations.acceptedAt),
+            isNull(invitations.revokedAt),
+            gt(invitations.expiresAt, new Date()),
+          ),
         ),
-      ),
-    docs: showDocs ? await trackedDocuments(tx, dubaiToday()) : [],
-  }))
+      docs: showDocs ? await trackedDocuments(tx, dubaiToday()) : [],
+      branchRows: await listBranches(tx),
+      scopes: await tx.select().from(memberBranches),
+    }),
+  )
+  // Branch assignment (G22) only matters once the spa has more than one open branch.
+  const branchOptions = branchRows.map((b) => ({ id: b.id, name: b.name }))
+  const multiBranch = branchOptions.length > 1
+  const branchName = new Map(branchOptions.map((b) => [b.id, b.name]))
   // Profiles live in the platform-scoped auth table.
   const profiles = memberRows.length
     ? await platformDb()
@@ -89,6 +99,7 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
     roleName: roleLabel.get(m.roleId) ?? '',
     name: byId.get(m.userId)?.name ?? t('team.unknown'),
     email: byId.get(m.userId)?.email ?? '',
+    branchIds: scopes.filter((x) => x.memberId === m.id && branchName.has(x.branchId)).map((x) => x.branchId),
   }))
   const rank = (key: string) => {
     const i = (SYSTEM_ORDER as readonly string[]).indexOf(key)
@@ -118,7 +129,7 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
                 <ShieldCheck /> {t('team.rolesButton')}
               </Link>
             </Button>
-            <InviteSheet slug={slug} roles={roleOptions} />
+            <InviteSheet slug={slug} roles={roleOptions} branches={multiBranch ? branchOptions : []} />
           </>
         }
       />
@@ -141,6 +152,22 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
                     cell: (r) => <TName name={r.name} sub={r.email} />,
                   },
                   { key: 'role', header: t('team.col.role'), cell: (r) => r.roleName },
+                  ...(multiBranch
+                    ? [
+                        {
+                          key: 'branches',
+                          header: t('team.col.branches'),
+                          hideOnMobile: true,
+                          cell: (r: (typeof people)[number]) => (
+                            <span className="crm-muted">
+                              {r.allBranches
+                                ? t('team.edit.allBranches')
+                                : r.branchIds.map((id) => branchName.get(id)).join(', ')}
+                            </span>
+                          ),
+                        },
+                      ]
+                    : []),
                   {
                     key: 'status',
                     header: t('team.col.status'),
@@ -163,8 +190,16 @@ export default async function TeamPage({ params }: { params: Promise<{ tenant: s
                     cell: (r) => (
                       <EditMemberSheet
                         slug={slug}
-                        member={{ id: r.id, name: r.name, roleId: r.roleId, status: r.status }}
+                        member={{
+                          id: r.id,
+                          name: r.name,
+                          roleId: r.roleId,
+                          status: r.status,
+                          allBranches: r.allBranches,
+                          branchIds: r.branchIds,
+                        }}
                         roles={roleOptions}
+                        branches={multiBranch ? branchOptions : []}
                       />
                     ),
                   },

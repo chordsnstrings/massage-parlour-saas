@@ -222,4 +222,12 @@ export const domain: Messages['errors']['domain'] = {
   metaImageNotPublic: 'รูปภาพไม่ได้อยู่บนลิงก์ https สาธารณะ',
   metaReplyFirst: 'เขียนคำตอบก่อน',
   metaPhoneNeeded: 'ต้องมีเบอร์มือถือ UAE หรือลูกค้าที่มีเบอร์',
+  // Branches + tax invoice (G22, G16)
+  branchPlanLimit: 'แพ็กเกจของคุณมี {limit} สาขา',
+  branchArchiveMain: 'ไม่สามารถเก็บถาวรสาขาหลักได้',
+  memberNotFound: 'ไม่พบสมาชิก',
+  branchChooseOne: 'เลือกอย่างน้อยหนึ่งสาขา',
+  billingName: 'กรอกชื่อสำหรับออกใบกำกับของลูกค้า',
+  billingTrn: 'TRN มี 15 หลัก',
+  billingVoided: 'รายการขายที่ยกเลิกแล้วไม่มีใบกำกับภาษี',
 }

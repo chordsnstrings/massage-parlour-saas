@@ -136,7 +136,14 @@ export function BookingFlow({
     const id = ++request.current
     setSlots(null)
     startLoading(async () => {
-      const res = await getSlots({ site, variantId: variant.id, date, staffId, lang: locale })
+      const res = await getSlots({
+        site,
+        variantId: variant.id,
+        date,
+        staffId,
+        branchId: catalog.branch.id,
+        lang: locale,
+      })
       if (id !== request.current) return
       if (res?.ok) setSlots((res.data?.slots as SlotOption[]) ?? [])
       else {
@@ -144,7 +151,7 @@ export function BookingFlow({
         toast.error(res?.error ?? t('error', locale))
       }
     })
-  }, [site, variant, date, staffId, locale])
+  }, [site, variant, date, staffId, locale, catalog.branch.id])
 
   useEffect(() => {
     if (step === 'when') loadSlots()
@@ -170,6 +177,7 @@ export function BookingFlow({
       phone: String(fd.get('phone') ?? ''),
       notes: String(fd.get('notes') ?? ''),
       website: String(fd.get('website') ?? ''),
+      branchId: catalog.branch.id,
       lang: locale,
       via: embed ? 'widget' : undefined,
     })
@@ -732,11 +740,36 @@ function Summary({
           </dl>
         )}
       </div>
-      {(catalog.branch.address || catalog.branch.name) && (
-        <div className="flex items-start gap-2 border-t bg-subtle/40 px-5 py-3.5 text-[13px] text-muted sm:px-6">
-          <MapPin className="mt-0.5 size-3.5 shrink-0" />
-          <span>{catalog.branch.address || catalog.branch.name}</span>
-        </div>
+      {catalog.branches.length > 1 ? (
+        <label className="flex items-center gap-2 border-t bg-subtle/40 px-5 py-3 text-[13px] text-muted sm:px-6">
+          <MapPin className="size-3.5 shrink-0" />
+          <span className="sr-only">{L('branch')}</span>
+          <select
+            name="branch"
+            aria-label={L('branch')}
+            value={catalog.branch.id}
+            onChange={(e) => {
+              // A new branch has its own therapists, hours and times: reload the page for it.
+              const url = new URL(window.location.href)
+              url.searchParams.set('branch', e.currentTarget.value)
+              window.location.assign(url.toString())
+            }}
+            className="min-w-0 flex-1 truncate bg-transparent text-fg outline-none focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {catalog.branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.address ? `${b.name} — ${b.address}` : b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        (catalog.branch.address || catalog.branch.name) && (
+          <div className="flex items-start gap-2 border-t bg-subtle/40 px-5 py-3.5 text-[13px] text-muted sm:px-6">
+            <MapPin className="mt-0.5 size-3.5 shrink-0" />
+            <span>{catalog.branch.address || catalog.branch.name}</span>
+          </div>
+        )
       )}
     </Card>
   )

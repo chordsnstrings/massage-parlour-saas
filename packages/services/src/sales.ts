@@ -45,7 +45,7 @@ export type PosMethod = (typeof POS_METHODS)[number]
 export const PAY_METHODS = [...POS_METHODS, 'gift_card'] as const
 export type PayMethod = (typeof PAY_METHODS)[number]
 /** Prepaid items carry no VAT at sale — VAT is due when the session or card is used. */
-const PREPAID = new Set(['package', 'gift_card'])
+export const PREPAID = new Set(['package', 'gift_card'])
 export const METHOD_LABEL: Record<string, string> = {
   cash: 'Cash',
   card_terminal: 'Card terminal',
