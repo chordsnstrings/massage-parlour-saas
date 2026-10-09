@@ -11,18 +11,23 @@ import { ICON_INK, ICON_LIME, ICON_VARIANTS, type IconVariant, type PwaTenant, p
 type Spec = (typeof ICON_VARIANTS)[IconVariant]
 const radius = (size: number) => Math.round(size * 0.22)
 
+/** `fallback`: the spa has a logo but it couldn't be read or decoded this time, so this is the initials icon. */
+export type AppIcon = { png: Buffer; fallback: boolean }
+/** A fallback is kept this long only (storage hiccups heal; repeated requests still don't hit storage each time). */
+const FALLBACK_TTL = 60_000
+
 const g = globalThis as unknown as {
-  __spaPwaIcons?: LRUCache<string, Buffer>
-  __spaPwaRenders?: Map<string, Promise<Buffer>>
+  __spaPwaAppIcons?: LRUCache<string, AppIcon>
+  __spaPwaIconRenders?: Map<string, Promise<AppIcon>>
 }
-if (!g.__spaPwaIcons)
-  g.__spaPwaIcons = new LRUCache<string, Buffer>({
+if (!g.__spaPwaAppIcons)
+  g.__spaPwaAppIcons = new LRUCache<string, AppIcon>({
     maxSize: 16 * 1024 * 1024,
-    sizeCalculation: (b) => b.length || 1,
+    sizeCalculation: (i) => i.png.length || 1,
   })
-if (!g.__spaPwaRenders) g.__spaPwaRenders = new Map()
-const icons = g.__spaPwaIcons
-const inFlight = g.__spaPwaRenders
+if (!g.__spaPwaIconRenders) g.__spaPwaIconRenders = new Map()
+const icons = g.__spaPwaAppIcons
+const inFlight = g.__spaPwaIconRenders
 
 function tile(spec: Spec, fill: string) {
   const { size } = spec
@@ -86,33 +91,33 @@ export async function initialsIcon(initials: string, spec: Spec) {
   return Buffer.from(await res.arrayBuffer())
 }
 
-/** `cache: false` when a logo couldn't be read this time (e.g. object storage hiccup): try again next request. */
-async function render(t: PwaTenant, variant: IconVariant) {
+/** `fallback` when a logo couldn't be read this time (e.g. object storage hiccup): the caller must not cache it. */
+async function render(t: PwaTenant, variant: IconVariant): Promise<AppIcon> {
   const spec = ICON_VARIANTS[variant]
-  let cache = true
+  let fallback = false
   if (t.logoFileId) {
     const fileId = t.logoFileId
     try {
       const file = await withTenant(t.id, (tx) => getFile(tx, fileId))
-      if (file?.bytes.length) return { png: await logoIcon(file.bytes, spec), cache }
+      if (file?.bytes.length) return { png: await logoIcon(file.bytes, spec), fallback }
     } catch {
-      cache = false // unreadable or undecodable logo → initials for now, like the sidebar
+      fallback = true // unreadable or undecodable logo → initials for now, like the sidebar
     }
   }
-  return { png: await initialsIcon(pwaFor(t).initials, spec), cache }
+  return { png: await initialsIcon(pwaFor(t).initials, spec), fallback }
 }
 
 /** The PNG for one spa + variant, rendered once per icon key (concurrent requests share one render). */
-export async function appIcon(t: PwaTenant, variant: IconVariant) {
+export async function appIcon(t: PwaTenant, variant: IconVariant): Promise<AppIcon> {
   const cacheKey = `${t.id}:${pwaFor(t).key}:${variant}`
   const hit = icons.get(cacheKey)
   if (hit) return hit
   let pending = inFlight.get(cacheKey)
   if (!pending) {
     pending = render(t, variant)
-      .then(({ png, cache }) => {
-        if (cache) icons.set(cacheKey, png)
-        return png
+      .then((icon) => {
+        icons.set(cacheKey, icon, icon.fallback ? { ttl: FALLBACK_TTL } : {})
+        return icon
       })
       .finally(() => inFlight.delete(cacheKey))
     inFlight.set(cacheKey, pending)

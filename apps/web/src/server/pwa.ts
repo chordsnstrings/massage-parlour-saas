@@ -55,18 +55,32 @@ export function pwaFor(t: PwaTenant) {
 }
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
-// Manifest and icon requests come without cookies and can repeat a lot: a short cache keeps them off the database
-// (misses included). Callers holding a newer icon key re-read with `fresh`.
-const g = globalThis as unknown as { __spaPwaTenants?: LRUCache<string, PwaTenant | 'none'> }
-if (!g.__spaPwaTenants) g.__spaPwaTenants = new LRUCache({ max: 2000, ttl: 30_000 })
-const tenantCache = g.__spaPwaTenants
+// Manifest and icon requests come without cookies and can repeat a lot: a short cache keeps them off the database.
+// Misses get their own cache, so made-up slugs can't push real spas out. Callers holding a newer icon key re-read with
+// `fresh`, at most once per FRESH_GAP per slug (anyone can send a made-up key).
+const FRESH_GAP = 10_000
+const g = globalThis as unknown as {
+  __spaPwaFound?: LRUCache<string, PwaTenant>
+  __spaPwaMisses?: LRUCache<string, true>
+  __spaPwaFresh?: LRUCache<string, true>
+}
+if (!g.__spaPwaFound) g.__spaPwaFound = new LRUCache({ max: 2000, ttl: 30_000 })
+if (!g.__spaPwaMisses) g.__spaPwaMisses = new LRUCache({ max: 5000, ttl: 30_000 })
+if (!g.__spaPwaFresh) g.__spaPwaFresh = new LRUCache({ max: 2000, ttl: FRESH_GAP })
+const tenantCache = g.__spaPwaFound
+const missCache = g.__spaPwaMisses
+const freshReads = g.__spaPwaFresh
 
 /** The spa behind a dashboard slug (platform lookup, like host routing); deleted spas have no app. */
 export async function pwaTenant(slug: string, opts: { fresh?: boolean } = {}): Promise<PwaTenant | null> {
   const s = slug.toLowerCase()
   if (!SLUG.test(s)) return null
-  const hit = opts.fresh ? undefined : tenantCache.get(s)
-  if (hit) return hit === 'none' ? null : hit
+  const fresh = opts.fresh && !freshReads.has(s)
+  if (!fresh) {
+    const hit = tenantCache.get(s)
+    if (hit) return hit
+    if (missCache.has(s)) return null
+  }
   const [row] = await platformDb()
     .select({
       id: tenants.id,
@@ -80,7 +94,14 @@ export async function pwaTenant(slug: string, opts: { fresh?: boolean } = {}): P
     .limit(1)
   const found =
     row && !row.deletedAt ? { id: row.id, slug: row.slug, name: row.name, logoFileId: row.logoFileId } : null
-  tenantCache.set(s, found ?? 'none')
+  if (opts.fresh) freshReads.set(s, true)
+  if (found) {
+    tenantCache.set(s, found)
+    missCache.delete(s)
+  } else {
+    tenantCache.delete(s)
+    missCache.set(s, true)
+  }
   return found
 }
 

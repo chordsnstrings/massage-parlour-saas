@@ -36,18 +36,22 @@ async function offlinePage() {
   return stored || new Response(FALLBACK, { headers: { 'content-type': 'text/html; charset=utf-8' } })
 }
 
-/* Network-first for dashboard page loads, falling back to the offline page; everything else (API, server actions, */
-/* POSTs, RSC fetches, files) is left to the browser untouched, and no response is ever stored. */
+/* Every page load in scope is answered with its navigation-preload response, so it reaches the server exactly once */
+/* (a fetch handler that skipped some would make the browser request those twice); dashboard loads fall back to the */
+/* offline page. Everything else (API, server actions, POSTs, RSC fetches, files) is left to the browser untouched, */
+/* and no response is ever stored. */
 self.addEventListener('fetch', (event) => {
   const req = event.request
-  if (req.mode !== 'navigate' || req.method !== 'GET' || !inApp(new URL(req.url))) return
+  if (req.mode !== 'navigate' || req.method !== 'GET') return
+  const inside = inApp(new URL(req.url))
   event.respondWith(
     (async () => {
       try {
         const preloaded = await event.preloadResponse
         return preloaded || (await fetch(req))
-      } catch {
-        return offlinePage()
+      } catch (error) {
+        if (inside) return offlinePage()
+        throw error
       }
     })(),
   )
@@ -73,23 +77,47 @@ self.addEventListener('push', (event) => {
   )
 })
 
+/** The spa dashboard a URL belongs to (`{BASE}/{slug}`), or null for other pages / origins. */
+function spaHome(href) {
+  const url = new URL(href, self.location.origin)
+  if (!inApp(url)) return null
+  const slug = url.pathname.slice(BASE.length).split('/')[1]
+  return slug ? `${BASE}/${slug}` : null
+}
+
+/** A window to reuse for `href`: one already on it, else one inside the same spa's dashboard (each spa is its own */
+/* installed app, so another spa's window — or the console, a site — is never taken over). */
+function windowFor(windows, href) {
+  const exact = windows.find((w) => w.url === href)
+  if (exact) return { client: exact, exact: true }
+  const home = spaHome(href)
+  if (!home) return null
+  const same = windows.find((w) => {
+    const url = new URL(w.url)
+    return (
+      url.origin === self.location.origin && (url.pathname === home || url.pathname.startsWith(`${home}/`))
+    )
+  })
+  return same ? { client: same, exact: false } : null
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const url = new URL(event.notification.data?.url || `${BASE}/`, self.location.origin).href
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      // Prefer a tab already on that page, then any dashboard tab of this origin, else open a new one.
-      const exact = windows.find((w) => w.url === url)
-      if (exact) return exact.focus()
-      const tab = windows.find((w) => new URL(w.url).origin === self.location.origin)
-      if (tab && 'navigate' in tab) {
+      // Prefer a window already on that page, then one in the same spa's dashboard, else open one (Chrome opens it in
+      // that spa's installed app when there is one).
+      const found = windowFor(windows, url)
+      if (found?.exact) return found.client.focus()
+      if (found && 'navigate' in found.client) {
         try {
-          const focused = await tab.focus()
+          const focused = await found.client.focus()
           const moved = await focused.navigate(url)
           if (moved) return moved
         } catch {
-          // Tabs this worker doesn't control can't be navigated; open a fresh one instead.
+          // Windows this worker doesn't control can't be navigated; open a fresh one instead.
         }
       }
       return self.clients.openWindow(url)

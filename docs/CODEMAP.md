@@ -153,7 +153,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     cookie-free; `server/pwa.ts` = name rule via core `pwaAppName`, icon key = hash(ICON_VERSION + logo file id |
     initials), 30 s slug cache; `server/pwa-icons.tsx` = sharp logo tiles / next/og initials, in-memory LRU). Layout
     `generateMetadata` links them (+ apple title, theme colour); `components/pwa` registers `public/sw.js` (scope `/`,
-    shared with push via `lib/sw.ts`), stores the localised offline page, "Install app" menu item + owner/manager tip.
+    shared with push via `lib/sw.ts`; answers every in-scope page load with the preload response — never return early
+    for a navigation, or it is fetched twice), stores the localised offline page, "Install app" menu item + tip.
 - **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
 - **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
   (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via

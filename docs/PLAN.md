@@ -1415,17 +1415,22 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
     letters of the first two words; non-Latin names use the slug's) in ink `#0b0b0f` on lime `#d9f26a`. Key = hash of
     `ICON_VERSION` + logo file id (or initials) → `immutable` 1-year cache; a new logo = new URLs; old keys get the
     current icon for 5 min. Public, cookie-free, only the logo-derived image; rendered once per key (in-memory LRU,
-    shared in-flight renders, 30 s slug cache incl. misses) — no DB rate-limiter writes.
+    shared in-flight renders, 30 s slug cache + separate miss cache) — no DB rate-limiter writes. An unknown key
+    re-reads the spa at most once per 10 s per slug. A logo that can't be read right now (storage error, bad file)
+    gets the initials with `no-store` and no ETag (kept in memory 60 s only), so installs never keep a stand-in.
   - `<head>` of `dashboard/[tenant]` only: manifest link, apple-touch-icon, apple-mobile-web-app-title/capable,
     theme-color. Console and marketing keep the root `/manifest.webmanifest`.
   - Service worker `public/sw.js` (one registration, scope `/`, same URL as push → no second worker; registered on
-    every dashboard load by `components/pwa` `PwaSetup`): network-first for GET page loads in the app surface with
-    navigation preload; offline → the page's localised offline page ("You're offline — reconnect to continue",
+    every dashboard load by `components/pwa` `PwaSetup`): every GET page load in scope is answered with its
+    navigation-preload response (one server request each — marketing, console, sites and OAuth callbacks included);
+    offline → dashboard loads only get the page's localised offline page ("You're offline — reconnect to continue",
     EN/TH via `pwa.*` keys, built-in bilingual copy as fallback). Nothing else is cached; API, server actions,
-    POSTs, RSC fetches and files pass through untouched.
+    POSTs, RSC fetches and files pass through untouched. Notification clicks reuse a window of the same spa only
+    (`{base}/{slug}`), else open a new one (Chrome opens it in that spa's installed app).
   - "Install app" in the profile menu (Chrome/Edge/Android `beforeinstallprompt`, kept from first paint by an inline
     listener; iOS → Share → Add to Home Screen steps sheet with the app name); one-time dismissible tip on the
     dashboard home for owners/managers (dismiss remembered per browser). Hidden when already running standalone.
   - Tests: core `pwa.test.ts` (name rule, initials); e2e `pwa.spec.ts` (manifest/icons cookie-free for a logo spa and
     a no-logo spa, 304/404, `<head>`, console/marketing manifests, SW control + Chrome installability via CDP,
-    offline page, menu + tip + iOS steps).
+    offline page, one server request per page load via a counting proxy, same-spa notification windows, uncached
+    stand-in icon for an unreadable logo + throttled re-read, menu + tip + iOS steps).
