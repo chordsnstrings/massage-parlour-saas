@@ -12,7 +12,12 @@ x-app-env: &app-env
   ADMIN_URL: ${ADMIN_URL:-https://${SITE_HOST}/admin}
   # More platform domains (comma or space separated) — each serves the whole platform with its own links + TLS.
   EXTRA_ROOT_DOMAINS: ${EXTRA_ROOT_DOMAINS:-}
-  PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
+  # Owner, 2026-10-09: the droplet's base value (ahmed@arks.ae) + two more super-admins, appended here because the base
+  # env can't be edited without SSH. listedAdminEmails() drops empty segments and duplicates. Keep in sync with migrate.
+  PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-},ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com
+  # Studio Ask AI + Claude MCP connector (/api/mcp): only these super-admins (verified email + 2FA). Owner, 2026-10-09:
+  # exactly the two added admins by default; a value in /opt/spa/.env or the secrets overlay replaces it.
+  SITE_AI_EDITOR_EMAILS: ${SITE_AI_EDITOR_EMAILS:-ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
   ARK_API_KEY: ${ARK_API_KEY:-}
@@ -93,7 +98,7 @@ services:
     command: ["sh", "-c", "node dist/migrate.js && node dist/seed.js"]
     environment:
       <<: *db
-      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS}
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-},ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com
       # G7: migrations give up instead of queueing traffic behind a lock (packages/db/src/migrate.ts).
       MIGRATE_LOCK_TIMEOUT: ${MIGRATE_LOCK_TIMEOUT:-10s}
       MIGRATE_STATEMENT_TIMEOUT: ${MIGRATE_STATEMENT_TIMEOUT:-15min}

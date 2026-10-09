@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -446,4 +447,110 @@ export const tenantPurges = pgTable(
     createdAt: createdAt(),
   },
   () => platformPolicies(),
+)
+
+/**
+ * Fixed-window request counters for public server actions (no Redis): e.g. `signup:ip:<ip>` for "Apply for your
+ * spa", which creates the login server-side, past Better Auth's HTTP rate limiter. Platform-only; no tenant data.
+ */
+export const rateLimits = pgTable(
+  'rate_limits',
+  {
+    key: text('key').primaryKey(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull().defaultNow(),
+    count: integer('count').notNull().default(0),
+  },
+  () => platformPolicies(),
+)
+
+/** Spa applications (PLAN §18.3): new spas apply, the platform owner accepts (provisions the spa) or rejects. */
+export const spaApplicationStatus = pgEnum('spa_application_status', ['pending', 'approved', 'rejected'])
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
+
+/** What the owner recorded for the setup fee when accepting (copied onto the platform invoice + payment). */
+export type SetupPaymentSummary = {
+  kind: 'full' | 'deposit' | 'none'
+  feeAed: string
+  invoiceTotalAed?: string
+  amountAed?: string
+  balanceAed?: string
+  paidOn?: string
+  method?: 'cash' | 'bank_transfer' | 'card'
+  reference?: string | null
+  note?: string | null
+  invoiceId?: string
+  invoiceNumber?: string
+}
+
+export const spaApplications = pgTable(
+  'spa_applications',
+  {
+    id: id(),
+    status: spaApplicationStatus('status').notNull().default('pending'),
+    /** The applicant's login (created at apply time; locked until accepted). */
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    applicantName: text('applicant_name').notNull(),
+    email: text('email').notNull(),
+    /** UAE mobile, E.164 with '+' (+971501234567). */
+    phone: text('phone').notNull(),
+    spaName: text('spa_name').notNull(),
+    slug: text('slug').notNull(),
+    /** `UAE_EMIRATES` key in @spa/core. */
+    emirate: text('emirate').notNull(),
+    streetAddress: text('street_address').notNull(),
+    planId: uuid('plan_id').references(() => plans.id),
+    preferredStart: date('preferred_start').notNull(),
+    notes: text('notes'),
+    /** Optional logo, already processed (512 px WebP); stored as the spa's logo file on acceptance. */
+    logoBytes: bytea('logo_bytes'),
+    logoContentType: text('logo_content_type'),
+    reviewedBy: text('reviewed_by').references(() => user.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    rejectionReason: text('rejection_reason'),
+    /** Rejected: show `rejection_reason` to the applicant (page + email). */
+    shareReason: boolean('share_reason').notNull().default(false),
+    /** Not `tenant_id`: that column name marks RLS tenant tables (db rls test). */
+    createdTenantId: uuid('created_tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    setupPayment: jsonb('setup_payment').$type<SetupPaymentSummary>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // A web address is held by one pending application at a time; one pending application per login.
+    uniqueIndex('spa_applications_pending_slug').on(t.slug).where(sql`${t.status} = 'pending'`),
+    uniqueIndex('spa_applications_pending_user').on(t.userId).where(sql`${t.status} = 'pending'`),
+    index('spa_applications_status_created').on(t.status, t.createdAt),
+    ...platformPolicies(),
+  ],
+)
+
+/** Contact enquiries (PLAN §18.4): the marketing Contact form; the owner works them in the console (Enquiries). */
+export const contactEnquiryStatus = pgEnum('contact_enquiry_status', ['new', 'contacted', 'closed'])
+
+export const contactEnquiries = pgTable(
+  'contact_enquiries',
+  {
+    id: id(),
+    status: contactEnquiryStatus('status').notNull().default('new'),
+    name: text('name').notNull(),
+    /** E.164 with '+' (+971501234567, +447700900123). */
+    phone: text('phone').notNull(),
+    email: text('email').notNull(),
+    spaName: text('spa_name').notNull(),
+    message: text('message').notNull(),
+    /** Internal console note (never shown to the sender). */
+    adminNote: text('admin_note'),
+    /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address; its audit row has `ip` null). */
+    ipHash: text('ip_hash'),
+    userAgent: text('user_agent'),
+    /** Last super-admin who changed the status or note. */
+    handledBy: text('handled_by').references(() => user.id, { onDelete: 'set null' }),
+    handledAt: timestamp('handled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('contact_enquiries_status_created').on(t.status, t.createdAt), ...platformPolicies()],
 )

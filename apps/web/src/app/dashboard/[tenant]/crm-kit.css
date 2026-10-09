@@ -231,6 +231,12 @@
     height: 14px;
     color: var(--crm-accent);
   }
+  /* Figures in Space Grotesk (sign-in look; --crm-num, crm.css) */
+  :where(:root:has(.crm))
+  :is(.crm-stat .crm-n, .crm-kpi .crm-n, .crm-gift .crm-gv, .crm-team-card .crm-stats b),
+  :where(:root:has(.crm)) [class*="--ui-stat-fs"] {
+    font-family: var(--crm-num);
+  }
   :where(:root:has(.crm)) .crm-stat .crm-n {
     position: relative;
     z-index: 1;
@@ -393,9 +399,10 @@
     background: var(--crm-info-bg);
     color: var(--crm-info);
   }
+  /* acc = the brand highlight: lime chip, dark-green text */
   :where(:root:has(.crm)) .crm-pill[data-tone="acc"] {
-    border-color: transparent;
-    background: color-mix(in srgb, var(--crm-accent) 14%, transparent);
+    border-color: rgb(15 107 75 / 0.14);
+    background: var(--crm-lime-soft);
     color: var(--crm-accent-ink);
   }
   :where(:root:has(.crm)) .crm-dotc {
@@ -683,7 +690,7 @@
   :where(:root:has(.crm)) .crm-segctl > [aria-current="true"] {
     background: var(--crm-surface);
     color: var(--crm-text);
-    box-shadow: 0 1px 3px rgb(32 44 94 / 0.08);
+    box-shadow: 0 1px 3px rgb(17 40 28 / 0.08);
   }
   :where(:root:has(.crm)) .crm-segctl[data-fill="true"] {
     display: flex;
@@ -1096,7 +1103,7 @@
     width: 100%;
     height: var(--crm-h-ctl);
     padding: 0 12px;
-    border: 1px solid var(--crm-line);
+    border: 1px solid var(--crm-ctl-line);
     border-radius: 9px;
     background: var(--crm-surface2);
     font: inherit;

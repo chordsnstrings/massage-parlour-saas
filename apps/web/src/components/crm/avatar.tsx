@@ -1,7 +1,8 @@
 import { cn, initials } from '@/lib/utils'
 
-// Design avatar colours (crm-spec §1.1 extra literals). Picked from the name so a person keeps one colour.
-const COLOURS = ['#3b6fe0', '#7a6ce0', '#3b9ee0', '#e0559e', '#5f6e7e', '#1fa865', '#f2603c']
+// Avatar colours (brand theme, PLAN §18.6); white initials pass WCAG AA on each.
+// Picked from the name so a person keeps one colour.
+const COLOURS = ['#0f6b4b', '#6553c4', '#2a6aae', '#b03f78', '#56636e', '#5f7a12', '#b3471f']
 const colourFor = (name: string) => {
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0

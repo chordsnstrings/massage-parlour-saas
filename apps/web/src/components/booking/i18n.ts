@@ -11,6 +11,7 @@ export const pick = (value: Bi | null | undefined, locale: Locale) =>
 
 const T = {
   title: { en: 'Book a treatment', ar: 'احجز جلستك' },
+  openInMaps: { en: 'Open in Google Maps', ar: 'افتح في خرائط Google' },
   intro: {
     en: 'Choose a treatment and a time that suits you. We will confirm on WhatsApp.',
     ar: 'اختر العلاج والوقت المناسب لك، وسنؤكد الحجز عبر واتساب.',

@@ -1,5 +1,6 @@
-import { Check } from 'lucide-react'
+import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { AREAS, AUTOMATIONS } from '@/components/marketing/content'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 
@@ -64,8 +65,35 @@ export default function FeaturesPage() {
         </section>
       ))}
 
+      {/* The team's language (links to the Spa CRM page) */}
+      <section id="language" className="mkt-band">
+        <div
+          data-rise
+          className="mkt-wrap grid gap-6 py-16 lg:grid-cols-[1fr_1.6fr] lg:items-center lg:gap-16"
+        >
+          <div>
+            <p className="mkt-eyebrow">Your team’s language</p>
+            <h2 className="mt-4 text-[30px] sm:text-[38px]">
+              English or <span lang="th">ภาษาไทย</span>
+            </h2>
+          </div>
+          <div>
+            <p className="max-w-xl text-[17px] text-[var(--muted)]">
+              The whole dashboard — menus, buttons, messages and dates — switches between English and Thai,
+              and each person picks their own. Names your team types stay exactly as written.
+            </p>
+            <Link
+              href="/crm"
+              className="mkt-link mt-5 inline-flex items-center gap-1.5 font-semibold text-[var(--accent-ink)]"
+            >
+              See the spa CRM <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Included in every plan */}
-      <section className="mkt-sec mkt-dark">
+      <section id="automations" className="mkt-sec mkt-dark">
         <div className="mkt-wrap grid gap-10 lg:grid-cols-2">
           <div data-rise>
             <p className="mkt-eyebrow">Runs on its own</p>

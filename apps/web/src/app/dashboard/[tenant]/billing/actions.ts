@@ -1,7 +1,7 @@
 'use server'
 import { platformDb, platformInvoices } from '@spa/db'
-import { createInvoiceCheckout, StripeError, stripeConfig } from '@spa/services'
-import { and, eq } from 'drizzle-orm'
+import { cardPayableInvoice, createInvoiceCheckout, StripeError, stripeConfig } from '@spa/services'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { can, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -20,11 +20,10 @@ export async function payInvoiceByCardAction(
   if (!cfg) return { ok: false, error: 'billing.error.cardsOff' }
   if (!z.uuid().safeParse(invoiceId).success) return { ok: false, error: 'billing.error.notFound' }
   const db = platformDb()
-  const [invoice] = await db
-    .select()
-    .from(platformInvoices)
-    .where(and(eq(platformInvoices.id, invoiceId), eq(platformInvoices.tenantId, ctx.tenant.id)))
-  if (invoice?.status !== 'issued') return { ok: false, error: 'billing.error.notOpen' }
+  // Re-checked here, not only in the page: a partly paid invoice (setup deposit) must not be charged in full.
+  const payable = await cardPayableInvoice(db, ctx.tenant.id, invoiceId)
+  if (!payable.invoice) return { ok: false, error: `billing.error.${payable.error}` }
+  const { invoice } = payable
   const back = await appUrl(`/${slug}/billing`)
   try {
     const session = await createInvoiceCheckout(cfg, {

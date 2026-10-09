@@ -13,6 +13,7 @@ afterEach(() => {
   setEmailSettingsSource(undefined)
   setEmailTransport(null)
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -65,6 +66,27 @@ describe('email settings precedence (console, then env, then default)', () => {
     expect(sent).toEqual([
       { to: 'x@y.test', subject: 's', text: 't', from: 'Db <a@db.test>', apiKey: 're_db_2222' },
     ])
+  })
+
+  it('posts to Resend with reply_to only when replyTo is set (contact enquiries)', async () => {
+    vi.stubEnv('RESEND_API_KEY', 're_env_1111')
+    vi.stubEnv('EMAIL_FROM', '')
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await sendStaffEmail({ to: 'x@y.test', subject: 's', text: 't', replyTo: 'sender@spa.test' })
+    await sendStaffEmail({ to: 'x@y.test', subject: 's', text: 't' })
+    const bodies = fetchMock.mock.calls.map((c) =>
+      JSON.parse((c as unknown as [string, RequestInit])[1].body as string),
+    )
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.resend.com/emails')
+    expect(bodies[0]).toEqual({
+      from: DEFAULT_EMAIL_FROM,
+      to: 'x@y.test',
+      subject: 's',
+      text: 't',
+      reply_to: 'sender@spa.test',
+    })
+    expect(bodies[1]).not.toHaveProperty('reply_to')
   })
 
   it('still fails loudly in production when neither has a key', async () => {

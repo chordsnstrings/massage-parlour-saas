@@ -1,5 +1,5 @@
 'use server'
-import { requires2fa, toUaeE164 } from '@spa/core'
+import { isGoogleMapsUrl, normalizeGoogleMapsUrl, requires2fa, toUaeE164 } from '@spa/core'
 import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
 import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -26,6 +26,12 @@ const schema = z.object({
     .transform((v) => v || null),
   branchName: z.string().trim().min(2, 'settings.profile.errors.branchName').max(80),
   address: opt,
+  mapsUrl: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || isGoogleMapsUrl(v), 'settings.profile.errors.mapsUrl')
+    .transform((v) => normalizeGoogleMapsUrl(v)), // store URL.href, never the raw paste
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),
@@ -63,6 +69,7 @@ export async function saveSettingsAction(
       .set({
         name: d.branchName,
         address: d.address,
+        mapsUrl: d.mapsUrl,
         phone: d.phone,
         whatsappE164: whatsapp,
         businessDayCutoff: d.cutoff,

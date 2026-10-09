@@ -11,7 +11,7 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
-import { and, asc, eq, isNull, lt, ne, sql, sum } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, isNull, lt, ne, sql, sum } from 'drizzle-orm'
 import { DomainError } from './errors'
 
 /** The annual price may be paid as this many monthly invoices (AED 24,000 → 12 × AED 2,000). */
@@ -83,8 +83,30 @@ type InvoiceInput = {
   installments?: number | null
 }
 
-/** Creates one numbered platform invoice (SM-2026-0001). Returns null when a schedule/setup invoice already exists. */
+/**
+ * Creates one numbered platform invoice (SM-2026-0001). Returns null when a schedule/setup invoice already exists —
+ * checked BEFORE a number is drawn: sequences are not transactional, so a draw absorbed by the unique index (left
+ * as the guard against a race) would leave a gap in the invoice numbers.
+ */
 export async function createPlatformInvoice(db: DbOrTx, tenantId: string, input: InvoiceInput) {
+  const kind = input.kind ?? 'other'
+  const live = and(eq(platformInvoices.tenantId, tenantId), ne(platformInvoices.status, 'void'))
+  const same =
+    kind === 'setup'
+      ? and(live, eq(platformInvoices.kind, 'setup'))
+      : kind === 'plan' && input.periodStart && input.installments && input.installment
+        ? and(
+            live,
+            eq(platformInvoices.kind, 'plan'),
+            eq(platformInvoices.periodStart, input.periodStart),
+            eq(platformInvoices.installments, input.installments),
+            eq(platformInvoices.installment, input.installment),
+          )
+        : null
+  if (same) {
+    const [exists] = await db.select({ id: platformInvoices.id }).from(platformInvoices).where(same).limit(1)
+    if (exists) return null
+  }
   const [settings] = await db.select().from(platformSettings).where(eq(platformSettings.id, 1))
   const { rows } = await db.execute<{ n: string }>(sql`select nextval('platform_invoice_seq') as n`)
   const number = `${settings?.invoicePrefix ?? 'SM'}-${input.issueDate.slice(0, 4)}-${String(rows[0]!.n).padStart(4, '0')}`
@@ -96,7 +118,7 @@ export async function createPlatformInvoice(db: DbOrTx, tenantId: string, input:
       issueDate: input.issueDate,
       dueDate: input.dueDate,
       description: input.description,
-      kind: input.kind ?? 'other',
+      kind,
       periodStart: input.periodStart ?? null,
       installment: input.installment ?? null,
       installments: input.installments ?? null,
@@ -246,6 +268,79 @@ export async function setInvoicePaid(
       .returning()
     return row!
   })
+}
+
+export type PlatformPaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other'
+
+/**
+ * Records money received (console "Record a payment", the setup fee on accepting an application). Against an
+ * invoice: the invoice becomes paid once its payments cover the total (else it stays issued with a balance due),
+ * and paying the last overdue invoice resolves reminders. Run inside the caller's platform transaction.
+ */
+export async function recordPlatformPayment(
+  tx: DbOrTx,
+  p: {
+    tenantId: string
+    invoiceId?: string | null
+    amountAed: string
+    method: PlatformPaymentMethod
+    reference?: string | null
+    receivedAt: string
+    recordedBy: string
+    notes?: string | null
+    /** Asia/Dubai today: reminders resolve only when nothing is overdue NOW (`receivedAt` may be back-dated). */
+    today: string
+  },
+) {
+  let inv: typeof platformInvoices.$inferSelect | undefined
+  if (p.invoiceId) {
+    ;[inv] = await tx
+      .select()
+      .from(platformInvoices)
+      .where(and(eq(platformInvoices.id, p.invoiceId), eq(platformInvoices.tenantId, p.tenantId)))
+      .for('update')
+    if (!inv) throw new DomainError('Invoice not found', 'not_found')
+    if (inv.status === 'void') throw new DomainError('This invoice is void')
+  }
+  const [payment] = await tx
+    .insert(platformPayments)
+    .values({
+      tenantId: p.tenantId,
+      invoiceId: inv?.id ?? null,
+      amountAed: p.amountAed,
+      method: p.method,
+      reference: p.reference ?? null,
+      receivedAt: p.receivedAt,
+      recordedBy: p.recordedBy,
+      notes: p.notes ?? null,
+    })
+    .returning()
+  if (!inv) return { payment: payment!, invoice: null, paidAed: p.amountAed, balanceAed: '0.00' }
+  const [got] = await tx
+    .select({ total: sum(platformPayments.amountAed) })
+    .from(platformPayments)
+    .where(eq(platformPayments.invoiceId, inv.id))
+  const paid = Number(got?.total ?? 0)
+  const balance = Math.max(0, Number(inv.totalAed) - paid)
+  if (balance < 0.005 && inv.status !== 'paid') {
+    ;[inv] = await tx
+      .update(platformInvoices)
+      .set({ status: 'paid', paidAt: new Date() })
+      .where(eq(platformInvoices.id, inv.id))
+      .returning()
+    if ((await overdueInvoices(tx, p.tenantId, p.today)).length === 0) await resolveReminders(tx, p.tenantId)
+  }
+  return { payment: payment!, invoice: inv!, paidAed: paid.toFixed(2), balanceAed: balance.toFixed(2) }
+}
+
+/** Money received per invoice (invoice id → AED), for "paid / balance due" columns. Tenant tx or platform role. */
+export async function invoicePaidTotals(db: DbOrTx, tenantId: string) {
+  const rows = await db
+    .select({ invoiceId: platformPayments.invoiceId, total: sum(platformPayments.amountAed) })
+    .from(platformPayments)
+    .where(and(eq(platformPayments.tenantId, tenantId), isNotNull(platformPayments.invoiceId)))
+    .groupBy(platformPayments.invoiceId)
+  return new Map(rows.map((r) => [r.invoiceId!, Number(r.total ?? 0)]))
 }
 
 /** Issued (unpaid) invoices whose due date has passed. Works on a tenant-scoped tx or the platform role. */

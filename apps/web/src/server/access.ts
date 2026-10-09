@@ -7,6 +7,7 @@ import {
 } from '@spa/core'
 import {
   grantListedPlatformAdmins,
+  isListedAdminEmail,
   listedAdminEmails,
   memberBranches,
   members,
@@ -169,12 +170,11 @@ export async function requirePlatformAdmin() {
   const session = await requireUser()
   let status = await adminStatus(session.user.id)
   // G2: a PLATFORM_ADMIN_EMAILS address is promoted here once its email is verified (no deploy needed).
-  if (
-    !status &&
-    listedAdminEmails().includes(session.user.email.toLowerCase()) &&
-    (await grantListedPlatformAdmins(platformDb(), listedAdminEmails(), session.user.id)) > 0
-  )
+  const listed = !status && isListedAdminEmail(session.user.email)
+  if (listed && (await grantListedPlatformAdmins(platformDb(), listedAdminEmails(), session.user.id)) > 0)
     status = await queryAdminStatus(session.user.id)
+  // Listed but not verified yet: the join page says how (email link, or an existing super-admin confirms it).
+  if (!status && listed) redirect(adminPath('/join'))
   if (!status) notFound()
   if (status === 'needs2fa') enrolAdmin2fa(adminPath('/account'))
   return session

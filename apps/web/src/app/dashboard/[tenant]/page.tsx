@@ -55,11 +55,13 @@ import {
 import { InsightsCard } from '@/components/kpis/insights-card'
 import { Sparkline } from '@/components/kpis/sparkline'
 import { AgendaList, PeakHeatmap, RankedList, UpNextTable } from '@/components/kpis/widgets'
+import { InstallTip } from '@/components/pwa/install-app'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext, requireMember } from '@/server/access'
+import { pwaFor } from '@/server/pwa'
 import { publicSiteUrl } from '@/server/sites'
 import { allowedBranches } from './calendar/data'
 
@@ -366,6 +368,10 @@ export default async function TenantHome({
       />
       <PageBody>
         <Stack>
+          {/* One-time install tip (PLAN §18.6) for the people who run the spa; everyone has it in the user menu. */}
+          {(ctx.member?.roleKey === 'owner' || ctx.member?.roleKey === 'manager') && (
+            <InstallTip app={pwaFor(tenant).name} slug={tenant.slug} />
+          )}
           {!setupDone && steps.length > 0 && checklist}
 
           <Grid cols="kgrid">

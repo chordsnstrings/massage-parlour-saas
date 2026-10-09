@@ -9,7 +9,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0021` (hand-written SQL inside), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only. `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). |
 | `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → `assertAiAllowed` (platform + per-spa kill switch `ai_enabled`, monthly budget `tenants.ai_budget_usd`, Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage` → 80 %/100 % bell notification once per month (G18). Aggregation of `ai_usage` lives only in `services/ai-usage.ts` (console AI usage, Performance, dashboard meter). Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`), `meta` (R7 Meta tools assistant). `tool-loop.ts` `runToolLoop` = the shared OpenAI-style tool loop (local tools + MCP sources, every step through `runChat`, so budget + `ai_usage` per step; the DM agent uses it). `mcp/`: Meta MCP (see "Meta MCP" below). |
@@ -30,7 +30,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - `withTenant(tenantId, fn)` rejects non-UUIDs, opens a transaction on `appDb()` and runs
   `set_config('app.tenant_id', id, true)`.
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
-  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `tenant_purges` (G12 purge record; its column is
+  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `spa_applications` (PLAN §18.3;
+  `created_tenant_id`), `rate_limits` (fixed-window counters: services `hitRateLimit`, web `server/rate-limit.ts`
+  `withinIpLimit` → services `withinRateLimits` — per-IP limits for public actions Better Auth's HTTP limiter never sees,
+  e.g. apply, contact form), `contact_enquiries` (PLAN §18.4; marketing Contact form, services `enquiries.ts`), `tenant_purges` (G12 purge record; its column is
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
@@ -92,7 +95,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
-     `audit()` (`server/audit.ts`, platformDb `audit_log`) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
+     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
    - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
      rethrow to the error boundary.
    - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
@@ -112,14 +115,26 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 ## Web routes (`apps/web/src/app`)
 
 - **`dashboard/(auth)`**: login, signup, invite/[token], 2FA, forgot/reset password.
-  - Signup calls `provisionTenant`, which creates the tenant, a default branch, the 6 system roles, the owner member
-    and a trial subscription on the first active plan. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
+  - Signup = **spa application** (PLAN §18.3): `signup/actions.ts` creates the login (Better Auth) + a pending
+    `spa_applications` row (`submitApplication`); `/application` is the applicant's waiting page (locked logins:
+    `server/applications.ts` `applicantState`). The console accepts (`acceptApplication` → `provisionTenantTx` in
+    services/applications.ts: tenant, default branch, the 6 system roles, owner member, active subscription, setup
+    invoice + `recordPlatformPayment`) or rejects (`rejectApplication`: `user.disabled_at`, sessions deleted; Better
+    Auth session hook + `getSession` refuse disabled logins). `provisionTenant` without `subscription` = old trial path. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
     platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
     `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
     sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
+  - **Super-admin join** (owner, 2026-10-09): listed emails never apply (`submitApplication` + `signupAction` refuse
+    them, before any login is created); they join on the admin host `platform/(auth)/join` (Better Auth sign-up, no
+    spa; `assertAdminJoinAllowed` = neutral refusal; per-IP limit; callback = console). Unverified listed login →
+    `requirePlatformAdmin` redirects to `/join` (how to finish + resend). `applicantState.listedAdmin`: never
+    `locked`; dashboard home / `/application` / `/signup` send listed or super-admin logins without a spa to the
+    console (`adminUrl()`). Console Company → **Super-admins** card (`superAdminRoster`, `markListedAdminVerified` in
+    services/platform-admins.ts: listed + not disabled + actor super-admin with 2FA + not yourself; audit
+    `platform.admin.email_verified`; no removal). `listedAdminEmails` drops empty segments/duplicates (compose appends).
 - **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
   `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
-  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`; top bar: group crumb + title (home = greeting), EN | ไทย;
+  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`, platform badge `Logo` → marketing site (PLAN §18.6); top bar: group crumb + title (home = greeting), EN | ไทย;
   ≤860 px drawer). Look = `crm.css` (tokens on `:root:has(.crm)`, lifted under `[data-crm-off]` = site editor/preview
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
@@ -143,20 +158,37 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Therapist (G14): booking sheet own-status buttons → `setOwnStatusAction` (calendar/actions.ts) → services
     `setOwnBookingStatus` (ownership check); TherapistHome "My earnings" → `staffEarnings` (payroll.ts).
     `settings/audit` = audit log viewer (`audit.view`).
+  - Installable app per spa (PLAN §18.6): `app.webmanifest/route.ts` + `app-icon/[key]/[variant]/route.ts` (public,
+    cookie-free; `server/pwa.ts` = name rule via core `pwaAppName`, icon key = hash(ICON_VERSION + logo file id |
+    initials), 30 s slug cache; `server/pwa-icons.tsx` = sharp logo tiles / next/og initials, in-memory LRU). Layout
+    `generateMetadata` links them (+ apple title, theme colour); `components/pwa` registers `public/sw.js` (scope `/`,
+    shared with push via `lib/sw.ts`; answers every in-scope page load with the preload response — never return early
+    for a navigation, or it is fetched twice), stores the localised offline page, "Install app" menu item + tip.
 - **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
-- **`platform/(console)`**: overview, tenants, plans, settings, audit, ai models, domains (order approval), templates
+- **`platform/(console)`**: overview, applications (PLAN §18.3), enquiries (PLAN §18.4: list/search/filter, detail with
+  tel/wa.me/mailto, status + note via `updateEnquiry`; nav badge = `newEnquiryCount`), tenants, plans, settings, audit,
+  ai models, domains (order approval), templates
   (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via
   `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
   `tenantPerformance`; detail adds `tenantPerformanceDetail`). Revenue there = sales (paid|refunded) by sale business
   date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
+- **`marketing/`**: `/`, features, crm, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
+  scoped `.mkt`; Space Grotesk + DM Sans; Noto Sans Thai as the Thai-glyph fallback in `--font`/`--head`) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
+  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. `/crm` EN/TH demo: labels resolved
+  server-side from the dashboard catalogues (`components/marketing/crm-demo-copy.ts`) → client `crm-demo.tsx`; PLAN §18.5.
 - **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
   scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
+  Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
+  `withinIpLimit`, `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
+  email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
+  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. Footer = brand + 5 link columns into
+  section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
-  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); uploaded by the signup action (optional, validated before the
-  account is created) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
+  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); kept on the application at sign-up (optional, validated before
+  the account is created; stored as the spa's logo on acceptance) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
   pick in the browser (server actions take ≤ 1 MB). Replaced logo files are kept (URL may be reused).
 - **`api/`**:
   - `auth`, `health`, `client-error`.
@@ -203,6 +235,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `allow-same-origin`: design scripts can't touch platform cookies/APIs); `{{placeholders}}` filled + HTML-escaped from
   `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
   when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
+- **Map links (owner, 2026-10-09)**: every rendered branch address links to Google Maps (new tab, label "Open in Google
+  Maps" EN/AR via `ui('openInMaps')`, `data-maps-link`): contact/hours block, footer, placeholder site, booking page.
+  Target = `branchMapsHref` (`@spa/core/maps.ts`): `branches.maps_url` (exact pin; `normalizeGoogleMapsUrl` =
+  explicit host allowlist google.com|ae/maps…, maps.google.com|ae (/ or /maps…; no /url redirector), maps.app.goo.gl,
+  goo.gl/maps; no whitespace/quotes/backslash/<>/backtick; the actions store `URL.href` (RFC 3986 chars only), never
+  the raw paste; re-checked on read) else an address search. Site: `mapHref(meta)` / `addressLinkProps(meta)`
+  (`links.ts`). HTML designs: `{{map_url}}` = same target; `{{address}}` in plain text becomes an escaped
+  `<a data-spa-map>` — text positions come from a quote-aware tokenizer (`linkableTextRanges`; `>` inside attribute
+  values doesn't end a tag), never inside comments, `<a>`/`<select>`/`<button>` or raw-text elements (script, style,
+  title, textarea, xmp, plaintext, iframe, noembed, noframes, noscript); `escapeHtml` also escapes `\` and `` ` ``.
+  Tests `packages/core/test/maps.test.ts`; E2E: `site.spec.ts`.
   - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
     `htmlDesignDocument` adds a viewport meta if missing + `HTML_DESIGN_BASE_CSS` (all `:where()`, first in <head> so
     the design's rules win) + the link script; `fixHtmlDesign` (upload) adds the viewport and turns inline img
@@ -228,7 +271,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Draft JSON is capped at 512 KB.
   - Design changes need `site.design` (checked via `designSignature`).
   - Preflight runs before publish (`server/site-preflight.ts`); errors block publishing, warnings don't.
+- **Site-edit ops layer** (`@spa/services` `site-edit.ts`, shared by Ask AI and the Claude MCP connector): `runSiteEdit`
+  (zod op shapes → per-page `applySiteEditOps` against the block schema the caller passes, all-or-nothing, `dryRun`,
+  `base` = editor canvas data; writes `saveDraft` / `addPage` / `renamePage` / `updateDraftTheme`; `check` callback =
+  caller policy), `restoreSiteEdit`, `getSiteForEdit`, `blockCatalogue`, `siteEditAuditData`. Edit ops accept `index`.
+  Drafts only: `sites.theme_draft` (`editingTheme()`; editor, previews and preflight use it; `loadSite({published:
+  false})` swaps it in) and `site_pages.pending` (rename of a live page); `publishPage` applies both.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
+  Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed verified email + super-admin +
+  2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
+  (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
+  reverts the newest.
   - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the
     instruction, the trimmed page (`trimPageForPrompt`: ids/types/props, page text marked as data) and the vocabulary
     from `siteEditSchema()` (`components/site/ai-schema.ts`: built from the Puck config — custom fields carry
@@ -520,7 +573,8 @@ i18n namespace `automations`.
   test → web build → Playwright e2e.
 - **e2e**:
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
-  - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test`.
+  - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
+    (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
   - Host routing by default; set `E2E_ROUTING=path` for path routing.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin.
@@ -550,6 +604,37 @@ i18n namespace `automations`.
 - **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
   autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
   `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
+
+## Claude MCP connector (site editing, `/api/mcp`)
+
+- **OAuth** (packages/auth): Better Auth `jwt()` + `@better-auth/mcp` `mcp()` (oauth-provider 1.7.7; tables in
+  `@spa/db` `schema/oauth.ts`: jwks, oauth_client/resource/client_resource/refresh_token/access_token/consent/
+  client_assertion). Resource = `mcpResourceUrl()` (canonical APP_URL + `/api/mcp`; dev `*.localhost` → `localhost`).
+  Open DCR (rate-limited), PKCE, login `/login`, consent `/oauth/consent` (`(auth)/oauth/consent`, EN+TH keys
+  `auth.oauth.*`). Auth `hooks.before` on `/oauth2/authorize` (ineligible → consent page `?not_enabled=1`) and
+  `/oauth2/consent` (403). `oauthProviderClient()` in the browser client sends the signed query, so sign-in / 2FA
+  resume the flow (`forms.tsx` follows the returned `url`). Discovery: `app/.well-known/[...path]` → auth handler
+  (proxy no longer rewrites `/.well-known/*`). `verifyMcpAccessToken`: local JWKS (cached 5 min), audience-bound.
+- **Server** `packages/ai/src/mcp/site-server.ts` `handleSiteMcpRequest` (stateless, JSON): bearer → verify →
+  `siteAiEditorStatus` → consent row for (user, client) → 60/min per token (in memory) → tools (`SITE_MCP_TOOLS`) over
+  the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
+  Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
+- **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
+  deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
+  `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
+  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`).
+- **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
+  `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
+  authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on
+  `/oauth2/consent` audits grants. Prune: services `oauth-clients.ts` `pruneUnusedOAuthClients` (worker
+  `oauth-clients-prune`, hourly). Real client IP: Caddyfile `trusted_proxies` (Cloudflare ranges) +
+  `header_up Cf-Connecting-Ip {client_ip}`.
+- **Draft concurrency + publish** (services sites.ts): `lockSite` (FOR UPDATE on `sites`, re-entrant) at the start of
+  saveDraft / publishPage / publishAll / addPage / renamePage / restoreVersion / runSiteEdit (non-dry) /
+  restoreSiteEdit and the Theme panel action. `editStamp` / `assertEditStamp` / `EDITED_ELSEWHERE`: the editor page
+  passes the stamp; editor.tsx `takeStamp` refreshes it from every save / publish / restore / Ask AI reply.
+  `promoteDraftTheme` + `applyPendingRename` (re-checks the slug) run in publishPage and publishAll. Preflight:
+  `server/site-preflight.ts` `themeDraftWarnings` (editor `publishNotesAction`, overview Publish site sheet).
 
 ## Known gaps (verified 2026-10-08, not fixed yet)
 

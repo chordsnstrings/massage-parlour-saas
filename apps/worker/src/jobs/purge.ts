@@ -1,5 +1,5 @@
 import { platformDb } from '@spa/db'
-import { autoPurgeDeletedTenants } from '@spa/services'
+import { autoPurgeDeletedTenants, pruneUnusedOAuthClients } from '@spa/services'
 import { log } from '../log'
 import { recordPlatformRun } from './backup'
 
@@ -17,4 +17,11 @@ export async function autoPurgeTenants(env: Record<string, string | undefined> =
   if (res.purged.length || res.failed.length) log('info', 'tenants auto-purged', res)
   await recordPlatformRun(env, 'tenant-auto-purge', startedAt, res.failed.length ? 'failed' : 'ok', res)
   return res
+}
+
+/** Claude MCP connector: drops dynamically registered OAuth clients nobody approved within a day (hourly). */
+export async function pruneOAuthClients() {
+  const pruned = await pruneUnusedOAuthClients(platformDb())
+  if (pruned.length) log('info', 'unused oauth clients pruned', { count: pruned.length })
+  return { pruned: pruned.length }
 }

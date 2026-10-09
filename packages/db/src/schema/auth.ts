@@ -15,6 +15,11 @@ export const user = pgTable(
     twoFactorEnabled: boolean('two_factor_enabled').default(false),
     /** Spa-dashboard language ('en' | 'th'); Better Auth additional field, set by the top-bar toggle. */
     locale: text('locale').notNull().default('en'),
+    /**
+     * Spa applications (PLAN §18.3): set when the owner rejects an applicant's application. A disabled user can't
+     * sign in (Better Auth session hook) and `getSession` treats an existing session as signed out.
+     */
+    disabledAt: ts('disabled_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },

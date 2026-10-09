@@ -18,7 +18,7 @@ import {
   notifyPendingBookings,
   pruneAllNotifications,
 } from './notifications'
-import { autoPurgeTenants } from './purge'
+import { autoPurgeTenants, pruneOAuthClients } from './purge'
 import { restoreDrill } from './restore-drill'
 import { expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
 
@@ -58,4 +58,6 @@ export const jobs: JobDef[] = [
   { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
   // G12: off until the owner sets the days in console Settings → Data retention.
   { name: 'tenant-auto-purge', cron: '30 4 * * *', handler: () => autoPurgeTenants() },
+  // Claude MCP connector: open dynamic client registration; unapproved clients go after a day.
+  { name: 'oauth-clients-prune', cron: '35 * * * *', handler: () => pruneOAuthClients() },
 ]

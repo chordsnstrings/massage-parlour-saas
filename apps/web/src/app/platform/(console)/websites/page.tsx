@@ -1,4 +1,7 @@
+import { mcpResourceUrl } from '@spa/auth'
+import { oauthClient, oauthConsent, oauthRefreshToken, platformDb, siteAiEditorStatus } from '@spa/db'
 import { studioOverview } from '@spa/services'
+import { and, desc, eq, max } from 'drizzle-orm'
 import { ArrowUpRight, PanelsTopLeft } from 'lucide-react'
 import type { Metadata } from 'next'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +13,7 @@ import { DataTable } from '@/components/ui/table'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { requestUrls } from '@/server/origin'
+import { type ClaudeClient, ConnectClaudeCard } from './connect-claude'
 
 export const metadata: Metadata = { title: 'Websites' }
 
@@ -21,8 +25,38 @@ const STATUS = {
 } as const
 
 /** Website Studio (PLAN §14.4): every spa's site, its review state and open change requests. */
+/** The signed-in super-admin's connected Claude (MCP) clients: consent + newest refresh-token sign-in. */
+async function claudeClients(userId: string): Promise<ClaudeClient[]> {
+  const rows = await platformDb()
+    .select({
+      clientId: oauthConsent.clientId,
+      name: oauthClient.name,
+      connectedAt: oauthConsent.createdAt,
+      lastUsedAt: max(oauthRefreshToken.createdAt),
+    })
+    .from(oauthConsent)
+    .innerJoin(oauthClient, eq(oauthClient.clientId, oauthConsent.clientId))
+    .leftJoin(
+      oauthRefreshToken,
+      and(eq(oauthRefreshToken.clientId, oauthConsent.clientId), eq(oauthRefreshToken.userId, userId)),
+    )
+    .where(eq(oauthConsent.userId, userId))
+    .groupBy(oauthConsent.clientId, oauthClient.name, oauthConsent.createdAt)
+    .orderBy(desc(oauthConsent.createdAt))
+  return rows.map((r) => ({
+    clientId: r.clientId,
+    name: r.name?.trim() || 'Claude',
+    connectedAt: r.connectedAt?.toISOString() ?? null,
+    lastUsedAt: r.lastUsedAt ? new Date(r.lastUsedAt).toISOString() : null,
+  }))
+}
+
 export default async function PlatformWebsitesPage() {
-  await requirePlatformAdmin()
+  const { user } = await requirePlatformAdmin()
+  const [claudeEnabled, clients] = await Promise.all([
+    siteAiEditorStatus(platformDb(), user.id).then((s) => s === 'ok'),
+    claudeClients(user.id),
+  ])
   const urls = await requestUrls()
   const rows = (await studioOverview()).sort(
     (a, b) => b.openRequests - a.openRequests || Number(a.hasSite) - Number(b.hasSite),
@@ -98,6 +132,7 @@ export default async function PlatformWebsitesPage() {
             ]}
           />
         </Card>
+        <ConnectClaudeCard url={mcpResourceUrl()} enabled={claudeEnabled} clients={clients} />
       </PageBody>
     </>
   )

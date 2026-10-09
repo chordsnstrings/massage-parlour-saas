@@ -1,10 +1,15 @@
+// Brand fonts (same as the sign-in pages) + Thai; tokens in crm.css.
+import '@fontsource-variable/dm-sans'
 import '@fontsource-variable/noto-sans-thai'
+import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
 import { isSystemRole, type Permission } from '@spa/core'
 import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
+import type { Metadata, Viewport } from 'next'
+import { InstallMenuItem, PwaSetup } from '@/components/pwa/install-app'
 import { SearchPalette } from '@/components/search/search-palette'
 import { NotificationBell } from '@/components/shell/notification-bell'
 import {
@@ -17,10 +22,33 @@ import {
 import { I18nProvider } from '@/i18n/client'
 import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
+import { EARLY_PROMPT_SCRIPT } from '@/lib/sw'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
 import { navBadgeCounts } from '@/server/nav-counts'
 import { bellData } from '@/server/notifications'
+import { canonicalUrls } from '@/server/origin'
+import { PWA_THEME, pwaFor } from '@/server/pwa'
+
+// Each spa's dashboard installs as its own app (docs/PLAN.md §18.6): manifest, home-screen icon and title.
+// Platform console and marketing keep the root manifest.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ tenant: string }>
+}): Promise<Metadata> {
+  const ctx = await requireMember((await params).tenant)
+  const app = pwaFor(ctx.tenant)
+  return {
+    manifest: app.manifestUrl,
+    icons: { apple: [{ url: app.icon('apple-180'), sizes: '180x180', type: 'image/png' }] },
+    appleWebApp: { capable: true, title: app.name, statusBarStyle: 'default' },
+    // Next emits only the newer `mobile-web-app-capable`; older iOS still reads the apple- prefixed one.
+    other: { 'apple-mobile-web-app-capable': 'yes' },
+  }
+}
+
+export const viewport: Viewport = { themeColor: PWA_THEME }
 
 /** Default branch, subscription and this month's AI spend for the sidebar (one tenant transaction). */
 async function shellData(ctx: MemberContext) {
@@ -73,6 +101,7 @@ export default async function TenantLayout({
   const { locale, t, fmt, messages } = i18n
   const [data, bell, counts] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt), navBadgeCounts(ctx)])
   const base = appPath(`/${ctx.tenant.slug}`)
+  const app = pwaFor(ctx.tenant)
 
   // Menu per the design (crm-spec §2.1, §7) + Sales; pages without a design home are grouped as section tabs.
   // Coming next stays hidden until Phase 3 builds it.
@@ -234,7 +263,12 @@ export default async function TenantLayout({
 
   return (
     <div className="crm" lang={locale}>
+      <script
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline listener, no user input
+        dangerouslySetInnerHTML={{ __html: EARLY_PROMPT_SCRIPT }}
+      />
       <I18nProvider locale={locale} messages={messages}>
+        <PwaSetup app={app.name} />
         <SpaShell
           spa={{
             name: ctx.tenant.name,
@@ -251,6 +285,8 @@ export default async function TenantLayout({
           search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           accountHref={appPath('/account')}
           switchHref={appPath()}
+          platformHref={canonicalUrls().marketing()}
+          install={<InstallMenuItem />}
         >
           {children}
         </SpaShell>

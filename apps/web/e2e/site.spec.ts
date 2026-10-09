@@ -66,6 +66,40 @@ test('owner picks a template, publishes from the editor and the public site rend
     await page.emulateMedia({ reducedMotion: 'no-preference' })
   })
 
+  await test.step('the address opens Google Maps; an exact pin from Settings wins', async () => {
+    const address = 'Shop 4, Marina Walk, Dubai'
+    await page.goto(`${app}/${slug}/settings`)
+    await page.getByLabel('Address', { exact: true }).fill(address)
+    // a lookalike host and a Google host outside the allowlist are refused server-side
+    for (const bad of ['https://evil.test/maps/place', 'https://www.google.xyz/maps/place/x']) {
+      await page.getByLabel('Google Maps link').fill(bad)
+      await page.getByRole('button', { name: 'Save changes' }).click()
+      await expect(page.getByText('Paste a Google Maps link').first()).toBeVisible()
+    }
+    await page.getByLabel('Google Maps link').fill('')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
+
+    await page.goto(site(slug))
+    const search = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+    const link = page.getByRole('link', { name: `${address} (Open in Google Maps)` }).first()
+    await expect(link).toHaveAttribute('href', search)
+    await expect(link).toHaveAttribute('target', '_blank')
+
+    const pin = 'https://maps.app.goo.gl/BirchSpaPin1'
+    await page.goto(`${app}/${slug}/settings`)
+    // stored normalized (URL.href), never the raw paste
+    await page.getByLabel('Google Maps link').fill('HTTPS://Maps.App.Goo.gl/BirchSpaPin1')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByText('Settings saved').first()).toBeVisible()
+    await page.goto(`${site(slug)}?lang=ar`)
+    const maps = page.locator('a[data-maps-link]')
+    await expect(maps.first()).toHaveAttribute('href', pin)
+    await expect(maps.first()).toHaveAttribute('title', 'افتح في خرائط Google')
+    for (const href of await maps.evaluateAll((els) => els.map((e) => e.getAttribute('href'))))
+      expect(href).toBe(pin)
+  })
+
   await test.step('Arabic renders right-to-left; unpublished pages 404', async () => {
     await page.goto(`${site(slug)}?lang=ar`)
     await expect(page.locator('.site-root')).toHaveAttribute('dir', 'rtl')

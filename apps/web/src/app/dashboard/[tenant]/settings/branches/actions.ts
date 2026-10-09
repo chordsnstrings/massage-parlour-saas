@@ -1,5 +1,5 @@
 'use server'
-import { toUaeE164 } from '@spa/core'
+import { isGoogleMapsUrl, normalizeGoogleMapsUrl, toUaeE164 } from '@spa/core'
 import { plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { branchLimit, createBranch, DomainError, setBranchActive, updateBranch } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -22,6 +22,12 @@ const branchSchema = z.object({
     .or(z.literal('').transform(() => undefined)),
   name: z.string().trim().min(2, 'settings.branches.errors.name').max(80),
   address: opt,
+  mapsUrl: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || isGoogleMapsUrl(v), 'settings.branches.errors.mapsUrl')
+    .transform((v) => normalizeGoogleMapsUrl(v)), // store URL.href, never the raw paste
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'settings.branches.errors.time'),
@@ -58,6 +64,7 @@ export async function saveBranchAction(
   const input = {
     name: d.name,
     address: d.address,
+    mapsUrl: d.mapsUrl,
     phone: d.phone,
     whatsappE164,
     businessDayCutoff: d.cutoff,

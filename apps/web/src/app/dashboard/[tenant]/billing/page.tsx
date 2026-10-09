@@ -89,7 +89,14 @@ export default async function BillingPage({
     [t('billing.pay.iban'), company?.iban],
     [t('billing.pay.swift'), company?.swift],
   ].filter(([, v]) => v)
-  const open = invoices.find((i) => i.status === 'issued')
+  // A partly paid invoice (e.g. a setup-fee deposit, PLAN §18.3) stays issued with a balance due; the card button
+  // charges a whole invoice, so it is only offered while nothing has been paid on it yet.
+  const paidOn = new Map<string, number>()
+  for (const p of payments)
+    if (p.invoiceId) paidOn.set(p.invoiceId, (paidOn.get(p.invoiceId) ?? 0) + Number(p.amountAed))
+  const partly = (i: { id: string; status: string }) =>
+    i.status === 'issued' && (paidOn.get(i.id) ?? 0) > 0.005
+  const open = invoices.find((i) => i.status === 'issued' && !partly(i))
   // R11: the current period's plan invoices (12 monthly or one-time) + the setup fee; status is set by the super-admin.
   const schedule = [
     ...invoices
@@ -219,7 +226,9 @@ export default async function BillingPage({
                       header: t('billing.invoices.status'),
                       className: 'text-end',
                       cell: (r) =>
-                        cardsOn && r.status === 'issued' ? (
+                        partly(r) ? (
+                          <Pill tone="warn">{t('billing.schedule.partlyPaid')}</Pill>
+                        ) : cardsOn && r.status === 'issued' ? (
                           <span className="inline-flex items-center gap-2">
                             <Pill tone={statusTone(r.status)}>{enumLabel(t, 'invoiceStatus', r.status)}</Pill>
                             <PayByCardButton
@@ -296,12 +305,21 @@ export default async function BillingPage({
                               })
                       }
                       body={`${t('billing.schedule.due', { date: day(i.dueDate) })} · ${i.number}${
-                        late ? ` · ${t('billing.schedule.overdue')}` : ''
-                      }`}
+                        partly(i)
+                          ? ` · ${t('billing.schedule.balance', {
+                              paid: fmt.aed(paidOn.get(i.id) ?? 0),
+                              balance: fmt.aed(Math.max(0, Number(i.totalAed) - (paidOn.get(i.id) ?? 0))),
+                            })}`
+                          : ''
+                      }${late ? ` · ${t('billing.schedule.overdue')}` : ''}`}
                       time={<span className="crm-num">{fmt.aed(i.totalAed)}</span>}
                       end={
-                        <Pill tone={paid ? 'ok' : 'bad'} dot>
-                          {paid ? t('billing.schedule.paid') : t('billing.schedule.mustPay')}
+                        <Pill tone={paid ? 'ok' : partly(i) ? 'warn' : 'bad'} dot>
+                          {paid
+                            ? t('billing.schedule.paid')
+                            : partly(i)
+                              ? t('billing.schedule.partlyPaid')
+                              : t('billing.schedule.mustPay')}
                         </Pill>
                       }
                     />

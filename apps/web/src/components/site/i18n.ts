@@ -13,6 +13,7 @@ const UI = {
   whatsapp: { en: 'WhatsApp us', ar: 'راسلنا على واتساب' },
   call: { en: 'Call us', ar: 'اتصل بنا' },
   directions: { en: 'Get directions', ar: 'احصل على الاتجاهات' },
+  openInMaps: { en: 'Open in Google Maps', ar: 'افتح في خرائط Google' },
   closed: { en: 'Closed', ar: 'مغلق' },
   today: { en: 'Today', ar: 'اليوم' },
   hours: { en: 'Opening hours', ar: 'ساعات العمل' },

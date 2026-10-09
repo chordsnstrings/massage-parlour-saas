@@ -1,4 +1,5 @@
 import '@fontsource-variable/dm-sans'
+import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './marketing.css'
 

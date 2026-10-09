@@ -20,6 +20,8 @@ export type SiteStaff = { id: string; name: string; photoUrl: string | null; bio
 export type SiteBranch = {
   name: string
   address: string | null
+  /** Exact Google Maps pin set by the spa (else address links search Maps for the address). */
+  mapsUrl: string | null
   phone: string | null
   whatsappE164: string | null
   openingHours: OpeningHours

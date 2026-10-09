@@ -1,12 +1,16 @@
 import type { ComponentConfig } from '@puckeditor/core'
-import { type HtmlImageAdjust, htmlDesignDocument } from '@spa/core'
+import { type HtmlDesignLink, type HtmlImageAdjust, htmlDesignDocument } from '@spa/core'
+import { ui } from '../i18n'
 import { bookHref, mapHref, pageHref, phoneHref, whatsappHref } from '../links'
 import type { SiteMeta } from '../types'
 
 /** Block type of an uploaded HTML design (one per page; the page's root carries `htmlDesign: true`). */
 export const HTML_DESIGN = 'HtmlDesign'
 
-/** Live spa data an uploaded design can show: `{{spa_name}}`, `{{book_url}}`, … (HTML-escaped). */
+/**
+ * Live spa data an uploaded design can show: `{{spa_name}}`, `{{book_url}}`, … (HTML-escaped). `{{map_url}}` is the
+ * branch's exact Google Maps pin when set (else an address search); `{{address}}` in page text becomes a link to it.
+ */
 export const HTML_DESIGN_PLACEHOLDERS = [
   'spa_name',
   'book_url',
@@ -28,10 +32,15 @@ export function htmlDesignValues(meta: SiteMeta): Record<(typeof HTML_DESIGN_PLA
     phone: branch?.phone ?? '',
     phone_url: phoneHref(meta) ?? book,
     address: branch?.address ?? '',
-    map_url: branch?.address ? mapHref(branch.address) : book,
+    map_url: mapHref(meta) ?? book,
     site_url: pageHref(meta, ''),
   }
 }
+
+/** Placeholders that render as links when used in page text (inside attributes they stay plain values). */
+export const htmlDesignLinks = (meta: SiteMeta): Record<string, HtmlDesignLink> => ({
+  address: { href: mapHref(meta), label: ui('openInMaps', meta.locale) },
+})
 
 export { htmlDesignDocument }
 
@@ -55,7 +64,13 @@ export const HtmlDesign: ComponentConfig<Props> = {
     return (
       <iframe
         title={meta.data.tenant.name}
-        srcDoc={htmlDesignDocument(html, htmlDesignValues(meta), Boolean(meta.editing), images ?? [])}
+        srcDoc={htmlDesignDocument(
+          html,
+          htmlDesignValues(meta),
+          Boolean(meta.editing),
+          images ?? [],
+          htmlDesignLinks(meta),
+        )}
         sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         className="site-html-design"
         style={{ display: 'block', width: '100%', height: '100dvh', border: 0 }}

@@ -4,7 +4,7 @@ export const RESERVED_SLUGS = new Set(
     'www app admin api mail email smtp imap pop ftp cdn assets static media img status help support docs blog ' +
     'customers dev staging test demo preview login logout signup register invite account accounts dashboard ' +
     'billing pay payments book booking shop store spa spas ns ns1 ns2 mx m mobile wa whatsapp instagram google ' +
-    'website files domain s'
+    'website files domain s oauth'
   ).split(' '),
 )
 

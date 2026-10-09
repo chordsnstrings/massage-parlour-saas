@@ -819,6 +819,8 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   `services.manage`), a link to the live site. The site's service/price blocks read services live (`site/data.ts`), so
   edits show without a republish. Studio status (review/approve) and publishing are studio-only and unchanged; the
   old requests list stays visible to the studio for history; `requestChangeAction` is removed.
+- **Prompt editing (2026-10-09, §18.2):** Studio "Ask AI to edit" and the Claude MCP connector (`/api/mcp`) edit drafts
+  through one ops layer (`site-edit.ts`); only `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; theme/renames draftable.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
 - Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
@@ -842,6 +844,7 @@ until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept v
   Meta webhooks/deauthorize/data-deletion, worker jobs.
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
+- **Colours + fonts superseded 2026-10-09 (owner): brand look, see §18.6.** Layout, density and menu stay as below.
 - Design `docs/design/be-relax-crm.html`, spec + gap analysis `docs/design/crm-spec.md`. Same design for every spa; the
   sidebar shows the spa's own logo + name (logo captured at onboarding/settings). Super-admin console unchanged.
 - ~15–20% more compact than the HTML; light only. Menu per the design + a Sales entry.
@@ -1178,7 +1181,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G2 super-admin granted to any signup whose email is in `PLATFORM_ADMIN_EMAILS` with no email verification (provision.ts, seed.ts) ·
   ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
   G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
-  components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
+  components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
@@ -1209,6 +1212,20 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
 - Online booking from tenant sites stays.
 
 ### 18.2 Done (2026-10-09)
+- **Two more super-admins (owner decision 2026-10-09):** `ahmedabouseif1997@gmail.com` and `sefohh.aa45@gmail.com`
+  are super-admins and the **only** AI site editors; the existing production super-admin (`ahmed@arks.ae`, droplet
+  base env) stays. deploy/droplet/compose.yml appends both to `${PLATFORM_ADMIN_EMAILS:-}` for web, worker and
+  migrate/seed (the base env can't be edited without SSH) and defaults `SITE_AI_EDITOR_EMAILS` to exactly the two (an
+  env / secrets-overlay value replaces that default). They get a login through the new admin join page and the
+  console "Super-admins" card (§18.3 "Super-admin join").
+- **Map links (owner request 2026-10-09):** every spa-website address (all templates, footer, placeholder site,
+  booking page, uploaded HTML designs via `{{address}}`) opens Google Maps in a new tab. Optional per-branch
+  "Google Maps link" (`branches.maps_url`, Settings → Business + Settings → Branches; only Google Maps URLs) pins the
+  exact place; else the address is searched. Review fixes: explicit Google host allowlist (no lookalike TLDs, no /url
+  redirector), the normalized `URL.href` is stored, `{{address}}` links only in real text (quote-aware tokenizer),
+  and `runMigrations` stops a deploy whose journal holds a migration older than the newest applied one (merge order
+  with the AI branch's 0033: the branch merging second regenerates its migration as 0034). Details: CODEMAP
+  "Site builder → Map links".
 - **G1:** compose passes `R2_*` to the worker; `offsiteConfig` falls back to the `S3_*` bucket (`backups/`) when no `R2_*`
   is set (separate bucket recommended); `db-backup` records ok/skipped/failed in `platform_job_runs`; console overview
   card "Off-site backup" warns when the last ok run is missing or > 36 h old.
@@ -1299,3 +1316,251 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   bookings already had them; added on the overview (KPIs, "All branches" for unrestricted members) and the public
   booking page (`?branch=`, select when > 1 open branch; slots + booking use it). Archived branches drop out of
   pickers, rooms/hours screens and online booking. Services in services/branches.ts.
+
+### 18.3 Spa applications (owner decision 2026-10-09)
+New spas **apply**; the platform owner accepts or rejects. Self-serve instant sign-up (trial) is gone.
+- **Apply** (app host `/signup`, marketing CTAs "Apply for your spa" / "Get started"): name, work email, password (the
+  login is created now), UAE mobile (required, stored E.164 `+9715…`), spa name, web address (live check: format,
+  existing spa, **or held by another pending application**), emirate (7) + street address, optional logo (processed
+  512 px WebP, kept on the application), plan (active plans with yearly price + setup fee), preferred start (≥ today,
+  Dubai), notes. No trade licence / TRN / size. Terms/Privacy links stay. A signed-in login with no spa and no
+  application (e.g. OAuth later, or an existing owner adding a spa) gets the same form without the login fields.
+  One pending application per login (partial unique index); a pending application holds its slug (partial unique).
+- **Before approval** the login is **locked**: with no spa it only sees `/application` (EN + TH, auth layout: status +
+  everything sent, sign-out). **No 2FA** to apply or to see it; the G23 owner/manager 2FA rule (default on, unchanged)
+  applies once they open the dashboard. Dashboard index / account page send it to `/application`.
+- **Owner notified:** email to `PLATFORM_ADMIN_EMAILS` (`sendStaffEmail`, never fails the submission), console nav
+  "Applications" with a pending-count badge, overview card "Spa applications".
+- **Console `/applications`** (super-admin; `requirePlatformAdmin` in pages and actions): status filter (pending first,
+  oldest first), detail = every field + logo + live slug check. **Reject**: optional reason + "Show reason to
+  applicant" → login **disabled** (`user.disabled_at`) and its sessions deleted — unless the login is also an active
+  member of another spa or a super-admin (then only the application closes). **Accept**: plan + start date (prefilled)
+  + setup payment when the plan's fee > 0: Paid in full / Deposit (amount > 0 and < the setup-fee invoice total incl.
+  VAT), payment date (≤ today), cash / bank transfer / credit card (`card`), optional reference + note.
+- **Accept = one platform transaction** (`acceptApplication`, services/applications.ts): `provisionTenantTx` (tenant
+  **active**, default branch with "street, Emirate" + mobile, system roles, owner membership, `require2fa: true`), the
+  subscription **active** from the start date for one year (`current_period_end` = start + 12 months, plan price/fee/
+  interval), the setup-fee platform invoice via `createPlatformInvoice` (numbering + VAT; validated before numbering;
+  due = start date or today), the payment via `recordPlatformPayment` (shared with console "Record a payment") → full =
+  paid, deposit = issued with a balance due; logo → `setTenantLogo`. Plan invoices are still issued with "Generate
+  payment schedule". The rest of a deposit is recorded later with Record a payment. Payments are recorded, never processed.
+- **Balance due** shows on the console spa page (Paid / Balance columns, "part paid" = net received > 0, header
+  "Due now" (due date ≤ today) + "Outstanding" (all open, incl. later installments)) and the spa's Billing page
+  ("Paid AED x · balance due AED y", pill "Balance due"); Pay-by-card is hidden on a partly paid invoice and refused by
+  the action too (`cardPayableInvoice`: Stripe charges a whole invoice); a Checkout paid after another payment is still
+  recorded but its payment note says "OVERPAID by AED x: refund or credit it".
+- **Disabled logins:** Better Auth `databaseHooks.session.create.before` refuses a session (`ACCOUNT_DISABLED`, + the
+  reason when shared) → the sign-in page shows "Application not approved" (+ reason); web `getSession` reads
+  `user.disabled_at` fresh, so a cached cookie session stops at once. Emails: accepted (sign-in link, 2FA note),
+  rejected (reason only if shared). Audit: `platform.application.submitted` / `accepted` (plan, start, setup payment
+  summary) / `rejected` (reason, share flag, login disabled, sessions revoked).
+- **Data:** `spa_applications` (platform-only RLS; `created_tenant_id`, never `tenant_id`; `setup_payment` jsonb
+  summary; logo bytes) + `user.disabled_at`. No console "create spa" existed; existing spas are unaffected.
+- **e2e:** `signUpOwner` = `applyForSpa` (UI) + `approveApplication` (services fast path); `applications.spec` covers
+  apply → waiting page → console accept with a deposit by bank transfer → sign-in → 2FA enrol → dashboard + billing
+  balance, and the reject path. `signInPlatformAdmin` creates its login through the auth API (no spa).
+- **Review fixes (2026-10-09):** apply is limited per IP (5/hour, 20/day; Postgres `rate_limits`, `hitRateLimit` +
+  web `withinIpLimit`; production only, off with `AUTH_RATE_LIMIT=off` like Better Auth's limiter) because the
+  action creates the login server-side, past Better Auth's HTTP limiter. `createPlatformInvoice` checks for an existing
+  setup / same plan installment before drawing a number (no gaps when "Generate payment schedule" runs after an
+  accept); `recordPlatformPayment` takes `today` (reminders resolve only when nothing is overdue today). Rejection
+  email says "account closed" only when the login was disabled. Pricing cards link `/signup?plan=<id>` (preselected);
+  "another spa" copy only for a login that has a spa; the waiting page shows the full web address; phones show the
+  Applications count on the bottom tab. e2e: a signed-in owner on the console gets 404 for `/applications(/id)` and
+  the super-admin's captured accept/reject calls replayed with the owner's session change nothing.
+- **Super-admin join (owner, 2026-10-09):** the public sign-up is the application form, so `PLATFORM_ADMIN_EMAILS`
+  addresses create their login on the admin host **`/join`** (linked "Create a super-admin account" from the admin
+  sign-in page only): name, email, password → Better Auth sign-up (no spa, no application) + verification email
+  (callback = console). Unlisted email → neutral "This email address cannot create a super-admin account." (per-IP
+  limit 5/h, 20/day counted before the check). Signed in but not verified → `/join` shows how to finish (+ "Send the
+  link again"), and the console redirects there instead of a 404. Verified → console → promoted (G2) → 2FA enrolment
+  (G3) → console. The application form refuses a listed email before creating anything ("…create its login on the
+  admin join page instead: <url>/join"; `submitApplication` refuses it too). Listed / super-admin logins are never
+  "locked" applicants: dashboard home, `/application` and `/signup` send them (no spa) to the console, so 2FA
+  enrolment is always reachable. **Bootstrap without email:** console Company → **Super-admins** card lists
+  super-admins (email, verified, 2FA, still listed) and listed emails that aren't yet (no login / not verified /
+  verified → promoted on first visit / login closed); a super-admin **with 2FA** can "Mark email verified" (or "Make
+  super-admin now") for a registered, not-disabled listed login only → promoted at once (it still enrols 2FA).
+  Audited: `platform.admin.joined`, `platform.admin.verification_resent`, `platform.admin.email_verified`. No
+  removal/demotion anywhere (and never on yourself). `listedAdminEmails` drops empty segments + duplicates and also
+  splits on spaces/semicolons. e2e `admin-join.spec` (confirm path, link path + app-home redirect, refusals).
+  Also fixed: the admin sign-in's "Forgot password?" pointed at the admin host (404; its link prefetch never
+  completed, which stalled `networkidle` in site-mcp.spec once a second link was on the page) → now the app host's
+  reset page (`LoginForm forgotHref`).
+- Not built (later if wanted): re-opening a disabled login from the console, editing an application, Google sign-in,
+  holding the slug / notifying only after email verification, expiring unverified pending applications.
+- **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT
+  only (never publish), both limited to `SITE_AI_EDITOR_EMAILS` (comma-separated, verified email, must also be a
+  super-admin with 2FA; empty = nobody; re-checked on every action/request, never hard-coded).
+  - **A — ops layer** `@spa/services` `site-edit.ts`: `runSiteEdit` (update / add (index, after/before, into slot) /
+    preset / move / remove block, theme, add_page, rename_page, html_design; zod shapes + `applySiteEditOps` against
+    the Puck block schema; all-or-nothing; `dryRun` returns the resulting drafts; saves via `saveDraft` / `addPage` /
+    `renamePage` / `updateDraftTheme`), `restoreSiteEdit` (undo), `getSiteForEdit`, `blockCatalogue`,
+    `siteEditAuditData` (callers audit). **Decision:** theme + renames are now draftable: `sites.theme_draft` (editor
+    and previews show it; `publishPage` makes it live) and `site_pages.pending` (rename of a live page, applied by its
+    next publish). The Theme panel stays live and also updates a pending draft theme.
+  - **B — Studio "Ask AI to edit"** (R16 panel): plan (`site_editor` agent, any instruction language) → dry run →
+    canvas preview → Apply (same ops through A) → history of the last 5 with Undo. Theme ops go to the draft theme.
+  - **C — Claude connector** `/api/mcp` (remote MCP, Streamable HTTP, `@modelcontextprotocol/sdk` 1.30.1): OAuth 2.1 =
+    Better Auth `@better-auth/mcp` 1.7.7 (+ jwt plugin): DCR, PKCE, RFC 9728/8414 metadata under `/.well-known`,
+    sign-in + 2FA + consent (`/oauth/consent`) on the app host. Tools: list_spas, get_site, list_block_types,
+    update_block, add_block, remove_block, move_block, set_theme, add_page, rename_page, replace_html_design,
+    preview_link — no publish tool. Per call: token → allow-list → live consent → 60 calls/min per token; audit
+    `site.mcp.<tool>` "via Claude (MCP)". Console → Websites "Connect Claude" card: URL + copy, connected clients,
+    Revoke (deletes consent + tokens → next call 401). Owner setup: deploy/droplet/README.md "Connect Claude".
+  - **Review fixes (2026-10-09):** OAuth — clients may only register Claude's callbacks (`mcpRedirectUris()`:
+    claude.ai / claude.com `…/api/mcp/auth_callback`, env `MCP_REDIRECT_URIS` replaces; loopback only while APP_URL is
+    http); `validateRedirectUri` holds every authorize to the same list (no consent phishing, no open redirect, legacy
+    rows included); client admin endpoints disabled, `clientPrivileges` = listed editor; consent page shows the
+    redirect host (no "Claude" fallback name); grants audited `platform.mcp.client_authorized`; worker
+    `oauth-clients-prune` (hourly) drops clients without consent after 24 h; Caddy trusts Cf-Connecting-Ip /
+    X-Forwarded-For only from Cloudflare ranges and overwrites Cf-Connecting-Ip (forged-IP rate-limit bypass).
+    Drafts — **decisions:** the Theme panel shows the LIVE theme and saves only changed fields (live + into a draft
+    theme); every draft writer takes `lockSite` (row lock on `sites`); the Studio editor sends an `EditStamp` (page
+    version + draft theme/rename hash) with save / publish / Ask AI apply / undo and is refused ("changed elsewhere —
+    reload") when stale; editor publish = one transaction and its dialog lists what also goes live (+ contrast of
+    other live pages under the draft theme); "Publish site" and the overview count/publish theme-only and rename-only
+    changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
+    publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
+    (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+### 18.5 Marketing: Spa CRM page (owner 2026-10-09)
+- Owner request: the marketing site sells the spa CRM (the dashboard we build and run for each spa), not only websites,
+  and says it is in English **and Thai**. New page `/crm` (`app/marketing/crm/page.tsx`, metadata + OG): hero (CTAs
+  "Apply for your spa" → app `/signup` via `requestUrls`, "See pricing"), "In English or ภาษาไทย" EN/TH toggle demo, 12
+  modules (each verified against §14.6–§18: calendar & rooms/EXCLUDE, all channels on one calendar, POS with packages,
+  gift cards, memberships (G15), full tax invoice (G16), staff/commission (payroll + WPS; tips + advances paid out separately, R2), therapist own day + earnings
+  (G14), WhatsApp click-to-send, clients + intake forms, reports/KPIs, multi-branch (G22), roles + audit log, 2FA on by
+  default (G23)), "Set up for you" (apply → we build menu/rooms/staff/hours with you → first import → team invites;
+  matches the Contact copy), closing CtaBand.
+- **Demo rule:** the mock's labels are the dashboard's real catalogue strings (`@spa/core/i18n`, resolved on the server in
+  `components/marketing/crm-demo-copy.ts`; the client gets only those strings) — never hand-typed Thai. Typed names
+  (clients, therapists, treatments, products) stay untranslated and are dotted-underlined; "Walk-in" is a label, so it
+  translates. Swap animation is CSS and off under `prefers-reduced-motion`. Marketing copy itself is English; it does
+  not claim the Thai is native-reviewed (it still needs that review, §14.6).
+- Home: new "Spa CRM" section (EN/TH label pairs from the catalogues, link to /crm); hero notes now "Sites in English &
+  Arabic · Dashboard in English & Thai". Features: "Your team's language" band (link to /crm) + team-area bullet.
+  FAQ "Is it in Arabic?" no longer says the dashboard is English-only. Thai font: the marketing layout loads
+  `@fontsource-variable/noto-sans-thai`; it sits after DM Sans/Space Grotesk in `--font`/`--head`, so it supplies Thai
+  glyphs only (typed Latin names keep their face in EN and TH; only the Thai subset loads), as in crm.css.
+- **Pending (shell.tsx is being rebuilt on another branch):** add `| 'crm'` to `MarketingPage`, NAV entry
+  `{ key: 'crm', href: '/crm', label: 'Spa CRM' }` before 'Website studio', footer Product column `NAV.slice(0, 4)`
+  (else Pricing drops out), then `/crm` uses `active="crm"` (today `active="home"`, so no nav item is marked).
+  No sitemap exists yet (G19), so nothing to register there.
+- e2e: `marketing-crm.spec` (page, CTAs, toggle → Thai catalogue strings, typed names stay, home/features links);
+  `platform-domains.spec` also checks /crm links on the second domain.
+
+### 18.4 Contact enquiries (owner 2026-10-09)
+Marketing **Contact** page (`marketing/contact`) gets an enquiry form; the owner works enquiries in the console.
+- **Form** (English only, like all marketing): your name, phone (UAE mobile 05…/5…/9715… or international with + / 00,
+  `toE164` in core whatsapp.ts → stored `+…`; UAE landlines with the trunk 0 too), email (lowercased), spa name, "What
+  do you need?" (required, ≤ 2000 chars, live counter) — all required. Server-side zod (`enquirySchema`, services
+  enquiries.ts; the service re-parses, never stores invalid input); errors inline per field (`aria-invalid` +
+  `aria-describedby`) + a summary line; typed values stay on error (transition submit, not `action=`); success panel
+  "Thanks — we'll reply within one working day." (focused). 360 px safe; styles `.mkt-enq*` / `.mkt-input` in marketing.css.
+- **Spam:** honeypot `extra_details` (off-screen, `aria-hidden`, no tab stop) → answered like a success, nothing stored /
+  counted / sent; then per-IP limit **5/hour, 20/day** (`ENQUIRY_LIMITS`, web `withinIpLimit('enquiry', …)` → services
+  `withinRateLimits` over `rate_limits`; production only, `AUTH_RATE_LIMIT=off` like apply) — counted after validation
+  so fixing typos doesn't use the quota; refused → "email us at <contact email>".
+- **Stored:** `contact_enquiries` (platform-only RLS, no `tenant_id`): name, phone, email, spa_name, message, status
+  `new | contacted | closed`, admin_note, ip_hash (HMAC-SHA256 of the IP with BETTER_AUTH_SECRET, 32 hex — the raw IP is
+  only in the day-long rate-limit keys), user_agent (≤ 300), handled_by/at, timestamps. Audit
+  `platform.enquiry.received` (no actor, **`ip: null`** — `audit()` takes an `ip` override, so the raw address is not
+  stored next to the enquiry) and `platform.enquiry.updated` (changed, status from→to, note). Name / spa name are one
+  line (line breaks, control chars → space, bidi overrides dropped: they go into the email Subject and logs); the
+  message keeps newlines/tabs only (NUL etc. dropped). Phones: `toE164` drops a trunk 0 — `(0)`, after +971, and
+  after a separately typed country code (+44 07700…, 0049 030…) except countries that keep it (+39 Italy, …).
+- **Notify:** after the reply (`after()`), `sendStaffEmail` to every `PLATFORM_ADMIN_EMAILS` address with
+  **reply-to = the sender** (`StaffEmail.replyTo` → Resend `reply_to`) + console link; failures are logged, never
+  fail the submission. Console nav **Enquiries** (after Applications) with the count of `new` (`newEnquiryCount`).
+- **Console `/enquiries`** (`requirePlatformAdmin` in pages + action): newest first, filter New / Contacted / Closed /
+  All (default All, with counts), search name / email / spa (and phone digits, 4+; the local 05… / 00971… forms match
+  the stored +971…). Empty filter → "No <status> enquiries" ("No enquiries yet" only under All). Detail page: message, all fields,
+  **Call** (`tel:`), **WhatsApp** (`wa.me` click-to-send draft, locked comms rule), **Email** (`mailto:` with subject),
+  last handled (who/when); Follow-up form = status radio + internal note (≤ 2000) → `updateEnquiry` (row-locked, stamps
+  handled_by/at only when something changed; "No changes" otherwise). No "convert to application" (not needed).
+- **Contact email:** the page shows the console's company email when set, else `PLATFORM_CONTACT_EMAIL` =
+  **ask@spamanagement.co** (core email.ts; replaces the old hello@ fallback); the seed sets it for new installs.
+  **Owner:** if Console → Company → Email holds another address, change it there to ask@spamanagement.co. Make sure
+  ask@spamanagement.co receives mail (mailbox/forwarding at the domain's email provider).
+- **Tests:** core `toE164` + Resend `reply_to`; services `enquiries.test.ts` (store/normalise, one-line fields,
+  validation, 5/hour limit, list/search incl. local UAE phone/counts, status + note, spa role can't read/write); e2e
+  `enquiries.spec.ts` (360 px, inline error keeps values → sent → super-admin badge + search + links → contacted + note,
+  badge drops, audit, empty Closed filter; honeypot dropped; console needs sign-in; with a console Resend key the
+  admin email lands in the e2e outbox with reply-to = sender + console link, received audit row has no IP).
+### 18.7 Marketing footer (owner 2026-10-09)
+Rich SaaS footer (`components/marketing/shell.tsx` `Footer`, `.mkt-foot/.mkt-fgrid/.mkt-fnav/.mkt-fhead/.mkt-fbot`):
+brand block (logo, "Calm software for busy spas.", one-line product summary) + `nav "Footer"` with five columns —
+Product (Features, Website studio, Pricing, Apply for your spa, Sign in), Features (`/features#bookings|follow-up|money|
+marketing|team|automations`), Website studio (`/website-builder#make-it-yours|how-we-build-it|section-designs|
+after-launch|included`), Built for the UAE (`/pricing#plans`, VAT + WhatsApp → features anchors, English & Arabic →
+`#included`, `/pricing#faq`), Company (Contact, the contact-page email (super-admin Settings, fallback
+`DEFAULT_CONTACT_EMAIL` = ask@spamanagement.co), Privacy, Terms, Data deletion) — then "© year {LEGAL.companyName} ·
+{LEGAL.brand}" + "Client payments are recorded, never processed. WhatsApp reminders and follow-ups are sent by you, from
+your own number." (scoped on purpose: the subscription can be paid by card via Stripe, and the Instagram DM agent replies
+automatically). Only existing pages/sections are linked
+(no multi-branch section exists, so none); section `id`s are stable link targets. Layout: brand + 5 cols ≥ 1100 px,
+brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, the mailto address
+(Settings email or the default), that every footer link answers 200 and that every `#anchor` exists.
+### 18.6 Spa CRM look + PWA (owner 2026-10-09)
+- **Look ✅ (branch feat/crm-brand-theme)** — replaces the blue Be Relax colours (§14.6 layout/density unchanged):
+  the sign-in brand (`components/brand-app.css`) made lighter, every spa's CRM identical. Tokens only, in
+  `app/dashboard/[tenant]/crm.css` `:root:has(.crm)`: fonts `--crm-font` (DM Sans) / `--crm-head` (Space Grotesk:
+  h1–h3, top-bar title, spa name) / `--crm-num` (Space Grotesk for KPI/stat figures in both languages); Thai puts
+  Noto Sans Thai Variable first in `--crm-font` + `--crm-head` (no tofu, Thai headings in Noto). Colours: frame
+  `--crm-bg` #E7EFE6 mint, page `--crm-page` #F8FAF5, sidebar `--crm-side-bg` #F5F8F1, cards white, primary
+  `--crm-accent` #0F6B4B (ink #0A4F37), lime `--crm-lime` #D9F26A only for the active menu item (lime wash + green
+  start bar), nav count badges, `acc` pills (`--crm-lime-soft`) and the keyboard focus halo (green 2 px ring + lime
+  inside). Semantic colours darkened to pass AA on their tints: ok #13773F, warn #8A5A00, bad #B93B1B, info teal
+  #1B6684. Avatars and chart palette re-picked (white initials AA; chart: green, mint, blue, amber, orange, violet,
+  magenta `--crm-magenta` #B03F78 — no second green, 7 booking sources). WCAG AA: text pairs ≥ 4.5:1; form-control
+  edges `--crm-ctl-line` #848E88 ≥ 3:1 (1.4.11, kit Input/Select/Textarea via `--ui-ctl-border`, `.crm-inp`); card
+  dividers `--crm-line` stay soft (decorative). The html element takes `--crm-font` too (`font-sans` unused in the CRM).
+- **Platform badge ✅** — `Logo` (components/brand.tsx, 28 px tall) at the sidebar foot under the plan card (also in
+  the phone drawer), links to `canonicalUrls().marketing()` in a new tab (`rel=noopener`, aria-label "Spa
+  Management", brand name not translated). The whole sidebar (and phone drawer) scrolls as one at every height — the
+  menu never scrolls inside its own box; the foot sits at the bottom when everything fits (`margin-top:auto`) and
+  after the menu when it doesn't, so it never covers a menu item (shell e2e checks it). Badge 24 px on ≤700 px tall
+  screens. Not on the no-spa/locked pages.
+- **Open owner question (2026-10-09):** "same theme as the log in like fonts sizeing" — the CRM has the sign-in font
+  families + colours but keeps the compact type scale (titles 18–20 px, 13 px body, 34 px buttons) vs sign-in
+  (28–36 px titles, 15 px body, 44 px controls, 700 headings). Raise the CRM type tokens only if the owner says so;
+  record the answer here.
+- **PWA** — separate branch (manifest, icons = spa logo + "<first word> Management", service worker, install item
+  in the user menu).
+### 18.6 Spa CRM look + PWA (owner 2026-10-09)
+Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look; the CRM layout/screens stay:
+- **Look:** the spa dashboard uses the login's brand theme (same fonts and sizing, colours lighter); the platform's
+  logo sits small in a premium spot of every spa's CRM without affecting the CRM UX (separate branch: crm.css tokens,
+  fonts, sidebar badge).
+- ✅ **Installable app for every spa's CRM** (done 2026-10-09, branch feat/spa-pwa):
+  - Manifest `{dashboard}/app.webmanifest` (host routing `app.…/{slug}/app.webmanifest`, path routing
+    `/app/{slug}/app.webmanifest`): `name` = `short_name` = first word of the spa name + " Management" (core
+    `pwaAppName`: edge punctuation, possessive "'s" and a leading article — the/a/an/al/el/le/la — dropped; Arabic/Thai
+    words kept as typed; empty → "Spa Management"); `id` = `start_url` = `scope` = the dashboard path (`/{slug}`), so
+    each spa installs separately (scope is a path prefix: `/tamara` also covers a `/tamara-x` slug — harmless);
+    standalone, theme `#0f6b4b` (dark green), background `#f6f6f9`, `lang` en, `dir` ltr (auto for Arabic names).
+  - Icons `{dashboard}/app-icon/{key}/{192|512|maskable-512|apple-180}` (PNG): logo trimmed + centred on a white
+    tile (any = rounded, maskable = full bleed inside the safe zone, apple = full bleed); no logo → initials (first
+    letters of the first two words; non-Latin names use the slug's) in ink `#0b0b0f` on lime `#d9f26a`. Key = hash of
+    `ICON_VERSION` + logo file id (or initials) → `immutable` 1-year cache; a new logo = new URLs; old keys get the
+    current icon for 5 min. Public, cookie-free, only the logo-derived image; rendered once per key (in-memory LRU,
+    shared in-flight renders, 30 s slug cache + separate miss cache) — no DB rate-limiter writes. An unknown key
+    re-reads the spa at most once per 10 s per slug. A logo that can't be read right now (storage error, bad file)
+    gets the initials with `no-store` and no ETag (kept in memory 60 s only), so installs never keep a stand-in.
+  - `<head>` of `dashboard/[tenant]` only: manifest link, apple-touch-icon, apple-mobile-web-app-title/capable,
+    theme-color. Console and marketing keep the root `/manifest.webmanifest`.
+  - Service worker `public/sw.js` (one registration, scope `/`, same URL as push → no second worker; registered on
+    every dashboard load by `components/pwa` `PwaSetup`): every GET page load in scope is answered with its
+    navigation-preload response (one server request each — marketing, console, sites and OAuth callbacks included);
+    offline → dashboard loads only get the page's localised offline page ("You're offline — reconnect to continue",
+    EN/TH via `pwa.*` keys, built-in bilingual copy as fallback). Nothing else is cached; API, server actions,
+    POSTs, RSC fetches and files pass through untouched. Notification clicks reuse a window of the same spa only
+    (`{base}/{slug}`), else open a new one (Chrome opens it in that spa's installed app).
+  - "Install app" in the profile menu (Chrome/Edge/Android `beforeinstallprompt`, kept from first paint by an inline
+    listener; iOS → Share → Add to Home Screen steps sheet with the app name); one-time dismissible tip on the
+    dashboard home for owners/managers (dismiss remembered per browser). Hidden when already running standalone.
+  - Tests: core `pwa.test.ts` (name rule, initials); e2e `pwa.spec.ts` (manifest/icons cookie-free for a logo spa and
+    a no-logo spa, 304/404, `<head>`, console/marketing manifests, SW control + Chrome installability via CDP,
+    offline page, one server request per page load via a counting proxy, same-spa notification windows, uncached
+    stand-in icon for an unreadable logo + throttled re-read, menu + tip + iOS steps).

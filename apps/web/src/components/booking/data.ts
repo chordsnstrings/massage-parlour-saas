@@ -1,4 +1,4 @@
-import { addDays, businessDateOf, type OpeningHours, openIntervals } from '@spa/core'
+import { addDays, branchMapsHref, businessDateOf, type OpeningHours, openIntervals } from '@spa/core'
 import {
   branches,
   serviceCategories,
@@ -121,6 +121,7 @@ export async function loadBookingCatalog(
         id: branch.id,
         name: branch.name,
         address: branch.address,
+        mapsHref: branchMapsHref(branch),
         hasWhatsapp: Boolean(branch.whatsappE164),
       },
       branches: all.map((b) => ({ id: b.id, name: b.name, address: b.address })),

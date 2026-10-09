@@ -5,18 +5,28 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { LogoInput } from '@/components/media/logo-input'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+import { Input, Select, Textarea } from '@/components/ui/input'
 import { useT } from '@/i18n/client'
 import { appPath } from '@/lib/paths'
 import { checkSlugAction, signupAction } from './actions'
 
+/** "Apply for your spa" (PLAN §18.3): login (when signed out) + spa details; the owner reviews it before it opens. */
 export function SignupForm({
   address,
   signedIn,
+  plans,
+  planId,
+  emirates,
+  today,
   logo,
 }: {
   address: { prefix: string; suffix: string }
   signedIn: boolean
+  plans: { id: string; label: string }[]
+  /** Preselected plan (`?plan=` from the pricing page, else the first). */
+  planId?: string
+  emirates: { key: string; label: string }[]
+  today: string
   logo: { label: string; hint: string; tooLarge: string }
 }) {
   const t = useT()
@@ -48,6 +58,9 @@ export function SignupForm({
     <ActionForm action={signupAction} className="space-y-5">
       {!signedIn && (
         <>
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+            {t('auth.signup.loginSection')}
+          </h2>
           <Field label={t('auth.yourName')} name="name">
             <Input id="name" name="name" autoComplete="name" required />
           </Field>
@@ -59,6 +72,12 @@ export function SignupForm({
           </Field>
         </>
       )}
+      <h2 className="pt-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {t('auth.signup.spaSection')}
+      </h2>
+      <Field label={t('auth.signup.phone')} name="phone" hint={t('auth.signup.phoneHint')}>
+        <Input id="phone" name="phone" type="tel" autoComplete="tel" inputMode="tel" required />
+      </Field>
       <Field label={t('auth.signup.spaName')} name="businessName">
         <Input
           id="businessName"
@@ -124,8 +143,48 @@ export function SignupForm({
           </AnimatePresence>
         </div>
       </Field>
+      <div className="grid gap-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <Field label={t('auth.signup.emirate')} name="emirate">
+          <Select id="emirate" name="emirate" defaultValue="" required>
+            <option value="" disabled>
+              {t('auth.signup.emiratePick')}
+            </option>
+            {emirates.map((e) => (
+              <option key={e.key} value={e.key}>
+                {e.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={t('auth.signup.street')} name="street">
+          <Input
+            id="street"
+            name="street"
+            autoComplete="street-address"
+            placeholder={t('auth.signup.streetPlaceholder')}
+            required
+          />
+        </Field>
+      </div>
       <Field label={logo.label} name="logo" hint={logo.hint}>
         <LogoInput tooLargeText={logo.tooLarge} />
+      </Field>
+      {plans.length > 0 && (
+        <Field label={t('auth.signup.plan')} name="planId">
+          <Select id="planId" name="planId" defaultValue={planId}>
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      <Field label={t('auth.signup.start')} name="start">
+        <Input id="start" name="start" type="date" min={today} defaultValue={today} required />
+      </Field>
+      <Field label={t('auth.signup.notes')} name="notes">
+        <Textarea id="notes" name="notes" rows={3} placeholder={t('auth.signup.notesPlaceholder')} />
       </Field>
       <SubmitButton size="lg" className="w-full">
         {signedIn ? t('auth.signup.submitAdd') : t('auth.signup.submit')}

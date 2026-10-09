@@ -65,6 +65,8 @@ export const billing = {
     due: 'Due {date}',
     paid: 'Paid',
     mustPay: 'Must pay',
+    partlyPaid: 'Balance due',
+    balance: 'Paid {paid} · balance due {balance}',
     overdue: 'Overdue',
     empty: 'Your schedule appears here once your account manager issues it.',
     reminder:
@@ -74,6 +76,7 @@ export const billing = {
     cardsOff: 'Card payments aren’t switched on yet — pay by bank transfer or cash.',
     notFound: 'Invoice not found',
     notOpen: 'This invoice is not open for payment',
+    partlyPaid: 'Part of this invoice is already paid. Please pay the balance by bank transfer or cash.',
     noPage: 'Stripe did not return a payment page',
   },
 } as const

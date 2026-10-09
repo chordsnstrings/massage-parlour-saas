@@ -10,6 +10,8 @@ import { Card } from '@/components/ui/card'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { appPath } from '@/lib/paths'
 import { isPlatformAdmin } from '@/server/access'
+import { applicantState } from '@/server/applications'
+import { adminUrl } from '@/server/origin'
 import { requireUser } from '@/server/session'
 
 export default async function DashboardIndex() {
@@ -23,7 +25,15 @@ export default async function DashboardIndex() {
     .orderBy(asc(tenants.name))
   const admin = await isPlatformAdmin(session.user.id)
   if (spas.length === 1 && !admin) redirect(appPath(`/${spas[0]!.slug}`))
-  if (spas.length === 0 && !admin) redirect(appPath('/signup'))
+  // Spa applications (PLAN §18.3): a login without a spa sees its application's page, or applies.
+  const { application, isAdmin, listedAdmin } = await applicantState(session.user.id)
+  if (spas.length === 0 && !admin) {
+    // A super-admin row without 2FA, or a PLATFORM_ADMIN_EMAILS login not promoted yet: the console (it promotes a
+    // verified listed email and sends it to 2FA enrolment) — never the spa application form.
+    if (isAdmin || listedAdmin) redirect(await adminUrl())
+    redirect(appPath(application?.status === 'pending' ? '/application' : '/signup'))
+  }
+  const pendingApplication = application?.status === 'pending' ? application : null
   return (
     <div className="mx-auto min-h-dvh max-w-3xl px-5 py-8 sm:px-8 sm:py-14">
       <div className="mb-14 flex items-center justify-between">
@@ -52,11 +62,20 @@ export default async function DashboardIndex() {
           </StaggerItem>
         ))}
       </Stagger>
-      <Button variant="secondary" className="mt-6" asChild>
-        <Link href={appPath('/signup')}>
-          <Plus /> Add a spa
-        </Link>
-      </Button>
+      {pendingApplication ? (
+        <Card className="mt-6 px-5 py-4 text-sm" data-testid="pending-application">
+          <Link href={appPath('/application')} className="font-medium hover:text-accent">
+            {pendingApplication.spaName}
+          </Link>
+          <span className="text-muted"> · application waiting for approval</span>
+        </Card>
+      ) : listedAdmin ? null : (
+        <Button variant="secondary" className="mt-6" asChild>
+          <Link href={appPath('/signup')}>
+            <Plus /> Apply for another spa
+          </Link>
+        </Button>
+      )}
     </div>
   )
 }

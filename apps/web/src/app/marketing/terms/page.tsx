@@ -25,8 +25,9 @@ export default function TermsPage() {
       <h2>Subscription and billing</h2>
       <ul>
         <li>
-          The subscription is <strong>AED 24,000 per spa per year</strong>, invoiced in advance, unless we
-          agree otherwise in writing.
+          Subscription fees and any setup fee are the ones shown for your plan on our{' '}
+          <Link href="/pricing">pricing page</Link>, or as agreed with you in writing. They are invoiced in
+          advance.
         </li>
         <li>
           Invoices are paid by bank transfer or cash, or by card through a secure payment page where offered.

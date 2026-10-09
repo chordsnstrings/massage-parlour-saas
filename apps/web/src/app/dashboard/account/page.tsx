@@ -1,12 +1,14 @@
 import type { Messages } from '@spa/core/i18n'
 import { pushConfig } from '@spa/services'
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { NotificationsCard } from '@/components/push/enable-notifications'
 import { AppShell } from '@/components/shell/app-shell'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { I18nProvider } from '@/i18n/client'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
+import { applicantState } from '@/server/applications'
 import { adminUrl } from '@/server/origin'
 import { requireUser } from '@/server/session'
 import { PasswordCard, ProfileCard, TwoFactorCard } from './account-client'
@@ -21,6 +23,9 @@ export default async function AccountPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { user } = await requireUser()
+  // Spa applications (PLAN §18.3): until approved, an applicant only sees the waiting page.
+  // (`locked` is never set for a super-admin or a PLATFORM_ADMIN_EMAILS login: they must reach 2FA enrolment here.)
+  if ((await applicantState(user.id)).locked) redirect(appPath('/application'))
   // Sent here by the spa's "Require 2FA" policy (server/access.ts requireMember).
   const required = (await searchParams).require2fa
   const requiredSlug = typeof required === 'string' && /^[a-z0-9-]{1,63}$/.test(required) ? required : null

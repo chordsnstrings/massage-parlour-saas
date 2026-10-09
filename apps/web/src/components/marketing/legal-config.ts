@@ -1,10 +1,10 @@
 // OWNER MUST REVIEW: the legal pages (/privacy, /terms, /data-deletion) are a plain-English starting point, not legal
-// advice. Fill in the company details below (PLAN §16.2) and have the text checked before submitting to Meta/Google.
+// advice. Company details set by the owner 2026-10-09; have the text checked before submitting to Meta/Google.
 export const LEGAL = {
   /** Registered legal name of the platform company (must match Meta Business Verification). */
-  companyName: '[Company legal name]',
+  companyName: '1997labs',
   /** Registered address, including emirate. */
-  address: '[Registered address], United Arab Emirates',
+  address: 'Dubai, United Arab Emirates',
   /** Inbox for privacy, deletion and legal requests. */
   email: 'privacy@spamanagement.co',
   brand: 'spamanagement.co',

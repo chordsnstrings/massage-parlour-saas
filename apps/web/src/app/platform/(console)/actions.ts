@@ -1,15 +1,6 @@
 'use server'
 import { sendStaffEmail } from '@spa/core'
-import {
-  aiModelConfig,
-  plans,
-  platformDb,
-  platformInvoices,
-  platformPayments,
-  platformSettings,
-  subscriptions,
-  tenants,
-} from '@spa/db'
+import { aiModelConfig, plans, platformDb, platformSettings, subscriptions, tenants } from '@spa/db'
 import {
   createPaymentReminder,
   createPlatformInvoice,
@@ -18,13 +9,15 @@ import {
   encryptSecret,
   generateBillingSchedule,
   MIN_AUTO_PURGE_DAYS,
+  markListedAdminVerified,
   pauseTenant,
   purgeTenant,
+  recordPlatformPayment,
   resumeTenant,
   saveEmailSettings,
   setInvoicePaid,
 } from '@spa/services'
-import { eq, sum } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
@@ -135,7 +128,7 @@ export async function recordPaymentAction(
   const parsed = z
     .object({
       amountAed: money.refine((v) => Number(v) > 0, 'Enter an amount'),
-      method: z.enum(['cash', 'bank_transfer', 'other']),
+      method: z.enum(['cash', 'bank_transfer', 'card', 'other']),
       reference: text(120),
       receivedAt: date,
       invoiceId: z.union([z.uuid(), z.literal('')]).optional(),
@@ -144,28 +137,33 @@ export async function recordPaymentAction(
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const { invoiceId, ...d } = parsed.data
-  const db = platformDb()
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(platformPayments)
-      .values({ tenantId, invoiceId: invoiceId || null, recordedBy: user.id, ...d })
-    if (invoiceId) {
-      const [inv] = await tx.select().from(platformInvoices).where(eq(platformInvoices.id, invoiceId))
-      const [paid] = await tx
-        .select({ total: sum(platformPayments.amountAed) })
-        .from(platformPayments)
-        .where(eq(platformPayments.invoiceId, invoiceId))
-      if (inv && Number(paid?.total ?? 0) >= Number(inv.totalAed)) {
-        await tx
-          .update(platformInvoices)
-          .set({ status: 'paid', paidAt: new Date() })
-          .where(eq(platformInvoices.id, invoiceId))
-      }
-    }
+  let res: Awaited<ReturnType<typeof recordPlatformPayment>>
+  try {
+    res = await platformDb().transaction((tx) =>
+      recordPlatformPayment(tx, {
+        tenantId,
+        invoiceId: invoiceId || null,
+        recordedBy: user.id,
+        today: todayDubai(),
+        ...d,
+      }),
+    )
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({
+    tenantId,
+    actorUserId: user.id,
+    action: 'platform.payment.recorded',
+    data: { ...parsed.data, balanceAed: res.invoice ? res.balanceAed : undefined },
   })
-  await audit({ tenantId, actorUserId: user.id, action: 'platform.payment.recorded', data: parsed.data })
   revalidatePath(`/platform/tenants/${tenantId}`)
-  return ok('Payment recorded')
+  return ok(
+    res.invoice && Number(res.balanceAed) > 0
+      ? `Payment recorded · balance due AED ${res.balanceAed}`
+      : 'Payment recorded',
+  )
 }
 
 export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -402,6 +400,36 @@ export async function sendTestEmailAction(_p: ActionResult): Promise<ActionResul
   }
   await audit({ actorUserId: user.id, action: 'platform.email.test_sent', data: { to: user.email } })
   return ok(`Test email sent to ${user.email}`)
+}
+
+/**
+ * Super-admins card (owner, 2026-10-09): confirm a registered PLATFORM_ADMIN_EMAILS login's email (no working email
+ * yet) → promoted at once; it still enrols 2FA before its console opens. Only listed logins; never yourself.
+ */
+export async function markAdminVerifiedAction(userId: string, _p: ActionResult): Promise<ActionResult> {
+  const me = await admin()
+  const id = z.string().trim().min(1).max(200).safeParse(userId)
+  if (!id.success) return fail('Unknown login.')
+  let result: Awaited<ReturnType<typeof markListedAdminVerified>>
+  try {
+    result = await markListedAdminVerified(platformDb(), { actorUserId: me.id, userId: id.data })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({
+    actorUserId: me.id,
+    action: 'platform.admin.email_verified',
+    entity: 'user',
+    entityId: id.data,
+    data: result,
+  })
+  revalidatePath('/platform/settings')
+  return ok(
+    result.promoted
+      ? `${result.email} is a super-admin now (two-step verification is set up on its first console visit).`
+      : `${result.email} is confirmed.`,
+  )
 }
 
 /** Revalidates the console pages and the spa's dashboard (red bar + Billing page). */

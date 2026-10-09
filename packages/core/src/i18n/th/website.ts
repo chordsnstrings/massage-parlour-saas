@@ -44,6 +44,7 @@ export const website: Messages['website'] = {
   copyLink: 'คัดลอกลิงก์',
   pages: 'หน้า',
   pagesPending: { other: 'มี {count} หน้าที่ยังไม่ได้เผยแพร่การแก้ไข' },
+  themePending: 'มีการเปลี่ยนธีมเว็บไซต์ที่รอการเผยแพร่',
   allLive: 'ทุกหน้าออนไลน์แล้ว',
   noPages: 'ยังไม่มีหน้า',
   colPage: 'หน้า',

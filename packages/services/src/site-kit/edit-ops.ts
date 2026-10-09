@@ -32,8 +32,16 @@ export type SiteEditSchema = {
   presets: EditPreset[]
 }
 
-/** Where a block goes: after/before a block id, at the end of a block's slot, or (none) at the end of the page. */
-export type EditPlace = { after?: string; before?: string; into?: { id: string; slot: string } }
+/**
+ * Where a block goes: after/before a block id, into a block's slot, or (none) the page itself. `index` (0-based)
+ * picks the position in the page or in the `into` slot; without it the block goes at the end.
+ */
+export type EditPlace = {
+  after?: string
+  before?: string
+  into?: { id: string; slot: string }
+  index?: number
+}
 export type SiteEditOp =
   | ({ op: 'add'; type: string; props?: Record<string, unknown> } & EditPlace)
   | ({ op: 'preset'; key: string } & EditPlace)
@@ -234,6 +242,12 @@ function locate(data: EditPageData, id: string, schema: SiteEditSchema): Located
 function insert(data: EditPageData, node: PuckNode, place: EditPlace, at: string, ctx: Ctx) {
   const anchors = [place.after, place.before, place.into].filter((x) => x !== undefined && x !== null)
   if (anchors.length > 1) fail(`${at}: give only one of after / before / into`)
+  if (place.index !== undefined && place.index !== null) {
+    if (!Number.isInteger(place.index) || place.index < 0) fail(`${at}: index must be 0 or more`)
+    if (place.after || place.before) fail(`${at}: give index or after / before, not both`)
+  }
+  const position = (list: PuckNode[]) =>
+    place.index === undefined || place.index === null ? list.length : Math.min(place.index, list.length)
   if (place.into) {
     const target = locate(data, place.into.id, ctx.schema)
     if (!target) fail(`${at}: no block with id "${place.into.id}"`)
@@ -243,7 +257,7 @@ function insert(data: EditPageData, node: PuckNode, place: EditPlace, at: string
     const list = Array.isArray(target!.node.props[place.into.slot])
       ? (target!.node.props[place.into.slot] as PuckNode[])
       : []
-    list.push(node)
+    list.splice(position(list), 0, node)
     target!.node.props[place.into.slot] = list
     return
   }
@@ -255,7 +269,7 @@ function insert(data: EditPageData, node: PuckNode, place: EditPlace, at: string
     target!.list.splice(target!.index + (place.after ? 1 : 0), 0, node)
     return
   }
-  data.content.push(node)
+  data.content.splice(position(data.content), 0, node)
 }
 
 const labelOf = (schema: SiteEditSchema, type: string) => schema.blocks[type]?.label ?? type
@@ -267,6 +281,7 @@ const where = (schema: SiteEditSchema, data: EditPageData, place: EditPlace) => 
   if (place.after) return ` after ${name(place.after)}`
   if (place.before) return ` before ${name(place.before)}`
   if (place.into) return ` inside ${name(place.into.id)}`
+  if (typeof place.index === 'number') return ` at position ${place.index + 1}`
   return ' at the end of the page'
 }
 

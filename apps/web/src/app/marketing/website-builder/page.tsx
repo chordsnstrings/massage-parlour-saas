@@ -90,7 +90,7 @@ export default async function WebsiteStudioPage() {
           </p>
           <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
             <a href={signup} className="mkt-btn mkt-btn-primary">
-              Start your spa <ArrowRight />
+              Apply for your spa <ArrowRight />
             </a>
             <a href="#make-it-yours" className="mkt-btn mkt-btn-ghost">
               Try the styles
@@ -120,7 +120,7 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* How we build it */}
-      <section className="mkt-sec">
+      <section id="how-we-build-it" className="mkt-sec">
         <div className="mkt-wrap">
           <div data-rise className="mkt-shead">
             <p className="mkt-eyebrow">How we build it</p>
@@ -146,7 +146,7 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* Section library */}
-      <section className="mkt-sec mkt-dark">
+      <section id="section-designs" className="mkt-sec mkt-dark">
         <div className="mkt-wrap">
           <div data-rise className="mkt-shead">
             <p className="mkt-eyebrow">Crafted, not templated</p>
@@ -175,7 +175,7 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* After launch */}
-      <section className="mkt-band mkt-sec">
+      <section id="after-launch" className="mkt-band mkt-sec">
         <div className="mkt-wrap grid items-center gap-12 lg:grid-cols-2">
           <div data-rise>
             <p className="mkt-eyebrow">After launch</p>
@@ -208,7 +208,7 @@ export default async function WebsiteStudioPage() {
       </section>
 
       {/* Included */}
-      <section className="mkt-sec">
+      <section id="included" className="mkt-sec">
         <div data-rise className="mkt-wrap">
           <p className="mkt-eyebrow">Included in every site</p>
           <ul className="mt-8 grid gap-x-10 gap-y-4 sm:grid-cols-2">

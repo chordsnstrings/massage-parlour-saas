@@ -48,6 +48,7 @@ export const website = {
     one: '{count} page has unpublished changes',
     other: '{count} pages have unpublished changes',
   },
+  themePending: 'Site theme changes are waiting to be published',
   allLive: 'Everything is live',
   noPages: 'No pages yet',
   colPage: 'Page',

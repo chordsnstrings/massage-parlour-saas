@@ -4,6 +4,7 @@ import {
   platformInvoices,
   platformJobRuns,
   platformPayments,
+  spaApplications,
   subscriptions,
   tenants,
 } from '@spa/db'
@@ -114,6 +115,16 @@ export default async function PlatformOverview() {
   const backupStale = !okBackup || Date.now() - okBackup.finishedAt.getTime() > 36 * 3_600_000
   // G18: spas at ≥ 80 % of their monthly AI budget (budget 0 = AI deliberately off, not flagged).
   const aiFlags = (await aiUsageOverview(db)).filter((r) => r.budgetUsd > 0 && r.level !== 'ok')
+  // Spa applications waiting for the owner (PLAN §18.3).
+  const waiting = await db
+    .select({
+      id: spaApplications.id,
+      spaName: spaApplications.spaName,
+      createdAt: spaApplications.createdAt,
+    })
+    .from(spaApplications)
+    .where(eq(spaApplications.status, 'pending'))
+    .orderBy(spaApplications.createdAt)
 
   return (
     <>
@@ -141,6 +152,23 @@ export default async function PlatformOverview() {
             />
           </StaggerItem>
         </Stagger>
+        <Card data-testid="applications-card">
+          <CardHeader
+            title="Spa applications"
+            description={
+              waiting.length
+                ? `${waiting.length} waiting for review · oldest: ${waiting[0]!.spaName}, sent ${formatDate(waiting[0]!.createdAt)}`
+                : 'No applications waiting. New spas apply from the website; you accept or reject them here.'
+            }
+            action={
+              <Link href={adminPath('/applications')}>
+                <Badge tone={waiting.length ? 'warning' : 'success'}>
+                  {waiting.length ? `${waiting.length} pending` : 'none waiting'}
+                </Badge>
+              </Link>
+            }
+          />
+        </Card>
         <Card data-testid="ops-health">
           <CardHeader
             title="Server health"

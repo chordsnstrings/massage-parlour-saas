@@ -44,9 +44,18 @@ fix backlog F1–F8 ✅ (§17); production runs on one DO droplet (deploy/drople
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
   **Website Studio:** only super-admins edit sites; spas review, approve and request changes (PLAN.md §14.4).
-- **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM design (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
+  **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
+  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA (owner, 2026-10-09; PLAN §18.2, CODEMAP "Claude MCP connector").
+- **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM layout (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
   identical for every spa (spa logo + name in the sidebar from onboarding), ~15–20% more compact, light only, EN + Thai
-  (all UI text and system messages; typed names never translated). Plan: PLAN §14.6.
+  (all UI text and system messages; typed names never translated). Plan: PLAN §14.6. **Look (owner, 2026-10-09,
+  replaces the blue):** the sign-in brand made lighter — DM Sans text, Space Grotesk headings/figures (Thai: Noto Sans
+  Thai first), mint/cream light surfaces, dark-green #0F6B4B primary, lime #D9F26A only for small highlights; small
+  "SM Spa Management" badge at the sidebar foot → marketing site (PLAN §18.6). Tokens only in `crm.css`.
+  (all UI text and system messages; typed names never translated). Plan: PLAN §14.6. **Look since 2026-10-09
+  (replaces the blue Be Relax palette):** the login's brand theme — same fonts + sizing, lighter colours — with the
+  platform logo small in a premium spot that doesn't affect the CRM UX; every spa's CRM installs as its own PWA named
+  "{first word of spa name} Management" with the spa logo as icon (initials on lime without one). PLAN §18.6.
 - Super-admin console + editor chrome: minimal Swedish modern, airy well-padded 12-col grid, one accent,
   micro-animations via `motion`, fully responsive 360 px → wide desktop (PLAN.md §12). Tenant sites fully responsive too.
 - Legal/compliance is the operator's responsibility — don't add legal features beyond what PLAN.md lists.
@@ -79,7 +88,10 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`. Full suite: build first and run
   with `E2E_SERVER=start` (production server, as CI does) — the dev server's on-demand compiles OOM past ~13 GB.
 - Targeted: `pnpm --filter @spa/<pkg> test` · `cd <pkg> && npx tsc --noEmit`
-- Super-admin locally: sign up with an email in `PLATFORM_ADMIN_EMAILS`, then use admin.localhost:3000.
+- Super-admin locally: create the login at admin.localhost:3000/join with an email in `PLATFORM_ADMIN_EMAILS` (the
+  public /signup is the spa application form and refuses listed emails), verify it (link, or another super-admin's
+  Company → Super-admins "Mark email verified"), then enrol 2FA. Production list = droplet base value + the two
+  owner-added admins appended in deploy/droplet/compose.yml (they are also the default `SITE_AI_EDITOR_EMAILS`).
 
 ## Gotchas
 - Biome reformats on `pnpm format`; patch the formatted code (prefer the Edit tool over string-replace scripts).
