@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { subscriptions, tenants } from '@spa/db'
 import { addMonths } from '@spa/services'
 import { eq } from 'drizzle-orm'
-import { admin, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
+import { admin, seedBooking, seedCatalog, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
 
 const daysAgo = (n: number) =>
   new Date(Date.now() - n * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Dubai' })
@@ -82,5 +82,28 @@ test('platform billing: schedule, overdue bar, mark paid, pause and reminder', a
   })
 
   await ownerCtx.close()
+  await adminCtx.close()
+})
+
+// PLAN §18.1: the console's Performance view lists every spa's aggregates and opens a per-spa detail page.
+test('platform performance: all-spas table and per-spa detail', async ({ browser }) => {
+  const ownerCtx = await browser.newContext()
+  const adminCtx = await browser.newContext()
+  const { slug } = await signUpOwner(await ownerCtx.newPage(), { spa: 'Perf Spa' })
+  await ownerCtx.close()
+  const seed = await seedCatalog(slug)
+  await seedBooking(seed, '11:00')
+  await seedBooking(seed, '13:00')
+  const ops = await adminCtx.newPage()
+  await signInPlatformAdmin(ops)
+
+  await ops.goto(`${admin}/performance?range=7&sort=name`)
+  await expect(ops.getByRole('heading', { name: 'Performance', exact: true })).toBeVisible()
+  const row = ops.locator('tr', { has: ops.getByTestId(`perf-${slug}`) })
+  await expect(row.getByTestId('perf-bookings').locator('span').first()).toHaveText('2')
+  await row.getByTestId(`perf-${slug}`).click()
+  await expect(ops.getByRole('heading', { name: 'Perf Spa' })).toBeVisible()
+  await expect(ops.getByText('Booking funnel')).toBeVisible()
+  await expect(ops.getByText('0 completed · 0 cancelled · 0 no-show')).toBeVisible()
   await adminCtx.close()
 })
