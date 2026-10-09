@@ -26,7 +26,8 @@ export default function TermsPage() {
       <ul>
         <li>
           Subscription fees and any setup fee are the ones shown for your plan on our{' '}
-          <Link href="/pricing">pricing page</Link>, or as agreed with you in writing. They are invoiced in advance.
+          <Link href="/pricing">pricing page</Link>, or as agreed with you in writing. They are invoiced in
+          advance.
         </li>
         <li>
           Invoices are paid by bank transfer or cash, or by card through a secure payment page where offered.

@@ -157,7 +157,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
 - **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
   scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
-  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
+  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. Footer = brand + 5 link columns into
+  section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **`files/`**: `/files/{id}` (public = immutable cache; private = members only) and `/files/upload?tenant=`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px

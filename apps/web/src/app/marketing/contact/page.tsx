@@ -1,6 +1,6 @@
 import { Mail, MessageCircle, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
-import { companyContact } from '@/components/marketing/plans'
+import { companyContact, DEFAULT_CONTACT_EMAIL } from '@/components/marketing/plans'
 import { MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/server/origin'
 
@@ -15,7 +15,7 @@ const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
 export default async function ContactPage() {
   const c = await companyContact()
   const wa = digits(c?.whatsapp) || digits(c?.phone)
-  const email = c?.email || 'hello@spamanagement.co'
+  const email = c?.email || DEFAULT_CONTACT_EMAIL
   const cards = [
     wa && {
       icon: MessageCircle,

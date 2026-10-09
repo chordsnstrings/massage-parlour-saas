@@ -52,7 +52,7 @@ export default async function PricingPage() {
         </h1>
       </section>
 
-      <section className="mkt-wrap pb-20">
+      <section id="plans" className="mkt-wrap pb-20">
         <div
           className="mx-auto grid max-w-4xl gap-[18px]"
           style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, 20rem), 1fr))` }}
@@ -109,7 +109,7 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      <section className="mkt-sec pt-0">
+      <section id="faq" className="mkt-sec pt-0">
         <div className="mkt-wrap max-w-[820px]">
           <div data-rise className="mkt-shead">
             <h2 className="mkt-h2">Questions</h2>

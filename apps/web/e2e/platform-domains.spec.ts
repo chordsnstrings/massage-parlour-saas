@@ -9,6 +9,7 @@ import {
   enableTotp,
   enrolUrl,
   PATH,
+  PORT,
   site,
   uniqueSlug,
 } from './helpers'
@@ -42,6 +43,47 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
       'href',
       `${base}/privacy`,
     )
+  })
+
+  await test.step('footer: five columns, every link answers 200 and every #anchor exists', async () => {
+    await page.goto(`${base}/`)
+    const nav = page.getByRole('navigation', { name: 'Footer' })
+    await expect(nav.getByRole('heading', { level: 2 })).toHaveText([
+      'Product',
+      'Features',
+      'Website studio',
+      'Built for the UAE',
+      'Company',
+    ])
+    await expect(page.locator('footer')).toContainText(
+      `© ${new Date().getFullYear()} 1997labs · spamanagement.co`,
+    )
+    const hrefs = await nav
+      .getByRole('link')
+      .evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href))
+    expect(hrefs.length).toBeGreaterThanOrEqual(25)
+    expect(hrefs.filter((h) => h.startsWith('mailto:'))).toHaveLength(1)
+    expect(hrefs).toContain(`${app}/signup`)
+    const anchors = new Map<string, Set<string>>()
+    for (const href of hrefs.filter((h) => !h.startsWith('mailto:'))) {
+      const u = new URL(href)
+      const url = `${u.origin}${u.pathname}`
+      if (!anchors.has(url)) anchors.set(url, new Set())
+      if (u.hash) anchors.get(url)?.add(u.hash.slice(1))
+    }
+    for (const [url, ids] of anchors) {
+      // Node can't resolve *.localhost, so ask 127.0.0.1 with the link's host (no redirects: each link lands as is).
+      const u = new URL(url)
+      const res = await page.request.get(`http://127.0.0.1:${PORT}${u.pathname}`, {
+        headers: { host: u.host },
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      })
+      expect(res.status(), url).toBe(200)
+      if (!ids.size) continue
+      await page.goto(url)
+      for (const id of ids) await expect(page.locator(`[id="${id}"]`), `${url}#${id}`).toHaveCount(1)
+    }
   })
 
   await test.step('second domain: marketing pages link to the app on that domain', async () => {

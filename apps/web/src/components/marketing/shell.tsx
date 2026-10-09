@@ -1,8 +1,9 @@
 import { ArrowRight, Check } from 'lucide-react'
 import Link from 'next/link'
 import { Logo } from '@/components/brand'
-import { LEGAL_LINKS } from '@/components/marketing/legal-config'
+import { LEGAL, LEGAL_LINKS } from '@/components/marketing/legal-config'
 import { MarketingMotion } from '@/components/marketing/motion'
+import { companyContact, DEFAULT_CONTACT_EMAIL } from '@/components/marketing/plans'
 import { requestUrls } from '@/server/origin'
 
 export type MarketingPage =
@@ -117,43 +118,119 @@ export async function CtaBand({ title = 'Let your spa run itself.' }: { title?: 
   )
 }
 
+type FootLink = { label: string; href: string; external?: boolean }
+
+/** Footer columns: only pages and in-page sections that exist (anchors are the `id`s on the features, website-builder
+ *  and pricing sections; platform-domains.spec checks every link and anchor). */
+function footColumns(app: (path: string) => string, email: string): { title: string; links: FootLink[] }[] {
+  return [
+    {
+      title: 'Product',
+      links: [
+        ...NAV.slice(0, 3).map((n) => ({ label: n.label, href: n.href })),
+        { label: 'Apply for your spa', href: app('/signup'), external: true },
+        { label: 'Sign in', href: app('/login'), external: true },
+      ],
+    },
+    {
+      title: 'Features',
+      links: [
+        { label: 'Bookings & calendar', href: '/features#bookings' },
+        { label: 'Reminders & follow-ups', href: '/features#follow-up' },
+        { label: 'Sales & accounts', href: '/features#money' },
+        { label: 'Instagram & Google', href: '/features#marketing' },
+        { label: 'Roles & security', href: '/features#team' },
+        { label: 'Background automations', href: '/features#automations' },
+      ],
+    },
+    {
+      title: 'Website studio',
+      links: [
+        { label: 'Make it yours', href: '/website-builder#make-it-yours' },
+        { label: 'How we build it', href: '/website-builder#how-we-build-it' },
+        { label: 'Section designs', href: '/website-builder#section-designs' },
+        { label: 'Changes after launch', href: '/website-builder#after-launch' },
+        { label: 'Included in every site', href: '/website-builder#included' },
+      ],
+    },
+    {
+      title: 'Built for the UAE',
+      links: [
+        { label: 'Plans in AED', href: '/pricing#plans' },
+        { label: 'VAT for your FTA return', href: '/features#money' },
+        { label: 'WhatsApp from your own number', href: '/features#follow-up' },
+        { label: 'English & Arabic sites', href: '/website-builder#included' },
+        { label: 'Questions', href: '/pricing#faq' },
+      ],
+    },
+    {
+      title: 'Company',
+      links: [
+        { label: 'Contact', href: '/contact' },
+        { label: email, href: `mailto:${email}`, external: true },
+        ...LEGAL_LINKS.map((l) => ({ label: l.label, href: l.href })),
+      ],
+    },
+  ]
+}
+
+/** Lets an email address wrap after the @ instead of mid-domain in a narrow column. */
+const wrapAt = (s: string) => {
+  const i = s.indexOf('@')
+  return i < 0 ? (
+    s
+  ) : (
+    <>
+      {s.slice(0, i + 1)}
+      <wbr />
+      {s.slice(i + 1)}
+    </>
+  )
+}
+
 async function Footer() {
   const urls = await requestUrls()
+  const email = (await companyContact())?.email || DEFAULT_CONTACT_EMAIL
+  const cols = footColumns(urls.app, email)
   return (
     <footer className="mkt-foot">
       <div className="mkt-wrap">
         <div className="mkt-fgrid">
-          <div>
+          <div className="mkt-fbrand">
             <div className="mkt-logo">
               <Logo className="h-11" />
             </div>
-            <p className="mt-3 max-w-[280px]">Software for massage spas in the UAE. Made in Dubai.</p>
+            <p className="mkt-ftag">Calm software for busy spas.</p>
+            <p className="mkt-fdesc">
+              Bookings, POS, staff and your website in one place. Built for the UAE, priced in AED.
+            </p>
           </div>
-          <div>
-            <b>Product</b>
-            {NAV.slice(0, 3).map((n) => (
-              <Link key={n.key} href={n.href}>
-                {n.label}
-              </Link>
+          <nav aria-label="Footer" className="mkt-fnav">
+            {cols.map((c, i) => (
+              <div key={c.title}>
+                <h2 id={`mkt-f${i}`} className="mkt-fhead">
+                  {c.title}
+                </h2>
+                <ul aria-labelledby={`mkt-f${i}`}>
+                  {c.links.map((l) => (
+                    <li key={l.label}>
+                      {l.external ? (
+                        <a href={l.href}>{wrapAt(l.label)}</a>
+                      ) : (
+                        <Link href={l.href}>{l.label}</Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </div>
-          <div>
-            <b>Company</b>
-            <Link href="/contact">Contact</Link>
-            <a href={urls.app('/login')}>Sign in</a>
-            {LEGAL_LINKS.map((l) => (
-              <Link key={l.href} href={l.href}>
-                {l.label}
-              </Link>
-            ))}
-          </div>
-          <div>
-            <b>Built for the UAE</b>
-            <p>AED pricing · VAT ready · English & Arabic sites</p>
-          </div>
+          </nav>
         </div>
         <div className="mkt-fbot">
-          <span>© {new Date().getFullYear()} spamanagement.co</span>
+          <span>
+            © {new Date().getFullYear()} {LEGAL.companyName} · {LEGAL.brand}
+          </span>
+          <span>Payments are recorded, never processed. Customer messages are sent by you on WhatsApp.</span>
         </div>
       </div>
     </footer>

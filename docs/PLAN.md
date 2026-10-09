@@ -1397,3 +1397,16 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     changes (`publishAll` → `{ pages, theme }`); pending rename slugs are reserved (`takenSlugs`) and re-checked at
     publish (DomainError); renames validated in dry runs (`checkPageRename`); undo restores the exact earlier state
     (`SiteEditPrevious`: raw draft theme incl. none, added draft row dropped).
+
+### 18.5 Marketing footer (owner 2026-10-09)
+Rich SaaS footer (`components/marketing/shell.tsx` `Footer`, `.mkt-foot/.mkt-fgrid/.mkt-fnav/.mkt-fhead/.mkt-fbot`):
+brand block (logo, "Calm software for busy spas.", one-line product summary) + `nav "Footer"` with five columns —
+Product (Features, Website studio, Pricing, Apply for your spa, Sign in), Features (`/features#bookings|follow-up|money|
+marketing|team|automations`), Website studio (`/website-builder#make-it-yours|how-we-build-it|section-designs|
+after-launch|included`), Built for the UAE (`/pricing#plans`, VAT + WhatsApp → features anchors, English & Arabic →
+`#included`, `/pricing#faq`), Company (Contact, the contact-page email (super-admin Settings, fallback
+`DEFAULT_CONTACT_EMAIL`), Privacy, Terms, Data deletion) — then "© year {LEGAL.companyName} · {LEGAL.brand}" + "Payments are
+recorded, never processed. Customer messages are sent by you on WhatsApp." Only existing pages/sections are linked
+(no multi-branch section exists, so none); section `id`s are stable link targets. Layout: brand + 5 cols ≥ 1100 px,
+brand on top + 3 cols tablet, 2 cols ≤ 640 px. platform-domains.spec checks the headings, that every footer link
+answers 200 and that every `#anchor` exists.
