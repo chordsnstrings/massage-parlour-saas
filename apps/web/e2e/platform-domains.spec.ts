@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { platformSettings } from '@spa/db'
 import {
+  admin,
   altApp,
   altBase,
   app,
@@ -140,5 +141,68 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     // Navigation stays on this domain; the spa's free address is the canonical one.
     await page.goto(`${altApp}/${slug}/settings/domains`)
     await expect(page.getByText(site(slug).replace(/^https?:\/\//, ''), { exact: true })).toBeVisible()
+  })
+})
+
+// F12: what search engines and link previews see on the platform's own hosts.
+test('search: marketing robots + sitemap, JSON-LD and social cards; app and admin stay out', async ({
+  page,
+}) => {
+  const fetchAs = (url: string) => {
+    const u = new URL(url)
+    return page.request.get(`http://127.0.0.1:${PORT}${u.pathname}`, { headers: { host: u.host } })
+  }
+  const pages = [
+    '/',
+    '/features',
+    '/crm',
+    '/website-builder',
+    '/pricing',
+    '/contact',
+    '/privacy',
+    '/terms',
+    '/data-deletion',
+  ]
+
+  await test.step('robots.txt points at the canonical sitemap, which lists every marketing page', async () => {
+    for (const host of [base, altBase]) {
+      const robots = await (await fetchAs(`${host}/robots.txt`)).text()
+      expect(robots).toContain('User-agent: *')
+      expect(robots).toContain(`Sitemap: ${base}/sitemap.xml`)
+      if (PATH) for (const p of ['/app/', '/admin/']) expect(robots).toContain(`Disallow: ${p}`)
+    }
+    const xml = await (await fetchAs(`${base}/sitemap.xml`)).text()
+    for (const p of pages) expect(xml).toContain(`<loc>${base}${p}</loc>`)
+  })
+
+  await test.step('pages: canonical on the canonical domain, generated og:image, JSON-LD Organization', async () => {
+    await page.goto(`${altBase}/features`)
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${base}/features`)
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image')
+    const og = await page.locator('meta[property="og:image"]').first().getAttribute('content')
+    expect(og).toBe(`${base}/og/features.png`)
+    const img = await fetchAs(og!)
+    expect(img.status()).toBe(200)
+    expect(img.headers()['content-type']).toBe('image/png')
+    expect((await fetchAs(`${base}/og/nope.png`)).status()).toBe(404)
+    const raw = await page.locator('script[type="application/ld+json"]').first().textContent()
+    const graph = (JSON.parse(raw ?? '') as { '@graph': { '@type': string; [k: string]: unknown }[] })[
+      '@graph'
+    ]
+    expect(graph.map((n) => n['@type'])).toEqual(['Organization', 'WebSite', 'SoftwareApplication'])
+    const [settings] = await testDb().select().from(platformSettings).limit(1)
+    expect(graph[0]).toMatchObject({
+      name: 'spamanagement.co',
+      legalName: '1997labs',
+      email: settings?.email || 'ask@spamanagement.co',
+    })
+  })
+
+  await test.step('the dashboard and console are never crawled', async () => {
+    if (PATH) return // one host: covered by Disallow /app/ and /admin/ above
+    for (const host of [app, admin]) {
+      const res = await fetchAs(`${host}/robots.txt`)
+      expect(await res.text()).toBe('User-agent: *\nDisallow: /\n')
+    }
   })
 })

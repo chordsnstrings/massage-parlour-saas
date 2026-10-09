@@ -4,14 +4,15 @@ import { Mail, MessageCircle, Phone } from 'lucide-react'
 import type { Metadata } from 'next'
 import { EnquiryForm } from '@/components/marketing/enquiry-form'
 import { companyContact } from '@/components/marketing/plans'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/server/origin'
 import { sendEnquiryAction } from './actions'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('contact', {
   title: 'Contact',
   description: 'Talk to the spamanagement.co team in Dubai.',
-}
+})
 export const dynamic = 'force-dynamic' // contact details are edited in the super-admin
 
 const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '')
