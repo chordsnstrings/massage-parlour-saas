@@ -129,7 +129,13 @@ test('staff issue a full tax invoice with the customer’s billing details (G16)
       branchId: seed.branchId,
       clientId: seed.clientId,
       lines: [
-        { kind: 'service', description: 'Swedish massage 60 min', qty: 2, unitPriceAed: 350, discountAed: 50 },
+        {
+          kind: 'service',
+          description: 'Swedish massage 60 min',
+          qty: 2,
+          unitPriceAed: 350,
+          discountAed: 50,
+        },
       ],
       payments: [{ method: 'card_terminal', amountAed: 650 }],
     }),
