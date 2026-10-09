@@ -58,6 +58,23 @@ function createAuth() {
         })
       },
     },
+    // G2: verify addresses (needed before a PLATFORM_ADMIN_EMAILS user gets super-admin). Sign-in is NOT gated on it,
+    // so spa sign-ups keep working; a failed send is logged, never blocks sign-up. Google sign-ins arrive verified.
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user: u, url }) => {
+        try {
+          await sendStaffEmail({
+            to: u.email,
+            subject: 'Confirm your spamanagement.co email',
+            text: `Hi ${u.name},\n\nConfirm your email address here: ${url}\n\nIf you didn't sign up, ignore this email.`,
+          })
+        } catch (error) {
+          console.error('[auth] verification email failed', { to: u.email, error: String(error) })
+        }
+      },
+    },
     // Behind Cloudflare / DO App Platform the client IP arrives in these headers (first match wins).
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'do-connecting-ip', 'x-forwarded-for'] },

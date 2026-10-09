@@ -16,14 +16,16 @@ function useSubmit() {
   const t = useAuthT()
   const [pending, setPending] = useState(false)
   const run = async (
-    fn: () => Promise<{ error?: { code?: string; message?: string; status?: number } | null } | undefined>,
-    onOk: () => void,
+    fn: () => Promise<
+      { data?: unknown; error?: { code?: string; message?: string; status?: number } | null } | undefined
+    >,
+    onOk: (data?: unknown) => void,
   ) => {
     setPending(true)
     try {
       const res = await fn()
       if (res?.error) toast.error(authErrorText(t, res.error))
-      else onOk()
+      else onOk(res?.data)
     } finally {
       setPending(false)
     }
@@ -42,7 +44,10 @@ export function LoginForm({ next, signupHref }: { next: string; signupHref?: str
         run(
           () =>
             authClient.signIn.email({ email: String(f.get('email')), password: String(f.get('password')) }),
-          () => go(next),
+          // With 2FA on, the client plugin already sent the browser to /two-factor (keeping ?next); don't override it.
+          (data) => {
+            if (!(data as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) go(next)
+          },
         )
       }}
     >

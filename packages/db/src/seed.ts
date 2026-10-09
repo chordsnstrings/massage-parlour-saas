@@ -1,6 +1,6 @@
-import { inArray } from 'drizzle-orm'
+import { grantListedPlatformAdmins } from './admins'
 import type { Db } from './client'
-import { aiModelConfig, plans, platformAdmins, platformSettings, user } from './schema'
+import { aiModelConfig, plans, platformSettings } from './schema'
 
 /** Model defaults from docs/PLAN.md §7 (2026-10). Super-admin can change them; seeding never overwrites. */
 export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
@@ -123,14 +123,6 @@ export async function seedPlatform(db: Db, adminEmails: string[] = []) {
     })
     .onConflictDoNothing()
   await db.insert(aiModelConfig).values(defaultAiModels).onConflictDoNothing()
-  const emails = adminEmails.map((e) => e.trim().toLowerCase()).filter(Boolean)
-  if (emails.length) {
-    const admins = await db.select({ id: user.id }).from(user).where(inArray(user.email, emails))
-    if (admins.length) {
-      await db
-        .insert(platformAdmins)
-        .values(admins.map((a) => ({ userId: a.id })))
-        .onConflictDoNothing()
-    }
-  }
+  // G2: listed emails are promoted only once verified; existing super-admins are never demoted.
+  await grantListedPlatformAdmins(db, adminEmails)
 }

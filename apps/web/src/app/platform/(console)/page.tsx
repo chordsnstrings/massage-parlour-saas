@@ -76,6 +76,20 @@ export default async function PlatformOverview() {
     .orderBy(desc(platformJobRuns.finishedAt))
     .limit(1)
   const drillStale = !drill || Date.now() - drill.finishedAt.getTime() > 35 * 86_400_000
+  // Nightly off-site backup (worker `db-backup`, G1): latest run + latest success; warn past 36 h.
+  const [lastBackup] = await db
+    .select()
+    .from(platformJobRuns)
+    .where(eq(platformJobRuns.job, 'db-backup'))
+    .orderBy(desc(platformJobRuns.finishedAt))
+    .limit(1)
+  const [okBackup] = await db
+    .select({ finishedAt: platformJobRuns.finishedAt, details: platformJobRuns.details })
+    .from(platformJobRuns)
+    .where(and(eq(platformJobRuns.job, 'db-backup'), eq(platformJobRuns.status, 'ok')))
+    .orderBy(desc(platformJobRuns.finishedAt))
+    .limit(1)
+  const backupStale = !okBackup || Date.now() - okBackup.finishedAt.getTime() > 36 * 3_600_000
 
   return (
     <>
@@ -103,6 +117,29 @@ export default async function PlatformOverview() {
             />
           </StaggerItem>
         </Stagger>
+        <Card data-testid="offsite-backup">
+          <CardHeader
+            title="Off-site backup"
+            description={`${
+              okBackup
+                ? `Last successful backup ${formatDate(okBackup.finishedAt.toISOString().slice(0, 10))}`
+                : 'No successful off-site backup yet'
+            }${
+              lastBackup && lastBackup.status !== 'ok'
+                ? ` · last run ${lastBackup.status}: ${
+                    lastBackup.status === 'skipped'
+                      ? 'no off-site bucket configured (set R2_* or S3_* for the worker)'
+                      : String(lastBackup.details.error ?? 'failed')
+                  }`
+                : ''
+            }${backupStale ? ' — the database is not safely backed up off the server.' : ''}`}
+            action={
+              <Badge tone={backupStale ? 'danger' : 'success'}>
+                {backupStale ? (okBackup ? 'overdue' : 'missing') : 'ok'}
+              </Badge>
+            }
+          />
+        </Card>
         <Card data-testid="restore-drill">
           <CardHeader
             title="Backup restore drill"

@@ -11,6 +11,11 @@ export const DEFAULT_EMAIL_FROM = `${EMAIL_DOMAIN} <no-reply@${EMAIL_DOMAIN}>`
 export async function sendStaffEmail(msg: { to: string; subject: string; text: string }): Promise<void> {
   const key = process.env.RESEND_API_KEY
   if (!key) {
+    // G2/G9: in production a missing key must never put sign-in links in the logs — fail loudly instead.
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`[email] RESEND_API_KEY is not set; not sent: to=${msg.to} subject="${msg.subject}"`)
+      throw new Error('email is not configured (RESEND_API_KEY missing)')
+    }
     console.info(`[email:dev] to=${msg.to} subject="${msg.subject}"\n${msg.text}`)
     return
   }
