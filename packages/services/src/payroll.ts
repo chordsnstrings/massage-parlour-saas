@@ -432,3 +432,51 @@ export function wpsSif(input: {
   ].join(',')
   return [...edr, scr].join('\n')
 }
+
+export type EarningsRange = { from: string; to: string }
+
+/**
+ * One therapist's own earnings (G14 "My earnings"): booking commission (rows dated by the booking's business date,
+ * corrections and reversals net out) and tips on paid sales (sale business date), per inclusive date range.
+ */
+export async function staffEarnings<K extends string>(
+  tx: Tx,
+  staffId: string,
+  ranges: Record<K, EarningsRange>,
+): Promise<Record<K, { commissionAed: number; tipsAed: number }>> {
+  const list = Object.values(ranges) as EarningsRange[]
+  const from = list.reduce((m, r) => (r.from < m ? r.from : m), list[0]?.from ?? '9999-12-31')
+  const to = list.reduce((m, r) => (r.to > m ? r.to : m), list[0]?.to ?? '0000-01-01')
+  const comm = await tx
+    .select({ d: bookingCommissions.businessDate, v: sql<string>`sum(${bookingCommissions.amountAed})` })
+    .from(bookingCommissions)
+    .where(
+      and(
+        eq(bookingCommissions.staffId, staffId),
+        gte(bookingCommissions.businessDate, from),
+        lte(bookingCommissions.businessDate, to),
+      ),
+    )
+    .groupBy(bookingCommissions.businessDate)
+  const tipRows = await tx
+    .select({ d: sales.businessDate, v: sql<string>`sum(${tips.amountAed})` })
+    .from(tips)
+    .innerJoin(sales, eq(sales.id, tips.saleId))
+    .where(
+      and(
+        eq(tips.staffId, staffId),
+        eq(sales.status, 'paid'),
+        gte(sales.businessDate, from),
+        lte(sales.businessDate, to),
+      ),
+    )
+    .groupBy(sales.businessDate)
+  const sum = (rows: { d: string; v: string }[], r: EarningsRange) =>
+    r2(rows.filter((x) => x.d >= r.from && x.d <= r.to).reduce((s, x) => s + Number(x.v ?? 0), 0))
+  return Object.fromEntries(
+    (Object.entries(ranges) as [K, EarningsRange][]).map(([k, r]) => [
+      k,
+      { commissionAed: sum(comm, r), tipsAed: sum(tipRows, r) },
+    ]),
+  ) as Record<K, { commissionAed: number; tipsAed: number }>
+}

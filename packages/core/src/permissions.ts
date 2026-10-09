@@ -7,6 +7,7 @@ export const PERMISSION_GROUPS = {
       view: 'View calendar',
       manage: 'Create and edit bookings',
       commission: 'Enter therapist commission',
+      ownStatus: 'Check in, start and complete own bookings',
     },
   },
   clients: {
@@ -120,7 +121,7 @@ export const SYSTEM_ROLES: Record<
   therapist: {
     name: 'Therapist',
     description: 'Own schedule, check-in/out and earnings. Never sees client phone numbers.',
-    permissions: ['calendar.view', 'timeclock.leave'],
+    permissions: ['calendar.view', 'calendar.ownStatus', 'timeclock.leave'],
   },
   accountant: {
     name: 'Accountant',
@@ -168,3 +169,7 @@ export function resolvePermissions(role: { key: string; permissions: readonly st
 
 /** Roles that must use TOTP 2FA when the tenant turns on "Require 2FA for owner & managers". */
 export const TWO_FACTOR_POLICY_ROLES: readonly string[] = ['owner', 'manager']
+
+/** "Require 2FA for owner & managers" is on unless the spa turned it off (owner decision G23, 2026-10-09). */
+export const requires2fa = (settings: { require2fa?: boolean } | null | undefined) =>
+  settings?.require2fa !== false

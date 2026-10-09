@@ -6,7 +6,12 @@ export const permissions: Messages['permissions'] = {
     dashboard: { label: 'แดชบอร์ด', actions: { view: 'ดูแดชบอร์ด', revenue: 'ดูตัวเลขรายได้' } },
     calendar: {
       label: 'ปฏิทินและการจอง',
-      actions: { view: 'ดูปฏิทิน', manage: 'สร้างและแก้ไขการจอง', commission: 'บันทึกค่าคอมมิชชันนักบำบัด' },
+      actions: {
+        view: 'ดูปฏิทิน',
+        manage: 'สร้างและแก้ไขการจอง',
+        commission: 'บันทึกค่าคอมมิชชันนักบำบัด',
+        ownStatus: 'เช็กอิน เริ่ม และปิดงานการจองของตัวเอง',
+      },
     },
     clients: {
       label: 'ลูกค้า',

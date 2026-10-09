@@ -86,6 +86,17 @@ export const platformSettings = pgTable(
     metaMcpKeyEnc: text('meta_mcp_key_enc'),
     /** External tool names the agents may use (still filtered: WhatsApp send-like tools are never exposed). */
     metaMcpTools: text('meta_mcp_tools').array().notNull().default([]),
+    /** Staff email (Resend) set in the console; wins over RESEND_API_KEY / EMAIL_FROM env. Key AES-GCM encrypted. */
+    resendApiKeyEnc: text('resend_api_key_enc'),
+    resendApiKeyLast4: text('resend_api_key_last4'),
+    emailFrom: text('email_from'),
+    /**
+     * G12: days after a soft delete when the worker permanently purges a spa (`tenant-auto-purge`).
+     * Null = off (default); the console only accepts 30 or more.
+     */
+    autoPurgeDays: integer('auto_purge_days'),
+    /** G18 global AI kill switch: false = no AI call runs for any spa. */
+    aiEnabled: boolean('ai_enabled').notNull().default(true),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -120,8 +131,13 @@ export type TenantSettings = {
   receptionistBookingFee?: string
   /** Automation switches (B3): keys = `AUTOMATIONS` in @spa/core; missing = on. Written via setAutomation(). */
   automations?: Record<string, boolean>
-  /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
+  /**
+   * Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard.
+   * Missing = on (G23, owner decision 2026-10-09; read it with `requires2fa()` from @spa/core).
+   */
   require2fa?: boolean
+  /** G21: online / Instagram / AI bookings of clients with ≥ N completed visits are confirmed at once (off by default). */
+  onlineBooking?: { autoConfirmReturning?: boolean; autoConfirmAfterVisits?: number }
   /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
   metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
 }
@@ -139,6 +155,8 @@ export const tenants = pgTable(
     defaultLocale: text('default_locale').notNull().default('en'),
     timezone: text('timezone').notNull().default('Asia/Dubai'),
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
+    /** G18 per-spa AI kill switch (super-admin): false = the gateway refuses every AI call for this spa. */
+    aiEnabled: boolean('ai_enabled').notNull().default(true),
     /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
@@ -402,4 +420,30 @@ export const platformJobRuns = pgTable(
     finishedAt: timestamp('finished_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('platform_job_runs_job_finished').on(t.job, t.finishedAt), ...platformPolicies()],
+)
+
+/**
+ * G12: one row per permanently purged spa. No FK to `tenants` (the tenant row is gone) so the record survives the
+ * purge: who, when, how many rows per table, and how many stored objects were removed.
+ */
+export const tenantPurges = pgTable(
+  'tenant_purges',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    /** Not `tenant_id`: that column name marks RLS tenant tables (db rls test). */
+    purgedTenantId: uuid('purged_tenant_id').notNull(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    /** Super-admin user id; null for the automatic purge. */
+    purgedBy: text('purged_by'),
+    mode: text('mode', { enum: ['manual', 'auto'] }).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /** Rows removed per table (table name → count). */
+    counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
+    objectsDeleted: integer('objects_deleted').notNull().default(0),
+    /** Clean-up steps outside Postgres that failed (bucket objects, Cloudflare hostnames). */
+    errors: jsonb('errors').$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  () => platformPolicies(),
 )

@@ -7,24 +7,31 @@ import {
   closeAllDbs,
   outbox,
   rooms,
+  sales,
   services,
   serviceVariants,
   staff,
   staffServices,
   tenants,
+  tips,
   withTenant,
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { and, asc, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  completeBooking,
   createBooking,
   markOutbox,
+  type OwnStatusTarget,
   outboxBookingLive,
   planBookingMessages,
   rescheduleItem,
+  selfBookingStatus,
   setAutomation,
   setBookingStatus,
+  setOwnBookingStatus,
+  staffEarnings,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -180,5 +187,114 @@ describe('booking message plan (G4)', () => {
     const off = await newClient()
     expect(await msgs((await book(off.id, at('21:00'), 'confirmed')).id)).toEqual([])
     await tx((db) => setAutomation(db, ids.tenant!, 'bookingMessages', true))
+  })
+})
+
+describe('auto-confirm returning clients (G21)', () => {
+  const setRule = (rule: { autoConfirmReturning?: boolean; autoConfirmAfterVisits?: number }) =>
+    platform
+      .update(tenants)
+      .set({ settings: { onlineBooking: rule } })
+      .where(eq(tenants.id, ids.tenant!))
+  const status = (clientId: string) => tx((db) => selfBookingStatus(db, ids.tenant!, clientId))
+
+  it('stays pending when off (default) or the client has too few completed visits', async () => {
+    const c = await newClient()
+    const first = await book(c.id, at('10:00'), 'confirmed')
+    await tx((db) => setBookingStatus(db, first.id, 'completed'))
+    expect(await status(c.id)).toBe('pending') // setting off
+    await setRule({ autoConfirmReturning: true, autoConfirmAfterVisits: 2 })
+    expect(await status(c.id)).toBe('pending') // 1 of 2 visits
+    expect(await status((await newClient()).id)).toBe('pending') // new client
+  })
+
+  it('confirms a qualifying client and the outbox plans the confirmation + reminders', async () => {
+    await setRule({ autoConfirmReturning: true }) // default: after 1 completed visit
+    const c = await newClient()
+    const first = await book(c.id, at('09:00'), 'confirmed')
+    await tx((db) => setBookingStatus(db, first.id, 'completed'))
+    expect(await status(c.id)).toBe('confirmed')
+    const b = await book(c.id, at('17:00'), await status(c.id), 'online')
+    expect(b.status).toBe('confirmed')
+    const rows = await byKind(b.id)
+    expect(Object.keys(rows).sort()).toEqual(['booking_confirmation', 'reminder', 'reminder_2h'])
+    await setRule({})
+  })
+})
+
+describe('therapist own bookings + earnings (G14)', () => {
+  it('a therapist checks in, starts and completes only bookings they are on', async () => {
+    const other = await tx(async (db) => {
+      const [s] = await db.insert(staff).values({ tenantId: ids.tenant!, displayName: 'Lina' }).returning()
+      return s!.id
+    })
+    const c = await newClient()
+    const b = await book(c.id, at('12:00'), 'confirmed')
+    const own = (to: OwnStatusTarget, staffId = ids.maya!) =>
+      tx((db) => setOwnBookingStatus(db, { bookingId: b.id, staffId, to }))
+    await expect(own('checked_in', other)).rejects.toThrow('Booking not found')
+    await expect(
+      tx((db) =>
+        setOwnBookingStatus(db, { bookingId: b.id, staffId: ids.maya!, to: 'cancelled' as OwnStatusTarget }),
+      ),
+    ).rejects.toThrow('Booking not found')
+    expect((await own('checked_in')).status).toBe('checked_in')
+    expect((await own('in_service')).status).toBe('in_service')
+    expect((await own('completed')).status).toBe('completed')
+    // Re-opening a completed booking (commission reversal) stays with the front desk.
+    await expect(own('checked_in')).rejects.toThrow(/Can't change a completed booking/)
+    const pending = await book(c.id, at('22:30'), 'pending')
+    await expect(
+      tx((db) => setOwnBookingStatus(db, { bookingId: pending.id, staffId: ids.maya!, to: 'checked_in' })),
+    ).rejects.toThrow(/Can't change a pending booking/)
+  })
+
+  it('earnings: own commission and tips on paid sales, per range', async () => {
+    const c = await newClient()
+    const b = await book(c.id, at('14:00'), 'confirmed')
+    const [item] = await tx((db) => db.select().from(bookingItems).where(eq(bookingItems.bookingId, b.id)))
+    await tx((db) =>
+      completeBooking(db, {
+        bookingId: b.id,
+        amounts: [{ bookingItemId: item!.id, staffId: ids.maya!, amountAed: 40 }],
+      }),
+    )
+    await tx(async (db) => {
+      const [paid, voided] = await db
+        .insert(sales)
+        .values([
+          {
+            tenantId: ids.tenant!,
+            branchId: ids.branch!,
+            number: 901,
+            businessDate: D,
+            subtotalAed: '0',
+            totalAed: '0',
+            status: 'paid',
+          },
+          {
+            tenantId: ids.tenant!,
+            branchId: ids.branch!,
+            number: 902,
+            businessDate: D,
+            subtotalAed: '0',
+            totalAed: '0',
+            status: 'void',
+          },
+        ])
+        .returning()
+      await db.insert(tips).values([
+        { tenantId: ids.tenant!, saleId: paid!.id, staffId: ids.maya!, amountAed: '25', method: 'cash' },
+        { tenantId: ids.tenant!, saleId: voided!.id, staffId: ids.maya!, amountAed: '99', method: 'cash' },
+      ])
+    })
+    const e = await tx((db) =>
+      staffEarnings(db, ids.maya!, {
+        day: { from: D, to: D },
+        before: { from: '2000-01-01', to: '2000-01-02' },
+      }),
+    )
+    expect(e.day).toEqual({ commissionAed: 40, tipsAed: 25 })
+    expect(e.before).toEqual({ commissionAed: 0, tipsAed: 0 })
   })
 })

@@ -47,6 +47,14 @@ export const notifications = {
         },
         body: 'Instagram posts: {posts} · Review replies: {replies}',
       },
+      budget_warning: {
+        title: 'AI budget {percent}% used',
+        body: 'USD {spent} of USD {budget} this month. AI pauses when the budget is reached — contact us to raise it.',
+      },
+      budget_reached: {
+        title: 'AI paused: monthly AI budget reached',
+        body: 'USD {budget} used this month. AI features restart on the 1st — contact us to raise the budget.',
+      },
     },
     billing: {
       overdue: { title: 'Invoice overdue', body: '{number} · {amount} was due on {date}' },

@@ -125,6 +125,13 @@ export const clients = {
     signedTitle: 'Signed intake',
     print: 'Print or save PDF',
   },
+  memberships: {
+    title: 'Memberships',
+    sub: 'Sold and renewed at checkout; benefits apply there automatically',
+    period: '{from} – {to}',
+    discount: '−{pct}% on treatments',
+    sessions: { one: '{count} included session left', other: '{count} included sessions left' },
+  },
   prefs: {
     title: 'Preferences',
     sub: 'What the therapist should know before the session.',
@@ -166,6 +173,23 @@ export const clients = {
     therapistNotFound: 'Therapist not found.',
     visitNotFound: 'Visit not found.',
     dupPhone: 'Another client already has this number.',
+    erased: 'Client data erased',
+  },
+  erase: {
+    title: 'Erase personal data',
+    sub: 'For a client who asks you to delete their data. Sales and bookings stay for your accounts.',
+    button: 'Erase client',
+    sheetSub: 'This cannot be undone. Download an export first if you need a copy.',
+    removes:
+      'Removed: name, phone, email, birthday, nationality, tags, preferences, notes, treatment notes, intake forms and signatures, WhatsApp messages and conversations, waitlist entries and booking notes.',
+    keeps:
+      'Kept for accounting: visits, sales, payments, packages and gift cards — shown as “Erased client”.',
+    export: 'Download export',
+    confirm: 'I understand this permanently erases this client’s personal data',
+    confirmRequired: 'Tick the box to confirm',
+    submit: 'Erase permanently',
+    erasedName: 'Erased client',
+    erasedBanner: 'This client’s personal data was erased on {date}. Financial records are kept.',
   },
   error: {
     name: 'Enter the client’s name',

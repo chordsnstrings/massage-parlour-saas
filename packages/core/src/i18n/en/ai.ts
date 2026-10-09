@@ -85,7 +85,7 @@ export const ai = {
   replyDrafted: 'Reply drafted',
   unknownPost: 'Unknown post',
   publishedIg: 'Published to Instagram',
-  errBudget: 'Your monthly AI budget is used up. Ask your account manager to raise it.',
+  errBudget: 'AI paused: monthly AI budget reached — contact us.',
   errDisabled: 'This AI feature is switched off by the platform.',
   errBusy: 'The AI service is busy — please try again in a moment.',
   errTone: 'Use 3–120 characters',

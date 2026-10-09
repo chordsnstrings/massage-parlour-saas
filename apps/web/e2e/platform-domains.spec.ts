@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { altApp, altBase, app, base, PATH, site, uniqueSlug } from './helpers'
+import { altApp, altBase, app, base, enableTotp, enrolUrl, PATH, site, uniqueSlug } from './helpers'
 
 // The platform answers on every configured domain: getting around stays on the domain the visitor is using, while a
 // spa's own addresses (its site, invites, campaign links) always use the canonical domain.
@@ -72,6 +72,10 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     await page.getByLabel('Spa name').fill('Alt Domain Spa')
     await page.getByLabel('Web address').fill(slug)
     await page.getByRole('button', { name: 'Create account' }).click()
+    // G23: the owner is asked to enrol 2FA first — on this domain too.
+    await page.waitForURL((u) => u.href.startsWith(altApp) && enrolUrl(slug).test(u.href))
+    await enableTotp(`owner-${slug}@e2e.test`)
+    await page.goto(`${altApp}/${slug}`)
     await page.waitForURL(`${altApp}/${slug}`)
     await expect(page.getByRole('link', { name: 'Website' }).first()).toBeVisible()
 

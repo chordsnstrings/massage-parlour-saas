@@ -1,3 +1,4 @@
+import { requires2fa } from '@spa/core'
 import { branches, withTenant } from '@spa/db'
 import { IMPORT_KINDS, listAuditLog, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -14,7 +15,7 @@ import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { saveSecurityAction, saveSettingsAction } from './actions'
+import { saveOnlineBookingAction, saveSecurityAction, saveSettingsAction } from './actions'
 import { actorLabel } from './audit/labels'
 import { LogoForm } from './logo-form'
 import { SettingsTabs } from './settings-tabs'
@@ -123,6 +124,42 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
               </div>
             </Card>
           </ActionForm>
+          <ActionForm action={saveOnlineBookingAction.bind(null, tenant.slug)}>
+            <Card title={t('settings.profile.online.title')} sub={t('settings.profile.online.sub')}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{t('settings.profile.online.autoConfirm')}</p>
+                  <p className="crm-muted text-[13px]">{t('settings.profile.online.autoConfirmHint')}</p>
+                </div>
+                <Toggle
+                  name="autoConfirm"
+                  label={t('settings.profile.online.autoConfirm')}
+                  defaultChecked={Boolean(tenant.settings.onlineBooking?.autoConfirmReturning)}
+                />
+              </div>
+              <div className="mt-4 max-w-56">
+                <Field
+                  label={t('settings.profile.online.afterVisits')}
+                  name="afterVisits"
+                  hint={t('settings.profile.online.afterVisitsHint')}
+                >
+                  <Input
+                    id="afterVisits"
+                    name="afterVisits"
+                    type="number"
+                    min={1}
+                    max={50}
+                    inputMode="numeric"
+                    defaultValue={tenant.settings.onlineBooking?.autoConfirmAfterVisits ?? 1}
+                    className="tabular"
+                  />
+                </Field>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <SubmitButton>{t('settings.profile.online.save')}</SubmitButton>
+              </div>
+            </Card>
+          </ActionForm>
           {(canImport || canExport) && (
             <Card title={t('settings.profile.data.title')}>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -172,7 +209,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
                 <Toggle
                   name="require2fa"
                   label={t('audit.security.require2fa')}
-                  defaultChecked={Boolean(tenant.settings.require2fa)}
+                  defaultChecked={requires2fa(tenant.settings)}
                 />
               </div>
               <div className="mt-3 flex justify-end">

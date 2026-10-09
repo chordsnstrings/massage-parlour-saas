@@ -1,3 +1,4 @@
+import { configChecks, emailDomain, resolveEmailConfig } from '@spa/core'
 import {
   platformDb,
   platformInvoices,
@@ -6,6 +7,7 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
+import { aiUsageOverview } from '@spa/services'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -17,6 +19,7 @@ import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { formatAed, formatDate, todayDubai } from '@/lib/utils'
+import { registerEmailSettings } from '@/server/email-settings'
 import { pauseTenantAction } from './actions'
 
 export default async function PlatformOverview() {
@@ -89,7 +92,28 @@ export default async function PlatformOverview() {
     .where(and(eq(platformJobRuns.job, 'db-backup'), eq(platformJobRuns.status, 'ok')))
     .orderBy(desc(platformJobRuns.finishedAt))
     .limit(1)
+  // G8: worker heartbeat (every 5 min) carries disk use, the droplet's deploy state and the worker's config flags.
+  const [beat] = await db
+    .select()
+    .from(platformJobRuns)
+    .where(eq(platformJobRuns.job, 'worker-heartbeat'))
+    .orderBy(desc(platformJobRuns.finishedAt))
+    .limit(1)
+  const beatAgeMin = beat ? Math.round((Date.now() - beat.finishedAt.getTime()) / 60_000) : null
+  const beatStale = beatAgeMin === null || beatAgeMin > 10
+  const disk = beat?.details.disk as { usedPct: number; freeGb: number } | null | undefined
+  const deploy = beat?.details.deploy as
+    | { state: string; commit?: string; message?: string }
+    | null
+    | undefined
+  const workerConfig = (beat?.details.config ?? null) as Record<string, boolean> | null
+  // G9: config health — presence only, never a value.
+  registerEmailSettings()
+  const mail = await resolveEmailConfig()
+  const checks = configChecks()
   const backupStale = !okBackup || Date.now() - okBackup.finishedAt.getTime() > 36 * 3_600_000
+  // G18: spas at ≥ 80 % of their monthly AI budget (budget 0 = AI deliberately off, not flagged).
+  const aiFlags = (await aiUsageOverview(db)).filter((r) => r.budgetUsd > 0 && r.level !== 'ok')
 
   return (
     <>
@@ -117,6 +141,71 @@ export default async function PlatformOverview() {
             />
           </StaggerItem>
         </Stagger>
+        <Card data-testid="ops-health">
+          <CardHeader
+            title="Server health"
+            description="Worker heartbeat every 5 minutes; alerts are emailed to PLATFORM_ADMIN_EMAILS once per incident."
+          />
+          <ul className="mt-4 divide-y border-t text-sm">
+            <HealthRow
+              testId="health-worker"
+              label="Worker"
+              ok={!beatStale}
+              text={
+                beatAgeMin === null
+                  ? 'No heartbeat yet: the worker is not running'
+                  : `Last heartbeat ${beatAgeMin} min ago${beatStale ? ': the worker looks down' : ''}`
+              }
+            />
+            <HealthRow
+              testId="health-disk"
+              label="Disk"
+              ok={Boolean(disk) && (disk?.usedPct ?? 100) <= 85}
+              text={disk ? `${disk.usedPct}% used · ${disk.freeGb} GB free` : 'Unknown'}
+            />
+            {deploy && (
+              <HealthRow
+                testId="health-deploy"
+                label="Last deploy"
+                ok={deploy.state !== 'failed'}
+                text={`${deploy.state}${deploy.commit ? ` · ${deploy.commit.slice(0, 7)}` : ''}${deploy.message ? ` · ${deploy.message}` : ''}`}
+              />
+            )}
+          </ul>
+        </Card>
+        <Card data-testid="config-health">
+          <CardHeader
+            title="Configuration"
+            description="Production settings present on the server (values are never shown)."
+          />
+          <ul className="mt-4 divide-y border-t text-sm">
+            <HealthRow
+              testId="config-resend"
+              label="RESEND_API_KEY (staff email)"
+              ok={Boolean(mail.apiKey)}
+              strong
+              text={
+                mail.keySource === 'missing'
+                  ? 'Missing: sign-up verification, password reset and alerts cannot be sent. Set it in Settings → Email.'
+                  : `Set (from ${mail.keySource === 'console' ? 'console' : 'env'}) · sends as ${emailDomain(mail.from) ?? '?'}${mail.fromSource === 'missing' ? ' (default sender)' : ''}`
+              }
+            />
+            {checks.map((c) => (
+              <HealthRow
+                key={c.key}
+                testId={`config-${c.key}`}
+                label={c.label}
+                ok={c.ok}
+                warnOnly={!c.required}
+                text={`${c.ok ? 'Set' : `Missing: ${c.effect}`}${c.detail ? ` · ${c.detail}` : ''}${
+                  workerConfig && c.key in workerConfig && workerConfig[c.key] !== c.ok
+                    ? ` · worker sees it ${workerConfig[c.key] ? 'set' : 'missing'}`
+                    : ''
+                }`}
+              />
+            ))}
+          </ul>
+        </Card>
         <Card data-testid="offsite-backup">
           <CardHeader
             title="Off-site backup"
@@ -137,6 +226,36 @@ export default async function PlatformOverview() {
               <Badge tone={backupStale ? 'danger' : 'success'}>
                 {backupStale ? (okBackup ? 'overdue' : 'missing') : 'ok'}
               </Badge>
+            }
+          />
+        </Card>
+        <Card data-testid="ai-budget-flags">
+          <CardHeader
+            title="AI budgets"
+            description={
+              aiFlags.length
+                ? aiFlags
+                    .map(
+                      (r) =>
+                        `${r.name} ${Math.round(r.ratio * 100)}%${r.level === 'over' ? ' (paused)' : ''}`,
+                    )
+                    .join(' · ')
+                : 'Every spa is under 80 % of its monthly AI budget.'
+            }
+            action={
+              <Link href={adminPath('/ai/usage')}>
+                <Badge
+                  tone={
+                    aiFlags.some((r) => r.level === 'over')
+                      ? 'danger'
+                      : aiFlags.length
+                        ? 'warning'
+                        : 'success'
+                  }
+                >
+                  {aiFlags.length ? `${aiFlags.length} at ≥ 80 %` : 'ok'}
+                </Badge>
+              </Link>
             }
           />
         </Card>
@@ -259,5 +378,27 @@ export default async function PlatformOverview() {
         </Card>
       </PageBody>
     </>
+  )
+}
+
+function HealthRow(p: {
+  testId: string
+  label: string
+  ok: boolean
+  text: string
+  warnOnly?: boolean
+  strong?: boolean
+}) {
+  const tone = p.ok ? 'success' : p.warnOnly ? 'warning' : 'danger'
+  return (
+    <li
+      data-testid={p.testId}
+      data-ok={p.ok}
+      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 py-2.5"
+    >
+      <span className={p.strong ? 'min-w-56 font-semibold' : 'min-w-56 font-medium'}>{p.label}</span>
+      <span className="flex-1 text-muted">{p.text}</span>
+      <Badge tone={tone}>{p.ok ? 'ok' : p.warnOnly ? 'off' : 'problem'}</Badge>
+    </li>
   )
 }

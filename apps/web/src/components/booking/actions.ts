@@ -8,6 +8,7 @@ import {
   findOrCreateClient,
   notify,
   publicPrice,
+  selfBookingStatus,
   spaHidesPrices,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
@@ -82,6 +83,7 @@ const slotQuery = z.object({
     .uuid()
     .optional()
     .or(z.literal('').transform(() => undefined)),
+  branchId: z.uuid().optional(),
   lang: locale,
 })
 
@@ -108,7 +110,7 @@ export async function getSlots(input: z.input<typeof slotQuery>): Promise<Action
   if (!tenant) return fail(t('unavailable', q.lang))
   try {
     const slots = await withTenant(tenant.id, async (tx) => {
-      const branch = await bookingBranch(tx)
+      const branch = await bookingBranch(tx, q.branchId)
       if (!branch || !(await bookableVariant(tx, q.variantId))) return null
       if (!bookingDates(branch).some((d) => d.date === q.date)) return []
       const found = await freeSlots(tx, branch, q)
@@ -145,6 +147,7 @@ const bookingInput = z.object({
   website: z.string().optional().default(''),
   /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
   via: z.enum(['widget']).optional(),
+  branchId: z.uuid().optional(),
   lang: locale,
 })
 
@@ -159,7 +162,7 @@ function confirmText(
     : `Hi ${v.spa}, I'd like to confirm my booking #${v.ref}: ${v.service} on ${day} at ${time}. Name: ${v.name}.`
 }
 
-/** Public booking request → pending booking (resources reserved), returns the confirmation details. */
+/** Public booking request → pending (or auto-confirmed, G21) booking with resources reserved; returns the details. */
 export async function bookOnline(input: z.input<typeof bookingInput>): Promise<ActionResult> {
   const parsed = bookingInput.safeParse(input)
   const lang: Locale = input?.lang === 'ar' ? 'ar' : 'en'
@@ -181,7 +184,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
 
   try {
     const result = await withTenant(tenant.id, async (tx) => {
-      const branch = await bookingBranch(tx)
+      const branch = await bookingBranch(tx, v.branchId)
       const row = await bookableVariant(tx, v.variantId)
       if (!branch || !row) return { kind: 'unavailable' as const }
       const date = businessDateOf(start, branch.businessDayCutoff.slice(0, 5))
@@ -206,16 +209,19 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       ]
         .filter(Boolean)
         .join('\n')
+      // Pending until the front desk confirms, unless the spa auto-confirms returning clients (G21).
+      const status = await selfBookingStatus(tx, tenant.id, client.id)
       const booking = await createBooking(tx, {
         tenantId: tenant.id,
         branchId: branch.id,
         clientId: client.id,
         source: 'online',
-        status: 'pending',
+        status,
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
       })
-      // Pending: the confirmation + reminders are queued when the receptionist confirms (G4).
+      // Pending: the confirmation + reminders are queued when the receptionist confirms (G4); a confirmed
+      // booking queued them in createBooking.
 
       let therapist: string | null = null
       if (v.staffId) {
@@ -243,6 +249,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
           : null,
         spa: tenant.name,
         address: branch.address,
+        confirmed: status === 'confirmed',
       }
       return { kind: 'ok' as const, bookingId: booking.id, done, date, serviceEn: row.service.name.en }
     })

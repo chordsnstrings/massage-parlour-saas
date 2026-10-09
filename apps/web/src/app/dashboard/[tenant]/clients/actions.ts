@@ -9,7 +9,7 @@ import {
   treatmentNotes,
   withTenant,
 } from '@spa/db'
-import { DomainError, pgCode } from '@spa/services'
+import { DomainError, eraseClient, pgCode } from '@spa/services'
 import { and, desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -361,6 +361,42 @@ export async function submitIntakeAction(
     if (e instanceof DomainError) return failDomain(e)
     throw e
   }
+}
+
+/**
+ * G12: erase one client's personal data on request (owner only; a super-admin acting on the spa may too).
+ * Sales, ledger and bookings stay for accounting, pointing at the anonymised client (services/data-deletion.ts).
+ */
+export async function eraseClientAction(
+  slug: string,
+  clientId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'clients.manage')
+  if (error) return fail(error)
+  if (ctx.member?.roleKey !== 'owner' && !ctx.impersonating) return fail('errors.forbidden')
+  if (!z.uuid().safeParse(clientId).success) return fail('clients.result.notFound')
+  if (formData.get('confirm') !== 'on')
+    return fail('errors.checkFields', { confirm: 'clients.erase.confirmRequired' })
+  try {
+    const { removed, alreadyErased } = await withTenant(ctx.tenant.id, (tx) => eraseClient(tx, clientId))
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+      action: 'client.erased',
+      entity: 'client',
+      entityId: clientId,
+      data: { removed, alreadyErased },
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  revalidatePath(clientsPath(slug))
+  revalidatePath(`${clientsPath(slug)}/${clientId}`)
+  return ok('clients.result.erased')
 }
 
 class FieldErrors extends Error {

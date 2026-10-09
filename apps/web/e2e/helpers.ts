@@ -40,19 +40,30 @@ export const site = (slug: string) => (PATH ? `${base}/s/${slug}` : `http://${sl
 export const uniqueSlug = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`
 
-/** Signs up a new owner + spa and lands on its dashboard. */
+/** Where the spa sign-up lands: G23 makes new owners enrol 2FA first (`/account?require2fa=<slug>`). */
+export const enrolUrl = (slug: string) => new RegExp(`/account\\?require2fa=${slug}$`)
+
+/**
+ * Signs up a new owner + spa and lands on its dashboard. "Require 2FA for owner & managers" is on for new spas (G23):
+ * sign-up lands on the enrol page, so a verified TOTP secret is stored directly (`enableTotp`; the UI enrolment is
+ * covered in onboarding.spec) and a later password sign-in passes with `passTwoFactor(page, email)`.
+ */
 export async function signUpOwner(page: Page, opts: { slug?: string; name?: string; spa?: string } = {}) {
   const slug = opts.slug ?? uniqueSlug('spa')
+  const email = `owner-${slug}@e2e.test`
   await page.goto(`${app}/signup`)
   await page.getByLabel('Your name').fill(opts.name ?? 'Aisha Rahman')
-  await page.getByLabel('Work email').fill(`owner-${slug}@e2e.test`)
+  await page.getByLabel('Work email').fill(email)
   await page.getByLabel('Password').fill('correct-horse-battery')
   await page.getByLabel('Spa name').fill(opts.spa ?? 'Serenity Spa')
   await page.getByLabel('Web address').fill(slug)
   await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
   await page.getByRole('button', { name: 'Create account' }).click()
+  await page.waitForURL(enrolUrl(slug))
+  await enableTotp(email)
+  await page.goto(`${app}/${slug}`)
   await page.waitForURL(`${app}/${slug}`)
-  return { slug, dashboard: `${app}/${slug}` }
+  return { slug, dashboard: `${app}/${slug}`, email }
 }
 
 /** BETTER_AUTH_SECRET of the e2e server (playwright.config.ts). */
@@ -130,7 +141,8 @@ export async function signInPlatformAdmin(page: Page) {
     await page.getByLabel('Spa name').fill('Admin Test Spa')
     await page.getByLabel('Web address').fill(slug)
     await page.getByRole('button', { name: 'Create account' }).click()
-    await page.waitForURL(`${app}/${slug}`)
+    // G23: the new spa asks its owner to enrol 2FA first; the super-admin enrolment below covers it.
+    await page.waitForURL(enrolUrl(slug))
     // Unverified: the listed email is not a super-admin yet (G2).
     await page.goto(`${admin}/`)
     await expect(overview).toHaveCount(0)
@@ -173,6 +185,28 @@ export async function mockAiReply(slug: string, reply: unknown) {
   await writeFile(path.join(dir, `${slug}.json`), JSON.stringify(reply))
 }
 
+/**
+ * Turns TOTP 2FA on for a user by storing a verified secret directly (as Better Auth would), so a later password
+ * sign-in passes with passTwoFactor(page, email). The UI enrolment is covered by onboarding.spec / signInPlatformAdmin.
+ */
+export async function enableTotp(email: string) {
+  const db = testDb()
+  const [row] = await db.select({ id: user.id }).from(user).where(eq(user.email, email))
+  if (!row) throw new Error(`no user ${email}`)
+  const enc = (data: string) => symmetricEncrypt({ key: AUTH_SECRET, data })
+  await db
+    .insert(twoFactor)
+    .values({
+      id: `tf-${row.id}`,
+      userId: row.id,
+      secret: await enc(`e2e-totp-${row.id}`),
+      backupCodes: await enc('[]'),
+      verified: true,
+    })
+    .onConflictDoNothing()
+  await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, row.id))
+}
+
 /** Makes a signed-up owner a super-admin too, so the Website Studio (super-admin only) opens on their spa. */
 export async function makeStudio(slug: string) {
   const db = testDb()
@@ -181,20 +215,8 @@ export async function makeStudio(slug: string) {
     .from(user)
     .where(eq(user.email, `owner-${slug}@e2e.test`))
   await db.insert(platformAdmins).values({ userId: owner!.id }).onConflictDoNothing()
-  // Super-admin powers need 2FA (G3); the UI enrolment is covered by signInPlatformAdmin. Here a verified TOTP
-  // secret is stored directly (as Better Auth would), so a later sign-in passes with passTwoFactor().
-  const enc = (data: string) => symmetricEncrypt({ key: AUTH_SECRET, data })
-  await db
-    .insert(twoFactor)
-    .values({
-      id: `tf-${owner!.id}`,
-      userId: owner!.id,
-      secret: await enc(`e2e-totp-${owner!.id}`),
-      backupCodes: await enc('[]'),
-      verified: true,
-    })
-    .onConflictDoNothing()
-  await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, owner!.id))
+  // Super-admin powers need 2FA (G3): signUpOwner already enrolled it (G23); kept for owners created otherwise.
+  await enableTotp(`owner-${slug}@e2e.test`)
 }
 
 /** Today's business date in Dubai (05:00 cutoff). */

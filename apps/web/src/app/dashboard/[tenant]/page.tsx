@@ -1,4 +1,4 @@
-import { addDays, businessDateOf } from '@spa/core'
+import { addDays, businessDateOf, weekStartOf } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import {
   bookings,
@@ -19,6 +19,7 @@ import {
   outboxBookingLive,
   peakHours,
   revenueSeries,
+  staffEarnings,
   upcomingItems,
 } from '@spa/services'
 import { and, count, eq, inArray, isNull, lte, not, or } from 'drizzle-orm'
@@ -60,6 +61,10 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext, requireMember } from '@/server/access'
 import { publicSiteUrl } from '@/server/sites'
+import { allowedBranches } from './calendar/data'
+
+/** Matches no branch: a member scoped to branches that are all archived sees empty figures, not the whole spa. */
+const NO_BRANCH = '00000000-0000-0000-0000-000000000000'
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('overview.metaTitle') }
@@ -79,13 +84,13 @@ export default async function TenantHome({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>
-  searchParams: Promise<{ period?: string }>
+  searchParams: Promise<{ period?: string; branch?: string }>
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'dashboard.view')) return <TherapistHome ctx={ctx} />
   const { t, fmt } = await getI18n()
 
-  const { period: periodParam } = await searchParams
+  const { period: periodParam, branch: branchParam } = await searchParams
   const period: PeriodKey =
     periodParam && Object.hasOwn(PERIODS, periodParam) ? (periodParam as PeriodKey) : 'today'
   const days = PERIODS[period].days
@@ -93,16 +98,19 @@ export default async function TenantHome({
   const showRevenue = can(ctx, 'dashboard.revenue')
   const showClients = can(ctx, 'clients.view')
   const showMessages = can(ctx, 'marketing.send')
-  // Members scoped to specific branches see their first branch; everyone else sees the whole spa.
-  const branchId = ctx.member && !ctx.member.allBranches ? ctx.member.branchIds[0] : undefined
+  // Branch picker (G22): members scoped to branches pick one of theirs (first by default); everyone else sees
+  // the whole spa or picks a branch. A scoped member without an open branch sees nothing.
+  const scoped = Boolean(ctx.member && !ctx.member.allBranches)
   const now = new Date()
 
   const data = await withTenant(tenant.id, async (tx) => {
-    const [branch] = await tx
-      .select()
-      .from(branches)
-      .where(branchId ? eq(branches.id, branchId) : eq(branches.isDefault, true))
-      .limit(1)
+    const allowed = await allowedBranches(tx, ctx)
+    const picked = allowed.find((b) => b.id === branchParam) ?? (scoped ? allowed[0] : undefined)
+    const branchId = picked?.id ?? (scoped ? NO_BRANCH : undefined)
+    const branch =
+      picked ??
+      (await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1))[0] ??
+      allowed[0]
     const cutoff = branch?.businessDayCutoff.slice(0, 5) ?? '05:00'
     const to = businessDateOf(now, cutoff)
     const from = addDays(to, 1 - days)
@@ -145,6 +153,8 @@ export default async function TenantHome({
         : []
     return {
       branch,
+      branchId: picked?.id,
+      branchOptions: allowed.map((b) => ({ id: b.id, name: b.name })),
       cutoff,
       teamSize: team?.n ?? 0,
       sub,
@@ -209,7 +219,13 @@ export default async function TenantHome({
   const live = k.bookings - (k.byStatus.cancelled ?? 0)
   const prevLive = prev.bookings - (prev.byStatus.cancelled ?? 0)
   const walkIns = k.bySource.find((s) => s.source === 'walk_in')?.count ?? 0
-  const periodHref = (key: PeriodKey) => appPath(key === 'today' ? `/${slug}` : `/${slug}?period=${key}`)
+  const homeHref = (key: PeriodKey, branch = data.branchId) => {
+    const q = new URLSearchParams()
+    if (key !== 'today') q.set('period', key)
+    if (branch) q.set('branch', branch)
+    return appPath(q.size ? `/${slug}?${q}` : `/${slug}`)
+  }
+  const periodHref = (key: PeriodKey) => homeHref(key)
   const cutoffHour = Number(data.cutoff.slice(0, 2))
   const viewDetails = t('common.viewDetails')
 
@@ -315,6 +331,22 @@ export default async function TenantHome({
         }
         actions={
           <>
+            {data.branchOptions.length > 1 && (
+              <Seg
+                label={t('overview.branch.label')}
+                value={data.branchId ?? 'all'}
+                items={[
+                  ...(scoped
+                    ? []
+                    : [{ value: 'all', label: t('overview.branch.all'), href: homeHref(period, '') }]),
+                  ...data.branchOptions.map((b) => ({
+                    value: b.id,
+                    label: b.name,
+                    href: homeHref(period, b.id),
+                  })),
+                ]}
+              />
+            )}
             <Seg
               label={t('overview.period.label')}
               value={period}
@@ -591,7 +623,7 @@ function Empty({ text }: { text: string }) {
   return <p className="crm-muted py-6 text-center text-sm">{text}</p>
 }
 
-/** Therapists (no dashboard access): their own agenda for today, nothing financial. */
+/** Therapists (no dashboard access): their own agenda for today and their own earnings (G14) — no spa figures. */
 async function TherapistHome({ ctx }: { ctx: MemberContext }) {
   const { t, fmt } = await getI18n()
   const now = new Date()
@@ -609,7 +641,15 @@ async function TherapistHome({ ctx }: { ctx: MemberContext }) {
     const items: AgendaItem[] = me
       ? await upcomingItems(tx, { date, after: now, staffId: me.id, limit: 20 })
       : []
-    return { linked: Boolean(me), items, date }
+    // Own commission + tips only (business dates: today, Mon-start week, calendar month to date).
+    const earnings = me
+      ? await staffEarnings(tx, me.id, {
+          today: { from: date, to: date },
+          week: { from: weekStartOf(date), to: date },
+          month: { from: `${date.slice(0, 8)}01`, to: date },
+        })
+      : null
+    return { linked: Boolean(me), items, date, earnings }
   })
   const next = data.items[0]
 
@@ -669,6 +709,32 @@ async function TherapistHome({ ctx }: { ctx: MemberContext }) {
               )}
             </Card>
           </Grid>
+        )}
+        {data.earnings && (
+          <Card
+            title={t('overview.therapist.earnings.title')}
+            sub={t('overview.therapist.earnings.sub')}
+            footer={<p className="crm-muted text-[13px]">{t('overview.therapist.earnings.note')}</p>}
+          >
+            <Grid cols="g3">
+              {(['today', 'week', 'month'] as const).map((k) => {
+                const e = data.earnings![k]
+                return (
+                  <Stat
+                    key={k}
+                    label={t(`overview.therapist.earnings.${k}`)}
+                    value={fmt.aed(e.commissionAed + e.tipsAed)}
+                    change={{
+                      text: `${t('overview.therapist.earnings.commission')} ${fmt.aed(e.commissionAed)} · ${t('overview.therapist.earnings.tips')} ${fmt.aed(e.tipsAed)}`,
+                    }}
+                  />
+                )
+              })}
+            </Grid>
+          </Card>
+        )}
+        {data.linked && can(ctx, 'calendar.ownStatus') && (
+          <p className="crm-muted text-sm">{t('overview.therapist.actions')}</p>
         )}
       </PageBody>
     </>

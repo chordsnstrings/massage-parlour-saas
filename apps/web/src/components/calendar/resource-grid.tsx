@@ -451,6 +451,8 @@ function Block({
         type="button"
         {...listeners}
         {...attributes}
+        // dnd-kit marks a non-draggable handle aria-disabled; the block still opens the booking (therapists, G14).
+        aria-disabled={canDrag ? attributes['aria-disabled'] : undefined}
         aria-roledescription={canDrag ? t('calendar.grid.draggable') : undefined}
         onClick={() => onOpen(item.bookingId)}
         className={cn(

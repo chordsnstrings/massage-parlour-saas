@@ -1,7 +1,16 @@
 import { expect, test } from '@playwright/test'
 import { bookings, tenants, user } from '@spa/db'
 import { eq, sql } from 'drizzle-orm'
-import { seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
+import {
+  ADMIN,
+  app,
+  passTwoFactor,
+  seedBooking,
+  seedCatalog,
+  signInPlatformAdmin,
+  signUpOwner,
+  testDb,
+} from './helpers'
 
 // X5 (PLAN §14.7 B4 + Settings → Security): ⌘K / Ctrl+K global search; 2FA policy redirect, mask-phones toggle,
 // audit log viewer.
@@ -58,14 +67,29 @@ test('global search: Ctrl+K palette with grouped results and keyboard navigation
   })
 })
 
-test('security: audit log and the 2FA policy redirect', async ({ page }) => {
-  const { slug, dashboard } = await signUpOwner(page)
+test('security: 2FA policy on by default, audit log, redirect and super-admin access', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(180_000)
+  const { slug, dashboard, email } = await signUpOwner(page)
   const db = testDb()
   const require2fa = page.getByRole('switch', { name: 'Require 2FA for owner & managers' })
   const save = page.getByRole('button', { name: 'Save security' })
 
-  await test.step('the policy cannot be turned on without your own 2FA', async () => {
+  await test.step('G23: the policy is on for a new spa and the owner can turn it off', async () => {
     await page.goto(`${dashboard}/settings`)
+    await expect(require2fa).toHaveAttribute('aria-checked', 'true')
+    await require2fa.click()
+    await save.click()
+    await expect(page.getByText('Security settings saved')).toBeVisible()
+    const [t] = await db.select({ s: tenants.settings }).from(tenants).where(eq(tenants.slug, slug))
+    expect(t!.s.require2fa).toBe(false)
+  })
+
+  await test.step('the policy cannot be turned back on without your own 2FA', async () => {
+    await db.update(user).set({ twoFactorEnabled: false }).where(eq(user.email, email))
+    await page.reload()
     await expect(require2fa).toHaveAttribute('aria-checked', 'false')
     await require2fa.click()
     await save.click()
@@ -85,11 +109,11 @@ test('security: audit log and the 2FA policy redirect', async ({ page }) => {
     await page.getByRole('link', { name: 'View full audit log' }).click()
     await page.waitForURL(`${dashboard}/settings/audit`)
     const row = page.getByRole('row').filter({ hasText: 'settings.security.updated' })
-    await expect(row).toContainText('Aisha Rahman')
+    await expect(row.first()).toContainText('Aisha Rahman')
     await page.getByLabel('Action').selectOption('settings.security.updated')
     await page.getByRole('button', { name: 'Apply' }).click()
     await page.waitForURL(/action=settings\.security\.updated/)
-    await expect(page.getByRole('row')).toHaveCount(2) // header + the one entry
+    await expect(page.getByRole('row')).toHaveCount(3) // header + the two saves
   })
 
   await test.step('with the policy on, an owner without 2FA is sent to set it up', async () => {
@@ -101,12 +125,28 @@ test('security: audit log and the 2FA policy redirect', async ({ page }) => {
     await page.waitForURL(/\/account\?require2fa=/)
     await expect(page.getByText(/requires two-step verification/)).toBeVisible()
     // Once 2FA is on (row, not the cached session), the dashboard opens again.
-    await db
-      .update(user)
-      .set({ twoFactorEnabled: true })
-      .where(eq(user.email, `owner-${slug}@e2e.test`))
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.email, email))
     await page.goto(dashboard)
     await expect(page).toHaveURL(dashboard)
     await expect(page.getByRole('navigation', { name: 'Main menu' })).toBeVisible()
+  })
+
+  await test.step('a super-admin still opens the spa (impersonation is not held by the spa policy)', async () => {
+    await db.update(user).set({ twoFactorEnabled: false }).where(eq(user.email, email))
+    const ctx = await browser.newContext()
+    const admin = await ctx.newPage()
+    await signInPlatformAdmin(admin) // makes sure the super-admin exists with 2FA (G3)
+    // The spa dashboard lives on the app host: sign in there too (super-admins pass the two-step page).
+    await admin.goto(`${app}/login?next=${encodeURIComponent(new URL(dashboard).pathname)}`)
+    if (await admin.getByLabel('Email').isVisible()) {
+      await admin.getByLabel('Email').fill(ADMIN.email)
+      await admin.getByLabel('Password').fill(ADMIN.password)
+      await admin.getByRole('button', { name: 'Sign in' }).click()
+      await admin.waitForURL(/\/two-factor/)
+      await passTwoFactor(admin)
+    }
+    await admin.waitForURL(dashboard)
+    await expect(admin.getByRole('navigation', { name: 'Main menu' })).toBeVisible()
+    await ctx.close()
   })
 })

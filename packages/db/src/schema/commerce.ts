@@ -18,7 +18,7 @@ import {
 import { createdAt, id } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
-import { bookings, clients, staff } from './operations'
+import { type BillingDetails, bookings, clients, staff } from './operations'
 import { tenants } from './platform'
 import { branches } from './tenant'
 
@@ -40,7 +40,14 @@ export const counters = pgTable(
 )
 
 export const saleStatus = pgEnum('sale_status', ['open', 'paid', 'void', 'refunded'])
-export const saleLineKind = pgEnum('sale_line_kind', ['service', 'product', 'package', 'gift_card', 'other'])
+export const saleLineKind = pgEnum('sale_line_kind', [
+  'service',
+  'product',
+  'package',
+  'gift_card',
+  'other',
+  'membership',
+])
 export const paymentMethodKind = pgEnum('payment_method_kind', [
   'cash',
   'card_terminal',
@@ -70,6 +77,8 @@ export const sales = pgTable(
     tipsAed: aed('tips_aed').notNull().default('0'),
     status: saleStatus('status').notNull().default('open'),
     voidReason: text('void_reason'),
+    /** Customer billing details printed on the full tax invoice (G16); null = simplified tax invoice only. */
+    billing: jsonb('billing').$type<BillingDetails>(),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
   },
@@ -228,6 +237,7 @@ export const messageKind = pgEnum('message_kind', [
   'slot_offer',
   'waitlist_slot',
   'custom',
+  'membership_renewal',
 ])
 export const outboxStatus = pgEnum('outbox_status', ['queued', 'opened', 'sent', 'skipped'])
 

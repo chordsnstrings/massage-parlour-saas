@@ -1179,12 +1179,18 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
   G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
   components/marketing/legal-config.ts — owner fills §16.2 + reviews text; URLs in deploy/droplet/README.md OAuth step).
-- **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
-  G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
+- **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
+  ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
+  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
-  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
+  G20 source attribution (ig/gbp/qr) not carried to bookings · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
+  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
+  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
@@ -1211,3 +1217,85 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   production without `RESEND_API_KEY` (no links in logs — also closes the log-leak half of G9).
 - **G3:** super-admin powers (console, impersonation, studio, file access, template export) need TOTP 2FA; without it →
   account page `?admin2fa=1` to enrol (reachable on app + admin hosts; sign-out in the user menu). e2e enrols for real.
+- **G7:** the droplet deploys only CI-green commits: CI job `promote` moves branch `deploy/green` (forward only,
+  `GITHUB_TOKEN`, no new secret); `update.sh` deploys it (tip fallback only until it first exists), dumps
+  `pre-migrate-<sha>.dump` (keep 5), migrates with lock/statement timeouts, health-checks and rolls back to
+  `/opt/spa/last-good` on any failure (state `failed`, not retried without `--force`). `updater-sync` keeps the
+  installed updater current. Owner steps: deploy/droplet/README.md "One-time owner steps for the CI gate".
+- **G8:** worker `worker-heartbeat` every 5 min (disk, deploy state, config flags) + compose healthcheck; console
+  "Server health" (red: beat > 10 min, disk > 85 %, deploy failed); one email per incident to
+  `PLATFORM_ADMIN_EMAILS`; Docker log rotation (compose per service + daemon.json in cloud-init/update.sh).
+- **G9:** log-leak closed by G2; console "Configuration" card (green/red per production setting, no values,
+  RESEND first with its source). Owner add-on (2026-10-09): console Settings → Email (Resend key write-only, last 4
+  shown; From; "Send test email to me"); DB value wins over env in web + worker; key AES-GCM when an encryption key
+  exists, else stored as entered (owner: never refuse to save); never logged/audited.
+- **G12 (data deletion, backs the /data-deletion "within 30 days" promise):** services `data-deletion.ts`.
+  - **Tenant purge:** console spa page → "Permanently delete" (only once soft-deleted; type the slug; "Download full
+    export" link next to it and next to Delete). `purgeTenant` (platform role): Cloudflare custom hostnames →
+    one transaction (row counts of every `tenant_id` table from the catalog, pg-boss jobs whose `data.tenantId`
+    matches — none today, best effort/privilege-checked — `DELETE tenants` → every tenant FK cascades) → bucket
+    objects under `<tenantId>/`. **Ledger exception (decision):** the ledger is append-only for live spas (triggers
+    block `spa_app` only); purging a whole deleted spa as the platform role is the one allowed deletion of journal rows
+    / booking commissions. Record: `tenant_purges` (no FK; slug, name, who, mode, counts, objects deleted, clean-up
+    errors) + a tenant-less `platform.tenant.purged` audit row; the spa's own audit rows go with it. Login accounts
+    (`user`) stay — they may belong to other spas. Integration tokens are rows (deleted), not revoked at Meta/Google.
+  - **Auto-purge (default off):** console Settings → Data retention "Auto-purge deleted spas after (days)"
+    (`platform_settings.auto_purge_days`, blank = off, ≥ 30 so the export window stays). Worker `tenant-auto-purge`
+    04:30 daily; skipped/ok/failed in `platform_job_runs`.
+  - **Client erase:** client profile → "Erase personal data" card (owner, or super-admin acting on the spa;
+    `clients.manage` + roleKey owner; tick-box confirm; export link). `eraseClient(tx)` keeps the client row as
+    "Erased client" (`clients.erased_at`; UI shows the translated label) with sales, ledger, bookings, packages,
+    memberships, gift cards; removes phone/email/birthday/nationality/gender/tags/preferences/notes/blocklist,
+    treatment notes, intake submissions (answers + signatures), outbox rows, conversations (+ messages), waitlist
+    entries and booking notes; sets marketing opt-out. Audit `client.erased` (counts only). No files link to
+    clients today. Not scrubbed: names inside old audit-log `data` and notification payloads.
+- **G18:** console **AI usage** (`/ai/usage`, nav + links from AI models / Performance / overview card "AI budgets"):
+  every spa this + last month (calls, tokens, cost, % of budget; sortable), inline monthly budget edit, per-spa AI
+  on/off (`tenants.ai_enabled`) and a platform-wide switch (`platform_settings.ai_enabled`); `/ai/usage/[id]` = daily
+  cost + by agent + by model for this/last month. All changes audited (`platform.ai.*`). Shared aggregation
+  `services/ai-usage.ts` (also Performance + dashboard meter). Gateway (`assertAiAllowed`): kill switches →
+  `AiPausedError` (extends `AiDisabledError`); budget → `AiBudgetExceededError`; after metering, 80 % / 100 % bell
+  notifications (`ai.budget_warning` / `ai.budget_reached`, `billing.view`, dedupe `ai.budget.<80|100>.<YYYY-MM>` =
+  once per threshold per Dubai month). Dashboard: one AI banner (80 % warning / "AI paused: monthly AI budget
+  reached — contact us" / AI off), budget error messages EN + TH. Months reset at Asia/Dubai month start.
+- **G15:** memberships sold/renewed in POS (sale line kind `membership`, one one-month period per line, client
+  required; selling a plan the client still holds = renewal starting the day after the current period). Price →
+  2110 with no VAT at sale (like packages); included sessions move their share to revenue + VAT when used; whatever
+  is left when the period ends is recognised then (`membership_expiry`, 2110 → 4000 + VAT — earned, not breakage).
+  Checkout: member discount % auto-applies to treatments (untick per line), "use an included session" checkbox;
+  both show on the receipt as typed suffixes. Daily job `memberships-renew` (automation switch `membershipRenewals`):
+  ≤ 7 days before the end → status `due` + WhatsApp renewal reminder queued in /messages (click-to-send; opted-out /
+  blocklisted clients skipped), ended → `expired`. Refund = unused value (as packages), period `refunded`; sales with
+  a membership or a membership session can't be voided. Discounts already given aren't clawed back on refund.
+  Client profile lists memberships.
+- **G14:** new permission `calendar.ownStatus` (therapist system role; system roles resolve from code, so every
+  existing spa has it — no migration). Calendar booking sheet shows Check in / Start service / Complete on bookings
+  the member's linked staff profile is on (`setOwnStatusAction` → services `setOwnBookingStatus`: ownership + from
+  confirmed/checked-in/in-service only; never confirm, cancel, re-open or move). Completing records no commission —
+  the front desk enters it on the booking page as before. Therapist home has "My earnings" (today / Mon-start week /
+  month to date): own `booking_commissions` (booking business date, net of corrections) + own tips on paid sales
+  (`staffEarnings`); no spa revenue.
+- **G21:** Settings → profile → "Online booking" card: "Auto-confirm returning clients" (off) + "after N completed
+  visits" (1–50, default 1) → `tenants.settings.onlineBooking`. `selfBookingStatus` (services) is used by `bookOnline`
+  (website/widget) and the AI DM `book` tool (Instagram/WhatsApp AI): a client matched by phone with ≥ N completed
+  bookings is created `confirmed` (reservations unchanged, EXCLUDE), so `createBooking` plans the confirmation +
+  reminders. The public done page then says "Booking confirmed".
+- **G23:** "Require 2FA for owner & managers" is on by default: `requires2fa(settings)` (core) treats missing as on,
+  provisioning writes `require2fa: true`, migration `0030_require_2fa_default` sets it on for every existing spa (even
+  ones that had turned it off). Owners may still turn it off (Settings → Security). Super-admin impersonation is
+  unaffected (not a member → own G3 2FA rule). e2e: `signUpOwner` stores a verified TOTP secret (`enableTotp`) after
+  sign-up lands on `/account?require2fa=`; onboarding.spec enrols through the UI.
+- **G16 (full tax invoice):** receipt → "Full tax invoice" (`sales/[id]/invoice`): "Tax Invoice / فاتورة ضريبية", supplier
+  legal name + branch address + TRN, customer billing name/address/TRN (`sales.billing`, prefilled from
+  `clients.billing`; "also save on the client's profile" needs `clients.manage`), invoice no. = sale number (gapless
+  per-tenant counter), issue date (sale created) + supply date (business date), per line qty / unit price incl. VAT /
+  discount (line + share of sale discount) / taxable / VAT % / VAT, totals + amount payable in AED; EN with AR labels,
+  A4 print CSS. Prepaid lines (packages, gift cards) show 0 % (VAT at redemption). `taxInvoiceLines` /
+  `saveSaleBilling` in services/tax-invoice.ts. Credit notes for refunds are not separate documents (listed on it).
+- **G22 (multi-branch):** Settings → Branches (`settings.manage`): add / edit (name, address, phone, WhatsApp, cutoff;
+  time zone fixed Asia/Dubai) / archive / restore; new branches copy the main branch's hours; main branch can't be
+  archived; plan `limits.branches` enforced on add/restore when the plan sets it. Team: per-member "All branches" or
+  ticked branches (edit + invite; invites now really create `member_branches` on accept). Pickers: calendar, POS,
+  bookings already had them; added on the overview (KPIs, "All branches" for unrestricted members) and the public
+  booking page (`?branch=`, select when > 1 open branch; slots + booking use it). Archived branches drop out of
+  pickers, rooms/hours screens and online booking. Services in services/branches.ts.

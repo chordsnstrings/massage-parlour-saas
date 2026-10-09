@@ -10,6 +10,7 @@ export const permissions = {
         view: 'View calendar',
         manage: 'Create and edit bookings',
         commission: 'Enter therapist commission',
+        ownStatus: 'Check in, start and complete own bookings',
       },
     },
     clients: {

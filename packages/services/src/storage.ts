@@ -94,3 +94,46 @@ export async function deleteFile(tx: Tx, id: string) {
     await bucket.client.fetch(`${bucket.endpoint}/${bucket.bucket}/${row.objectKey}`, { method: 'DELETE' })
   return Boolean(row)
 }
+
+const xmlText = (s: string) =>
+  s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+
+/**
+ * G12 tenant purge: deletes every bucket object under `<tenantId>/` (ListObjectsV2 pages, then one DELETE per
+ * object — no Content-MD5 needed). No bucket configured → nothing to do. Failures are returned, not thrown.
+ */
+export async function deleteTenantObjects(tenantId: string) {
+  const bucket = s3()
+  const out = { deleted: 0, errors: [] as string[] }
+  if (!bucket) return out
+  const base = `${bucket.endpoint}/${bucket.bucket}`
+  const prefix = `${tenantId}/`
+  let token: string | null = null
+  for (let page = 0; page < 1000; page++) {
+    const qs = new URLSearchParams({ 'list-type': '2', prefix })
+    if (token) qs.set('continuation-token', token)
+    const res = await bucket.client.fetch(`${base}?${qs}`)
+    if (!res.ok) {
+      out.errors.push(`list objects failed (${res.status})`)
+      break
+    }
+    const xml = await res.text()
+    const keys = [...xml.matchAll(/<Key>([^<]*)<\/Key>/g)].map((m) => xmlText(m[1]!))
+    for (const key of keys) {
+      if (!key.startsWith(prefix)) continue
+      const path = key.split('/').map(encodeURIComponent).join('/')
+      const del = await bucket.client.fetch(`${base}/${path}`, { method: 'DELETE' })
+      if (del.ok || del.status === 404) out.deleted++
+      else out.errors.push(`delete ${key} failed (${del.status})`)
+    }
+    const next = xml.match(/<NextContinuationToken>([^<]*)<\/NextContinuationToken>/)?.[1]
+    token = /<IsTruncated>true<\/IsTruncated>/.test(xml) && next ? xmlText(next) : null
+    if (!token) break
+  }
+  return out
+}

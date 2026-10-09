@@ -1,14 +1,25 @@
 'use server'
 import { sendStaffEmail } from '@spa/core'
-import { invitations, members, platformDb, roles, user, withTenant } from '@spa/db'
-import { and, eq, isNull } from 'drizzle-orm'
+import { branches, invitations, members, platformDb, roles, user, withTenant } from '@spa/db'
+import { DomainError, setMemberBranches } from '@spa/services'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
 import { hashToken, newToken } from '@/server/token'
+
+/** Branch scope from the form (G22): undefined = field not shown (single-branch spa), else 'all' or ids. */
+function branchScopeOf(formData: FormData): 'all' | string[] | undefined {
+  if (!formData.get('branchField')) return undefined
+  if (formData.get('branchScope') === 'all') return 'all'
+  return formData
+    .getAll('branchIds')
+    .map(String)
+    .filter((id) => z.uuid().safeParse(id).success)
+}
 
 const inviteSchema = z.object({
   email: z.email('validation.email').transform((e) => e.toLowerCase()),
@@ -25,6 +36,8 @@ export async function inviteAction(
   const parsed = inviteSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const { email, roleId } = parsed.data
+  const scope = branchScopeOf(formData)
+  if (Array.isArray(scope) && !scope.length) return fail('team.edit.branchesRequired')
   const existingUser = await platformDb().query.user.findFirst({
     where: eq(user.email, email),
     columns: { id: true },
@@ -50,10 +63,20 @@ export async function inviteAction(
         .where(
           and(eq(invitations.email, email), isNull(invitations.acceptedAt), isNull(invitations.revokedAt)),
         )
+      const branchIds = Array.isArray(scope)
+        ? (
+            await tx
+              .select({ id: branches.id })
+              .from(branches)
+              .where(and(inArray(branches.id, scope), eq(branches.active, true)))
+          ).map((b) => b.id)
+        : null
+      if (branchIds && !branchIds.length) return { error: 'team.edit.branchesRequired' }
       await tx.insert(invitations).values({
         tenantId: ctx.tenant.id,
         email,
         roleId,
+        branchIds,
         tokenHash: hashToken(token),
         invitedBy: ctx.user.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
@@ -111,36 +134,44 @@ export async function updateMemberAction(
   const parsed = memberSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const { memberId, roleId, status } = parsed.data
-  const problem = await withTenant(ctx.tenant.id, async (tx) => {
-    const [target] = await tx
-      .select({ id: members.id, userId: members.userId, roleKey: roles.key })
-      .from(members)
-      .innerJoin(roles, eq(members.roleId, roles.id))
-      .where(eq(members.id, memberId))
-    const [role] = await tx.select().from(roles).where(eq(roles.id, roleId))
-    if (!target || !role) return 'team.result.notFound'
-    const callerIsOwner = ctx.member?.roleKey === 'owner' || ctx.impersonating
-    if ((target.roleKey === 'owner' || role.key === 'owner') && !callerIsOwner)
-      return 'team.result.ownersChangeOwners'
-    if (target.userId === ctx.user.id && status === 'disabled') return 'team.result.cantDisableSelf'
-    if (target.roleKey === 'owner' && (role.key !== 'owner' || status === 'disabled')) {
-      const owners = await tx
-        .select({ id: members.id })
+  const scope = branchScopeOf(formData)
+  let problem: string | null
+  try {
+    problem = await withTenant(ctx.tenant.id, async (tx) => {
+      const [target] = await tx
+        .select({ id: members.id, userId: members.userId, roleKey: roles.key })
         .from(members)
         .innerJoin(roles, eq(members.roleId, roles.id))
-        .where(and(eq(roles.key, 'owner'), eq(members.status, 'active')))
-      if (owners.length <= 1) return 'team.result.needOwner'
-    }
-    await tx.update(members).set({ roleId, status }).where(eq(members.id, memberId))
-    return null
-  })
+        .where(eq(members.id, memberId))
+      const [role] = await tx.select().from(roles).where(eq(roles.id, roleId))
+      if (!target || !role) return 'team.result.notFound'
+      const callerIsOwner = ctx.member?.roleKey === 'owner' || ctx.impersonating
+      if ((target.roleKey === 'owner' || role.key === 'owner') && !callerIsOwner)
+        return 'team.result.ownersChangeOwners'
+      if (target.userId === ctx.user.id && status === 'disabled') return 'team.result.cantDisableSelf'
+      if (target.roleKey === 'owner' && (role.key !== 'owner' || status === 'disabled')) {
+        const owners = await tx
+          .select({ id: members.id })
+          .from(members)
+          .innerJoin(roles, eq(members.roleId, roles.id))
+          .where(and(eq(roles.key, 'owner'), eq(members.status, 'active')))
+        if (owners.length <= 1) return 'team.result.needOwner'
+      }
+      await tx.update(members).set({ roleId, status }).where(eq(members.id, memberId))
+      if (scope) await setMemberBranches(tx, ctx.tenant.id, memberId, scope)
+      return null
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
   if (problem) return fail(problem)
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,
     action: 'member.updated',
     entityId: memberId,
-    data: { roleId, status },
+    data: { roleId, status, branches: scope },
   })
   revalidatePath(`/dashboard/${slug}/team`)
   return ok('team.result.memberUpdated')

@@ -38,6 +38,7 @@ export const enums: Messages['enums'] = {
     package: 'แพ็กเกจ',
     gift_card: 'บัตรของขวัญ',
     other: 'อื่น ๆ',
+    membership: 'สมาชิก',
   },
   paymentMethodKind: {
     cash: 'เงินสด',
@@ -59,6 +60,7 @@ export const enums: Messages['enums'] = {
     slot_offer: 'เสนอช่วงเวลาว่าง',
     waitlist_slot: 'คิวรอ: มีช่วงว่าง',
     custom: 'กำหนดเอง',
+    membership_renewal: 'ต่ออายุสมาชิก',
   },
   waitlistStatus: { waiting: 'รอคิว', notified: 'แจ้งแล้ว', booked: 'จองแล้ว', cancelled: 'นำออกแล้ว' },
   outboxStatus: { queued: 'อยู่ในคิว', opened: 'เปิดแล้ว', sent: 'ส่งแล้ว', skipped: 'ข้าม' },
@@ -73,7 +75,15 @@ export const enums: Messages['enums'] = {
   clientPackageStatus: { active: 'ใช้งานอยู่', used_up: 'ใช้ครบแล้ว', expired: 'หมดอายุ', refunded: 'คืนเงินแล้ว' },
   giftCardStatus: { active: 'ใช้งานอยู่', redeemed: 'ใช้แล้ว', expired: 'หมดอายุ', void: 'ยกเลิก' },
   giftCardTxnKind: { issue: 'ออกบัตร', redeem: 'ใช้บัตร', refund: 'คืนเงิน', expire: 'หมดอายุ', adjust: 'ปรับยอด' },
-  membershipStatus: { active: 'ใช้งานอยู่', paused: 'พักไว้', cancelled: 'ยกเลิกแล้ว', lapsed: 'ขาดต่ออายุ' },
+  membershipStatus: {
+    active: 'ใช้งานอยู่',
+    paused: 'พักไว้',
+    cancelled: 'ยกเลิกแล้ว',
+    lapsed: 'ขาดต่ออายุ',
+    due: 'ถึงกำหนดต่ออายุ',
+    expired: 'หมดอายุ',
+    refunded: 'คืนเงินแล้ว',
+  },
   promoKind: { percent: 'ลดเป็นเปอร์เซ็นต์', amount: 'ลดเป็นจำนวนเงิน' },
   payrollStatus: { draft: 'ฉบับร่าง', finalised: 'ยืนยันแล้ว' },
   replyStatus: {

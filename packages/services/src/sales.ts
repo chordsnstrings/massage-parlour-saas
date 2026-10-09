@@ -4,12 +4,14 @@ import { businessDateOf, includedVat } from '@spa/core'
 import {
   bookings,
   branches,
+  clientMemberships,
   clientPackages,
   commissionEntries,
   counters,
   dayCloses,
   giftCards,
   giftCardTxns,
+  membershipRedemptions,
   packageRedemptions,
   payments,
   products,
@@ -31,8 +33,12 @@ import { post, postRefund, postSale, reverseSource } from './ledger'
 import {
   giftCardForPayment,
   issueGiftCard,
+  issueMembership,
   issuePackage,
+  LIVE_MEMBERSHIP,
+  membershipForUse,
   redeemGiftCard,
+  redeemMembershipSession,
   redeemPackageSession,
 } from './loyalty'
 import { enqueueBookingMessage } from './outbox'
@@ -44,8 +50,8 @@ export type PosMethod = (typeof POS_METHODS)[number]
 /** Payments can also draw on a gift card (reference = card code); tips can't. */
 export const PAY_METHODS = [...POS_METHODS, 'gift_card'] as const
 export type PayMethod = (typeof PAY_METHODS)[number]
-/** Prepaid items carry no VAT at sale — VAT is due when the session or card is used. */
-const PREPAID = new Set(['package', 'gift_card'])
+/** Prepaid items carry no VAT at sale — VAT is due when the session or card is used (or the membership period ends). */
+export const PREPAID = new Set(['package', 'gift_card', 'membership'])
 export const METHOD_LABEL: Record<string, string> = {
   cash: 'Cash',
   card_terminal: 'Card terminal',
@@ -61,7 +67,8 @@ const aed = (f: number) => (f / 100).toFixed(2)
 const num = (v: string | number | null | undefined) => Number(v ?? 0)
 
 export type NewSaleLine = {
-  kind: 'service' | 'product' | 'package' | 'gift_card' | 'other'
+  /** `membership`: sells (or renews) one period of the plan `refId` to the client. */
+  kind: 'service' | 'product' | 'package' | 'gift_card' | 'other' | 'membership'
   refId?: string | null
   description: string
   qty: number
@@ -70,6 +77,11 @@ export type NewSaleLine = {
   staffId?: string | null
   /** Service line covered by a session from this client package (price must be 0). */
   clientPackageId?: string | null
+  /**
+   * Service line using a membership benefit: `session` = an included session (price must be 0, qty 1);
+   * `discount` = the membership's discount % off the line, added to any line discount (computed here).
+   */
+  membership?: { id: string; use: 'session' | 'discount' } | null
 }
 
 export type NewSale = {
@@ -126,16 +138,28 @@ export async function createSale(tx: Tx, input: NewSale) {
   const branch = await branchRow(tx, input.branchId)
   const businessDate = businessDateOf(input.now ?? new Date(), branch.businessDayCutoff.slice(0, 5))
 
+  // Membership discounts are the period's snapshotted %; who may use it is checked once the client is known.
+  const memberIds = [...new Set(input.lines.flatMap((l) => (l.membership ? [l.membership.id] : [])))]
+  const memberPct = new Map(
+    (memberIds.length
+      ? await tx.select().from(clientMemberships).where(inArray(clientMemberships.id, memberIds))
+      : []
+    ).map((m) => [m.id, num(m.discountPct)]),
+  )
+
   // Lines → net amounts in fils.
   const priced = input.lines.map((l) => {
     if (!Number.isInteger(l.qty) || l.qty < 1) throw new DomainError('Quantity must be at least 1')
     if (!Number.isFinite(l.unitPriceAed)) throw new DomainError(`Type a price for “${l.description}”`)
     if (l.unitPriceAed < 0) throw new DomainError('Prices cannot be negative')
     const gross = fils(l.unitPriceAed) * l.qty
-    const discount = fils(l.discountAed ?? 0)
-    if (discount < 0 || discount > gross)
+    const manual = fils(l.discountAed ?? 0)
+    if (manual < 0 || manual > gross)
       throw new DomainError(`Discount on “${l.description}” is more than its price`)
-    return { ...l, net: gross - discount, discount }
+    const pct = l.membership?.use === 'discount' ? (memberPct.get(l.membership.id) ?? 0) : 0
+    const memberOff = Math.round((gross * pct) / 100)
+    const discount = Math.min(gross, manual + memberOff)
+    return { ...l, net: gross - discount, discount, memberPct: pct }
   })
   const subtotal = priced.reduce((s, l) => s + l.net, 0)
   const saleDiscount = fils(input.discountAed ?? 0)
@@ -209,6 +233,20 @@ export async function createSale(tx: Tx, input: NewSale) {
 
   for (const l of priced) {
     if (l.kind === 'package' && !clientId) throw new DomainError('Choose the client to sell a package to')
+    if (l.kind === 'membership') {
+      if (!clientId) throw new DomainError('Choose the client to sell a membership to')
+      if (l.qty !== 1 || !l.refId) throw new DomainError('Sell one membership period per line')
+    }
+    if (l.membership) {
+      if (l.kind !== 'service' || !clientId)
+        throw new DomainError('Membership benefits need a client and a treatment')
+      if (l.clientPackageId) throw new DomainError('Use either a package or a membership on a treatment')
+      await membershipForUse(tx, l.membership.id, clientId, businessDate)
+      if (l.membership.use === 'session' && (l.net !== 0 || l.qty !== 1))
+        throw new DomainError(`“${l.description}” is covered by a membership — its price must be 0`)
+      if (l.membership.use === 'discount' && !l.memberPct)
+        throw new DomainError('This membership has no discount')
+    }
     if (l.clientPackageId) {
       if (l.kind !== 'service' || !clientId)
         throw new DomainError('Package sessions need a client and a treatment')
@@ -258,7 +296,14 @@ export async function createSale(tx: Tx, input: NewSale) {
         saleId: sale!.id,
         kind: l.kind,
         refId: l.refId ?? null,
-        description: l.clientPackageId ? `${l.description.trim()} · package session` : l.description.trim(),
+        // Typed suffixes keep the benefit visible on the receipt (descriptions are stored text, not translated).
+        description: l.clientPackageId
+          ? `${l.description.trim()} · package session`
+          : l.membership?.use === 'session'
+            ? `${l.description.trim()} · membership session`
+            : l.membership?.use === 'discount'
+              ? `${l.description.trim()} · member −${l.memberPct}%`
+              : l.description.trim(),
         qty: l.qty,
         unitPriceAed: aed(fils(l.unitPriceAed)),
         discountAed: aed(l.discount),
@@ -345,56 +390,57 @@ export async function createSale(tx: Tx, input: NewSale) {
           recipientName: l.description.replace(/^Gift card\s*[—-]?\s*/i, '') || undefined,
           createdBy: input.createdBy,
         })
-    if (l.clientPackageId && l.refId) {
+    if (l.kind === 'membership' && l.refId && clientId)
+      await issueMembership(tx, {
+        tenantId: input.tenantId,
+        clientId,
+        planId: l.refId,
+        businessDate,
+        saleId: sale!.id,
+        saleLineId: line.id,
+        pricePaidAed: num(line.lineTotalAed),
+        now: input.now,
+      })
+    const session = l.clientPackageId ? 'package' : l.membership?.use === 'session' ? 'membership' : null
+    if (session && l.refId) {
       const [variant] = await tx
         .select({ serviceId: serviceVariants.serviceId })
         .from(serviceVariants)
         .where(eq(serviceVariants.id, l.refId))
       if (!variant) throw new DomainError('Treatment not found', 'not_found')
-      const { valueAed } = await redeemPackageSession(tx, {
-        clientPackageId: l.clientPackageId,
-        serviceId: variant.serviceId,
-        bookingId: booking?.id ?? null,
-        saleId: sale!.id,
-        branchId: input.branchId,
-        businessDate,
-        now: input.now,
-        createdBy: input.createdBy,
-      })
+      const { valueAed } =
+        session === 'package'
+          ? await redeemPackageSession(tx, {
+              clientPackageId: l.clientPackageId!,
+              serviceId: variant.serviceId,
+              bookingId: booking?.id ?? null,
+              saleId: sale!.id,
+              branchId: input.branchId,
+              businessDate,
+              now: input.now,
+              createdBy: input.createdBy,
+            })
+          : await redeemMembershipSession(tx, {
+              clientMembershipId: l.membership!.id,
+              clientId,
+              serviceId: variant.serviceId,
+              saleId: sale!.id,
+              branchId: input.branchId,
+              businessDate,
+              createdBy: input.createdBy,
+            })
       // The line is priced at 0, so commission is earned on the session's redeemed value instead.
-      if (l.staffId) {
-        const [person] = await tx
-          .select({ rate: staff.commissionPct, payType: staff.payType })
-          .from(staff)
-          .where(eq(staff.id, l.staffId))
-        // Therapists are paid per booking (PLAN §14.8 R2); only `sales_commission` people earn a %.
-        if (person?.payType !== 'sales_commission') continue
-        const baseAed = valueAed - includedVat(valueAed, VAT_RATE_PCT)
-        const amount = Math.round(baseAed * num(person?.rate)) / 100
-        if (amount > 0) {
-          await tx.insert(commissionEntries).values({
-            tenantId: input.tenantId,
-            staffId: l.staffId,
-            saleLineId: line.id,
-            businessDate,
-            baseAed: baseAed.toFixed(2),
-            ratePct: num(person?.rate).toFixed(2),
-            amountAed: amount.toFixed(2),
-          })
-          await post(tx, {
-            tenantId: input.tenantId,
-            branchId: input.branchId,
-            date: businessDate,
-            sourceType: 'commission',
-            sourceId: sale!.id,
-            memo: 'Therapist commission (package session)',
-            lines: [
-              { code: '6010', debit: amount },
-              { code: '2300', credit: amount },
-            ],
-          })
-        }
-      }
+      if (l.staffId)
+        await sessionCommission(tx, {
+          tenantId: input.tenantId,
+          branchId: input.branchId,
+          saleId: sale!.id,
+          saleLineId: line.id,
+          staffId: l.staffId,
+          businessDate,
+          valueAed,
+          memo: `Therapist commission (${session} session)`,
+        })
     }
   }
   for (const p of input.payments)
@@ -414,6 +460,52 @@ export async function createSale(tx: Tx, input: NewSale) {
     message = await enqueueBookingMessage(tx, booking.id, 'thank_you')
   }
   return { sale: sale!, lines, message }
+}
+
+/** Commission on a prepaid session's redeemed value (the line itself is priced at 0). */
+async function sessionCommission(
+  tx: Tx,
+  c: {
+    tenantId: string
+    branchId: string
+    saleId: string
+    saleLineId: string
+    staffId: string
+    businessDate: string
+    valueAed: number
+    memo: string
+  },
+) {
+  const [person] = await tx
+    .select({ rate: staff.commissionPct, payType: staff.payType })
+    .from(staff)
+    .where(eq(staff.id, c.staffId))
+  // Therapists are paid per booking (PLAN §14.8 R2); only `sales_commission` people earn a %.
+  if (person?.payType !== 'sales_commission') return
+  const baseAed = c.valueAed - includedVat(c.valueAed, VAT_RATE_PCT)
+  const amount = Math.round(baseAed * num(person?.rate)) / 100
+  if (amount <= 0) return
+  await tx.insert(commissionEntries).values({
+    tenantId: c.tenantId,
+    staffId: c.staffId,
+    saleLineId: c.saleLineId,
+    businessDate: c.businessDate,
+    baseAed: baseAed.toFixed(2),
+    ratePct: num(person?.rate).toFixed(2),
+    amountAed: amount.toFixed(2),
+  })
+  await post(tx, {
+    tenantId: c.tenantId,
+    branchId: c.branchId,
+    date: c.businessDate,
+    sourceType: 'commission',
+    sourceId: c.saleId,
+    memo: c.memo,
+    lines: [
+      { code: '6010', debit: amount },
+      { code: '2300', credit: amount },
+    ],
+  })
 }
 
 async function isClosed(tx: Tx, branchId: string, date: string) {
@@ -460,8 +552,19 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string; 
     .select({ id: packageRedemptions.id })
     .from(packageRedemptions)
     .where(eq(packageRedemptions.saleId, sale.id))
-  if (soldLines.some((l) => PREPAID.has(l.kind)) || giftPaid.length || usedPackage.length)
-    throw new DomainError('Sales with packages or gift cards can’t be voided — record a refund instead')
+  const usedMembership = await tx
+    .select({ id: membershipRedemptions.id })
+    .from(membershipRedemptions)
+    .where(eq(membershipRedemptions.saleId, sale.id))
+  if (
+    soldLines.some((l) => PREPAID.has(l.kind)) ||
+    giftPaid.length ||
+    usedPackage.length ||
+    usedMembership.length
+  )
+    throw new DomainError(
+      'Sales with packages, memberships or gift cards can’t be voided — record a refund instead',
+    )
   const [updated] = await tx
     .update(sales)
     .set({ status: 'void', voidReason: reason })
@@ -511,7 +614,7 @@ export async function voidSale(tx: Tx, input: { saleId: string; reason: string; 
 const shareOf = (total: number, count: number, qty: number) => Math.round((total * count) / qty)
 
 type PrepaidUnit = {
-  type: 'gift_card' | 'package'
+  type: 'gift_card' | 'package' | 'membership'
   id: string
   /** Liability still owed on it (balance / remaining value), fils. */
   remaining: number
@@ -557,8 +660,10 @@ async function refundPlan(tx: Tx, sale: typeof sales.$inferSelect, lock = false)
   const cardQuery = tx.select().from(giftCards).where(eq(giftCards.saleId, sale.id))
   const pkgQuery = tx.select().from(clientPackages).where(eq(clientPackages.saleId, sale.id))
   // Sequential: one transaction connection runs one query at a time.
+  const memberQuery = tx.select().from(clientMemberships).where(eq(clientMemberships.saleId, sale.id))
   const cards = hasPrepaid ? await (lock ? cardQuery.for('update') : cardQuery) : []
   const pkgs = hasPrepaid ? await (lock ? pkgQuery.for('update') : pkgQuery) : []
+  const periods = hasPrepaid ? await (lock ? memberQuery.for('update') : memberQuery) : []
 
   return lines.map((line): RefundPlanLine => {
     const refunded = refundedQty.get(line.id) ?? 0
@@ -572,30 +677,41 @@ async function refundPlan(tx: Tx, sale: typeof sales.$inferSelect, lock = false)
       return { line, refundedQty: refunded, units }
     }
     // Cards/packages sold before `sale_line_id` existed match by sale (and package definition).
+    // Membership periods always carry `sale_line_id`; expired ones were already earned (nothing unused).
     const instruments: PrepaidUnit[] =
-      line.kind === 'gift_card'
-        ? cards
-            .filter((c) => c.saleLineId === line.id || (!c.saleLineId && !hasOtherLine(lines, line)))
-            .filter((c) => c.status === 'active')
-            .map((c) => ({
-              type: 'gift_card' as const,
-              id: c.id,
-              remaining: fils(num(c.balanceAed)),
-              initial: fils(num(c.initialAed)),
+      line.kind === 'membership'
+        ? periods
+            .filter((m) => m.saleLineId === line.id)
+            .filter((m) => (LIVE_MEMBERSHIP as readonly string[]).includes(m.status))
+            .map((m) => ({
+              type: 'membership' as const,
+              id: m.id,
+              remaining: fils(num(m.remainingValueAed)),
+              initial: fils(num(m.pricePaidAed)),
             }))
-        : pkgs
-            .filter(
-              (p) =>
-                p.saleLineId === line.id ||
-                (!p.saleLineId && p.definitionId === line.refId && !hasOtherLine(lines, line)),
-            )
-            .filter((p) => p.status === 'active')
-            .map((p) => ({
-              type: 'package' as const,
-              id: p.id,
-              remaining: fils(num(p.remainingValueAed)),
-              initial: fils(num(p.pricePaidAed)),
-            }))
+        : line.kind === 'gift_card'
+          ? cards
+              .filter((c) => c.saleLineId === line.id || (!c.saleLineId && !hasOtherLine(lines, line)))
+              .filter((c) => c.status === 'active')
+              .map((c) => ({
+                type: 'gift_card' as const,
+                id: c.id,
+                remaining: fils(num(c.balanceAed)),
+                initial: fils(num(c.initialAed)),
+              }))
+          : pkgs
+              .filter(
+                (p) =>
+                  p.saleLineId === line.id ||
+                  (!p.saleLineId && p.definitionId === line.refId && !hasOtherLine(lines, line)),
+              )
+              .filter((p) => p.status === 'active')
+              .map((p) => ({
+                type: 'package' as const,
+                id: p.id,
+                remaining: fils(num(p.remainingValueAed)),
+                initial: fils(num(p.pricePaidAed)),
+              }))
     const ratio = (u: PrepaidUnit) => (u.initial > 0 ? Math.min(1, u.remaining / u.initial) : 0)
     const units = instruments
       .filter((u) => ratio(u) > 0)
@@ -769,6 +885,11 @@ export async function refundSale(
           .update(clientPackages)
           .set({ status: 'refunded', remainingValueAed: '0.00' })
           .where(eq(clientPackages.id, u.prepaid.id))
+      else if (u.prepaid?.type === 'membership')
+        await tx
+          .update(clientMemberships)
+          .set({ status: 'refunded', remainingValueAed: '0.00', balances: {} })
+          .where(eq(clientMemberships.id, u.prepaid.id))
     }
 
   // Retail: goods back on the shelf and their cost of sales reversed for exactly the refunded quantity.

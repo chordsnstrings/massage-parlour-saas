@@ -54,3 +54,30 @@ jobs:
           name: playwright
           path: apps/web/test-results
           retention-days: 7
+
+  # G7: the droplet deploys `deploy/green`, never the raw branch tip. Only a commit of the deploy branch whose checks
+  # passed moves it (forward only; the built-in token, no extra secret). Pushes made with it start no workflow.
+  promote:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/claude/intelligent-heisenberg-g9e81o'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Move deploy/green to this commit
+        run: |
+          set -eu
+          if git fetch -q origin deploy/green 2>/dev/null; then
+            cur=$(git rev-parse FETCH_HEAD)
+            # A slower run of an older commit must not move it back.
+            if git merge-base --is-ancestor "$GITHUB_SHA" "$cur"; then
+              echo "deploy/green is already at ${cur} (contains ${GITHUB_SHA}); leaving it"
+              exit 0
+            fi
+          fi
+          git push --force origin "${GITHUB_SHA}:refs/heads/deploy/green"
+          echo "deploy/green -> ${GITHUB_SHA}"

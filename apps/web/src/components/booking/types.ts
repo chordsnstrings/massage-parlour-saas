@@ -19,7 +19,9 @@ export type BookingDate = { date: string; closed: boolean }
 
 export type BookingCatalog = {
   spa: string
-  branch: { name: string; address: string | null; hasWhatsapp: boolean }
+  branch: { id: string; name: string; address: string | null; hasWhatsapp: boolean }
+  /** Open branches; the page shows a picker when there is more than one (G22). */
+  branches: { id: string; name: string; address: string | null }[]
   groups: BookingGroup[]
   therapists: BookingTherapist[]
   dates: BookingDate[]
@@ -38,4 +40,6 @@ export type BookingDone = {
   whatsappUrl: string | null
   spa: string
   address: string | null
+  /** Auto-confirmed returning client (G21); otherwise a request the spa confirms. */
+  confirmed: boolean
 }

@@ -4,6 +4,7 @@ import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
 import { syncAllGbpReviews } from './gbp'
+import { heartbeat } from './heartbeat'
 import {
   publishScheduledInstagramPosts,
   refreshInstagramAccessTokens,
@@ -17,8 +18,9 @@ import {
   notifyPendingBookings,
   pruneAllNotifications,
 } from './notifications'
+import { autoPurgeTenants } from './purge'
 import { restoreDrill } from './restore-drill'
-import { expireAllPackages, runSlotFiller } from './tenant-jobs'
+import { expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
   name: string
@@ -29,12 +31,15 @@ export type JobDef = {
 
 /** Every background job. Integration jobs no-op until their credentials are configured. */
 export const jobs: JobDef[] = [
+  // G8: liveness + disk/backup/deploy alerts (console overview turns red after 10 min without a beat).
+  { name: 'worker-heartbeat', cron: '*/5 * * * *', handler: () => heartbeat() },
   { name: 'db-backup', cron: '30 3 * * *', handler: () => backupDatabase() },
   // Monthly, the day after the monthly dump (PLAN §3.5).
   { name: 'restore-drill', cron: '0 5 2 * *', handler: () => restoreDrill() },
   { name: 'analytics-rollup', cron: '7 * * * *', handler: () => rollupAnalytics() },
   { name: 'analytics-prune', cron: '20 4 * * *', handler: () => pruneAnalytics() },
   { name: 'packages-expire', cron: '10 4 * * *', handler: () => expireAllPackages() },
+  { name: 'memberships-renew', cron: '25 4 * * *', handler: () => renewAllMemberships() },
   { name: 'media-prune-ai', cron: '40 4 * * *', handler: () => pruneExpiredAiImages() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
   { name: 'verify-custom-domains', cron: '*/10 * * * *', handler: () => verifyCustomDomains() },
@@ -51,4 +56,6 @@ export const jobs: JobDef[] = [
   { name: 'notify-ai-drafts', cron: '0 10 * * *', handler: () => notifyAiDrafts() },
   { name: 'notify-billing', cron: '20 9 * * *', handler: () => notifyBilling() },
   { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
+  // G12: off until the owner sets the days in console Settings → Data retention.
+  { name: 'tenant-auto-purge', cron: '30 4 * * *', handler: () => autoPurgeTenants() },
 ]

@@ -2,16 +2,23 @@
 import { addDays, businessDateOf, dubaiParts } from '@spa/core'
 import {
   branches,
+  clientMemberships,
   clientPackages,
+  clients,
   giftCards,
   giftCardTxns,
+  membershipPlans,
+  membershipRedemptions,
+  outbox,
   packageDefinitions,
   packageRedemptions,
   type Tx,
+  tenants,
 } from '@spa/db'
-import { and, desc, eq, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { post, postRedemption } from './ledger'
+import { fmtDay, renderTemplate, templateFor } from './outbox'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -260,4 +267,259 @@ export async function redeemGiftCard(
     createdBy: g.createdBy ?? null,
   })
   return { card: { ...card, balanceAed: balance.toFixed(2) } }
+}
+
+// ---------------------------------------------------------------------------
+// Memberships (PLAN §18 G15): sold per one-month period through POS, like packages. The price sits in 2110
+// until it is earned: included sessions move their share to revenue when used (as package sessions do);
+// whatever is left when the period ends is recognised then (2110 → 4000 + output VAT). Benefits (discount % on
+// services, included sessions per period) are snapshotted from the plan at sale.
+// ---------------------------------------------------------------------------
+
+/** Memberships whose benefits can be used: active or due for renewal. */
+export const LIVE_MEMBERSHIP = ['active', 'due'] as const
+/** A renewal reminder is queued this many days before the period ends. */
+export const RENEWAL_NOTICE_DAYS = 7
+
+/** Last day of a one-month period starting `start` (YYYY-MM-DD): same day next month − 1 (clamped to month end). */
+export function membershipPeriodEnd(start: string) {
+  const [y, m, d] = start.split('-').map(Number) as [number, number, number]
+  const lastOfNext = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+  const next = new Date(Date.UTC(y, m, Math.min(d, lastOfNext)))
+  return addDays(next.toISOString().slice(0, 10), -1)
+}
+
+/**
+ * Creates the client's membership period after it was sold (the sale line already credited 2110). When the
+ * client still has a live period of the same plan, this one is the renewal: it starts the day after that one
+ * ends, the old one is no longer "due" and its queued renewal reminder is skipped.
+ */
+export async function issueMembership(
+  tx: Tx,
+  p: {
+    tenantId: string
+    clientId: string
+    planId: string
+    businessDate: string
+    saleId?: string | null
+    saleLineId?: string | null
+    pricePaidAed?: number
+    now?: Date
+  },
+) {
+  const [plan] = await tx.select().from(membershipPlans).where(eq(membershipPlans.id, p.planId))
+  if (!plan?.active) throw new DomainError('Membership not available', 'not_found')
+  const [current] = await tx
+    .select()
+    .from(clientMemberships)
+    .where(
+      and(
+        eq(clientMemberships.clientId, p.clientId),
+        eq(clientMemberships.planId, plan.id),
+        inArray(clientMemberships.status, [...LIVE_MEMBERSHIP]),
+        gte(clientMemberships.currentPeriodEnd, p.businessDate),
+      ),
+    )
+    .orderBy(desc(clientMemberships.currentPeriodEnd))
+    .limit(1)
+    .for('update')
+  const start = current ? addDays(current.currentPeriodEnd, 1) : p.businessDate
+  if (current) {
+    if (current.status === 'due')
+      await tx.update(clientMemberships).set({ status: 'active' }).where(eq(clientMemberships.id, current.id))
+    await tx
+      .update(outbox)
+      .set({ status: 'skipped' })
+      .where(
+        and(
+          eq(outbox.clientId, p.clientId),
+          eq(outbox.kind, 'membership_renewal'),
+          eq(outbox.status, 'queued'),
+        ),
+      )
+  }
+  const paid = p.pricePaidAed === undefined ? plan.monthlyAed : r2(p.pricePaidAed).toFixed(2)
+  const [row] = await tx
+    .insert(clientMemberships)
+    .values({
+      tenantId: p.tenantId,
+      clientId: p.clientId,
+      planId: plan.id,
+      name: plan.name.en,
+      discountPct: String(plan.benefits.discountPct ?? 0),
+      status: 'active',
+      currentPeriodStart: start,
+      currentPeriodEnd: membershipPeriodEnd(start),
+      balances: Object.fromEntries(
+        (plan.benefits.includedSessions ?? []).map((i) => [i.serviceId, i.quantity]),
+      ),
+      pricePaidAed: paid,
+      remainingValueAed: paid,
+      saleId: p.saleId ?? null,
+      saleLineId: p.saleLineId ?? null,
+      lastPaidAt: p.now ?? new Date(),
+    })
+    .returning()
+  return { membership: row!, renewed: Boolean(current) }
+}
+
+/** A client's memberships whose benefits apply on `date` (period covers it; active or due). */
+export async function liveMemberships(tx: Tx, clientId: string, date: string) {
+  return tx
+    .select()
+    .from(clientMemberships)
+    .where(
+      and(
+        eq(clientMemberships.clientId, clientId),
+        inArray(clientMemberships.status, [...LIVE_MEMBERSHIP]),
+        lte(clientMemberships.currentPeriodStart, date),
+        gte(clientMemberships.currentPeriodEnd, date),
+      ),
+    )
+    .orderBy(asc(clientMemberships.currentPeriodEnd))
+}
+
+/** Checks a membership can give its benefits to `clientId` on `date` (row-locked for the sale). */
+export async function membershipForUse(tx: Tx, id: string, clientId: string | null, date: string) {
+  const [m] = await tx.select().from(clientMemberships).where(eq(clientMemberships.id, id)).for('update')
+  if (!m || m.clientId !== clientId) throw new DomainError('That membership belongs to another client')
+  if (
+    !(LIVE_MEMBERSHIP as readonly string[]).includes(m.status) ||
+    m.currentPeriodStart > date ||
+    m.currentPeriodEnd < date
+  )
+    throw new DomainError('This membership is not active today')
+  return m
+}
+
+/**
+ * Uses one included session of a service from a membership period: its share of what is left moves from
+ * 2110 to revenue (with output VAT), as a package session does. Returns the value recognised.
+ */
+export async function redeemMembershipSession(
+  tx: Tx,
+  r: {
+    clientMembershipId: string
+    clientId: string | null
+    serviceId: string
+    businessDate: string
+    saleId?: string | null
+    branchId?: string | null
+    createdBy?: string | null
+  },
+) {
+  const m = await membershipForUse(tx, r.clientMembershipId, r.clientId, r.businessDate)
+  const left = m.balances[r.serviceId] ?? 0
+  if (left < 1) throw new DomainError('No sessions of this service left in the membership')
+  const totalLeft = Object.values(m.balances).reduce((s, n) => s + Math.max(0, n), 0)
+  const value = r2(Number(m.remainingValueAed) / totalLeft)
+  await tx
+    .update(clientMemberships)
+    .set({
+      balances: { ...m.balances, [r.serviceId]: left - 1 },
+      remainingValueAed: r2(Number(m.remainingValueAed) - value).toFixed(2),
+    })
+    .where(eq(clientMemberships.id, m.id))
+  await tx.insert(membershipRedemptions).values({
+    tenantId: m.tenantId,
+    clientMembershipId: m.id,
+    serviceId: r.serviceId,
+    saleId: r.saleId ?? null,
+    valueAed: value.toFixed(2),
+    createdBy: r.createdBy ?? null,
+  })
+  if (value > 0)
+    await postRedemption(tx, {
+      tenantId: m.tenantId,
+      branchId: r.branchId,
+      sourceId: m.id,
+      date: r.businessDate,
+      valueAed: value,
+      createdBy: r.createdBy,
+    })
+  return { valueAed: value, sessionsLeft: left - 1 }
+}
+
+/**
+ * Daily renewal pass for one spa (worker job `memberships-renew`):
+ * - periods that ended → `expired`; what was not used is recognised as earned (2110 → 4000 + VAT);
+ * - periods ending within RENEWAL_NOTICE_DAYS and not renewed yet → `due`, and a WhatsApp renewal reminder is
+ *   queued in the outbox for staff to click-to-send (nothing is sent automatically; opted-out clients skipped).
+ */
+export async function runMembershipRenewals(tx: Tx, tenantId: string, now = new Date()) {
+  const today = await businessDateFor(tx, now)
+  const ended = await tx
+    .select()
+    .from(clientMemberships)
+    .where(
+      and(
+        eq(clientMemberships.tenantId, tenantId),
+        inArray(clientMemberships.status, [...LIVE_MEMBERSHIP]),
+        lt(clientMemberships.currentPeriodEnd, today),
+      ),
+    )
+  for (const m of ended) {
+    await tx
+      .update(clientMemberships)
+      .set({ status: 'expired', remainingValueAed: '0.00' })
+      .where(eq(clientMemberships.id, m.id))
+    const value = Number(m.remainingValueAed)
+    if (value > 0)
+      await postRedemption(tx, {
+        tenantId,
+        sourceId: m.id,
+        date: today,
+        valueAed: value,
+        sourceType: 'membership_expiry',
+        memo: `Membership period ended: ${m.name}`,
+      })
+  }
+
+  // Not renewed yet = no later period of the same plan for the client.
+  const renewed = sql`exists (select 1 from client_memberships n where n.client_id = ${clientMemberships.clientId}
+    and n.plan_id = ${clientMemberships.planId} and n.current_period_start > ${clientMemberships.currentPeriodEnd}
+    and n.status in ('active', 'due'))`
+  const due = await tx
+    .select({ m: clientMemberships, client: clients })
+    .from(clientMemberships)
+    .innerJoin(clients, eq(clients.id, clientMemberships.clientId))
+    .where(
+      and(
+        eq(clientMemberships.tenantId, tenantId),
+        eq(clientMemberships.status, 'active'),
+        gte(clientMemberships.currentPeriodEnd, today),
+        lte(clientMemberships.currentPeriodEnd, addDays(today, RENEWAL_NOTICE_DAYS)),
+        sql`not ${renewed}`,
+      ),
+    )
+  let queued = 0
+  if (due.length) {
+    const [spa] = await tx.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId))
+    const [branch] = await tx
+      .select({ id: branches.id })
+      .from(branches)
+      .orderBy(desc(branches.isDefault))
+      .limit(1)
+    for (const { m, client } of due) {
+      await tx.update(clientMemberships).set({ status: 'due' }).where(eq(clientMemberships.id, m.id))
+      if (!client.phoneE164 || client.marketingOptOutAt || client.blocklisted) continue
+      const lang = client.language === 'ar' ? 'ar' : 'en'
+      await tx.insert(outbox).values({
+        tenantId,
+        branchId: branch?.id ?? null,
+        clientId: client.id,
+        kind: 'membership_renewal',
+        phoneE164: client.phoneE164,
+        text: renderTemplate(await templateFor(tx, 'membership_renewal', lang), {
+          first_name: client.name.split(' ')[0] ?? client.name,
+          name: client.name,
+          spa: spa?.name ?? '',
+          service: m.name,
+          day: fmtDay(new Date(`${m.currentPeriodEnd}T08:00:00Z`), lang),
+        }),
+      })
+      queued++
+    }
+  }
+  return { expired: ended.length, due: due.length, queued }
 }

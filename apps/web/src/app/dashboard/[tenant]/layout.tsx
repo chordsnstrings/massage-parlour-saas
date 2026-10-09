@@ -1,11 +1,10 @@
 import '@fontsource-variable/noto-sans-thai'
 import './crm.css'
 import './crm-kit.css'
-import { dubaiMonthStart } from '@spa/ai'
 import { isSystemRole, type Permission } from '@spa/core'
-import { aiUsage, branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { billingAlert, logoUrl } from '@spa/services'
-import { and, eq, gte, sql } from 'drizzle-orm'
+import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
+import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
+import { eq } from 'drizzle-orm'
 import { SearchPalette } from '@/components/search/search-palette'
 import { NotificationBell } from '@/components/shell/notification-bell'
 import {
@@ -33,16 +32,13 @@ async function shellData(ctx: MemberContext) {
         .where(eq(branches.isDefault, true))
         .limit(1)
       const [sub] = await tx.select().from(subscriptions).limit(1)
-      const [spend] = await tx
-        .select({ usd: sql<string>`coalesce(sum(${aiUsage.costUsd}), 0)` })
-        .from(aiUsage)
-        .where(and(eq(aiUsage.tenantId, ctx.tenant.id), gte(aiUsage.createdAt, dubaiMonthStart())))
+      const spend = await aiTenantTotals(tx, aiMonth(), ctx.tenant.id)
       // Overdue platform invoices or an open payment reminder → the red bar (R11).
       const alert = await billingAlert(tx, ctx.tenant.id, todayDubai())
       return {
         branch,
         sub,
-        aiSpendUsd: Number(spend?.usd ?? 0),
+        aiSpendUsd: spend.costUsd,
         pastDue: alert.overdue.length > 0 || !!alert.reminder,
       }
     }),
@@ -211,6 +207,17 @@ export default async function TenantLayout({
   ) : !isWritable(ctx.tenant) ? (
     <SpaBanner tone="warning">{t('shell.banner.readOnly')}</SpaBanner>
   ) : null
+  // G18: one AI banner for whoever sees the AI meter — switched off, paused at 100 %, or warned at 80 %.
+  const aiLevel = showAi ? aiBudgetLevel(data.aiSpendUsd, budget) : 'ok'
+  const aiBanner = !showAi ? null : !ctx.tenant.aiEnabled ? (
+    <SpaBanner tone="warning">{t('shell.banner.aiOff')}</SpaBanner>
+  ) : aiLevel === 'over' ? (
+    <SpaBanner tone="danger">{t('shell.banner.aiPaused')}</SpaBanner>
+  ) : aiLevel === 'warn' ? (
+    <SpaBanner tone="warning">
+      {t('shell.banner.aiWarning', { percent: fmt.percent(aiPercent / 100) })}
+    </SpaBanner>
+  ) : null
   const alert = data.pastDue ? (
     <SpaBanner tone="danger">
       {t('shell.banner.overdue')}
@@ -221,7 +228,9 @@ export default async function TenantLayout({
         </>
       )}
     </SpaBanner>
-  ) : null
+  ) : (
+    aiBanner
+  )
 
   return (
     <div className="crm" lang={locale}>

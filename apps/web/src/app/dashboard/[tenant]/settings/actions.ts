@@ -1,5 +1,5 @@
 'use server'
-import { toUaeE164 } from '@spa/core'
+import { requires2fa, toUaeE164 } from '@spa/core'
 import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
 import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -133,10 +133,10 @@ export async function saveSecurityAction(
   const parsed = securitySchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const settings = ctx.tenant.settings
-  const require2fa = parsed.data.require2fa ? parsed.data.require2fa === 'on' : Boolean(settings.require2fa)
+  const require2fa = parsed.data.require2fa ? parsed.data.require2fa === 'on' : requires2fa(settings)
   // Turning the policy on would lock the actor out at once: they must have 2FA themselves (fresh row, not the
   // cached session). A super-admin acting on the spa is exempt (the policy applies to the spa's own members).
-  if (require2fa && !settings.require2fa && !ctx.impersonating) {
+  if (require2fa && !requires2fa(settings) && !ctx.impersonating) {
     const [me] = await platformDb()
       .select({ on: user.twoFactorEnabled })
       .from(user)
@@ -170,4 +170,50 @@ export async function saveSecurityAction(
   })
   revalidatePath(`/dashboard/${slug}`, 'layout')
   return ok('audit.security.saved')
+}
+
+const onlineSchema = z.object({
+  autoConfirm: z.enum(['on', 'off']).optional(),
+  afterVisits: z.coerce
+    .number({ error: 'settings.profile.online.errors.visits' })
+    .int('settings.profile.online.errors.visits')
+    .min(1, 'settings.profile.online.errors.visits')
+    .max(50, 'settings.profile.online.errors.visits'),
+})
+
+/** Settings → Online booking (G21): auto-confirm returning clients after N completed visits (off by default). */
+export async function saveOnlineBookingAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'settings.manage')
+  if (error) return fail(error)
+  const parsed = onlineSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const onlineBooking = {
+    autoConfirmReturning: parsed.data.autoConfirm === 'on',
+    autoConfirmAfterVisits: parsed.data.afterVisits,
+  }
+  await withTenant(ctx.tenant.id, async (tx) => {
+    const [cur] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+    await tx
+      .update(tenants)
+      .set({ settings: { ...(cur?.settings ?? {}), onlineBooking } })
+      .where(eq(tenants.id, ctx.tenant.id))
+  })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+    action: 'settings.online_booking.updated',
+    entity: 'tenant',
+    entityId: ctx.tenant.id,
+    data: onlineBooking,
+  })
+  revalidatePath(`/dashboard/${slug}`, 'layout')
+  return ok('settings.profile.online.saved')
 }
