@@ -35,7 +35,7 @@ test('contact form → super-admin Enquiries (badge) → marked contacted with a
     await page.setViewportSize({ width: 360, height: 780 })
     await page.goto(`${base}/contact`)
     await expect(page.getByRole('heading', { name: 'Send us a message' })).toBeVisible()
-    await expect(page.locator('a[href="mailto:ask@spamanagement.co"]')).toBeVisible()
+    await expect(page.locator('main a[href="mailto:ask@spamanagement.co"]')).toBeVisible()
     await expect(page.getByRole('main').getByRole('link', { name: 'Sign in' })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360)
     await page.setViewportSize({ width: 1280, height: 800 })
