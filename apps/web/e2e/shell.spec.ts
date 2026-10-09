@@ -69,8 +69,8 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     await expect(menu.getByRole('link', { name: 'Coming next' })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
     await expect(page.getByText('AI allowance · 0% used this month')).toBeVisible()
-    // Accepted spas start on an active yearly subscription (PLAN §18.3), not a trial.
-    await expect(page.getByText(/^Renews \d{1,2} \w{3} \d{4} · AED\s?[\d,]+\/yr$/)).toBeVisible()
+    // Accepted spas start on an active subscription (PLAN §18.3), not a trial; Premium is paid monthly (§18.8).
+    await expect(page.getByText(/^Renews \d{1,2} \w{3} \d{4} · AED\s?3,000\/mo$/)).toBeVisible()
     await expect(page.getByRole('banner')).toContainText('Workspace')
     // Platform badge at the foot of the sidebar (PLAN §18.6): the marketing site, in a new tab.
     const platform = page.getByRole('complementary').getByRole('link', { name: 'Spa Management' })

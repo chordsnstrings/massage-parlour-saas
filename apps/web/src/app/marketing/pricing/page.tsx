@@ -172,10 +172,15 @@ export default async function PricingPage() {
                       return (
                         <td key={p.id} className="px-3 py-3 text-center">
                           {yes ? (
-                            <Check className="mkt-check inline size-[18px]" aria-label="Included" />
+                            <Check
+                              role="img"
+                              className="mkt-check inline size-[18px]"
+                              aria-label="Included"
+                            />
                           ) : (
                             <Minus
                               className="inline size-[18px] text-[var(--mute)]"
+                              role="img"
                               aria-label="Not included"
                             />
                           )}

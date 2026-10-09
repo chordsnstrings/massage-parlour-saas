@@ -81,6 +81,13 @@ export async function applyForSpa(
   await page.waitForURL(`${root}/application`)
 }
 
+/** A seeded plan's id by code (PLAN §18.8: premium / standard / legacy-yearly). */
+export async function planIdOf(code: string) {
+  const [row] = await testDb().select({ id: plans.id }).from(plans).where(eq(plans.code, code))
+  if (!row) throw new Error(`no plan ${code}`)
+  return row.id
+}
+
 /**
  * Fast path for specs that just need a spa: accepts the applicant's pending application server-side with the same
  * service the console uses (setup fee, if any, recorded as paid in full by bank transfer). The console flow itself
@@ -114,10 +121,15 @@ export async function approveApplication(email: string) {
  * is covered in onboarding.spec / applications.spec) and a later password sign-in passes with
  * `passTwoFactor(page, email)`.
  */
-export async function signUpOwner(page: Page, opts: { slug?: string; name?: string; spa?: string } = {}) {
+export async function signUpOwner(
+  page: Page,
+  opts: { slug?: string; name?: string; spa?: string; plan?: 'premium' | 'standard' } = {},
+) {
   const slug = opts.slug ?? uniqueSlug('spa')
   const email = `owner-${slug}@e2e.test`
-  await applyForSpa(page, { slug, email, name: opts.name, spa: opts.spa })
+  // PLAN §18.8: the form preselects Premium (first plan); `plan: 'standard'` applies for Standard.
+  const planId = opts.plan ? await planIdOf(opts.plan) : undefined
+  await applyForSpa(page, { slug, email, name: opts.name, spa: opts.spa, planId })
   await approveApplication(email)
   await enableTotp(email)
   await page.goto(`${app}/${slug}`)

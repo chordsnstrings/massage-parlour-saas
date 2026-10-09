@@ -20,7 +20,7 @@ import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './hel
 test('owner adds a second branch, scopes a receptionist to it, and a client books there online (G22)', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Twin Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Twin Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
 
@@ -116,7 +116,7 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
 })
 
 test('staff issue a full tax invoice with the customer’s billing details (G16)', async ({ page }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db

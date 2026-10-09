@@ -5,7 +5,7 @@ import { app, screenshotAt, seedCatalog, signUpOwner, testDb } from './helpers'
 const DAY = 86_400_000
 
 test('campaigns: win-back segment with live preview → queued WhatsApp messages', async ({ page }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
   // Three lapsed regulars (one Arabic speaker), one recent visitor and one opted-out client.

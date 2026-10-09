@@ -10,7 +10,7 @@ test('console AI usage: spend per spa, budget edit, kill switch, dashboard banne
   const ownerCtx = await browser.newContext()
   const adminCtx = await browser.newContext()
   const owner = await ownerCtx.newPage()
-  const { slug, dashboard } = await signUpOwner(owner, { spa: 'Usage Spa' })
+  const { slug, dashboard } = await signUpOwner(owner, { spa: 'Usage Spa', plan: 'premium' })
   const db = testDb()
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
   await db.insert(aiUsage).values([
