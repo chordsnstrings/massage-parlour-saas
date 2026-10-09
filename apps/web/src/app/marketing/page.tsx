@@ -5,13 +5,16 @@ import Link from 'next/link'
 import { AREAS, DAY } from '@/components/marketing/content'
 import { CalendarMock } from '@/components/marketing/mocks'
 import { activePlans } from '@/components/marketing/plans'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
-export const metadata: Metadata = {
-  title: { absolute: 'spamanagement.co — more bookings, less work for UAE spas' },
-}
+export const metadata: Metadata = marketingMetadata('home', {
+  title: 'spamanagement.co — more bookings, less work for UAE spas',
+  absoluteTitle: true,
+  description: 'Bookings, payments, accounting, websites and AI marketing for spas in the UAE.',
+})
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties

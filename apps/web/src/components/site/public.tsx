@@ -1,5 +1,6 @@
 import './site.css'
 import { type ComponentConfig, type Config, type Data, Render } from '@puckeditor/core'
+import { jsonLdString, normalizeGoogleMapsUrl, spaJsonLd } from '@spa/core'
 import { withTenant } from '@spa/db'
 import { getPublishedPage, globalSectionsFor, isScheduleVisible, PAGE_SLUG } from '@spa/services'
 import type { Metadata } from 'next'
@@ -7,12 +8,13 @@ import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { ScrollScenes } from '@/components/scroll-scenes'
 import { PlaceholderSite } from '@/components/site/placeholder-site'
+import { heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { siteData } from '@/server/sites'
 import { siteConfig } from './config'
 import { buildMeta, loadSite, localeOf } from './data'
 import { tr } from './i18n'
 import type { AdvancedProps } from './style'
-import type { Bi } from './types'
+import type { Bi, Locale } from './types'
 
 type Tenant = { id: string; slug: string; name: string; status: string }
 
@@ -69,24 +71,67 @@ export async function publicSiteMetadata(
   if (!tenant) return {}
   const slug = slugOf(path)
   const loaded = slug === null ? null : await loadPublished(tenant, slug)
-  if (!loaded) return { title: { absolute: tenant.name } }
+  // Placeholder (nothing published) or a 404: never indexed.
+  if (!loaded || slug === null) return { title: { absolute: tenant.name }, robots: { index: false } }
+  const seo = await siteSeo(tenant)
   const locale = localeOf(lang)
   const ctx = { locale, data: loaded.data }
   const root = (loaded.published.data as { root?: { props?: { title?: Bi; description?: Bi } } }).root?.props
   const title = tr(root?.title, ctx) || tenant.name
   const description = tr(root?.description, ctx) || undefined
+  const url = sitePageUrl(seo.base, slug, locale === 'ar' && seo.arabic ? 'ar' : undefined)
+  // Social card: the page's hero picture, else the spa logo.
+  const hero = heroImageOf(loaded.published.data, seo.origin)
+  const image = hero ?? seo.logo
+  const images = image ? [{ url: image, alt: title }] : undefined
   return {
     title: { absolute: title },
     description,
+    alternates: { canonical: url, languages: hreflang(seo.base, slug, seo.arabic) },
     openGraph: {
       title,
       description,
       siteName: tenant.name,
       locale: locale === 'ar' ? 'ar_AE' : 'en_AE',
       type: 'website',
+      url,
+      images,
     },
-    alternates: { languages: { en: '?lang=en', ar: '?lang=ar' } },
+    twitter: { card: hero ? 'summary_large_image' : 'summary', title, description, images },
+    ...(seo.indexable ? {} : { robots: { index: false, follow: false } }),
   }
+}
+
+/** schema.org JSON-LD for a published page: the spa (branch, hours, profiles, services + public prices). */
+async function siteJsonLd(
+  tenant: Tenant,
+  slug: string,
+  loaded: NonNullable<Awaited<ReturnType<typeof loadPublished>>>,
+  locale: Locale,
+) {
+  const seo = await siteSeo(tenant)
+  const ctx = { locale, data: loaded.data }
+  const root = (loaded.published.data as { root?: { props?: { description?: Bi } } }).root?.props
+  const branch = loaded.data.branch
+  return jsonLdString(
+    spaJsonLd({
+      name: tenant.name,
+      url: seo.home,
+      pageUrl: sitePageUrl(seo.base, slug),
+      pageName: slug ? tr(loaded.published.page.title, ctx) : null,
+      description: slug ? null : tr(root?.description, ctx),
+      logo: seo.logo,
+      image: heroImageOf(loaded.published.data, seo.origin),
+      branch,
+      services: loaded.data.services.map((s) => ({
+        name: tr(s.name, ctx),
+        description: tr(s.description, ctx) || null,
+        category: tr(s.category, ctx) || null,
+        variants: s.variants,
+      })),
+      sameAs: [seo.instagram, normalizeGoogleMapsUrl(branch?.mapsUrl)],
+    }),
+  )
 }
 
 /**
@@ -122,9 +167,15 @@ export async function PublicSite({
     globals: loaded.published.globals,
   }
   const data = loaded.published.data as Partial<Data>
+  const ld = await siteJsonLd(tenant, slug, loaded, meta.locale)
   // ScrollScenes mounts last so it commits with the sections it drives (per-section scroll effects).
   return (
     <>
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD escaped by jsonLdString (no tag breakout)
+        dangerouslySetInnerHTML={{ __html: ld }}
+      />
       <Render config={trackedConfig(data)} data={data} metadata={meta} />
       <ScrollScenes key={slug} />
     </>

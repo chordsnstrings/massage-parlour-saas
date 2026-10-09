@@ -1,5 +1,18 @@
 import { expect, test } from '@playwright/test'
-import { app, makeStudio, screenshotAt, seedCatalog, signUpOwner, site } from './helpers'
+import { branches, domains, tenants } from '@spa/db'
+import { and, eq } from 'drizzle-orm'
+import {
+  app,
+  base,
+  makeStudio,
+  PATH,
+  PORT,
+  screenshotAt,
+  seedCatalog,
+  signUpOwner,
+  site,
+  testDb,
+} from './helpers'
 
 const HERO = 'Calm, clear and restorative.'
 
@@ -13,6 +26,7 @@ test('owner picks a template, publishes from the editor and the public site rend
   await test.step('nothing published yet → placeholder site', async () => {
     await page.goto(site(slug))
     await expect(page.getByRole('heading', { name: 'Birch Spa' })).toBeVisible()
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/)
   })
 
   await test.step('website overview: choose Nordic Clean', async () => {
@@ -107,5 +121,114 @@ test('owner picks a template, publishes from the editor and the public site rend
     await expect(page.getByRole('heading', { name: 'مساج سويدي' })).toBeVisible()
     const missing = await page.goto(`${site(slug)}/contact`)
     expect(missing?.status()).toBe(404)
+  })
+
+  // F12: robots.txt, sitemap.xml, canonical/hreflang, social cards and schema.org JSON-LD.
+  const db = testDb()
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  // Node can't resolve *.localhost: ask 127.0.0.1 with the URL's host (custom domains answer the same way).
+  const fetchAs = (url: string) => {
+    const u = new URL(url)
+    return page.request.get(`http://127.0.0.1:${PORT}${u.pathname}${u.search}`, {
+      headers: { host: u.host },
+      failOnStatusCode: false,
+    })
+  }
+  const jsonLd = async () => {
+    const raw = await page.locator('script[type="application/ld+json"]').first().textContent()
+    // biome-ignore lint/suspicious/noExplicitAny: assertions walk loosely typed JSON-LD
+    return JSON.parse(raw ?? '') as { '@context': string; '@graph': Record<string, any>[] }
+  }
+  const home = PATH ? site(slug) : `${site(slug)}/`
+
+  await test.step('search: robots.txt and sitemap.xml list the published pages with EN/AR alternates', async () => {
+    const robots = await (await fetchAs(PATH ? `${base}/robots.txt` : `${site(slug)}/robots.txt`)).text()
+    expect(robots).toContain(`Sitemap: ${site(slug)}/sitemap.xml`)
+    expect(robots).toContain(PATH ? 'Disallow: /s/*/book/embed' : 'Disallow: /book/embed')
+    const res = await fetchAs(`${site(slug)}/sitemap.xml`)
+    expect(res.headers()['content-type']).toContain('application/xml')
+    const xml = await res.text()
+    expect(xml).toContain(`<loc>${home}</loc>`)
+    expect(xml).toContain(`<loc>${home}?lang=ar</loc>`)
+    expect(xml).toContain(`<xhtml:link rel="alternate" hreflang="ar" href="${home}?lang=ar"/>`)
+    expect(xml).toContain(`<loc>${site(slug)}/book</loc>`)
+    expect(xml).not.toContain('/contact') // never published
+  })
+
+  await test.step('page: canonical, hreflang, social card and valid JSON-LD (spa text cannot break out)', async () => {
+    const hostile = 'Shop 4 </script><img src=x onerror="window.__xss=1"> Marina, Dubai'
+    await db
+      .update(branches)
+      .set({ address: hostile, phone: '+971 4 123 4567' })
+      .where(eq(branches.tenantId, tenant!.id))
+    await page.goto(site(slug))
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', home)
+    await expect(page.locator('link[rel="alternate"][hreflang="ar"]')).toHaveAttribute(
+      'href',
+      `${home}?lang=ar`,
+    )
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', home)
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', /summary/)
+    await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
+    const ld = await jsonLd()
+    expect(ld['@context']).toBe('https://schema.org')
+    const spa = ld['@graph'][0]!
+    expect(spa).toMatchObject({
+      '@type': 'DaySpa',
+      name: 'Birch Spa',
+      url: home,
+      telephone: '+971 4 123 4567',
+      address: { streetAddress: hostile, addressRegion: 'Dubai', addressCountry: 'AE' },
+      hasMap: 'https://maps.app.goo.gl/BirchSpaPin1',
+      currenciesAccepted: 'AED',
+    })
+    expect(spa.sameAs).toContain('https://maps.app.goo.gl/BirchSpaPin1')
+    expect(spa.openingHoursSpecification).toEqual([
+      {
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        opens: '09:00',
+        closes: '23:00',
+      },
+    ])
+    const swedish = spa.hasOfferCatalog.itemListElement.find(
+      (o: { itemOffered: { name: string } }) => o.itemOffered.name === 'Swedish massage',
+    )
+    expect(swedish).toMatchObject({ '@type': 'Offer', priceCurrency: 'AED', price: '350' })
+    expect(await page.evaluate(() => (window as { __xss?: number }).__xss)).toBeUndefined()
+    await expect(page.locator('img[src="x"]')).toHaveCount(0)
+  })
+
+  await test.step('custom domain: canonical address everywhere; suspended spas are kept out of search', async () => {
+    const custom = `www.${slug}.test`
+    await db
+      .insert(domains)
+      .values({ tenantId: tenant!.id, hostname: custom, kind: 'custom', status: 'active', isPrimary: true })
+    try {
+      await page.goto(site(slug))
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://${custom}/`)
+      expect((await jsonLd())['@graph'][0]!.url).toBe(`https://${custom}/`)
+      const robots = await (await fetchAs(`http://${custom}/robots.txt`)).text()
+      expect(robots).toContain(`Sitemap: https://${custom}/sitemap.xml`)
+      const xml = await (await fetchAs(`http://${custom}/sitemap.xml`)).text()
+      expect(xml).toContain(`<loc>https://${custom}/</loc>`)
+      expect(xml).toContain(`<loc>https://${custom}/book?lang=ar</loc>`)
+
+      // A second, not-yet-seen host reads the tenant fresh (the host lookup is cached 60 s).
+      const second = `shop.${slug}.test`
+      await db.update(tenants).set({ status: 'suspended' }).where(eq(tenants.id, tenant!.id))
+      await db
+        .insert(domains)
+        .values({ tenantId: tenant!.id, hostname: second, kind: 'custom', status: 'active' })
+      const robotsOff = await (await fetchAs(`http://${second}/robots.txt`)).text()
+      expect(robotsOff).not.toContain('Sitemap:')
+      expect(await (await fetchAs(`http://${second}/sitemap.xml`)).text()).not.toContain('<url>')
+      expect(await (await fetchAs(`http://${second}/`)).text()).toMatch(
+        /<meta name="robots" content="noindex, nofollow"/,
+      )
+    } finally {
+      await db.update(tenants).set({ status: tenant!.status }).where(eq(tenants.id, tenant!.id))
+      await db.delete(domains).where(and(eq(domains.tenantId, tenant!.id), eq(domains.kind, 'custom')))
+    }
   })
 })

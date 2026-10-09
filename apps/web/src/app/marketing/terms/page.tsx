@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { LEGAL, LegalPage, Mail } from '@/components/marketing/legal'
+import { marketingMetadata } from '@/components/marketing/seo'
 
 // OWNER MUST REVIEW: plain-English draft. Company details live in components/marketing/legal-config.ts.
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('terms', {
   title: 'Terms of service',
   description: `The terms for using ${LEGAL.brand}.`,
-}
+})
 
 export default function TermsPage() {
   return (

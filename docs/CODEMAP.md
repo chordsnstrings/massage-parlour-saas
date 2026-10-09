@@ -88,7 +88,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    - Path routing (`NEXT_PUBLIC_ROUTING=path`, inlined at build): `/app`, `/admin`, `/s/{slug}`; non-platform hosts
      go to `/domain/{host}`.
    - Sets `x-original-path`. A trailing-dot host gets a 308 redirect.
-   - `/api`, `/files`, `_next` and static assets are not rewritten.
+   - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
+     `/robots.txt` + `/sitemap.xml` ARE rewritten, so each surface answers its own (F12, see "Search + social").
 2. **`server/session.ts`**: `getSession` reads `headers()` first; `requireUser` redirects to `{surface}/login?next=`.
 3. **`server/access.ts`**:
    - `requireMember(slug)`: tenant via `platformDb`, membership via `withTenant`. A platform admin who is not a
@@ -205,6 +206,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `domains/allowed`: Caddy's on-demand TLS "ask".
   - `integrations/meta|google`: OAuth, Meta webhook, deauthorize, data deletion.
   - `mcp/meta`: first-party Meta MCP server (R7, `handleMetaMcpRequest`; bearer = 5-minute signed tenant token).
+
+## Search + social (F12, PLAN §17)
+
+- Pure builders in `@spa/core` `seo.ts` (tests: core/test/seo.test.ts): `jsonLdString` (escapes `< > &` U+2028/9 —
+  always use it for inline JSON-LD), `spaJsonLd` (DaySpa + branch address/emirate, geo from a Maps link that carries
+  coordinates, hasMap, hours → OpeningHoursSpecification, priceRange, sameAs, services as Offers — prices only where
+  `publicPrice` shows them; BreadcrumbList on inner pages), `platformJsonLd`, `robotsTxt`, `sitemapXml`.
+- Spa sites: `server/seo.ts` `siteSeo(tenant)` (React-cached): canonical base = `publicSiteUrl` (primary active custom
+  domain, else free address), logo/Instagram, published pages, `indexable` = not suspended and ≥ 1 published page.
+  Routes `site/[slug]/{robots.txt,sitemap.xml}` + `domain/[hostname]/…`; robots disallow `/book/embed`, `/api/`.
+  Not indexable → robots without Sitemap, empty sitemap, pages `noindex` (crawlable, so search drops them).
+  `publicSiteMetadata` / `bookingMetadata`: canonical + hreflang (`?lang=ar` when the site has `ar`), og/twitter image
+  = first Hero (or band background) image, else the logo. `PublicSite` renders the JSON-LD script.
+- Platform: `marketing/{robots.txt,sitemap.xml}` (path routing: also Disallow `/app/ /admin/ /s/*/book/embed` and a
+  Sitemap line per `/s/{slug}` spa without a primary custom domain); `dashboard|platform/robots.txt` = disallow all.
+  Marketing pages use `marketingMetadata(key, …)` (`components/marketing/seo.ts`, `MARKETING_PAGES` = sitemap list +
+  OG headlines); the marketing layout sets `metadataBase` (canonical domain) and the Organization/WebSite/
+  SoftwareApplication JSON-LD. OG images: `app/og/[page]/route.tsx` (`next/og`, default font).
 
 ## Site builder
 

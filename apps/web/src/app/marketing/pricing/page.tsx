@@ -2,14 +2,15 @@ import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import { FAQ, INCLUDED } from '@/components/marketing/content'
 import { activePlans } from '@/components/marketing/plans'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('pricing', {
   title: 'Pricing',
   description: 'One simple yearly price in AED, every feature included.',
-}
+})
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
 const BANDS = [

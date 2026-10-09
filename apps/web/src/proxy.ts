@@ -64,9 +64,10 @@ export function proxy(req: NextRequest) {
 }
 
 // /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten; so is
-// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known).
+// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known). /robots.txt and /sitemap.xml ARE
+// rewritten, so each surface answers its own (marketing, app/admin = disallow all, spa site, custom domain).
 export const config = {
   matcher: [
-    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
+    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
   ],
 }

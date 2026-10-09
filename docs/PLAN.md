@@ -1197,6 +1197,15 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   entry (`spa_entry`), core `bookingAttribution` maps it. Shown as "Online · Instagram" (calendar, bookings list +
   detail), split on the dashboard Booking sources card (`kpis.byAttribution`) and console Performance detail
   (`onlineSources`). Older online bookings show "Not recorded".
+- **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
+- ✅ **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
+  Done 2026-10-09: every host answers its own robots.txt/sitemap.xml (proxy now rewrites them). Spa sites: canonical =
+  primary active custom domain else free address; sitemap = published pages + /book with EN/AR hreflang; suspended or
+  unpublished sites stay crawlable but `noindex` (no Sitemap line, empty sitemap). Pages: canonical/hreflang, og/twitter
+  (hero image, else logo), DaySpa JSON-LD (branch address, hours, Maps pin/geo, Instagram, services; AED prices only
+  where shown). Marketing: sitemap of the 9 pages, Organization (1997labs) + SoftwareApplication JSON-LD, generated
+  og:image per page (/og/{page}.png). App/admin hosts disallow all (path routing: /app/, /admin/). CODEMAP "Search + social".
+- **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
 - **F14. Tests for 2FA + password reset** (G13 remainder): e2e for 2FA enrol/verify/require2fa redirect, password reset, files access matrix.
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
 
@@ -1219,6 +1228,14 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
   ✅ G17 no Turnstile on public booking (F9) · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   ✅ G20 source attribution (ig/gbp/qr) not carried to bookings (F13) · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
+  G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
+  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
+  G20 source attribution (ig/gbp/qr) not carried to bookings · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
+  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
+  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
+  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
@@ -1491,7 +1508,7 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
 - **Pending (shell.tsx is being rebuilt on another branch):** add `| 'crm'` to `MarketingPage`, NAV entry
   `{ key: 'crm', href: '/crm', label: 'Spa CRM' }` before 'Website studio', footer Product column `NAV.slice(0, 4)`
   (else Pricing drops out), then `/crm` uses `active="crm"` (today `active="home"`, so no nav item is marked).
-  No sitemap exists yet (G19), so nothing to register there.
+  /crm is listed in the marketing sitemap (F12, `MARKETING_PAGES` in components/marketing/seo.ts).
 - e2e: `marketing-crm.spec` (page, CTAs, toggle → Thai catalogue strings, typed names stay, home/features links);
   `platform-domains.spec` also checks /crm links on the second domain.
 

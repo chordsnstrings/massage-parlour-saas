@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/page'
 import { turnstileSiteKey } from '@/server/turnstile'
+import { hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { BookingFlow } from './booking-flow'
 import { acceptsBookings, loadBookingCatalog } from './data'
 import { localeOf, t } from './i18n'
@@ -11,15 +12,27 @@ import type { SiteKey } from './types'
 type Tenant = { id: string; slug: string; name: string; status: string }
 type Search = { lang?: string | string[]; service?: string | string[]; branch?: string | string[] }
 
-export function bookingMetadata(tenant: Tenant | null, lang: Search['lang'], embed = false): Metadata {
+export async function bookingMetadata(
+  tenant: Tenant | null,
+  lang: Search['lang'],
+  embed = false,
+): Promise<Metadata> {
   if (!tenant) return { title: 'Not found' }
   const locale = localeOf(lang)
-  if (embed)
-    return { title: { absolute: `${t('title', locale)} · ${tenant.name}` }, robots: { index: false } }
+  const title = `${t('title', locale)} · ${tenant.name}`
+  if (embed) return { title: { absolute: title }, robots: { index: false } }
+  // Canonical address + hreflang on the spa's canonical host; kept out of search like the rest of the site.
+  const seo = await siteSeo(tenant)
+  const url = sitePageUrl(seo.base, 'book', locale === 'ar' && seo.arabic ? 'ar' : undefined)
+  const description = t('intro', locale)
+  const images = seo.logo ? [{ url: seo.logo, alt: tenant.name }] : undefined
   return {
-    title: { absolute: `${t('title', locale)} · ${tenant.name}` },
-    description: t('intro', locale),
-    alternates: { languages: { en: '?lang=en', ar: '?lang=ar' } },
+    title: { absolute: title },
+    description,
+    alternates: { canonical: url, languages: hreflang(seo.base, 'book', seo.arabic) },
+    openGraph: { title, description, siteName: tenant.name, type: 'website', url, images },
+    twitter: { card: 'summary', title, description, images },
+    ...(seo.indexable ? {} : { robots: { index: false, follow: false } }),
   }
 }
 

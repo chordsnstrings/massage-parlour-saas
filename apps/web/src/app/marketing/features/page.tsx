@@ -2,13 +2,14 @@ import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AREAS, AUTOMATIONS } from '@/components/marketing/content'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, MarketingShell } from '@/components/marketing/shell'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('features', {
   title: 'Features',
   description:
     'Every automation in spamanagement.co: bookings, follow-ups, accounts, marketing and your website.',
-}
+})
 
 // Only what is not built yet (owner, 2026-10-09: built items live in AREAS above).
 const NEXT = ['Reserve with Google']

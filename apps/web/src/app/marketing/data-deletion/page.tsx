@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { LEGAL, LegalPage, Mail } from '@/components/marketing/legal'
+import { marketingMetadata } from '@/components/marketing/seo'
 
 // OWNER MUST REVIEW: plain-English draft. This is the "User data deletion instructions URL" given to Meta.
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('data-deletion', {
   title: 'Data deletion',
   description: `How to delete your data from ${LEGAL.brand}.`,
-}
+})
 
 export default function DataDeletionPage() {
   return (
