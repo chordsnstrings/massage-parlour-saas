@@ -1607,4 +1607,8 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
   without it get the same curves from an IntersectionObserver-gated, scroll-scheduled rAF in `crm-showcase.tsx`
   (cached offsets, no per-frame layout reads). Reduced motion → static flat layout (an exception to the "motion for
   everyone" rule of motion.tsx, as the owner asked here). The /crm demo shares the mock, so it got the CRM look too;
-  phones show the mock's menu as one fading row so EN/TH keep the same height. e2e: `marketing-crm.spec`.
+  phones show the mock's menu as one fading row so EN/TH keep the same height (mock grid columns are
+  `minmax(0,1fr)`, else that row's min-content widens the phone mock). ≥ 1024 px the earnings card hangs below the
+  till total; ≥ 1440 px the cards sit further out beside the page column. Probe (production build, 390 px slow
+  scroll + 4 address-bar resizes, CSS and JS-fallback paths): 0 frames > 50 ms, 0 blank frames, CLS 0, no
+  horizontal scroll. e2e: `marketing-crm.spec`.
