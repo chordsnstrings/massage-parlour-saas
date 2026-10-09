@@ -38,4 +38,6 @@ export type BookingDone = {
   whatsappUrl: string | null
   spa: string
   address: string | null
+  /** Auto-confirmed returning client (G21); otherwise a request the spa confirms. */
+  confirmed: boolean
 }

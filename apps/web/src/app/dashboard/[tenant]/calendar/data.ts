@@ -237,6 +237,8 @@ export async function loadCalendar(
       canManage,
       canCheckout: can(ctx, 'pos.use'),
       ownOnly,
+      // G14: a therapist may check in / start / complete bookings with their own staff profile on them.
+      ownStatusStaffId: can(ctx, 'calendar.ownStatus') ? myStaff : null,
       checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
       bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),

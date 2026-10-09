@@ -1185,8 +1185,9 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
+  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
-  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
+  G20 source attribution (ig/gbp/qr) not carried to bookings · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
@@ -1264,3 +1265,20 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   blocklisted clients skipped), ended → `expired`. Refund = unused value (as packages), period `refunded`; sales with
   a membership or a membership session can't be voided. Discounts already given aren't clawed back on refund.
   Client profile lists memberships.
+- **G14:** new permission `calendar.ownStatus` (therapist system role; system roles resolve from code, so every
+  existing spa has it — no migration). Calendar booking sheet shows Check in / Start service / Complete on bookings
+  the member's linked staff profile is on (`setOwnStatusAction` → services `setOwnBookingStatus`: ownership + from
+  confirmed/checked-in/in-service only; never confirm, cancel, re-open or move). Completing records no commission —
+  the front desk enters it on the booking page as before. Therapist home has "My earnings" (today / Mon-start week /
+  month to date): own `booking_commissions` (booking business date, net of corrections) + own tips on paid sales
+  (`staffEarnings`); no spa revenue.
+- **G21:** Settings → profile → "Online booking" card: "Auto-confirm returning clients" (off) + "after N completed
+  visits" (1–50, default 1) → `tenants.settings.onlineBooking`. `selfBookingStatus` (services) is used by `bookOnline`
+  (website/widget) and the AI DM `book` tool (Instagram/WhatsApp AI): a client matched by phone with ≥ N completed
+  bookings is created `confirmed` (reservations unchanged, EXCLUDE), so `createBooking` plans the confirmation +
+  reminders. The public done page then says "Booking confirmed".
+- **G23:** "Require 2FA for owner & managers" is on by default: `requires2fa(settings)` (core) treats missing as on,
+  provisioning writes `require2fa: true`, migration `0030_require_2fa_default` sets it on for every existing spa (even
+  ones that had turned it off). Owners may still turn it off (Settings → Security). Super-admin impersonation is
+  unaffected (not a member → own G3 2FA rule). e2e: `signUpOwner` stores a verified TOTP secret (`enableTotp`) after
+  sign-up lands on `/account?require2fa=`; onboarding.spec enrols through the UI.

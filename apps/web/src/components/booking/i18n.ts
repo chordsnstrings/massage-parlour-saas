@@ -62,6 +62,12 @@ const T = {
     en: 'Your time is held. Tap below to confirm on WhatsApp — we reply quickly.',
     ar: 'تم حجز موعدك مبدئياً. اضغط أدناه للتأكيد عبر واتساب — نرد بسرعة.',
   },
+  doneConfirmedTitle: { en: 'Booking confirmed', ar: 'تم تأكيد الحجز' },
+  doneConfirmedBody: {
+    en: 'Welcome back — your time is booked. We will send the details on WhatsApp.',
+    ar: 'أهلاً بعودتك — تم حجز موعدك. سنرسل لك التفاصيل عبر واتساب.',
+  },
+  chatWhatsapp: { en: 'Message us on WhatsApp', ar: 'راسلنا عبر واتساب' },
   ref: { en: 'Reference', ar: 'الرقم المرجعي' },
   confirmWhatsapp: { en: 'Confirm on WhatsApp', ar: 'أكّد عبر واتساب' },
   addCalendar: { en: 'Add to calendar', ar: 'أضف إلى التقويم' },

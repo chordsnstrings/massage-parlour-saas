@@ -65,6 +65,18 @@ export const settings = {
       templates: 'WhatsApp templates',
       templatesSub: 'Confirmation, reminder and thank-you messages in English and Arabic.',
     },
+    online: {
+      title: 'Online booking',
+      sub: 'Bookings from your website, Instagram and the AI assistant.',
+      autoConfirm: 'Auto-confirm returning clients',
+      autoConfirmHint:
+        'Clients with enough completed visits (matched by phone) are confirmed at once and get the WhatsApp confirmation and reminders. Everyone else waits for you to confirm.',
+      afterVisits: 'After completed visits',
+      afterVisitsHint: 'How many completed visits make a client “returning”.',
+      save: 'Save online booking',
+      saved: 'Online booking settings saved',
+      errors: { visits: 'Enter a number from 1 to 50' },
+    },
   },
   hours: {
     title: 'Opening hours',

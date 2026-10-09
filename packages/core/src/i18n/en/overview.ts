@@ -133,5 +133,17 @@ export const overview = {
     remaining: '{count} remaining',
     emptyTitle: 'No more clients today',
     emptyText: 'Enjoy the break.',
+    earnings: {
+      title: 'My earnings',
+      sub: 'Your commission and tips',
+      today: 'Today',
+      week: 'This week',
+      month: 'This month',
+      commission: 'Commission',
+      tips: 'Tips',
+      total: 'Total',
+      note: 'Commission is entered by the front desk after each treatment.',
+    },
+    actions: 'Open a booking in the calendar to check in, start or complete it.',
   },
 } as const

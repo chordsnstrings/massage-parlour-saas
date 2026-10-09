@@ -131,8 +131,13 @@ export type TenantSettings = {
   receptionistBookingFee?: string
   /** Automation switches (B3): keys = `AUTOMATIONS` in @spa/core; missing = on. Written via setAutomation(). */
   automations?: Record<string, boolean>
-  /** Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard. */
+  /**
+   * Security (X5): owners and managers must have TOTP 2FA on before they can open the spa dashboard.
+   * Missing = on (G23, owner decision 2026-10-09; read it with `requires2fa()` from @spa/core).
+   */
   require2fa?: boolean
+  /** G21: online / Instagram / AI bookings of clients with ≥ N completed visits are confirmed at once (off by default). */
+  onlineBooking?: { autoConfirmReturning?: boolean; autoConfirmAfterVisits?: number }
   /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
   metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
 }

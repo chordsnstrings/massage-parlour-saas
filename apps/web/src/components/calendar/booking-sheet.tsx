@@ -5,7 +5,11 @@ import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt } from 'lu
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
-import { rescheduleFormAction, setStatusAction } from '@/app/dashboard/[tenant]/calendar/actions'
+import {
+  rescheduleFormAction,
+  setOwnStatusAction,
+  setStatusAction,
+} from '@/app/dashboard/[tenant]/calendar/actions'
 import { Pill, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -25,6 +29,15 @@ const ACTIONS: { to: Target; variant: 'primary' | 'secondary' | 'danger' }[] = [
   { to: 'no_show', variant: 'secondary' },
   { to: 'cancelled', variant: 'danger' },
 ]
+
+type OwnTarget = 'checked_in' | 'in_service' | 'completed'
+/** A therapist's own booking (G14): check in → start → complete; never confirm, cancel or move. */
+const OWN_ACTIONS: { to: OwnTarget; variant: 'primary' | 'secondary' }[] = [
+  { to: 'checked_in', variant: 'primary' },
+  { to: 'in_service', variant: 'primary' },
+  { to: 'completed', variant: 'secondary' },
+]
+const OWN_FROM: BookingStatus[] = ['confirmed', 'checked_in', 'in_service']
 
 export function BookingSheet({
   data,
@@ -67,7 +80,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
   const first = items[0]!
   const status = first.status
   const [pending, start] = useTransition()
-  const [busy, setBusy] = useState<Target | null>(null)
+  const [busy, setBusy] = useState<Target | OwnTarget | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
   const [moving, setMoving] = useState(false)
@@ -75,6 +88,22 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
   // Completing (with the therapist commission) and re-opening happen on the booking page (PLAN §14.8 R2).
   const actions =
     data.canManage && status !== 'completed' ? ACTIONS.filter((a) => canTransition(status, a.to)) : []
+  const mine =
+    !data.canManage &&
+    data.ownStatusStaffId !== null &&
+    items.some((i) => i.staffIds.includes(data.ownStatusStaffId!))
+  const ownActions =
+    mine && OWN_FROM.includes(status) ? OWN_ACTIONS.filter((a) => canTransition(status, a.to)) : []
+
+  const changeOwn = (to: OwnTarget) => {
+    setBusy(to)
+    start(async () => {
+      const r = await setOwnStatusAction(data.slug, { bookingId: first.bookingId, status: to })
+      setBusy(null)
+      if (r?.ok) toast.success(resultText(t, r) ?? t('calendar.updated'))
+      else if (r) toast.error(resultText(t, r) ?? r.error ?? '')
+    })
+  }
 
   const change = (to: Target, why?: string) => {
     setBusy(to)
@@ -197,6 +226,29 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+      )}
+
+      {ownActions.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted">
+            {t('calendar.details.status')}
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {ownActions.map((a) => (
+              <Button
+                key={a.to}
+                variant={a.variant}
+                size="lg"
+                className="sm:h-10 sm:text-sm"
+                pending={pending && busy === a.to}
+                disabled={pending}
+                onClick={() => changeOwn(a.to)}
+              >
+                {t(`calendar.details.actions.${a.to}`)}
+              </Button>
+            ))}
+          </div>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { addDays, businessDateOf } from '@spa/core'
+import { addDays, businessDateOf, weekStartOf } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import {
   bookings,
@@ -19,6 +19,7 @@ import {
   outboxBookingLive,
   peakHours,
   revenueSeries,
+  staffEarnings,
   upcomingItems,
 } from '@spa/services'
 import { and, count, eq, inArray, isNull, lte, not, or } from 'drizzle-orm'
@@ -591,7 +592,7 @@ function Empty({ text }: { text: string }) {
   return <p className="crm-muted py-6 text-center text-sm">{text}</p>
 }
 
-/** Therapists (no dashboard access): their own agenda for today, nothing financial. */
+/** Therapists (no dashboard access): their own agenda for today and their own earnings (G14) — no spa figures. */
 async function TherapistHome({ ctx }: { ctx: MemberContext }) {
   const { t, fmt } = await getI18n()
   const now = new Date()
@@ -609,7 +610,15 @@ async function TherapistHome({ ctx }: { ctx: MemberContext }) {
     const items: AgendaItem[] = me
       ? await upcomingItems(tx, { date, after: now, staffId: me.id, limit: 20 })
       : []
-    return { linked: Boolean(me), items, date }
+    // Own commission + tips only (business dates: today, Mon-start week, calendar month to date).
+    const earnings = me
+      ? await staffEarnings(tx, me.id, {
+          today: { from: date, to: date },
+          week: { from: weekStartOf(date), to: date },
+          month: { from: `${date.slice(0, 8)}01`, to: date },
+        })
+      : null
+    return { linked: Boolean(me), items, date, earnings }
   })
   const next = data.items[0]
 
@@ -669,6 +678,32 @@ async function TherapistHome({ ctx }: { ctx: MemberContext }) {
               )}
             </Card>
           </Grid>
+        )}
+        {data.earnings && (
+          <Card
+            title={t('overview.therapist.earnings.title')}
+            sub={t('overview.therapist.earnings.sub')}
+            footer={<p className="crm-muted text-[13px]">{t('overview.therapist.earnings.note')}</p>}
+          >
+            <Grid cols="g3">
+              {(['today', 'week', 'month'] as const).map((k) => {
+                const e = data.earnings![k]
+                return (
+                  <Stat
+                    key={k}
+                    label={t(`overview.therapist.earnings.${k}`)}
+                    value={fmt.aed(e.commissionAed + e.tipsAed)}
+                    change={{
+                      text: `${t('overview.therapist.earnings.commission')} ${fmt.aed(e.commissionAed)} · ${t('overview.therapist.earnings.tips')} ${fmt.aed(e.tipsAed)}`,
+                    }}
+                  />
+                )
+              })}
+            </Grid>
+          </Card>
+        )}
+        {data.linked && can(ctx, 'calendar.ownStatus') && (
+          <p className="crm-muted text-sm">{t('overview.therapist.actions')}</p>
         )}
       </PageBody>
     </>

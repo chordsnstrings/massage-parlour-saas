@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
-import { admin, app, base, signInPlatformAdmin, site } from './helpers'
+import { admin, app, base, enrolTwoFactor, enrolUrl, signInPlatformAdmin, site } from './helpers'
 
 const slug = `serenity-${Date.now().toString(36)}`
 const shots = (name: string) => `test-results/screens/${name}.png`
@@ -31,6 +31,11 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
     await page.getByLabel('Web address').fill(slug)
     await expect(page.getByText(new RegExp(`${slug}.* is available`))).toBeVisible()
     await page.getByRole('button', { name: 'Create account' }).click()
+    // G23: "Require 2FA for owner & managers" is on for new spas — the owner enrols TOTP before the dashboard.
+    await page.waitForURL(enrolUrl(slug))
+    await expect(page.getByText(/requires two-step verification/)).toBeVisible()
+    await enrolTwoFactor(page, `owner-${slug}@e2e.test`, 'correct-horse-battery')
+    await page.goto(`${app}/${slug}`)
     await page.waitForURL(`${app}/${slug}`)
     // The time-of-day greeting lives in the shell's top bar; the page heading names the spa.
     await expect(page.getByRole('banner')).toContainText('Aisha')

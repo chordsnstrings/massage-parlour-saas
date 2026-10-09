@@ -8,6 +8,7 @@ import {
   findOrCreateClient,
   notify,
   publicPrice,
+  selfBookingStatus,
   spaHidesPrices,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
@@ -159,7 +160,7 @@ function confirmText(
     : `Hi ${v.spa}, I'd like to confirm my booking #${v.ref}: ${v.service} on ${day} at ${time}. Name: ${v.name}.`
 }
 
-/** Public booking request → pending booking (resources reserved), returns the confirmation details. */
+/** Public booking request → pending (or auto-confirmed, G21) booking with resources reserved; returns the details. */
 export async function bookOnline(input: z.input<typeof bookingInput>): Promise<ActionResult> {
   const parsed = bookingInput.safeParse(input)
   const lang: Locale = input?.lang === 'ar' ? 'ar' : 'en'
@@ -206,16 +207,19 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       ]
         .filter(Boolean)
         .join('\n')
+      // Pending until the front desk confirms, unless the spa auto-confirms returning clients (G21).
+      const status = await selfBookingStatus(tx, tenant.id, client.id)
       const booking = await createBooking(tx, {
         tenantId: tenant.id,
         branchId: branch.id,
         clientId: client.id,
         source: 'online',
-        status: 'pending',
+        status,
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
       })
-      // Pending: the confirmation + reminders are queued when the receptionist confirms (G4).
+      // Pending: the confirmation + reminders are queued when the receptionist confirms (G4); a confirmed
+      // booking queued them in createBooking.
 
       let therapist: string | null = null
       if (v.staffId) {
@@ -243,6 +247,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
           : null,
         spa: tenant.name,
         address: branch.address,
+        confirmed: status === 'confirmed',
       }
       return { kind: 'ok' as const, bookingId: booking.id, done, date, serviceEn: row.service.name.en }
     })

@@ -1,6 +1,12 @@
 import { addDays, businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
 import { conversationMessages, conversations, type Tx, withTenant } from '@spa/db'
-import { availableSlots, createBooking, DomainError, findOrCreateClient } from '@spa/services'
+import {
+  availableSlots,
+  createBooking,
+  DomainError,
+  findOrCreateClient,
+  selfBookingStatus,
+} from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { metaMcpSources } from '../mcp/client'
 import type { ChatMessage, ModelArkClient, ToolDef } from '../modelark'
@@ -79,7 +85,7 @@ Menu (prices in AED, VAT included):
 ${menu || '- (no online menu yet — hand off to staff for bookings)'}
 
 How to help: answer questions about services, prices, hours and location from the facts above. To book, find out the service and preferred day/time,
-call check_availability, offer up to 3 times, then collect the customer's name and UAE mobile and call book. After booking, tell them the reference and that the spa will confirm on WhatsApp.
+call check_availability, offer up to 3 times, then collect the customer's name and UAE mobile and call book. After booking, tell them the reference and what the book tool's status says (pending: the spa will confirm on WhatsApp; confirmed: they are booked).
 Keep replies under 600 characters, friendly and clear. ${ctx.rules}
 ${SAFETY}`
 }
@@ -225,17 +231,26 @@ async function runTool(
         })
         if (client.blocklisted)
           throw new DomainError('We are unable to take this booking online — please call the spa.')
+        // Pending for the spa to confirm, unless it auto-confirms returning clients (G21).
+        const status = await selfBookingStatus(tx, tenantId, client.id)
         return createBooking(tx, {
           tenantId,
           branchId,
           clientId: client.id,
           source,
-          status: 'pending',
+          status,
           items: [{ serviceVariantId: args.variant_id ?? '', start }],
         })
       })
       result.bookingRef = booking.refCode
-      return { ok: true, ref: booking.refCode, status: 'pending — the spa will confirm on WhatsApp' }
+      return {
+        ok: true,
+        ref: booking.refCode,
+        status:
+          booking.status === 'confirmed'
+            ? 'confirmed — the confirmation follows on WhatsApp'
+            : 'pending — the spa will confirm on WhatsApp',
+      }
     }
     if (name === 'handoff_to_human') {
       result.handoff = args.reason ?? 'requested'
