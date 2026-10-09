@@ -19,6 +19,7 @@ fi
 for db in spa spa_test "$@"; do
   PGOPTIONS="-c client_min_messages=warning" psql -h localhost -p "$PORT" -U postgres -d postgres -q \
     -v db_name="$db" -v owner_password=spa_owner_dev -v platform_password=spa_platform_dev -v app_password=spa_app_dev \
+    -v drill_password=spa_drill_dev \
     -f "$ROOT/packages/db/sql/bootstrap.sql"
 done
 echo "Postgres ready on localhost:$PORT (databases: spa spa_test $*)"

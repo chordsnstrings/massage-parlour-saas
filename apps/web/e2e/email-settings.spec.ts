@@ -17,6 +17,9 @@ test('console email settings: masked Resend key, test email, config health (G9)'
   await expect(resendRow).toContainText('Missing')
   await expect(page.getByTestId('ops-health')).toBeVisible()
   await expect(page.getByTestId('config-backups')).toBeVisible()
+  // F11: the restore drill's role exists (bootstrap.sql) with CREATEDB only.
+  await expect(page.getByTestId('config-drill-role')).toHaveAttribute('data-ok', 'true')
+  await expect(page.getByTestId('config-drill-role')).toContainText('CREATEDB only')
 
   await page.goto(`${admin}/settings`)
   const card = page.getByTestId('email-settings')

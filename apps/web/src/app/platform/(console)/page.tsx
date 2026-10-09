@@ -1,4 +1,4 @@
-import { configChecks, emailDomain, resolveEmailConfig } from '@spa/core'
+import { configChecks, type DrillRole, drillRoleProblem, emailDomain, resolveEmailConfig } from '@spa/core'
 import {
   platformDb,
   platformInvoices,
@@ -112,6 +112,11 @@ export default async function PlatformOverview() {
   registerEmailSettings()
   const mail = await resolveEmailConfig()
   const checks = configChecks()
+  // F11: the restore drill's least-privilege role (created by compose service db-roles); pg_roles is world-readable.
+  const { rows: drillRoles } = await db.execute<DrillRole>(
+    sql`select rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication from pg_roles where rolname = 'spa_drill'`,
+  )
+  const drillProblem = drillRoleProblem(drillRoles[0])
   const backupStale = !okBackup || Date.now() - okBackup.finishedAt.getTime() > 36 * 3_600_000
   // G18: spas at ≥ 80 % of their monthly AI budget (budget 0 = AI deliberately off, not flagged).
   const aiFlags = (await aiUsageOverview(db)).filter((r) => r.budgetUsd > 0 && r.level !== 'ok')
@@ -232,6 +237,18 @@ export default async function PlatformOverview() {
                 }`}
               />
             ))}
+            <HealthRow
+              testId="config-drill-role"
+              label="Restore drill role (spa_drill)"
+              ok={!drillProblem}
+              text={
+                !drillProblem
+                  ? 'Set · CREATEDB only, no superuser'
+                  : drillRoles[0]
+                    ? `Wrong attributes: ${drillProblem}. The monthly restore drill refuses to run as it.`
+                    : 'Missing: the monthly restore drill cannot run. The next deploy creates it (service db-roles).'
+              }
+            />
           </ul>
         </Card>
         <Card data-testid="offsite-backup">

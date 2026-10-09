@@ -36,6 +36,7 @@ jobs:
         run: >-
           psql -h localhost -U postgres -d postgres -v db_name=spa_test
           -v owner_password=spa_owner_dev -v platform_password=spa_platform_dev -v app_password=spa_app_dev
+          -v drill_password=spa_drill_dev
           -f packages/db/sql/bootstrap.sql
       - run: pnpm lint
       - run: pnpm typecheck

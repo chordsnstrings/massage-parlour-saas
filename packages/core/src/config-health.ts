@@ -105,3 +105,28 @@ export const configFlags = (env: Env = process.env): Record<string, boolean> =>
     ...configChecks(env).map((c) => [c.key, c.ok] as const),
     ['RESEND_API_KEY', set(env, 'RESEND_API_KEY')] as const,
   ])
+
+/** pg_roles attributes of the restore-drill role (F11). */
+export type DrillRole = {
+  rolsuper: boolean
+  rolcreatedb: boolean
+  rolcreaterole: boolean
+  rolbypassrls: boolean
+  rolreplication: boolean
+}
+
+/**
+ * F11: why a role must not run the restore drill (least privilege: CREATEDB, nothing more), or null when it is fit.
+ * The worker refuses to run on a problem; the console Configuration card shows it for `spa_drill`.
+ */
+export function drillRoleProblem(r: DrillRole | null | undefined): string | null {
+  if (!r) return 'role missing'
+  const extra = [
+    r.rolsuper && 'SUPERUSER',
+    r.rolcreaterole && 'CREATEROLE',
+    r.rolbypassrls && 'BYPASSRLS',
+    r.rolreplication && 'REPLICATION',
+  ].filter(Boolean)
+  if (extra.length) return `has ${extra.join(', ')}`
+  return r.rolcreatedb ? null : 'no CREATEDB'
+}

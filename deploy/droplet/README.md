@@ -51,6 +51,13 @@ such as Namecheap.
     `S3_*` file bucket (`backups/` prefix). **Recommended:** a separate private R2 bucket + its own key in `R2_*`,
     with lifecycle rules `backups/daily/` 30 days and `backups/monthly/` 365 days.
   - every run (ok / skipped / failed) shows on the super-admin overview; it warns when the last good backup is > 36 h old
+  - monthly **restore drill** (worker `restore-drill`, 2nd of the month): latest off-site dump → scratch database →
+    counts → drop, as the least-privilege role `spa_drill` (CREATEDB only; it owns only its scratch database and has
+    no access to the live data; F11). The worker never holds the Postgres superuser password and refuses to run as a
+    superuser. Compose service `db-roles` re-runs the idempotent role bootstrap on every deploy, so the role reaches
+    an existing droplet with no SSH; its password is derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is
+    set (optional, e.g. via the secrets overlay; the next deploy applies a new value). Console → Overview →
+    Configuration shows "Restore drill role (spa_drill)".
   - enable DigitalOcean droplet backups for whole-machine snapshots
 
 ## Health and alerts (G8)
@@ -225,6 +232,7 @@ The secrets file needs these keys:
   owner-chosen super-admins (see "Super-admins"); each must be a super-admin with 2FA; set it to replace the list;
   removing an address cuts access on the next request
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
+- optional `SPA_DRILL_PASSWORD` (restore-drill role `spa_drill`; unset = derived from `SPA_OWNER_PASSWORD`)
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
 - strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),

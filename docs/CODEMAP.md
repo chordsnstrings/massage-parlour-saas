@@ -26,7 +26,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `spa_owner` owns the schema and runs migrations, pg-boss and the worker.
   - `spa_platform` gets policy `platform_all` (every row).
   - `spa_app` gets policy `tenant_isolation`: `tenant_id = current_setting('app.tenant_id')`.
-  - No role has BYPASSRLS.
+  - `spa_drill` (F11): LOGIN CREATEDB only, no grants: the worker's restore drill creates/restores/drops its own
+    scratch DB. Attributes + password re-applied on every bootstrap run; empty `drill_password` → sha256 of
+    `spa_drill:<owner password>` (worker `drillUrl` derives the same). Dev/CI password `spa_drill_dev`.
+  - No role has BYPASSRLS. bootstrap.sql runs at first boot (postgres init) **and every deploy** (compose one-shot
+    `db-roles`, official postgres image; the only container besides postgres with the superuser password; not a
+    dependency of migrate) — add new roles there, idempotently.
 - `withTenant(tenantId, fn)` rejects non-UUIDs, opens a transaction on `appDb()` and runs
   `set_config('app.tenant_id', id, true)`.
 - **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
@@ -515,7 +520,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 |---|---|
 | `db-backup` (pg_dump → off-site bucket: `R2_*`, else the `S3_*` bucket under `backups/` (`offsiteConfig`; a half-set `R2_*` = not configured); every ok/skipped/failed run in `platform_job_runs`; console overview warns when the last ok run is missing or > 36 h old) | 03:30 |
 | `worker-heartbeat` (G8: `platform_job_runs` row with disk %, `deploy.json`, `configFlags` presence map; 1 day kept; touches `/tmp/worker-heartbeat`; incidents disk > 85 % / backup > 36 h / deploy failed → `ops-alert` rows open=failed/closed=ok, one email per incident to `PLATFORM_ADMIN_EMAILS`; also sent once at worker start) | every 5 min |
-| `restore-drill` (latest R2 daily dump → scratch DB via `RESTORE_DRILL_ADMIN_URL` (CREATEDB; compose uses the postgres superuser) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
+| `restore-drill` (latest R2 daily dump → scratch DB as `spa_drill` (F11: `DATABASE_URL_DRILL`, else built from `DATABASE_URL_OWNER`'s host + `SPA_DRILL_PASSWORD`/derived; refuses SUPERUSER/CREATEROLE/BYPASSRLS/REPLICATION via core `drillRoleProblem`; superuser-only extensions e.g. pg_stat_statements left out of the restore list; drops only its own scratch DB; passwords via PGPASSWORD, masked in errors; old `RESTORE_DRILL_ADMIN_URL` ignored with a warning) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
 | `instagram-reply` (DB queue `instagram_reply_queue`, RLS, PK = message id: the Meta webhook's `ingestInstagramWebhook` inserts the row in the message's transaction for live spas; the job finds spas with due rows (`tenantsWithDueReplies`, platform role), `claimDueReplies` (5-min lease, SKIP LOCKED), `inboundAnswered` skips threads already answered, `finishReply` deletes, `failReply` backs off 30 s ×2 … 30 min, `failed_at` after 5 tries. Web has no pg-boss / owner URL / `after()`) | every minute |
 | `analytics-rollup` | hourly at :07 |
 | `analytics-prune` | 04:20 |
