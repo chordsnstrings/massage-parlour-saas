@@ -146,11 +146,10 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
     return { client, team, visits, items, totals: totals!, notes, intakes, template, memberships }
   })
   if (!data) notFound()
-  const { client, team, visits, items, totals, notes, intakes, template } = data
+  const { client, team, visits, items, totals, notes, intakes, template, memberships } = data
   const erased = Boolean(client.erasedAt)
   const canManage = canEdit && !erased
   const clientName = erased ? t('clients.erase.erasedName') : client.name
-  const { client, team, visits, items, totals, notes, intakes, template, memberships } = data
 
   const staffName = new Map(team.map((s) => [s.id, s.name]))
   const authorIds = [...new Set(notes.filter((n) => !n.staffId && n.createdBy).map((n) => n.createdBy!))]

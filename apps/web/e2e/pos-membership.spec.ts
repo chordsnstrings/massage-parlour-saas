@@ -21,9 +21,7 @@ test('POS: sell a membership, then use its included session and member discount 
     await page.goto(`${app}/${slug}/sales/new?booking=${booking.id}`)
     await expect(page.getByText('Fatima Al Mansoori')).toBeVisible()
     await page.getByRole('button', { name: 'Remove item 1' }).click()
-    await page
-      .getByLabel('Sell or renew a membership')
-      .selectOption({ label: 'Gold — AED 600 / month' })
+    await page.getByLabel('Sell or renew a membership').selectOption({ label: 'Gold — AED 600 / month' })
     await expect(page.getByTestId('sale-total')).toHaveText(/600/)
     await expect(page.getByText('VAT 5% included').locator('..')).toContainText(/AED\s?0/)
     await page.getByLabel('Payment 1 amount').fill('600')
@@ -32,10 +30,7 @@ test('POS: sell a membership, then use its included session and member discount 
     await expect(page.locator('#receipt').getByText(/^Membership .+ – .+$/)).toBeVisible()
   })
 
-  const [period] = await db
-    .select()
-    .from(clientMemberships)
-    .where(eq(clientMemberships.tenantId, tenant!.id))
+  const [period] = await db.select().from(clientMemberships).where(eq(clientMemberships.tenantId, tenant!.id))
   expect(period).toMatchObject({ status: 'active', name: 'Gold', remainingValueAed: '600.00' })
 
   await test.step('next visit: included session at zero, extra treatment with the member discount', async () => {
