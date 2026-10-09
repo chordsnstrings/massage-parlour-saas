@@ -1,7 +1,8 @@
 'use server'
 // Marketing Contact form (PLAN §18.4). Public: honeypot → zod (server-side, never trust the client) → per-IP limit
-// (5/hour, 20/day) → stored as a `new` enquiry → super-admins emailed after the reply (never fails the submission).
-import { PLATFORM_CONTACT_EMAIL } from '@spa/core'
+// (5/hour, 20/day) → Turnstile (F9) → stored as a `new` enquiry → super-admins emailed after the reply (never fails
+// the submission).
+import { PLATFORM_CONTACT_EMAIL, TURNSTILE_FIELD } from '@spa/core'
 import { platformDb } from '@spa/db'
 import { ENQUIRY_LIMITS, enquirySchema, submitEnquiry } from '@spa/services'
 import { headers } from 'next/headers'
@@ -12,6 +13,7 @@ import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { audit } from '@/server/audit'
 import { emailNewEnquiry, hashIp } from '@/server/enquiries'
 import { clientIp, withinIpLimit } from '@/server/rate-limit'
+import { passesBotCheck } from '@/server/turnstile'
 
 const SENT = 'Thanks — we’ll reply within one working day.'
 
@@ -26,6 +28,8 @@ export async function sendEnquiryAction(_prev: ActionResult, fd: FormData): Prom
     const email = (await companyContact())?.email || PLATFORM_CONTACT_EMAIL
     return fail(`Too many messages from your network. Please email us at ${email} instead.`)
   }
+  if (!(await passesBotCheck(form[TURNSTILE_FIELD], 'contact')))
+    return fail("We couldn't confirm you're not a robot. Please try again.")
   const h = await headers()
   const enquiry = await submitEnquiry(platformDb(), parsed.data, {
     ipHash: hashIp(await clientIp()),

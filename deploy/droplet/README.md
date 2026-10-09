@@ -75,6 +75,26 @@ worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTI
 is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
 either place.
 
+## Bot check on public forms (Cloudflare Turnstile, F9)
+
+Online booking (`/book`), the booking widget (`/book/embed`), **Apply** (`/signup`) and marketing **Contact** check
+visitors with Cloudflare Turnstile (managed, invisible unless Cloudflare wants a click), on top of the honeypot and
+per-IP limits. Until both keys are set the forms stay open and console → Overview → Configuration shows
+`TURNSTILE_*` red. Owner steps:
+
+1. Cloudflare dashboard → **Turnstile** → **Add widget**: name `spamanagement forms`, **Widget mode: Managed**,
+   pre-clearance **No**.
+2. **Hostnames:** `spamanagement.co` (a hostname also covers its subdomains, so `app.`, `admin.` and every spa's
+   `<slug>.spamanagement.co`) and `spamanagement.ae` while the old domain is live.
+3. **Custom domains (option):** a spa's own domain (e.g. `book.saffronspa.ae`) works only once it is in the
+   widget's hostname list. Add them there, then set `TURNSTILE_CUSTOM_DOMAINS=on`. Without it, custom-domain booking
+   pages skip the bot check (honeypot + limits only) instead of breaking. The free plan caps hostnames per widget.
+4. Copy the **Site key** and **Secret key** into the secrets overlay ("Secrets without SSH" below):
+   `TURNSTILE_SITE_KEY=…` and `TURNSTILE_SECRET_KEY=…` (both needed; web container only). Push; the next update
+   restarts web and the Configuration row turns green.
+5. Check: open a spa's `/book` and book a test slot. A visitor who fails the check sees "We couldn't confirm you're
+   not a robot" and nothing is stored.
+
 ## Super-admins
 
 - **Who:** the droplet's base `PLATFORM_ADMIN_EMAILS` (`/opt/spa/.env`, e.g. `ahmed@arks.ae`) **plus**

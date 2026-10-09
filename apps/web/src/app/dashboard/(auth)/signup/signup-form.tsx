@@ -4,9 +4,11 @@ import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { LogoInput } from '@/components/media/logo-input'
+import { TURNSTILE_FIELD, useTurnstile } from '@/components/turnstile'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
-import { useT } from '@/i18n/client'
+import { useI18n } from '@/i18n/client'
+import type { ActionResult } from '@/lib/action'
 import { appPath } from '@/lib/paths'
 import { checkSlugAction, signupAction } from './actions'
 
@@ -19,6 +21,7 @@ export function SignupForm({
   emirates,
   today,
   logo,
+  turnstileSiteKey,
 }: {
   address: { prefix: string; suffix: string }
   signedIn: boolean
@@ -28,8 +31,17 @@ export function SignupForm({
   emirates: { key: string; label: string }[]
   today: string
   logo: { label: string; hint: string; tooLarge: string }
+  /** F9: Cloudflare Turnstile site key (null = no bot check). */
+  turnstileSiteKey: string | null
 }) {
-  const t = useT()
+  const { t, locale } = useI18n()
+  const bot = useTurnstile(turnstileSiteKey, 'apply', locale)
+  const send = async (prev: ActionResult, fd: FormData) => {
+    fd.set(TURNSTILE_FIELD, await bot.getToken())
+    const res = await signupAction(prev, fd)
+    if (!res?.ok) bot.reset()
+    return res
+  }
   const [business, setBusiness] = useState('')
   const [slug, setSlug] = useState('')
   const [touched, setTouched] = useState(false)
@@ -55,7 +67,7 @@ export function SignupForm({
   }, [effectiveSlug, touched])
 
   return (
-    <ActionForm action={signupAction} className="space-y-5">
+    <ActionForm action={send} className="space-y-5">
       {!signedIn && (
         <>
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -186,6 +198,7 @@ export function SignupForm({
       <Field label={t('auth.signup.notes')} name="notes">
         <Textarea id="notes" name="notes" rows={3} placeholder={t('auth.signup.notesPlaceholder')} />
       </Field>
+      <div ref={bot.ref} className="empty:hidden" />
       <SubmitButton size="lg" className="w-full">
         {signedIn ? t('auth.signup.submitAdd') : t('auth.signup.submit')}
       </SubmitButton>

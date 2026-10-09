@@ -68,10 +68,11 @@ test('booking widget: snippet in settings, frameable embed route, booking throug
   await expect.poll(() => page.evaluate(() => (window as { booked?: { ref: string } }).booked?.ref)).toBe(ref)
   const db = testDb()
   const [row] = await db
-    .select({ status: bookings.status, source: bookings.source })
+    .select({ status: bookings.status, source: bookings.source, attribution: bookings.attribution })
     .from(bookings)
     .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
-  expect(row).toEqual({ status: 'pending', source: 'online' })
+  // F13: the iframe is tagged src=widget, so the booking is attributed to the widget.
+  expect(row).toEqual({ status: 'pending', source: 'online', attribution: 'widget' })
   // Cookieless analytics attribute the visit to the widget.
   await expect
     .poll(

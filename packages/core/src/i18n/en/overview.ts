@@ -57,6 +57,7 @@ export const overview = {
     sub: 'Where bookings came from',
     barLabel: 'Bookings by source',
     empty: 'No bookings in this period yet.',
+    online: 'Online bookings by website source',
   },
   upNext: {
     title: 'Up next',

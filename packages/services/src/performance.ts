@@ -61,6 +61,8 @@ export type TenantPerformance = {
   conversion: number | null
   /** Non-cancelled bookings by channel (walk_in, online, ai_agent, instagram, gbp, phone, whatsapp). */
   bookingSources: SourceCount[]
+  /** F13: non-cancelled online bookings by the booker's website source (instagram, gbp, qr, …; 'unknown' = pre-F13). */
+  onlineSources: SourceCount[]
   /** Visitors by entry source (?src= ig/gbp/qr, referrer host or direct) and how many of them booked. */
   webSources: { source: string; sessions: number; booked: number }[]
   /** AI spend this Dubai calendar month (USD). */
@@ -94,6 +96,7 @@ export async function tenantPerformance(
     new_clients: number
     web: { visits: number; started: number; booked: number }
     booking_sources: SourceCount[]
+    online_sources: SourceCount[]
     web_sources: { source: string; sessions: number; booked: number }[]
   }>(
     tx,
@@ -122,6 +125,9 @@ export async function tenantPerformance(
         (select coalesce(json_agg(json_build_object('source', x.source, 'count', x.n) order by x.n desc, x.source), '[]')
           from (select source::text as source, count(*)::int as n from bookings
             where ${dates(sql`business_date`)} and status <> 'cancelled' group by 1) x) as booking_sources,
+        (select coalesce(json_agg(json_build_object('source', x.source, 'count', x.n) order by x.n desc, x.source), '[]')
+          from (select coalesce(attribution::text, 'unknown') as source, count(*)::int as n from bookings
+            where ${dates(sql`business_date`)} and source = 'online' and status <> 'cancelled' group by 1) x) as online_sources,
         (select coalesce(json_agg(json_build_object('source', x.src, 'sessions', x.sessions, 'booked', x.booked)
             order by x.sessions desc, x.src), '[]')
           from (select e.src, count(distinct w.session_hash)::int as sessions,
@@ -148,6 +154,7 @@ export async function tenantPerformance(
     bookedSessions: booked,
     conversion: visits ? booked / visits : null,
     bookingSources: row.booking_sources.map((s) => ({ source: s.source, count: n(s.count) })),
+    onlineSources: row.online_sources.map((s) => ({ source: s.source, count: n(s.count) })),
     webSources: row.web_sources.map((s) => ({
       source: s.source,
       sessions: n(s.sessions),

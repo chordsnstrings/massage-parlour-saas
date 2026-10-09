@@ -2,6 +2,7 @@ import { CalendarX2 } from 'lucide-react'
 import type { Metadata } from 'next'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/page'
+import { turnstileSiteKey } from '@/server/turnstile'
 import { BookingFlow } from './booking-flow'
 import { acceptsBookings, loadBookingCatalog } from './data'
 import { localeOf, t } from './i18n'
@@ -89,6 +90,7 @@ export async function BookingPage({
       langHref={langHref}
       initialServiceId={service}
       embed={embed}
+      turnstileSiteKey={turnstileSiteKey({ customDomain: 'hostname' in site })}
     />
   )
 }

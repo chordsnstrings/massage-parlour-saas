@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, type Page, test } from '@playwright/test'
 import { bookings, clients, notifications, outbox } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
@@ -10,6 +10,7 @@ import {
   signUpOwner,
   site,
   testDb,
+  today,
 } from './helpers'
 
 test('visitor books online: service → tomorrow → first time → details → pending booking + WhatsApp confirm', async ({
@@ -139,6 +140,67 @@ test('G21: a returning client is auto-confirmed online and gets the WhatsApp con
     await page.getByRole('button', { name: 'Request booking' }).click()
     await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
   })
+})
+
+/** Service → tomorrow → first free time → details → request; returns the booking ref. */
+async function bookTomorrow(page: Page, name: string, phone: string) {
+  await page
+    .getByRole('region', { name: 'Swedish massage' })
+    .getByRole('button', { name: /60 min/ })
+    .click()
+  await page.getByRole('button', { name: /^Tomorrow/ }).click()
+  await page.getByTestId('slots').getByRole('button').first().click()
+  await page.getByLabel('Your name').fill(name)
+  await page.getByLabel('UAE mobile').fill(phone)
+  await page.getByRole('button', { name: 'Request booking' }).click()
+}
+
+test('F13: a visitor from Instagram (?src=ig) books online; the booking and the KPIs show Instagram', async ({
+  page,
+}) => {
+  const { slug, dashboard } = await signUpOwner(page, { spa: 'Attribution Spa' })
+  const seed = await seedCatalog(slug)
+  const db = testDb()
+
+  // The Instagram bio link: the tracker keeps the entry for the tab session, the booking page reads it.
+  await page.goto(`${site(slug)}/?src=ig`)
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem('spa_entry') ?? ''))
+    .toContain('"src":"ig"')
+  await page.goto(`${site(slug)}/book`)
+  await bookTomorrow(page, 'Layla Insta', '050 222 3344')
+  await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
+  const ref = (await page.getByTestId('booking-ref').textContent())?.trim() ?? ''
+  const [row] = await db
+    .select({ id: bookings.id, source: bookings.source, attribution: bookings.attribution })
+    .from(bookings)
+    .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
+  expect(row).toMatchObject({ source: 'online', attribution: 'instagram' })
+
+  await page.goto(`${dashboard}/bookings/${row!.id}`)
+  await expect(page.getByText('Online · Instagram')).toBeVisible()
+
+  // Home KPIs end today: move the booking onto today's business date so "Today" counts it.
+  await db.update(bookings).set({ businessDate: today() }).where(eq(bookings.id, row!.id))
+  await page.goto(dashboard)
+  const online = page.getByTestId('online-sources')
+  await expect(online).toContainText('Online bookings by website source')
+  await expect(online).toContainText('Instagram')
+  await expect(online).toContainText('1 · 100%')
+})
+
+test('F9: without a Turnstile token (script blocked) the booking is refused and nothing is stored', async ({
+  page,
+}) => {
+  const { slug } = await signUpOwner(page)
+  const seed = await seedCatalog(slug)
+  await page.route('https://challenges.cloudflare.com/**', (route) => route.abort())
+  await page.goto(`${site(slug)}/book`)
+  await bookTomorrow(page, 'Robot Test', '050 999 8877')
+  await expect(page.getByText("We couldn't confirm you're not a robot").first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
+  const rows = await testDb().select().from(bookings).where(eq(bookings.tenantId, seed.tenantId))
+  expect(rows).toHaveLength(0)
 })
 
 test('Arabic booking page renders right-to-left', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import { webEntrySource } from '@spa/core'
 import { platformDb, webEvents } from '@spa/db'
 import { z } from 'zod'
 import { resolveSiteTenant } from '@/server/sites'
@@ -35,23 +36,6 @@ const limited = (ip: string) => {
   }
   h.n++
   return h.n > 240
-}
-
-const sourceOf = (utm: Record<string, string> | undefined, referrer: string | null | undefined) => {
-  const tag = (utm?.src ?? utm?.utm_source ?? '').toLowerCase()
-  if (tag) return tag.slice(0, 30)
-  if (!referrer) return 'direct'
-  try {
-    const h = new URL(referrer).hostname
-    if (/instagram/.test(h)) return 'instagram'
-    if (/google/.test(h)) return 'google'
-    if (/whatsapp|wa\.me/.test(h)) return 'whatsapp'
-    if (/facebook|fb\./.test(h)) return 'facebook'
-    if (/tiktok/.test(h)) return 'tiktok'
-    return h.replace(/^www\./, '').slice(0, 40)
-  } catch {
-    return 'direct'
-  }
 }
 
 /** Public, cookieless analytics ingest. Sessions are a daily-salted hash — no IP or cookie is stored. */
@@ -92,7 +76,7 @@ export async function POST(req: Request) {
       blockType: parsed.blockType ?? null,
       element: parsed.element ?? null,
       referrer: parsed.referrer?.slice(0, 300) ?? null,
-      source: sourceOf(parsed.utm, parsed.referrer),
+      source: webEntrySource(parsed.utm, parsed.referrer),
       utm: parsed.utm ?? null,
       device,
       country: req.headers.get('cf-ipcountry') ?? null,

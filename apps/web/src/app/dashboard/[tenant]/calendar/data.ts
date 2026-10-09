@@ -109,6 +109,7 @@ export async function loadCalendar(
       refCode: booking.refCode,
       status: booking.status,
       source: booking.source,
+      attribution: booking.attribution,
       startMin: rel(item.startsAt),
       endMin: rel(item.endsAt),
       staffIds: item.staffIds,
