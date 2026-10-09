@@ -3,6 +3,8 @@
 // Premium = every feature; Standard = the core spa CRM (no AI & Instagram automation, no marketing tools, one
 // branch). The yearly AED 24,000 plan stays as an inactive legacy plan (every feature) until each spa's renewal.
 
+import type { AutomationKey } from './automations'
+
 /** Plan codes (`plans.code`); code never hard-codes plan ids. */
 export const PLAN_CODES = {
   premium: 'premium',
@@ -18,6 +20,12 @@ export type PlanCode = (typeof PLAN_CODES)[keyof typeof PLAN_CODES]
  */
 export const FEATURES = ['ai', 'marketing', 'multiBranch'] as const
 export type Feature = (typeof FEATURES)[number]
+/** English names (marketing pricing page, console, services' English errors); the dashboard uses `plan.feature.*`. */
+export const FEATURE_LABELS: Record<Feature, string> = {
+  ai: 'AI & Instagram automation',
+  marketing: 'Marketing tools',
+  multiBranch: 'More branches',
+}
 export const isFeature = (v: unknown): v is Feature =>
   typeof v === 'string' && (FEATURES as readonly string[]).includes(v)
 
@@ -31,7 +39,23 @@ export const TIER_FEATURES: Record<FeatureTier, readonly Feature[]> = { premium:
  * AI agents our studio runs on the spa's website (Website Studio: super-admins only). The website is on every plan,
  * so these never need the `ai` feature; every other agent does (AI gateway, packages/ai).
  */
-export const STUDIO_AI_AGENTS: readonly string[] = ['site_generator', 'site_editor', 'translator', 'seo_agent']
+export const STUDIO_AI_AGENTS: readonly string[] = [
+  'site_generator',
+  'site_editor',
+  'translator',
+  'seo_agent',
+]
+
+/**
+ * Automation switches (Automations page, worker jobs) that need a feature: the worker skips spas without it and the
+ * page shows them as "Available on Premium". Others (booking messages, package expiry, digests…) are on every plan.
+ */
+export const AUTOMATION_FEATURE: Partial<Record<AutomationKey, Feature>> = {
+  slotFiller: 'marketing',
+  instagram: 'marketing',
+  googleReviews: 'marketing',
+  weeklyInsights: 'ai',
+}
 
 /** Active branches a spa without `multiBranch` may have. */
 export const SINGLE_BRANCH_LIMIT = 1
@@ -117,7 +141,8 @@ const cents = (v: string | number) => Math.round(Number(v) * 100)
  */
 export function parseDiscount(kind: string | null | undefined, value: string | null | undefined) {
   const raw = (value ?? '').replace(/,/g, '').replace(/%$/, '').trim()
-  if (!kind || kind === 'none' || raw === '' || Number(raw) === 0) return { ok: true as const, discount: null }
+  if (!kind || kind === 'none' || raw === '' || Number(raw) === 0)
+    return { ok: true as const, discount: null }
   if (kind !== 'amount' && kind !== 'percent') return { ok: false as const, error: 'Choose AED or %' }
   const n = Number(raw)
   if (!/^\d+(\.\d{1,2})?$/.test(raw) || !Number.isFinite(n) || n <= 0)
@@ -134,7 +159,10 @@ export function applyDiscount(amountAed: string | number, d: Discount | null | u
   const base = cents(amountAed)
   const off = !d
     ? 0
-    : Math.min(base, d.kind === 'percent' ? Math.round((base * Number(d.value)) / 100) : cents(d.value) * months)
+    : Math.min(
+        base,
+        d.kind === 'percent' ? Math.round((base * Number(d.value)) / 100) : cents(d.value) * months,
+      )
   return { netAed: ((base - off) / 100).toFixed(2), discountAed: (off / 100).toFixed(2) }
 }
 

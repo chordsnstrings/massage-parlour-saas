@@ -8,7 +8,7 @@ import { audit } from '@/server/audit'
 
 /** Publishes an approved post to the connected Instagram account now (image container → media_publish). */
 export async function publishToInstagramAction(slug: string, postId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const parsed = z.uuid().safeParse(postId)
   if (!parsed.success) return fail('ai.unknownPost')

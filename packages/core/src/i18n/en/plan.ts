@@ -24,9 +24,8 @@ export const plan = {
       text: 'Run several branches from one dashboard, each with its own hours, rooms, staff and reports.',
     },
   },
-  errors: {
-    feature: '{feature} is available on the Premium plan.',
-  },
+  integrations:
+    'Instagram posting and the Instagram inbox, Google reviews and Google posts are part of Premium. You can still connect or disconnect an account.',
   branches: {
     limit: 'The Standard plan includes one branch. Premium adds more branches.',
     extra: 'Your other active branches keep working; adding or restoring a branch needs Premium.',

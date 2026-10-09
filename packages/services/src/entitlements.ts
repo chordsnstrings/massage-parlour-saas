@@ -4,6 +4,7 @@
 import {
   branchCap,
   effectiveFeatures,
+  FEATURE_LABELS,
   type Feature,
   type FeatureTier,
   PLAN_CODES,
@@ -65,8 +66,8 @@ export async function tenantEntitlements(db: DbOrTx, tenantId: string): Promise<
 
 /** The refusal for a feature the spa's plan doesn't include (EN text + the catalogue key the dashboard shows). */
 export const featureError = (feature: Feature) =>
-  new DomainError(`This is available on the Premium plan (${feature}).`, 'invalid', {
-    key: 'plan.errors.feature',
+  new DomainError(`${FEATURE_LABELS[feature]} is available on the Premium plan.`, 'invalid', {
+    key: 'errors.domain.featureNotInPlan',
     params: { feature: { key: `plan.feature.${feature}.name` } },
   })
 
@@ -84,7 +85,9 @@ export async function assertFeature(db: DbOrTx, tenantId: string, feature: Featu
  * closed).
  */
 export function entitledSql(feature: Feature): SQL {
-  const tiers = (Object.keys(TIER_FEATURES) as FeatureTier[]).filter((t) => TIER_FEATURES[t].includes(feature))
+  const tiers = (Object.keys(TIER_FEATURES) as FeatureTier[]).filter((t) =>
+    TIER_FEATURES[t].includes(feature),
+  )
   const tierHas = tiers.length
     ? sql`${tenants.featureTier} in (${sql.join(
         tiers.map((t) => sql`${t}`),

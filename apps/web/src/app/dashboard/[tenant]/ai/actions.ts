@@ -27,7 +27,7 @@ const settingsSchema = z.object({
 })
 
 export async function saveAgentAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.manage')
+  const { ctx, error } = await guard(slug, 'ai.manage', 'ai')
   if (error) return fail(error)
   const parsed = settingsSchema.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
@@ -53,7 +53,7 @@ export async function saveAgentAction(slug: string, _p: ActionResult, fd: FormDa
 }
 
 export async function saveBrandAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.manage')
+  const { ctx, error } = await guard(slug, 'ai.manage', 'ai')
   if (error) return fail(error)
   const parsed = z
     .object({
@@ -83,7 +83,7 @@ export type ChatTurn = { from: 'customer' | 'spa'; text: string }
 
 /** Lets the owner try the DM receptionist with the spa's live menu and availability. */
 export async function tryDmAction(slug: string, history: ChatTurn[], text: string) {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'ai')
   if (error) return { ok: false as const, error }
   const incoming = text.trim().slice(0, 1000)
   if (!incoming) return { ok: false as const, error: 'ai.typeMessage' }
@@ -108,7 +108,7 @@ export async function tryDmAction(slug: string, history: ChatTurn[], text: strin
 }
 
 export async function draftPostAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const brief = String(fd.get('brief') ?? '')
     .trim()
@@ -180,7 +180,7 @@ export async function setPostStatusAction(
   status: 'scheduled' | 'draft' | 'published',
   scheduledAt?: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   await withTenant(ctx.tenant.id, (tx) =>
     tx
@@ -219,7 +219,7 @@ export async function setPostStatusAction(
 }
 
 export async function addReviewAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const parsed = z
     .object({
@@ -245,7 +245,7 @@ export async function addReviewAction(slug: string, _p: ActionResult, fd: FormDa
 }
 
 export async function draftReplyAction(slug: string, reviewId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   try {
     await draftReviewReply({ tenantId: ctx.tenant.id, reviewId })

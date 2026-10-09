@@ -28,7 +28,7 @@ export async function saveReviewReplyAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const parsed = schema.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)

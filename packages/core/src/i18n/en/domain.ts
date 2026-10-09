@@ -294,4 +294,11 @@ export const domain = {
   adminAlready: 'You are already a super-admin.',
   adminConfirmNeeds2fa: 'Only a super-admin with two-step verification can confirm super-admins.',
   adminConfirmNotListed: 'Only a login whose email is in PLATFORM_ADMIN_EMAILS can be confirmed here.',
+  // Plans + entitlements (PLAN §18.8). `feature` = a `plan.feature.*.name` ref.
+  featureNotInPlan: '{feature} is available on the Premium plan.',
+  planNotOffered: 'Choose a plan that is offered to spas',
+  planAlreadyOn: 'The spa is already on this plan',
+  planLegacyUntilRenewal:
+    'The legacy yearly plan stays until its renewal on {end}: choose the new plan from {from}.',
+  featureTierChoose: 'Choose a feature tier',
 } as const

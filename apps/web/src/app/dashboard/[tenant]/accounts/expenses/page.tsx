@@ -13,6 +13,7 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { addExpenseAction, voidExpenseAction } from '../actions'
 import { accountName } from '../labels'
 import { MonthNav, monthLabel, monthRange } from '../month'
@@ -128,7 +129,7 @@ export default async function ExpensesPage({
                   name: accountName(t, a.code, a.name),
                 }))}
                 today={todayDubai()}
-                aiReady={aiConfigured()}
+                aiReady={aiConfigured() && (await hasFeature(ctx.tenant.id, 'ai'))}
               />
             )}
           </>

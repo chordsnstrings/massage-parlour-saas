@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Card, Grid, ListRow, Meter, Pill } from '@/components/crm'
+import { PlanUpsell } from '@/components/plan/upsell'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { FormSheet } from '@/components/ui/form-sheet'
@@ -13,6 +14,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { saveAgentAction, saveBrandAction } from './actions'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -35,6 +37,8 @@ const dubaiMonthStart = () => {
 export default async function AiStudio({ params }: { params: Promise<{ tenant: string }> }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve') && !can(ctx, 'ai.manage')) notFound()
+  // PLAN §18.8: the AI studio is part of Premium (`ai`); ai/content + ai/reviews gate themselves (`marketing`).
+  if (!(await hasFeature(ctx.tenant.id, 'ai'))) return <PlanUpsell ctx={ctx} feature="ai" />
   const slug = ctx.tenant.slug
   const { settings, spent, brand } = await withTenant(ctx.tenant.id, async (tx) => ({
     settings: await tx.select().from(aiAgentSettings),
