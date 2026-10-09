@@ -1,5 +1,11 @@
 import { platformDb, tenants, withTenant } from '@spa/db'
-import { performanceRange, tenantPerformance, tenantPerformanceDetail, weeklySeries } from '@spa/services'
+import {
+  performanceRange,
+  tenantOperations,
+  tenantPerformance,
+  tenantPerformanceDetail,
+  weeklySeries,
+} from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -35,11 +41,14 @@ export default async function SpaPerformancePage({
     .from(tenants)
     .where(eq(tenants.id, id))
   if (!spa) notFound()
-  const range = performanceRange((await searchParams).range, todayDubai())
-  const { p, d } = await withTenant(spa.id, async (tx) => ({
+  const today = todayDubai()
+  const range = performanceRange((await searchParams).range, today)
+  const { p, d, o } = await withTenant(spa.id, async (tx) => ({
     p: await tenantPerformance(tx, range),
     d: await tenantPerformanceDetail(tx, range),
+    o: await tenantOperations(tx, { from: range.from, to: range.to, today }),
   }))
+  const hrs = (minutes: number) => Math.round(minutes / 6) / 10
   const weekly = range.days > 31
   const series = weekly ? weeklySeries(d.daily) : d.daily
   const label = (date: string) => (weekly ? `Week of ${day(date)}` : day(date))
@@ -94,6 +103,56 @@ export default async function SpaPerformancePage({
             </Link>
           </StaggerItem>
         </Stagger>
+
+        {/* F31 operational KPIs: whole-spa aggregates only (no therapist, room or client names). */}
+        <div data-testid="perf-operations">
+          <Stagger className="grid grid-cols-2 gap-[var(--ui-grid-gap,1rem)] lg:grid-cols-4">
+            <StaggerItem>
+              <StatCard
+                label="Rebooking (30 days)"
+                value={(o.rebooking.rate ?? 0) * 100}
+                format="pct"
+                hint={
+                  o.rebooking.visits
+                    ? `${o.rebooking.rebooked} of ${o.rebooking.visits} completed visits rebooked`
+                    : 'No completed visits'
+                }
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <StatCard
+                label="RevPATH"
+                value={o.revPath.revPath ?? 0}
+                format="aed"
+                hint={
+                  o.revPath.hours
+                    ? `${formatAed(o.revPath.revenue)} ex VAT ÷ ${o.revPath.hours} therapist h`
+                    : 'No shifts or clocked hours'
+                }
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <StatCard
+                label="Room utilisation"
+                value={(o.rooms.utilisation ?? 0) * 100}
+                format="pct"
+                hint={`${hrs(o.rooms.bookedMinutes)} h booked of ${hrs(o.rooms.openMinutes)} h open`}
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <StatCard
+                label="Prepaid liability"
+                value={o.liability.total}
+                format="aed"
+                hint={
+                  o.liability.difference.giftCards || o.liability.difference.packagesMemberships
+                    ? `Ledger differs: 2100 ${formatAed(o.liability.difference.giftCards)} · 2110 ${formatAed(o.liability.difference.packagesMemberships)}`
+                    : `Matches ledger 2100/2110 · end of ${day(o.liability.asOf)}`
+                }
+              />
+            </StaggerItem>
+          </Stagger>
+        </div>
 
         <div className="grid gap-[var(--ui-grid-gap,1rem)] lg:grid-cols-2">
           <Card>

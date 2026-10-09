@@ -127,5 +127,10 @@ test('platform performance: all-spas table and per-spa detail', async ({ browser
   await expect(ops.getByText('Booking funnel')).toBeVisible()
   await expect(ops.getByText('0 completed · 0 cancelled · 0 no-show')).toBeVisible()
   await expect(ops.getByTestId('perf-online-sources')).toContainText('QR code')
+  // F31: whole-spa operational KPIs (aggregates only).
+  const operations = ops.getByTestId('perf-operations')
+  await expect(operations).toContainText('Rebooking (30 days)')
+  await expect(operations).toContainText('Room utilisation')
+  await expect(operations).toContainText('Matches ledger 2100/2110')
   await adminCtx.close()
 })
