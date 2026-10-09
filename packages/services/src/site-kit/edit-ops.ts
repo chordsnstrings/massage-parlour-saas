@@ -1,3 +1,4 @@
+import { imageSrc, isImageValue, normalizeImage, toImageProp, withImageSrc } from './image'
 import { isNode, isNodeArray, type PuckNode } from './tree'
 
 /**
@@ -65,6 +66,8 @@ const fail = (msg: string): never => {
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
+const DEVICES = new Set(['base', 'md', 'lg'])
+
 type Ctx = { schema: SiteEditSchema; newId: (type: string) => string }
 
 function str(v: unknown, at: string, max = MAX_TEXT) {
@@ -88,9 +91,22 @@ function value(spec: PropSpec, v: unknown, at: string, ctx: Ctx, prev?: unknown)
     case 'text':
       return str(v, at, 2000)
     case 'image': {
-      const s = str(v, at, 2000)
+      // A URL, or { src?, frame } — src omitted keeps the current image and only reframes it.
+      if (typeof v !== 'string' && !isObj(v)) fail(`${at}: expected an image URL or {src, frame}`)
+      const o = isObj(v) ? v : { src: v }
+      for (const k of Object.keys(o))
+        if (k !== 'src' && k !== 'frame') fail(`${at}: unknown image key "${k}"`)
+      const s = str(o.src === undefined ? imageSrc(prev) : o.src, `${at}.src`, 2000)
       if (!SAFE_URL.test(s)) fail(`${at}: images must be https:// or site-relative URLs`)
-      return s
+      if (!isObj(v)) return withImageSrc(prev, s)
+      if (o.frame !== undefined && !isObj(o.frame)) fail(`${at}.frame: expected {base, md?, lg?}`)
+      const frame = { ...(isImageValue(prev) ? prev.frame : {}), ...(o.frame as object) } as Record<
+        string,
+        unknown
+      >
+      for (const k of Object.keys(frame)) if (!DEVICES.has(k)) fail(`${at}.frame: unknown device "${k}"`)
+      const { frames } = normalizeImage({ src: s, frame })
+      return toImageProp(s, frames)
     }
     case 'color': {
       const s = str(v, at, 9)

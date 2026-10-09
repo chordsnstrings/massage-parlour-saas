@@ -2,6 +2,7 @@
 export * from './contrast'
 export * from './css'
 export * from './edit-ops'
+export * from './image'
 export * from './preflight'
 export * from './schedule'
 export * from './tree'

@@ -154,6 +154,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
   - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
   - `advanced` holds the schedule and scoped custom CSS.
+- **Photo framing**: every image prop (`imageField`) holds a URL (all older pages) or `{ src, frame: {base, md?, lg?} }`
+  with focal point x/y 0–100 %, fit `cover|contain`, zoom 1–2× (`@spa/services/site-kit/image.ts`: `imageSrc`,
+  `normalizeImage`, `toImageProp` — stores a plain URL again when unframed — `imageFrameVars`). Render =
+  `FramedImage` (`blocks/shared.tsx`: clipped `.sb-frame` wrapper + `.sb-img`, site.css vars → object-fit /
+  object-position / `transform: scale` with the focal point as origin; physical %, never mirrored in RTL); used by
+  Image, Gallery, Hero split, Section/Hero-banner backgrounds (Team photos are staff records, not framed). Editor:
+  `media/image-frame.tsx` under the image field (drag/click/arrow-key focal dot, Fill/Fit, zoom, Reset; base frame
+  by default, tablet/desktop tabs add overrides); picking a new photo resets framing. Preflight, template scrub and AI
+  ops (`{src?, frame}`, src omitted = reframe) accept both shapes. E2E: `image-frame.spec.ts`.
 - **Themes and templates**: theme tokens in `sites.theme`; 23 built-in templates — 8 classic (`templates.ts`) + 15
   design templates (R5, `templates-designs.ts`); 24 section presets + one "3D motion" preset per design scene, and 7
   page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.

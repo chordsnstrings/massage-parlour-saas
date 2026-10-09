@@ -1,18 +1,21 @@
 'use client'
 import { FieldLabel } from '@puckeditor/core'
+import { type ImageProp, imageSrc } from '@spa/services/site-kit'
 import { ImageIcon, Images, X } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
+import { ImageFrameControl } from './image-frame'
 import { MediaPicker } from './media-picker'
 import { sized } from './types'
 
 type Props = {
   field: { label?: string }
   id: string
-  value: string | undefined
-  onChange: (value: string) => void
+  /** A URL, or `{ src, frame }` once framed (focal point / fit / zoom, see site-kit/image.ts). */
+  value: ImageProp
+  onChange: (value: ImageProp) => void
   readOnly?: boolean
 }
 
@@ -24,23 +27,24 @@ const usable = (v: string) => v === '' || /^\/(?!\/)/.test(v) || /^https?:\/\/[^
 
 /**
  * Puck field for every image prop (via imageField()): thumbnail preview, "Choose from library" (search +
- * inline upload) and a paste-a-URL fallback. The library needs a tenant; elsewhere only the URL input shows.
+ * inline upload), a paste-a-URL fallback and framing (focal point, Fill/Fit, zoom). A new image starts unframed. The library needs a tenant; elsewhere only the URL input shows.
  */
-export function ImageFieldControl({ field, id, value, onChange, readOnly }: Props) {
+export function ImageFieldControl({ field, id, value: raw, onChange, readOnly }: Props) {
+  const value = imageSrc(raw)
   const params = useParams<{ tenant?: string }>()
   const slug = typeof params?.tenant === 'string' ? params.tenant : null
   const t = useT()
   const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState(value ?? '')
+  const [draft, setDraft] = useState(value)
   const [broken, setBroken] = useState(false)
   useEffect(() => {
-    setDraft(value ?? '')
+    setDraft(value)
     setBroken(false)
   }, [value])
   const valid = usable(draft.trim())
   const commit = () => {
     const next = draft.trim()
-    if (usable(next) && next !== (value ?? '')) onChange(next)
+    if (usable(next) && next !== value) onChange(next)
   }
 
   return (
@@ -74,6 +78,7 @@ export function ImageFieldControl({ field, id, value, onChange, readOnly }: Prop
             </button>
           )}
         </div>
+        {value && !broken && <ImageFrameControl value={raw} onChange={onChange} readOnly={readOnly} />}
         {slug && !readOnly && (
           <button
             type="button"

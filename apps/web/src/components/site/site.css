@@ -44,6 +44,36 @@ figure > .sb-card {
   border-radius: var(--img-radius, var(--radius));
 }
 
+/* Framed images (image.ts → imageFrameVars): fit, focal point, zoom per device. Unframed images get the old
+   centred cover. Positions are physical percentages, so RTL never mirrors the focal point. */
+.sb-frame {
+  display: block;
+  overflow: hidden;
+}
+.sb-img {
+  display: block;
+  object-fit: var(--if-b, cover);
+  object-position: var(--ip-b, 50% 50%);
+  transform-origin: var(--ip-b, 50% 50%);
+  transform: scale(var(--iz-b, 1));
+}
+@media (min-width: 768px) {
+  .sb-img {
+    object-fit: var(--if-m, cover);
+    object-position: var(--ip-m, 50% 50%);
+    transform-origin: var(--ip-m, 50% 50%);
+    transform: scale(var(--iz-m, 1));
+  }
+}
+@media (min-width: 1024px) {
+  .sb-img {
+    object-fit: var(--if-l, cover);
+    object-position: var(--ip-l, 50% 50%);
+    transform-origin: var(--ip-l, 50% 50%);
+    transform: scale(var(--iz-l, 1));
+  }
+}
+
 /* Section background bands. Inverse/accent bands re-map the semantic tokens for their content. */
 .sb-bg-surface {
   background: var(--surface);
