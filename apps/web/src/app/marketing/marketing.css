@@ -988,9 +988,13 @@
     background: var(--text);
     color: #fff;
   }
+  /* the real CRM look (crm.css): mint/cream surfaces, dark-green primary, lime highlights */
   .crm-demo {
-    --line: #e6e6ec;
-    --mute: #5a5a66;
+    --line: rgb(17 40 28 / 0.08);
+    --muted: #59645d;
+    --mute: #59645d;
+    --text: #111a15;
+    color: var(--text);
     animation: crm-demo-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
   @keyframes crm-demo-in {
@@ -1010,7 +1014,22 @@
   .crm-demo-side {
     padding: 14px 10px;
     border-inline-end: 1px solid var(--line);
-    background: #fff;
+    background: #f5f8f1;
+  }
+  .crm-demo-main {
+    background: #f8faf5;
+  }
+  .crm-demo-title {
+    font-family: var(--head);
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+  .crm-demo-num {
+    font-family: var(--head);
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
   @media (max-width: 639px) {
     .crm-demo-side {
@@ -1031,29 +1050,67 @@
     font-size: 12px;
     letter-spacing: 0;
   }
+  .crm-demo-strip > li + li {
+    margin-top: 2px;
+  }
+  /* phones: the menu is one row that fades out at the edge, so EN and TH keep the same height */
+  @media (max-width: 639px) {
+    .crm-demo-strip {
+      display: flex;
+      gap: 4px;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, #000 82%, transparent);
+    }
+    .crm-demo-strip > li {
+      flex: none;
+    }
+    .crm-demo-strip > li + li {
+      margin-top: 0;
+    }
+  }
   .crm-demo-item {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
     padding: 6px 8px;
     border-radius: 8px;
     color: var(--muted);
   }
+  .crm-demo-ico {
+    flex: none;
+    width: 15px;
+    height: 15px;
+  }
+  /* active item: lime wash + a short green bar at the start edge */
   .crm-demo-item[data-active] {
-    background: var(--sage-soft);
-    color: var(--accent);
+    background: color-mix(in srgb, var(--lime) 46%, #fff);
+    color: #0a4f37;
     font-weight: 600;
+  }
+  .crm-demo-item[data-active]::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block: 7px;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .crm-demo-item[data-active] .crm-demo-ico {
+    color: var(--accent);
   }
   .crm-demo-badge {
     flex-shrink: 0;
     min-width: 20px;
     padding: 0 6px;
     border-radius: 999px;
-    background: var(--accent);
-    color: #fff;
+    background: var(--lime);
+    box-shadow: inset 0 0 0 1px rgb(17 40 28 / 0.08);
+    color: #1d2a06;
     font-size: 11px;
+    font-weight: 700;
     line-height: 18px;
     text-align: center;
   }
@@ -1082,10 +1139,38 @@
     border-radius: 12px;
     background: #fff;
     border: 1px solid var(--line);
+    box-shadow:
+      0 1px 2px rgb(17 40 28 / 0.04),
+      0 6px 20px rgb(17 40 28 / 0.05);
+  }
+  .crm-demo-kpi {
+    padding: 10px 12px;
   }
   .crm-demo-h {
+    font-family: var(--head);
     font-size: 14px;
     font-weight: 700;
+  }
+  /* booking status pills (crm.css info / ok / warn) */
+  .crm-demo-st {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+  .crm-demo-st[data-tone="checked_in"] {
+    background: rgb(27 102 132 / 0.1);
+    color: #1b6684;
+  }
+  .crm-demo-st[data-tone="confirmed"] {
+    background: rgb(32 160 92 / 0.12);
+    color: #13773f;
+  }
+  .crm-demo-st[data-tone="pending"] {
+    background: rgb(245 184 46 / 0.2);
+    color: #8a5a00;
   }
   .crm-demo-typed {
     text-decoration: underline dotted var(--accent);
@@ -1108,11 +1193,302 @@
     margin-top: 12px;
     padding: 10px 12px;
     border-radius: 10px;
-    background: var(--accent);
+    background: linear-gradient(135deg, #17825b, #0b5539);
     color: #fff;
     font-weight: 600;
     text-align: center;
   }
+
+  /* Home "Spa CRM" showcase (components/marketing/crm-showcase.tsx, PLAN §18.8). The stage owns the scroll timeline
+     (--mkt-show) and is never transformed itself; the dashboard lies back in 3D and is flat once the stage centre
+     reaches the viewport centre; the cards drift at their own depth (layered parallax) and are at rest at that same
+     moment. Amounts are unitless custom properties so the JS fallback reads the same numbers. Transform/opacity only,
+     so the layout (and CLS) never changes. prefers-reduced-motion: no animation at all → flat, static layout. */
+  .mkt-show {
+    overflow-x: clip;
+  }
+  .mkt-show-ben {
+    display: grid;
+    gap: 12px;
+    max-width: 960px;
+    margin: 30px auto 0;
+    text-align: start;
+  }
+  @media (min-width: 768px) {
+    .mkt-show-ben {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+    }
+  }
+  .mkt-show-head {
+    view-timeline: --mkt-show-head block;
+  }
+  .mkt-show-stage {
+    position: relative;
+    display: grid;
+    gap: 14px;
+    margin-top: 36px;
+    perspective: 1400px;
+    perspective-origin: 50% 20%;
+    view-timeline: --mkt-show block;
+  }
+  /* soft mint/lime glow behind the dashboard (static) */
+  .mkt-show-stage::before {
+    content: "";
+    position: absolute;
+    inset: -8% -4% 10%;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side,
+      rgb(217 242 106 / 0.42),
+      rgb(156 207 179 / 0.22) 55%,
+      rgb(156 207 179 / 0) 100%
+    );
+  }
+  /* the dashboard's own timeline (--mkt-dash): its wrapper, never transformed */
+  .mkt-show-dwrap {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    view-timeline: --mkt-dash block;
+  }
+  .mkt-show-dash {
+    --show-rx: 24;
+    --show-rz: -4;
+    --show-sc: 0.9;
+    --show-ty: 70;
+    --show-end: 50; /* flat from this cover % on (its centre at the viewport centre) */
+    margin: 0;
+    transform-origin: 50% 0%;
+  }
+  .mkt-show-slot {
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+    view-timeline: --mkt-slot block;
+  }
+  .mkt-show-card {
+    --show-rx: 8;
+    --show-y0: 28;
+    --show-y1: -12;
+    --show-z: 0;
+    padding: 12px 14px 14px;
+    border-radius: 16px;
+    background: #fff;
+    border: 1px solid rgb(17 40 28 / 0.08);
+    box-shadow:
+      0 2px 4px rgb(17 40 28 / 0.05),
+      0 24px 48px -16px rgb(17 40 28 / 0.3);
+    color: #111a15;
+  }
+  .mkt-show-cap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 9px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .mkt-show-ui {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .mkt-show-slotrow {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--mute);
+  }
+  .mkt-show-booked {
+    padding: 6px 9px;
+    border-radius: 9px;
+    border-inline-start: 3px solid var(--accent);
+    background: #dfefe5;
+    color: #111a15;
+    font-size: 12px;
+  }
+  .mkt-show-clash {
+    padding: 6px 9px;
+    border-radius: 9px;
+    border: 1.5px dashed #b93b1b;
+    background: rgb(226 84 48 / 0.08);
+    color: #b93b1b;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .mkt-show-wa {
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: #25d366;
+    color: #06361b;
+    font-weight: 700;
+    text-align: center;
+  }
+  @media (min-width: 560px) and (max-width: 1023px) {
+    .mkt-show-stage {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .mkt-show-dwrap {
+      grid-column: 1 / -1;
+    }
+  }
+  /* phones: a third of the 3D */
+  @media (max-width: 767px) {
+    .mkt-show-stage {
+      perspective: 900px;
+    }
+    .mkt-show-dash {
+      --show-rx: 12;
+      --show-rz: -2;
+      --show-sc: 0.95;
+      --show-ty: 24;
+      --show-end: 36; /* taller than the screen: flat once its top is in the upper third */
+    }
+  }
+  /* wide: the cards float over the dashboard's edges at four depths */
+  @media (min-width: 1024px) {
+    .mkt-show-stage {
+      display: block;
+      padding-inline: 100px;
+      margin-top: 44px;
+    }
+    .mkt-show-slot {
+      position: absolute;
+      width: 224px;
+    }
+    .mkt-show-card {
+      --show-rx: 16;
+    }
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: 0;
+      top: 20%;
+    }
+    .mkt-show-slot[data-slot="cal"] .mkt-show-card {
+      --show-y0: 150;
+      --show-y1: -100;
+      --show-z: 70;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: 0;
+      top: 5%;
+    }
+    .mkt-show-slot[data-slot="pos"] .mkt-show-card {
+      --show-y0: 90;
+      --show-y1: -60;
+      --show-z: 30;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: 2%;
+      bottom: 2%;
+    }
+    .mkt-show-slot[data-slot="wa"] .mkt-show-card {
+      --show-y0: 210;
+      --show-y1: -140;
+      --show-z: 100;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: 1%;
+      bottom: 12%;
+    }
+    .mkt-show-slot[data-slot="earn"] .mkt-show-card {
+      --show-y0: 120;
+      --show-y1: -80;
+      --show-z: 50;
+    }
+  }
+  @media (min-width: 1200px) {
+    .mkt-show-stage {
+      padding-inline: 128px;
+    }
+    .mkt-show-slot {
+      width: 240px;
+    }
+  }
+  /* room beside the page column: the cards stick further out and cover less of the dashboard */
+  @media (min-width: 1280px) {
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: -40px;
+      top: 30%;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: -20px;
+      bottom: -4%;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: -40px;
+      top: 2%;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: -28px;
+      bottom: 4%;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      .mkt-show-in {
+        animation: mkt-show-rise linear both;
+        animation-timeline: --mkt-show-head;
+        animation-range: entry 10% entry 100%;
+      }
+      .mkt-show-dash {
+        will-change: transform;
+        animation: mkt-show-dash cubic-bezier(0.45, 0, 0.55, 1) both;
+        animation-timeline: --mkt-dash;
+        animation-range: cover 0% cover calc(var(--show-end) * 1%);
+      }
+      /* stacked (< 1024px): each card on its own slot's timeline; floating: all on the stage's */
+      .mkt-show-card {
+        will-change: transform, opacity;
+        animation: mkt-show-float linear both;
+        animation-timeline: --mkt-slot;
+        animation-range: cover 0% cover 100%;
+      }
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+    @supports (animation-timeline: view()) {
+      .mkt-show-card {
+        animation-timeline: --mkt-show;
+      }
+    }
+  }
+  @keyframes mkt-show-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 40px, 0);
+    }
+  }
+  @keyframes mkt-show-dash {
+    from {
+      transform: translate3d(0, calc(var(--show-ty) * 1px), 0) rotateX(calc(var(--show-rx) * 1deg))
+        rotateZ(calc(var(--show-rz) * 1deg)) scale(var(--show-sc));
+    }
+    to {
+      transform: none;
+    }
+  }
+  @keyframes mkt-show-float {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, calc(var(--show-y0) * 1px), calc(var(--show-z) * 1px))
+        rotateX(calc(var(--show-rx) * 1deg));
+    }
+    22% {
+      opacity: 1;
+    }
+    50% {
+      transform: none;
+    }
+    100% {
+      transform: translate3d(0, calc(var(--show-y1) * 1px), 0);
+    }
+  }
+
   /* contact enquiry form (PLAN §18.4) */
   .mkt-enq {
     padding: 30px;
