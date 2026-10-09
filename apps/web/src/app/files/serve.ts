@@ -1,5 +1,5 @@
-import { type Permission, resolvePermissions } from '@spa/core'
-import { members, platformDb, roles, storedFiles, withTenant } from '@spa/db'
+import { type Permission, requires2fa, resolvePermissions, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
+import { members, platformDb, roles, storedFiles, tenants, user as users, withTenant } from '@spa/db'
 import { getFile, IMAGE_TYPES, jpegVariant, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
@@ -10,8 +10,10 @@ import { getSession } from '@/server/session'
  * GET /files/{id}[/{name}][?w=480][&f=jpg] on every host (app, tenant subdomain, /s/{slug} path routing, custom domains;
  * proxy.ts lets /files/* through untouched).
  *  - public files (site images): anyone, `public, max-age=1y, immutable` + ETag — a file id never changes content.
- *  - private files (receipts, documents): a signed-in active member of the file's tenant (or a super-admin),
- *    `Cache-Control: private, no-cache` so every reuse re-checks access (cheap 304s via ETag).
+ *  - private files (receipts, documents): a signed-in active member of the file's tenant with the purpose's
+ *    permission, under the dashboard's rules (server/access.ts requireMember: not once the spa is deleted, not for an
+ *    owner/manager held by "Require 2FA"), or a super-admin with 2FA. `Cache-Control: private, no-cache` so every
+ *    reuse re-checks access (cheap 304s via ETag).
  * `?f=jpg` renders a JPEG copy of an image (Instagram's publishing API only accepts JPEG).
  * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
  */
@@ -41,11 +43,28 @@ const PURPOSE_PERMISSIONS: Record<string, Permission[]> = {
   receipt: ['accounting.view', 'accounting.manage'],
 }
 
-async function canRead(tenantId: string, purpose: string) {
+type FileTenant = { tenantId: string; purpose: string; deleted: boolean; settings: { require2fa?: boolean } }
+
+/** requireMember's "Require 2FA" rule: the session may be up to 5 minutes old, so a "not on" is re-read. */
+async function heldBy2fa(
+  f: FileTenant,
+  roleKey: string,
+  user: { id: string; twoFactorEnabled?: boolean | null },
+) {
+  if (!requires2fa(f.settings) || !TWO_FACTOR_POLICY_ROLES.includes(roleKey) || user.twoFactorEnabled)
+    return false
+  const [fresh] = await platformDb()
+    .select({ on: users.twoFactorEnabled })
+    .from(users)
+    .where(eq(users.id, user.id))
+  return !fresh?.on
+}
+
+async function canRead(f: FileTenant) {
   const session = await getSession()
   if (!session) return false
   const userId = session.user.id
-  const [m] = await withTenant(tenantId, (tx) =>
+  const [m] = await withTenant(f.tenantId, (tx) =>
     tx
       .select({ roleKey: roles.key, rolePerms: roles.permissions })
       .from(members)
@@ -53,8 +72,8 @@ async function canRead(tenantId: string, purpose: string) {
       .where(and(eq(members.userId, userId), eq(members.status, 'active')))
       .limit(1),
   )
-  if (m) {
-    const needs = PURPOSE_PERMISSIONS[purpose]
+  if (m && !f.deleted && !(await heldBy2fa(f, m.roleKey, session.user))) {
+    const needs = PURPOSE_PERMISSIONS[f.purpose]
     if (!needs) return true
     const perms = resolvePermissions({ key: m.roleKey, permissions: m.rolePerms })
     if (needs.some((p) => perms.has(p))) return true
@@ -73,12 +92,16 @@ export async function serveFile(req: Request, id: string) {
       purpose: storedFiles.purpose,
       contentType: storedFiles.contentType,
       filename: storedFiles.filename,
+      tenantDeletedAt: tenants.deletedAt,
+      settings: tenants.settings,
     })
     .from(storedFiles)
+    .innerJoin(tenants, eq(tenants.id, storedFiles.tenantId))
     .where(eq(storedFiles.id, id))
     .limit(1)
   if (!meta) return notFound()
-  if (!meta.isPublic && !(await canRead(meta.tenantId, meta.purpose))) return notFound()
+  if (!meta.isPublic && !(await canRead({ ...meta, deleted: Boolean(meta.tenantDeletedAt) })))
+    return notFound()
 
   const params = new URL(req.url).searchParams
   const isImage = IMAGES.has(meta.contentType)

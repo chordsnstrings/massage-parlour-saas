@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
+import { commissionEntries, staff } from '@spa/db'
+import { eq, sql } from 'drizzle-orm'
+import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
 test('reception checks out a booking with split payment + tip, then closes the day balanced', async ({
   page,
@@ -7,6 +9,18 @@ test('reception checks out a booking with split payment + tip, then closes the d
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
   const booking = await seedBooking(seed)
+  // Maya earns a 10% sales commission, so the refund below must take it back (G13: commission reversal).
+  const maya = seed.staffIds[0]!
+  await testDb().update(staff).set({ payType: 'sales_commission' }).where(eq(staff.id, maya))
+  const commission = async () =>
+    Number(
+      (
+        await testDb()
+          .select({ v: sql<string>`coalesce(sum(${commissionEntries.amountAed}), 0)` })
+          .from(commissionEntries)
+          .where(eq(commissionEntries.staffId, maya))
+      )[0]?.v,
+    )
 
   await test.step('checkout is prefilled from the booking', async () => {
     await page.goto(`${app}/${slug}/sales/new?booking=${booking.id}`)
@@ -31,6 +45,7 @@ test('reception checks out a booking with split payment + tip, then closes the d
     await page.getByLabel('Tip 1 amount').fill('20')
     await page.getByRole('button', { name: /Complete sale/ }).click()
     await page.waitForURL(/\/sales\/[0-9a-f-]{36}$/)
+    expect(await commission()).toBe(33.33) // 10% of AED 333.33 net of VAT (the tip earns none)
   })
 
   await test.step('the receipt is a simplified tax invoice with payments, tip and WhatsApp share', async () => {
@@ -64,6 +79,10 @@ test('reception checks out a booking with split payment + tip, then closes the d
     await expect(receipt.getByText(/Card terminal · Client felt unwell/)).toBeVisible()
     await expect(receipt.getByText('Refunded', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Refund', exact: true })).toHaveCount(0)
+    expect(await commission()).toBe(0) // offset by a reversing entry, not deleted
+    expect(
+      await testDb().select().from(commissionEntries).where(eq(commissionEntries.staffId, maya)),
+    ).toHaveLength(2)
   })
 
   await test.step('sales list shows today’s totals', async () => {

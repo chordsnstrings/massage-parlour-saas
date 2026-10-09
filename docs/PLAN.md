@@ -1184,6 +1184,11 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
 - **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
 - **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
 - **F14. Tests for 2FA + password reset** (G13 remainder): e2e for 2FA enrol/verify/require2fa redirect, password reset, files access matrix.
+  ✅ Done (2026-10-09): e2e `two-factor.spec`, `password-reset.spec`, `files-access.spec`, commission reversal on refund
+  in `pos.spec`; `packages/auth/test/rate-limit.test.ts` (per-IP limits, production mode). Bugs fixed on the way: a
+  password reset left other sessions signed in (now `revokeSessionsOnPasswordReset` + `getSession` checks the session
+  row past the cookie cache); `/files` let members of a deleted spa, and owners/managers held by "Require 2FA", read
+  private files (now the same rules as `requireMember`).
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
 
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
@@ -1195,7 +1200,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
-  G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
+  G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
   G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
   G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·

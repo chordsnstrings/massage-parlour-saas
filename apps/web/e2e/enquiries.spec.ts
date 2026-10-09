@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, type Page, test } from '@playwright/test'
 import { auditLog, contactEnquiries } from '@spa/db'
 import { and, eq, sql } from 'drizzle-orm'
-import { ADMIN, admin, base, signInPlatformAdmin, testDb } from './helpers'
+import { ADMIN, admin, base, consoleEmailKey, signInPlatformAdmin, testDb } from './helpers'
 
 // Contact enquiries (PLAN §18.4, owner 2026-10-09): the marketing Contact form (server-validated, values kept on
 // error, honeypot) → stored as `new` → the super-admin sees it in the console's Enquiries (nav badge), opens it
@@ -142,16 +142,6 @@ test('a filled honeypot looks sent but nothing is stored; the console needs a si
   await page.goto(`${admin}/enquiries`)
   await expect(page).toHaveURL(/\/login/)
 })
-
-// Saves (or removes) a console Resend key: staff email then lands in the e2e outbox (JSON files, no Resend call).
-async function consoleEmailKey(page: Page, key: string | null) {
-  await page.goto(`${admin}/settings`)
-  const card = page.getByTestId('email-settings')
-  if (key) await card.getByLabel('Resend API key').fill(key)
-  else await card.getByLabel('Remove the stored key').check()
-  await card.getByRole('button', { name: 'Save email settings' }).click()
-  await expect(page.getByText('Email settings saved')).toBeVisible()
-}
 
 test('a new enquiry emails the super-admins (reply-to = sender); its audit row keeps no raw IP', async ({
   page,
