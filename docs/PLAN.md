@@ -1018,7 +1018,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   button list every image (`<img>` + CSS backgrounds) with focal point (drag/arrow keys), Fill/Fit, realign
   (left/centre/right, undoes floats/offsets) and replace (a spa's media library via MediaPicker, or an https URL);
   stored as `images` next to `html` and applied as CSS/attributes inside the sandbox only.
-- **R15 Logo:** spamanagement.co "Continuum" wordmark (`apps/web/public/brand/spamanagement-wordmark.svg`, replaced the first "Handoff" one 2026-10-08) in admin, marketing and
+- **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):

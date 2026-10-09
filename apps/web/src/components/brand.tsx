@@ -1,84 +1,65 @@
 import { cn } from '@/lib/utils'
 
-/** Platform brand (spamanagement.co) — owner "Continuum" wordmark, public/brand/spamanagement-wordmark.svg. Not for spa dashboards. */
-const FONT = '"Inter Variable", "Helvetica Neue", Arial, sans-serif'
-const DOT = '#F04B2F'
+/** Platform brand (spamanagement.co) — owner "SM" badge logo, public/brand/spamanagement-logo.svg. Not for spa dashboards. */
+const FONT = '"Helvetica Neue", Arial, "Inter Variable", sans-serif'
+const LIME = '#D9F26A'
+const INK = '#17181A'
+const CREAM = '#F7F3EA'
 
 type Tone = 'auto' | 'dark' | 'light'
-// auto: ink follows currentColor (works on light and dark pages); "management" is a step lighter, as in the file.
-const TONES: Record<Tone, { ink: string; soft: string; softOpacity: number }> = {
-  auto: { ink: 'currentColor', soft: 'currentColor', softOpacity: 0.82 },
-  dark: { ink: '#17181A', soft: '#333438', softOpacity: 1 },
-  light: { ink: '#F7F3EA', soft: '#F7F3EA', softOpacity: 0.82 },
+// auto: "Spa Management" follows currentColor (light and dark pages); the badge keeps its lime + ink colours.
+const TEXT: Record<Tone, string> = { auto: 'currentColor', dark: INK, light: CREAM }
+
+function Badge() {
+  return (
+    <>
+      <rect x="76" y="62" width="332" height="332" rx="88" fill={LIME} transform="rotate(-7 242 228)" />
+      <text
+        x="101"
+        y="287"
+        fill={INK}
+        fontFamily={FONT}
+        fontSize="198"
+        fontStyle="italic"
+        fontWeight="700"
+        letterSpacing="-32"
+        textLength="290"
+        lengthAdjust="spacingAndGlyphs"
+      >
+        SM
+      </text>
+      <path d="M116 327h244" stroke={CREAM} strokeWidth="18" strokeLinecap="round" />
+    </>
+  )
 }
 
-/** "Continuum" wordmark, viewBox cropped to the ink (the source file pads to 3.8:1); size by height, e.g. `h-6`. */
+/** Badge + two-line "Spa Management", viewBox cropped to the ink; size by height, e.g. `h-10`. */
 export function Logo({ className, tone = 'auto' }: { className?: string; tone?: Tone }) {
-  const t = TONES[tone]
   return (
     <svg
-      viewBox="64 118 1476 206"
+      viewBox="50 36 1205 384"
       role="img"
-      aria-label="spamanagement.co"
-      className={cn('h-6 w-auto shrink-0', className)}
+      aria-label="Spa Management"
+      className={cn('h-10 w-auto shrink-0', className)}
     >
-      <g fontFamily={FONT}>
-        <text
-          x="80"
-          y="255"
-          fontSize="158"
-          fontWeight="600"
-          letterSpacing="-7"
-          fill={t.ink}
-          textLength="320"
-          lengthAdjust="spacingAndGlyphs"
-        >
-          spa
+      <Badge />
+      <g fill={TEXT[tone]} fontFamily={FONT} fontWeight="700">
+        <text x="470" y="205" fontSize="132" letterSpacing="-5">
+          Spa
         </text>
-        <text
-          x="420"
-          y="255"
-          fontSize="158"
-          fontWeight="400"
-          letterSpacing="-6"
-          fill={t.soft}
-          fillOpacity={t.softOpacity}
-          textLength="870"
-          lengthAdjust="spacingAndGlyphs"
-        >
-          management
-        </text>
-        <text x="1330" y="255" fontSize="158" fontWeight="500" letterSpacing="-5" fill={t.ink}>
-          co
+        <text x="470" y="347" fontSize="132" letterSpacing="-6" textLength="775" lengthAdjust="spacingAndGlyphs">
+          Management
         </text>
       </g>
-      <path d="M86 302 H1282" stroke={t.ink} strokeWidth="5" strokeLinecap="round" />
-      <circle cx="1308" cy="229" r="13" fill={DOT} />
-      <circle cx="1308" cy="302" r="8" fill={DOT} />
     </svg>
   )
 }
 
-/** Compact square mark (bold "spa", underline, one orange dot) for favicon-size spots; same art as public/icon.svg. */
-export function LogoMark({ className, tone = 'dark' }: { className?: string; tone?: 'dark' | 'light' }) {
-  const [bg, ink] = tone === 'dark' ? ['#18191B', '#F7F3EA'] : ['#F7F3EA', '#18191B']
+/** The "SM" badge alone for favicon-size spots; same art as public/icon.svg. */
+export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={cn('size-7 shrink-0', className)} aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill={bg} />
-      <text
-        x="4.6"
-        y="19"
-        fill={ink}
-        fontFamily={FONT}
-        fontWeight="700"
-        fontSize="13.5"
-        textLength="21"
-        lengthAdjust="spacingAndGlyphs"
-      >
-        spa
-      </text>
-      <path d="M5 23.4 H23" stroke={ink} strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="26.4" cy="23.4" r="1.9" fill={DOT} />
+    <svg viewBox="50 36 384 384" className={cn('size-7 shrink-0', className)} aria-hidden="true">
+      <Badge />
     </svg>
   )
 }
