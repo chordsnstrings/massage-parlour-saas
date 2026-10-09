@@ -6,7 +6,6 @@ import {
   bookFromWaitlist,
   cancelWaitlistEntry,
   DomainError,
-  enqueueBookingMessage,
   findOrCreateClient,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -18,7 +17,6 @@ import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { allowedBranches } from '../calendar/data'
 
-const DAY_MS = 24 * 3600_000
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'waitlist.error.date')
 const optTime = z
   .union([z.string().regex(/^\d{2}:\d{2}$/, 'waitlist.error.time'), z.literal('')])
@@ -173,14 +171,7 @@ export async function bookWaitlistAction(
         notes: entry.notes,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
       })
-      await enqueueBookingMessage(tx, booking.id, 'booking_confirmation')
-      if (start.getTime() > Date.now())
-        await enqueueBookingMessage(
-          tx,
-          booking.id,
-          'reminder',
-          new Date(Math.max(Date.now(), start.getTime() - DAY_MS)),
-        )
+      // Confirmation + reminders are queued by createBooking (G4).
       return booking
     })
     await audit({

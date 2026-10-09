@@ -402,6 +402,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **Outbox**:
   - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
   - Staff open the WhatsApp link, then `markOutbox`.
+  - Booking messages (G4): `planBookingMessages(tx, bookingId, {now, rescheduled})` in outbox.ts is the single
+    planner, called by `createBooking` (when created confirmed), `setBookingStatus` (every transition) and
+    `rescheduleItem` (when the start moved). Confirmed → `booking_confirmation` (now) + `reminder` (start − 24 h)
+    + `reminder_2h` (start − 2 h); a reminder whose time has passed is skipped. Unsent rows are re-rendered/re-timed;
+    on reschedule sent/skipped rows are re-queued. Checked-in/completed → unsent planned kinds skipped; cancelled /
+    no-show → every unsent row of the booking skipped. Pending (online / AI / IG) → nothing until staff confirm.
+    Gated by the `bookingMessages` automation + client mobile. Queues hide rows of cancelled/no-show bookings
+    (`outboxBookingLive()`: messages page, dashboard count, `navCounts`).
   - `queueCampaign` takes a row lock plus a per-tenant advisory lock.
 - **Secrets**: AES-256-GCM, stored as `v1.<iv>.<tag>.<ct>`. The key is `APP_ENCRYPTION_KEY`, else HKDF from
   `BETTER_AUTH_SECRET`.

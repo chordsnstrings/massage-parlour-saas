@@ -5,6 +5,7 @@ import { bookingItems, bookings, branches, clients, conversations, outbox, shift
 import { and, asc, between, eq, gt, inArray, lt, type SQL, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { campaignConsentWithdrawn } from './growth'
+import { outboxBookingLive } from './outbox'
 import { CHANNELS } from './social'
 
 /** Statuses that don't occupy the day (excluded from counts, revenue and occupancy). */
@@ -175,6 +176,7 @@ export async function navCounts(tx: Tx, q: NavCountsQuery): Promise<NavCounts> {
         inArray(outbox.status, ['queued', 'opened']),
         sql`${outbox.dueAt} <= ${now}::timestamptz`,
         sql`not ${campaignConsentWithdrawn()}`,
+        outboxBookingLive(),
         q.branchIds === null
           ? undefined
           : sql`(${outbox.branchId} is null or ${inBranches(sql`${outbox.branchId}`)})`,
