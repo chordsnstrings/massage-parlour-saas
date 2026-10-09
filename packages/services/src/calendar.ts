@@ -65,6 +65,7 @@ export async function loadCalendarRange(
       refCode: bookings.refCode,
       status: bookings.status,
       source: bookings.source,
+      attribution: bookings.attribution,
       businessDate: bookings.businessDate,
       startsAt: bookingItems.startsAt,
       endsAt: bookingItems.endsAt,

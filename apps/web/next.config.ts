@@ -19,6 +19,8 @@ const config: NextConfig = {
         ? [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }]
         : []),
     ]
+    // No script-src/frame-src yet (F10). When added: allow https://challenges.cloudflare.com in script-src and frame-src
+    // (Turnstile, F9: booking page + /book/embed, /signup, marketing /contact).
     // The booking widget's iframe route (/book/embed, /s/{slug}/book/embed) is the only page other sites may frame.
     const embed = [
       ...common,

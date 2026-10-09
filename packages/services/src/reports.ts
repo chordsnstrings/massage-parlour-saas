@@ -28,6 +28,8 @@ export type Kpis = {
   bookings: number
   byStatus: Partial<Record<BookingStatusKey, number>>
   bySource: { source: string; count: number }[]
+  /** F13: non-cancelled online bookings by website source (bookings.attribution; 'unknown' = booked before F13). */
+  byAttribution: { source: string; count: number }[]
   newClients: number
   /** no-shows ÷ bookings that reached their time (completed, in progress or no-show); null when none. */
   noShowRate: number | null
@@ -89,6 +91,11 @@ export async function kpis(tx: Tx, range: KpiRange): Promise<Kpis> {
     sql`select b.source, count(*)::int as n from bookings b
       where ${bDates} ${bBranch} and b.status <> 'cancelled' group by 1 order by 2 desc, 1`,
   )
+  const attributionRows = await rows<{ source: string; n: number }>(
+    tx,
+    sql`select coalesce(b.attribution::text, 'unknown') as source, count(*)::int as n from bookings b
+      where ${bDates} ${bBranch} and b.source = 'online' and b.status <> 'cancelled' group by 1 order by 2 desc, 1`,
+  )
   const [fresh] = await rows<{ n: number }>(
     tx,
     sql`select count(*)::int as n from clients c
@@ -147,6 +154,7 @@ export async function kpis(tx: Tx, range: KpiRange): Promise<Kpis> {
     bookings: statusRows.reduce((sum, r) => sum + n(r.n), 0),
     byStatus,
     bySource: sourceRows.map((r) => ({ source: r.source, count: n(r.n) })),
+    byAttribution: attributionRows.map((r) => ({ source: r.source, count: n(r.n) })),
     newClients: n(fresh?.n),
     noShowRate: reached ? (byStatus.no_show ?? 0) / reached : null,
     bookedMinutes,

@@ -6,6 +6,7 @@ import { EnquiryForm } from '@/components/marketing/enquiry-form'
 import { companyContact } from '@/components/marketing/plans'
 import { MarketingShell } from '@/components/marketing/shell'
 import { appUrl } from '@/server/origin'
+import { turnstileSiteKey } from '@/server/turnstile'
 import { sendEnquiryAction } from './actions'
 
 export const metadata: Metadata = {
@@ -68,7 +69,11 @@ export default async function ContactPage() {
           We set up your spa with you — menu, staff, website and your first import — usually in one visit.
         </p>
         <div className="mt-14 grid items-start gap-[18px] lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <EnquiryForm action={sendEnquiryAction} maxLength={ENQUIRY_MESSAGE_MAX} />
+          <EnquiryForm
+            action={sendEnquiryAction}
+            maxLength={ENQUIRY_MESSAGE_MAX}
+            turnstileSiteKey={turnstileSiteKey()}
+          />
           <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-1">
             {cards.map((k) => (
               <a key={k.title} href={k.href} data-rise="card" className="mkt-card block">

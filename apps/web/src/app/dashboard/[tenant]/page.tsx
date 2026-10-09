@@ -280,6 +280,8 @@ export default async function TenantHome({
     count: s.count,
     color: CHART_COLOURS[i % CHART_COLOURS.length]!,
   }))
+  // F13: online bookings split by the booker's website source (Instagram, Google, QR, …).
+  const onlineTotal = k.byAttribution.reduce((s, r) => s + r.count, 0)
 
   const checklist = (
     <Card
@@ -497,6 +499,18 @@ export default async function TenantHome({
                       value: `${fmt.number(s.count)} · ${fmt.percent(s.count / Math.max(1, sourceTotal))}`,
                     }))}
                   />
+                  {onlineTotal > 0 && (
+                    <div data-testid="online-sources" className="space-y-2 border-t pt-3">
+                      <p className="crm-muted text-xs">{t('overview.sources.online')}</p>
+                      <Legend
+                        items={k.byAttribution.map((s, i) => ({
+                          label: enumLabel(t, 'bookingAttribution', s.source),
+                          color: CHART_COLOURS[(i + 3) % CHART_COLOURS.length]!,
+                          value: `${fmt.number(s.count)} · ${fmt.percent(s.count / onlineTotal)}`,
+                        }))}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <Empty text={t('overview.sources.empty')} />

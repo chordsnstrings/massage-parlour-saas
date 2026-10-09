@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { subscriptions, tenants } from '@spa/db'
+import { bookings, subscriptions, tenants } from '@spa/db'
 import { addMonths } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { admin, seedBooking, seedCatalog, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
@@ -107,7 +107,12 @@ test('platform performance: all-spas table and per-spa detail', async ({ browser
   await ownerCtx.close()
   const seed = await seedCatalog(slug)
   await seedBooking(seed, '11:00')
-  await seedBooking(seed, '13:00')
+  const fromQr = await seedBooking(seed, '13:00')
+  // F13: one of them was booked online by a visitor who scanned the spa's QR code.
+  await testDb()
+    .update(bookings)
+    .set({ source: 'online', attribution: 'qr' })
+    .where(eq(bookings.id, fromQr.id))
   const ops = await adminCtx.newPage()
   await signInPlatformAdmin(ops)
 
@@ -119,5 +124,6 @@ test('platform performance: all-spas table and per-spa detail', async ({ browser
   await expect(ops.getByRole('heading', { name: 'Perf Spa' })).toBeVisible()
   await expect(ops.getByText('Booking funnel')).toBeVisible()
   await expect(ops.getByText('0 completed · 0 cancelled · 0 no-show')).toBeVisible()
+  await expect(ops.getByTestId('perf-online-sources')).toContainText('QR code')
   await adminCtx.close()
 })

@@ -19,6 +19,12 @@ export function enumLabel<E extends EnumName>(
   return t.maybe(`enums.${name}.${value}`) ?? String(value)
 }
 
+/** F13: "Online · Instagram" for an online booking with a recorded website source, else just the channel. */
+export function bookingSourceLabel(t: Translator, source: string, attribution?: string | null) {
+  const channel = enumLabel(t, 'bookingSource', source)
+  return attribution ? `${channel} · ${enumLabel(t, 'bookingAttribution', attribution)}` : channel
+}
+
 /** `permissionLabel(t, 'clients.phone')` → "See phone numbers". */
 export const permissionLabel = (t: Translator, permission: Permission | string) => {
   const [group, action] = permission.split('.')

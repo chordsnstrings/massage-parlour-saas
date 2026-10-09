@@ -1,5 +1,5 @@
 'use server'
-import { businessDateOf, toUaeE164, whatsappLink } from '@spa/core'
+import { bookingAttribution, businessDateOf, toUaeE164, whatsappLink } from '@spa/core'
 import { services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
 import {
   availableSlots,
@@ -13,12 +13,13 @@ import {
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { after } from 'next/server'
 import { z } from 'zod'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { audit } from '@/server/audit'
+import { clientIp } from '@/server/rate-limit'
 import { resolveSiteTenant } from '@/server/sites'
+import { passesBotCheck } from '@/server/turnstile'
 import { acceptsBookings, bookingBranch, bookingDates, LEAD_MIN } from './data'
 import { fmtDate, fmtTime, type Locale, t } from './i18n'
 import type { BookingDone, SiteKey, SlotOption } from './types'
@@ -44,11 +45,6 @@ function recent(map: Map<string, number[]>, ip: string) {
     for (const [key, value] of map) if (!value.some((at) => now - at < HOUR)) map.delete(key)
   }
   return list
-}
-
-async function clientIp() {
-  const h = await headers()
-  return h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local'
 }
 
 async function siteTenant(key: SiteKey) {
@@ -147,6 +143,23 @@ const bookingInput = z.object({
   website: z.string().optional().default(''),
   /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
   via: z.enum(['widget']).optional(),
+  /** F13: the visitor's entry ({ referrer, utm } from public/t.js) → bookings.attribution; only the key is stored. */
+  entry: z
+    .object({
+      referrer: z.string().max(500).nullish(),
+      utm: z
+        .object({
+          src: z.string().max(60).optional(),
+          utm_source: z.string().max(60).optional(),
+          utm_medium: z.string().max(60).optional(),
+          utm_campaign: z.string().max(60).optional(),
+        })
+        .nullish(),
+    })
+    .optional()
+    .catch(undefined),
+  /** F9: Cloudflare Turnstile token (verified server-side when keys are configured). */
+  botToken: z.string().max(4096).optional(),
   branchId: z.uuid().optional(),
   lang: locale,
 })
@@ -178,9 +191,14 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   attempts.get(ip)!.push(Date.now())
   // Bots fill every field; answer like a generic failure and store nothing.
   if (v.website.trim()) return fail(t('error', lang))
+  if (!(await passesBotCheck(v.botToken, 'booking', { customDomain: 'hostname' in v.site })))
+    return fail(t('botCheck', lang))
   const tenant = await siteTenant(v.site)
   if (!tenant) return fail(t('unavailable', lang))
   const start = new Date(v.start)
+  // F13: first-touch website source; the widget's iframe is tagged src=widget (public/widget.js).
+  const fromEntry = bookingAttribution(v.entry)
+  const attribution = v.via === 'widget' && fromEntry === 'direct' ? 'widget' : fromEntry
 
   try {
     const result = await withTenant(tenant.id, async (tx) => {
@@ -216,6 +234,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         branchId: branch.id,
         clientId: client.id,
         source: 'online',
+        attribution,
         status,
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
@@ -269,7 +288,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       action: 'booking.created',
       entity: 'booking',
       entityId: result.bookingId,
-      data: { ref: result.done.ref, source: 'online', ...(v.via ? { via: v.via } : {}) },
+      data: { ref: result.done.ref, source: 'online', attribution, ...(v.via ? { via: v.via } : {}) },
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)

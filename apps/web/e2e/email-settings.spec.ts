@@ -17,6 +17,8 @@ test('console email settings: masked Resend key, test email, config health (G9)'
   await expect(resendRow).toContainText('Missing')
   await expect(page.getByTestId('ops-health')).toBeVisible()
   await expect(page.getByTestId('config-backups')).toBeVisible()
+  // F9: the e2e server runs with Cloudflare's Turnstile test keys → green (unset would be red).
+  await expect(page.getByTestId('config-TURNSTILE')).toHaveAttribute('data-ok', 'true')
 
   await page.goto(`${admin}/settings`)
   const card = page.getByTestId('email-settings')

@@ -288,6 +288,20 @@ export const bookingSource = pgEnum('booking_source', [
   'ai_agent',
   'gbp',
 ])
+/** F13: an online booking's first-touch website source (core BOOKING_ATTRIBUTIONS, public/t.js entry). */
+export const bookingAttribution = pgEnum('booking_attribution', [
+  'instagram',
+  'gbp',
+  'google',
+  'qr',
+  'facebook',
+  'tiktok',
+  'whatsapp',
+  'widget',
+  'campaign',
+  'referral',
+  'direct',
+])
 
 export const bookings = pgTable(
   'bookings',
@@ -300,6 +314,8 @@ export const bookings = pgTable(
     clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
     refCode: text('ref_code').notNull(),
     source: bookingSource('source').notNull(),
+    /** Where an online booker came from (?src=ig|gbp|qr, utm, referrer, direct); null for staff-made bookings. */
+    attribution: bookingAttribution('attribution'),
     status: bookingStatus('status').notNull().default('pending'),
     businessDate: date('business_date').notNull(),
     startsAt: ts('starts_at').notNull(),

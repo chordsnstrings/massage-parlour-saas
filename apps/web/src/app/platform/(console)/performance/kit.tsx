@@ -2,7 +2,8 @@ import { PERFORMANCE_RANGES, type PerformanceRange } from '@spa/services'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-/** Labels for booking channels and web entry sources (?src= tags from QR codes, Instagram bio, GBP). */
+/** Labels for booking channels, web entry sources (?src= tags from QR codes, Instagram bio, GBP) and online bookings'
+ * website sources (bookings.attribution, F13). */
 const SOURCE_LABELS: Record<string, string> = {
   walk_in: 'Walk-in',
   online: 'Online',
@@ -17,6 +18,10 @@ const SOURCE_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   tiktok: 'TikTok',
   direct: 'Direct',
+  widget: 'Booking widget',
+  campaign: 'Campaign link',
+  referral: 'Other websites',
+  unknown: 'Not recorded',
 }
 export const sourceLabel = (key: string) => SOURCE_LABELS[key] ?? key
 

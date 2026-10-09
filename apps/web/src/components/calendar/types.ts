@@ -18,6 +18,8 @@ export type CalItem = {
   refCode: string
   status: BookingStatus
   source: BookingSource
+  /** F13: online bookings' website source (bookings.attribution). */
+  attribution: string | null
   startMin: number
   endMin: number
   staffIds: string[]

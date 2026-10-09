@@ -11,6 +11,7 @@ import { todayDubai } from '@/lib/utils'
 import { applicantState } from '@/server/applications'
 import { adminUrl, canonicalUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
+import { turnstileSiteKey } from '@/server/turnstile'
 import { SignupForm } from './signup-form'
 
 /** How a spa's web address (on the canonical domain) is previewed while typing its name. */
@@ -70,6 +71,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           hint: t('logo.hint'),
           tooLarge: t('logo.tooLarge', { size: '1 MB' }),
         }}
+        turnstileSiteKey={turnstileSiteKey()}
       />
       <LegalLinks />
     </AuthLayout>

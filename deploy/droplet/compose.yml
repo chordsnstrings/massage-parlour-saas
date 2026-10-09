@@ -50,6 +50,10 @@ x-app-env: &app-env
   R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
   R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  # F9 bot check (Cloudflare Turnstile) on online booking, the widget, Apply and Contact; unset = off (console flags it).
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+  TURNSTILE_CUSTOM_DOMAINS: ${TURNSTILE_CUSTOM_DOMAINS:-}
   RESEND_API_KEY: ${RESEND_API_KEY:-}
   EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>} # B1: .ae until .co is verified in Resend
   APP_RELEASE: ${APP_RELEASE:-}

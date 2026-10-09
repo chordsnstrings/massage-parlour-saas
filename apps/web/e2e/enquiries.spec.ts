@@ -165,8 +165,13 @@ test('a new enquiry emails the super-admins (reply-to = sender); its audit row k
   await signInPlatformAdmin(page)
   await consoleEmailKey(page, 're_e2eEnquiryKey_ENQ1')
   try {
-    const ctx = await browser.newContext({ extraHTTPHeaders: { 'cf-connecting-ip': ip } })
+    const ctx = await browser.newContext()
     const visitor = await ctx.newPage()
+    // The visitor's IP header on our own requests only: Cloudflare (Turnstile, F9) refuses clients that send it.
+    await visitor.route(
+      (url) => url.href.startsWith(base),
+      (route) => route.continue({ headers: { ...route.request().headers(), 'cf-connecting-ip': ip } }),
+    )
     await visitor.goto(`${base}/contact`)
     await fillForm(visitor, email, spa, '+44 (0)20 7946 0958')
     await visitor.getByRole('button', { name: 'Send message' }).click()

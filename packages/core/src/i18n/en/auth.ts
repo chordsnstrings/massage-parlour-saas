@@ -103,6 +103,7 @@ export const auth = {
       adminEmailField: 'Super-admin address: use the admin join page instead',
       failed: 'Could not create your account.',
       tooMany: 'Too many applications from your network. Please try again later.',
+      botCheck: "We couldn't confirm you're not a robot. Please try again.",
       phone: 'Enter a UAE mobile number',
       emirate: 'Choose an emirate',
       street: 'Enter the street address',

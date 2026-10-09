@@ -42,6 +42,7 @@ export async function listBookings(tx: Tx, f: BookingListFilter) {
       refCode: bookings.refCode,
       status: bookings.status,
       source: bookings.source,
+      attribution: bookings.attribution,
       businessDate: bookings.businessDate,
       startsAt: bookings.startsAt,
       branchId: bookings.branchId,
