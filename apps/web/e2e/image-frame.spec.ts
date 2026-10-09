@@ -73,6 +73,8 @@ test('site builder photos: focal point, fit and zoom from the editor reach the p
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Publish now' }).click()
     await expect(page.getByText('Published — your page is live')).toBeVisible()
+    // The toast shows before the publish dialog has closed; its overlay would swallow the next pointer input.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   }
   const shoot = async (name: string) => {
     if (!SHOTS) return
@@ -104,6 +106,7 @@ test('site builder photos: focal point, fit and zoom from the editor reach the p
 
   await test.step('click the focal point onto the subject: canvas follows live', async () => {
     const pad = frameUi().locator('img')
+    await expect.poll(() => pad.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true)
     const box = (await pad.boundingBox())!
     await page.mouse.click(box.x + box.width * 0.15, box.y + box.height * 0.4)
     await expect.poll(async () => (await frameOf(canvas)).position).toBe('15% 40%')
