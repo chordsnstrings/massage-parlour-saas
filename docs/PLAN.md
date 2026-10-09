@@ -1170,7 +1170,7 @@ CLAUDE.md). Rules for the work:
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
 - **Blockers:** G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
   G2 super-admin granted to any signup whose email is in `PLATFORM_ADMIN_EMAILS` with no email verification (provision.ts, seed.ts) ·
-  G3 super-admins not forced to 2FA · G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
+  G3 super-admins not forced to 2FA · ~~G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder~~ ✅ (2026-10-09: `planBookingMessages`, new `reminder_2h` kind; CODEMAP Outbox) ·
   G5 no privacy/terms pages (needed for Meta/Google approval).
 - **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·

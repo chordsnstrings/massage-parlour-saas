@@ -5,7 +5,6 @@ import {
   availableSlots,
   createBooking,
   DomainError,
-  enqueueBookingMessage,
   findOrCreateClient,
   notify,
   publicPrice,
@@ -216,8 +215,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
       })
-      // The receptionist's confirmation message is ready in the outbox (sent after they confirm).
-      await enqueueBookingMessage(tx, booking.id, 'booking_confirmation')
+      // Pending: the confirmation + reminders are queued when the receptionist confirms (G4).
 
       let therapist: string | null = null
       if (v.staffId) {

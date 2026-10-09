@@ -50,6 +50,7 @@ export const enums: Messages['enums'] = {
   messageKind: {
     booking_confirmation: 'ยืนยันการจอง',
     reminder: 'แจ้งเตือนนัด',
+    reminder_2h: 'แจ้งเตือนนัด (2 ชม.)',
     thank_you: 'ขอบคุณ',
     review_request: 'ขอรีวิว',
     rebook: 'ชวนจองอีกครั้ง',

@@ -6,6 +6,7 @@ import type { Tone } from '@/components/crm'
 export const MESSAGE_KINDS = [
   'booking_confirmation',
   'reminder',
+  'reminder_2h',
   'thank_you',
   'review_request',
   'rebook',
@@ -24,6 +25,7 @@ export const TEMPLATE_KINDS = MESSAGE_KINDS.filter((k) => k !== 'custom')
 export const KIND_TONE: Record<MessageKind, Tone> = {
   booking_confirmation: 'info',
   reminder: 'warn',
+  reminder_2h: 'warn',
   thank_you: 'ok',
   review_request: 'ok',
   rebook: 'neutral',

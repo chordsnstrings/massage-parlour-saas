@@ -1,6 +1,12 @@
 import { businessDateOf, businessDayWindow } from '@spa/core'
 import { bookings, campaigns, clients, outbox, platformDb, user, withTenant } from '@spa/db'
-import { campaignConsentWithdrawn, campaignResults, inboxCounts, outboxLink } from '@spa/services'
+import {
+  campaignConsentWithdrawn,
+  campaignResults,
+  inboxCounts,
+  outboxBookingLive,
+  outboxLink,
+} from '@spa/services'
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lte, not, or } from 'drizzle-orm'
 import { FileText, Info, Plus } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -53,7 +59,11 @@ export default async function MessagesPage({
       : undefined
     // Campaign messages whose client opted out (or was blocklisted / tagged no-marketing) since queueing are
     // never offered for sending; the hourly campaigns job then marks them skipped.
-    const pending = and(inArray(outbox.status, ['queued', 'opened']), not(campaignConsentWithdrawn()))
+    const pending = and(
+      inArray(outbox.status, ['queued', 'opened']),
+      not(campaignConsentWithdrawn()),
+      outboxBookingLive(),
+    )
     const dueWhere = and(inBranch, pending, lte(outbox.dueAt, now))
     const scheduledWhere = and(inBranch, pending, gt(outbox.dueAt, now))
     const weekAgo = new Date(now.getTime() - 7 * 24 * 3600_000)
