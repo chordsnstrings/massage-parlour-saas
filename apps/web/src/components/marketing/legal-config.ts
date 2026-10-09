@@ -6,7 +6,7 @@ export const LEGAL = {
   /** Registered address, including emirate. */
   address: 'Dubai, United Arab Emirates',
   /** Inbox for privacy, deletion and legal requests. */
-  email: 'privacy@spamanagement.co',
+  email: 'ask@spamanagement.co',
   brand: 'spamanagement.co',
   /** Date the current text took effect. */
   updated: '9 October 2026',

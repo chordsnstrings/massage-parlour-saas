@@ -334,7 +334,7 @@ Shared engine:
 document.documentElement.classList.add("js");
 /* ===== CONFIG: where demo requests go ===== */
 const WHATSAPP_NUMBER = "";            // e.g. "9715XXXXXXXX" — demo requests open WhatsApp with the details
-const CONTACT_EMAIL = "";              // e.g. "hello@spamanagement.co" — used if no WhatsApp number is set
+const CONTACT_EMAIL = "";              // e.g. "ask@spamanagement.co" — used if no WhatsApp number is set
 const BRAND = "Spamanagement.co";
 const AR = @AR@;
 const EN={}; document.querySelectorAll("[data-i18n]").forEach(el=>{ if(!(el.dataset.i18n in EN)) EN[el.dataset.i18n]=el.textContent; });

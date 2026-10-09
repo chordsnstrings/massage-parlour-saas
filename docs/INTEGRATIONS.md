@@ -131,7 +131,7 @@ npx web-push generate-vapid-keys
 |---|---|
 | `VAPID_PUBLIC_KEY` | public key |
 | `VAPID_PRIVATE_KEY` | private key |
-| `VAPID_SUBJECT` | `mailto:support@spamanagement.co` |
+| `VAPID_SUBJECT` | `mailto:ask@spamanagement.co` |
 
 Staff enable notifications per device on their *Account* page. Who gets what: new online bookings → members with
 `calendar.manage`; document expiry (60/30/7/0 days, daily 09:00) → `staff.manage`; weekly insights (Mon 08:00) →
