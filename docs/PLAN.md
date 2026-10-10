@@ -1193,6 +1193,8 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   in CODEMAP "Security headers"). HTML designs run in their own shell document (`/api/html-design/frame`, own sandbox
   CSP) instead of `srcdoc`. Violations → `/api/csp-report` → console Server health row. Also (owner request): Turnstile
   keys + custom-domain switch editable in console Company → "Bot check" (secret write-only, console wins over env).
+  Found on the way (full e2e on a production build): Apply form's spa-name slug check could overwrite a typed web
+  address (stale answer, fixed); the online-booking per-IP limit now follows `AUTH_RATE_LIMIT=off` (e2e only).
 - ✅ **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
   Done: role `spa_drill` (bootstrap.sql; compose one-shot `db-roles` re-runs the bootstrap every deploy, so existing
   droplets get it without SSH; password derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is set); worker
