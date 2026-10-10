@@ -117,7 +117,7 @@ function useActive() {
 export function SidebarNav({ items }: { items: NavItem[] }) {
   const isActive = useActive()
   return (
-    <nav className="flex flex-col gap-0.5">
+    <nav className="flex min-h-0 flex-1 flex-col gap-0.5">
       {items.map((item, i) => {
         const Icon = icons[item.icon]
         const active = isActive(item)
@@ -137,7 +137,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
               title={item.label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
+                'relative flex max-h-10 min-h-6 flex-[1_1_0] items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
                 active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
               )}
             >

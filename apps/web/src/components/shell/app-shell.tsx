@@ -37,15 +37,19 @@ export function AppShell({
       {/* The dark column is a plain grid cell (full page height); only its inner panel is sticky, so the nav stays in view. */}
       <aside className="mkt-app-dark hidden md:block">
         <div className="mkt-app-glow sticky top-0 flex h-dvh flex-col">
-          <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
+          <Link
+            href={homeHref}
+            className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center [@media(max-height:820px)]:py-3"
+          >
             <LogoMark className="size-9 lg:hidden" />
             <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
-              <Logo className="mb-3.5 hidden h-12 lg:block" />
+              <Logo className="mb-3.5 hidden h-12 lg:block [@media(max-height:820px)]:mb-2.5 [@media(max-height:820px)]:h-9" />
               <span className="mkt-app-chip">{title}</span>
               {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
             </span>
           </Link>
-          <div className="flex-1 overflow-y-auto px-3 py-4">
+          {/* Every item on one screen (owner 2026-10-10): items share the height (24-40 px each); scrolls only below ~590 px. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3">
             <SidebarNav items={nav} />
           </div>
           <div className="border-t border-border p-3">
