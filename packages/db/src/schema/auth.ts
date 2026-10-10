@@ -1,5 +1,5 @@
 // Better Auth tables (email + password, two-factor). Platform-scoped: users can belong to several tenants.
-import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 import { platformPolicies } from './_rls'
 
 const ts = (name: string) => timestamp(name, { withTimezone: true })
@@ -20,6 +20,8 @@ export const user = pgTable(
      * sign in (Better Auth session hook) and `getSession` treats an existing session as signed out.
      */
     disabledAt: ts('disabled_at'),
+    /** F21: stamped on every new session (Better Auth hook) — the console's "last staff sign-in" column. */
+    lastSignInAt: ts('last_sign_in_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
@@ -40,7 +42,8 @@ export const session = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
-  () => platformPolicies(),
+  // F21: latest session per user (console tenant list).
+  (t) => [index('session_user_created').on(t.userId, t.createdAt), ...platformPolicies()],
 )
 
 export const account = pgTable(

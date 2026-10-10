@@ -17,6 +17,10 @@ export const NOTIFICATION_KINDS = {
   'ai.budget_reached': { permission: 'billing.view' },
   'billing.overdue': { permission: 'billing.view' },
   'billing.reminder': { permission: 'billing.view' },
+  // F22 automatic billing transitions (once per stage per late episode).
+  'billing.late': { permission: 'billing.view' },
+  'billing.read_only': { permission: 'billing.view' },
+  'billing.restored': { permission: 'billing.view' },
   // Bell copies of the scheduled digests (push-only before): one row per week / business day.
   weekly_insights: { permission: 'reports.view' },
   daily_digest: { permission: 'calendar.manage' },
