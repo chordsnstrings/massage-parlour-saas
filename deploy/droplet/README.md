@@ -353,6 +353,9 @@ rest of the path and the query, in one hop (a renamed spa's old slug goes straig
 | `https://<old>/admin/…` | `https://admin.spamanagement.co/…` |
 | `https://<old>/s/{slug}/…` | `https://{slug}.spamanagement.co/…` |
 
+A spa whose own domain is active and primary goes straight to `https://{its domain}/…` instead (GET/HEAD, R20); the
+widget frame `/s/{slug}/book/embed` still goes to `{slug}.spamanagement.co/book/embed`.
+
 GET/HEAD get a 301, other methods a 308 (method and body kept). Never redirected, served as they are on every host,
 the old one included while it stays in `EXTRA_ROOT_DOMAINS`:
 - `/api/*`: Google/Meta OAuth callbacks (`/api/integrations/google/callback`, `/api/integrations/meta/callback`,

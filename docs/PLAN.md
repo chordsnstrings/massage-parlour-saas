@@ -845,7 +845,7 @@ new hosts. Steps and undo: deploy/droplet/README.md "Move to spamanagement.co" (
 
 ### 14.5 Domain-agnostic links (decided 2026-10-07)
 - Navigation and sign-in URLs are built per request from the visitor's platform domain (`server/origin.ts`:
-  `requestUrls`, `appUrl`, `adminUrl`, `tenantSiteUrl`, `marketingUrl`); shared/stored addresses are the exception below. Platform domains = `ROOT_DOMAIN` (canonical) + `EXTRA_ROOT_DOMAINS`;
+  `requestUrls`, `appUrl`, `adminUrl`, `marketingUrl`); shared/stored addresses are the exception below. Platform domains = `ROOT_DOMAIN` (canonical) + `EXTRA_ROOT_DOMAINS`;
   any other Host (forged, or a spa custom domain) falls back to the canonical domain. Never bake a domain in at build time.
 - Proxy routing, Better Auth (dynamic `baseURL` with an exact allowed-hosts list + canonical fallback, so reset links
   can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
@@ -1025,6 +1025,17 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   remove / update incl. bilingual + per-device style / theme), validated against the real Puck schema, previewed on the
   canvas, Apply saves the draft (+ theme, site-wide), one-click Undo, audited, never publishes. Details: CODEMAP
   "Site builder → Ask AI".
+- **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** once a spa's own domain is connected (active) and
+  primary, its website lives only there; the temporary address {slug}.spamanagement.co (/s/{slug} with path routing) is
+  only for spas that haven't connected one; spamanagement.co hosts only the CRM + console.
+  **Built (2026-10-10):** proxy.ts 301s every GET/HEAD for the spa's site on the temporary address (any platform root
+  incl. the sslip.io extra; old /s/{slug} path addresses and renamed slugs in one hop) to the same path + query on
+  https://{own domain}, private 5-min cache; kept there: other methods, the widget iframe /book/embed, robots.txt (and
+  /api, /files, static files); pending/failed domains never redirect; domain changes apply at once (console
+  activate/deactivate/remove, spa Make primary/remove; worker checks within 30 s). Custom-domain hosts now 404 the
+  platform-only endpoints (/api/auth, /api/mcp, /api/integrations, /.well-known). Links shown or sent already use
+  publicSiteUrl (the draft-preview links too now). Settings → Domains + Console → Domains say so in one line (TH copy
+  needs the owner's native review). Details: CODEMAP "Request flow" R20.
 - **R18 Resend sending-domain setup (owner, 2026-10-10):** Console → Company → Email: a "Set up sending domain" button
   that uses the Resend API (with the console key) to add spamanagement.co, shows the DNS records to copy into Namecheap,
   and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone).
@@ -1052,10 +1063,6 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Accept sheet preselects no plan ("The plan this applicant chose … Choose one."); audit `platform.plan.deleted` {code, name} /
   `platform.plan.archived` {code, name, spas} / `platform.plan.restored` {code, name}; tests: services
   `plan-delete.test.ts`, e2e plans.spec "console: delete an unused plan …".
-- **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** a spa's website lives on its own domain (e.g.
-  berelaxspa.com; connect it in spa Settings → Domains or Console → Domains, or buy one, R14); spamanagement.co hosts only
-  the CRM (app.) and console (admin.). Until a spa connects its domain it uses the temporary address {slug}.spamanagement.co;
-  once its own domain is active + primary, the temporary address 301s there for good. Planned.
 - **R21 Console sidebar on one screen (owner, 2026-10-10):** all console items visible without scrolling on laptop
   heights. ✅ Items share the sidebar height (24–40 px each, `flex-[1_1_0]`), logo block shrinks below 820 px tall; fits
   down to ~590 px (e2e `console-sidebar.spec.ts`). Overview health/config rows aligned with the card padding.

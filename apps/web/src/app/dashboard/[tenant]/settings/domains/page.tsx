@@ -73,7 +73,7 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
         <Stack className="min-w-0">
           <Card
             title={t('settings.domains.free')}
-            sub={t('settings.domains.freeSub')}
+            sub={t('settings.domains.freeSub', { host: freeUrl.replace(/^https?:\/\//, '') })}
             actions={
               customPrimary ? (
                 <SubdomainPrimaryButton slug={slug} />
