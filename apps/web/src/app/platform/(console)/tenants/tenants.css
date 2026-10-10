@@ -496,6 +496,10 @@
   margin-block-start: 2px;
   overflow-wrap: anywhere;
 }
+/* Card columns are ~105 px on phones; "110% of budget" must wrap there (CI's fonts are wider than local ones). */
+.sl-card-grid .sl-share {
+  white-space: normal;
+}
 
 @container sl (width < 884px) {
   .sl-table {
