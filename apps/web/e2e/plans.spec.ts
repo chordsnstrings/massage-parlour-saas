@@ -253,22 +253,21 @@ test('console: delete an unused plan, archive a used one and restore it; the las
   // `Applied`: only a rejected application points at it (a kept record, never accepted).
   const applicant = `${tag}-applicant`
   await db.insert(user).values({ id: applicant, name: 'R19 Applicant', email: `${applicant}@plans.test` })
-  const [pastApp] = await db
-    .insert(spaApplications)
-    .values({
-      userId: applicant,
-      applicantName: 'R19 Applicant',
-      email: `${applicant}@plans.test`,
-      phone: '+971501234567',
-      spaName: `R19 Applied ${tag}`,
-      slug: `${tag}-applied`,
-      emirate: 'dubai',
-      streetAddress: 'Street 1',
-      planId: applied!.id,
-      preferredStart: '2026-11-01',
-      status: 'rejected',
-    })
-    .returning()
+  const pastAppValues = {
+    userId: applicant,
+    applicantName: 'R19 Applicant',
+    email: `${applicant}@plans.test`,
+    phone: '+971501234567',
+    spaName: `R19 Applied ${tag}`,
+    slug: `${tag}-applied`,
+    emirate: 'dubai',
+    streetAddress: 'Street 1',
+    planId: applied!.id,
+    preferredStart: '2026-11-01',
+    status: 'rejected' as const,
+  }
+  const [pastApp] = await db.insert(spaApplications).values(pastAppValues).returning()
+  let pendingAppId = ''
   const spaName = `R19 Spa ${tag}`
   const [spa] = await db
     .insert(tenants)
@@ -323,6 +322,32 @@ test('console: delete an unused plan, archive a used one and restore it; the las
       ).toBeVisible()
       await expect(card(name('Applied'))).toHaveCount(0)
       expect((await db.select().from(plans).where(eq(plans.id, applied!.id)))[0]?.archivedAt).toBeTruthy()
+    })
+
+    await test.step('a pending application on an archived plan says so; accept asks for a plan', async () => {
+      const [pending] = await db
+        .insert(spaApplications)
+        .values({
+          ...pastAppValues,
+          spaName: `R19 Pending ${tag}`,
+          slug: `${tag}-pending`,
+          status: 'pending',
+        })
+        .returning()
+      pendingAppId = pending!.id
+      await page.goto(`${admin}/applications/${pending!.id}`)
+      await expect(
+        page.getByText(new RegExp(`^${name('Applied')} · .* \\(no longer offered\\)$`)),
+      ).toBeVisible()
+      await page.getByRole('button', { name: 'Accept', exact: true }).click()
+      await expect(page.getByLabel('Plan')).toHaveValue('')
+      await expect(
+        page.getByText(
+          `The plan this applicant chose (${name('Applied')}) is no longer offered. Choose one.`,
+        ),
+      ).toBeVisible()
+      await shot(page, 'application-archived-plan', false)
+      await page.goto(`${admin}/plans`)
     })
 
     await test.step('a plan nothing points at is deleted', async () => {
@@ -439,7 +464,9 @@ test('console: delete an unused plan, archive a used one and restore it; the las
   } finally {
     // Whatever happened above, no test plan stays offered (the pricing tests read the first Premium-tier plan).
     await db.update(plans).set({ active: false }).where(eq(plans.id, used!.id))
-    await db.delete(spaApplications).where(eq(spaApplications.id, pastApp!.id))
+    await db
+      .delete(spaApplications)
+      .where(inArray(spaApplications.id, [pastApp!.id, ...(pendingAppId ? [pendingAppId] : [])]))
     await db.delete(user).where(eq(user.id, applicant))
     await db.delete(plans).where(inArray(plans.id, [unused!.id, only!.id, applied!.id]))
     await visitor.close()

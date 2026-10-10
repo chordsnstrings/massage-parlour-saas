@@ -659,7 +659,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   plan new spas can get (`offeredToNewSpas`: active, not archived, not legacy) —
   `restorePlan` clears `archived_at` but leaves it inactive; DB check `plans_archived_inactive` keeps archived plans
   inactive, so the `active = true` lists (pricing `activePlans`, sign-up, `offeredPlans`, approval choices) never show
-  them while spa pages read the plan by id and keep its name). Discounts apply in `generateBillingScheduleTx` / `acceptApplication` via
+  them while spa pages read the plan by id and keep its name; the application page marks a chosen plan that is not
+  among its choices "(no longer offered)" and its Accept sheet then preselects none). Discounts apply in `generateBillingScheduleTx` / `acceptApplication` via
   `discounted()` (invoice `list_aed`/`discount_aed`/`discount_label` + description note; setup discounted to 0 = no
   invoice). Where enforced: web `server/access.ts` `guard(slug, perm, feature)` + `server/entitlements.ts`
   (`getEntitlements` per request, `featureRef`), `components/plan/upsell.tsx` (`PlanUpsell`, `FeatureGate` used by

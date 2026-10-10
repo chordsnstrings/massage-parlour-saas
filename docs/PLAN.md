@@ -1039,7 +1039,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   locks every plan row, so use counts + the last-plan check hold at write time), DB check `plans_archived_inactive`
   (archived ⇒ inactive, so every `active = true` list hides archived plans), `acceptApplication`, `switchPlan` and a
   new subscription refuse an archived plan (they read it FOR SHARE, so a removal in flight is seen), Edit refused
-  while archived; audit `platform.plan.deleted` {code, name} /
+  while archived; a pending application on a plan that is no longer offered shows "(no longer offered)" and its
+  Accept sheet preselects no plan ("The plan this applicant chose … Choose one."); audit `platform.plan.deleted` {code, name} /
   `platform.plan.archived` {code, name, spas} / `platform.plan.restored` {code, name}; tests: services
   `plan-delete.test.ts`, e2e plans.spec "console: delete an unused plan …".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
