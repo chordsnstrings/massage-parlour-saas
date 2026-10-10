@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, type Page, test } from '@playwright/test'
 import { auditLog, contactEnquiries } from '@spa/db'
 import { and, eq, sql } from 'drizzle-orm'
-import { ADMIN, admin, base, signInPlatformAdmin, testDb } from './helpers'
+import { ADMIN, admin, base, consoleEmailKey, signInPlatformAdmin, testDb } from './helpers'
 
 // Contact enquiries (PLAN §18.4, owner 2026-10-09): the marketing Contact form (server-validated, values kept on
 // error, honeypot) → stored as `new` → the super-admin sees it in the console's Enquiries (nav badge), opens it
@@ -69,7 +69,8 @@ test('contact form → super-admin Enquiries (badge) → marked contacted with a
       spaName: spa,
       message: MESSAGE,
     })
-    expect(row?.ipHash).toMatch(/^[0-9a-f]{32}$/)
+    // F26: the IP comes only from Cf-Connecting-Ip (set by Caddy); the e2e server has none → no hash.
+    expect(row?.ipHash).toBeNull()
   })
 
   const ctx = await page.context().browser()!.newContext()
@@ -143,16 +144,6 @@ test('a filled honeypot looks sent but nothing is stored; the console needs a si
   await expect(page).toHaveURL(/\/login/)
 })
 
-// Saves (or removes) a console Resend key: staff email then lands in the e2e outbox (JSON files, no Resend call).
-async function consoleEmailKey(page: Page, key: string | null) {
-  await page.goto(`${admin}/settings`)
-  const card = page.getByTestId('email-settings')
-  if (key) await card.getByLabel('Resend API key').fill(key)
-  else await card.getByLabel('Remove the stored key').check()
-  await card.getByRole('button', { name: 'Save email settings' }).click()
-  await expect(page.getByText('Email settings saved')).toBeVisible()
-}
-
 test('a new enquiry emails the super-admins (reply-to = sender); its audit row keeps no raw IP', async ({
   page,
   browser,
@@ -165,8 +156,13 @@ test('a new enquiry emails the super-admins (reply-to = sender); its audit row k
   await signInPlatformAdmin(page)
   await consoleEmailKey(page, 're_e2eEnquiryKey_ENQ1')
   try {
-    const ctx = await browser.newContext({ extraHTTPHeaders: { 'cf-connecting-ip': ip } })
+    const ctx = await browser.newContext()
     const visitor = await ctx.newPage()
+    // The visitor's IP header on our own requests only: Cloudflare (Turnstile, F9) refuses clients that send it.
+    await visitor.route(
+      (url) => url.href.startsWith(base),
+      (route) => route.continue({ headers: { ...route.request().headers(), 'cf-connecting-ip': ip } }),
+    )
     await visitor.goto(`${base}/contact`)
     await fillForm(visitor, email, spa, '+44 (0)20 7946 0958')
     await visitor.getByRole('button', { name: 'Send message' }).click()
@@ -174,6 +170,7 @@ test('a new enquiry emails the super-admins (reply-to = sender); its audit row k
     await ctx.close()
     const [row] = await testDb().select().from(contactEnquiries).where(eq(contactEnquiries.email, email))
     expect(row?.phone).toBe('+442079460958')
+    expect(row?.ipHash).toMatch(/^[0-9a-f]{32}$/) // from the Cf-Connecting-Ip header above
 
     const sentTo = async () => {
       const files = await readdir(outbox).catch(() => [] as string[])

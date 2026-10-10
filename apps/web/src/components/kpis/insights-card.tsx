@@ -7,6 +7,7 @@ import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { getI18n } from '@/i18n/server'
 import { cn } from '@/lib/utils'
 import { can, type MemberContext } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { refreshInsightsAction } from './insights-actions'
 
 const TONE = { positive: 'bg-success', negative: 'bg-danger', neutral: 'bg-border' } as const
@@ -17,6 +18,8 @@ const TONE = { positive: 'bg-success', negative: 'bg-danger', neutral: 'bg-borde
  */
 export async function InsightsCard({ ctx }: { ctx: MemberContext }) {
   if (!can(ctx, 'reports.view')) return null
+  // AI insights are part of Premium (PLAN §18.8): no card on a plan without `ai`.
+  if (!(await hasFeature(ctx.tenant.id, 'ai'))) return null
   const { t, fmt } = await getI18n()
   const configured = aiConfigured()
   const run = configured ? await withTenant(ctx.tenant.id, (tx) => latestInsights(tx)) : null

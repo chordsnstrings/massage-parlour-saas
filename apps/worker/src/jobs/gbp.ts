@@ -1,6 +1,13 @@
 import { draftReviewReply } from '@spa/ai'
 import { platformDb, socialAccounts, tenants } from '@spa/db'
-import { automationOnSql, GBP_PENDING_ID, googleConfig, syncGbpReviews } from '@spa/services'
+import {
+  automationOnSql,
+  GBP_PENDING_ID,
+  googleConfig,
+  submitDueSitemaps,
+  syncGbpBookActions,
+  syncGbpReviews,
+} from '@spa/services'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { log } from '../log'
 import { LIVE_STATUSES, recordRun } from './runs'
@@ -55,4 +62,18 @@ export async function syncAllGbpReviews() {
     }
   }
   return { tenants: connected.length, synced }
+}
+
+/**
+ * Every 10 minutes (F17): re-points Google "Book" buttons whose booking address changed (custom domain added, made
+ * primary or removed) and retries failed ones every 6 h; sends Search Console sitemaps queued by a publish (a couple
+ * of minutes after the last one). Premium spas only; DB reads only unless something changed.
+ */
+export async function syncGbpSite() {
+  if (!googleConfig()) return { skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' }
+  const book = await syncGbpBookActions()
+  const sitemaps = await submitDueSitemaps()
+  if (book.updated || book.failed || sitemaps.submitted || sitemaps.notSubmitted)
+    log('info', 'gbp site sync', { ...book, ...sitemaps })
+  return { book, sitemaps }
 }

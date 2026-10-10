@@ -61,7 +61,7 @@ function dubaiLocal(value: string | undefined) {
 
 /** Live preview for the segment builder: how many clients match, and the first ten. */
 export async function previewSegmentAction(slug: string, rules: unknown): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   const parsed = parseRules(rules)
   if (!parsed.success) return fromZod(parsed.error)
@@ -87,7 +87,7 @@ export async function saveSegmentAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   if (badId(id)) return fail('campaigns.errors.segmentNotFound')
   const raw = formObject(fd)
@@ -136,7 +136,7 @@ export async function deleteSegmentAction(
   _p: ActionResult,
   _fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   if (badId(id)) return fail('campaigns.errors.segmentNotFound')
   const gone = await withTenant(ctx.tenant.id, (tx) =>
@@ -169,7 +169,7 @@ export async function estimateAudienceAction(
   slug: string,
   input: z.input<typeof estimateInput>,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   const parsed = estimateInput.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)
@@ -222,7 +222,7 @@ export async function saveCampaignAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   const parsed = campaignInput.safeParse(formObject(fd))
@@ -341,7 +341,7 @@ export async function duplicateCampaignAction(
   _p: ActionResult,
   _fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   let copyId: string
@@ -370,7 +370,7 @@ export async function archiveCampaignAction(
   _p: ActionResult,
   _fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.campaigns')
+  const { ctx, error } = await guard(slug, 'marketing.campaigns', 'marketing')
   if (error) return fail(error)
   if (badId(id)) return fail('campaigns.errors.campaignNotFound')
   const archived = archivedInput === true

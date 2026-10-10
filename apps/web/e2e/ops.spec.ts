@@ -6,8 +6,9 @@ test('ops: security headers and client error reporting endpoint', async ({ reque
   expect(res.status()).toBe(200)
   const h = res.headers()
   expect(h['x-content-type-options']).toBe('nosniff')
-  expect(h['x-frame-options']).toBe('SAMEORIGIN')
-  expect(h['content-security-policy']).toContain("frame-ancestors 'self'")
+  // F10: API responses are never framed (pages: security-headers.spec).
+  expect(h['x-frame-options']).toBe('DENY')
+  expect(h['content-security-policy']).toContain("frame-ancestors 'none'")
   expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin')
 
   const ok = await request.post(`${base}/api/client-error`, {

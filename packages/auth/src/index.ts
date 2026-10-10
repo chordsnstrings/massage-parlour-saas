@@ -1,5 +1,5 @@
 import { mcp } from '@better-auth/mcp'
-import { parseRoots, sendStaffEmail } from '@spa/core'
+import { CLIENT_IP_HEADER, clientIpFrom, parseRoots, sendStaffEmail } from '@spa/core'
 import { isLocale } from '@spa/core/i18n'
 import {
   account,
@@ -90,7 +90,7 @@ async function auditConsentGranted(ctx: Parameters<Parameters<typeof createAuthM
         redirectHost: back.host,
         scopes: (query.get('scope') ?? '').split(' ').filter(Boolean),
       },
-      ip: h?.get('cf-connecting-ip') ?? h?.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      ip: clientIpFrom(h),
     })
 }
 
@@ -186,6 +186,9 @@ function createAuth() {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,
+      // A reset is how someone takes their account back: sign the login out everywhere (getSession also reads the
+      // session row, so the cookie cache can't keep a revoked one alive).
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user: u, url }) => {
         await sendStaffEmail({
           to: u.email,
@@ -211,12 +214,25 @@ function createAuth() {
         }
       },
     },
-    // Behind Cloudflare / DO App Platform the client IP arrives in these headers (first match wins).
+    // F26: only the header Caddy overwrites on every request (@spa/core clientIpFrom; deploy/droplet/Caddyfile).
+    // IPv6 is limited per /64, the same buckets as the app's own limits (`ipRateLimitKey`).
     advanced: {
-      ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'do-connecting-ip', 'x-forwarded-for'] },
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER], ipv6Subnet: 64 },
     },
     databaseHooks: {
-      session: { create: { before: async (s) => refuseDisabled(s.userId) } },
+      session: {
+        create: {
+          before: async (s) => refuseDisabled(s.userId),
+          // F21: "last staff sign-in" in the console's spa list (sessions are deleted on sign-out, so stamp it).
+          after: async (s) => {
+            try {
+              await platformDb().update(user).set({ lastSignInAt: new Date() }).where(eq(user.id, s.userId))
+            } catch (error) {
+              console.error('last sign-in stamp failed', error)
+            }
+          },
+        },
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,

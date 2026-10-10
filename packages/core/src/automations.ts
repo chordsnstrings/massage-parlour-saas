@@ -6,6 +6,9 @@
 export const AUTOMATIONS = [
   'bookingMessages',
   'thankYou',
+  'reviewRequests',
+  'birthdayMessages',
+  'winbackMessages',
   'slotFiller',
   'packageExpiry',
   'membershipRenewals',
@@ -14,6 +17,7 @@ export const AUTOMATIONS = [
   'weeklyInsights',
   'dailyDigest',
   'documentAlerts',
+  'outboxAutoAssign',
 ] as const
 export type AutomationKey = (typeof AUTOMATIONS)[number]
 
@@ -27,6 +31,10 @@ export type AutomationSettings = Partial<Record<AutomationKey, boolean>>
 export const AUTOMATION_JOBS: Record<AutomationKey, readonly string[]> = {
   bookingMessages: [],
   thankYou: [],
+  // F15: one hourly worker job (`client-drafts`) logs each kind under its own name.
+  reviewRequests: ['review-requests'],
+  birthdayMessages: ['birthday-messages'],
+  winbackMessages: ['winback-messages'],
   slotFiller: ['slot-filler'],
   packageExpiry: ['packages-expire'],
   membershipRenewals: ['memberships-renew'],
@@ -35,13 +43,26 @@ export const AUTOMATION_JOBS: Record<AutomationKey, readonly string[]> = {
   weeklyInsights: ['weekly-insights'],
   dailyDigest: ['daily-digest'],
   documentAlerts: ['document-reminders'],
+  outboxAutoAssign: ['outbox-auto-assign'],
 }
+
+/** Switches that are off until the spa turns them on (every other switch: missing = on). */
+export const DEFAULT_OFF_AUTOMATIONS: readonly AutomationKey[] = [
+  'outboxAutoAssign',
+  // F15: they write to clients unprompted, so each spa opts in (no surprise win-back wave on deploy).
+  'reviewRequests',
+  'birthdayMessages',
+  'winbackMessages',
+]
 
 export const isAutomationKey = (v: unknown): v is AutomationKey =>
   typeof v === 'string' && (AUTOMATIONS as readonly string[]).includes(v)
 
-/** Is this automation on for the spa? Unknown / missing = on. */
+/** Is this automation on for the spa? Missing = on, except the `DEFAULT_OFF_AUTOMATIONS` (missing = off). */
 export const automationOn = (
   settings: { automations?: Record<string, boolean | undefined> } | null | undefined,
   key: AutomationKey,
-) => settings?.automations?.[key] !== false
+) => {
+  const v = settings?.automations?.[key]
+  return v === undefined || v === null ? !DEFAULT_OFF_AUTOMATIONS.includes(key) : v !== false
+}

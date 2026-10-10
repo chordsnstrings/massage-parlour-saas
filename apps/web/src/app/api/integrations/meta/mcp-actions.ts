@@ -10,7 +10,7 @@ import { audit } from '@/server/audit'
 
 /** R7: the spa's "AI tools via Meta MCP" switches (tool groups + autopilot for public replies). */
 export async function saveMetaMcpAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.manage')
+  const { ctx, error } = await guard(slug, 'ai.manage', 'ai')
   if (error) return fail(error)
   const f = formObject(fd)
   const groups = Object.fromEntries(META_TOOL_GROUPS.map((g) => [g, f[`group_${g}`] === 'on']))
@@ -37,7 +37,7 @@ export async function saveMetaMcpAction(slug: string, _p: ActionResult, fd: Form
 
 /** Runs the Meta tools assistant on a staff instruction; its write tools audit themselves (ai.mcp.<tool>). */
 export async function askMetaAiAction(slug: string, _p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'ai')
   if (error) return fail(error)
   const instruction = String(fd.get('instruction') ?? '').trim()
   if (instruction.length < 3 || instruction.length > 1000)

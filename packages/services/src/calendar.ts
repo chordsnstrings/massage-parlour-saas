@@ -1,7 +1,17 @@
 // Multi-day calendar (Week / Month views) and the sidebar's count badges. Tenant-scoped through the caller's `tx`
 // (RLS); permission + own-only decisions are the caller's, passed in as filters.
 import { addDays, businessDayWindow } from '@spa/core'
-import { bookingItems, bookings, branches, clients, conversations, outbox, shifts, type Tx } from '@spa/db'
+import {
+  bookingItems,
+  bookings,
+  branches,
+  clients,
+  conversations,
+  outbox,
+  shifts,
+  siteEnquiries,
+  type Tx,
+} from '@spa/db'
 import { and, asc, between, eq, gt, inArray, lt, type SQL, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { campaignConsentWithdrawn } from './growth'
@@ -65,6 +75,7 @@ export async function loadCalendarRange(
       refCode: bookings.refCode,
       status: bookings.status,
       source: bookings.source,
+      attribution: bookings.attribution,
       businessDate: bookings.businessDate,
       startsAt: bookingItems.startsAt,
       endsAt: bookingItems.endsAt,
@@ -135,6 +146,10 @@ export type NavCountsQuery = {
   calendar: boolean
   outbox: boolean
   instagram: boolean
+  /** F28: the viewer's member id — due messages assigned to them are counted as `outboxMine`. */
+  assigneeMemberId?: string | null
+  /** F15: new website enquiries (clients.view). */
+  enquiries?: boolean
 }
 
 export type NavCounts = {
@@ -146,6 +161,10 @@ export type NavCounts = {
   outboxDue: number
   /** Instagram threads with an unread customer message. */
   igUnread: number
+  /** WhatsApp messages due now that are assigned to the viewer (F28). */
+  outboxMine: number
+  /** New (unanswered) website enquiries (F15). */
+  enquiriesNew: number
 }
 
 /** Sidebar badges in one round trip (scalar subqueries; disabled parts are literal zeros). */
@@ -171,17 +190,20 @@ export async function navCounts(tx: Tx, q: NavCountsQuery): Promise<NavCounts> {
     today = sql`(select count(*) ${day} and b.status not in ('cancelled', 'no_show'))`
     pending = sql`(select count(*) ${day} and b.status = 'pending')`
   }
-  const outboxDue = q.outbox
-    ? sql`(select count(*) from ${outbox} where ${and(
-        inArray(outbox.status, ['queued', 'opened']),
-        sql`${outbox.dueAt} <= ${now}::timestamptz`,
-        sql`not ${campaignConsentWithdrawn()}`,
-        outboxBookingLive(),
-        q.branchIds === null
-          ? undefined
-          : sql`(${outbox.branchId} is null or ${inBranches(sql`${outbox.branchId}`)})`,
-      )})`
-    : zero
+  const dueWhere = and(
+    inArray(outbox.status, ['queued', 'opened']),
+    sql`${outbox.dueAt} <= ${now}::timestamptz`,
+    sql`not ${campaignConsentWithdrawn()}`,
+    outboxBookingLive(),
+    q.branchIds === null
+      ? undefined
+      : sql`(${outbox.branchId} is null or ${inBranches(sql`${outbox.branchId}`)})`,
+  )
+  const outboxDue = q.outbox ? sql`(select count(*) from ${outbox} where ${dueWhere})` : zero
+  const outboxMine =
+    q.outbox && q.assigneeMemberId
+      ? sql`(select count(*) from ${outbox} where ${and(dueWhere, eq(outbox.assignedTo, q.assigneeMemberId))})`
+      : zero
   const igUnread = q.instagram
     ? sql`(select count(*) from ${conversations} where ${and(
         inArray(conversations.channel, CHANNELS),
@@ -189,14 +211,22 @@ export async function navCounts(tx: Tx, q: NavCountsQuery): Promise<NavCounts> {
         sql`(${conversations.readAt} is null or ${conversations.lastCustomerMsgAt} > ${conversations.readAt})`,
       )})`
     : zero
+  const enquiriesNew = q.enquiries
+    ? sql`(select count(*) from ${siteEnquiries} where ${eq(siteEnquiries.status, 'new')})`
+    : zero
   const res = await tx.execute(
-    sql`select ${today}::int as today, ${pending}::int as pending, ${outboxDue}::int as outbox, ${igUnread}::int as ig`,
+    sql`select ${today}::int as today, ${pending}::int as pending, ${outboxDue}::int as outbox, ${igUnread}::int as ig,
+      ${outboxMine}::int as mine, ${enquiriesNew}::int as enquiries`,
   )
-  const row = res.rows[0] as { today: number; pending: number; outbox: number; ig: number } | undefined
+  const row = res.rows[0] as
+    | { today: number; pending: number; outbox: number; ig: number; mine: number; enquiries: number }
+    | undefined
   return {
     today: Number(row?.today ?? 0),
     pending: Number(row?.pending ?? 0),
     outboxDue: Number(row?.outbox ?? 0),
     igUnread: Number(row?.ig ?? 0),
+    outboxMine: Number(row?.mine ?? 0),
+    enquiriesNew: Number(row?.enquiries ?? 0),
   }
 }

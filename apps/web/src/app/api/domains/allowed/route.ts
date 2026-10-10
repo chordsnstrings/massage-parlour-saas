@@ -3,10 +3,14 @@ import { domains, platformDb, tenants } from '@spa/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { PATH_ROUTING } from '@/lib/paths'
 import { platformRoots } from '@/server/origin'
+import { currentSlugFor } from '@/server/slug-redirect'
 
 export const dynamic = 'force-dynamic'
 
-/** Hosts on a platform domain that serve something: the domain itself, and with host routing www/app/admin + spas. */
+/**
+ * Hosts on a platform domain that serve something: the domain itself, and with host routing www/app/admin + spas
+ * (their current and previous addresses).
+ */
 async function isPlatformHost(hostname: string) {
   const matched = matchRoot(hostname, platformRoots())
   if (!matched) return false
@@ -21,7 +25,8 @@ async function isPlatformHost(hostname: string) {
     .from(tenants)
     .where(eq(tenants.slug, label))
     .limit(1)
-  return Boolean(tenant)
+  // F23: a renamed spa's previous address needs its certificate too, to answer with the 301.
+  return Boolean(tenant) || Boolean(await currentSlugFor(label))
 }
 
 /**

@@ -1,32 +1,36 @@
-import { en, th } from '@spa/core/i18n'
+import { monthlyAed } from '@spa/core'
 import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AREAS, DAY } from '@/components/marketing/content'
+import { crmDemoCopy } from '@/components/marketing/crm-demo-copy'
+import { CrmShowcase } from '@/components/marketing/crm-showcase'
 import { CalendarMock } from '@/components/marketing/mocks'
 import { activePlans } from '@/components/marketing/plans'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
-export const metadata: Metadata = {
-  title: { absolute: 'spamanagement.co — more bookings, less work for UAE spas' },
-}
+export const metadata: Metadata = marketingMetadata('home', {
+  title: 'spamanagement.co — more bookings, less work for UAE spas',
+  absoluteTitle: true,
+  description: 'Bookings, payments, accounting, websites and AI marketing for spas in the UAE.',
+})
 export const dynamic = 'force-dynamic' // prices are edited live in the super-admin
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties
 
-/** Real dashboard labels (spa-dashboard catalogues), shown side by side in the Spa CRM section. */
-const LABELS = [
-  [en.nav.calendar, th.nav.calendar],
-  [en.nav.bookings, th.nav.bookings],
-  [en.nav.sales, th.nav.sales],
-  [en.nav.clients, th.nav.clients],
-  [en.overview.upNext.title, th.overview.upNext.title],
-] as const
+/** Spa CRM showcase benefits (each checked against the product: PLAN §14.6, §18.5). */
+const SHOWCASE_BENEFITS = [
+  'Front desk, therapists, managers and the owner each see what their role needs',
+  'Every person picks English or Thai; names your team types never change',
+  'Menu, rooms, therapists and opening hours set up with you, plus your first client import',
+]
 
 export default async function MarketingPage() {
-  const [plan] = await activePlans()
+  const plans = (await activePlans()).filter((p) => p.billingInterval === 'month')
+  const signupUrl = await appUrl('/signup')
   return (
     <MarketingShell active="home">
       {/* Hero */}
@@ -44,7 +48,7 @@ export default async function MarketingPage() {
             care of themselves. Your team just looks after guests.
           </p>
           <div data-depth="0.1" className="mkt-ctas mkt-rise justify-center" style={css({ '--d': 3 })}>
-            <a href={await appUrl('/signup')} className="mkt-btn mkt-btn-primary">
+            <a href={signupUrl} className="mkt-btn mkt-btn-primary">
               Apply for your spa <ArrowRight />
             </a>
             <Link href="/features" className="mkt-btn mkt-btn-ghost">
@@ -113,57 +117,37 @@ export default async function MarketingPage() {
         </div>
       </section>
 
-      {/* The spa CRM — the dashboard the team works in, English or Thai */}
-      <section className="mkt-sec">
-        <div className="mkt-wrap grid items-center gap-12 lg:grid-cols-2">
-          <div data-rise>
-            <p className="mkt-eyebrow">Spa CRM</p>
-            <h2 className="mkt-h2">One dashboard for your whole team — in English or Thai.</h2>
-            <p className="mkt-lead max-w-md">
-              Calendar, till, clients, staff and accounts in one place. We build it and set it up with your
-              spa, and every person picks their own language.
-            </p>
-            <ul className="mt-7 space-y-3 text-[15px] text-[var(--muted)]">
-              {[
-                'Front desk, therapists, managers and the owner each see what their role needs',
-                'Till with packages, gift cards, memberships and full tax invoices',
-                'Names you type — clients, therapists, treatments — stay exactly as written',
-              ].map((t) => (
-                <li key={t} className="flex gap-3">
-                  <Check className="mkt-check mt-0.5 size-[18px] shrink-0" /> {t}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/crm"
-              className="mkt-link mt-8 inline-flex items-center gap-1.5 text-[15px] font-semibold text-[var(--accent-ink)]"
-            >
-              Explore the spa CRM <ArrowRight className="size-4" />
-            </Link>
-          </div>
-          <div data-rise="card" className="mkt-tile p-0">
-            <div className="grid grid-cols-2 gap-4 border-b border-[var(--line)] px-6 py-4 text-[12px] font-bold tracking-[0.12em] text-[var(--mute)] uppercase">
-              <span>English</span>
-              <span lang="th" className="tracking-normal">
-                ภาษาไทย
-              </span>
+      {/* Spa CRM showcase: the dashboard straightens from 3D as it scrolls in, feature cards float around it */}
+      <section className="mkt-sec mkt-show" data-testid="crm-showcase" aria-labelledby="crm-showcase-title">
+        <div className="mkt-wrap">
+          <div className="mkt-show-head mkt-shead">
+            <div className="mkt-show-in">
+              <p className="mkt-eyebrow">Spa CRM</p>
+              <h2 id="crm-showcase-title" className="mkt-h2 max-w-3xl">
+                Run the whole spa from one dashboard.
+              </h2>
+              <p className="mkt-lead mx-auto">
+                Calendar, till, clients, staff and accounts in one place, in English or Thai. We set it up
+                with your spa.
+              </p>
+              <ul className="mkt-show-ben">
+                {SHOWCASE_BENEFITS.map((t) => (
+                  <li key={t} className="flex gap-2.5 text-[15px] text-[var(--muted)]">
+                    <Check className="mkt-check mt-0.5 size-[18px] shrink-0" /> {t}
+                  </li>
+                ))}
+              </ul>
+              <div className="mkt-ctas justify-center">
+                <Link href="/crm" className="mkt-btn mkt-btn-primary">
+                  See the Spa CRM <ArrowRight />
+                </Link>
+                <a href={signupUrl} className="mkt-btn mkt-btn-ghost">
+                  Apply for your spa
+                </a>
+              </div>
             </div>
-            <ul className="divide-y divide-[var(--line)]">
-              {LABELS.map(([a, b]) => (
-                <li key={a} className="grid grid-cols-2 gap-4 px-6 py-3.5 text-[15px]">
-                  <span>{a}</span>
-                  <span lang="th">{b}</span>
-                </li>
-              ))}
-              <li className="grid grid-cols-2 gap-4 px-6 py-3.5 text-[15px] font-semibold">
-                <span>Hot stone ritual</span>
-                <span>Hot stone ritual</span>
-              </li>
-            </ul>
-            <p className="border-t border-[var(--line)] px-6 py-3.5 text-[13px] text-[var(--mute)]">
-              Labels switch with each person’s language; the treatment name your spa typed never changes.
-            </p>
           </div>
+          <CrmShowcase copy={crmDemoCopy()} />
         </div>
       </section>
 
@@ -192,19 +176,28 @@ export default async function MarketingPage() {
       {/* Price */}
       <section className="mkt-sec">
         <div data-rise className="mkt-wrap text-center">
-          <p className="mkt-eyebrow">One simple price</p>
-          <p className="mkt-head mt-5 text-[44px] leading-none font-bold tabular-nums sm:text-[66px]">
-            {plan ? formatAed(plan.priceAed) : 'AED 24,000'}
-            <span className="text-lg font-medium tracking-normal text-[var(--mute)]"> / year</span>
-          </p>
-          <p className="mkt-lead mx-auto">
-            Every automation and feature, unlimited staff and bookings, your website and domain.
-          </p>
+          <p className="mkt-eyebrow">Two plans</p>
+          <h2 className="mkt-h2 mx-auto max-w-2xl">Pick your plan. We handle the rest.</h2>
+          <div className="mx-auto mt-8 grid max-w-3xl gap-4 text-start sm:grid-cols-2">
+            {plans.map((p) => (
+              <div key={p.id} className="mkt-card">
+                <p className="mkt-head text-[20px] font-bold">{p.name}</p>
+                <p className="mkt-head mt-3 text-[34px] leading-none font-bold tabular-nums sm:text-[40px]">
+                  {formatAed(monthlyAed(p.priceAed))}
+                  <span className="text-base font-medium tracking-normal text-[var(--mute)]"> / month</span>
+                </p>
+                <p className="mt-2 text-[14px] text-[var(--mute)]">
+                  + {formatAed(p.setupFeeAed)} one-time setup · excl. VAT
+                </p>
+                {p.description && <p className="mt-4 text-[15px]">{p.description}</p>}
+              </div>
+            ))}
+          </div>
           <Link
             href="/pricing"
             className="mkt-link mt-6 inline-flex items-center gap-1.5 text-[15px] font-semibold text-[var(--accent-ink)]"
           >
-            See what’s included <ArrowRight className="size-4" />
+            Compare the plans <ArrowRight className="size-4" />
           </Link>
         </div>
       </section>

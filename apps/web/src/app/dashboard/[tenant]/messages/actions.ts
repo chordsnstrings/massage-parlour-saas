@@ -1,11 +1,11 @@
 'use server'
 import { messageTemplates, outbox, withTenant } from '@spa/db'
-import { DEFAULT_TEMPLATES, markOutbox } from '@spa/services'
+import { assignOutbox, DEFAULT_TEMPLATES, DomainError, markOutbox } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { TEMPLATE_KINDS, unknownVariables } from '@/components/messages/shared'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -51,6 +51,56 @@ export async function markMessageAction(
         ? 'messages.results.skipped'
         : undefined,
   )
+}
+
+const assignSchema = z.object({
+  ids: z.array(z.uuid()).min(1).max(200),
+  memberId: z.uuid().nullable(),
+})
+
+/**
+ * F28: assigns messages to a team member who can send WhatsApp messages (or clears it). Anyone with
+ * marketing.send may assign; every change is audited with the previous assignee. Click-to-send is unchanged.
+ */
+export async function assignMessagesAction(
+  slug: string,
+  input: { ids: string[]; memberId: string | null },
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'marketing.send')
+  if (error) return fail(error)
+  const parsed = assignSchema.safeParse(input)
+  if (!parsed.success) return fail('messages.results.notFound')
+  const { ids, memberId } = parsed.data
+  try {
+    const { changed, skipped } = await withTenant(ctx.tenant.id, (tx) =>
+      assignOutbox(tx, { ids, memberId, byUserId: ctx.user.id }),
+    )
+    for (const c of changed)
+      await audit({
+        tenantId: ctx.tenant.id,
+        actorUserId: ctx.user.id,
+        impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+        action: memberId ? 'outbox.assigned' : 'outbox.unassigned',
+        entity: 'outbox',
+        entityId: c.id,
+        data: { from: c.from, to: memberId, bulk: ids.length > 1 },
+      })
+    revalidatePath(`/dashboard/${slug}/messages`)
+    if (!changed.length)
+      return skipped
+        ? fail({ key: 'messages.assign.skipped', params: { count: skipped } })
+        : ok('messages.assign.nothing')
+    return ok(
+      {
+        key: memberId ? 'messages.assign.assigned' : 'messages.assign.unassigned',
+        params: { count: changed.length },
+      },
+      { skipped },
+    )
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
 }
 
 const body = z

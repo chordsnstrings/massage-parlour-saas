@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
+import { SurfaceProvider } from '@/components/status/surface'
 import { MotionProvider } from '@/components/ui/motion'
 import { Toaster } from '@/components/ui/toast'
+import { getNonce } from '@/server/nonce'
+import { requestSurface } from '@/server/surface'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -19,13 +22,25 @@ export const viewport: Viewport = {
   ],
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Async on purpose: reading the CSP nonce (F10) renders every page per request, which nonces require.
+// F24: <html lang/dir> per surface (server/surface.ts): marketing + console en, dashboard en|th, spa sites en|ar (rtl).
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = await getNonce()
+  const { site: _site, ...surface } = await requestSurface()
   return (
     // data-scroll-behavior: the marketing pages scroll smoothly to in-page anchors; route changes still jump.
-    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
+    <html
+      lang={surface.lang}
+      dir={surface.dir}
+      data-surface={surface.surface}
+      data-scroll-behavior="smooth"
+      suppressHydrationWarning
+    >
       <head>
         {/* Scroll scenes run for every visitor (owner decision: also with OS reduced motion); set before first paint so pins never shift the layout. */}
         <script
+          nonce={nonce}
+          suppressHydrationWarning
           // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline bootstrap, no user input
           dangerouslySetInnerHTML={{
             __html: "document.documentElement.classList.add('scenes-on')",
@@ -33,10 +48,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-dvh font-sans antialiased">
-        <MotionProvider>
-          {children}
-          <Toaster />
-        </MotionProvider>
+        <SurfaceProvider value={surface}>
+          <MotionProvider>
+            {children}
+            <Toaster />
+          </MotionProvider>
+        </SurfaceProvider>
       </body>
     </html>
   )

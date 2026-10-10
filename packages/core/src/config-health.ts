@@ -1,5 +1,7 @@
 // Production config health (G9, console overview): which settings are present. Booleans + non-secret hints only:
 // a value is never returned.
+import { type ResolvedTurnstile, resolveTurnstile, turnstileStatusText } from './turnstile'
+
 type Env = Record<string, string | undefined>
 
 export type ConfigCheck = {
@@ -33,9 +35,19 @@ function encryptionKey(env: Env): { ok: boolean; detail?: string } {
   return bytes === 32 ? { ok: true } : { ok: false, detail: 'not 32 bytes base64' }
 }
 
-/** Every production setting except the Resend key (shown on its own with its source). */
-export function configChecks(env: Env = process.env): ConfigCheck[] {
+/** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */
+const WEB_ONLY = new Set(['TURNSTILE'])
+
+/**
+ * Every production setting except the Resend key (shown on its own with its source). `turnstile`: the console-aware
+ * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags).
+ */
+export function configChecks(
+  env: Env = process.env,
+  opts: { turnstile?: ResolvedTurnstile } = {},
+): ConfigCheck[] {
   const backup = backupBucketSource(env)
+  const turnstile = opts.turnstile ?? resolveTurnstile(null, env)
   const enc = encryptionKey(env)
   return [
     {
@@ -67,6 +79,16 @@ export function configChecks(env: Env = process.env): ConfigCheck[] {
       ok: set(env, 'ARK_API_KEY'),
       required: true,
       effect: 'AI features (content, replies, insights) are unavailable.',
+    },
+    {
+      // F9: unset = public forms stay open (honeypot + per-IP limits only), so spas are never locked out.
+      key: 'TURNSTILE',
+      label: 'TURNSTILE_* (bot check)',
+      ok: Boolean(turnstile.config),
+      required: true,
+      detail: turnstileStatusText(turnstile),
+      effect:
+        'Online booking, the booking widget, Apply and Contact have no bot check (honeypot + rate limits only).',
     },
     {
       key: 'VAPID',
@@ -102,6 +124,33 @@ export function configChecks(env: Env = process.env): ConfigCheck[] {
 /** Presence flags only — what the worker reports in its heartbeat (worker-side env may differ from web). */
 export const configFlags = (env: Env = process.env): Record<string, boolean> =>
   Object.fromEntries([
-    ...configChecks(env).map((c) => [c.key, c.ok] as const),
+    ...configChecks(env)
+      .filter((c) => !WEB_ONLY.has(c.key))
+      .map((c) => [c.key, c.ok] as const),
     ['RESEND_API_KEY', set(env, 'RESEND_API_KEY')] as const,
   ])
+
+/** pg_roles attributes of the restore-drill role (F11). */
+export type DrillRole = {
+  rolsuper: boolean
+  rolcreatedb: boolean
+  rolcreaterole: boolean
+  rolbypassrls: boolean
+  rolreplication: boolean
+}
+
+/**
+ * F11: why a role must not run the restore drill (least privilege: CREATEDB, nothing more), or null when it is fit.
+ * The worker refuses to run on a problem; the console Configuration card shows it for `spa_drill`.
+ */
+export function drillRoleProblem(r: DrillRole | null | undefined): string | null {
+  if (!r) return 'role missing'
+  const extra = [
+    r.rolsuper && 'SUPERUSER',
+    r.rolcreaterole && 'CREATEROLE',
+    r.rolbypassrls && 'BYPASSRLS',
+    r.rolreplication && 'REPLICATION',
+  ].filter(Boolean)
+  if (extra.length) return `has ${extra.join(', ')}`
+  return r.rolcreatedb ? null : 'no CREATEDB'
+}

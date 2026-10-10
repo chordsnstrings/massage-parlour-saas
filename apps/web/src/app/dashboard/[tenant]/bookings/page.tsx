@@ -1,5 +1,5 @@
 import { addDays, businessDateOf, MARK_STATUSES } from '@spa/core'
-import { enumLabel } from '@spa/core/i18n'
+import { bookingSourceLabel, enumLabel } from '@spa/core/i18n'
 import { bookings, staff, withTenant } from '@spa/db'
 import { listBookings } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
@@ -257,7 +257,7 @@ export default async function BookingsPage({
                           : t('bookings.noTherapist')}
                       </td>
                       <td data-label={col.source} className="crm-muted">
-                        {enumLabel(t, 'bookingSource', r.source)}
+                        {bookingSourceLabel(t, r.source, r.attribution)}
                       </td>
                       <td data-label={col.status}>
                         <MarkPill status={r.status} t={t} />

@@ -17,17 +17,17 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CrmLanguageDemo } from '@/components/marketing/crm-demo'
 import { crmDemoCopy } from '@/components/marketing/crm-demo-copy'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { requestUrls } from '@/server/origin'
 
 const description =
   'The spa CRM we build and set up with you: calendar, till, clients, team and accounts in one dashboard — in English or Thai.'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('crm', {
   title: 'Spa CRM — the dashboard your whole team uses',
   description,
-  openGraph: { title: 'Spa CRM — the dashboard your whole team uses · spamanagement.co', description },
-}
+})
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties
 

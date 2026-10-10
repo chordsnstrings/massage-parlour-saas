@@ -180,7 +180,7 @@ export function extractSiteCopy(pages: { data: PageData }[]): SiteCopy {
 
 /* ------------------------------------------------------------------ Sanitising a spa's site into a template */
 
-const IMAGE_KEYS = new Set(['src', 'image', 'bgImage'])
+const IMAGE_KEYS = new Set(['src', 'image', 'bgImage', 'poster'])
 
 /** Blocks holding the spa's own customers' words: reset to neutral sample content, never copied across spas. */
 const CUSTOMER_VOICE: Record<string, string[]> = { Testimonials: ['items'] }
@@ -225,6 +225,8 @@ function scrub(value: unknown, name: RegExp | null): unknown {
     if (IMAGE_KEYS.has(k) && (typeof v === 'string' || isImageValue(v))) out[k] = ''
     // Links to other sites (the spa's Instagram, booking partners…) are the spa's own, not the template's.
     else if (k === 'target' && obj.action === 'url') out[k] = ''
+    // F15 Video block: the spa's own YouTube / Vimeo link or uploaded clip.
+    else if (k === 'url' && typeof v === 'string') out[k] = ''
     else out[k] = scrub(v, name)
   }
   return out

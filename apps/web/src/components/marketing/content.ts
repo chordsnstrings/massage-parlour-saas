@@ -17,6 +17,9 @@ export const AREAS: Area[] = [
       'Every booking lands on the calendar with therapist and room reserved',
       'Double booking impossible — the database itself blocks it',
       'Couples treatments, walk-in rotation and late-night business days handled for you',
+      'Equipment booked with the treatment, so the last unit can never be double-booked',
+      'Waitlist for busy days: when a slot frees up, the waiting client gets a ready-to-send WhatsApp',
+      'Booking widget for the website you already have: paste one line, clients book without leaving it',
       'Google posts and your Instagram bio carry a Book button that is tracked by source',
     ],
   },
@@ -83,6 +86,8 @@ export const AREAS: Area[] = [
       'Roles for owner, manager, receptionist, therapist and accountant, or your own',
       'Dashboard in English or Thai — each person picks their own language',
       'Therapists never see client phone numbers',
+      'Staff time clock with a PIN, timesheets and leave requests; nobody on leave gets booked',
+      'Duplicate clients found by phone or name and merged, with their bookings, sales and packages',
       'Staff and business documents tracked, with expiry reminders to your phone',
       'Two-factor sign-in and an audit log of every change',
       'Import clients, menu and products from a spreadsheet; export everything',
@@ -137,16 +142,27 @@ export const AUTOMATIONS = [
   'Nightly backups',
 ]
 
-export const INCLUDED = [
-  'Every feature and automation, no add-ons',
-  'Unlimited staff, clients and bookings',
-  'Website, online booking and your own domain',
-  'AI tools with a monthly allowance',
-  'Onboarding and data import help',
-  'WhatsApp support from a real person',
-]
-
 export const FAQ = [
+  {
+    q: 'What is the difference between Premium and Standard?',
+    a: 'Standard is the whole spa CRM for one branch: calendar and rooms, online booking, POS and tax invoices, packages, gift cards and memberships, clients, staff, payroll and WPS, inventory, WhatsApp reminders, your website and reports. Premium adds AI & Instagram automation (AI receptionist, Instagram replies and booking from chat, AI insights, receipt scanning), marketing tools (campaigns, Google Business and Instagram posting, review requests) and more branches.',
+  },
+  {
+    q: 'Is there a setup fee?',
+    a: 'Yes: a one-time setup fee when you start (shown on each plan above), then one monthly fee.',
+  },
+  {
+    q: 'Are prices with or without VAT?',
+    a: 'All prices are excl. VAT. VAT is added to the invoice where it applies.',
+  },
+  {
+    q: 'Can I change my plan later?',
+    a: 'Yes. Ask your account manager to move you between Standard and Premium; your next invoices follow the new plan and nothing else changes.',
+  },
+  {
+    q: 'I am already a customer on the yearly plan. What changes?',
+    a: 'Nothing until your renewal date: you keep your plan and every feature. At renewal you choose Premium or Standard, and we agree the switch with you first.',
+  },
   {
     q: 'Do you take payments from my clients?',
     a: 'No. You keep using cash, your own card machine or bank transfer — we record every payment so your accounts and VAT figures are right.',

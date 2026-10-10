@@ -2,15 +2,21 @@
 # Manual restore drill (PLAN §3.5) — same steps as the worker's monthly `restore-drill` job:
 # latest pg_dump from R2 (or a local file) → scratch database → sanity counts → drop.
 #   R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY  (same config as db-backup)
-#   RESTORE_DRILL_ADMIN_URL  postgres URL of a role with CREATEDB (default: DATABASE_URL_OWNER)
+#   DATABASE_URL_DRILL  URL of the least-privilege spa_drill role (CREATEDB only, F11), database `postgres`,
+#                       e.g. postgres://spa_drill:spa_drill_dev@localhost:5432/postgres (dev); never the superuser
 # Usage: scripts/restore-drill.sh [path/to/backup.dump]
 set -euo pipefail
-ADMIN=${RESTORE_DRILL_ADMIN_URL:-${DATABASE_URL_OWNER:?set RESTORE_DRILL_ADMIN_URL or DATABASE_URL_OWNER}}
+ADMIN=${DATABASE_URL_DRILL:?set DATABASE_URL_DRILL (the spa_drill role)}
+q() { psql -X -A -t -v ON_ERROR_STOP=1 "$@"; }
+# Defence in depth (same rule as the worker): CREATEDB, nothing more.
+ATTRS=$(q --dbname="$ADMIN" -c "select rolsuper or rolcreaterole or rolbypassrls or rolreplication, rolcreatedb from pg_roles where rolname = current_user")
+[ "$ATTRS" = "f|t" ] || { echo "refusing: the drill role must have CREATEDB and no SUPERUSER/CREATEROLE/BYPASSRLS/REPLICATION" >&2; exit 1; }
 WORK=$(mktemp -d)
 SCRATCH="spa_restore_drill_$(date +%s)"
 SCRATCH_URL=$(printf '%s' "$ADMIN" | sed -E "s#^(postgres(ql)?://[^/]+)/[^?]*#\1/$SCRATCH#")
+CREATED=
 cleanup() {
-  psql -X -q -v ON_ERROR_STOP=1 --dbname="$ADMIN" -c "DROP DATABASE IF EXISTS \"$SCRATCH\" WITH (FORCE)" || true
+  [ -z "$CREATED" ] || q -q --dbname="$ADMIN" -c "DROP DATABASE IF EXISTS \"$SCRATCH\" WITH (FORCE)" || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -29,8 +35,12 @@ else
   curl "${SIG[@]}" -o "$DUMP" "$BASE/$KEY"
 fi
 
-psql -X -q -v ON_ERROR_STOP=1 --dbname="$ADMIN" -c "CREATE DATABASE \"$SCRATCH\""
-pg_restore --no-owner --no-acl --exit-on-error --dbname="$SCRATCH_URL" "$DUMP"
+# Superuser-only extensions (pg_stat_statements) can't be created by spa_drill and hold no data: left out.
+SKIP=$(q --dbname="$ADMIN" -c "select string_agg(distinct name, '|') from pg_available_extension_versions where superuser and not trusted")
+pg_restore --list "$DUMP" | grep -v -E "^[0-9]+; [0-9]+ [0-9]+ (EXTENSION - |COMMENT - EXTENSION )($SKIP) " > "$WORK/restore.list"
+CREATED=1
+q -q --dbname="$ADMIN" -c "CREATE DATABASE \"$SCRATCH\""
+pg_restore --no-owner --no-acl --exit-on-error --use-list="$WORK/restore.list" --dbname="$SCRATCH_URL" "$DUMP"
 for t in tenants user branches clients bookings journal_entries audit_log; do
   printf '%-16s %s\n' "$t" "$(psql -X -A -t -v ON_ERROR_STOP=1 --dbname="$SCRATCH_URL" -c "select count(*) from public.\"$t\"")"
 done

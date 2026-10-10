@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useTurnstile } from '@/components/turnstile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -43,6 +44,34 @@ const STEPS: { key: Exclude<Step, 'done'>; label: 'stepService' | 'stepWhen' | '
   { key: 'details', label: 'stepDetails' },
 ]
 
+/**
+ * F13: the visitor's entry source for the booking — what public/t.js keeps for the tab session (`spa_entry`), else
+ * (tracker off or storage blocked) this page's own tags + an external referrer. Only a source key is stored.
+ */
+function visitorEntry() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('spa_entry') ?? 'null')
+    if (saved && typeof saved === 'object')
+      return {
+        referrer: typeof saved.referrer === 'string' ? saved.referrer.slice(0, 500) : null,
+        utm: saved.utm ?? {},
+      }
+  } catch {}
+  const q = new URLSearchParams(location.search)
+  const utm: Record<string, string> = {}
+  for (const k of ['src', 'utm_source', 'utm_medium', 'utm_campaign', 'partner']) {
+    const v = q.get(k)
+    if (v) utm[k] = v.slice(0, 60)
+  }
+  let referrer = document.referrer
+  try {
+    if (referrer && new URL(referrer).hostname === location.hostname) referrer = ''
+  } catch {
+    referrer = ''
+  }
+  return { referrer: referrer.slice(0, 500) || null, utm }
+}
+
 const chip =
   'select-none rounded-xl border bg-surface text-sm transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-[var(--ease-calm)] hover:-translate-y-px hover:border-fg/20 active:scale-[0.98] aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-fg focus-visible:outline-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-45'
 
@@ -54,6 +83,7 @@ export function BookingFlow({
   langHref,
   initialServiceId,
   embed = false,
+  turnstileSiteKey = null,
 }: {
   site: SiteKey
   catalog: BookingCatalog
@@ -63,8 +93,11 @@ export function BookingFlow({
   initialServiceId?: string
   /** Chrome-less mode inside the embeddable widget's iframe (public/widget.js): no site link, posts resize + booked. */
   embed?: boolean
+  /** F9: Cloudflare Turnstile site key (null = no bot check on this site). */
+  turnstileSiteKey?: string | null
 }) {
   const L = (key: Parameters<typeof t>[0]) => t(key, locale)
+  const bot = useTurnstile(turnstileSiteKey, 'booking', locale)
   const rtl = locale === 'ar'
   const reduce = useReducedMotion()
   const services = useMemo(() => catalog.groups.flatMap((g) => g.services), [catalog])
@@ -168,6 +201,7 @@ export function BookingFlow({
 
   const submit = async (_: ActionResult, fd: FormData): Promise<ActionResult> => {
     if (!variant || !slot) return { ok: false, error: L('error') }
+    const botToken = await bot.getToken()
     const res = await bookOnline({
       site,
       variantId: variant.id,
@@ -180,7 +214,10 @@ export function BookingFlow({
       branchId: catalog.branch.id,
       lang: locale,
       via: embed ? 'widget' : undefined,
+      entry: visitorEntry(),
+      botToken,
     })
+    if (!res?.ok) bot.reset()
     if (res && !res.ok && res.fieldErrors?.start) {
       // Someone else got there first: back to times with a fresh list.
       setSlot(null)
@@ -561,6 +598,8 @@ export function BookingFlow({
                       <label htmlFor="website">Website</label>
                       <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
                     </div>
+                    {/* F9: Cloudflare Turnstile — invisible unless Cloudflare asks for a click. */}
+                    <div ref={bot.ref} className="empty:hidden" />
                     <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
                       <Button
                         type="button"

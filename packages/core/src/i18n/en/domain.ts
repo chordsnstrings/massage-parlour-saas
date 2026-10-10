@@ -147,9 +147,20 @@ export const domain = {
   pageTitleLength: 'Page titles need 1–80 characters',
   homeSlugFixed: 'The home page address can’t change',
   pageSlugTaken: 'Another page already uses that address',
+  postSlugTaken: 'Another post already uses that address',
   pendingSlugTaken: 'Another page now uses /{slug} — rename this page to a free address before publishing',
   editedElsewhere:
     'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',
+  pageLocked:
+    '{name} is editing this page in the Studio editor — changes are refused until they close it (the lock frees itself 2 minutes after they leave) or someone takes over in the editor',
+  pageLockRace: 'Another editor opened this page at the same moment — please try again',
+  importUrlMissing: 'Enter the address of the spa’s current website',
+  importUrlInvalid: 'That address isn’t valid',
+  importHttpOnly: 'Only http:// and https:// addresses can be imported',
+  importUnreachable:
+    '{host} didn’t answer (its robots.txt couldn’t be read) — check the address and try again',
+  importRobots:
+    'robots.txt of {host} asks bots not to read this page, so it can’t be imported. Ask the spa for the content instead.',
   templateKeyFormat: 'Use lowercase letters, numbers and dashes for the key',
   templateKeyExists: 'A template with the key "{key}" already exists',
   publishHomeFirst: 'Publish the home page before saving this site as a template',
@@ -279,15 +290,48 @@ export const domain = {
   applicationPending: 'You already have an application waiting for approval',
   applicationSlugFormat: 'Use 3–40 lowercase letters, numbers or hyphens.',
   applicationSlugTaken: 'That address is taken.',
+  // F23 slug rename (console)
+  slugUnchanged: 'That is already this spa’s address.',
   applicationNotFound: 'Application not found',
   applicationReviewed: 'This application was already reviewed',
   applicantClosed: 'The applicant’s login is closed',
   setupPaymentMissing: 'Record how the setup fee was paid',
   paymentDateFuture: 'The payment date can’t be in the future',
   paymentMethodMissing: 'Choose how it was paid',
-  depositRange: 'A deposit must be more than 0 and less than the setup invoice total (incl. VAT)',
+  depositRange:
+    'A deposit must be more than AED 0 and less than the setup invoice total ({total} incl. VAT).',
+  depositRangeNoVat:
+    'A deposit must be more than AED 0 and less than the setup invoice total ({total}, no VAT).',
+  balanceDueMissing: 'Choose when the balance is due',
   adminJoinRefused: 'This email address cannot create a super-admin account.',
   adminAlready: 'You are already a super-admin.',
   adminConfirmNeeds2fa: 'Only a super-admin with two-step verification can confirm super-admins.',
   adminConfirmNotListed: 'Only a login whose email is in PLATFORM_ADMIN_EMAILS can be confirmed here.',
+  // Plans + entitlements (PLAN §18.8). `feature` = a `plan.feature.*.name` ref.
+  featureNotInPlan: '{feature} is available on the Premium plan.',
+  planNotOffered: 'Choose a plan that is offered to spas',
+  planAlreadyOn: 'The spa is already on this plan',
+  planLegacyUntilRenewal:
+    'The legacy yearly plan stays until its renewal on {end}: choose the new plan from {from}.',
+  featureTierChoose: 'Choose a feature tier',
+  intakeNotFound: 'Intake form not found',
+  outboxNotAssignable: 'That team member cannot send WhatsApp messages',
+  // F20 / F22 console tools (super-admin messages; mapped like every DomainError).
+  endBeforeStart: 'The end must be after the start',
+  pickPlan: 'Pick at least one plan',
+  pickSpa: 'Pick at least one spa',
+  announcementNotFound: 'Announcement not found',
+  daysPositive: 'Days must be positive',
+  flagKeyFormat: 'Use lower-case dotted names, e.g. calendar.newDayView',
+  flagInCode: 'The code reads this flag — change its default instead of deleting it',
+  flagNotFound: 'Flag not found',
+  // F17–F19 (new strings, flagged for native TH review)
+  privateReplyOnlyComments: 'Private replies are only for comments.',
+  privateReplyAlreadySent: 'A private reply was already sent for this comment.',
+  privateReplyExpired: 'Instagram only allows a private reply within 7 days of the comment.',
+  facebookSignInAgain: 'Sign in with Facebook again to choose a Page.',
+  // F16 QR poster partners.
+  partnerNameRequired: 'Enter the partner name',
+  partnerNotFound: 'Partner not found',
+  partnerCodeClash: 'Could not create a link code, please try again',
 } as const

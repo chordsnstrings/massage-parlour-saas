@@ -1,6 +1,7 @@
 // SaaS billing for spas (PLAN §14.3, §14.8 R3/R11/R12). Payments are recorded by a super-admin (cash / bank
 // transfer), or settled by Stripe Checkout for platform invoices; nothing here moves money.
 // All functions run on the platform role (or a tenant-scoped tx for the read-only helpers) and take `tenantId`.
+import { applyDiscount, type Discount, discountLabel, vatTotals } from '@spa/core'
 import {
   type Db,
   type DbOrTx,
@@ -9,9 +10,11 @@ import {
   platformReminders,
   platformSettings,
   subscriptions,
+  type Tx,
   tenants,
 } from '@spa/db'
 import { and, asc, eq, isNotNull, isNull, lt, ne, sql, sum } from 'drizzle-orm'
+import { billingTransitionEffects, liftBillingHold } from './billing-transitions'
 import { DomainError } from './errors'
 
 /** The annual price may be paid as this many monthly invoices (AED 24,000 → 12 × AED 2,000). */
@@ -64,13 +67,11 @@ export function planSchedule(sub: {
   }))
 }
 
-/** Subtotal / VAT / total for an entered amount, per the platform's VAT settings. */
-export function invoiceTotals(amount: number, s?: { vatRate: string; pricesIncludeVat: boolean } | null) {
-  const rate = Number(s?.vatRate ?? 5)
-  const vat = s?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
-  const subtotal = s?.pricesIncludeVat ? amount - vat : amount
-  return { subtotalAed: subtotal.toFixed(2), vatAed: vat.toFixed(2), totalAed: (subtotal + vat).toFixed(2) }
-}
+/**
+ * Subtotal / VAT / total for an entered amount, per the platform's VAT settings. `chargeVat: false` (a setup invoice
+ * accepted without VAT, PLAN §18.3) → no VAT: the amount is the total.
+ */
+export const invoiceTotals = vatTotals
 
 type InvoiceInput = {
   description: string
@@ -81,6 +82,10 @@ type InvoiceInput = {
   periodStart?: string | null
   installment?: number | null
   installments?: number | null
+  /** false = no VAT on this invoice (default: VAT per the platform settings). */
+  vat?: boolean
+  /** PLAN §18.8: the list amount before a discount (`amountAed` is the discounted amount) and how it was set. */
+  discount?: { listAed: string; discountAed: string; label: string } | null
 }
 
 /**
@@ -122,11 +127,33 @@ export async function createPlatformInvoice(db: DbOrTx, tenantId: string, input:
       periodStart: input.periodStart ?? null,
       installment: input.installment ?? null,
       installments: input.installments ?? null,
-      ...invoiceTotals(Number(input.amountAed), settings),
+      ...(input.discount && Number(input.discount.discountAed) > 0
+        ? {
+            listAed: input.discount.listAed,
+            discountAed: input.discount.discountAed,
+            discountLabel: input.discount.label,
+          }
+        : {}),
+      ...invoiceTotals(Number(input.amountAed), settings, input.vat ?? true),
     })
     .onConflictDoNothing()
     .returning()
   return row ?? null
+}
+
+/**
+ * An invoice amount after a per-spa discount (PLAN §18.8): the amount to bill, the invoice's discount columns and a
+ * note for its description ("· discount 10% (−AED 300.00)"). No discount → the list amount, no note.
+ */
+export function discounted(listAed: string, d: Discount | null | undefined, months = 1) {
+  const { netAed, discountAed } = applyDiscount(listAed, d, months)
+  if (!d || Number(discountAed) <= 0) return { amountAed: listAed, discount: null, note: '' }
+  const label = discountLabel(d)
+  return {
+    amountAed: netAed,
+    discount: { listAed: Number(listAed).toFixed(2), discountAed, label },
+    note: ` · discount ${label}${d.kind === 'amount' && months > 1 ? ' per month' : ''} (−AED ${discountAed})`,
+  }
 }
 
 const scheduleLabel = (r: ScheduleRow, periodStart: string) => {
@@ -140,62 +167,76 @@ const scheduleLabel = (r: ScheduleRow, periodStart: string) => {
  * Issues the plan invoices for the current subscription period (12 monthly or one annual) plus the one-off setup
  * fee when set. Idempotent: existing invoices are kept. Switching the payment plan voids the unpaid invoices of the
  * other plan for the same period; if any of them is already paid it refuses (sort that out by hand first).
+ * Console "Generate payment schedule"; accepting an application runs the same code (`generateBillingScheduleTx`).
  */
-export async function generateBillingSchedule(db: Db, tenantId: string, today: string) {
-  return db.transaction(async (tx) => {
-    const [sub] = await tx
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.tenantId, tenantId))
-      .for('update')
-    if (!sub) throw new DomainError('Save a subscription for this spa first', 'not_found')
-    const schedule = planSchedule(sub)
-    const expected = schedule[0]!.installments
-    const other = await tx
-      .select()
-      .from(platformInvoices)
-      .where(
-        and(
-          eq(platformInvoices.tenantId, tenantId),
-          eq(platformInvoices.kind, 'plan'),
-          eq(platformInvoices.periodStart, sub.currentPeriodStart),
-          ne(platformInvoices.installments, expected),
-          ne(platformInvoices.status, 'void'),
-        ),
+export const generateBillingSchedule = (db: Db, tenantId: string, today: string) =>
+  db.transaction((tx) => generateBillingScheduleTx(tx, tenantId, today))
+
+/** `generateBillingSchedule` inside the caller's platform transaction. */
+export async function generateBillingScheduleTx(tx: Tx, tenantId: string, today: string) {
+  const [sub] = await tx
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.tenantId, tenantId))
+    .for('update')
+  if (!sub) throw new DomainError('Save a subscription for this spa first', 'not_found')
+  const schedule = planSchedule(sub)
+  const expected = schedule[0]!.installments
+  const other = await tx
+    .select()
+    .from(platformInvoices)
+    .where(
+      and(
+        eq(platformInvoices.tenantId, tenantId),
+        eq(platformInvoices.kind, 'plan'),
+        eq(platformInvoices.periodStart, sub.currentPeriodStart),
+        ne(platformInvoices.installments, expected),
+        ne(platformInvoices.status, 'void'),
+      ),
+    )
+  if (other.some((i) => i.status === 'paid'))
+    throw new DomainError(
+      'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
+    )
+  for (const inv of other)
+    await tx.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.id, inv.id))
+  let created = 0
+  if (Number(sub.priceAed) > 0)
+    for (const r of schedule) {
+      // The monthly-fee discount (PLAN §18.8) applies per month: a one-time yearly invoice gets 12 × an amount.
+      const d = discounted(
+        r.amountAed,
+        sub.discounts?.monthly,
+        r.installments === 1 ? MONTHLY_INSTALLMENTS : 1,
       )
-    if (other.some((i) => i.status === 'paid'))
-      throw new DomainError(
-        'Invoices of the other payment plan are already paid for this period — mark them unpaid or void them first',
-      )
-    for (const inv of other)
-      await tx.update(platformInvoices).set({ status: 'void' }).where(eq(platformInvoices.id, inv.id))
-    let created = 0
-    if (Number(sub.priceAed) > 0)
-      for (const r of schedule) {
-        const row = await createPlatformInvoice(tx, tenantId, {
-          description: scheduleLabel(r, sub.currentPeriodStart),
-          amountAed: r.amountAed,
-          issueDate: today,
-          dueDate: r.dueDate,
-          kind: 'plan',
-          periodStart: sub.currentPeriodStart,
-          installment: r.installment,
-          installments: r.installments,
-        })
-        if (row) created++
-      }
-    if (Number(sub.setupFeeAed) > 0) {
       const row = await createPlatformInvoice(tx, tenantId, {
-        description: 'One-time setup fee',
-        amountAed: sub.setupFeeAed,
+        description: scheduleLabel(r, sub.currentPeriodStart) + d.note,
+        amountAed: d.amountAed,
         issueDate: today,
-        dueDate: today,
-        kind: 'setup',
+        dueDate: r.dueDate,
+        kind: 'plan',
+        periodStart: sub.currentPeriodStart,
+        installment: r.installment,
+        installments: r.installments,
+        discount: d.discount,
       })
       if (row) created++
     }
-    return { created, voided: other.length }
-  })
+  // A setup fee discounted to 0 is no setup fee (as at acceptance): no invoice.
+  const setup = discounted(sub.setupFeeAed, sub.discounts?.setup)
+  if (Number(setup.amountAed) > 0) {
+    const d = setup
+    const row = await createPlatformInvoice(tx, tenantId, {
+      description: `One-time setup fee${d.note}`,
+      amountAed: d.amountAed,
+      issueDate: today,
+      dueDate: today,
+      kind: 'setup',
+      discount: d.discount,
+    })
+    if (row) created++
+  }
+  return { created, voided: other.length }
 }
 
 /**
@@ -214,7 +255,8 @@ export async function setInvoicePaid(
     reference?: string | null
   },
 ) {
-  return db.transaction(async (tx) => {
+  // F22: paying lifts an automatic overdue / read-only stage once nothing is late (effects after commit).
+  const out = await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
       .from(platformInvoices)
@@ -228,7 +270,7 @@ export async function setInvoicePaid(
       .where(eq(platformPayments.invoiceId, inv.id))
     const received = Number(got?.total ?? 0)
     if (r.paid) {
-      if (inv.status === 'paid') return inv
+      if (inv.status === 'paid') return { row: inv, billing: null }
       const open = Number(inv.totalAed) - received
       if (open > 0.004)
         await tx.insert(platformPayments).values({
@@ -248,9 +290,9 @@ export async function setInvoicePaid(
         .returning()
       if ((await overdueInvoices(tx, r.tenantId, r.today)).length === 0)
         await resolveReminders(tx, r.tenantId)
-      return row!
+      return { row: row!, billing: await liftBillingHold(tx, r.tenantId, r.today) }
     }
-    if (inv.status !== 'paid') return inv
+    if (inv.status !== 'paid') return { row: inv, billing: null }
     if (received > 0.004)
       await tx.insert(platformPayments).values({
         tenantId: r.tenantId,
@@ -266,8 +308,10 @@ export async function setInvoicePaid(
       .set({ status: 'issued', paidAt: null })
       .where(eq(platformInvoices.id, inv.id))
       .returning()
-    return row!
+    return { row: row!, billing: null }
   })
+  if (out.billing) await billingTransitionEffects(db, out.billing, { actorUserId: r.userId })
+  return out.row
 }
 
 export type PlatformPaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other'
@@ -275,7 +319,8 @@ export type PlatformPaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other'
 /**
  * Records money received (console "Record a payment", the setup fee on accepting an application). Against an
  * invoice: the invoice becomes paid once its payments cover the total (else it stays issued with a balance due),
- * and paying the last overdue invoice resolves reminders. Run inside the caller's platform transaction.
+ * and paying the last overdue invoice resolves reminders. Run inside the caller's platform transaction; `billing`
+ * (F22) = the lifted automatic stage, for `billingTransitionEffects` after commit.
  */
 export async function recordPlatformPayment(
   tx: DbOrTx,
@@ -315,7 +360,8 @@ export async function recordPlatformPayment(
       notes: p.notes ?? null,
     })
     .returning()
-  if (!inv) return { payment: payment!, invoice: null, paidAed: p.amountAed, balanceAed: '0.00' }
+  if (!inv)
+    return { payment: payment!, invoice: null, paidAed: p.amountAed, balanceAed: '0.00', billing: null }
   const [got] = await tx
     .select({ total: sum(platformPayments.amountAed) })
     .from(platformPayments)
@@ -330,7 +376,15 @@ export async function recordPlatformPayment(
       .returning()
     if ((await overdueInvoices(tx, p.tenantId, p.today)).length === 0) await resolveReminders(tx, p.tenantId)
   }
-  return { payment: payment!, invoice: inv!, paidAed: paid.toFixed(2), balanceAed: balance.toFixed(2) }
+  // F22: lift an automatic stage once nothing is late; the caller runs `billingTransitionEffects` after commit.
+  const billing = inv?.status === 'paid' ? await liftBillingHold(tx, p.tenantId, p.today) : null
+  return {
+    payment: payment!,
+    invoice: inv!,
+    paidAed: paid.toFixed(2),
+    balanceAed: balance.toFixed(2),
+    billing,
+  }
 }
 
 /** Money received per invoice (invoice id → AED), for "paid / balance due" columns. Tenant tx or platform role. */
@@ -448,12 +502,22 @@ export async function pauseTenant(db: DbOrTx, tenantId: string) {
   return row
 }
 
-/** Resume a paused, suspended or deleted spa: back to trial while the subscription is trialing, else active. */
+/**
+ * Resume a paused, suspended or deleted spa: back to trial while the subscription is trialing, else active. Also
+ * clears an automatic billing stage (F22): a spa still late starts a fresh grace period on the next daily run
+ * (pause the transitions for the spa to stop that).
+ */
 export async function resumeTenant(db: DbOrTx, tenantId: string) {
   const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId))
   const [row] = await db
     .update(tenants)
-    .set({ status: sub?.status === 'trialing' ? 'trial' : 'active', deletedAt: null })
+    .set({
+      status: sub?.status === 'trialing' ? 'trial' : 'active',
+      deletedAt: null,
+      billingStage: null,
+      billingOverdueSince: null,
+      billingStageAt: new Date(),
+    })
     .where(eq(tenants.id, tenantId))
     .returning()
   if (!row) throw new DomainError('Spa not found', 'not_found')

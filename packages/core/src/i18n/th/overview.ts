@@ -59,6 +59,7 @@ export const overview: Messages['overview'] = {
     sub: 'การจองมาจากที่ไหน',
     barLabel: 'การจองแยกตามช่องทาง',
     empty: 'ยังไม่มีการจองในช่วงนี้',
+    online: 'การจองออนไลน์แยกตามแหล่งที่มาของเว็บไซต์',
   },
   upNext: {
     title: 'คิวถัดไป',

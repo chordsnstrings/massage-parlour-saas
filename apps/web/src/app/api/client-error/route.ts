@@ -1,4 +1,4 @@
-import { reportError } from '@spa/core'
+import { clientIpFrom, ipRateLimitKey, reportError } from '@spa/core'
 import { z } from 'zod'
 
 const Body = z.object({
@@ -24,9 +24,7 @@ const limited = (ip: string) => {
 export async function POST(req: Request) {
   const raw = await req.text()
   if (raw.length > 12_000) return new Response(null, { status: 413 })
-  const ip =
-    req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '0'
-  if (limited(ip)) return new Response(null, { status: 429 })
+  if (limited(ipRateLimitKey(clientIpFrom(req.headers)))) return new Response(null, { status: 429 })
   const parsed = Body.safeParse(
     (() => {
       try {

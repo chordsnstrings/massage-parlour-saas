@@ -18,5 +18,13 @@ export default async function CustomDomainSite({ params, searchParams }: Props) 
   const { hostname, path } = await params
   const tenant = await resolveSiteTenant({ hostname: decodeURIComponent(hostname) })
   if (!tenant) notFound()
-  return <PublicSite tenant={tenant} path={path} lang={(await searchParams).lang} base="" />
+  return (
+    <PublicSite
+      tenant={tenant}
+      path={path}
+      lang={(await searchParams).lang}
+      base=""
+      site={{ hostname: decodeURIComponent(hostname).toLowerCase() }}
+    />
+  )
 }

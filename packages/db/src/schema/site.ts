@@ -112,6 +112,99 @@ export const pageVersions = pgTable(
   () => tenantPolicies(),
 )
 
+/**
+ * Studio editor soft lock (F29): one editor per page at a time. The editor renews it with a heartbeat; it frees
+ * itself at `expires_at` (tab closed, network gone). Others see who holds it and may take over (audited). Draft
+ * writers (editor saves, Ask AI, Claude MCP) refuse a page locked by someone else (services `site-locks.ts`).
+ */
+export const sitePageLocks = pgTable(
+  'site_page_locks',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    pageId: uuid('page_id')
+      .notNull()
+      .references(() => sitePages.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** Display name at the time the lock was taken (shown to other editors). */
+    holderName: text('holder_name').notNull(),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [unique('site_page_locks_page').on(t.pageId), ...tenantPolicies()],
+)
+
+/**
+ * F15 blog: posts written by the studio (super-admins) in Website Studio, shown by the BlogList block and at
+ * `{site}/blog/{slug}` once published (sitemap + BlogPosting JSON-LD). Body = plain text (blank line = paragraph,
+ * `## ` = sub-heading); never HTML.
+ */
+export const sitePostStatus = pgEnum('site_post_status', ['draft', 'published'])
+
+export const sitePosts = pgTable(
+  'site_posts',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    slug: text('slug').notNull(),
+    status: sitePostStatus('status').notNull().default('draft'),
+    title: jsonb('title').$type<{ en: string; ar?: string }>().notNull(),
+    excerpt: jsonb('excerpt').$type<{ en: string; ar?: string }>().notNull().default({ en: '' }),
+    body: jsonb('body').$type<{ en: string; ar?: string }>().notNull().default({ en: '' }),
+    /** Cover picture: '/files/{id}' or an https URL (also the og:image). */
+    coverImage: text('cover_image'),
+    seoTitle: jsonb('seo_title').$type<{ en: string; ar?: string }>().notNull().default({ en: '' }),
+    seoDescription: jsonb('seo_description')
+      .$type<{ en: string; ar?: string }>()
+      .notNull()
+      .default({ en: '' }),
+    /** First publish (kept on later edits; the post's date). */
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique('site_posts_slug').on(t.tenantId, t.slug),
+    index('site_posts_published').on(t.tenantId, t.status, t.publishedAt),
+    ...tenantPolicies(),
+  ],
+)
+
+/**
+ * F15 enquiry form: leads sent from the spa's website (EnquiryForm block). The spa works them in the dashboard
+ * (Inbox → Enquiries) and answers by WhatsApp click-to-send; nothing is ever emailed to the sender.
+ */
+export const siteEnquiryStatus = pgEnum('site_enquiry_status', ['new', 'replied', 'closed'])
+
+export const siteEnquiries = pgTable(
+  'site_enquiries',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    status: siteEnquiryStatus('status').notNull().default('new'),
+    name: text('name').notNull(),
+    /** E.164 with '+'. */
+    phone: text('phone').notNull(),
+    message: text('message').notNull(),
+    /** Site language the visitor wrote in (the WhatsApp reply starts in it). */
+    locale: text('locale').notNull().default('en'),
+    /** Page slug the form was on ('' = home). */
+    page: text('page').notNull().default(''),
+    /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address). */
+    ipHash: text('ip_hash'),
+    handledBy: text('handled_by').references(() => user.id, { onDelete: 'set null' }),
+    handledAt: timestamp('handled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('site_enquiries_status_created').on(t.tenantId, t.status, t.createdAt), ...tenantPolicies()],
+)
+
 /** Web Push subscriptions per signed-in user (platform-level; a user can belong to several spas). */
 export const pushSubscriptions = pgTable(
   'push_subscriptions',

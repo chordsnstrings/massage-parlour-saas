@@ -1,10 +1,24 @@
-import { AUTOMATIONS, type AutomationKey, automationOn } from '@spa/core'
+import {
+  AUTOMATION_FEATURE,
+  AUTOMATIONS,
+  type AutomationKey,
+  automationOn,
+  DEFAULT_OFF_AUTOMATIONS,
+} from '@spa/core'
 import { jobRuns, type Tx, tenants } from '@spa/db'
 import { desc, eq, gte, lt, sql } from 'drizzle-orm'
+import { entitledSql } from './entitlements'
 
-/** SQL predicate over `tenants`: the spa has this automation on (missing key = on). For cross-tenant job queries. */
-export const automationOnSql = (key: AutomationKey) =>
-  sql`coalesce((${tenants.settings} -> 'automations' ->> ${key})::boolean, true)`
+/**
+ * SQL predicate over `tenants`: the spa has this automation on (missing key = on, except default-off switches) AND its
+ * plan includes the automation's feature (`AUTOMATION_FEATURE`, PLAN §18.8 — e.g. a Standard spa never runs quiet-slot
+ * offers). For cross-tenant job queries on the PLATFORM role (plans are invisible to the app role: gated keys read as off).
+ */
+export const automationOnSql = (key: AutomationKey) => {
+  const on = sql`coalesce((${tenants.settings} -> 'automations' ->> ${key})::boolean, ${!DEFAULT_OFF_AUTOMATIONS.includes(key)}::boolean)`
+  const feature = AUTOMATION_FEATURE[key]
+  return feature ? sql`(${on} and ${entitledSql(feature)})` : on
+}
 
 /** Current switch state for every automation of the spa (missing = on). */
 export async function getAutomations(tx: Tx, tenantId: string): Promise<Record<AutomationKey, boolean>> {

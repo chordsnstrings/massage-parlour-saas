@@ -14,6 +14,14 @@ export const errors: Omit<Messages['errors'], 'domain'> = {
     ref: 'รหัสอ้างอิง {digest}',
     retry: 'ลองอีกครั้ง',
   },
+  // F24 (2026-10-10): needs native review.
+  page: {
+    notFoundTitle: 'ไม่พบหน้านี้',
+    notFoundBody: 'ไม่มีหน้าที่คุณกำลังค้นหา หรือหน้านี้ถูกย้ายไปแล้ว',
+    toDashboard: 'ไปที่แดชบอร์ดของคุณ',
+    toHome: 'กลับไปหน้าแรกของแดชบอร์ด',
+    signIn: 'เข้าสู่ระบบ',
+  },
   file: {
     empty: 'ไฟล์นี้ว่างเปล่า',
     tooLarge: 'ไฟล์ต้องมีขนาดไม่เกิน {size}',
@@ -22,6 +30,8 @@ export const errors: Omit<Messages['errors'], 'domain'> = {
     unreadable: 'ไม่สามารถอ่านรูปภาพนี้ได้ ไฟล์อาจเสียหาย',
     svg: 'ไม่รองรับไฟล์ SVG โปรดอัปโหลดไฟล์ JPG, PNG หรือ WebP',
     notImage: 'ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้ (JPG, PNG, WebP, AVIF หรือ GIF)',
+    notVideo: 'ไฟล์นี้ไม่ใช่วิดีโอที่เล่นได้ (MP4 หรือ WebM)',
+    videoTooLarge: 'วิดีโอมีขนาดได้ไม่เกิน {size}',
     uploadFailed: 'อัปโหลดไม่สำเร็จ โปรดลองอีกครั้ง',
     choose: 'โปรดเลือกรูปภาพที่จะอัปโหลด',
   },

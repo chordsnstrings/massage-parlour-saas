@@ -3,6 +3,7 @@
 // kept on error (submitted in a transition, not `action=`, so React never resets the fields), success panel after.
 import { CircleCheck, Send } from 'lucide-react'
 import { useEffect, useRef, useState, useTransition } from 'react'
+import { TURNSTILE_FIELD, useTurnstile } from '@/components/turnstile'
 import type { ActionResult } from '@/lib/action'
 import { ENQUIRY_HONEYPOT } from './enquiry-fields'
 
@@ -21,7 +22,17 @@ const FIELDS = [
   { name: 'spaName', label: 'Spa name', type: 'text', autoComplete: 'organization' },
 ] as const
 
-export function EnquiryForm({ action, maxLength }: { action: Action; maxLength: number }) {
+export function EnquiryForm({
+  action,
+  maxLength,
+  turnstileSiteKey,
+}: {
+  action: Action
+  maxLength: number
+  /** F9: Cloudflare Turnstile site key (null = no bot check). */
+  turnstileSiteKey: string | null
+}) {
+  const bot = useTurnstile(turnstileSiteKey, 'contact', 'en')
   const [state, setState] = useState<ActionResult>(null)
   const [pending, start] = useTransition()
   const [length, setLength] = useState(0)
@@ -61,7 +72,10 @@ export function EnquiryForm({ action, maxLength }: { action: Action; maxLength: 
         if (pending) return
         const fd = new FormData(e.currentTarget)
         start(async () => {
-          setState(await action(null, fd))
+          fd.set(TURNSTILE_FIELD, await bot.getToken())
+          const res = await action(null, fd)
+          if (!res?.ok) bot.reset()
+          setState(res)
         })
       }}
     >
@@ -134,6 +148,7 @@ export function EnquiryForm({ action, maxLength }: { action: Action; maxLength: 
           autoComplete="off"
         />
       </div>
+      <div ref={bot.ref} className="mt-5 empty:hidden" />
       <button
         type="submit"
         className="mkt-btn mkt-btn-primary mt-7 w-full sm:w-auto"

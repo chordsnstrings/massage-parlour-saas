@@ -12,6 +12,14 @@ export const errors = {
     ref: 'Ref {digest}',
     retry: 'Try again',
   },
+  /** F24: the dashboard's 404 / error pages (also outside the spa shell: sign-in pages, unknown spa addresses). */
+  page: {
+    notFoundTitle: 'Page not found',
+    notFoundBody: 'The page you’re looking for doesn’t exist or has moved.',
+    toDashboard: 'Go to your dashboard',
+    toHome: 'Back to the dashboard home',
+    signIn: 'Sign in',
+  },
   file: {
     empty: 'The file is empty',
     tooLarge: 'Files can be up to {size}',
@@ -20,6 +28,8 @@ export const errors = {
     unreadable: 'We couldn’t read that image — it may be damaged.',
     svg: 'SVG files aren’t supported — please upload a JPG, PNG or WebP.',
     notImage: 'That file isn’t an image we can use (JPG, PNG, WebP, AVIF or GIF).',
+    notVideo: 'That file isn’t a video we can play (MP4 or WebM).',
+    videoTooLarge: 'Videos can be up to {size}',
     uploadFailed: 'Upload failed — please try again.',
     choose: 'Choose an image to upload.',
   },

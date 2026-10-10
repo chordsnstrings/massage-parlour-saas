@@ -1,6 +1,14 @@
 import { queueSlotOffers } from '@spa/ai'
 import { aiAgentSettings, branches, outbox, platformDb, tenants, withTenant } from '@spa/db'
-import { automationOnSql, expirePackages, runMembershipRenewals } from '@spa/services'
+import {
+  autoAssignDueOutbox,
+  automationOnSql,
+  expirePackages,
+  queueBirthdayMessages,
+  queueReviewRequests,
+  queueWinbackMessages,
+  runMembershipRenewals,
+} from '@spa/services'
 import { and, eq, gte, ne } from 'drizzle-orm'
 import { log } from '../log'
 import { activeTenants, recordRun } from './runs'
@@ -15,6 +23,54 @@ export async function expireAllPackages() {
     } catch (error) {
       log('error', 'package expiry failed', { tenant: t.slug, error: String(error) })
       await recordRun(t.id, 'packages-expire', 'failed')
+    }
+  }
+}
+
+/** F15 draft kinds: automation switch, job-log name, queue function. */
+const CLIENT_DRAFT_JOBS = [
+  ['reviewRequests', 'review-requests', queueReviewRequests],
+  ['birthdayMessages', 'birthday-messages', queueBirthdayMessages],
+  ['winbackMessages', 'winback-messages', queueWinbackMessages],
+] as const
+
+/**
+ * Hourly (F15): automatic review-request, birthday and win-back WhatsApp drafts (click-to-send) for spas with that
+ * switch on (off by default) and Premium marketing (`activeTenants` → `automationOnSql`). Consent, quiet hours and
+ * caps are applied by the services. Only runs that queued something are logged.
+ */
+export async function queueClientDrafts(now = new Date()) {
+  for (const [key, job, run] of CLIENT_DRAFT_JOBS) {
+    for (const t of await activeTenants(key)) {
+      try {
+        const n = await withTenant(t.id, (tx) => run(tx, t.id, now))
+        if (n) {
+          log('info', 'client drafts queued', { tenant: t.slug, job, n })
+          await recordRun(t.id, job, 'ok', { count: n })
+        }
+      } catch (error) {
+        log('error', 'client drafts failed', { tenant: t.slug, job, error: String(error) })
+        await recordRun(t.id, job, 'failed')
+      }
+    }
+  }
+}
+
+/**
+ * Every minute (F28): spas with "Assign WhatsApp messages" on (off by default) — due, unassigned messages go
+ * round-robin to the receptionists on shift. Only runs that assigned something are logged.
+ */
+export async function autoAssignOutbox() {
+  for (const t of await activeTenants('outboxAutoAssign')) {
+    try {
+      const n = await withTenant(t.id, (tx) => autoAssignDueOutbox(tx, t.id))
+      if (n) {
+        log('info', 'outbox auto-assigned', { tenant: t.slug, n })
+        await recordRun(t.id, 'outbox-auto-assign', 'ok', { count: n })
+      }
+    } catch (error) {
+      log('error', 'outbox auto-assign failed', { tenant: t.slug, error: String(error) })
+      await recordRun(t.id, 'outbox-auto-assign', 'failed')
     }
   }
 }

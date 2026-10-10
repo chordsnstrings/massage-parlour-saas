@@ -72,7 +72,10 @@ const decode = (s: string) =>
 type ImgHit = { id: string; src: string; tagStart: number; tagEnd: number; tag: string }
 type BgHit = { id: string; src: string; urlStart: number; urlEnd: number; declEnd: number }
 
-const URL_RE = /url\(\s*(?:"([^"]*)"|'([^']*)'|((?:[^)'"\s]|&quot;|&#39;)*))\s*\)/gi
+// `&quot;` / `&#39;` need no alternatives of their own (the class already takes them: overlapping alternatives
+// backtrack exponentially); the closing `\s*` sits inside each branch so two `\s*` never meet, and an unquoted url
+// can't hold `(` (invalid CSS), so `url(url(…` can't rescan (both quadratic).
+const URL_RE = /url\(\s*(?:"([^"]*)"\s*|'([^']*)'\s*|([^()'"\s]+)\s*)?\)/gi
 const BG_PROP = /(?:^|[;{\s"'])background(?:-image)?\s*:[^;{}]*$/i
 
 /** Background `url()`s inside one CSS text (style block body or style attribute value), absolute offsets. */
@@ -82,7 +85,7 @@ function cssBackgrounds(css: string, offset: number, endChars: string, out: Omit
     if (!BG_PROP.test(before)) continue
     const raw = m[1] ?? m[2] ?? m[3] ?? ''
     const src = decode(raw.replace(/^(?:&quot;|&#39;)|(?:&quot;|&#39;)$/g, ''))
-    if (!src || /^data:font|\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i.test(src)) continue
+    if (!src || /(?:^data:font)|(?:\.(?:woff2?|ttf|otf|eot)(?:[?#]|$))/i.test(src)) continue
     let declEnd = m.index + m[0].length
     while (declEnd < css.length && !endChars.includes(css[declEnd]!)) declEnd++
     out.push({
@@ -145,11 +148,23 @@ function applyEdits(html: string, edits: Edit[]) {
 
 /** Inserts `text` right after the first of <head>, <html>, <!doctype>, or at the start. */
 function insertAtHead(html: string, text: string) {
-  for (const tag of [/<head\b[^>]*>/i, /<html\b[^>]*>/i, /<!doctype[^>]*>/i]) {
-    const m = tag.exec(html)
-    if (m) return html.slice(0, m.index + m[0].length) + text + html.slice(m.index + m[0].length)
+  for (const tag of [/<head\b/i, /<html\b/i, /<!doctype/i]) {
+    // The tag's first `>` by indexOf, not `[^>]*>` (rescans to the end from every start when a `>` is missing).
+    const at = html.search(tag)
+    const end = at < 0 ? -1 : html.indexOf('>', at)
+    if (end >= 0) return html.slice(0, end + 1) + text + html.slice(end + 1)
   }
   return text + html
+}
+
+/**
+ * F10: designs run in a shell document (`HTML_DESIGN_FRAME_PATH`) instead of `srcdoc`, so relative links would resolve
+ * against the shell's URL. A `<base>` with the hosting page's URL keeps them as before (a design's own <base> wins).
+ */
+export function withBaseHref(html: string, href: string): string {
+  if (/<base\b[^>]*\bhref\s*=/i.test(html)) return html
+  const safe = href.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return insertAtHead(html, `<base href="${safe}">`)
 }
 
 const hasViewport = (html: string) => /<meta\b[^>]*\bname\s*=\s*["']?viewport\b/i.test(html)

@@ -510,6 +510,76 @@ function servicesPage(
   ])
 }
 
+/**
+ * F15 blocks used by a few templates (map, enquiry form, Google reviews, Instagram feed, video, blog posts). Own id
+ * prefix (`{template}-x-…`), so the template's existing nodes keep their ids. Data blocks render nothing until the
+ * spa has data (reviews/Instagram also need Premium), so the defaults are safe everywhere.
+ */
+function extraBlocks(key: string) {
+  const c = builder(`${key}-x`)
+  const padding = { base: 'lg', lg: 'xl' }
+  return {
+    map: (background: Bg = 'none') =>
+      c('Map', { title: { en: '' }, intro: { en: '' }, layout: 'map', height: 'md', background, padding }),
+    enquiry: (background: Bg = 'none') =>
+      c('EnquiryForm', {
+        title: { en: 'Send us a message', ar: 'أرسل لنا رسالة' },
+        intro: {
+          en: 'Questions about a treatment, a gift or a group booking? We reply on WhatsApp.',
+          ar: 'لديك سؤال عن جلسة أو هدية أو حجز جماعي؟ نرد عليك عبر واتساب.',
+        },
+        buttonLabel: { en: 'Send message', ar: 'إرسال الرسالة' },
+        success: {
+          en: 'Thank you — we’ll reply on WhatsApp soon.',
+          ar: 'شكرًا لك — سنرد عليك عبر واتساب قريبًا.',
+        },
+        layout: 'split',
+        background,
+        padding,
+      }),
+    reviews: (background: Bg = 'none') =>
+      c('Reviews', {
+        title: { en: 'Rated on Google', ar: 'تقييماتنا على Google' },
+        intro: { en: '' },
+        count: '3',
+        minRating: '4',
+        showSummary: true,
+        background,
+        padding,
+      }),
+    instagram: (background: Bg = 'none') =>
+      c('InstagramFeed', {
+        title: { en: 'On Instagram', ar: 'على إنستغرام' },
+        intro: { en: '' },
+        count: '6',
+        showFollow: true,
+        background,
+        padding,
+      }),
+    video: (background: Bg = 'none') =>
+      c('Video', {
+        title: { en: 'Step inside', ar: 'ادخل إلى عالمنا' },
+        intro: { en: '' },
+        url: '',
+        poster: '',
+        caption: { en: '' },
+        aspect: '16:9',
+        size: 'contained',
+        background,
+        padding,
+      }),
+    blog: (background: Bg = 'none') =>
+      c('BlogList', {
+        title: { en: 'From our journal', ar: 'من مدونتنا' },
+        intro: { en: '' },
+        count: '3',
+        layout: 'grid',
+        background,
+        padding,
+      }),
+  }
+}
+
 function contactPage(
   c: Build,
   o: {
@@ -518,6 +588,8 @@ function contactPage(
     footer?: 'columns' | 'simple'
     title?: Bi
     whatsapp?: 'pill' | 'icon'
+    /** F15 blocks shown after the hours band (made with `extraBlocks`, so other node ids don't shift). */
+    extras?: Node[]
   } = {},
 ) {
   return page(SEO.contact.title, SEO.contact.description, [
@@ -534,6 +606,7 @@ function contactPage(
       buttons(c, [BOOK, WHATSAPP], { size: 'lg', stack: true }),
     ]),
     hours(c, { background: o.hoursBg ?? 'subtle' }),
+    ...(o.extras ?? []),
     faq(c, [...FAQ_VISIT, ...FAQ_BASICS.slice(0, 2)], { layout: o.faqLayout }),
     footer(c, { en: 'Massage & wellness', ar: 'مساج وعافية' }, o.footer),
     whatsapp(c, o.whatsapp),
@@ -828,7 +901,7 @@ function zen(): SiteTemplate {
         ctaBg: 'none',
         tagline: { en: 'Massage & wellness', ar: 'مساج وعافية' },
       }),
-      contact: contactPage(c),
+      contact: contactPage(c, { extras: [extraBlocks('zen').enquiry()] }),
     }),
   }
 }
@@ -886,6 +959,7 @@ function luxury(): SiteTemplate {
       },
       'hero',
     ),
+    extraBlocks('luxury').video('inverse'),
     section(c, [
       columns(c, '1-2', [
         [
@@ -985,6 +1059,7 @@ const nordicTheme: SiteTheme = {
 
 function nordic(): SiteTemplate {
   const c = builder('nordic')
+  const nx = extraBlocks('nordic')
   const home = page(SEO.home.title, SEO.home.description, [
     c(
       'Hero',
@@ -1048,7 +1123,7 @@ function nordic(): SiteTemplate {
         imageAspect: 'landscape',
         tagline: { en: 'Massage studio', ar: 'استوديو مساج' },
       }),
-      contact: contactPage(c, { faqLayout: 'columns' }),
+      contact: contactPage(c, { faqLayout: 'columns', extras: [nx.map(), nx.enquiry('subtle')] }),
     }),
   }
 }
@@ -1404,6 +1479,7 @@ function desert(): SiteTemplate {
       }),
       contact: contactPage(c, {
         title: { en: 'Ahlan — we are here for you', ar: 'أهلاً بكم، نحن هنا لخدمتكم' },
+        extras: [extraBlocks('desert').enquiry()],
       }),
     }),
   }
@@ -1534,6 +1610,7 @@ function bali(): SiteTemplate {
       text: { en: 'Pick a treatment and time in under a minute.', ar: 'اختر الجلسة والوقت في أقل من دقيقة.' },
     }),
     hours(c),
+    extraBlocks('bali').instagram(),
     footer(c, tagline),
     whatsapp(c),
   ])
@@ -1781,6 +1858,7 @@ const HOTEL_USPS: Usp[] = [
 
 function hotel(): SiteTemplate {
   const c = builder('hotel')
+  const hx = extraBlocks('hotel')
   const tagline = { en: 'Spa & wellness', ar: 'سبا وعافية' }
   const home = page(SEO.home.title, SEO.home.description, [
     c(
@@ -1845,6 +1923,7 @@ function hotel(): SiteTemplate {
     gallery(c, { title: { en: 'Moments', ar: 'لحظات' }, count: 4, layout: 'strip' }),
     team(c, { en: 'Our therapists', ar: 'معالجونا' }, { layout: 'compact' }),
     testimonials(c, { en: 'Guest reviews', ar: 'آراء النزلاء' }, QUOTES, { background: 'subtle' }),
+    hx.reviews(),
     faq(c, FAQ_BASICS),
     cta(c, {
       variant: 'split',
@@ -1853,6 +1932,7 @@ function hotel(): SiteTemplate {
       background: 'inverse',
     }),
     hours(c, { background: 'surface' }),
+    hx.blog(),
     footer(c, tagline),
     whatsapp(c, 'icon'),
   ])
@@ -1919,7 +1999,11 @@ function hotel(): SiteTemplate {
         tagline,
         whatsapp: 'icon',
       }),
-      contact: contactPage(c, { hoursBg: 'surface', whatsapp: 'icon' }),
+      contact: contactPage(c, {
+        hoursBg: 'surface',
+        whatsapp: 'icon',
+        extras: [hx.map(), hx.enquiry('subtle')],
+      }),
     }),
   }
 }

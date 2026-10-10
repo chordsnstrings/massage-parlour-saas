@@ -14,9 +14,24 @@ export const automations = {
       schedule: 'On every booking',
     },
     thankYou: {
-      name: 'Thank-you & review requests',
+      name: 'Thank-you messages',
       desc: 'Queues a thank-you message after checkout',
       schedule: 'After checkout',
+    },
+    reviewRequests: {
+      name: 'Review requests',
+      desc: 'Queues a WhatsApp review request a few hours after checkout (needs your review link below; off until you switch it on)',
+      schedule: 'Hourly',
+    },
+    birthdayMessages: {
+      name: 'Birthday messages',
+      desc: 'Queues a birthday greeting with your booking link on the client’s birthday (off until you switch it on)',
+      schedule: 'Hourly',
+    },
+    winbackMessages: {
+      name: 'Win-back messages',
+      desc: 'Queues a “we miss you” note for clients who have not visited for a while (off until you switch it on)',
+      schedule: 'Hourly',
     },
     slotFiller: {
       name: 'Quiet-slot offers',
@@ -57,6 +72,11 @@ export const automations = {
       name: 'Document expiry alerts',
       desc: 'Notifies managers 60, 30 and 7 days before staff documents expire',
       schedule: 'Daily 09:00',
+    },
+    outboxAutoAssign: {
+      name: 'Assign WhatsApp messages',
+      desc: 'Shares due WhatsApp messages round-robin between receptionists on shift now (off: everyone picks from the queue)',
+      schedule: 'Every minute',
     },
     backups: { name: 'Nightly backups', desc: 'Encrypted database backup', schedule: 'Nightly' },
     domains: {

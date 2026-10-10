@@ -5,12 +5,13 @@ import { type NavCounts, navCounts } from '@spa/services'
 import { cache } from 'react'
 import { can, type MemberContext } from '@/server/access'
 
-const NONE: NavCounts = { today: 0, pending: 0, outboxDue: 0, igUnread: 0 }
+const NONE: NavCounts = { today: 0, pending: 0, outboxDue: 0, igUnread: 0, outboxMine: 0, enquiriesNew: 0 }
 
 export const navBadgeCounts = cache(async (ctx: MemberContext): Promise<NavCounts> => {
   const calendar = can(ctx, 'calendar.view')
   const send = can(ctx, 'marketing.send')
-  if (!calendar && !send) return NONE
+  const enquiries = can(ctx, 'clients.view')
+  if (!calendar && !send && !enquiries) return NONE
   const m = ctx.member
   const canManage = can(ctx, 'calendar.manage')
   // Same own-only rule as the calendar: therapists always, other non-managers when linked to a staff profile.
@@ -23,6 +24,8 @@ export const navBadgeCounts = cache(async (ctx: MemberContext): Promise<NavCount
       calendar,
       outbox: send,
       instagram: send,
+      assigneeMemberId: send ? (m?.id ?? null) : null,
+      enquiries,
     }),
   )
 })

@@ -13,11 +13,13 @@ import {
   user,
   withTenant,
 } from '@spa/db'
+import { fileUrl } from '@spa/services'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   ArrowLeft,
   CalendarX2,
   Eraser,
+  FileDown,
   FileSignature,
   MessageCircle,
   NotebookPen,
@@ -126,6 +128,7 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
         signedAt: intakeSubmissions.signedAt,
         version: intakeSubmissions.templateVersion,
         templateName: intakeTemplates.name,
+        pdfFileId: intakeSubmissions.pdfFileId,
       })
       .from(intakeSubmissions)
       .leftJoin(intakeTemplates, eq(intakeTemplates.id, intakeSubmissions.templateId))
@@ -391,10 +394,10 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
               ) : (
                 <ul className="divide-y divide-[var(--crm-line)]" data-testid="intake-list">
                   {intakes.map((s) => (
-                    <li key={s.id}>
+                    <li key={s.id} className="flex items-center">
                       <Link
                         href={`${base}/intake/${s.id}`}
-                        className="flex min-h-12 items-center justify-between gap-4 px-[var(--crm-pad-card)] py-2.5 transition-colors hover:bg-[var(--crm-bg)]"
+                        className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-4 px-[var(--crm-pad-card)] py-2.5 transition-colors hover:bg-[var(--crm-bg)]"
                       >
                         <span className="min-w-0">
                           <span className="block truncate font-medium">
@@ -408,6 +411,18 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
                           {t('clients.intake.version', { n: s.version })}
                         </Pill>
                       </Link>
+                      {s.pdfFileId && (
+                        <a
+                          href={fileUrl(s.pdfFileId)}
+                          download
+                          className="crm-iconbtn me-2 shrink-0"
+                          aria-label={t('clients.intake.downloadPdf')}
+                          title={t('clients.intake.downloadPdf')}
+                          data-testid="intake-pdf-link"
+                        >
+                          <FileDown className="size-4" />
+                        </a>
+                      )}
                     </li>
                   ))}
                 </ul>

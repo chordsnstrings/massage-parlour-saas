@@ -4,3 +4,8 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - sharp
+# F25: CI runs `pnpm audit --prod --audit-level=high` (fails on high/critical). To accept an advisory that cannot be
+# fixed yet, add its GHSA id below with a comment: why it does not apply or what blocks the fix, and a review date.
+# Remove the entry once a fixed version is in. Example:  - GHSA-xxxx-xxxx-xxxx # reason; review 2026-12-01
+auditConfig:
+  ignoreGhsas: []

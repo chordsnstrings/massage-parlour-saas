@@ -1,13 +1,13 @@
 'use server'
 import { isGoogleMapsUrl, normalizeGoogleMapsUrl, toUaeE164 } from '@spa/core'
-import { plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { branchLimit, createBranch, DomainError, setBranchActive, updateBranch } from '@spa/services'
-import { eq } from 'drizzle-orm'
+import { withTenant } from '@spa/db'
+import { createBranch, DomainError, setBranchActive, updateBranch } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { getEntitlements } from '@/server/entitlements'
 
 const opt = z
   .string()
@@ -33,14 +33,13 @@ const branchSchema = z.object({
   cutoff: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'settings.branches.errors.time'),
 })
 
-/** The plan's branch cap (plans.limits.branches), when the spa has a plan that sets one. */
-async function planBranchLimit(tenantId: string) {
-  const [sub] = await withTenant(tenantId, (tx) =>
-    tx.select({ planId: subscriptions.planId }).from(subscriptions).limit(1),
-  )
-  if (!sub) return null
-  const plan = await platformDb().query.plans.findFirst({ where: eq(plans.id, sub.planId) })
-  return branchLimit(plan?.limits)
+/**
+ * The spa's branch rules (PLAN §18.8): the active-branch cap and whether it has `multiBranch` (Standard = one
+ * branch: adding / restoring is refused with the Premium upsell message).
+ */
+async function branchRules(tenantId: string) {
+  const e = await getEntitlements(tenantId)
+  return { limit: e.branchCap, multiBranch: e.features.includes('multiBranch') }
 }
 
 const paths = (slug: string) => {
@@ -70,9 +69,9 @@ export async function saveBranchAction(
     businessDayCutoff: d.cutoff,
   }
   try {
-    const limit = d.id ? null : await planBranchLimit(ctx.tenant.id)
+    const rules = d.id ? null : await branchRules(ctx.tenant.id)
     const row = await withTenant(ctx.tenant.id, (tx) =>
-      d.id ? updateBranch(tx, d.id, input) : createBranch(tx, ctx.tenant.id, input, { limit }),
+      d.id ? updateBranch(tx, d.id, input) : createBranch(tx, ctx.tenant.id, input, rules ?? {}),
     )
     await audit({
       tenantId: ctx.tenant.id,
@@ -100,8 +99,8 @@ export async function setBranchActiveAction(
   if (error) return fail(error)
   if (!z.uuid().safeParse(branchId).success) return fail('settings.branches.errors.notFound')
   try {
-    const limit = active ? await planBranchLimit(ctx.tenant.id) : null
-    await withTenant(ctx.tenant.id, (tx) => setBranchActive(tx, branchId, active, { limit }))
+    const rules = active ? await branchRules(ctx.tenant.id) : {}
+    await withTenant(ctx.tenant.id, (tx) => setBranchActive(tx, branchId, active, rules))
   } catch (e) {
     if (e instanceof DomainError) return failDomain(e)
     throw e

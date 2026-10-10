@@ -16,6 +16,7 @@ export type PresetCategory =
   | 'faq'
   | 'contact'
   | 'cta'
+  | 'media'
   | 'motion'
 
 export type PresetNode = { type: string; props: Record<string, unknown> }
@@ -708,6 +709,96 @@ export const SECTION_PRESETS: SectionPreset[] = [
       }),
       buttons([BOOK, WHATSAPP, CALL], { size: 'lg', stack: true }),
     ]),
+  },
+  // F15 blocks: Google reviews, Instagram feed, map, enquiry form, video, blog posts.
+  {
+    key: 'google-reviews',
+    name: 'Google reviews',
+    category: 'social-proof',
+    description: 'Live Google reviews with the average rating (Premium; hidden until reviews sync).',
+    node: n('Reviews', {
+      title: { en: 'What our guests say', ar: 'ماذا يقول ضيوفنا' },
+      intro: { en: '' },
+      count: '3',
+      minRating: '4',
+      showSummary: true,
+      ...band('subtle'),
+    }),
+  },
+  {
+    key: 'instagram-feed',
+    name: 'Instagram feed',
+    category: 'social-proof',
+    description: 'Latest Instagram posts and a follow button (Premium; hidden until there are posts).',
+    node: n('InstagramFeed', {
+      title: { en: 'On Instagram', ar: 'على إنستغرام' },
+      intro: { en: '' },
+      count: '6',
+      showFollow: true,
+      ...band(),
+    }),
+  },
+  {
+    key: 'contact-map',
+    name: 'Map and directions',
+    category: 'contact',
+    description: 'Address card with "Open in Google Maps" next to an embedded map.',
+    node: n('Map', {
+      title: { en: 'Find us', ar: 'موقعنا' },
+      intro: { en: '' },
+      layout: 'split',
+      height: 'md',
+      ...band(),
+    }),
+  },
+  {
+    key: 'contact-enquiry',
+    name: 'Enquiry form',
+    category: 'contact',
+    description: 'Name, phone and message — lands in the dashboard, answered on WhatsApp.',
+    node: n('EnquiryForm', {
+      title: { en: 'Send us a message', ar: 'أرسل لنا رسالة' },
+      intro: {
+        en: 'Questions about a treatment, a gift or a group booking? We reply on WhatsApp.',
+        ar: 'لديك سؤال عن جلسة أو هدية أو حجز جماعي؟ نرد عليك عبر واتساب.',
+      },
+      buttonLabel: { en: 'Send message', ar: 'إرسال الرسالة' },
+      success: {
+        en: 'Thank you — we’ll reply on WhatsApp soon.',
+        ar: 'شكرًا لك — سنرد عليك عبر واتساب قريبًا.',
+      },
+      layout: 'split',
+      ...band('subtle'),
+    }),
+  },
+  {
+    key: 'video-feature',
+    name: 'Video',
+    category: 'media',
+    description: 'A YouTube, Vimeo or uploaded video that loads only when played.',
+    node: n('Video', {
+      title: { en: 'Step inside', ar: 'ادخل إلى عالمنا' },
+      intro: { en: '' },
+      url: '',
+      poster: '',
+      caption: { en: '' },
+      aspect: '16:9',
+      size: 'contained',
+      ...band(),
+    }),
+  },
+  {
+    key: 'blog-latest',
+    name: 'Latest blog posts',
+    category: 'media',
+    description: 'The newest articles from the spa’s blog (hidden until one is published).',
+    node: n('BlogList', {
+      title: { en: 'From our journal', ar: 'من مدونتنا' },
+      intro: { en: '' },
+      count: '3',
+      layout: 'grid',
+      ...band(),
+    }),
   },
   // CTA ×2
   {

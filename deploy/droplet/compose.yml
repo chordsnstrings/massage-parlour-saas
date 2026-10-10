@@ -28,6 +28,7 @@ x-app-env: &app-env
   META_APP_ID: ${META_APP_ID:-}
   META_APP_SECRET: ${META_APP_SECRET:-}
   META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-}
+  META_FB_CONFIG_ID: ${META_FB_CONFIG_ID:-}
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   CF_API_TOKEN: ${CF_API_TOKEN:-}
@@ -50,6 +51,10 @@ x-app-env: &app-env
   R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
   R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  # F9 bot check (Cloudflare Turnstile) on online booking, the widget, Apply and Contact; unset = off (console flags it).
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+  TURNSTILE_CUSTOM_DOMAINS: ${TURNSTILE_CUSTOM_DOMAINS:-}
   RESEND_API_KEY: ${RESEND_API_KEY:-}
   EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>} # B1: .ae until .co is verified in Resend
   APP_RELEASE: ${APP_RELEASE:-}
@@ -74,6 +79,7 @@ services:
       SPA_OWNER_PASSWORD: ${SPA_OWNER_PASSWORD}
       SPA_PLATFORM_PASSWORD: ${SPA_PLATFORM_PASSWORD}
       SPA_APP_PASSWORD: ${SPA_APP_PASSWORD}
+      SPA_DRILL_PASSWORD: ${SPA_DRILL_PASSWORD:-}
     command: >-
       postgres -c shared_buffers=512MB -c effective_cache_size=1536MB -c work_mem=8MB
       -c maintenance_work_mem=128MB -c max_connections=60
@@ -90,6 +96,29 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 1200m
+
+  # F11: re-runs the idempotent role bootstrap (deploy/postgres/init + packages/db/sql/bootstrap.sql) on every deploy,
+  # so roles added later (spa_drill) reach existing droplets without SSH. Besides postgres itself, the only container
+  # holding the superuser password (official image, no app code). A failure doesn't block the deploy: the console's
+  # Configuration card shows the drill role as missing and /_status/runtime.txt has this service's log.
+  db-roles:
+    logging: *logging
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      POSTGRES_USER: postgres
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      SPA_OWNER_PASSWORD: ${SPA_OWNER_PASSWORD}
+      SPA_PLATFORM_PASSWORD: ${SPA_PLATFORM_PASSWORD}
+      SPA_APP_PASSWORD: ${SPA_APP_PASSWORD}
+      SPA_DRILL_PASSWORD: ${SPA_DRILL_PASSWORD:-}
+    command: ["sh", "/init/01-bootstrap.sh"]
+    volumes:
+      - ../postgres/init:/init:ro
+      - ../../packages/db/sql/bootstrap.sql:/bootstrap/bootstrap.sql:ro
+    depends_on:
+      postgres: { condition: service_healthy }
 
   migrate:
     logging: *logging
@@ -129,8 +158,9 @@ services:
     environment:
       <<: [*app-env, *db]
       DB_POOL_MAX: "4"
-      # Monthly restore drill: creates/drops a scratch database (needs CREATEDB; spa_owner has none).
-      RESTORE_DRILL_ADMIN_URL: postgres://postgres:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/postgres
+      # Monthly restore drill (F11): connects as spa_drill (CREATEDB only, created by db-roles), never the superuser.
+      # Unset → its password is derived from SPA_OWNER_PASSWORD (same formula as bootstrap.sql).
+      SPA_DRILL_PASSWORD: ${SPA_DRILL_PASSWORD:-}
       # G8: the heartbeat reports the updater's deploy state (deploy.json) to the console + alerts.
       OPS_STATUS_DIR: /ops-status
     volumes:

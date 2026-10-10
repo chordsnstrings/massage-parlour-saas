@@ -21,7 +21,7 @@ export async function refreshInsightsAction(
   _p: ActionResult,
   _fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'reports.view')
+  const { ctx, error } = await guard(slug, 'reports.view', 'ai')
   if (error) return fail(error)
   if (!aiConfigured()) return fail('overview.insights.errors.off')
   const last = await withTenant(ctx.tenant.id, (tx) => latestInsights(tx))

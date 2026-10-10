@@ -139,14 +139,21 @@ describe('sidebar badge counts', () => {
     const all = await tx((db) =>
       navCounts(db, { now, branchIds: null, calendar: true, outbox: true, instagram: true }),
     )
-    expect(all).toEqual({ today: 2, pending: 1, outboxDue: 2, igUnread: 1 })
+    expect(all).toEqual({ today: 2, pending: 1, outboxDue: 2, igUnread: 1, outboxMine: 0, enquiriesNew: 0 })
     const scoped = await tx((db) =>
       navCounts(db, { now, branchIds: [ids.branch!], calendar: true, outbox: true, instagram: false }),
     )
-    expect(scoped).toEqual({ today: 2, pending: 1, outboxDue: 1, igUnread: 0 })
+    expect(scoped).toEqual({
+      today: 2,
+      pending: 1,
+      outboxDue: 1,
+      igUnread: 0,
+      outboxMine: 0,
+      enquiriesNew: 0,
+    })
     const none = await tx((db) =>
       navCounts(db, { now, branchIds: [], calendar: true, outbox: false, instagram: false }),
     )
-    expect(none).toEqual({ today: 0, pending: 0, outboxDue: 0, igUnread: 0 })
+    expect(none).toEqual({ today: 0, pending: 0, outboxDue: 0, igUnread: 0, outboxMine: 0, enquiriesNew: 0 })
   })
 })

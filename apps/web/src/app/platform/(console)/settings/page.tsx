@@ -1,6 +1,6 @@
-import { emailDomain, resolveEmailConfig } from '@spa/core'
+import { BILLING_RULE_LIMITS, emailDomain, resolveEmailConfig, turnstileStatusText } from '@spa/core'
 import { platformDb, platformSettings } from '@spa/db'
-import { emailSettingsStatus } from '@spa/services'
+import { billingRules, emailSettingsStatus, turnstileSettingsStatus } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,14 @@ import { Checkbox, Input, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { requirePlatformAdmin } from '@/server/access'
 import { registerEmailSettings } from '@/server/email-settings'
-import { saveCompanyAction, saveEmailSettingsAction, sendTestEmailAction } from '../actions'
+import { currentTurnstile } from '@/server/turnstile'
+import {
+  saveCompanyAction,
+  saveEmailSettingsAction,
+  saveTurnstileSettingsAction,
+  sendTestEmailAction,
+} from '../actions'
+import { saveBillingRulesAction } from '../billing-actions'
 import { SuperAdminsCard } from './super-admins-card'
 
 export const metadata: Metadata = { title: 'Company' }
@@ -21,6 +28,11 @@ export default async function CompanyPage() {
   registerEmailSettings()
   const mail = await emailSettingsStatus(platformDb())
   const eff = await resolveEmailConfig()
+  const [bot, botSaved, rules] = await Promise.all([
+    currentTurnstile(),
+    turnstileSettingsStatus(platformDb()),
+    billingRules(platformDb()),
+  ])
   const v = (k: keyof NonNullable<typeof s>) => (s?.[k] as string | null | undefined) ?? ''
   const text = (name: keyof NonNullable<typeof s>, label: string, hint?: string, cls?: string) => (
     <Field label={label} name={name} hint={hint} className={cls}>
@@ -86,6 +98,121 @@ export default async function CompanyPage() {
             </ActionForm>
             <ActionForm action={sendTestEmailAction} className="border-t pt-5">
               <SubmitButton variant="secondary">Send test email to me</SubmitButton>
+            </ActionForm>
+          </CardBody>
+        </Card>
+        <Card data-testid="turnstile-settings">
+          <CardHeader
+            title="Bot check (Cloudflare Turnstile)"
+            description="Protects online booking, the booking widget, Apply and Contact. Values saved here win over TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY / TURNSTILE_CUSTOM_DOMAINS in the server env. Both keys come from the same widget (Cloudflare → Turnstile). Without both, the forms have no bot check (honeypot + rate limits only)."
+            action={
+              <Badge tone={bot.config ? 'success' : 'danger'}>
+                {bot.config ? turnstileStatusText(bot).split(' · ')[0] : turnstileStatusText(bot)}
+              </Badge>
+            }
+          />
+          <CardBody>
+            <ActionForm action={saveTurnstileSettingsAction} className="grid gap-5 sm:grid-cols-2">
+              <Field
+                label="Site key"
+                name="siteKey"
+                hint={
+                  botSaved.siteKey
+                    ? 'Public: it is sent to visitors with the widget. Blank = use env.'
+                    : bot.siteKeySource === 'env'
+                      ? 'Not set here; the server env key is used.'
+                      : 'Not set. Cloudflare → Turnstile → Add widget (Managed).'
+                }
+              >
+                <Input
+                  id="siteKey"
+                  name="siteKey"
+                  autoComplete="off"
+                  defaultValue={botSaved.siteKey ?? ''}
+                  placeholder="0x4AAAA…"
+                />
+              </Field>
+              <Field
+                label="Secret key"
+                name="secretKey"
+                hint={
+                  botSaved.hasSecret
+                    ? `Set ✓ (…${botSaved.secretLast4 ?? '????'}). Leave blank to keep it.`
+                    : bot.secretKeySource === 'env'
+                      ? 'Not set here; the server env key is used.'
+                      : 'Not set. Shown once in Cloudflare next to the site key.'
+                }
+              >
+                <Input
+                  id="secretKey"
+                  name="secretKey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="0x4AAAA…"
+                />
+              </Field>
+              <label className="flex items-start gap-2.5 text-sm sm:col-span-2">
+                <Checkbox name="customDomains" defaultChecked={bot.customDomains} className="mt-0.5" />
+                <span>
+                  Also check spa custom domains
+                  <span className="block text-muted">
+                    Add each custom domain to the widget&apos;s hostnames in Cloudflare first, or bookings
+                    there are refused. Off = custom domains have no bot check.
+                    {bot.customDomainsSource === 'env'
+                      ? ' Currently from env (TURNSTILE_CUSTOM_DOMAINS).'
+                      : ''}
+                  </span>
+                </span>
+              </label>
+              {(botSaved.siteKey || botSaved.hasSecret || botSaved.customDomains !== null) && (
+                <label className="flex items-center gap-2.5 text-sm sm:col-span-2">
+                  <Checkbox name="clearKeys" /> Remove the stored keys and switch (fall back to env)
+                </label>
+              )}
+              <div className="sm:col-span-2">
+                <SubmitButton>Save bot check</SubmitButton>
+              </div>
+            </ActionForm>
+          </CardBody>
+        </Card>
+        <Card data-testid="billing-rules">
+          <CardHeader
+            title="Billing rules"
+            description="Automatic transitions for unpaid platform invoices (worker, daily 09:05 Dubai). Overdue → grace → read-only: the spa's dashboard blocks changes except the Billing page; its website and online booking keep working. Paying lifts it at once. Pause per spa on the spa's page, or for every spa under Feature flags (billing.autoTransitions)."
+          />
+          <CardBody>
+            <ActionForm action={saveBillingRulesAction} className="grid gap-5 sm:grid-cols-3">
+              <Field
+                label="Overdue after (days past due)"
+                name="overdueAfterDays"
+                hint="1 = the day after the due date."
+              >
+                <Input
+                  id="overdueAfterDays"
+                  name="overdueAfterDays"
+                  type="number"
+                  min={BILLING_RULE_LIMITS.overdueAfterDays.min}
+                  max={BILLING_RULE_LIMITS.overdueAfterDays.max}
+                  defaultValue={rules.overdueAfterDays}
+                />
+              </Field>
+              <Field
+                label="Grace period (days)"
+                name="graceDays"
+                hint="Counted from the day the spa was first found overdue; then read-only."
+              >
+                <Input
+                  id="graceDays"
+                  name="graceDays"
+                  type="number"
+                  min={BILLING_RULE_LIMITS.graceDays.min}
+                  max={BILLING_RULE_LIMITS.graceDays.max}
+                  defaultValue={rules.graceDays}
+                />
+              </Field>
+              <div className="flex items-end">
+                <SubmitButton>Save billing rules</SubmitButton>
+              </div>
             </ActionForm>
           </CardBody>
         </Card>

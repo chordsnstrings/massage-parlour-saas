@@ -1,5 +1,5 @@
 import { getAuth } from '@spa/auth'
-import { platformDb, user } from '@spa/db'
+import { platformDb, session as sessions, user } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -9,13 +9,14 @@ import { surfaceBaseOf } from '@/lib/paths'
 export const getSession = cache(async () => {
   const h = await headers() // read first so pages are marked dynamic before any DB/env access
   const session = await getAuth().api.getSession({ headers: h })
-  // Spa applications (PLAN §18.3): a rejected applicant's login is disabled. Its sessions were revoked, but the
-  // 5-minute cookie cache may still carry one — read the row so a disabled login is signed out everywhere at once.
+  // The 5-minute cookie cache may still carry a session that was revoked (password reset signs out everywhere, F14)
+  // or whose login was disabled (a rejected spa application, PLAN §18.3): read the rows so either ends at once.
   if (session) {
     const [row] = await platformDb()
       .select({ disabledAt: user.disabledAt })
-      .from(user)
-      .where(eq(user.id, session.user.id))
+      .from(sessions)
+      .innerJoin(user, eq(user.id, sessions.userId))
+      .where(eq(sessions.id, session.session.id))
     if (!row || row.disabledAt) return null
   }
   return session

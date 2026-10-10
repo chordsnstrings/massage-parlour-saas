@@ -1,15 +1,16 @@
 import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
 import { StudioDemo } from '@/components/marketing/studio-demo'
 import { appUrl } from '@/server/origin'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = marketingMetadata('website-builder', {
   title: 'Website studio',
   description:
     'Your spa website, designed, written and built by our studio in English and Arabic — with online booking built in.',
-}
+})
 
 const css = (vars: Record<string, number>) => vars as React.CSSProperties
 

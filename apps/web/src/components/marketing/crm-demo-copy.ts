@@ -44,6 +44,18 @@ const SALE = [
   { name: 'Aromatherapy oil', aed: 95 },
 ] as const
 const TIP = 50
+/** Home showcase (PLAN §18.8): today's figures on the overview and the floating feature cards. */
+const TODAY = {
+  revenue: 6240,
+  paid: 11,
+  bookings: 14,
+  walkIns: 2,
+  cancelled: 1,
+  booked: 31,
+  hours: 40,
+  toSend: 5,
+}
+const EARNINGS = { therapist: 'Mei', commission: 180, tips: 50 }
 
 export type CrmDemoCopy = ReturnType<typeof build>
 
@@ -113,6 +125,71 @@ function build(locale: Locale) {
       totalAmount: fmt.aed(total),
       methods: [t('enums.paymentMethodKind.cash'), t('enums.paymentMethodKind.card_terminal')],
       complete: t('sales.checkout.complete', { amount: fmt.aed(total + TIP) }),
+    },
+    kpis: [
+      {
+        key: 'revenue',
+        label: t('overview.kpi.revenue'),
+        value: fmt.aed(TODAY.revenue),
+        sub: t('overview.kpi.paidSales', { count: TODAY.paid }),
+      },
+      {
+        key: 'bookings',
+        label: t('overview.kpi.bookings'),
+        value: fmt.number(TODAY.bookings),
+        sub: t('overview.kpi.bookingsSub', { walkIns: TODAY.walkIns, cancelled: TODAY.cancelled }),
+      },
+      {
+        key: 'occupancy',
+        label: t('overview.kpi.occupancy'),
+        value: fmt.percent(TODAY.booked / TODAY.hours),
+        sub: t('overview.kpi.shiftHours', { booked: TODAY.booked, total: TODAY.hours }),
+      },
+      {
+        key: 'messages',
+        label: t('overview.kpi.messages'),
+        value: fmt.number(TODAY.toSend),
+        sub: t('overview.kpi.messagesSub'),
+      },
+    ],
+    calendar: {
+      title: t('nav.calendar'),
+      today: t('overview.therapist.today'),
+      booked: { time: '14:30', service: 'Hot stone ritual', client: 'Layla', therapist: 'Mei' },
+      clashTime: '15:00',
+      clash: t('errors.domain.timeClashes'),
+    },
+    invoice: {
+      title: t('sales.invoice.title'),
+      number: 'INV-0142',
+      lines: SALE.map((l) => ({ name: l.name, amount: fmt.aed(l.aed) })),
+      vat: t('sales.checkout.vatIncluded'),
+      vatAmount: fmt.aed(Math.round((total - total / 1.05) * 100) / 100),
+      total: t('sales.checkout.total'),
+      totalAmount: fmt.aed(total),
+    },
+    whatsapp: {
+      title: t('messages.queue.title'),
+      ready: t('messages.queue.ready', { count: TODAY.toSend }),
+      kind: t('enums.messageKind.reminder'),
+      client: 'Sara',
+      due: t('messages.card.dueAt', { time: '16:00' }),
+      open: t('messages.card.open'),
+    },
+    earnings: {
+      title: t('overview.therapist.earnings.title'),
+      period: t('overview.therapist.earnings.today'),
+      therapist: EARNINGS.therapist,
+      rows: [
+        {
+          key: 'commission',
+          label: t('overview.therapist.earnings.commission'),
+          amount: fmt.aed(EARNINGS.commission),
+        },
+        { key: 'tips', label: t('overview.therapist.earnings.tips'), amount: fmt.aed(EARNINGS.tips) },
+      ],
+      total: t('overview.therapist.earnings.total'),
+      totalAmount: fmt.aed(EARNINGS.commission + EARNINGS.tips),
     },
   }
 }

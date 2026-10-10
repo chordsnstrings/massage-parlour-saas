@@ -14,6 +14,7 @@ import {
   SYSTEM_ROLES,
   toE164,
   toUaeE164,
+  trimTrailingSlashes,
   whatsappLink,
 } from '../src'
 
@@ -80,9 +81,25 @@ describe('platform roots', () => {
   })
 })
 
+describe('trimTrailingSlashes', () => {
+  it('drops only trailing slashes, linear on long runs', () => {
+    expect(trimTrailingSlashes('https://a.test//')).toBe('https://a.test')
+    expect(trimTrailingSlashes('/a/b')).toBe('/a/b')
+    expect(trimTrailingSlashes('///')).toBe('')
+    const t = Date.now()
+    expect(trimTrailingSlashes(`${'/'.repeat(200_000)}x`)).toBe(`${'/'.repeat(200_000)}x`)
+    expect(Date.now() - t).toBeLessThan(500)
+  })
+})
+
 describe('slugs', () => {
   it('normalizes and validates', () => {
     expect(normalizeSlug('  Serenity Spa & Wellness!! ')).toBe('serenity-spa-wellness')
+    expect(normalizeSlug('--Lotus--Garden--')).toBe('lotus-garden')
+    expect(normalizeSlug('-')).toBe('')
+    const t = performance.now()
+    expect(normalizeSlug(`${'-'.repeat(200_000)}x`)).toBe('x') // no quadratic hyphen trim
+    expect(performance.now() - t).toBeLessThan(500)
     expect(checkSlug('serenity-spa')).toEqual({ ok: true })
     expect(checkSlug('ab').ok).toBe(false)
     expect(checkSlug('-bad').ok).toBe(false)

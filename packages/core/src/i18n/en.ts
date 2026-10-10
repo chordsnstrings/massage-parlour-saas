@@ -8,6 +8,7 @@ import { account } from './en/account'
 import { accounts } from './en/accounts'
 import { ai } from './en/ai'
 import { analytics } from './en/analytics'
+import { assistant } from './en/assistant'
 import { audit } from './en/audit'
 import { auth } from './en/auth'
 import { automations } from './en/automations'
@@ -20,9 +21,11 @@ import { clientsMerge } from './en/clientsMerge'
 import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
+import { enquiries } from './en/enquiries'
 import { enums } from './en/enums'
 import { equipment } from './en/equipment'
 import { errors } from './en/errors'
+import { growth } from './en/growth'
 import { inbox } from './en/inbox'
 import { inventory } from './en/inventory'
 import { logo } from './en/logo'
@@ -35,8 +38,10 @@ import { overview } from './en/overview'
 import { packages } from './en/packages'
 import { payroll } from './en/payroll'
 import { permissions } from './en/permissions'
+import { plan } from './en/plan'
 import { purchases } from './en/purchases'
 import { pwa } from './en/pwa'
+import { reports } from './en/reports'
 import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
@@ -74,6 +79,7 @@ export const en = {
   services,
   equipment,
   packages,
+  growth,
   inventory,
   purchases,
   warehouse,
@@ -84,11 +90,13 @@ export const en = {
   documents,
   roles,
   inbox,
+  enquiries,
   messages,
   campaigns,
   marketing,
   ai,
   analytics,
+  reports,
   reviews,
   website,
   widget,
@@ -104,7 +112,9 @@ export const en = {
   auth,
   enums,
   permissions,
+  plan,
   notifications,
   search,
+  assistant,
   audit,
 } as const

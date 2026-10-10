@@ -228,6 +228,10 @@ export type NewBooking = {
   branchId: string
   clientId?: string | null
   source: (typeof bookings.$inferInsert)['source']
+  /** F13: online bookings only — the visitor's first-touch website source. */
+  attribution?: (typeof bookings.$inferInsert)['attribution']
+  /** F16: the partner whose poster / link the online booker came through. */
+  partnerId?: string | null
   status?: (typeof bookings.$inferInsert)['status']
   notes?: string | null
   createdBy?: string | null
@@ -335,6 +339,8 @@ export async function createBooking(tx: Tx, input: NewBooking) {
             clientId: input.clientId ?? null,
             refCode,
             source: input.source,
+            attribution: input.attribution ?? null,
+            partnerId: input.partnerId ?? null,
             status: input.status ?? 'pending',
             businessDate: businessDateOf(startsAt, cutoff),
             startsAt,

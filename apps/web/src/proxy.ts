@@ -1,5 +1,6 @@
-import { parseRoots, resolveSurface } from '@spa/core'
+import { newNonce, pageSecurityHeaders, parseRoots, resolveSurface } from '@spa/core'
 import { type NextRequest, NextResponse } from 'next/server'
+import { movedSlugTarget } from '@/server/slug-redirect'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
 /** Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — every one serves the whole platform. */
@@ -41,11 +42,14 @@ function internalPath(host: string, pathname: string): string {
   return `${prefix}${tail(pathname)}`
 }
 
+const DEV = process.env.NODE_ENV === 'development'
+
 /**
- * One Next.js app serves every surface; this only rewrites paths.
- * Pages re-check tenant and permissions themselves.
+ * One Next.js app serves every surface; this rewrites paths and sets the page security headers (F10): a fresh CSP nonce
+ * per request, passed to the render in the request's own `Content-Security-Policy` (Next reads the nonce from it and
+ * stamps its scripts) and `x-nonce` (our inline scripts, server/nonce.ts). Pages re-check tenant and permissions.
  */
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // `example.ae.` is the same host as `example.ae`: send it to the canonical spelling so sign-in, cookies and links all
   // see one host (otherwise the dotted host would show pages it can't sign in on).
   const host = req.headers.get('host') ?? ''
@@ -57,16 +61,39 @@ export function proxy(req: NextRequest) {
   }
   const url = req.nextUrl.clone()
   const originalPath = url.pathname
-  url.pathname = internalPath(req.headers.get('host') ?? '', originalPath)
+  url.pathname = internalPath(host, originalPath)
+  const proto =
+    req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
+  // F23: a renamed spa's previous address (site or dashboard) → the same path + query under its new slug.
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    const moved = await movedSlugTarget(host, originalPath, url.pathname)
+    if (moved) {
+      const res = NextResponse.redirect(`${proto}://${moved.host}${moved.pathname}${req.nextUrl.search}`, 301)
+      // Short browser cache: the address may be taken back (or, after the cooling period, by another spa).
+      res.headers.set('cache-control', 'private, max-age=300')
+      return res
+    }
+  }
+  const https = proto === 'https'
+  const nonce = newNonce()
+  const security = pageSecurityHeaders({ nonce, internalPath: url.pathname, https, dev: DEV })
   const headers = new Headers(req.headers)
   headers.set('x-original-path', `${originalPath}${url.search}`)
-  return NextResponse.rewrite(url, { request: { headers } })
+  // F24: the surface (route prefix) for <html lang/dir> and the surface-aware 404 (server/surface.ts).
+  headers.set('x-internal-path', url.pathname)
+  headers.set('x-nonce', nonce)
+  headers.set('content-security-policy', security['content-security-policy']!)
+  const res = NextResponse.rewrite(url, { request: { headers } })
+  for (const [k, v] of Object.entries(security)) res.headers.set(k, v)
+  return res
 }
 
 // /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten; so is
-// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known).
+// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known). /robots.txt and /sitemap.xml ARE
+// rewritten, so each surface answers its own (marketing, app/admin = disallow all, spa site, custom domain).
+// Paths left out here get their security headers from next.config.ts instead (keep the two lists in step).
 export const config = {
   matcher: [
-    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|robots\\.txt|sitemap\\.xml|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
+    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
   ],
 }

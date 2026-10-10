@@ -2,7 +2,7 @@
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
-fix backlog F1–F8 ✅, **F9–F32 open** (§17, remind the owner; F9–F14 built, awaiting release); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+fix backlog F1–F8 ✅ live, **F9–F32 built, awaiting release** (§17, remind the owner until live); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
 - Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
@@ -17,9 +17,11 @@ fix backlog F1–F8 ✅, **F9–F32 open** (§17, remind the owner; F9–F14 bui
 - Phase 2 screen conversion: page kit `components/crm` + `crm-kit.css`, i18n per-namespace files, enum/permission/
   DomainError translation and the per-screen checklist → `docs/design/phase2-kit.md`.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
+- Plan gating (PLAN §18.8): features `ai` / `marketing` / `multiBranch` only via `@spa/core` plans.ts + `guard(slug, perm, feature)`
+  / `FeatureGate` / `entitledSql` — never check plan codes or ids in feature code (CODEMAP "Plans + entitlements").
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** PLAN §17: F1–F8 fixed; **F9–F32 open** (owner 2026-10-09: "always remind me"; "finish everything"). While any is open,
+- **Fix backlog reminder:** PLAN §17: F1–F8 live; **F9–F32 built, awaiting release** (owner 2026-10-09: "always remind me"; "finish everything"). While any is open,
   remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
   the next one in order. Don't fix them until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
@@ -84,6 +86,7 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 ## Commands
 - `bash scripts/local-db.sh` — local Postgres 16 + roles + `spa` (dev) / `spa_test` DBs (SessionStart hook runs it, then migrate + seed).
 - `pnpm db:generate` (after schema edits in `packages/db/src/schema`) · `pnpm db:migrate` · `pnpm db:seed`
+  · `pnpm db:check-drift` (CI `guards`: fails when a schema edit has no migration)
 - `pnpm dev` — web on http://localhost:3000 (marketing), http://app.localhost:3000, http://admin.localhost:3000, http://{slug}.localhost:3000
 - `pnpm lint` (Biome) · `pnpm format` · `pnpm typecheck` · `pnpm test` (Vitest; DB tests use `spa_test`)
 - `pnpm --filter @spa/web e2e` — Playwright, own dev server on :3100 against `spa_test`. Full suite: build first and run
@@ -109,6 +112,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
   GitHub default; every push there reaches production) every 2 min and rebuilds; check
   `https://<host>/_status/deploy.json` (basic auth `ops`). Secrets without SSH: commit `deploy/droplet/secrets.env.enc`
   (see deploy/droplet/README.md). The worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
+- CSP (F10, CODEMAP "Security headers"): every page has a nonce + `'strict-dynamic'` script policy. Our own inline
+  `<script>` needs `nonce={await getNonce()}` (server/nonce.ts); a new outside script/frame/font host goes into
+  `@spa/core` security-headers.ts; never `srcdoc` for untrusted HTML (inherits the page CSP; use the design shell).
 - React effects must use block bodies (`useEffect(() => { … })`): newer Chromium returns a value from `scrollIntoView`,
   which React then calls as the cleanup.
 - Sandbox-only: Docker builds need the proxy CA (`--build-context ca=/root/.ccr` on a temp Dockerfile copy); committed Dockerfiles stay clean.

@@ -75,6 +75,8 @@ beforeAll(async () => {
           branchId: b!.id,
           clientId,
           source,
+          // F13: the first online booking came from Instagram (the other one is cancelled below).
+          attribution: source === 'online' && start === 11 * 60 ? 'instagram' : undefined,
           status: 'confirmed',
           items: [
             { serviceVariantId: v!.id, start: dubaiInstant(D, start), staffIds: [st!.id], roomId: room!.id },
@@ -210,6 +212,7 @@ describe('performance', () => {
       { source: 'online', count: 1 },
       { source: 'walk_in', count: 1 },
     ])
+    expect(p.onlineSources).toEqual([{ source: 'instagram', count: 1 }])
     expect(p.webSources).toEqual([
       { source: 'direct', sessions: 1, booked: 0 },
       { source: 'ig', sessions: 1, booked: 1 },

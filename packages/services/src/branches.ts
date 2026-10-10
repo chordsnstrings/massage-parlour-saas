@@ -1,7 +1,9 @@
 // Multi-branch management (PLAN §18 G22): add / edit / archive branches and scope members to branches.
 // Times stay Asia/Dubai (UAE only); each branch has its own business-day cutoff and opening hours.
+import { SINGLE_BRANCH_LIMIT } from '@spa/core'
 import { branches, memberBranches, members, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { featureError } from './entitlements'
 import { DomainError } from './errors'
 
 export type BranchInput = {
@@ -33,7 +35,12 @@ async function activeCount(tx: Tx) {
   return (await tx.select({ id: branches.id }).from(branches).where(eq(branches.active, true))).length
 }
 
-function checkLimit(count: number, limit: number | null | undefined) {
+/** `opts.limit` = the active-branch cap (`Entitlements.branchCap`); `multiBranch: false` = Standard's single branch. */
+type LimitOpts = { limit?: number | null; multiBranch?: boolean }
+
+function checkLimit(count: number, { limit, multiBranch = true }: LimitOpts) {
+  // PLAN §18.8: without the multiBranch feature the refusal is the Premium upsell, not a count.
+  if (!multiBranch && count >= SINGLE_BRANCH_LIMIT) throw featureError('multiBranch')
   if (limit && count >= limit)
     throw new DomainError(`Your plan includes ${limit} branches`, 'invalid', {
       key: 'settings.branches.errors.limit',
@@ -42,13 +49,8 @@ function checkLimit(count: number, limit: number | null | undefined) {
 }
 
 /** New branch; opening hours start as a copy of the main branch's (edit them under Settings → Opening hours). */
-export async function createBranch(
-  tx: Tx,
-  tenantId: string,
-  input: BranchInput,
-  opts: { limit?: number | null } = {},
-) {
-  checkLimit(await activeCount(tx), opts.limit)
+export async function createBranch(tx: Tx, tenantId: string, input: BranchInput, opts: LimitOpts = {}) {
+  checkLimit(await activeCount(tx), opts)
   const [main] = await tx
     .select({ hours: branches.openingHours })
     .from(branches)
@@ -94,12 +96,7 @@ export async function updateBranch(tx: Tx, branchId: string, input: BranchInput)
  * Archive (active=false) or restore a branch. Archived branches leave pickers, online booking and member scopes,
  * but their history (sales, bookings, ledger) stays. The main branch can't be archived.
  */
-export async function setBranchActive(
-  tx: Tx,
-  branchId: string,
-  active: boolean,
-  opts: { limit?: number | null } = {},
-) {
+export async function setBranchActive(tx: Tx, branchId: string, active: boolean, opts: LimitOpts = {}) {
   const [row] = await tx.select().from(branches).where(eq(branches.id, branchId))
   if (!row) throw notFound()
   if (row.active === active) return row
@@ -107,7 +104,7 @@ export async function setBranchActive(
     throw new DomainError("The main branch can't be archived", 'invalid', {
       key: 'settings.branches.errors.archiveMain',
     })
-  if (active) checkLimit(await activeCount(tx), opts.limit)
+  if (active) checkLimit(await activeCount(tx), opts)
   const [updated] = await tx.update(branches).set({ active }).where(eq(branches.id, branchId)).returning()
   return updated!
 }

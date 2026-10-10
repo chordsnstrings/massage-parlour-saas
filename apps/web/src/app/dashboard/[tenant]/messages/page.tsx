@@ -1,9 +1,15 @@
 import { businessDateOf, businessDayWindow } from '@spa/core'
-import { bookings, campaigns, clients, outbox, platformDb, user, withTenant } from '@spa/db'
+import { bookings, campaigns, clients, members, outbox, platformDb, user, withTenant } from '@spa/db'
 import {
+  assignableMembers,
   campaignConsentWithdrawn,
   campaignResults,
   inboxCounts,
+  isAutomationOn,
+  OUTBOX_ASSIGNEE_FILTERS,
+  type OutboxAssigneeFilter,
+  outboxAssigneeCounts,
+  outboxAssigneeWhere,
   outboxBookingLive,
   outboxLink,
 } from '@spa/services'
@@ -23,6 +29,7 @@ import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { allowedBranches } from '../calendar/data'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,13 +44,18 @@ export default async function MessagesPage({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; who?: string }>
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'marketing.send')) notFound()
   const slug = ctx.tenant.slug
-  const tabParam = (await searchParams).tab
-  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'due'
+  const sp = await searchParams
+  const tab: Tab = TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : 'due'
+  // F28: Mine / Unassigned / All (default All).
+  const who: OutboxAssigneeFilter = OUTBOX_ASSIGNEE_FILTERS.includes(sp.who as OutboxAssigneeFilter)
+    ? (sp.who as OutboxAssigneeFilter)
+    : 'all'
+  const meId = ctx.member?.id ?? null
   const seePhone = can(ctx, 'clients.phone')
   const seeCampaigns = can(ctx, 'marketing.campaigns')
   const { t, fmt } = await getI18n()
@@ -74,6 +86,7 @@ export default async function MessagesPage({
 
     const counter = async (where: ReturnType<typeof and>) =>
       (await tx.select({ n: count() }).from(outbox).where(where))[0]?.n ?? 0
+    const tabWhere = tab === 'due' ? dueWhere : tab === 'scheduled' ? scheduledWhere : sentWhere
 
     const rows = await tx
       .select({
@@ -86,13 +99,15 @@ export default async function MessagesPage({
         dueAt: outbox.dueAt,
         sentAt: outbox.sentAt,
         sentBy: outbox.sentBy,
+        assignedTo: outbox.assignedTo,
+        assignedBy: outbox.assignedBy,
         clientName: clients.name,
         bookingAt: bookings.startsAt,
       })
       .from(outbox)
       .leftJoin(clients, eq(clients.id, outbox.clientId))
       .leftJoin(bookings, eq(bookings.id, outbox.bookingId))
-      .where(tab === 'due' ? dueWhere : tab === 'scheduled' ? scheduledWhere : sentWhere)
+      .where(and(tabWhere, outboxAssigneeWhere(who, meId)))
       .orderBy(tab === 'sent' ? desc(outbox.sentAt) : asc(outbox.dueAt))
       .limit(200)
 
@@ -111,8 +126,19 @@ export default async function MessagesPage({
           .orderBy(desc(campaigns.createdAt))
           .limit(4)
       : []
+    const assignedIds = [...new Set(rows.map((r) => r.assignedTo).filter((v): v is string => Boolean(v)))]
     return {
       rows,
+      assignees: await assignableMembers(tx),
+      // Assignees who can no longer send (role changed / disabled) are still named on their messages.
+      assigned: assignedIds.length
+        ? await tx
+            .select({ memberId: members.id, userId: members.userId })
+            .from(members)
+            .where(inArray(members.id, assignedIds))
+        : [],
+      whoCounts: await outboxAssigneeCounts(tx, { memberId: meId, where: tabWhere }),
+      autoAssign: await isAutomationOn(tx, ctx.tenant.id, 'outboxAutoAssign'),
       recent,
       results: await campaignResults(
         tx,
@@ -135,8 +161,16 @@ export default async function MessagesPage({
     }
   })
 
-  // Who pressed send (names live in the platform-scoped auth table).
-  const senderIds = [...new Set(data.rows.map((r) => r.sentBy).filter((v): v is string => Boolean(v)))]
+  // Who pressed send / who may send (names live in the platform-scoped auth table).
+  const senderIds = [
+    ...new Set(
+      [
+        ...data.rows.map((r) => r.sentBy),
+        ...data.assignees.map((m) => m.userId),
+        ...data.assigned.map((m) => m.userId),
+      ].filter((v): v is string => Boolean(v)),
+    ),
+  ]
   const senders = senderIds.length
     ? await platformDb()
         .select({ id: user.id, name: user.name })
@@ -157,6 +191,8 @@ export default async function MessagesPage({
     bookingAt: r.bookingAt?.toISOString() ?? null,
     sentAt: r.sentAt?.toISOString() ?? null,
     sentBy: r.sentBy ? (senderName.get(r.sentBy) ?? null) : null,
+    assignedTo: r.assignedTo,
+    assignedAuto: r.assignedTo !== null && r.assignedBy === null,
     links: {
       web: outboxLink({ phoneE164: r.phone, text: r.text }, 'web'),
       desktop: outboxLink({ phoneE164: r.phone, text: r.text }, 'desktop'),
@@ -164,7 +200,18 @@ export default async function MessagesPage({
     },
   }))
 
+  const nameOf = (userId: string) => senderName.get(userId) ?? t('messages.clientFallback')
+  const options = data.assignees.map((m) => ({
+    id: m.memberId,
+    name: m.memberId === meId ? t('messages.assign.you', { name: nameOf(m.userId) }) : nameOf(m.userId),
+  }))
+  const names: Record<string, string> = Object.fromEntries(options.map((o) => [o.id, o.name]))
+  for (const m of data.assigned)
+    names[m.memberId] ??= t('messages.assign.inactive', { name: nameOf(m.userId) })
+
   const base = appPath(`/${slug}`)
+  // The Instagram inbox (AI replies) is part of Premium (PLAN §18.8): no card on a plan without `ai`.
+  const igInbox = await hasFeature(ctx.tenant.id, 'ai')
   const aside = (
     <>
       {seeCampaigns && (
@@ -207,21 +254,23 @@ export default async function MessagesPage({
           )}
         </Card>
       )}
-      <Card title={t('messages.aiCard.title')} sub={t('messages.aiCard.sub')}>
-        <Grid cols="g3">
-          <Stat label={t('messages.aiCard.open')} value={fmt.number(data.inbox.open)} />
-          <Stat label={t('messages.aiCard.unread')} value={fmt.number(data.inbox.unread)} />
-          <Stat label={t('messages.aiCard.flagged')} value={fmt.number(data.inbox.flagged)} />
-        </Grid>
-        <Note tone="acc" icon={<Info />} className="mt-3">
-          {t('messages.aiCard.note')}
-        </Note>
-        <Button variant="secondary" size="sm" className="mt-3" asChild>
-          <Link href={`${base}/inbox`}>
-            <InstagramGlyph /> {t('messages.aiCard.link')}
-          </Link>
-        </Button>
-      </Card>
+      {igInbox && (
+        <Card title={t('messages.aiCard.title')} sub={t('messages.aiCard.sub')}>
+          <Grid cols="g3">
+            <Stat label={t('messages.aiCard.open')} value={fmt.number(data.inbox.open)} />
+            <Stat label={t('messages.aiCard.unread')} value={fmt.number(data.inbox.unread)} />
+            <Stat label={t('messages.aiCard.flagged')} value={fmt.number(data.inbox.flagged)} />
+          </Grid>
+          <Note tone="acc" icon={<Info />} className="mt-3">
+            {t('messages.aiCard.note')}
+          </Note>
+          <Button variant="secondary" size="sm" className="mt-3" asChild>
+            <Link href={`${base}/inbox`}>
+              <InstagramGlyph /> {t('messages.aiCard.link')}
+            </Link>
+          </Button>
+        </Card>
+      )}
     </>
   )
 
@@ -240,13 +289,14 @@ export default async function MessagesPage({
         }
       />
       <OutboxQueue
-        key={tab}
+        key={`${tab}-${who}`}
         slug={slug}
         tab={tab}
         base={appPath(`/${slug}/messages`)}
         rows={rows}
         counts={data.counts}
         aside={aside}
+        assign={{ who, counts: data.whoCounts, options, names, meId, autoAssign: data.autoAssign }}
       />
     </>
   )

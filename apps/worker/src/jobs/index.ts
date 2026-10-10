@@ -1,9 +1,10 @@
 import { pruneAnalytics, rollupAnalytics } from './analytics'
 import { backupDatabase } from './backup'
+import { billingTransitions } from './billing'
 import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
-import { syncAllGbpReviews } from './gbp'
+import { syncAllGbpReviews, syncGbpSite } from './gbp'
 import { heartbeat } from './heartbeat'
 import {
   publishScheduledInstagramPosts,
@@ -20,7 +21,13 @@ import {
 } from './notifications'
 import { autoPurgeTenants, pruneOAuthClients } from './purge'
 import { restoreDrill } from './restore-drill'
-import { expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
+import {
+  autoAssignOutbox,
+  expireAllPackages,
+  queueClientDrafts,
+  renewAllMemberships,
+  runSlotFiller,
+} from './tenant-jobs'
 
 export type JobDef = {
   name: string
@@ -47,13 +54,19 @@ export const jobs: JobDef[] = [
   { name: 'instagram-reply', cron: '* * * * *', handler: () => replyToInstagramMessages() },
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
+  { name: 'gbp-site-sync', cron: '*/10 * * * *', handler: () => syncGbpSite() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
+  { name: 'outbox-auto-assign', cron: '* * * * *', handler: () => autoAssignOutbox() },
+  // F15: review-request / birthday / win-back drafts (each switch off by default; Premium marketing).
+  { name: 'client-drafts', cron: '25 * * * *', handler: () => queueClientDrafts() },
   { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
   { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
   { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },
   { name: 'notify-pending-bookings', cron: '*/15 * * * *', handler: () => notifyPendingBookings() },
   { name: 'notify-low-stock', cron: '15 9 * * *', handler: () => notifyLowStock() },
   { name: 'notify-ai-drafts', cron: '0 10 * * *', handler: () => notifyAiDrafts() },
+  // F22: overdue → grace → read-only for unpaid platform invoices (before the billing notifications).
+  { name: 'billing-transitions', cron: '5 9 * * *', handler: () => billingTransitions() },
   { name: 'notify-billing', cron: '20 9 * * *', handler: () => notifyBilling() },
   { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
   // G12: off until the owner sets the days in console Settings → Data retention.

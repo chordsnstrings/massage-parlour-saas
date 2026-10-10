@@ -82,6 +82,15 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
     priceCachedInPerM: '0.10',
   },
   {
+    // F30: dashboard "Ask AI" for spa staff (read-only tools over the spa's own data).
+    agentKey: 'staff_assistant',
+    label: 'Dashboard Ask AI (staff questions)',
+    modelId: 'seed-2-0-lite-260428',
+    priceInPerM: '0.25',
+    priceOutPerM: '2.00',
+    priceCachedInPerM: '0.05',
+  },
+  {
     agentKey: 'translator',
     label: 'Translation & alt text',
     modelId: 'seed-2-0-mini-260428',
@@ -108,21 +117,55 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
   },
 ]
 
+const ALL_FEATURES = { ai: true, marketing: true, multiBranch: true }
+
+/** Feature switches (`limits`) follow `tierLimits` in @spa/core; missing switch = included. */
+export const defaultPlans: (typeof plans.$inferInsert)[] = [
+  {
+    code: 'premium',
+    name: 'Premium',
+    description:
+      'Everything: AI receptionist and Instagram automation, marketing tools and as many branches as you need.',
+    priceAed: '36000',
+    setupFeeAed: '14000',
+    billingInterval: 'month',
+    trialDays: 14,
+    limits: { ...ALL_FEATURES },
+    sort: 1,
+  },
+  {
+    code: 'standard',
+    name: 'Standard',
+    description:
+      'The spa CRM: calendar, online booking, POS, accounts, staff, payroll, inventory and your website, for one branch.',
+    priceAed: '24000',
+    setupFeeAed: '9000',
+    billingInterval: 'month',
+    trialDays: 14,
+    limits: { ai: false, marketing: false, multiBranch: false },
+    sort: 2,
+  },
+  {
+    code: 'legacy-yearly',
+    name: 'Yearly (legacy)',
+    description:
+      'The original AED 24,000 per year plan with every feature. Kept for existing spas until renewal.',
+    priceAed: '24000',
+    billingInterval: 'year',
+    trialDays: 14,
+    limits: { branches: 3, staff: 50, customDomain: true, aiBudgetUsd: 25, ...ALL_FEATURES },
+    active: false,
+    sort: 90,
+  },
+]
+
 export async function seedPlatform(db: Db, adminEmails: string[] = []) {
   // New installs: the public contact address (= PLATFORM_CONTACT_EMAIL in @spa/core); a saved company email is kept.
   await db.insert(platformSettings).values({ id: 1, email: 'ask@spamanagement.co' }).onConflictDoNothing()
-  await db
-    .insert(plans)
-    .values({
-      code: 'standard',
-      name: 'Standard',
-      description: 'Everything included: booking, POS, accounting, site builder, analytics and AI agents.',
-      priceAed: '24000',
-      billingInterval: 'year',
-      trialDays: 14,
-      limits: { branches: 3, staff: 50, customDomain: true, aiBudgetUsd: 25 },
-    })
-    .onConflictDoNothing()
+  // PLAN §18.8 (owner 2026-10-09): Premium + Standard (setup + monthly, excl. VAT; price_aed = 12 months, paid as 12
+  // monthly invoices) and the old yearly plan as an inactive legacy plan (existing spas keep it until renewal).
+  // Existing installs get the same rows from migration 0036 (the old `standard` row is renamed `legacy-yearly`).
+  await db.insert(plans).values(defaultPlans).onConflictDoNothing()
   await db.insert(aiModelConfig).values(defaultAiModels).onConflictDoNothing()
   // G2: listed emails are promoted only once verified; existing super-admins are never demoted.
   await grantListedPlatformAdmins(db, adminEmails)

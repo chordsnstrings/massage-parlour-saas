@@ -1,4 +1,6 @@
 'use client'
+// Puck styles without outside fonts (F10 CSP); first, before Puck renders.
+import '@/components/site/editor/puck-css'
 import '@/components/site/site.css'
 import {
   ActionBar,
@@ -50,6 +52,24 @@ import { type InsightsMeta, withInsights } from '@/components/site/editor/insigh
 import { LibraryPanel } from '@/components/site/editor/library'
 import { PublishSheet } from '@/components/site/editor/publish'
 import { Segmented } from '@/components/site/editor/segmented'
+import {
+  AUTOSAVE_MS,
+  ConflictBanner,
+  clearLocalCopy,
+  type LocalCopy,
+  LockBanner,
+  type LockHolder,
+  type LockState,
+  localCopyKey,
+  RestoreBanner,
+  readLocalCopy,
+  reloadEditor,
+  type SaveState,
+  saveStatusText,
+  useEditorLock,
+  useNow,
+  writeLocalCopy,
+} from '@/components/site/editor/session'
 import { VersionsSheet } from '@/components/site/editor/versions'
 import { type AiAssist, EditorContext } from '@/components/site/fields'
 import type { SiteTheme } from '@/components/site/theme'
@@ -75,6 +95,7 @@ import {
   updateGlobalSectionAction,
 } from '../actions'
 import { aiEditApplyAction, aiEditPlanAction, aiEditUndoAction } from '../ai-edit-actions'
+import { editorLockAction, editorLockStatusAction, releaseEditorLockAction } from '../lock-actions'
 
 const usePuckStore = createUsePuck()
 
@@ -115,6 +136,27 @@ type Chrome = {
   stampRef: { readonly current: EditStamp }
   /** Takes the stamp from an action reply (`r.data.stamp`), when there is one. */
   takeStamp: <R extends ActionResult | undefined>(r: R) => R
+  /** F29: bumps on every change while there are unsaved changes (autosave debounce). */
+  tick: number
+  /** An unapplied Ask AI plan is on the canvas: no autosave, no local copy. */
+  previewing: { current: boolean }
+  lock: LockState
+  /** A save was refused by someone else's lock: view-only from now on. */
+  lockLost: (name: string) => void
+  takeOver: () => Promise<void>
+  releaseLock: () => void
+  saveState: SaveState
+  setSaveState: (s: SaveState) => void
+  savedAt: number | null
+  setSavedAt: (at: number) => void
+  localKey: string
+  /** Set before a deliberate reload / leave, so the unsaved-changes prompt stays quiet. */
+  leaving: { current: boolean }
+  /** Unsaved local copy found on open (crash / closed tab), offered back once the canvas is ready. */
+  restore: LocalCopy | null
+  setRestore: (c: LocalCopy | null) => void
+  /** Re-checks the canvas against the saved baseline (dirty flag, autosave tick, local copy). */
+  noteChange: (data: Data) => void
 }
 const ChromeContext = createContext<Chrome | null>(null)
 const useChrome = () => useContext(ChromeContext)!
@@ -139,6 +181,8 @@ type EditorProps = {
   aiEditAllowed: boolean
   sections: SavedSection[]
   pages: { slug: string; visible: boolean; published: boolean }[]
+  /** Someone else holds the editing lock (read when the page loaded): opens view-only. */
+  lockHolder: LockHolder | null
   backHref: string
   previewHref: string
   liveHref: string
@@ -173,6 +217,40 @@ export function SiteEditor(props: EditorProps) {
   }, [])
   const { slug } = props
 
+  // F29: autosave state, unsaved local copy, editing lock.
+  const [tick, setTick] = useState(0)
+  const previewing = useRef(false)
+  const leaving = useRef(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [savedAt, setSavedAt] = useState<number | null>(() =>
+    props.savedAt ? new Date(props.savedAt).getTime() : null,
+  )
+  const [restore, setRestore] = useState<LocalCopy | null>(null)
+  const localKey = localCopyKey(slug, props.pageId)
+  const localTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lockApi = useMemo(
+    () => ({
+      acquire: (takeOver?: boolean) => editorLockAction(slug, props.pageId, { takeOver }),
+      status: () => editorLockStatusAction(slug, props.pageId),
+      release: () => releaseEditorLockAction(slug, props.pageId),
+    }),
+    [slug, props.pageId],
+  )
+  const { lock, setLock, lost: lockLost } = useEditorLock(lockApi, props.lockHolder)
+  const takeOver = useCallback(async () => {
+    const r = await lockApi.acquire(true)
+    if (!r?.ok || !r.data?.held) {
+      if (r && !r.ok) toast.error(r.error)
+      return
+    }
+    // Load what they saved last; unsaved changes of this tab stay in the local copy and are offered back.
+    setLock({ kind: 'mine' })
+    reloadEditor(leaving)
+  }, [lockApi, setLock])
+  const releaseLock = useCallback(() => {
+    if (lock.kind === 'mine') void lockApi.release().catch(() => null)
+  }, [lock.kind, lockApi])
+
   const baseConfig = useMemo(() => editorConfig(props.canDesign), [props.canDesign])
   const config = useMemo(() => withInsights(baseConfig), [baseConfig])
   const globals = useMemo(
@@ -183,14 +261,34 @@ export function SiteEditor(props: EditorProps) {
     () => ({ ...props.meta, theme, locale, editing: true, globals, insights }),
     [props.meta, theme, locale, globals, insights],
   )
-  const onChange = useCallback((data: Data) => {
-    if (baseline.current !== null) setDirty(JSON.stringify(data) !== baseline.current)
-  }, [])
-  const markSaved = useCallback((json: string, next: Status) => {
-    baseline.current = json
-    setDirty(false)
-    setStatus(next)
-  }, [])
+  const onChange = useCallback(
+    (data: Data) => {
+      if (baseline.current === null) return
+      const json = JSON.stringify(data)
+      const changed = json !== baseline.current
+      setDirty(changed)
+      if (localTimer.current) clearTimeout(localTimer.current)
+      if (!changed) {
+        clearLocalCopy(localKey)
+        return
+      }
+      setTick((t) => t + 1)
+      // Unsaved local copy (crash / offline), not of an unapplied AI preview.
+      if (!previewing.current)
+        localTimer.current = setTimeout(() => writeLocalCopy(localKey, json, stampRef.current.page), 400)
+    },
+    [localKey],
+  )
+  const markSaved = useCallback(
+    (json: string, next: Status) => {
+      baseline.current = json
+      setDirty(false)
+      setStatus(next)
+      if (localTimer.current) clearTimeout(localTimer.current)
+      clearLocalCopy(localKey)
+    },
+    [localKey],
+  )
   const setBaseline = useCallback((json: string) => {
     if (baseline.current === null) baseline.current = json
   }, [])
@@ -221,6 +319,21 @@ export function SiteEditor(props: EditorProps) {
     stamp,
     stampRef,
     takeStamp,
+    tick,
+    previewing,
+    lock,
+    lockLost,
+    takeOver,
+    releaseLock,
+    saveState,
+    setSaveState,
+    savedAt,
+    setSavedAt,
+    localKey,
+    leaving,
+    restore,
+    setRestore,
+    noteChange: onChange,
   }
 
   const setSections = useCallback(
@@ -270,7 +383,9 @@ export function SiteEditor(props: EditorProps) {
 
   useEffect(() => {
     if (!dirty) return
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!leaving.current) e.preventDefault()
+    }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
@@ -293,7 +408,13 @@ export function SiteEditor(props: EditorProps) {
   )
   const closeGlobal = useCallback(() => setEditingGlobal(null), [])
 
-  const permissions = props.canDesign ? {} : { drag: false, duplicate: false, delete: false, insert: false }
+  // View only while someone else holds the editing lock (F29); the server refuses this tab's writes meanwhile anyway.
+  const permissions =
+    lock.kind === 'other'
+      ? { drag: false, duplicate: false, delete: false, insert: false, edit: false }
+      : props.canDesign
+        ? {}
+        : { drag: false, duplicate: false, delete: false, insert: false }
   return (
     <div className="site-editor fixed inset-0 z-50 bg-bg text-fg" data-crm-off>
       <EditorContext.Provider value={{ locale, device, ai }}>
@@ -389,14 +510,147 @@ function EditorHeader() {
   const dispatch = usePuckStore((s) => s.dispatch)
   const viewports = usePuckStore((s) => s.appState.ui.viewports)
   const history = usePuckStore((s) => s.history)
-  const [saving, startSave] = useTransition()
+  const now = useNow()
 
-  // Baseline for "unsaved changes" once Puck has normalised the initial data.
-  const { setBaseline, markSaved, stampRef, takeStamp } = chrome
+  const {
+    setBaseline,
+    markSaved,
+    stampRef,
+    takeStamp,
+    localKey,
+    setRestore,
+    setSaveState,
+    setSavedAt,
+    noteChange,
+  } = chrome
+  // Baseline for "unsaved changes" once Puck has normalised the initial data; then offer back an unsaved local
+  // copy from an earlier session (dropped silently when it matches what was saved).
   useEffect(() => {
-    const t = setTimeout(() => setBaseline(JSON.stringify(getPuck().appState.data)), 400)
+    const t = setTimeout(() => {
+      const puck = getPuck()
+      // An edit made before this timer (quick typist, busy machine) is already in the undo history: the baseline is
+      // the state Puck recorded first, so that edit still counts as unsaved (else it was never autosaved).
+      const first = puck.history.hasPast
+        ? (puck.history.histories[0]?.state as { data?: Data } | undefined)?.data
+        : undefined
+      const json = JSON.stringify(first ?? puck.appState.data)
+      setBaseline(json)
+      if (first) noteChange(puck.appState.data)
+      const copy = readLocalCopy(localKey)
+      if (copy && JSON.stringify(copy.data) !== json) setRestore(copy)
+      else if (copy) clearLocalCopy(localKey)
+    }, 400)
     return () => clearTimeout(t)
-  }, [getPuck, setBaseline])
+  }, [getPuck, setBaseline, localKey, setRestore, noteChange])
+
+  // F29 autosave: ~2 s after the last change, on blur / tab hidden, retried when back online. Sends the edit stamp,
+  // so it never silently overwrites a change made elsewhere (→ "Changed elsewhere": reload or keep mine).
+  const dirtyRef = useRef(chrome.dirty)
+  dirtyRef.current = chrome.dirty
+  const lockRef = useRef(chrome.lock)
+  lockRef.current = chrome.lock
+  const chromeRef = useRef(chrome)
+  chromeRef.current = chrome
+  const busy = useRef(false)
+  const again = useRef(false)
+  const persistRef = useRef<(mode: 'auto' | 'manual' | 'overwrite') => Promise<void>>(async () => {})
+  const persist = useCallback(
+    async (mode: 'auto' | 'manual' | 'overwrite') => {
+      const c = chromeRef.current
+      if (lockRef.current.kind === 'other' || c.previewing.current) return
+      if (mode === 'auto' && !dirtyRef.current) return
+      if (busy.current) {
+        again.current = true
+        return
+      }
+      const data = getPuck().appState.data
+      const json = JSON.stringify(data)
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        writeLocalCopy(localKey, json, stampRef.current.page)
+        setSaveState('offline')
+        return
+      }
+      busy.current = true
+      setSaveState('saving')
+      let r: ActionResult
+      try {
+        r = takeStamp(
+          await saveDraftAction(props.slug, props.pageId, data, stampRef.current, {
+            autosave: mode === 'auto',
+            overwrite: mode === 'overwrite',
+          }),
+        )
+      } catch {
+        // Network / server unreachable: the local copy keeps the changes until the next try.
+        busy.current = false
+        writeLocalCopy(localKey, json, stampRef.current.page)
+        setSaveState('offline')
+        return
+      }
+      busy.current = false
+      if (r?.ok) {
+        markSaved(json, 'draft')
+        setSavedAt(Date.now())
+        setSaveState('saved')
+        // Edited on while the save was running: still unsaved (re-checked against the new baseline).
+        c.noteChange(getPuck().appState.data)
+        if (mode === 'overwrite') toast.success('Your version is saved')
+        else if (mode === 'manual') toast.success('Draft saved')
+      } else if (r?.key === 'errors.domain.editedElsewhere') {
+        setSaveState('conflict')
+        if (mode !== 'auto') toast.error(r.error)
+      } else if (r?.key === 'errors.domain.pageLocked') {
+        setSaveState('idle')
+        c.lockLost(String(r.params?.name ?? 'Another editor'))
+      } else if (r) {
+        setSaveState('error')
+        toast.error(r.error)
+      }
+      if (again.current) {
+        again.current = false
+        void persistRef.current('auto')
+      }
+    },
+    [getPuck, localKey, markSaved, props.pageId, props.slug, setSaveState, setSavedAt, stampRef, takeStamp],
+  )
+  persistRef.current = persist
+  const { tick, dirty, saveState, lock } = chrome
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` restarts the debounce on every change
+  useEffect(() => {
+    if (!dirty || lock.kind === 'other' || saveState === 'conflict' || saveState === 'saving') return
+    const t = setTimeout(() => void persistRef.current('auto'), AUTOSAVE_MS)
+    return () => clearTimeout(t)
+  }, [tick, dirty, lock.kind, saveState])
+  useEffect(() => {
+    if (saveState !== 'offline') return
+    const retry = () => void persistRef.current('auto')
+    window.addEventListener('online', retry)
+    const t = setInterval(retry, 15_000)
+    return () => {
+      window.removeEventListener('online', retry)
+      clearInterval(t)
+    }
+  }, [saveState])
+  useEffect(() => {
+    const flush = () => {
+      if (dirtyRef.current) void persistRef.current('auto')
+    }
+    // Clicking into the canvas iframe also blurs the window: that's still editing, not leaving.
+    const onBlur = () =>
+      setTimeout(() => {
+        if (document.activeElement?.tagName !== 'IFRAME') flush()
+      }, 0)
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onHidden)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onHidden)
+    }
+  }, [])
+  const viewOnly = lock.kind === 'other'
 
   const setDevice = (d: Device) => {
     chrome.setDevice(d)
@@ -407,15 +661,8 @@ function EditorHeader() {
   }
 
   const current = () => getPuck().appState.data
-  const save = () =>
-    startSave(async () => {
-      const data = current()
-      const r = takeStamp(await saveDraftAction(props.slug, props.pageId, data, stampRef.current))
-      if (r?.ok) {
-        markSaved(JSON.stringify(data), 'draft')
-        toast.success('Draft saved')
-      } else if (r) toast.error(r.error)
-    })
+  const save = () => void persist('manual')
+  const saving = saveState === 'saving'
   const onRestored = (data: Record<string, unknown>) => {
     getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
     setTimeout(() => {
@@ -453,113 +700,167 @@ function EditorHeader() {
     [themeDraft, props.slug, props.pageId],
   )
 
-  const state = chrome.dirty ? 'Unsaved changes' : chrome.status === 'published' ? 'Live' : 'Draft saved'
+  const state = saveStatusText({
+    lock,
+    state: saveState,
+    dirty,
+    savedAt: chrome.savedAt,
+    published: chrome.status === 'published',
+    now,
+  })
+  const warn = dirty || saveState === 'offline' || saveState === 'conflict' || saveState === 'error'
+  const restore = chrome.restore
   return (
-    <header className="flex h-14 items-center gap-2 border-b bg-surface px-2 sm:gap-3 sm:px-4">
-      <Button variant="ghost" size="icon" asChild className="shrink-0">
-        <Link href={props.backHref} aria-label="Back to website">
-          <ArrowLeft />
-        </Link>
-      </Button>
-      <div className="min-w-0 flex-1 md:flex-none">
-        <p className="truncate text-sm font-semibold tracking-tight">{props.pageTitle}</p>
-        <p className="flex items-center gap-1.5 text-xs text-muted">
-          <span
-            className={cn(
-              'size-1.5 shrink-0 rounded-full',
-              chrome.dirty ? 'bg-warning' : chrome.status === 'published' ? 'bg-success' : 'bg-muted',
-            )}
-          />
-          <span className="truncate">{state}</span>
-        </p>
-      </div>
-      <div className="hidden flex-1 justify-center md:flex">
-        <Segmented
-          label="Viewport"
-          value={chrome.device}
-          onChange={setDevice}
-          options={DEVICES.map((d) => ({
-            value: d.key,
-            label: d.label,
-            content: <d.Icon className="size-4" strokeWidth={1.5} />,
-          }))}
-        />
-      </div>
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-        <Segmented
-          label="Content language"
-          value={chrome.locale}
-          onChange={chrome.setLocale}
-          options={[
-            { value: 'en', label: 'Edit English', content: 'EN' },
-            { value: 'ar', label: 'Edit Arabic', content: 'AR' },
-          ]}
-        />
-        <div className="hidden items-center lg:flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={history.back}
-            disabled={!history.hasPast}
-            aria-label="Undo"
-          >
-            <Undo2 />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={history.forward}
-            disabled={!history.hasFuture}
-            aria-label="Redo"
-          >
-            <Redo2 />
-          </Button>
-          <Button variant="ghost" size="icon" asChild>
-            <a href={props.previewHref} target="_blank" rel="noreferrer" aria-label="Preview draft">
-              <Eye />
-            </a>
-          </Button>
-          {props.canInsights && <InsightsToggle />}
-        </div>
-        {props.aiEditReady && (
-          <AiEditPanel
-            api={aiEditApi}
-            enabled={props.aiEditAllowed}
-            getData={() => current() as unknown as Record<string, unknown>}
-            theme={chrome.theme}
-            show={(data, theme) => {
-              getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
-              chrome.setTheme(theme)
-            }}
-            saved={() => markSaved(JSON.stringify(getPuck().appState.data), 'draft')}
-          />
-        )}
-        <VersionsSheet api={versionsApi} dirty={chrome.dirty} onRestored={onRestored} />
-        <Button
-          variant="secondary"
-          onClick={save}
-          pending={saving}
-          className="px-3 sm:px-4"
-          aria-label="Save draft"
-        >
-          {!saving && <Save />}
-          <span className="hidden sm:inline">Save draft</span>
+    <>
+      <header className="flex h-14 items-center gap-2 border-b bg-surface px-2 sm:gap-3 sm:px-4">
+        <Button variant="ghost" size="icon" asChild className="shrink-0">
+          <Link href={props.backHref} aria-label="Back to website" onClick={chrome.releaseLock}>
+            <ArrowLeft />
+          </Link>
         </Button>
-        {props.canPublish && (
-          <PublishSheet
-            pageTitle={props.pageTitle}
-            liveHref={props.liveHref}
-            context={chrome.preflight}
-            publish={async (data) =>
-              takeStamp(await publishCheckedAction(props.slug, props.pageId, data, stampRef.current))
-            }
-            onPublished={(data) => markSaved(JSON.stringify(data), 'published')}
-            alsoPublishes={alsoPublishes}
-            loadNotes={loadNotes}
+        <div className="min-w-0 flex-1 md:flex-none">
+          <p className="truncate text-sm font-semibold tracking-tight">{props.pageTitle}</p>
+          <p className="flex items-center gap-1.5 text-xs text-muted">
+            <span
+              className={cn(
+                'size-1.5 shrink-0 rounded-full',
+                viewOnly
+                  ? 'bg-muted'
+                  : warn
+                    ? 'bg-warning'
+                    : saving
+                      ? 'animate-pulse bg-accent'
+                      : chrome.status === 'published'
+                        ? 'bg-success'
+                        : 'bg-muted',
+              )}
+            />
+            <span className="truncate" data-testid="save-status" aria-live="polite">
+              {state}
+            </span>
+          </p>
+        </div>
+        <div className="hidden flex-1 justify-center md:flex">
+          <Segmented
+            label="Viewport"
+            value={chrome.device}
+            onChange={setDevice}
+            options={DEVICES.map((d) => ({
+              value: d.key,
+              label: d.label,
+              content: <d.Icon className="size-4" strokeWidth={1.5} />,
+            }))}
           />
-        )}
-      </div>
-    </header>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Segmented
+            label="Content language"
+            value={chrome.locale}
+            onChange={chrome.setLocale}
+            options={[
+              { value: 'en', label: 'Edit English', content: 'EN' },
+              { value: 'ar', label: 'Edit Arabic', content: 'AR' },
+            ]}
+          />
+          <div className="hidden items-center lg:flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={history.back}
+              disabled={!history.hasPast}
+              aria-label="Undo"
+            >
+              <Undo2 />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={history.forward}
+              disabled={!history.hasFuture}
+              aria-label="Redo"
+            >
+              <Redo2 />
+            </Button>
+            <Button variant="ghost" size="icon" asChild>
+              <a href={props.previewHref} target="_blank" rel="noreferrer" aria-label="Preview draft">
+                <Eye />
+              </a>
+            </Button>
+            {props.canInsights && <InsightsToggle />}
+          </div>
+          {props.aiEditReady && !viewOnly && (
+            <AiEditPanel
+              api={aiEditApi}
+              enabled={props.aiEditAllowed}
+              getData={() => current() as unknown as Record<string, unknown>}
+              theme={chrome.theme}
+              show={(data, theme) => {
+                getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
+                chrome.setTheme(theme)
+              }}
+              saved={() => markSaved(JSON.stringify(getPuck().appState.data), 'draft')}
+              onPreview={(on) => {
+                chrome.previewing.current = on
+              }}
+            />
+          )}
+          <VersionsSheet api={versionsApi} dirty={chrome.dirty} onRestored={onRestored} />
+          <Button
+            variant="secondary"
+            onClick={save}
+            pending={saving}
+            disabled={viewOnly}
+            className="px-3 sm:px-4"
+            aria-label="Save draft"
+          >
+            {!saving && <Save />}
+            <span className="hidden sm:inline">Save draft</span>
+          </Button>
+          {props.canPublish && !viewOnly && (
+            <PublishSheet
+              pageTitle={props.pageTitle}
+              liveHref={props.liveHref}
+              context={chrome.preflight}
+              publish={async (data) =>
+                takeStamp(await publishCheckedAction(props.slug, props.pageId, data, stampRef.current))
+              }
+              onPublished={(data) => {
+                markSaved(JSON.stringify(data), 'published')
+                setSaveState('idle')
+              }}
+              alsoPublishes={alsoPublishes}
+              loadNotes={loadNotes}
+            />
+          )}
+        </div>
+      </header>
+      {lock.kind === 'other' && (
+        <LockBanner lock={lock} onTakeOver={chrome.takeOver} onReload={() => reloadEditor(chrome.leaving)} />
+      )}
+      {!viewOnly && saveState === 'conflict' && (
+        <ConflictBanner
+          onReload={() => {
+            clearLocalCopy(localKey)
+            reloadEditor(chrome.leaving)
+          }}
+          onKeepMine={() => void persist('overwrite')}
+        />
+      )}
+      {!viewOnly && restore && saveState !== 'conflict' && (
+        <RestoreBanner
+          copy={restore}
+          stale={restore.stamp !== stampRef.current.page}
+          onRestore={() => {
+            setRestore(null)
+            getPuck().dispatch({ type: 'setData', data: restore.data as Partial<Data> })
+          }}
+          onDiscard={() => {
+            setRestore(null)
+            clearLocalCopy(localKey)
+          }}
+        />
+      )}
+    </>
   )
 }
 

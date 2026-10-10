@@ -19,8 +19,9 @@ import {
 } from './helpers'
 
 // Spa applications (PLAN §18.3, owner decision 2026-10-09): apply → waiting page (no dashboard, no 2FA) → the owner
-// accepts in the console with a setup-fee deposit by bank transfer → the applicant signs in, enrols 2FA (G23) and
-// opens the dashboard; the balance shows in the console and on the spa's billing page. Reject: login closed with
+// accepts in the console with a setup-fee deposit by bank transfer, no VAT, balance due 10 days after start (the
+// plan's invoice is issued from the start date too) → the applicant signs in, enrols 2FA (G23) and opens the
+// dashboard; the balance shows in the console and on the spa's billing page. Reject: login closed with
 // the shared reason. A pending application holds its web address.
 const tag = Date.now().toString(36)
 let planId = ''
@@ -51,7 +52,7 @@ async function adminPage(page: Page) {
   return p
 }
 
-test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the dashboard', async ({
+test('apply, wait, accepted with a deposit by bank transfer (no VAT, 10 days), then 2FA and the dashboard', async ({
   page,
 }) => {
   const slug = uniqueSlug('apply')
@@ -89,10 +90,13 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
   await test.step('the address is held while the application is pending', async () => {
     const other = await page.context().browser()!.newContext()
     const visitor = await other.newPage()
-    // Each pricing card applies for its own plan (?plan=), preselected on the form.
+    // Each pricing card applies for its own plan (?plan=<code>, PLAN §18.8), preselected on the form.
     await visitor.goto(`${base}/pricing`)
-    await expect(visitor.locator(`a[href$="/signup?plan=${planId}"]`)).toHaveCount(1)
-    await visitor.goto(`${app}/signup?plan=${planId}`)
+    await expect(visitor.locator('a[href$="/signup?plan=premium"]')).toHaveCount(1)
+    await expect(visitor.locator('a[href$="/signup?plan=standard"]')).toHaveCount(1)
+    await visitor.goto(`${app}/signup?plan=setup-${tag}`)
+    await expect(visitor.getByLabel('Plan')).toHaveValue(planId)
+    await visitor.goto(`${app}/signup?plan=${planId}`) // a plan id still works
     await expect(visitor.getByLabel('Plan')).toHaveValue(planId)
     await visitor.getByLabel('Web address').fill(slug)
     await expect(visitor.getByText('That address is taken.')).toBeVisible()
@@ -122,21 +126,37 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
     await expect(owner.getByTestId('slug-check')).toHaveText('Available')
     await owner.getByRole('button', { name: 'Accept', exact: true }).click()
     await expect(owner.getByLabel('Plan')).toHaveValue(planId)
-    await expect(owner.getByTestId('setup-fee')).toContainText('AED 5,250')
+    // VAT follows the platform settings by default (5%); this spa is invoiced without it.
+    const vat = owner.getByLabel('Charge VAT (5%)')
+    await expect(vat).toBeChecked()
+    await expect(owner.getByTestId('setup-fee')).toContainText(/AED\s5,250 \(incl\. VAT\)/)
+    await vat.uncheck()
+    await expect(owner.getByTestId('setup-fee')).toContainText(/AED\s5,000 \(no VAT\)/)
     await owner.getByLabel('Deposit', { exact: true }).check()
+    await expect(
+      owner.getByText(/more than AED 0 and less than the setup invoice total \(AED\s5,000, no VAT\)/),
+    ).toBeVisible()
+    await expect(owner.getByLabel(/10 days after start/)).toBeChecked()
     await owner.getByLabel('Deposit amount (AED)').fill('2000')
     await owner.getByLabel('Method').selectOption('bank_transfer')
     await owner.getByLabel('Reference (optional)').fill('TT-123')
     await owner.getByRole('button', { name: 'Accept and create spa' }).click()
     await expect(
-      owner.getByText(/Jasmine Spa is live · invoice SM-\d{4}-\d{4} · balance due AED 3250\.00/),
+      owner.getByText(
+        /Jasmine Spa is live · invoice SM-\d{4}-\d{4} · balance due AED 3000\.00 by .+ · 1 subscription invoice from/,
+      ),
     ).toBeVisible()
-    await expect(owner.getByTestId('setup-payment')).toContainText('deposit')
-    await expect(owner.getByTestId('setup-payment')).toContainText('Bank transfer')
-    await expect(owner.getByTestId('setup-payment')).toContainText('(ref TT-123)')
+    const summary = owner.getByTestId('setup-payment')
+    await expect(summary).toContainText('deposit')
+    await expect(summary).toContainText('Bank transfer')
+    await expect(summary).toContainText('(ref TT-123)')
+    await expect(summary).toContainText('(no VAT)')
+    await expect(summary).toContainText(/balance due AED\s3,000 by \d{1,2} \w{3} \d{4}/)
     await owner.getByRole('link', { name: 'Open the spa' }).click()
-    await expect(owner.getByText(/Due now: AED\s?3,250/)).toBeVisible()
+    // Due now = the yearly plan invoice (due on the start date, today); the setup balance is due in 10 days.
+    await expect(owner.getByText(/Due now: AED\s?25,200\. Outstanding: AED\s?28,200/)).toBeVisible()
     await expect(owner.getByText('part paid').first()).toBeVisible()
+    await expect(owner.getByRole('row', { name: /One-time setup fee/ })).toContainText('no VAT')
   })
 
   await test.step('the applicant signs in, enrols 2FA and opens the dashboard', async () => {
@@ -153,7 +173,8 @@ test('apply, wait, accepted with a deposit by bank transfer, then 2FA and the da
     await page.waitForURL(`${app}/${slug}`)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Jasmine Spa')
     await page.goto(`${app}/${slug}/billing`)
-    await expect(page.getByText(/Paid AED\s?2,000 · balance due AED\s?3,250/)).toBeVisible()
+    await expect(page.getByText(/Paid AED\s?2,000 · balance due AED\s?3,000/)).toBeVisible()
+    await expect(page.getByText('Annual payment', { exact: true })).toBeVisible()
   })
   await owner.context().close()
 })

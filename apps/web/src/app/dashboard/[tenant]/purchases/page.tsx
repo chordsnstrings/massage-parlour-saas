@@ -12,6 +12,7 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { ReceiptThumb } from '../accounts/expenses/receipt-thumb'
 import { MonthNav, monthLabel, monthRange } from '../accounts/month'
 import { VoidButton } from '../accounts/void-button'
@@ -154,7 +155,7 @@ export default async function PurchasesPage({
               action={recordPurchaseAction.bind(null, slug)}
               scanUrl={appPath(`/${slug}/purchases/scan`)}
               today={todayDubai()}
-              aiReady={aiConfigured()}
+              aiReady={aiConfigured() && (await hasFeature(ctx.tenant.id, 'ai'))}
               products={data.products.map((p) => ({
                 id: p.id,
                 name: p.name.en,

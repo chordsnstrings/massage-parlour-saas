@@ -4,24 +4,32 @@ import { withTenant } from '@spa/db'
 import {
   chooseGbpLocation,
   createPkce,
+  DomainError,
   disconnectGbp,
+  type GoogleErrorCode,
   gbpErrorMessage,
+  getGbpAccount,
   googleAuthorizeUrl,
+  googleBookingUrl,
   googleConfig,
   googleRedirectUri,
   listGbpLocations,
   newGoogleNonce,
+  publicSiteBase,
   publishGbpLocalPost,
+  removeGbpBookAction,
   resetGbpLocation,
+  setGbpBookAction,
   signGoogleState,
+  submitGbpSitemap,
   syncGbpReviews,
   withGbpToken,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
-import { guard } from '@/server/access'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
+import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
 import { requestUrls } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
@@ -108,9 +116,24 @@ export async function chooseLocationAction(
   )
 }
 
+/** Best effort before the location or connection goes: take our Book button off the old location. */
+async function dropBookButton(ctx: MemberContext) {
+  const row = await withTenant(ctx.tenant.id, (tx) => getGbpAccount(tx, ctx.tenant.id))
+  if (row?.meta?.bookAction !== 'on') return
+  try {
+    await removeGbpBookAction({
+      tenantId: ctx.tenant.id,
+      bookingUrl: googleBookingUrl(await publicSiteUrl(ctx.tenant)),
+    })
+  } catch {
+    // the change goes ahead; the link can still be removed in Google's own Business Profile editor
+  }
+}
+
 export async function changeLocationAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.manage')
   if (error) return fail(error)
+  await dropBookButton(ctx)
   const done = await withTenant(ctx.tenant.id, (tx) => resetGbpLocation(tx, ctx.tenant.id))
   if (!done) return fail('Google Business Profile is not connected.')
   await audit({
@@ -126,6 +149,7 @@ export async function changeLocationAction(slug: string): Promise<ActionResult> 
 export async function disconnectGoogleAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.manage')
   if (error) return fail(error)
+  await dropBookButton(ctx)
   const done = await disconnectGbp({ tenantId: ctx.tenant.id })
   if (!done) return fail('Google Business Profile is not connected.')
   await audit({
@@ -140,7 +164,7 @@ export async function disconnectGoogleAction(slug: string): Promise<ActionResult
 
 /** "Sync now": unanswered new reviews get AI drafts (at most 5 here; the 2-hourly job drafts the rest). */
 export async function syncGoogleReviewsAction(slug: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const tenantId = ctx.tenant.id
   const res = await syncGbpReviews({
@@ -166,7 +190,7 @@ export async function syncGoogleReviewsAction(slug: string): Promise<ActionResul
 
 /** Publishes an approved AI-studio post as a Google local post with a "Book" button. */
 export async function postToGoogleAction(slug: string, postId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   if (!z.uuid().safeParse(postId).success) return fail('Post not found.')
   const res = await publishGbpLocalPost({
@@ -185,4 +209,90 @@ export async function postToGoogleAction(slug: string, postId: string): Promise<
   })
   revalidatePath(`/dashboard/${slug}/ai/content`)
   return ok('Posted to Google')
+}
+
+/** A Google failure code as the viewer's text ("Google: {reason}"); the card shows the stored state after revalidation. */
+const googleFail = (code: GoogleErrorCode) =>
+  fail({
+    key: 'settings.integrations.google.error',
+    params: { reason: { key: `settings.integrations.google.errors.${code}` } },
+  })
+
+/**
+ * F17a: puts the Business Profile "Book" button (Place Actions APPOINTMENT link) on the chosen location, pointing at
+ * the online booking page with `?src=google`; running it again re-points it (the worker also follows domain changes).
+ */
+export async function setBookButtonAction(slug: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'ai.manage', 'marketing')
+  if (error) return fail(error)
+  const bookingUrl = googleBookingUrl(await publicSiteUrl(ctx.tenant))
+  let res: Awaited<ReturnType<typeof setGbpBookAction>>
+  try {
+    res = await setGbpBookAction({ tenantId: ctx.tenant.id, bookingUrl })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'integrations.gbp.book_button',
+    entity: 'social_account',
+    data: res.ok ? { uri: res.uri, changed: res.changed } : { error: res.code },
+  })
+  revalidate(slug)
+  return res.ok ? ok('settings.integrations.google.book.saved') : googleFail(res.code)
+}
+
+export async function removeBookButtonAction(slug: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'ai.manage', 'marketing')
+  if (error) return fail(error)
+  let res: Awaited<ReturnType<typeof removeGbpBookAction>>
+  try {
+    res = await removeGbpBookAction({
+      tenantId: ctx.tenant.id,
+      bookingUrl: googleBookingUrl(await publicSiteUrl(ctx.tenant)),
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'integrations.gbp.book_button_removed',
+    entity: 'social_account',
+    data: res.ok ? { removed: res.removed } : { error: res.code },
+  })
+  revalidate(slug)
+  return res.ok ? ok('settings.integrations.google.book.removed') : googleFail(res.code)
+}
+
+/** F17b: submits the spa site's sitemap to Search Console with the connected Google account. */
+export async function submitSitemapAction(slug: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'ai.manage', 'marketing')
+  if (error) return fail(error)
+  const base = await withTenant(ctx.tenant.id, (tx) => publicSiteBase(tx, ctx.tenant.slug))
+  let res: Awaited<ReturnType<typeof submitGbpSitemap>>
+  try {
+    res = await submitGbpSitemap({
+      tenantId: ctx.tenant.id,
+      siteBase: base.custom ? base.url : await publicSiteUrl(ctx.tenant),
+      custom: base.custom,
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'integrations.gsc.sitemap_submit',
+    entity: 'site',
+    data: res.ok ? { siteUrl: res.siteUrl } : { state: res.state, error: res.code ?? null },
+  })
+  revalidate(slug)
+  if (res.ok) return ok('settings.integrations.google.sc.submitted')
+  if (res.state === 'error') return googleFail(res.code ?? 'other')
+  return fail(`settings.integrations.google.sc.state.${res.state}`)
 }

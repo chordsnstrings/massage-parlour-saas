@@ -68,7 +68,7 @@ async function seedGoogle(slug: string) {
 test('Google Business Profile: not-configured card, synced reviews, filters, approve and a failed post', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
 
   await page.goto(`${app}/${slug}/settings/integrations`)
   const card = page.getByTestId('gbp-card')

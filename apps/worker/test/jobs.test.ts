@@ -12,8 +12,11 @@ describe('job schedule', () => {
       'notify-low-stock': '15 9 * * *',
       'notify-ai-drafts': '0 10 * * *',
       'notify-billing': '20 9 * * *',
+      'billing-transitions': '5 9 * * *',
       'notifications-prune': '50 4 * * *',
       'oauth-clients-prune': '35 * * * *',
+      'outbox-auto-assign': '* * * * *',
+      'client-drafts': '25 * * * *',
     })
     expect(new Set(jobs.map((j) => j.name)).size).toBe(jobs.length)
   })

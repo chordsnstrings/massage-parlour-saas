@@ -1,4 +1,4 @@
-import { enumLabel } from '@spa/core/i18n'
+import { bookingSourceLabel } from '@spa/core/i18n'
 import { withTenant } from '@spa/db'
 import { bookingDetail } from '@spa/services'
 import { ArrowLeft } from 'lucide-react'
@@ -66,7 +66,11 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
     [t('bookings.detail.branch'), data.branchName],
     [t('bookings.detail.date'), fmt.weekdayDate(data.startsAt)],
     [t('bookings.detail.time'), `${fmt.time(data.startsAt)}–${fmt.time(data.endsAt)}`],
-    [t('bookings.detail.source'), enumLabel(t, 'bookingSource', data.source)],
+    [
+      t('bookings.detail.source'),
+      // F16: partner names are typed (never translated).
+      [bookingSourceLabel(t, data.source, data.attribution), data.partnerName].filter(Boolean).join(' · '),
+    ],
     [t('bookings.detail.total'), fmt.aed(total)],
     ...(data.notes ? [[t('bookings.detail.notes'), data.notes] as [string, string]] : []),
     ...(data.cancelReason && data.status === 'cancelled'

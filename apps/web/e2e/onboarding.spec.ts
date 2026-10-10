@@ -1,4 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
+import { plans } from '@spa/db'
+import { eq } from 'drizzle-orm'
 import {
   admin,
   app,
@@ -9,6 +11,7 @@ import {
   enrolUrl,
   signInPlatformAdmin,
   site,
+  testDb,
 } from './helpers'
 
 const slug = `serenity-${Date.now().toString(36)}`
@@ -26,10 +29,14 @@ async function screenshotAt(page: Page, name: string) {
 let inviteLink = ''
 
 test('owner signs up, gets a live site, configures and invites', async ({ page }) => {
-  await test.step('marketing shows the live price', async () => {
+  await test.step('marketing shows the live prices', async () => {
     await page.goto(base)
     await expect(page.getByRole('heading', { name: 'More bookings. Less work.', exact: true })).toBeVisible()
-    await expect(page.getByText(/AED\s?24,000/).first()).toBeVisible()
+    await expect(page.getByText(/AED\s?3,000(\.00)? \/ month/)).toBeVisible() // home: both plans, monthly + setup
+    // PLAN §18.8: setup + monthly per plan, on the pricing page.
+    await page.goto(`${base}/pricing`)
+    await expect(page.getByTestId('plan-card-premium')).toContainText(/AED\s?14,000/)
+    await expect(page.getByTestId('plan-card-standard')).toContainText(/AED\s?9,000/)
   })
 
   await test.step('an accepted application creates the spa and its subdomain', async () => {
@@ -111,11 +118,14 @@ test('super-admin changes the plan price and the marketing page follows', async 
   await screenshotAt(page, 'platform-overview')
 
   await page.goto(`${admin}/plans`)
+  // Premium (first card): the stored price covers 12 months; the pricing page shows it per month.
   await page.getByRole('button', { name: 'Edit' }).first().click()
-  await page.getByLabel('Price (AED)').fill('26000')
+  await page.getByLabel('Price per 12 months (AED)').fill('37200')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Plan saved')).toBeVisible()
 
-  await page.goto(base)
-  await expect(page.getByText(/AED\s?26,000/).first()).toBeVisible()
+  await page.goto(`${base}/pricing`)
+  await expect(page.getByTestId('plan-card-premium')).toContainText(/AED\s?3,100\s?\/ month/)
+  // Back to the seeded price for the specs that follow.
+  await testDb().update(plans).set({ priceAed: '36000' }).where(eq(plans.code, 'premium'))
 })

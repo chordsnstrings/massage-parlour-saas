@@ -87,6 +87,11 @@ const T = {
     ar: 'تم حجز هذا الوقت للتو — إليك أحدث الأوقات المتاحة.',
   },
   error: { en: 'Something went wrong. Please try again.', ar: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.' },
+  /** F9: the Turnstile bot check failed or timed out. */
+  botCheck: {
+    en: "We couldn't confirm you're not a robot. Please try again, or contact us on WhatsApp.",
+    ar: 'تعذّر التحقق من أنك لست روبوتاً. يرجى المحاولة مرة أخرى أو التواصل معنا عبر واتساب.',
+  },
   langSwitch: { en: 'العربية', ar: 'English' },
 } as const satisfies Record<string, Record<Locale, string>>
 

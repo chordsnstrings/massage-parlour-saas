@@ -156,6 +156,32 @@ describe('sanitising a site into a template', () => {
     expect(buttons.map((b) => b.target)).toEqual(['', 'services'])
   })
 
+  it("drops a Video block's own link and poster (F15)", () => {
+    const pages = [
+      {
+        slug: '',
+        title: { en: 'Home' },
+        data: {
+          root: { props: {} },
+          content: [
+            {
+              type: 'Video',
+              props: {
+                id: 'v1',
+                url: 'https://youtu.be/dQw4w9WgXcQ',
+                poster: '/files/x',
+                title: { en: 'Tour' },
+              },
+            },
+          ],
+        },
+      },
+    ]
+    const [home] = sanitizeTemplatePages(pages, { key: 'vid', tenantName: 'Calm Spa' })
+    const props = (home!.data as { content: { props: Record<string, unknown> }[] }).content[0]!.props
+    expect(props).toMatchObject({ url: '', poster: '', title: { en: 'Tour' } })
+  })
+
   it('replaces client reviews, strips contact details and only rewrites whole words of copy', () => {
     const data = {
       root: { props: { title: { en: 'Hero' } } },

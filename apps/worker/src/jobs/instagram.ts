@@ -1,5 +1,6 @@
 import { respondToInstagram } from '@spa/ai'
 import {
+  checkFacebookPageTokens,
   claimDueReplies,
   failReply,
   finishReply,
@@ -27,11 +28,17 @@ export async function publishScheduledInstagramPosts() {
   return r
 }
 
-/** Daily: refresh long-lived Instagram tokens older than 7 days; expired ones ask the spa to reconnect. */
+/**
+ * Daily: refresh long-lived Instagram tokens older than 7 days; expired ones ask the spa to reconnect. Also checks
+ * connected Facebook Page tokens (F19, debug_token): stores Meta's data-access expiry for the card's warning and
+ * marks invalid ones expired (Page tokens can only be renewed by signing in again).
+ */
 export async function refreshInstagramAccessTokens() {
   const r = await refreshInstagramTokens()
   if (r.refreshed || r.expired || r.failed) console.info('instagram-token-refresh', r)
-  return r
+  const fb = await checkFacebookPageTokens()
+  if (fb.expired || fb.failed) console.info('facebook-token-check', fb)
+  return { ...r, facebook: fb }
 }
 
 /**
@@ -43,8 +50,13 @@ export async function refreshInstagramAccessTokens() {
 export async function replyToInstagramMessages(now = new Date()) {
   let answered = 0
   let failed = 0
-  for (const tenantId of await tenantsWithDueReplies(now)) {
+  for (const { tenantId, ai } of await tenantsWithDueReplies(now)) {
     for (const { item, attempts } of await claimDueReplies(tenantId, now)) {
+      // PLAN §18.8: no AI in the spa's plan (Standard) → no AI turn; the row is dropped, the message stays unread.
+      if (!ai) {
+        await finishReply(item)
+        continue
+      }
       try {
         if (!(await inboundAnswered(item))) await respondToInstagram(item)
         await finishReply(item)

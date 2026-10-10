@@ -1,12 +1,15 @@
 'use server'
+import { draftPrivateReply } from '@spa/ai'
 import { conversationMessages, conversations, withTenant } from '@spa/db'
 import {
+  bookingLink,
   claimDraft,
   DomainError,
   deliverReply,
   discardDraft,
   linkConversationClient,
   markConversationRead,
+  sendPrivateReply,
   setConversationFlag,
   setConversationMode,
 } from '@spa/services'
@@ -15,7 +18,9 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
+import { fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
+import { publicSiteUrl } from '@/server/sites'
 
 const uuid = z.uuid()
 const Text = z.string().trim().min(1, 'inbox.validation.writeFirst').max(2000)
@@ -32,7 +37,7 @@ export async function sendReplyAction(
   conversationId: string,
   text: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z.object({ conversationId: uuid, text: Text }).safeParse({ conversationId, text })
   if (!parsed.success) return fromZod(parsed.error)
@@ -69,7 +74,7 @@ export async function approveDraftAction(
   messageId: string,
   text: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z.object({ messageId: uuid, text: Text }).safeParse({ messageId, text })
   if (!parsed.success) return fromZod(parsed.error)
@@ -100,7 +105,7 @@ export async function approveDraftAction(
 }
 
 export async function discardDraftAction(slug: string, messageId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
   if (!parsed.success) return fail('inbox.results.unknownDraft')
@@ -118,7 +123,7 @@ export async function discardDraftAction(slug: string, messageId: string): Promi
 
 /** Re-sends an outbound message that wasn't delivered. */
 export async function retryMessageAction(slug: string, messageId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
   if (!parsed.success) return fail('inbox.results.unknownMessage')
@@ -128,7 +133,8 @@ export async function retryMessageAction(slug: string, messageId: string): Promi
       .from(conversationMessages)
       .where(and(eq(conversationMessages.id, parsed.data), eq(conversationMessages.direction, 'out'))),
   )
-  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer')
+  // A private reply is never re-sent from here (it would go out as a public comment reply): use the private box.
+  if (!msg?.error || msg.sender === 'ai_draft' || msg.sender === 'customer' || msg.kind === 'private_reply')
     return fail('inbox.results.nothingToResend')
   let r: Awaited<ReturnType<typeof deliverReply>>
   try {
@@ -163,7 +169,7 @@ export async function setModeAction(
   conversationId: string,
   mode: 'bot' | 'human' | 'closed',
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z
     .object({ conversationId: uuid, mode: z.enum(['bot', 'human', 'closed']) })
@@ -193,7 +199,7 @@ export async function setFlagAction(
   conversationId: string,
   flagged: boolean,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z
     .object({ conversationId: uuid, flagged: z.boolean() })
@@ -215,7 +221,7 @@ export async function setFlagAction(
 
 /** Opening a thread clears its unread dot (read receipts aren't audited). */
 export async function markReadAction(slug: string, conversationId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(conversationId)
   if (!parsed.success) return fail('inbox.results.unknownConversation')
@@ -234,7 +240,7 @@ export async function linkClientAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   if (!can(ctx, 'clients.manage')) return fail('errors.forbidden')
   const id = uuid.safeParse(conversationId)
@@ -263,4 +269,80 @@ export async function linkClientAction(
   })
   revalidatePath(inboxPath(slug))
   return ok('inbox.results.clientLinked')
+}
+
+/**
+ * F18: the comment's one private reply (Instagram Private Replies API, within 7 days). Always typed or approved by
+ * staff — the AI only fills the box (`draftPrivateReplyAction`). Failures keep nothing, so the text stays in the box.
+ */
+export async function sendPrivateReplyAction(
+  slug: string,
+  conversationId: string,
+  text: string,
+  aiDrafted = false,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
+  if (error) return fail(error)
+  const parsed = z
+    .object({ conversationId: uuid, text: Text, aiDrafted: z.boolean() })
+    .safeParse({ conversationId, text, aiDrafted })
+  if (!parsed.success) return fromZod(parsed.error)
+  let r: Awaited<ReturnType<typeof sendPrivateReply>>
+  try {
+    r = await sendPrivateReply(ctx.tenant.id, parsed.data.conversationId, parsed.data.text)
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'inbox.private_reply',
+    entity: 'conversation',
+    entityId: parsed.data.conversationId,
+    data: { delivered: r.ok, aiDrafted: parsed.data.aiDrafted },
+  })
+  revalidatePath(inboxPath(slug))
+  return r.ok ? ok('inbox.private.sent') : fail({ key: 'inbox.private.notSent', params: { reason: r.error } })
+}
+
+/** AI draft of the private reply (gateway: budget + kill switch apply). Returns the text; nothing is sent or stored. */
+export async function draftPrivateReplyAction(slug: string, conversationId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
+  if (error) return fail(error)
+  const id = uuid.safeParse(conversationId)
+  if (!id.success) return fail('inbox.results.unknownConversation')
+  const [comment] = await withTenant(ctx.tenant.id, (tx) =>
+    tx
+      .select({ text: conversationMessages.text, channel: conversations.channel })
+      .from(conversationMessages)
+      .innerJoin(conversations, eq(conversations.id, conversationMessages.conversationId))
+      .where(and(eq(conversationMessages.conversationId, id.data), eq(conversationMessages.direction, 'in')))
+      .orderBy(conversationMessages.createdAt)
+      .limit(1),
+  )
+  if (comment?.channel !== 'instagram_comment') return fail('inbox.results.unknownConversation')
+  let draft: Awaited<ReturnType<typeof draftPrivateReply>>
+  try {
+    draft = await draftPrivateReply({
+      tenantId: ctx.tenant.id,
+      comment: comment.text,
+      bookingUrl: bookingLink(await publicSiteUrl(ctx.tenant), 'ig'),
+      client: fixtureClient(slug),
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return fail(
+      /budget/i.test(msg) ? 'ai.errBudget' : /disabled/i.test(msg) ? 'ai.errDisabled' : 'ai.errBusy',
+    )
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'inbox.private_reply.drafted',
+    entity: 'conversation',
+    entityId: id.data,
+    data: { inappropriate: draft.inappropriate },
+  })
+  return ok('inbox.private.drafted', { text: draft.reply, inappropriate: draft.inappropriate })
 }

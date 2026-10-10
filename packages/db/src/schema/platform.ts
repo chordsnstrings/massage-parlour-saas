@@ -14,6 +14,7 @@ import {
   pgPolicy,
   pgSequence,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -34,6 +35,8 @@ export const tenantStatus = pgEnum('tenant_status', [
   'cancelled',
 ])
 export const billingInterval = pgEnum('billing_interval', ['year', 'month'])
+/** Super-admin feature-tier override per spa (PLAN §18.8; keys = FEATURE_TIERS in @spa/core). */
+export const featureTier = pgEnum('feature_tier', ['premium', 'standard'])
 export const subscriptionStatus = pgEnum('subscription_status', [
   'trialing',
   'active',
@@ -45,6 +48,11 @@ export const invoiceStatus = pgEnum('invoice_status', ['draft', 'issued', 'paid'
 export const platformInvoiceKind = pgEnum('platform_invoice_kind', ['plan', 'setup', 'other'])
 export const paymentMethod = pgEnum('platform_payment_method', ['cash', 'bank_transfer', 'other', 'card'])
 export const domainKind = pgEnum('domain_kind', ['subdomain', 'custom'])
+/**
+ * F22 automatic billing stage of a spa (PLAN §17, rules in @spa/core billing-stages.ts): NULL = nothing late;
+ * overdue (first day) → grace (until the read-only date) → read_only (tenant status read_only, set by the job).
+ */
+export const billingStage = pgEnum('billing_stage', ['overdue', 'grace', 'read_only'])
 export const domainStatus = pgEnum('domain_status', ['pending', 'verifying', 'active', 'failed'])
 
 export const platformAdmins = pgTable(
@@ -92,12 +100,27 @@ export const platformSettings = pgTable(
     resendApiKeyLast4: text('resend_api_key_last4'),
     emailFrom: text('email_from'),
     /**
+     * F9 bot check (Cloudflare Turnstile) set in the console; each wins over TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY /
+     * TURNSTILE_CUSTOM_DOMAINS env. Secret AES-GCM encrypted when an encryption key exists (like the Resend key).
+     * `turnstile_custom_domains` null = env decides.
+     */
+    turnstileSiteKey: text('turnstile_site_key'),
+    turnstileSecretEnc: text('turnstile_secret_enc'),
+    turnstileSecretLast4: text('turnstile_secret_last4'),
+    turnstileCustomDomains: boolean('turnstile_custom_domains'),
+    /**
      * G12: days after a soft delete when the worker permanently purges a spa (`tenant-auto-purge`).
      * Null = off (default); the console only accepts 30 or more.
      */
     autoPurgeDays: integer('auto_purge_days'),
     /** G18 global AI kill switch: false = no AI call runs for any spa. */
     aiEnabled: boolean('ai_enabled').notNull().default(true),
+    /**
+     * F22 billing transitions: an unpaid invoice is late this many days after its due date (1 = the day after);
+     * the dashboard becomes read-only `billing_grace_days` after the spa was first found late.
+     */
+    billingOverdueAfterDays: integer('billing_overdue_after_days').notNull().default(1),
+    billingGraceDays: integer('billing_grace_days').notNull().default(7),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -141,6 +164,18 @@ export type TenantSettings = {
   onlineBooking?: { autoConfirmReturning?: boolean; autoConfirmAfterVisits?: number }
   /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
   metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
+  /**
+   * F15 automatic client message drafts (review requests, birthdays, win-back; switches in `automations`):
+   * quiet hours (Dubai HH:MM — drafts never fall due inside them), the review link and the timing. Read with core
+   * `clientDraftSettings()` (defaults for missing values).
+   */
+  clientDrafts?: {
+    quietStart?: string
+    quietEnd?: string
+    reviewLink?: string
+    reviewDelayHours?: number
+    winbackDays?: number
+  }
 }
 
 export const tenants = pgTable(
@@ -158,12 +193,24 @@ export const tenants = pgTable(
     aiBudgetUsd: numeric('ai_budget_usd', { precision: 10, scale: 2 }).notNull().default('25'),
     /** G18 per-spa AI kill switch (super-admin): false = the gateway refuses every AI call for this spa. */
     aiEnabled: boolean('ai_enabled').notNull().default(true),
+    /**
+     * PLAN §18.8: super-admin override of the plan's features ("Grant Premium features" while billed at Standard).
+     * NULL = the plan decides (`effectiveFeatures` in @spa/core).
+     */
+    featureTier: featureTier('feature_tier'),
     /** Tenant-level business settings (e.g. WPS employer identifiers for the salary file). */
     settings: jsonb('settings').$type<TenantSettings>().notNull().default({}),
     /** Spa logo (public `stored_files` row, purpose 'logo'): dashboard sidebar; the studio may reuse it. */
     logoFileId: uuid('logo_file_id').references((): AnyPgColumn => storedFiles.id, { onDelete: 'set null' }),
     /** Soft delete by a super-admin (status is also 'cancelled'): data is kept, members and the site are shut out. */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /**
+     * F22: automatic billing stage (worker `billing-transitions`, services billing-transitions.ts). `billing_overdue_since`
+     * = Dubai date the spa was first found late (the grace clock); cleared when nothing is late any more.
+     */
+    billingStage: billingStage('billing_stage'),
+    billingOverdueSince: date('billing_overdue_since'),
+    billingStageAt: timestamp('billing_stage_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -205,6 +252,12 @@ export const domains = pgTable(
   () => tenantPolicies(),
 )
 
+/** Same shape as `SubscriptionDiscounts` in @spa/core (this package doesn't depend on core). */
+export type SubscriptionDiscountsRow = {
+  setup?: { kind: 'amount' | 'percent'; value: string } | null
+  monthly?: { kind: 'amount' | 'percent'; value: string } | null
+}
+
 export const subscriptions = pgTable(
   'subscriptions',
   {
@@ -220,6 +273,8 @@ export const subscriptions = pgTable(
     currentPeriodStart: date('current_period_start').notNull(),
     currentPeriodEnd: date('current_period_end').notNull(),
     graceDays: integer('grace_days').notNull().default(14),
+    /** PLAN §18.8 per-spa discounts (super-admin), applied when the setup / plan invoices are generated. */
+    discounts: jsonb('discounts').$type<SubscriptionDiscountsRow>().notNull().default({}),
     notes: text('notes'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -245,6 +300,10 @@ export const platformInvoices = pgTable(
     installment: smallint('installment'),
     installments: smallint('installments'),
     subtotalAed: numeric('subtotal_aed', { precision: 12, scale: 2 }).notNull(),
+    /** PLAN §18.8: a discounted invoice keeps its list amount, the discount (AED) and how it was set ("10%"). */
+    listAed: numeric('list_aed', { precision: 12, scale: 2 }),
+    discountAed: numeric('discount_aed', { precision: 12, scale: 2 }),
+    discountLabel: text('discount_label'),
     vatAed: numeric('vat_aed', { precision: 12, scale: 2 }).notNull(),
     totalAed: numeric('total_aed', { precision: 12, scale: 2 }).notNull(),
     status: invoiceStatus('status').notNull().default('issued'),
@@ -424,6 +483,28 @@ export const platformJobRuns = pgTable(
 )
 
 /**
+ * F23: a spa's previous web addresses (slug → the spa that renamed away from it). `{old}.{root}` and `app/{old}/…`
+ * 301 to the spa's current slug while no live spa holds the old one; another spa may claim it only after
+ * `reserved_until` (rename + 12 months), which deletes the row. Platform-only (no tenant policy): host routing reads
+ * it before any tenant is known. Not `tenant_id`: that column name marks RLS tenant tables (db rls test).
+ */
+export const tenantSlugHistory = pgTable(
+  'tenant_slug_history',
+  {
+    slug: text('slug').primaryKey(),
+    renamedTenantId: uuid('renamed_tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Super-admin user id who renamed it. */
+    renamedBy: text('renamed_by'),
+    renamedAt: timestamp('renamed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Until then only this spa may take the address back (cooling period). */
+    reservedUntil: timestamp('reserved_until', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('tenant_slug_history_tenant').on(t.renamedTenantId), ...platformPolicies()],
+)
+
+/**
  * G12: one row per permanently purged spa. No FK to `tenants` (the tenant row is gone) so the record survives the
  * purge: who, when, how many rows per table, and how many stored objects were removed.
  */
@@ -481,6 +562,13 @@ export type SetupPaymentSummary = {
   note?: string | null
   invoiceId?: string
   invoiceNumber?: string
+  /** false = the setup invoice was issued without VAT (owner, 2026-10-09). Older rows: VAT charged. */
+  vat?: boolean
+  /** The setup invoice's due date (start date or 10 days after it). */
+  dueDate?: string
+  /** PLAN §18.8: discount on the setup fee (AED off the fee, and how it was set). */
+  discountAed?: string
+  discountLabel?: string
 }
 
 export const spaApplications = pgTable(
@@ -553,4 +641,23 @@ export const contactEnquiries = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index('contact_enquiries_status_created').on(t.status, t.createdAt), ...platformPolicies()],
+)
+
+/**
+ * F10: Content-Security-Policy violations reported by browsers (/api/csp-report), counted per day, surface, directive
+ * and blocked source (an origin or 'inline'/'eval'/…; never a full URL). The console's Server health card sums them.
+ */
+export const cspViolations = pgTable(
+  'csp_violations',
+  {
+    day: date('day').notNull(),
+    surface: text('surface').notNull(),
+    directive: text('directive').notNull(),
+    blocked: text('blocked').notNull(),
+    count: integer('count').notNull().default(0),
+    /** Path (no query) of the latest page that reported it. */
+    lastPath: text('last_path'),
+    lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.surface, t.directive, t.blocked] }), ...platformPolicies()],
 )

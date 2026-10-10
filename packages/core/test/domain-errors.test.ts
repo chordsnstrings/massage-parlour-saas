@@ -28,6 +28,9 @@ const SAMPLES = [
   'Branch not found',
   'That business day has not started yet',
   'Maya is not free right now',
+  // depositRule (setup fee on accepting an application), money with its no-break space.
+  'A deposit must be more than AED 0 and less than the setup invoice total (AED\u00a05,250 incl. VAT).',
+  'A deposit must be more than AED 0 and less than the setup invoice total (AED\u00a05,000, no VAT).',
 ]
 
 // Every literal `new DomainError('…')` / template in services + web (`${…}` filled with a sample) must be mapped.

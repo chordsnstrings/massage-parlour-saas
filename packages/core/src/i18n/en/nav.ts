@@ -17,6 +17,7 @@ export const nav = {
   marketing: 'Marketing',
   website: 'Website studio',
   reviews: 'Reviews',
+  reports: 'Reports',
   accounts: 'Accounts',
   vatPayroll: 'VAT & payroll',
   billing: 'Billing',
@@ -35,6 +36,7 @@ export const nav = {
   access: 'Team',
   documents: 'Documents',
   socialPosts: 'Social posts',
+  posters: 'QR posters',
   analytics: 'Analytics',
   site: 'Website',
   media: 'Media',
@@ -46,5 +48,9 @@ export const nav = {
       other: '{count} bookings today waiting for confirmation',
     },
     inbox: { one: '{count} message or chat to handle', other: '{count} messages or chats to handle' },
+    mine: {
+      one: '{count} WhatsApp message assigned to you',
+      other: '{count} WhatsApp messages assigned to you',
+    },
   },
 } as const

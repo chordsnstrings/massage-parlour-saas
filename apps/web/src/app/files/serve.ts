@@ -1,6 +1,14 @@
-import { type Permission, resolvePermissions } from '@spa/core'
-import { members, platformDb, roles, storedFiles, withTenant } from '@spa/db'
-import { getFile, IMAGE_TYPES, jpegVariant, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
+import { type Permission, requires2fa, resolvePermissions, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
+import { members, platformDb, roles, storedFiles, tenants, user as users, withTenant } from '@spa/db'
+import {
+  getFile,
+  IMAGE_TYPES,
+  INTAKE_PDF_PURPOSE,
+  jpegVariant,
+  resizeVariant,
+  VARIANT_WIDTHS,
+  VIDEO_TYPES,
+} from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
 import { isPlatformAdmin } from '@/server/access'
@@ -10,14 +18,28 @@ import { getSession } from '@/server/session'
  * GET /files/{id}[/{name}][?w=480][&f=jpg] on every host (app, tenant subdomain, /s/{slug} path routing, custom domains;
  * proxy.ts lets /files/* through untouched).
  *  - public files (site images): anyone, `public, max-age=1y, immutable` + ETag — a file id never changes content.
- *  - private files (receipts, documents): a signed-in active member of the file's tenant (or a super-admin),
- *    `Cache-Control: private, no-cache` so every reuse re-checks access (cheap 304s via ETag).
+ *  - private files (receipts, documents): a signed-in active member of the file's tenant with the purpose's
+ *    permission, under the dashboard's rules (server/access.ts requireMember: not once the spa is deleted, not for an
+ *    owner/manager held by "Require 2FA"), or a super-admin with 2FA. `Cache-Control: private, no-cache` so every
+ *    reuse re-checks access (cheap 304s via ETag).
  * `?f=jpg` renders a JPEG copy of an image (Instagram's publishing API only accepts JPEG).
  * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IMAGES = new Set<string>(IMAGE_TYPES)
-const INLINE = new Set<string>([...IMAGE_TYPES, 'application/pdf'])
+const VIDEOS = new Set<string>(VIDEO_TYPES)
+const INLINE = new Set<string>([...IMAGE_TYPES, ...VIDEO_TYPES, 'application/pdf'])
+
+/** F15: one `bytes=a-b` / `bytes=a-` / `bytes=-n` range of a video (Safari only plays video served with ranges). */
+function byteRange(header: string | null, size: number): [number, number] | 'invalid' | null {
+  const m = header?.match(/^bytes=(\d*)-(\d*)$/)
+  if (!m || (!m[1] && !m[2])) return null
+  let start = m[1] ? Number(m[1]) : size - Number(m[2])
+  let end = m[1] && m[2] ? Number(m[2]) : size - 1
+  if (start < 0) start = 0
+  if (end >= size) end = size - 1
+  return start > end || start >= size ? 'invalid' : [start, end]
+}
 
 // Rendered thumbnails, so a busy library page doesn't re-run sharp per tile (browsers and the edge cache them too).
 const g = globalThis as unknown as { __spaVariants?: LRUCache<string, Buffer> }
@@ -34,18 +56,39 @@ const notFound = () =>
     headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' },
   })
 
-/** Private files by purpose: document scans need staff.manage, receipt scans need accounting access. */
+/**
+ * Private files by purpose: document scans need staff.manage, receipt scans need accounting access, signed intake
+ * PDFs (F27) need clients.view (same as the submission page).
+ */
 const PURPOSE_PERMISSIONS: Record<string, Permission[]> = {
   staff_document: ['staff.manage'],
   business_document: ['staff.manage'],
   receipt: ['accounting.view', 'accounting.manage'],
+  [INTAKE_PDF_PURPOSE]: ['clients.view'],
 }
 
-async function canRead(tenantId: string, purpose: string) {
+type FileTenant = { tenantId: string; purpose: string; deleted: boolean; settings: { require2fa?: boolean } }
+
+/** requireMember's "Require 2FA" rule: the session may be up to 5 minutes old, so a "not on" is re-read. */
+async function heldBy2fa(
+  f: FileTenant,
+  roleKey: string,
+  user: { id: string; twoFactorEnabled?: boolean | null },
+) {
+  if (!requires2fa(f.settings) || !TWO_FACTOR_POLICY_ROLES.includes(roleKey) || user.twoFactorEnabled)
+    return false
+  const [fresh] = await platformDb()
+    .select({ on: users.twoFactorEnabled })
+    .from(users)
+    .where(eq(users.id, user.id))
+  return !fresh?.on
+}
+
+async function canRead(f: FileTenant) {
   const session = await getSession()
   if (!session) return false
   const userId = session.user.id
-  const [m] = await withTenant(tenantId, (tx) =>
+  const [m] = await withTenant(f.tenantId, (tx) =>
     tx
       .select({ roleKey: roles.key, rolePerms: roles.permissions })
       .from(members)
@@ -53,8 +96,8 @@ async function canRead(tenantId: string, purpose: string) {
       .where(and(eq(members.userId, userId), eq(members.status, 'active')))
       .limit(1),
   )
-  if (m) {
-    const needs = PURPOSE_PERMISSIONS[purpose]
+  if (m && !f.deleted && !(await heldBy2fa(f, m.roleKey, session.user))) {
+    const needs = PURPOSE_PERMISSIONS[f.purpose]
     if (!needs) return true
     const perms = resolvePermissions({ key: m.roleKey, permissions: m.rolePerms })
     if (needs.some((p) => perms.has(p))) return true
@@ -73,12 +116,16 @@ export async function serveFile(req: Request, id: string) {
       purpose: storedFiles.purpose,
       contentType: storedFiles.contentType,
       filename: storedFiles.filename,
+      tenantDeletedAt: tenants.deletedAt,
+      settings: tenants.settings,
     })
     .from(storedFiles)
+    .innerJoin(tenants, eq(tenants.id, storedFiles.tenantId))
     .where(eq(storedFiles.id, id))
     .limit(1)
   if (!meta) return notFound()
-  if (!meta.isPublic && !(await canRead(meta.tenantId, meta.purpose))) return notFound()
+  if (!meta.isPublic && !(await canRead({ ...meta, deleted: Boolean(meta.tenantDeletedAt) })))
+    return notFound()
 
   const params = new URL(req.url).searchParams
   const isImage = IMAGES.has(meta.contentType)
@@ -122,8 +169,25 @@ export async function serveFile(req: Request, id: string) {
   let name = file.filename ? asciiName(file.filename) : null
   if (name && jpeg && type === 'image/jpeg') name = `${name.replace(/\.[a-z0-9]{2,5}$/i, '')}.jpg`
   headers['content-type'] = type
-  headers['content-length'] = String(body.length)
   headers['content-disposition'] =
     `${INLINE.has(type) ? 'inline' : 'attachment'}${name ? `; filename="${name}"` : ''}`
+  if (VIDEOS.has(type)) {
+    headers['accept-ranges'] = 'bytes'
+    const range = byteRange(req.headers.get('range'), body.length)
+    if (range === 'invalid') {
+      headers['content-range'] = `bytes */${body.length}`
+      return new Response(null, { status: 416, headers })
+    }
+    if (range) {
+      const [start, end] = range
+      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
+      headers['content-length'] = String(end - start + 1)
+      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
+        status: 206,
+        headers,
+      })
+    }
+  }
+  headers['content-length'] = String(body.length)
   return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
 }

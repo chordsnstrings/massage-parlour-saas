@@ -1,6 +1,6 @@
 'use client'
 import { canTransition } from '@spa/core'
-import { enumLabel } from '@spa/core/i18n'
+import { bookingSourceLabel, enumLabel } from '@spa/core/i18n'
 import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
@@ -65,7 +65,7 @@ export function BookingSheet({
         first
           ? t('calendar.details.ref', {
               ref: first.refCode,
-              source: enumLabel(t, 'bookingSource', first.source),
+              source: bookingSourceLabel(t, first.source, first.attribution),
             })
           : undefined
       }

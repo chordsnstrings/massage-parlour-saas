@@ -24,6 +24,9 @@ export const notifications = {
         body: '{name} · {service} · {at} — confirm it on WhatsApp',
       },
     },
+    enquiry: {
+      site: { title: 'New website enquiry', body: '{name}: {message}' },
+    },
     stock: {
       low: {
         title: {
@@ -59,6 +62,18 @@ export const notifications = {
     billing: {
       overdue: { title: 'Invoice overdue', body: '{number} · {amount} was due on {date}' },
       reminder: { title: 'Payment reminder', body: '{amount} is due — open Billing to pay' },
+      late: {
+        title: 'Payment overdue — read-only from {date}',
+        body: '{number} · {amount} is unpaid. Pay before {date} to keep full access; after that the dashboard becomes read-only. Your website and online booking keep working.',
+      },
+      read_only: {
+        title: 'Dashboard is read-only: invoice unpaid',
+        body: '{number} · {amount} is still unpaid. Changes are blocked until it is paid; your website and online booking keep working. Pay from the Billing page.',
+      },
+      restored: {
+        title: 'Full access restored',
+        body: 'Thank you — the payment was received and your dashboard works normally again.',
+      },
     },
     weekly_insights: { title: 'Your weekly insights are ready', body: '{headline}' },
     daily_digest: {

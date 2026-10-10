@@ -1,3 +1,4 @@
+export * from './agents/assistant'
 export * from './agents/content'
 export * from './agents/context'
 export * from './agents/dm'

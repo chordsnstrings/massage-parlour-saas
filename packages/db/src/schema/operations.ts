@@ -1,4 +1,6 @@
 // Phase 1 — spa operations: services, rooms, staff, shifts, clients, intake, bookings, reservations, rotation.
+
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   customType,
@@ -18,6 +20,7 @@ import {
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
+import { storedFiles } from './files'
 import { tenants } from './platform'
 import { branches, members } from './tenant'
 
@@ -194,7 +197,12 @@ export const shifts = pgTable(
     note: text('note'),
     createdAt: createdAt(),
   },
-  (t) => [index('shifts_staff_time').on(t.staffId, t.startsAt), ...tenantPolicies()],
+  (t) => [
+    index('shifts_staff_time').on(t.staffId, t.startsAt),
+    // Branch/period scans (KPIs: on-shift hours, RevPATH).
+    index('shifts_branch_time').on(t.branchId, t.startsAt),
+    ...tenantPolicies(),
+  ],
 )
 
 /** Customer billing details for a full UAE tax invoice (G16). `trn` only when the customer is VAT registered. */
@@ -288,6 +296,40 @@ export const bookingSource = pgEnum('booking_source', [
   'ai_agent',
   'gbp',
 ])
+/** F13: an online booking's first-touch website source (core BOOKING_ATTRIBUTIONS, public/t.js entry). */
+export const bookingAttribution = pgEnum('booking_attribution', [
+  'instagram',
+  'gbp',
+  'google',
+  'qr',
+  'facebook',
+  'tiktok',
+  'whatsapp',
+  'widget',
+  'campaign',
+  'referral',
+  'direct',
+])
+
+/**
+ * F16: a hotel concierge / partner that hands out the spa's booking QR. Its poster links carry `?partner={code}`;
+ * online bookings made through one keep `bookings.partner_id`.
+ */
+export const bookingPartners = pgTable(
+  'booking_partners',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    /** As typed (never translated), e.g. "Atlantis concierge". */
+    name: text('name').notNull(),
+    /** Short public code in the link (lowercase letters + digits). */
+    code: text('code').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('booking_partners_code').on(t.tenantId, t.code), ...tenantPolicies()],
+)
 
 export const bookings = pgTable(
   'bookings',
@@ -300,6 +342,10 @@ export const bookings = pgTable(
     clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
     refCode: text('ref_code').notNull(),
     source: bookingSource('source').notNull(),
+    /** Where an online booker came from (?src=ig|gbp|qr, utm, referrer, direct); null for staff-made bookings. */
+    attribution: bookingAttribution('attribution'),
+    /** F16: the partner whose poster / link the online booker came through (null = none). */
+    partnerId: uuid('partner_id').references(() => bookingPartners.id, { onDelete: 'set null' }),
     status: bookingStatus('status').notNull().default('pending'),
     businessDate: date('business_date').notNull(),
     startsAt: ts('starts_at').notNull(),
@@ -314,6 +360,9 @@ export const bookings = pgTable(
     unique('bookings_tenant_ref').on(t.tenantId, t.refCode),
     index('bookings_branch_day').on(t.branchId, t.businessDate),
     index('bookings_client').on(t.clientId),
+    // F21: console tenant list (last booking created, bookings in the last 30 days).
+    index('bookings_tenant_created').on(t.tenantId, t.createdAt),
+    index('bookings_partner').on(t.tenantId, t.partnerId).where(sql`${t.partnerId} is not null`),
     ...tenantPolicies(),
   ],
 )
@@ -340,7 +389,8 @@ export const bookingItems = pgTable(
     /** Equipment units reserved for this item (B5.3). */
     equipmentIds: uuid('equipment_ids').array().notNull().default([]),
   },
-  () => tenantPolicies(),
+  // Joins from bookings (reports: F31 room utilisation, rebooking by therapist).
+  (t) => [index('booking_items_booking').on(t.bookingId), ...tenantPolicies()],
 )
 
 export const resourceKind = pgEnum('resource_kind', ['staff', 'room', 'equipment'])
@@ -398,6 +448,13 @@ export const intakeSubmissions = pgTable(
     signature: text('signature').notNull(),
     signedAt: ts('signed_at').notNull().defaultNow(),
     ip: text('ip'),
+    /** F27: SHA-256 of the signed record (services intake.ts `intakeContentHash`), printed on the PDF. */
+    contentSha256: text('content_sha256'),
+    /** F27: the signed PDF (private stored file, purpose `intake_pdf`; served to members with clients.view). */
+    pdfFileId: uuid('pdf_file_id').references(() => storedFiles.id, { onDelete: 'set null' }),
+    /** SHA-256 of the PDF bytes, so a downloaded copy can be checked against the record. */
+    pdfSha256: text('pdf_sha256'),
+    pdfGeneratedAt: ts('pdf_generated_at'),
   },
   () => tenantPolicies(),
 )

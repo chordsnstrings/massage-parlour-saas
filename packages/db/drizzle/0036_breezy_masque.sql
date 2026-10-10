@@ -1,0 +1,2 @@
+CREATE TYPE "public"."booking_attribution" AS ENUM('instagram', 'gbp', 'google', 'qr', 'facebook', 'tiktok', 'whatsapp', 'widget', 'campaign', 'referral', 'direct');--> statement-breakpoint
+ALTER TABLE "bookings" ADD COLUMN "attribution" "booking_attribution";

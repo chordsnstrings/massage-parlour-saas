@@ -40,12 +40,12 @@ export const DEFAULT_TEMPLATES: Record<MessageKind, { en: string; ar: string }> 
     ar: 'مرحباً {first_name}، اشتقنا إليك! هل نحجز موعدك القادم في {spa}؟',
   },
   birthday: {
-    en: 'Happy birthday, {first_name}! Treat yourself at {spa} this week.',
-    ar: 'عيد ميلاد سعيد يا {first_name}! دلّل نفسك في {spa} هذا الأسبوع.',
+    en: 'Happy birthday, {first_name}! Treat yourself at {spa} this week: {link}',
+    ar: 'عيد ميلاد سعيد يا {first_name}! دلّل نفسك في {spa} هذا الأسبوع: {link}',
   },
   winback: {
-    en: 'Hi {first_name}, we miss you at {spa}. Come back for a relaxing treatment soon.',
-    ar: 'مرحباً {first_name}، نفتقدك في {spa}. نتطلع لرؤيتك قريباً.',
+    en: 'Hi {first_name}, we miss you at {spa}. Come back for a relaxing treatment soon: {link}',
+    ar: 'مرحباً {first_name}، نفتقدك في {spa}. نتطلع لرؤيتك قريباً: {link}',
   },
   slot_offer: {
     en: 'Hi {first_name}, we have a free slot {day} at {time} at {spa}. Would you like it?',
@@ -85,7 +85,7 @@ const BOOKING_MESSAGE_AUTOMATION: Partial<Record<MessageKind, AutomationKey>> = 
   reminder: 'bookingMessages',
   reminder_2h: 'bookingMessages',
   thank_you: 'thankYou',
-  review_request: 'thankYou',
+  review_request: 'reviewRequests',
 }
 
 export async function templateFor(tx: Tx, kind: MessageKind, lang: string) {

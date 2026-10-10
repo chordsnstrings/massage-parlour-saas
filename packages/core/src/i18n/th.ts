@@ -7,6 +7,7 @@ import { account } from './th/account'
 import { accounts } from './th/accounts'
 import { ai } from './th/ai'
 import { analytics } from './th/analytics'
+import { assistant } from './th/assistant'
 import { audit } from './th/audit'
 import { auth } from './th/auth'
 import { automations } from './th/automations'
@@ -19,9 +20,11 @@ import { clientsMerge } from './th/clientsMerge'
 import { common } from './th/common'
 import { documents } from './th/documents'
 import { domain } from './th/domain'
+import { enquiries } from './th/enquiries'
 import { enums } from './th/enums'
 import { equipment } from './th/equipment'
 import { errors } from './th/errors'
+import { growth } from './th/growth'
 import { inbox } from './th/inbox'
 import { inventory } from './th/inventory'
 import { logo } from './th/logo'
@@ -34,8 +37,10 @@ import { overview } from './th/overview'
 import { packages } from './th/packages'
 import { payroll } from './th/payroll'
 import { permissions } from './th/permissions'
+import { plan } from './th/plan'
 import { purchases } from './th/purchases'
 import { pwa } from './th/pwa'
+import { reports } from './th/reports'
 import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
@@ -74,6 +79,7 @@ export const th: Messages = {
   services,
   equipment,
   packages,
+  growth,
   inventory,
   purchases,
   warehouse,
@@ -84,11 +90,13 @@ export const th: Messages = {
   documents,
   roles,
   inbox,
+  enquiries,
   messages,
   campaigns,
   marketing,
   ai,
   analytics,
+  reports,
   reviews,
   website,
   widget,
@@ -104,7 +112,9 @@ export const th: Messages = {
   auth,
   enums,
   permissions,
+  plan,
   notifications,
   search,
+  assistant,
   audit,
 }

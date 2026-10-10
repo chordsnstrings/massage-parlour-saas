@@ -30,8 +30,15 @@ export const shell = {
     paused:
       'Your account is paused for late payment — the dashboard is read-only until your invoice is paid. Your website and online booking keep working.',
     payNow: 'Pay now',
+    billingLate: 'Invoice overdue — the dashboard becomes read-only on {date} unless it is paid.',
+    billingReadOnly:
+      'Read-only: an invoice is unpaid past the grace period. Your website and online booking keep working; changes are blocked until it is paid.',
     aiWarning: 'AI budget {percent} used this month — AI pauses when it is reached. Contact us to raise it.',
     aiPaused: 'AI paused: monthly AI budget reached — contact us. AI restarts on the 1st.',
     aiOff: 'AI is switched off for your spa — contact us.',
+  },
+  announcement: {
+    label: 'Announcement from {platform}',
+    dismiss: 'Dismiss',
   },
 } as const

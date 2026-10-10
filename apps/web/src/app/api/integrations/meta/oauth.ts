@@ -2,6 +2,22 @@
 export const NONCE_COOKIE = 'ig_oauth_nonce'
 export const NONCE_PATH = '/api/integrations/meta'
 
+/** Facebook Login for Business (F19): its own nonce cookie, same path. */
+export const FB_NONCE_COOKIE = 'fb_oauth_nonce'
+
+/** Notices for `?fb=` after the Facebook round trip (text: settings.integrations.fb.notices.*, EN + TH). */
+export const FB_NOTICES: Record<string, 'success' | 'error'> = {
+  connected: 'success',
+  choose: 'success',
+  denied: 'error',
+  state: 'error',
+  forbidden: 'error',
+  in_use: 'error',
+  no_pages: 'error',
+  not_configured: 'error',
+  error: 'error',
+}
+
 /** Messages for `?ig=` after the OAuth round trip (shown on the integrations card). */
 export const CONNECT_NOTICES: Record<string, { tone: 'success' | 'error'; text: string }> = {
   connected: {

@@ -13,3 +13,5 @@ test-results
 
 # workflow worktrees
 .claude/worktrees/
+# F25 drift check scratch copy (packages/db/scripts/check-drift.sh)
+packages/db/.drift-*

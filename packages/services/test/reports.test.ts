@@ -1,5 +1,6 @@
-import { dubaiInstant } from '@spa/core'
+import { BOOKING_ATTRIBUTIONS, dubaiInstant } from '@spa/core'
 import {
+  bookings,
   branches,
   clients,
   closeAllDbs,
@@ -81,20 +82,27 @@ beforeAll(async () => {
     ids.fatima = cls[0]!.id
     ids.noor = cls[1]!.id
 
-    const book = (start: number, staffId: string, clientId: string, source: 'phone' | 'online') =>
+    const book = (
+      start: number,
+      staffId: string,
+      clientId: string,
+      source: 'phone' | 'online',
+      attribution?: 'instagram' | 'qr',
+    ) =>
       createBooking(db, {
         tenantId,
         branchId: b!.id,
         clientId,
         source,
+        attribution,
         status: 'confirmed',
         items: [
           { serviceVariantId: v!.id, start: dubaiInstant(D, start), staffIds: [staffId], roomId: room!.id },
         ],
       })
     const b1 = await book(11 * 60, ids.maya!, ids.fatima!, 'phone')
-    const b2 = await book(14 * 60, ids.maya!, ids.noor!, 'online')
-    const b3 = await book(17 * 60, ids.ploy!, ids.fatima!, 'online')
+    const b2 = await book(14 * 60, ids.maya!, ids.noor!, 'online', 'instagram')
+    const b3 = await book(17 * 60, ids.ploy!, ids.fatima!, 'online', 'qr')
     const b4 = await book(24 * 60 + 30, ids.ploy!, ids.noor!, 'phone') // 00:30 → business date D
     ids.b4 = b4.id
     await setBookingStatus(db, b1.id, 'checked_in')
@@ -168,6 +176,9 @@ describe('kpis', () => {
       { source: 'phone', count: 2 },
       { source: 'online', count: 1 },
     ])
+    // F13: the online booking's website source (the cancelled QR one is left out, like bySource).
+    expect(k.byAttribution).toEqual([{ source: 'instagram', count: 1 }])
+    expect(bookings.attribution.enumValues).toEqual([...BOOKING_ATTRIBUTIONS])
     expect(k.newClients).toBe(2)
     expect(k.noShowRate).toBe(0.5)
     // Live bookings: b1 (completed) + b4 (confirmed) = 120 booked of 1200 shift minutes.

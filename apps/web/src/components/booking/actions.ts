@@ -1,5 +1,5 @@
 'use server'
-import { businessDateOf, toUaeE164, whatsappLink } from '@spa/core'
+import { bookingAttribution, businessDateOf, ipRateLimitKey, toUaeE164, whatsappLink } from '@spa/core'
 import { services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
 import {
   availableSlots,
@@ -7,18 +7,20 @@ import {
   DomainError,
   findOrCreateClient,
   notify,
+  partnerByCode,
   publicPrice,
   selfBookingStatus,
   spaHidesPrices,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
 import { after } from 'next/server'
 import { z } from 'zod'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import { audit } from '@/server/audit'
+import { clientIp } from '@/server/rate-limit'
 import { resolveSiteTenant } from '@/server/sites'
+import { passesBotCheck } from '@/server/turnstile'
 import { acceptsBookings, bookingBranch, bookingDates, LEAD_MIN } from './data'
 import { fmtDate, fmtTime, type Locale, t } from './i18n'
 import type { BookingDone, SiteKey, SlotOption } from './types'
@@ -35,6 +37,8 @@ const attempts = new Map<string, number[]>()
 const successes = new Map<string, number[]>()
 const MAX_ATTEMPTS = 20
 const MAX_BOOKINGS = 5
+/** Off only with AUTH_RATE_LIMIT=off (the e2e server: every spec books from 127.0.0.1), like the other per-IP limits. */
+const limited = () => process.env.AUTH_RATE_LIMIT !== 'off'
 
 function recent(map: Map<string, number[]>, ip: string) {
   const now = Date.now()
@@ -44,11 +48,6 @@ function recent(map: Map<string, number[]>, ip: string) {
     for (const [key, value] of map) if (!value.some((at) => now - at < HOUR)) map.delete(key)
   }
   return list
-}
-
-async function clientIp() {
-  const h = await headers()
-  return h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local'
 }
 
 async function siteTenant(key: SiteKey) {
@@ -147,6 +146,25 @@ const bookingInput = z.object({
   website: z.string().optional().default(''),
   /** Set by the embeddable widget (public/widget.js) — attribution only; same limits + honeypot. */
   via: z.enum(['widget']).optional(),
+  /** F13: the visitor's entry ({ referrer, utm } from public/t.js) → bookings.attribution; only the key is stored. */
+  entry: z
+    .object({
+      referrer: z.string().max(500).nullish(),
+      utm: z
+        .object({
+          src: z.string().max(60).optional(),
+          utm_source: z.string().max(60).optional(),
+          utm_medium: z.string().max(60).optional(),
+          utm_campaign: z.string().max(60).optional(),
+          /** F16: a partner poster's link code (booking_partners.code). */
+          partner: z.string().max(60).optional(),
+        })
+        .nullish(),
+    })
+    .optional()
+    .catch(undefined),
+  /** F9: Cloudflare Turnstile token (verified server-side when keys are configured). */
+  botToken: z.string().max(4096).optional(),
   branchId: z.uuid().optional(),
   lang: locale,
 })
@@ -168,8 +186,9 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   const lang: Locale = input?.lang === 'ar' ? 'ar' : 'en'
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
-  const ip = await clientIp()
-  if (recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS)
+  const ip = ipRateLimitKey(await clientIp())
+  const tooMany = recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS
+  if (tooMany && limited())
     return fail(
       lang === 'ar'
         ? 'طلبات كثيرة. يرجى المحاولة لاحقاً أو التواصل معنا عبر واتساب.'
@@ -178,9 +197,14 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   attempts.get(ip)!.push(Date.now())
   // Bots fill every field; answer like a generic failure and store nothing.
   if (v.website.trim()) return fail(t('error', lang))
+  if (!(await passesBotCheck(v.botToken, 'booking', { customDomain: 'hostname' in v.site })))
+    return fail(t('botCheck', lang))
   const tenant = await siteTenant(v.site)
   if (!tenant) return fail(t('unavailable', lang))
   const start = new Date(v.start)
+  // F13: first-touch website source; the widget's iframe is tagged src=widget (public/widget.js).
+  const fromEntry = bookingAttribution(v.entry)
+  const attribution = v.via === 'widget' && fromEntry === 'direct' ? 'widget' : fromEntry
 
   try {
     const result = await withTenant(tenant.id, async (tx) => {
@@ -202,6 +226,8 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         language: lang,
       })
       if (client.blocklisted) return { kind: 'blocked' as const }
+      // F16: a partner poster's code (unknown or paused codes are ignored).
+      const partner = await partnerByCode(tx, v.entry?.utm?.partner)
 
       const notes = [
         v.notes,
@@ -216,6 +242,8 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         branchId: branch.id,
         clientId: client.id,
         source: 'online',
+        attribution,
+        partnerId: partner?.id ?? null,
         status,
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
@@ -251,7 +279,14 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         address: branch.address,
         confirmed: status === 'confirmed',
       }
-      return { kind: 'ok' as const, bookingId: booking.id, done, date, serviceEn: row.service.name.en }
+      return {
+        kind: 'ok' as const,
+        bookingId: booking.id,
+        done,
+        date,
+        serviceEn: row.service.name.en,
+        partnerId: partner?.id ?? null,
+      }
     })
 
     if (result.kind === 'unavailable') return fail(t('unavailable', lang))
@@ -269,7 +304,13 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       action: 'booking.created',
       entity: 'booking',
       entityId: result.bookingId,
-      data: { ref: result.done.ref, source: 'online', ...(v.via ? { via: v.via } : {}) },
+      data: {
+        ref: result.done.ref,
+        source: 'online',
+        attribution,
+        ...(v.via ? { via: v.via } : {}),
+        ...(result.partnerId ? { partnerId: result.partnerId } : {}),
+      },
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)

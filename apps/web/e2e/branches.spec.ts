@@ -20,7 +20,7 @@ import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './hel
 test('owner adds a second branch, scopes a receptionist to it, and a client books there online (G22)', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Twin Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Twin Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
 
@@ -76,7 +76,8 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
   expect(scoped!.allBranches).toBe(false)
 
   // JLT gets a room and Ploy works there tomorrow.
-  const tomorrow = businessDateOf(new Date(Date.now() + 24 * 3600_000), '05:00')
+  // The booking page's "Tomorrow" follows JLT's own day cutoff (04:00), not the default 05:00 (they differ 04:00–05:00).
+  const tomorrow = businessDateOf(new Date(Date.now() + 24 * 3600_000), jlt!.businessDayCutoff.slice(0, 5))
   await db.insert(rooms).values({ tenantId: seed.tenantId, branchId: jlt!.id, name: 'JLT Room' })
   await db.delete(shifts).where(eq(shifts.staffId, seed.staffIds[1]!))
   await db.insert(shifts).values({
@@ -116,7 +117,7 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
 })
 
 test('staff issue a full tax invoice with the customer’s billing details (G16)', async ({ page }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db

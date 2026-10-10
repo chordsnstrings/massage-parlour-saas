@@ -6,7 +6,7 @@ import { app, signUpOwner, testDb } from './helpers'
 test('automations: switch one off (kept after reload), locked platform duties, last-24h run log', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   const [t] = await testDb().select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
   await testDb()
     .insert(jobRuns)
@@ -17,6 +17,11 @@ test('automations: switch one off (kept after reload), locked platform duties, l
   await expect(page.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible()
   await expect(page.getByText('12 active')).toBeVisible()
   await expect(page.getByText('Always on')).toHaveCount(2)
+  // F28: the only switch that starts off.
+  await expect(page.getByRole('switch', { name: 'Assign WhatsApp messages: on or off' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
   await expect(page.getByRole('cell', { name: /Package expiry · 3 items/ })).toBeVisible()
 
   const toggle = page.getByRole('switch', { name: 'Booking confirmations & reminders: on or off' })

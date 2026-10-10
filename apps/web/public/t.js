@@ -11,7 +11,8 @@
   } catch (_) {}
   var q = new URLSearchParams(location.search)
   var utm = {}
-  ;['utm_source', 'utm_medium', 'utm_campaign', 'src'].forEach((k) => {
+  // partner = F16 poster link of a hotel / concierge partner (bookings.partner_id).
+  ;['utm_source', 'utm_medium', 'utm_campaign', 'src', 'partner'].forEach((k) => {
     var v = q.get(k)
     if (v) utm[k] = v.slice(0, 60)
   })
@@ -99,9 +100,13 @@
       if (!a || a.hasAttribute('data-no-track')) return
       var b = a.closest('[data-block-id]')
       var href = a.getAttribute('href') || ''
+      var host = ''
+      try {
+        host = new URL(href, location.href).hostname
+      } catch (_) {}
       var type = /wa\.me|whatsapp/.test(href)
         ? 'wa_click'
-        : /instagram\.com/.test(href)
+        : host === 'instagram.com' || host.endsWith('.instagram.com')
           ? 'ig_click'
           : a.hasAttribute('data-track-booking') || /(^|\/)book(\/|$|\?)/.test(href)
             ? 'booking_start'

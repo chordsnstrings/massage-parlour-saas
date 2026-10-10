@@ -51,6 +51,13 @@ such as Namecheap.
     `S3_*` file bucket (`backups/` prefix). **Recommended:** a separate private R2 bucket + its own key in `R2_*`,
     with lifecycle rules `backups/daily/` 30 days and `backups/monthly/` 365 days.
   - every run (ok / skipped / failed) shows on the super-admin overview; it warns when the last good backup is > 36 h old
+  - monthly **restore drill** (worker `restore-drill`, 2nd of the month): latest off-site dump → scratch database →
+    counts → drop, as the least-privilege role `spa_drill` (CREATEDB only; it owns only its scratch database and has
+    no access to the live data; F11). The worker never holds the Postgres superuser password and refuses to run as a
+    superuser. Compose service `db-roles` re-runs the idempotent role bootstrap on every deploy, so the role reaches
+    an existing droplet with no SSH; its password is derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is
+    set (optional, e.g. via the secrets overlay; the next deploy applies a new value). Console → Overview →
+    Configuration shows "Restore drill role (spa_drill)".
   - enable DigitalOcean droplet backups for whole-machine snapshots
 
 ## Health and alerts (G8)
@@ -74,6 +81,39 @@ address, plus **Send test email to me**. Console values win over `RESEND_API_KEY
 worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTION_KEY` (or `BETTER_AUTH_SECRET`)
 is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
 either place.
+
+## Bot check on public forms (Cloudflare Turnstile, F9)
+
+Online booking (`/book`), the booking widget (`/book/embed`), the website **Enquiry form** block (F15), **Apply**
+(`/signup`) and marketing **Contact** check visitors with Cloudflare Turnstile (managed, invisible unless Cloudflare
+wants a click), on top of the honeypot and per-IP limits. Until both keys are set the forms stay open and console → Overview → Configuration shows
+`TURNSTILE_*` red. Owner steps:
+
+1. Cloudflare dashboard → **Turnstile** → **Add widget**: name `spamanagement forms`, **Widget mode: Managed**,
+   pre-clearance **No**.
+2. **Hostnames:** `spamanagement.co` (a hostname also covers its subdomains, so `app.`, `admin.` and every spa's
+   `<slug>.spamanagement.co`) and `spamanagement.ae` while the old domain is live.
+3. **Custom domains (option):** a spa's own domain (e.g. `book.saffronspa.ae`) works only once it is in the
+   widget's hostname list. Add them there, then tick **Also check spa custom domains** (step 4; or set
+   `TURNSTILE_CUSTOM_DOMAINS=on`). Without it, custom-domain booking pages skip the bot check (honeypot + limits only)
+   instead of breaking. The free plan caps hostnames per widget.
+4. **Enter the keys in the console** (easiest): super-admin console → **Company** (Settings) → **Bot check (Cloudflare
+   Turnstile)**: paste the **Site key** and **Secret key**, Save. Works at once, no deploy. The secret is write-only
+   (shown as `…last 4`), stored encrypted when an encryption key exists; console values win over env. "Remove the
+   stored keys" falls back to env. Alternative: the secrets overlay ("Secrets without SSH" below)
+   `TURNSTILE_SITE_KEY=…` / `TURNSTILE_SECRET_KEY=…` (web container only; push, the next update restarts web).
+   The Configuration row then turns green and says where the keys come from (console / env).
+5. Check: open a spa's `/book` and book a test slot. A visitor who fails the check sees "We couldn't confirm you're
+   not a robot" and nothing is stored.
+
+## Security headers (F10)
+
+Every page sends a strict Content-Security-Policy with a fresh nonce per request (scripts run only when the server
+stamped them), plus HSTS (https), `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` and COOP.
+Only the booking widget route (`/book/embed`) may be framed by other sites. Nothing to configure. If a browser blocks
+something, it reports it: console → Overview → **Server health → Content-Security-Policy** shows the count of the last
+7 days with the directive, blocked origin and page (web logs: `[csp] …`). Adding an outside script, font or frame
+host later means adding it to `packages/core/src/security-headers.ts`.
 
 ## Super-admins
 
@@ -106,10 +146,76 @@ either place.
    shows where access goes ("Approving sends access to claude.ai"). Registrations nobody approves are deleted after a
    day. Every approval is in the audit log (`platform.mcp.client_authorized`).
 
-The Caddyfile trusts `Cf-Connecting-Ip` / `X-Forwarded-For` only from Cloudflare's IP ranges (copied from
-https://www.cloudflare.com/ips/ — update them there if Cloudflare ever changes the list) and overwrites
-`Cf-Connecting-Ip` for the app, so per-IP sign-in / registration limits can't be bypassed by hitting the droplet
-directly.
+## Google: Business Profile, Book button, Search Console (F17)
+
+One OAuth client (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) in the platform's Google Cloud project serves every spa.
+Owner steps in that project (console.cloud.google.com → APIs & Services):
+1. **Enable the APIs**: My Business Account Management API, My Business Business Information API, Google My Business
+   API (v4: reviews + local posts), **My Business Place Actions API** (the "Book" button) and **Google Search Console
+   API**. A missing one shows on the spa's card as "this Google API isn't enabled for the platform yet" (the stored
+   code is `api_disabled`). Business Profile APIs need Google's access approval (the GBP API access form) before they
+   answer with real quota.
+2. **OAuth consent screen → scopes**: `https://www.googleapis.com/auth/business.manage` and
+   `https://www.googleapis.com/auth/webmasters` (both sensitive: Google verifies the app before external users see no
+   warning). The connect flow asks for both; spas connected before F17 see "Reconnect Google and allow Search Console
+   access" until they reconnect once.
+3. **Authorized redirect URIs**: `https://app.<domain>/api/integrations/google/callback` for each platform domain
+   (spamanagement.co and, while it lives, spamanagement.ae).
+
+What spas get (Premium): Settings → Instagram & Google → Google card → **Book button on Google** (adds/updates/removes
+the location's APPOINTMENT link → `https://<site>/book?src=google`; the `gbp-site-sync` worker job re-points it within
+10 minutes when the site address changes, e.g. a custom domain becomes primary) and **Search Console** (sitemap sent
+after each publish, or with "Send sitemap"; the spa's Google account must own or fully manage a property covering
+the address — a custom domain without one is added with `sites.add` and must then be verified in Search Console).
+**Platform marketing sitemap stays an owner step:** in Search Console add the `sc-domain:spamanagement.co` property
+(DNS TXT verification in Cloudflare) and submit `https://spamanagement.co/sitemap.xml` once. Spa free addresses
+(`{slug}.spamanagement.co`) are covered by that Domain property; spa Google accounts can't verify them.
+
+## Meta: Instagram + Facebook Page (F18, F19)
+
+One Meta app (`META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`) with two products:
+1. **Instagram API with Instagram Login** (existing): redirect `https://app.<domain>/api/integrations/meta/callback`,
+   webhook `…/api/integrations/meta/webhook` (fields `messages`, `comments`), deauthorize + data-deletion URLs (the
+   Instagram card lists them). Permissions for app review: `instagram_business_basic`,
+   `instagram_business_manage_messages`, `instagram_business_manage_comments` (comment replies **and private
+   replies**), `instagram_business_content_publish` (feed posts, **reels, stories, carousels**).
+2. **Facebook Login for Business** (F19): add the product, then **Valid OAuth Redirect URIs** =
+   `https://app.<domain>/api/integrations/meta/facebook/callback` per platform domain (the Facebook card shows it).
+   Optional: create a Login for Business **configuration** (user access token, the permissions below) and set
+   `META_FB_CONFIG_ID` to its id; unset = the dialog asks for the permission list directly. Permissions for app
+   review: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
+   `pages_read_user_content`, `pages_manage_engagement`, `business_management`, `instagram_basic`,
+   `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`. Also subscribe the app's
+   **Instagram** webhook object to `comments` (Facebook Login path) so comments on a Page-linked account reach the
+   inbox; the app is installed on the chosen Page (`subscribed_apps`, field `feed`) automatically.
+   Deauthorize / data-deletion callbacks are the same URLs as Instagram's (they also clear Page tokens).
+
+Until app review passes, only people with a role on the Meta app (admins, developers, testers) can connect. Page
+tokens don't expire, but Meta's data access lapses 90 days after the person last signed in: the card warns 14 days
+before (daily `instagram-token-refresh` job runs `debug_token`) and asks to reconnect. Videos for reels/stories must be
+public https `.mp4`/`.mov` links (the media library holds images only); Instagram processes them for up to a few
+minutes and the 5-minute `instagram-publish` job finishes the post.
+
+## Client IP (rate limits, audit IPs)
+
+The app takes the visitor's IP from one header only, `Cf-Connecting-Ip`, and Caddy overwrites it on every request:
+- **Through Cloudflare** (orange-cloud hosts, or a spa domain proxied by its own Cloudflare account): the TCP peer is a
+  Cloudflare edge address, so Caddy keeps Cloudflare's `Cf-Connecting-Ip` (the real visitor).
+- **Direct to the droplet** (grey-cloud hosts, spa custom domains, anyone using the droplet IP): the peer is not
+  Cloudflare, so Caddy sets `Cf-Connecting-Ip` to the peer itself and a forged header is discarded.
+- `X-Real-Ip`, `True-Client-Ip` and `Do-Connecting-Ip` are stripped; `X-Forwarded-For` is rebuilt by Caddy and never
+  read for the IP (behind Cloudflare its first entry is whatever the client sent).
+
+Per-IP sign-in / registration / booking / contact limits therefore can't be bypassed by forging headers. IPv6 visitors
+are limited per /64. A deploy that changes the Caddyfile restarts Caddy so the change takes effect (`update.sh`).
+
+**Cloudflare's ranges** (the `trusted_proxies static` line) come from https://www.cloudflare.com/ips/. The
+"Cloudflare IP ranges" GitHub workflow checks them every Monday; when it fails, refresh and commit:
+```sh
+deploy/droplet/cloudflare-ips.sh --write   # rewrites the list from cloudflare.com/ips-v4 + ips-v6
+deploy/droplet/test-caddy-ip.sh            # needs caddy or docker; CI runs it on every push
+git commit -am "chore(caddy): refresh Cloudflare IP ranges"
+```
 
 ## Secrets without SSH
 
@@ -225,6 +331,7 @@ The secrets file needs these keys:
   owner-chosen super-admins (see "Super-admins"); each must be a super-admin with 2FA; set it to replace the list;
   removing an address cuts access on the next request
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
+- optional `SPA_DRILL_PASSWORD` (restore-drill role `spa_drill`; unset = derived from `SPA_OWNER_PASSWORD`)
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
 - strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),

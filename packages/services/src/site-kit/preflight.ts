@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from '@spa/core'
 import { contrastRatio, MIN_TEXT_CONTRAST } from './contrast'
 import { scopeSectionCss } from './css'
 import { imageSrc, withImageSrc } from './image'
@@ -189,10 +190,11 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
       }
     }
     if (obj.action === 'page') {
-      const slug = String(obj.target ?? '')
-        .trim()
-        .replace(/^\/+|\/+$/g, '')
-        .toLowerCase()
+      const slug = trimTrailingSlashes(
+        String(obj.target ?? '')
+          .trim()
+          .replace(/^\/+/, ''),
+      ).toLowerCase()
       const page = pages.get(slug)
       const problem = !page
         ? 'a page that doesn’t exist'
@@ -233,6 +235,9 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
       return Array.isArray(v) ? v.length : 0
     }
     if (node.type === 'Section' && slot('content') === 0) empty('Section is empty', path, true)
+    // F15: a Video block without a video shows nothing on the live site.
+    if (node.type === 'Video' && !String(node.props.url ?? '').trim())
+      empty('Video has no video yet', path, true)
     if (node.type === 'Stack' && slot('items') === 0) empty('Stack is empty', path, true)
     if (node.type === 'Columns') {
       const n = columnCount(node.props.ratio)

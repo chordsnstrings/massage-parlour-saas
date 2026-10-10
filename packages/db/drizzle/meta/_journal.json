@@ -253,6 +253,83 @@
       "when": 1791575282827,
       "tag": "0035_only_ask_email",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791584883705,
+      "tag": "0036_breezy_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791592302203,
+      "tag": "0037_plans_premium_standard",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791592727973,
+      "tag": "0038_kpi_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791592911683,
+      "tag": "0039_intake_pdf_outbox_assign",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791592923266,
+      "tag": "0040_site_page_locks",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791593551631,
+      "tag": "0041_csp_turnstile_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791594483799,
+      "tag": "0042_console_flags_billing_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791598042576,
+      "tag": "0043_social_formats_private_replies",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791598375354,
+      "tag": "0044_vouchers_partners",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791598940404,
+      "tag": "0045_site_blog_enquiries",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791599213618,
+      "tag": "0046_tenant_slug_history",
+      "breakpoints": true
     }
   ]
 }

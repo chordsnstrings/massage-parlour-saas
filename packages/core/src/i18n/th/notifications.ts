@@ -22,6 +22,9 @@ export const notifications: Messages['notifications'] = {
       online: { title: 'มีการจองออนไลน์ใหม่', body: '{name} · {service} · {at} — รอการยืนยัน' },
       pending: { title: 'การจองรอการยืนยัน', body: '{name} · {service} · {at} — ยืนยันทาง WhatsApp' },
     },
+    enquiry: {
+      site: { title: 'มีข้อความใหม่จากเว็บไซต์', body: '{name}: {message}' },
+    },
     stock: {
       low: { title: { other: 'สต็อกใกล้หมดที่ {location}: {count} รายการ' }, body: '{products}' },
     },
@@ -48,6 +51,18 @@ export const notifications: Messages['notifications'] = {
     billing: {
       overdue: { title: 'ใบแจ้งหนี้เกินกำหนด', body: '{number} · {amount} ครบกำหนดเมื่อ {date}' },
       reminder: { title: 'แจ้งเตือนการชำระเงิน', body: 'ยอด {amount} ถึงกำหนดชำระ — เปิดหน้าการชำระเงินเพื่อจ่าย' },
+      late: {
+        title: 'เกินกำหนดชำระ — เป็นแบบอ่านอย่างเดียวตั้งแต่ {date}',
+        body: '{number} · {amount} ยังไม่ได้ชำระ กรุณาชำระก่อน {date} เพื่อใช้งานได้เต็มรูปแบบ หลังจากนั้นแดชบอร์ดจะเป็นแบบอ่านอย่างเดียว เว็บไซต์และการจองออนไลน์ยังใช้งานได้ตามปกติ',
+      },
+      read_only: {
+        title: 'แดชบอร์ดเป็นแบบอ่านอย่างเดียว: ใบแจ้งหนี้ยังไม่ได้ชำระ',
+        body: '{number} · {amount} ยังไม่ได้ชำระ ไม่สามารถแก้ไขข้อมูลได้จนกว่าจะชำระ เว็บไซต์และการจองออนไลน์ยังใช้งานได้ ชำระได้ที่หน้าการชำระเงิน',
+      },
+      restored: {
+        title: 'กลับมาใช้งานได้เต็มรูปแบบแล้ว',
+        body: 'ขอบคุณ — เราได้รับการชำระเงินแล้ว แดชบอร์ดของคุณกลับมาใช้งานได้ตามปกติ',
+      },
     },
     weekly_insights: { title: 'สรุปข้อมูลเชิงลึกประจำสัปดาห์พร้อมแล้ว', body: '{headline}' },
     daily_digest: {

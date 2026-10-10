@@ -19,6 +19,7 @@ export const nav: Messages['nav'] = {
   marketing: 'การตลาด',
   website: 'สตูดิโอเว็บไซต์',
   reviews: 'รีวิว',
+  reports: 'รายงาน',
   accounts: 'บัญชี',
   vatPayroll: 'ภาษีและเงินเดือน',
   billing: 'ค่าบริการระบบ',
@@ -36,6 +37,7 @@ export const nav: Messages['nav'] = {
   access: 'ทีม',
   documents: 'เอกสาร',
   socialPosts: 'โพสต์โซเชียล',
+  posters: 'โปสเตอร์คิวอาร์',
   analytics: 'การวิเคราะห์',
   site: 'เว็บไซต์',
   media: 'คลังสื่อ',
@@ -44,5 +46,6 @@ export const nav: Messages['nav'] = {
     calendar: { other: 'วันนี้มี {count} การจอง' },
     bookings: { other: 'วันนี้มี {count} การจองที่รอการยืนยัน' },
     inbox: { other: 'มี {count} ข้อความหรือแชตที่ต้องจัดการ' },
+    mine: { other: 'มี {count} ข้อความ WhatsApp ที่มอบหมายให้คุณ' },
   },
 }

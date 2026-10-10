@@ -39,8 +39,8 @@ export const KIND_TONE: Record<MessageKind, Tone> = {
 }
 
 /** Variables staff can insert (shown as chips). `{link}` and `{text}` are accepted too. */
-export const TEMPLATE_VARIABLES = ['first_name', 'service', 'day', 'time', 'spa', 'ref'] as const
-export const ALLOWED_VARIABLES = [...TEMPLATE_VARIABLES, 'name', 'link', 'text'] as const
+export const TEMPLATE_VARIABLES = ['first_name', 'service', 'day', 'time', 'spa', 'ref', 'link'] as const
+export const ALLOWED_VARIABLES = [...TEMPLATE_VARIABLES, 'name', 'text'] as const
 
 /** Same substitution rule as the server-side renderer: unknown variables are left as typed. */
 export const previewTemplate = (body: string, vars: Record<string, string>) =>
@@ -69,7 +69,21 @@ export type OutboxRow = {
   bookingAt: string | null
   sentAt: string | null
   sentBy: string | null
+  /** F28: member responsible for sending it; `assignedAuto` = picked by the auto-assign rule. */
+  assignedTo: string | null
+  assignedAuto: boolean
   links: Record<WaMode, string>
+}
+
+export type AssigneeFilter = 'all' | 'mine' | 'unassigned'
+/** Assignment data for the queue (F28). `options` = who a message can go to; `names` also covers former senders. */
+export type AssignProps = {
+  who: AssigneeFilter
+  counts: Record<AssigneeFilter, number>
+  options: { id: string; name: string }[]
+  names: Record<string, string>
+  meId: string | null
+  autoAssign: boolean
 }
 
 export const rowLabel = (t: Translator, row: Pick<OutboxRow, 'kind' | 'campaign'>) =>

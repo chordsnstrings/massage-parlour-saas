@@ -43,6 +43,8 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
     can(ctx, EXPORT_DATASETS[d].permission),
   )
   const full = canExportAll(ctx)
+  // F27: signed intake PDFs (.zip) for anyone who may export clients and read their forms.
+  const intakePdfs = can(ctx, 'clients.export') && can(ctx, 'clients.view')
   if (!importable.length && !exportable.length && !full) notFound()
 
   const history: HistoryRow[] = importable.length
@@ -205,6 +207,17 @@ export default async function DataPage({ params }: { params: Promise<{ tenant: s
                     <Download strokeWidth={1.5} /> {t('settings.data.export.download')}
                   </Button>
                 </form>
+                {intakePdfs && (
+                  <div className="mt-5 space-y-2 border-t border-[var(--crm-line)] pt-4">
+                    <p className="text-sm font-semibold">{t('settings.data.intakePdfs.title')}</p>
+                    <p className="crm-muted text-[13px]">{t('settings.data.intakePdfs.body')}</p>
+                    <Button asChild variant="secondary" className="h-11 w-full sm:w-auto md:h-10">
+                      <a href={appPath(`${base}/export?type=intake_pdfs`)} data-testid="intake-pdfs-export">
+                        <FileArchive strokeWidth={1.5} /> {t('settings.data.intakePdfs.download')}
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </Card>
             )}
             {full && (

@@ -15,7 +15,7 @@ const png = {
 }
 
 test('engage: document expiry tracker, notifications card, insights card, receipt scan', async ({ page }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   await seedCatalog(slug)
   const dubaiToday = businessDateOf(new Date(), '00:00')
 
@@ -50,7 +50,8 @@ test('engage: document expiry tracker, notifications card, insights card, receip
   await sheet.getByLabel('Document', { exact: true }).selectOption({ label: 'Trade licence' })
   await sheet.getByLabel('Expiry date').fill(addDays(dubaiToday, -3))
   await sheet.getByRole('button', { name: 'Add document' }).click()
-  await expect(page.getByText('Document added')).toBeVisible()
+  // The first "Document added" toast may still be showing (3.8 s): the newest one is last.
+  await expect(page.getByText('Document added').last()).toBeVisible()
   await expect(page.getByText('Expired 3 days ago').first()).toBeVisible()
 
   // Status tiles filter; "Belongs to" narrows to one person.

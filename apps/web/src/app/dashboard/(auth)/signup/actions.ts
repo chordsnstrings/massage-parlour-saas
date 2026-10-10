@@ -1,7 +1,7 @@
 'use server'
 // "Apply for your spa" (PLAN §18.3): the login is created now; the spa only once the platform owner accepts.
 import { getAuth } from '@spa/auth'
-import { checkSlug, isEmirate, normalizeSlug, toUaeE164 } from '@spa/core'
+import { checkSlug, isEmirate, normalizeSlug, TURNSTILE_FIELD, toUaeE164 } from '@spa/core'
 import { isListedAdminEmail, plans, platformDb } from '@spa/db'
 import { DomainError, type ProcessedImage, processLogo, submitApplication } from '@spa/services'
 import { APIError } from 'better-auth/api'
@@ -18,6 +18,7 @@ import { audit } from '@/server/audit'
 import { adminUrl } from '@/server/origin'
 import { withinIpLimit } from '@/server/rate-limit'
 import { getSession } from '@/server/session'
+import { passesBotCheck } from '@/server/turnstile'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'auth.signup.errors.start')
 const business = z.object({
@@ -124,6 +125,9 @@ export async function signupAction(_prev: ActionResult, formData: FormData): Pro
   // Public action that creates a login server-side (past Better Auth's HTTP limiter), files an application that holds
   // a web address and emails the platform owner: a few per IP per hour/day (counted once the form is valid).
   if (!(await withinIpLimit('signup', SIGNUP_LIMITS))) return fail('auth.signup.errors.tooMany')
+  // F9: Cloudflare Turnstile before any login or application is created.
+  if (!(await passesBotCheck(formData.get(TURNSTILE_FIELD), 'apply')))
+    return fail('auth.signup.errors.botCheck')
 
   let user: { id: string; email: string; name: string } | undefined = session?.user
   if (!user) {

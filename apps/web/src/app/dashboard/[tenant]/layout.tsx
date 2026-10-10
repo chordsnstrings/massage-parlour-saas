@@ -4,13 +4,22 @@ import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
-import { isSystemRole, type Permission } from '@spa/core'
+import {
+  type Feature,
+  isSystemRole,
+  monthlyAed,
+  type Permission,
+  PLATFORM_NAME,
+  readOnlyFrom,
+} from '@spa/core'
 import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
+import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, billingRules, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata, Viewport } from 'next'
+import { AskAi } from '@/components/assistant/ask-ai'
 import { InstallMenuItem, PwaSetup } from '@/components/pwa/install-app'
 import { SearchPalette } from '@/components/search/search-palette'
+import { Announcements } from '@/components/shell/announcements'
 import { NotificationBell } from '@/components/shell/notification-bell'
 import {
   type ShellGroup,
@@ -25,7 +34,10 @@ import { appPath } from '@/lib/paths'
 import { EARLY_PROMPT_SCRIPT } from '@/lib/sw'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { announcementsFor } from '@/server/announcements'
+import { getEntitlements } from '@/server/entitlements'
 import { navBadgeCounts } from '@/server/nav-counts'
+import { getNonce } from '@/server/nonce'
 import { bellData } from '@/server/notifications'
 import { canonicalUrls } from '@/server/origin'
 import { PWA_THEME, pwaFor } from '@/server/pwa'
@@ -99,7 +111,19 @@ export default async function TenantLayout({
   const ctx = await requireMember(slug)
   const i18n = await getI18n()
   const { locale, t, fmt, messages } = i18n
-  const [data, bell, counts] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt), navBadgeCounts(ctx)])
+  const [data, bell, counts, ent, news] = await Promise.all([
+    shellData(ctx),
+    bellData(ctx, t, fmt),
+    navBadgeCounts(ctx),
+    getEntitlements(ctx.tenant.id),
+    announcementsFor(ctx, locale),
+  ])
+  // F22 automatic billing stage: the read-only date for the overdue / grace banner (rules are platform settings).
+  const stage = ctx.tenant.billingStage
+  const lateUntil =
+    (stage === 'overdue' || stage === 'grace') && ctx.tenant.billingOverdueSince
+      ? readOnlyFrom(ctx.tenant.billingOverdueSince, await billingRules(platformDb()))
+      : null
   const base = appPath(`/${ctx.tenant.slug}`)
   const app = pwaFor(ctx.tenant)
 
@@ -120,6 +144,8 @@ export default async function TenantLayout({
   const single = (icon: ShellItem['icon'], perm: Permission | null, path: string, label: string) =>
     item(icon, label, page(perm, path, label))
   const group = (label: string, items: ShellItem[]): ShellGroup[] => (items.length ? [{ label, items }] : [])
+  // PLAN §18.8: pages of a plan feature the spa doesn't have are left out (visiting one shows the Premium upsell).
+  const gated = (feature: Feature, links: ShellLink[]) => (ent.features.includes(feature) ? links : [])
   // Count badges (crm-spec §2.1 ③), already permission-filtered by navBadgeCounts.
   const badge = (items: ShellItem[], value: number, key: 'calendar' | 'bookings' | 'inbox') =>
     items.map((i) => ({ ...i, count: { value, label: t(`nav.count.${key}`, { count: value }) } }))
@@ -137,12 +163,18 @@ export default async function TenantLayout({
       ...badge(
         item('inbox', t('nav.inbox'), [
           ...page('marketing.send', '/messages', t('nav.whatsapp')),
-          ...page('marketing.send', '/inbox', t('nav.instagram')),
-          ...page('marketing.campaigns', '/campaigns', t('nav.campaigns')),
+          ...gated('ai', page('marketing.send', '/inbox', t('nav.instagram'))),
+          ...gated('marketing', page('marketing.campaigns', '/campaigns', t('nav.campaigns'))),
+          // F15: leads from the website's enquiry form (every plan).
+          ...page('clients.view', '/enquiries', t('enquiries.nav')),
         ]),
-        counts.outboxDue + counts.igUnread,
+        counts.outboxDue + (ent.features.includes('ai') ? counts.igUnread : 0) + counts.enquiriesNew,
         'inbox',
-      ),
+      ).map((i) => ({
+        ...i,
+        // F28: the viewer's own due WhatsApp messages (Mine filter on the messages page).
+        mine: { value: counts.outboxMine, label: t('nav.count.mine', { count: counts.outboxMine }) },
+      })),
     ]),
     ...group(t('nav.group.people'), [
       ...single('clients', 'clients.view', '/clients', t('nav.clients')),
@@ -166,21 +198,31 @@ export default async function TenantLayout({
     ]),
     ...group(t('nav.group.growth'), [
       ...item('marketing', t('nav.marketing'), [
-        ...page('ai.approve', '/ai/content', t('nav.socialPosts')),
+        ...gated('marketing', page('ai.approve', '/ai/content', t('nav.socialPosts'))),
+        // F16: booking-QR posters for reception + partners (hotel concierges), with bookings per partner.
+        ...gated('marketing', page('marketing.campaigns', '/posters', t('nav.posters'))),
         ...page('reports.view', '/analytics', t('nav.analytics')),
         // AI studio sits here, not under Settings: AI roles (e.g. receptionist) shouldn't get a Settings item.
-        ...page(['ai.approve', 'ai.manage'], '/ai', t('nav.aiStudio'), {
-          exact: true,
-          match: [`${base}/ai/try`],
-        }),
+        ...gated(
+          'ai',
+          page(['ai.approve', 'ai.manage'], '/ai', t('nav.aiStudio'), {
+            exact: true,
+            match: [`${base}/ai/try`],
+          }),
+        ),
       ]),
       ...item('website', t('nav.website'), [
         ...page(['site.content', 'services.manage'], '/website', t('nav.site')),
         ...page('site.content', '/media', t('nav.media')),
       ]),
-      ...single('reviews', 'ai.approve', '/ai/reviews', t('nav.reviews')),
+      ...item(
+        'reviews',
+        t('nav.reviews'),
+        gated('marketing', page('ai.approve', '/ai/reviews', t('nav.reviews'))),
+      ),
     ]),
     ...group(t('nav.group.finance'), [
+      ...single('reports', 'reports.view', '/reports', t('nav.reports')),
       ...single('accounts', 'accounting.view', '/accounts', t('nav.accounts')),
       ...single('vat', 'staff.manage', '/payroll', t('nav.vatPayroll')),
       ...single('billing', 'billing.view', '/billing', t('nav.billing')),
@@ -193,16 +235,20 @@ export default async function TenantLayout({
 
   // Plan card (crm-spec §2.1 ④): plan + renewal for billing.view; the AI meter for anyone who works with AI.
   const budget = Number(ctx.tenant.aiBudgetUsd)
-  const showAi = budget > 0 && (can(ctx, 'billing.view') || can(ctx, 'ai.approve') || can(ctx, 'ai.manage'))
+  const showAi =
+    budget > 0 &&
+    ent.features.includes('ai') &&
+    (can(ctx, 'billing.view') || can(ctx, 'ai.approve') || can(ctx, 'ai.manage'))
   const aiPercent = showAi ? Math.round((data.aiSpendUsd / budget) * 100) : 0
   const sub = can(ctx, 'billing.view') ? data.sub : undefined
   const renewal = sub
     ? sub.status === 'trialing'
       ? t('shell.plan.trialEnds', { date: fmt.date(sub.currentPeriodEnd) })
-      : t('shell.plan.renews', {
+      : // The stored price covers 12 months (R3): paid monthly (Premium / Standard) it reads per month.
+        t('shell.plan.renews', {
           date: fmt.date(sub.currentPeriodEnd),
-          price: fmt.aed(sub.priceAed),
-          interval: t('shell.plan.interval.year'), // subscription price is annual (R3)
+          price: fmt.aed(sub.billingInterval === 'month' ? monthlyAed(sub.priceAed) : sub.priceAed),
+          interval: t(`shell.plan.interval.${sub.billingInterval === 'month' ? 'month' : 'year'}`),
         })
     : null
   const plan =
@@ -229,13 +275,31 @@ export default async function TenantLayout({
       ? t(`role.${roleKey}`)
       : ctx.member.roleName // custom roles stay as typed
 
-  const notice = ctx.impersonating ? (
+  const payLink = can(ctx, 'billing.view') && (
+    <>
+      {' '}
+      <a href={`${base}/billing`}>{t('shell.banner.payNow')}</a>
+    </>
+  )
+  const status = ctx.impersonating ? (
     <SpaBanner tone="accent">{t('shell.banner.impersonating')}</SpaBanner>
+  ) : ctx.tenant.status === 'read_only' && stage === 'read_only' ? (
+    <SpaBanner tone="danger">
+      {t('shell.banner.billingReadOnly')}
+      {payLink}
+    </SpaBanner>
   ) : ctx.tenant.status === 'read_only' ? (
     <SpaBanner tone="warning">{t('shell.banner.paused')}</SpaBanner>
   ) : !isWritable(ctx.tenant) ? (
     <SpaBanner tone="warning">{t('shell.banner.readOnly')}</SpaBanner>
   ) : null
+  const notice =
+    status || news.length ? (
+      <>
+        {status}
+        <Announcements slug={ctx.tenant.slug} items={news} platform={PLATFORM_NAME} />
+      </>
+    ) : null
   // G18: one AI banner for whoever sees the AI meter — switched off, paused at 100 %, or warned at 80 %.
   const aiLevel = showAi ? aiBudgetLevel(data.aiSpendUsd, budget) : 'ok'
   const aiBanner = !showAi ? null : !ctx.tenant.aiEnabled ? (
@@ -247,15 +311,15 @@ export default async function TenantLayout({
       {t('shell.banner.aiWarning', { percent: fmt.percent(aiPercent / 100) })}
     </SpaBanner>
   ) : null
-  const alert = data.pastDue ? (
+  const alert = lateUntil ? (
+    <SpaBanner tone="danger">
+      {t('shell.banner.billingLate', { date: fmt.date(lateUntil) })}
+      {payLink}
+    </SpaBanner>
+  ) : data.pastDue && stage !== 'read_only' ? (
     <SpaBanner tone="danger">
       {t('shell.banner.overdue')}
-      {can(ctx, 'billing.view') && (
-        <>
-          {' '}
-          <a href={`${base}/billing`}>{t('shell.banner.payNow')}</a>
-        </>
-      )}
+      {payLink}
     </SpaBanner>
   ) : (
     aiBanner
@@ -264,6 +328,8 @@ export default async function TenantLayout({
   return (
     <div className="crm" lang={locale}>
       <script
+        nonce={await getNonce()}
+        suppressHydrationWarning
         // biome-ignore lint/security/noDangerouslySetInnerHtml: static inline listener, no user input
         dangerouslySetInnerHTML={{ __html: EARLY_PROMPT_SCRIPT }}
       />
@@ -283,6 +349,21 @@ export default async function TenantLayout({
           alert={alert}
           bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
           search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
+          assistant={
+            // F30: staff with the dashboard; Standard spas get the Premium upsell in the drawer. Never for a
+            // super-admin acting on the spa (no spa data, PLAN §18) nor on the Website Studio editors.
+            can(ctx, 'dashboard.view') && ctx.member ? (
+              <AskAi
+                slug={ctx.tenant.slug}
+                enabled={ent.features.includes('ai')}
+                upsell={{
+                  compareHref: `${canonicalUrls().marketing()}/pricing`,
+                  billingHref: can(ctx, 'billing.view') ? `${base}/billing` : null,
+                }}
+                hiddenUnder={[`${base}/website/editor`, `${base}/website/blog`]}
+              />
+            ) : null
+          }
           accountHref={appPath('/account')}
           switchHref={appPath()}
           platformHref={canonicalUrls().marketing()}

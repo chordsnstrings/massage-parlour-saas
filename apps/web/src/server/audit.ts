@@ -1,3 +1,4 @@
+import { clientIpFrom } from '@spa/core'
 import { auditLog, platformDb } from '@spa/db'
 import { headers } from 'next/headers'
 
@@ -13,10 +14,7 @@ export async function audit(entry: {
   ip?: string | null
 }) {
   const h = await headers()
-  const ip =
-    entry.ip !== undefined
-      ? entry.ip
-      : (h.get('cf-connecting-ip') ?? h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null)
+  const ip = entry.ip !== undefined ? entry.ip : clientIpFrom(h)
   await platformDb()
     .insert(auditLog)
     .values({ ...entry, data: entry.data ?? null, ip })

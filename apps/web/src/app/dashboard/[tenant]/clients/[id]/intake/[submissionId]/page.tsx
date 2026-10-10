@@ -1,6 +1,7 @@
 import { clients, intakeSubmissions, intakeTemplates, withTenant } from '@spa/db'
+import { fileUrl, intakeAnswerRows, intakeContentHash } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -9,19 +10,17 @@ import { SignatureImage } from '@/components/clients/signature-pad'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardBody } from '@/components/ui/card'
 import { PageBody } from '@/components/ui/page'
-import { getT } from '@/i18n/server'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { IntakePdfActions } from './pdf-actions'
 import { PrintButton } from './print-button'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT()
   return { title: t('clients.intake.signedTitle') }
 }
-
-const humanize = (key: string) => key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
-const ANSWER_AR: Record<string, string> = { yes: 'نعم', no: 'لا' }
 
 /** Print only the document, not the dashboard chrome. */
 const PRINT_CSS = `@media print {
@@ -57,16 +56,11 @@ export default async function IntakeSubmissionPage({
   if (!row) notFound()
   const { submission: s, clientName, templateName, fields } = row
   const lang = s.answers._lang === 'ar' ? 'ar' : 'en'
-  const answered = (fields ?? []).map((f) => ({
-    key: f.key,
-    label: (lang === 'ar' && f.label.ar) || f.label.en,
-    value: s.answers[f.key],
-  }))
   // Answers whose question is no longer on the (versioned) template are still shown.
-  const known = new Set(answered.map((a) => a.key))
-  for (const [key, value] of Object.entries(s.answers))
-    if (!key.startsWith('_') && !known.has(key)) answered.push({ key, label: humanize(key), value })
-  const show = (v: string | undefined) => (v ? (lang === 'ar' ? (ANSWER_AR[v] ?? v) : humanize(v)) : '—')
+  const answered = intakeAnswerRows(fields, s.answers, lang)
+  const { t, fmt } = await getI18n()
+  // F27 integrity: the hash stored at signing vs. the record as it is now.
+  const integrity = !s.contentSha256 ? 'unknown' : intakeContentHash(s) === s.contentSha256 ? 'ok' : 'changed'
 
   return (
     <PageBody className="mx-auto max-w-3xl">
@@ -79,7 +73,16 @@ export default async function IntakeSubmissionPage({
         >
           <ArrowLeft className="size-4 rtl:rotate-180" /> {clientName}
         </Link>
-        <PrintButton label={(await getT())('clients.intake.print')} />
+        <div className="flex flex-wrap items-center gap-2">
+          <IntakePdfActions
+            slug={ctx.tenant.slug}
+            clientId={id}
+            submissionId={s.id}
+            pdfUrl={s.pdfFileId ? fileUrl(s.pdfFileId) : null}
+            canGenerate={can(ctx, 'clients.manage')}
+          />
+          <PrintButton label={t('clients.intake.print')} />
+        </div>
       </div>
       <Card
         id="intake-document"
@@ -103,7 +106,7 @@ export default async function IntakeSubmissionPage({
                   <span className="tabular-nums">{i + 1}.</span> {a.label}
                 </dt>
                 <dd className="whitespace-pre-wrap text-[15px] font-medium sm:col-span-5 sm:text-end">
-                  {show(a.value)}
+                  {a.value}
                 </dd>
               </div>
             ))}
@@ -138,6 +141,31 @@ export default async function IntakeSubmissionPage({
               </div>
             </dl>
           </section>
+        </CardBody>
+      </Card>
+      <Card className="print:hidden" data-testid="intake-integrity">
+        <CardBody className="space-y-3 text-sm">
+          <p className="inline-flex items-center gap-2 font-semibold">
+            <ShieldCheck className="size-4" /> {t('clients.intake.integrity.title')}
+          </p>
+          <p className={integrity === 'changed' ? 'font-medium text-danger' : 'text-muted'}>
+            {t(`clients.intake.integrity.${integrity}`)}
+          </p>
+          <p className="text-muted">
+            {s.pdfFileId && s.pdfGeneratedAt
+              ? t('clients.intake.pdfStored', { date: fmt.dateTime(s.pdfGeneratedAt) })
+              : t('clients.intake.pdfMissing')}
+          </p>
+          <dl className="grid gap-2 sm:grid-cols-[auto_1fr] sm:gap-x-4">
+            <dt className="text-muted">{t('clients.intake.integrity.record')}</dt>
+            <dd className="break-all font-mono text-[12px]">{s.contentSha256 ?? intakeContentHash(s)}</dd>
+            {s.pdfSha256 && (
+              <>
+                <dt className="text-muted">{t('clients.intake.integrity.file')}</dt>
+                <dd className="break-all font-mono text-[12px]">{s.pdfSha256}</dd>
+              </>
+            )}
+          </dl>
         </CardBody>
       </Card>
     </PageBody>

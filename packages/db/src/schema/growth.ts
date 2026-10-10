@@ -225,7 +225,11 @@ export const socialPosts = pgTable(
     platform: socialPlatform('platform').notNull(),
     type: text('type').notNull().default('feed'),
     caption: text('caption').notNull(),
-    media: jsonb('media').$type<{ url: string; alt?: string }[]>().notNull().default([]),
+    /** Images or videos (`type` when known; F18 reels/stories/carousels). */
+    media: jsonb('media')
+      .$type<{ url: string; alt?: string; type?: 'image' | 'video' }[]>()
+      .notNull()
+      .default([]),
     status: postStatus('status').notNull().default('draft'),
     scheduledAt: ts('scheduled_at'),
     publishedAt: ts('published_at'),
@@ -233,6 +237,8 @@ export const socialPosts = pgTable(
     error: text('error'),
     aiRunId: uuid('ai_run_id'),
     createdBy: text('created_by').references(() => user.id),
+    /** Instagram container progress while a video is processing (F18): { containerId?, childIds?, containerAt }. */
+    meta: jsonb('meta').$type<Record<string, string>>().notNull().default({}),
     createdAt: createdAt(),
   },
   (t) => [index('social_posts_schedule').on(t.status, t.scheduledAt), ...tenantPolicies()],
@@ -274,6 +280,10 @@ export const conversationMessages = pgTable(
     /** `ai_draft`: an AI reply waiting for staff approval (never sent until approved). */
     sender: text('sender', { enum: ['customer', 'bot', 'staff', 'ai_draft'] }).notNull(),
     text: text('text').notNull(),
+    /** `private_reply`: the one private DM answer to a comment (Instagram Private Replies, F18), kept in the comment thread. */
+    kind: text('kind', { enum: ['message', 'private_reply'] })
+      .notNull()
+      .default('message'),
     externalId: text('external_id'),
     /** Why an outbound message was not delivered (null = delivered / inbound). */
     error: text('error'),

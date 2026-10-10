@@ -1,5 +1,5 @@
 import { platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
-import { editStamp, getEditablePage, listPages, listSavedSections } from '@spa/services'
+import { editStamp, getEditablePage, getPageLock, listPages, listSavedSections } from '@spa/services'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { z } from 'zod'
@@ -29,7 +29,22 @@ export default async function EditorPage({
       listPages(tx, ctx.tenant.id),
       listSavedSections(tx, ctx.tenant.id),
     ])
-    return { editable, pages, sections, stamp: await editStamp(tx, ctx.tenant.id, pageId) }
+    // F29: read only — the editor takes the lock itself once it is open (a prefetch must not lock the page).
+    const lock = await getPageLock(tx, ctx.tenant.id, pageId)
+    return {
+      editable,
+      pages,
+      sections,
+      stamp: await editStamp(tx, ctx.tenant.id, pageId),
+      lockHolder:
+        lock && lock.userId !== ctx.user.id
+          ? {
+              name: lock.holderName,
+              since: lock.acquiredAt.toISOString(),
+              until: lock.expiresAt.toISOString(),
+            }
+          : null,
+    }
   })
   if (!loaded?.stamp) notFound()
   const { site, data } = await loadSite(ctx.tenant, { published: false })
@@ -74,6 +89,7 @@ export default async function EditorPage({
         visible: p.visible,
         published: Boolean(p.publishedAt),
       }))}
+      lockHolder={loaded.lockHolder}
       backHref={appPath(`/${slug}/website`)}
       previewHref={appPath(`/${slug}/website/preview?page=${page.slug}`)}
       liveHref={`${await publicSiteUrl(ctx.tenant)}${page.slug ? `/${page.slug}` : ''}`}
