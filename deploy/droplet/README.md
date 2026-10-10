@@ -244,7 +244,7 @@ git, never for secrets. On every deploy the updater rebuilds `/opt/spa/.env` as 
 site.env, so a line in site.env wins over both. Only these keys apply: `SITE_HOST`, `ROUTING`, `APP_URL`, `ADMIN_URL`,
 `EXTRA_ROOT_DOMAINS`, `ACME_EMAIL`, `VAPID_SUBJECT`, `CF_CNAME_TARGET`, `EMAIL_FROM`; any other line is skipped and
 noted in `/_status/build.log`. CI (`deploy/droplet/test-update.sh`) fails a site.env with another key, a key set
-twice, or `SITE_HOST` / `ROUTING` / `APP_URL` / `ADMIN_URL` not set together and matching (`ROUTING=host` needs
+twice, an empty value, or `SITE_HOST` / `ROUTING` / `APP_URL` / `ADMIN_URL` not set together and matching (`ROUTING=host` needs
 `APP_URL=https://app.<SITE_HOST>` and `ADMIN_URL=https://admin.<SITE_HOST>`; `ROUTING=path` needs
 `https://<SITE_HOST>` and `https://<SITE_HOST>/admin`). A rollback redeploys the last good commit with that commit's
 own site.env. A change to `update.sh` itself runs from the deploy after the one that ships it (`updater-sync` installs

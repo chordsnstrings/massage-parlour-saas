@@ -981,7 +981,7 @@ i18n namespace `automations`.
   `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
   --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
   date each), `deploy/droplet/test-caddy-ip.sh` and `deploy/droplet/test-update.sh` (build_env fixtures + the
-  committed site.env: allowed keys, no duplicates, SITE_HOST/ROUTING/APP_URL/ADMIN_URL together and matching).
+  committed site.env: allowed keys, no duplicates or empty values, SITE_HOST/ROUTING/APP_URL/ADMIN_URL together and matching).
   `promote` needs both. Also: `codeql.yml` (codeql-action v3,
   javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
   `js/insufficient-password-hash` in restore-drill.ts, for the owner to dismiss ("won't fix", §17); trailing-run trims use core `trimTrailing`, not

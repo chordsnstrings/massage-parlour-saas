@@ -123,6 +123,8 @@ check_site() {
   lines=$(site_lines "$1" 2>/dev/null)
   dups=$(printf '%s\n' "$lines" | sed -n 's/=.*//p' | sort | uniq -d | tr '\n' ' ')
   [ -z "$dups" ] || echo "set more than once: $dups"
+  empty=$(printf '%s\n' "$lines" | sed -n -E "s/^([A-Z0-9_]+)=(\"\"|''|)$/\1/p" | tr '\n' ' ')
+  [ -z "$empty" ] || echo "empty value (comment the line out instead): $empty"
   val() { printf '%s\n' "$lines" | sed -n "s/^$1=//p" | tail -n 1 | sed -E "s/^\"(.*)\"$/\1/; s/^'(.*)'$/\1/"; }
   host=$(val SITE_HOST) routing=$(val ROUTING) app=$(val APP_URL) admin=$(val ADMIN_URL)
   [ -n "$host$routing$app$admin" ] || return 0
@@ -149,6 +151,8 @@ rejects "a key outside the allow-list" 'BETTER_AUTH_SECRET=x'
 rejects "a partial domain set" 'SITE_HOST=spamanagement.co'
 rejects "APP_URL not app.<SITE_HOST>" $'SITE_HOST=spamanagement.co\nROUTING=host\nAPP_URL=https://spamanagement.co\nADMIN_URL=https://admin.spamanagement.co'
 rejects "a duplicate key" $'ACME_EMAIL=a@b.co\nACME_EMAIL=c@d.co'
+rejects "an empty value" 'SITE_HOST='
+rejects "an empty quoted value" 'EMAIL_FROM=""'
 printf '# nothing set\n' >"$work/site.env"
 [ -z "$(check_site "$work/site.env")" ] && ok "check accepts an all-comments file" || bad "check accepts an all-comments file"
 
