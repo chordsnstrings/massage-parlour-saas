@@ -1096,6 +1096,11 @@
     border: 1.5px dashed currentColor;
     color: inherit;
   }
+  /* on the dark-green card the generic --accent-hover (#0a4f37) would sink the lime link to ~1.3:1; white keeps
+     6.5:1+ (don't override --accent-hover there: the card's shadow uses it) */
+  .mkt-pc-spot .mkt-link:hover {
+    color: var(--on-accent);
+  }
   /* closing link row ("9 more spa tools"): at the foot of the shared list row, so both cards end level */
   .mkt-pl-end {
     display: flex;
