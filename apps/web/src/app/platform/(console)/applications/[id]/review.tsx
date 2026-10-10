@@ -45,6 +45,7 @@ export function AcceptSheet({
   action,
   plans,
   planId,
+  unofferedPlan,
   startDate,
   today,
   vatRate,
@@ -52,7 +53,10 @@ export function AcceptSheet({
 }: {
   action: Action
   plans: PlanChoice[]
+  /** Preselected plan; '' = none (the applicant's plan is no longer offered). */
   planId: string
+  /** Name of the applicant's plan when it is no longer offered (archived, inactive or legacy). */
+  unofferedPlan?: string
   startDate: string
   today: string
   /** The platform's VAT rate (%); 0 = no VAT choice to make. */
@@ -84,8 +88,21 @@ export function AcceptSheet({
       action={action}
       submitLabel="Accept and create spa"
     >
-      <Field label="Plan" name="planId">
+      <Field
+        label="Plan"
+        name="planId"
+        hint={
+          unofferedPlan
+            ? `The plan this applicant chose (${unofferedPlan}) is no longer offered. Choose one.`
+            : undefined
+        }
+      >
         <Select id="planId" name="planId" value={plan} onChange={(e) => setPlan(e.target.value)}>
+          {!plan && (
+            <option value="" disabled>
+              Choose a plan
+            </option>
+          )}
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -127,7 +144,8 @@ export function AcceptSheet({
           required
         />
       </Field>
-      {fee > 0 ? (
+      {/* No plan picked yet (the applicant's is no longer offered): no setup fee to describe. */}
+      {!chosen ? null : fee > 0 ? (
         <fieldset className="space-y-4 rounded-lg border p-4">
           <legend className="px-1 text-sm font-semibold">Setup payment</legend>
           {vatRate > 0 && (

@@ -334,4 +334,8 @@ export const domain = {
   partnerNameRequired: 'Enter the partner name',
   partnerNotFound: 'Partner not found',
   partnerCodeClash: 'Could not create a link code, please try again',
+  // R19 delete a plan (console).
+  planAlreadyArchived: '{name} is already archived',
+  planOnlyOffered: '{name} is the only plan new spas can get. Add another plan or make one available first.',
+  planNotArchived: '{name} is not archived',
 } as const

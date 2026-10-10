@@ -141,10 +141,15 @@ export const plans = pgTable(
     limits: jsonb('limits').$type<Record<string, number | boolean>>().notNull().default({}),
     active: boolean('active').notNull().default(true),
     sort: integer('sort').notNull().default(0),
+    /** R19: "deleted" while spas still point at it — hidden everywhere new spas pick a plan; restore clears it. */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  () => platformPolicies(),
+  (t) => [
+    check('plans_archived_inactive', sql`${t.archivedAt} IS NULL OR NOT ${t.active}`),
+    ...platformPolicies(),
+  ],
 )
 
 export type TenantSettings = {
