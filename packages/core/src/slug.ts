@@ -11,13 +11,15 @@ export const RESERVED_SLUGS = new Set(
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/
 
 export function normalizeSlug(input: string): string {
-  return input
+  const s = input
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/-{2,}/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
+  // Runs are single hyphens now: drop one at each end (no `-+$` regex, quadratic on long hyphen runs).
+  const start = s.startsWith('-') ? 1 : 0
+  const end = s.endsWith('-') && s.length > start ? s.length - 1 : s.length
+  return s.slice(start, end).slice(0, 40)
 }
 
 export type SlugCheck = { ok: true } | { ok: false; reason: string }

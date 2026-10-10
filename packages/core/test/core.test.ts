@@ -95,6 +95,11 @@ describe('trimTrailingSlashes', () => {
 describe('slugs', () => {
   it('normalizes and validates', () => {
     expect(normalizeSlug('  Serenity Spa & Wellness!! ')).toBe('serenity-spa-wellness')
+    expect(normalizeSlug('--Lotus--Garden--')).toBe('lotus-garden')
+    expect(normalizeSlug('-')).toBe('')
+    const t = performance.now()
+    expect(normalizeSlug(`${'-'.repeat(200_000)}x`)).toBe('x') // no quadratic hyphen trim
+    expect(performance.now() - t).toBeLessThan(500)
     expect(checkSlug('serenity-spa')).toEqual({ ok: true })
     expect(checkSlug('ab').ok).toBe(false)
     expect(checkSlug('-bad').ok).toBe(false)
