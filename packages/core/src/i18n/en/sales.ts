@@ -114,7 +114,7 @@ export const sales = {
     paymentAmount: 'Payment {n} amount',
     paymentReference: 'Payment {n} reference',
     removePayment: 'Remove payment {n}',
-    refGiftCard: 'Gift card code, e.g. ABCD-EFGH',
+    refGiftCard: 'Gift card code (ABCD-EFGH) or scan the voucher QR',
     refTerminal: 'Terminal slip no. (optional)',
     refTransfer: 'Transfer ref (optional)',
     splitPayment: 'Split payment',

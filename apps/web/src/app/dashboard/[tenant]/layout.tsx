@@ -180,6 +180,8 @@ export default async function TenantLayout({
     ...group(t('nav.group.growth'), [
       ...item('marketing', t('nav.marketing'), [
         ...gated('marketing', page('ai.approve', '/ai/content', t('nav.socialPosts'))),
+        // F16: booking-QR posters for reception + partners (hotel concierges), with bookings per partner.
+        ...gated('marketing', page('marketing.campaigns', '/posters', t('nav.posters'))),
         ...page('reports.view', '/analytics', t('nav.analytics')),
         // AI studio sits here, not under Settings: AI roles (e.g. receptionist) shouldn't get a Settings item.
         ...gated(

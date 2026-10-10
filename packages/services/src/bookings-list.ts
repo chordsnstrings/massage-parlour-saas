@@ -1,5 +1,14 @@
 // Bookings list + detail for the spa dashboard (PLAN §14.8 R2). Callers pass the branches the member may see.
-import { bookingCommissions, bookingItems, bookings, branches, clients, staff, type Tx } from '@spa/db'
+import {
+  bookingCommissions,
+  bookingItems,
+  bookingPartners,
+  bookings,
+  branches,
+  clients,
+  staff,
+  type Tx,
+} from '@spa/db'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { commissionTotals } from './booking-commissions'
 
@@ -86,10 +95,13 @@ export async function bookingDetail(tx: Tx, bookingId: string) {
       branchName: branches.name,
       clientName: clients.name,
       clientPhone: clients.phoneE164,
+      /** F16: the partner poster the online booker came through. */
+      partnerName: bookingPartners.name,
     })
     .from(bookings)
     .innerJoin(branches, eq(branches.id, bookings.branchId))
     .leftJoin(clients, eq(clients.id, bookings.clientId))
+    .leftJoin(bookingPartners, eq(bookingPartners.id, bookings.partnerId))
     .where(eq(bookings.id, bookingId))
   if (!b) return null
   const items = await tx
@@ -108,6 +120,7 @@ export async function bookingDetail(tx: Tx, bookingId: string) {
   return {
     ...b.booking,
     branchName: b.branchName,
+    partnerName: b.partnerName,
     clientName: b.clientName,
     clientPhone: b.clientPhone,
     commissionEntered: totals.size > 0,

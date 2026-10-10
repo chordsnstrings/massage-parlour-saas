@@ -313,4 +313,8 @@ export const domain = {
   featureTierChoose: 'Choose a feature tier',
   intakeNotFound: 'Intake form not found',
   outboxNotAssignable: 'That team member cannot send WhatsApp messages',
+  // F16 QR poster partners.
+  partnerNameRequired: 'Enter the partner name',
+  partnerNotFound: 'Partner not found',
+  partnerCodeClash: 'Could not create a link code, please try again',
 } as const

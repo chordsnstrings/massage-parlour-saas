@@ -281,4 +281,7 @@ export const domain: Messages['errors']['domain'] = {
   featureTierChoose: 'เลือกระดับฟีเจอร์',
   intakeNotFound: 'ไม่พบแบบฟอร์มสุขภาพ',
   outboxNotAssignable: 'พนักงานคนนี้ส่งข้อความ WhatsApp ไม่ได้',
+  partnerNameRequired: 'กรอกชื่อพาร์ทเนอร์',
+  partnerNotFound: 'ไม่พบพาร์ทเนอร์',
+  partnerCodeClash: 'สร้างรหัสลิงก์ไม่สำเร็จ กรุณาลองอีกครั้ง',
 }

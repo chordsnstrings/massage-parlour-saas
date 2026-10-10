@@ -23,7 +23,14 @@ const HOUR = 3_600_000
 export type DraftKind = 'review_request' | 'birthday' | 'winback'
 
 /** The spa's public site address: its primary active custom domain, else the free address (worker-safe). */
-export async function spaSiteUrl(tx: Tx, slug: string, env: NodeJS.ProcessEnv = process.env) {
+export async function spaSiteUrl(
+  tx: Tx,
+  slug: string,
+  env: { ROOT_DOMAIN?: string; APP_URL?: string } = {
+    ROOT_DOMAIN: process.env.ROOT_DOMAIN,
+    APP_URL: process.env.APP_URL,
+  },
+) {
   const [primary] = await tx
     .select({ hostname: domains.hostname })
     .from(domains)
@@ -42,7 +49,9 @@ async function spaOf(tx: Tx, tenantId: string) {
     .from(branches)
     .orderBy(desc(branches.isDefault), asc(branches.createdAt))
     .limit(1)
-  return spa ? { ...spa, defaultBranchId: branch?.id ?? null, drafts: clientDraftSettings(spa.settings) } : null
+  return spa
+    ? { ...spa, defaultBranchId: branch?.id ?? null, drafts: clientDraftSettings(spa.settings) }
+    : null
 }
 
 /** Clients a marketing message (campaign or automatic draft) reached or is due to reach within ±7 days of `at`. */
@@ -92,7 +101,14 @@ type Target = {
   dueAt: Date
 }
 
-async function insertDrafts(tx: Tx, tenantId: string, spa: Spa, kind: DraftKind, link: string, rows: Target[]) {
+async function insertDrafts(
+  tx: Tx,
+  tenantId: string,
+  spa: Spa,
+  kind: DraftKind,
+  link: string,
+  rows: Target[],
+) {
   if (!rows.length) return 0
   const bodies = { en: await templateFor(tx, kind, 'en'), ar: await templateFor(tx, kind, 'ar') }
   const inserted = await tx
@@ -282,6 +298,8 @@ export async function queueWinbackMessages(tx: Tx, tenantId: string, now = new D
 export async function saveClientDraftSettings(tx: Tx, tenantId: string, s: ClientDraftSettings) {
   await tx
     .update(tenants)
-    .set({ settings: sql`${tenants.settings} || jsonb_build_object('clientDrafts', ${JSON.stringify(s)}::jsonb)` })
+    .set({
+      settings: sql`${tenants.settings} || jsonb_build_object('clientDrafts', ${JSON.stringify(s)}::jsonb)`,
+    })
     .where(eq(tenants.id, tenantId))
 }

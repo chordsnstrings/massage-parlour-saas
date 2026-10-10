@@ -36,6 +36,7 @@ export const nav = {
   access: 'Team',
   documents: 'Documents',
   socialPosts: 'Social posts',
+  posters: 'QR posters',
   analytics: 'Analytics',
   site: 'Website',
   media: 'Media',

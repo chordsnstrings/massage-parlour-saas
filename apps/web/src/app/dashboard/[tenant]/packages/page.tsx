@@ -12,6 +12,7 @@ import {
 import { asc, count, desc, eq, inArray } from 'drizzle-orm'
 import { Gift, Package, Pencil, Plus, Repeat, ShoppingBag, TicketPercent, Users } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Card, Grid, Pill, SectionTabs, Stack, Stat, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { saveMembershipAction, savePackageAction, savePromoAction, toggleActiveAction } from './actions'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -126,6 +128,8 @@ export default async function PackagesPage({
   const slug = ctx.tenant.slug
   const manage = can(ctx, 'services.manage')
   const promos = can(ctx, 'marketing.campaigns')
+  // F15: printable vouchers with QR are a Premium (marketing) feature; Standard sees the Premium label.
+  const vouchers = await hasFeature(ctx.tenant.id, 'marketing')
   const base = appPath(`/${slug}/packages`)
 
   const data = await withTenant(ctx.tenant.id, async (tx) => ({
@@ -483,6 +487,9 @@ export default async function PackagesPage({
                       <th className="crm-num-c">{t('packages.card.value')}</th>
                       <th className="crm-num-c">{t('packages.card.balance')}</th>
                       <th>{t('packages.card.status')}</th>
+                      <th>
+                        <span className="sr-only">{t('growth.voucher.open')}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -506,6 +513,17 @@ export default async function PackagesPage({
                           <Pill tone={statusTone(c.status)} dot>
                             {enumLabel(t, 'giftCardStatus', c.status)}
                           </Pill>
+                        </td>
+                        <td data-label={t('growth.voucher.open')}>
+                          {vouchers ? (
+                            <Button size="sm" variant="secondary" asChild>
+                              <Link href={appPath(`/${slug}/vouchers/${c.id}`)}>
+                                <Gift /> {t('growth.voucher.open')}
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Pill tone="acc">{t('plan.premiumBadge')}</Pill>
+                          )}
                         </td>
                       </tr>
                     ))}

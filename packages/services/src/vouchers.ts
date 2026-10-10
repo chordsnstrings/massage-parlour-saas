@@ -72,13 +72,17 @@ export async function updateVoucher(
   id: string,
   v: {
     recipientName: string | null
-    recipientPhone: string | null
+    /** Left out = unchanged (only phone roles may change it). */
+    recipientPhone?: string | null
     message: string | null
     voucherServiceId: string | null
   },
 ) {
   if (v.voucherServiceId) {
-    const [svc] = await tx.select({ id: services.id }).from(services).where(eq(services.id, v.voucherServiceId))
+    const [svc] = await tx
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, v.voucherServiceId))
     if (!svc) throw new DomainError('Treatment not found', 'not_found')
   }
   const [card] = await tx.update(giftCards).set(v).where(eq(giftCards.id, id)).returning()
@@ -176,18 +180,17 @@ export async function partnerBookingStats(tx: Tx, now = new Date()) {
       ...counts,
     })
     .from(bookingPartners)
-    .leftJoin(bookings, and(eq(bookings.partnerId, bookingPartners.id), sql`${bookings.status} <> 'cancelled'`))
+    .leftJoin(
+      bookings,
+      and(eq(bookings.partnerId, bookingPartners.id), sql`${bookings.status} <> 'cancelled'`),
+    )
     .groupBy(bookingPartners.id)
     .orderBy(desc(bookingPartners.active), asc(bookingPartners.createdAt))
   const [reception] = await tx
     .select(counts)
     .from(bookings)
     .where(
-      and(
-        eq(bookings.attribution, 'qr'),
-        isNull(bookings.partnerId),
-        sql`${bookings.status} <> 'cancelled'`,
-      ),
+      and(eq(bookings.attribution, 'qr'), isNull(bookings.partnerId), sql`${bookings.status} <> 'cancelled'`),
     )
   return {
     partners: partners.map((p) => ({ ...p, latest: p.latest ? new Date(p.latest) : null })),

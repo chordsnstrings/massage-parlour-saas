@@ -1,4 +1,6 @@
 // Phase 2 — money: double-entry ledger, expenses, packages, gift cards, memberships, promo codes, commissions, payroll.
+
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   date,
@@ -13,7 +15,6 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
@@ -221,9 +222,7 @@ export const giftCards = pgTable(
      * F15: random key in the voucher's QR (public check page `/voucher/{token}` on the spa's site: validity +
      * balance only). Not the code, so the link alone can't be spent; staff can scan it at checkout.
      */
-    checkToken: text('check_token')
-      .notNull()
-      .default(sql`replace(gen_random_uuid()::text, '-', '')`),
+    checkToken: text('check_token').notNull().default(sql`replace(gen_random_uuid()::text, '-', '')`),
     /** F15 treatment voucher: shows this service instead of the amount (the value stays the AED balance). */
     voucherServiceId: uuid('voucher_service_id').references(() => services.id, { onDelete: 'set null' }),
     createdAt: createdAt(),

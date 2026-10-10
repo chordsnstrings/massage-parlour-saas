@@ -1,4 +1,6 @@
 // Phase 1 — spa operations: services, rooms, staff, shifts, clients, intake, bookings, reservations, rotation.
+
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   customType,
@@ -15,7 +17,6 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
@@ -359,9 +360,7 @@ export const bookings = pgTable(
     unique('bookings_tenant_ref').on(t.tenantId, t.refCode),
     index('bookings_branch_day').on(t.branchId, t.businessDate),
     index('bookings_client').on(t.clientId),
-    index('bookings_partner')
-      .on(t.tenantId, t.partnerId)
-      .where(sql`${t.partnerId} is not null`),
+    index('bookings_partner').on(t.tenantId, t.partnerId).where(sql`${t.partnerId} is not null`),
     ...tenantPolicies(),
   ],
 )
