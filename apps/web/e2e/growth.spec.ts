@@ -32,7 +32,7 @@ test('F15 voucher: print view with QR, edit, WhatsApp share, public check page (
   const card = await giftCard(seed.tenantId)
 
   await page.goto(`${dashboard}/packages?tab=gift-cards`)
-  await page.getByRole('link', { name: 'Voucher' }).click()
+  await page.getByRole('link', { name: 'Voucher', exact: true }).click()
   await expect(page.getByRole('heading', { name: `Gift voucher ${card.code}` })).toBeVisible()
   const voucher = page.getByTestId('voucher-print')
   await expect(voucher.getByTestId('voucher-code')).toHaveText(card.code)
@@ -106,7 +106,7 @@ test('F16 QR posters: reception + partner poster, a booking through the partner 
   await page.goto(`${dashboard}/posters`)
   await expect(row.getByRole('cell').nth(1)).toHaveText('1')
   await page.goto(`${dashboard}/bookings/${booking!.id}`)
-  await expect(page.getByText('Online · QR · Atlantis concierge')).toBeVisible()
+  await expect(page.getByText('Online · QR code · Atlantis concierge')).toBeVisible()
 
   // Paused: the link still books, without the partner.
   await page.goto(`${dashboard}/posters`)
@@ -155,7 +155,7 @@ test('Standard spa: vouchers, posters and client drafts are Premium', async ({ p
   const seed = await seedCatalog(slug)
   const card = await giftCard(seed.tenantId, 200)
   await page.goto(`${dashboard}/packages?tab=gift-cards`)
-  await expect(page.getByRole('link', { name: 'Voucher' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Voucher', exact: true })).toHaveCount(0)
   await expect(page.getByRole('cell', { name: 'Premium' })).toBeVisible()
   for (const path of ['/posters', `/vouchers/${card.id}`]) {
     await page.goto(`${dashboard}${path}`)

@@ -1283,7 +1283,7 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   reception (`/book?src=qr`, F13 attribution `qr`) or a partner (`booking_partners`: name as typed + 6-char code →
   `&partner={code}`); t.js + the booking page carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or
   paused codes ignored). Partner table: bookings all-time / 30 days / completed / latest (cancelled excluded) +
-  "Reception poster" row (QR without partner); pause / resume (audited). Booking detail shows "Online · QR ·
+  "Reception poster" row (QR without partner); pause / resume (audited). Booking detail shows "Online · QR code ·
   {partner}". Migration 0042.
 
 ### Remaining backlog (Website Studio items)

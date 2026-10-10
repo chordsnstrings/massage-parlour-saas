@@ -34,7 +34,7 @@ export const growth = {
     description:
       'Print a booking QR for your reception, or give partners such as hotel concierges their own tracked poster. Bookings made through each one are counted here.',
     reception: 'Reception poster',
-    receptionSub: 'Your own QR: bookings show as “Online · QR”.',
+    receptionSub: 'Your own QR: bookings show as “Online · QR code”.',
     partnerPoster: 'Poster for {name}',
     size: 'Paper size',
     print: 'Print poster',
