@@ -255,6 +255,45 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   OG headlines); the marketing layout sets `metadataBase` (canonical domain) and the Organization/WebSite/
   SoftwareApplication JSON-LD. OG images: `app/og/[page]/route.tsx` (`next/og`, default font).
 
+## Google + Meta integrations (F17–F19, Premium)
+
+- **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
+  business.manage + webmasters; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
+  `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via
+  `settings.integrations.google.errors.*`; Place Actions `list|create|update|deleteBookLink`, `findOurBookLink`;
+  Search Console `listScSites|addScSite|submitScSitemap|getScSitemap`, `scPropertyCandidates`/`pickScProperty`).
+  `services/integrations/meta.ts`: `instagramClient(fetch, host)` (`'instagram'` = graph.instagram.com with the
+  Instagram Login token, `'facebook'` = graph.facebook.com with a Page token — same paths), `createContainer`,
+  `sendPrivateReply` (`/{ig}/messages` + `recipient.comment_id`); `facebookLoginClient` (code → long-lived user token,
+  `pages()` with `instagram_business_account`, `debugToken`, `subscribePage`); `facebookAuthorizeUrl` (`config_id`
+  when `META_FB_CONFIG_ID`, else `FACEBOOK_SCOPES`).
+- **F17** `services/gbp-sync.ts` (state in the `gbp` row's meta, merged with jsonb `||`: `bookAction|bookUri|
+  bookLinkName|bookError…`, `scState|scSiteUrl|scSubmittedAt|scDueAt…`): `setGbpBookAction` / `removeGbpBookAction`,
+  `syncGbpBookActions` (worker), `submitGbpSitemap`, `markSitemapDue` (website publish actions call it),
+  `submitDueSitemaps` (worker). Address outside a request: `services/site-url.ts` `publicSiteBase` (same rule as web
+  `publicSiteUrl`), `googleBookingUrl` = `/book?src=google`. UI `components/integrations/gbp-site.tsx`; actions in
+  `api/integrations/google/actions.ts` (`setBookButtonAction`, `removeBookButtonAction`, `submitSitemapAction`, all
+  `guard(…, 'ai.manage', 'marketing')`; disconnect / change location remove the Book link first, best effort).
+- **F18 formats**: `social_posts.type` ∈ feed|reel|story|carousel, `media[].type` image|video, `meta` = parked
+  container ids. `instagramPublishPlan` (pure; `PublishProblem` codes → `marketing.problem.*`) feeds
+  `publishInstagramPost` (claim → children → parent → poll → media_publish; `StillProcessing` parks the post as
+  `scheduled` + `PROCESSING_NOTE`, the job resumes the same container, > 1 h fails). UI: `ai/content/post-format.tsx`
+  + `setPostFormatAction` (drops parked containers).
+- **F18 private replies**: `privateReplyState` (pure: available until comment + 7 days / sent / sending / expired),
+  `sendPrivateReply` (claim row `kind = private_reply` + `SENDING_NOTE` under a thread lock → Graph → keep or delete;
+  failures store nothing; never retried through `deliverReply`). AI: `@spa/ai` `draftPrivateReply` (`comment_agent`,
+  1,000-byte clip) only fills `components/inbox/private-reply.tsx`; staff send (`sendPrivateReplyAction`, audit
+  `inbox.private_reply` with `aiDrafted`).
+- **F19** `services/facebook.ts`: pending row (`external_id 'pending'`, status `pending_page`, encrypted user token) →
+  `chooseFacebookPage` (Page token encrypted, meta `igUserId|igUsername|fbUserId|dataAccessExpiresAt`, pending row
+  deleted, other Pages disconnected) → `facebookView` (expiresSoon < 14 days). `social.ts` `getInstagramSender`:
+  Instagram Login row first, else the Facebook row with `igUserId` (`via: 'facebook'`) — used by DMs/comment
+  replies, publishing, private replies, profile lookups; `instagramOwners` (webhook → tenant) and the publish job
+  also match Page-linked accounts; `forgetInstagramUser` also clears Page rows by `fbUserId`. Web:
+  `api/integrations/meta/facebook-actions.ts` + `facebook/callback/route.ts` (state + `fb_oauth_nonce`, ai.manage +
+  marketing), `components/integrations/facebook-card.tsx`. Tests: services `gbp-sync.test.ts`,
+  `instagram-formats.test.ts`; ai `instagram.test.ts`; e2e `instagram.spec.ts` (F18/F19 test).
+
 ## Site builder
 
 - **Puck config** (`components/site/config.tsx`), 19 blocks:
@@ -738,9 +777,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `media-prune-ai` | 04:40 |
 | `slot-filler` | 10:30, 15:30 |
 | `verify-custom-domains` | every 10 min |
-| `instagram-publish` | every 5 min |
-| `instagram-token-refresh` | 03:40 |
+| `instagram-publish` (also resumes videos parked while Instagram processes them, F18) | every 5 min |
+| `instagram-token-refresh` (+ Facebook Page token check `checkFacebookPageTokens`, F19) | 03:40 |
 | `gbp-reviews-sync` | every 2 h at :15 |
+| `gbp-site-sync` (F17: `syncGbpBookActions` re-points Book buttons whose address changed, 6 h retry; `submitDueSitemaps` sends sitemaps queued by a publish ≥ 2 min ago; Premium live spas) | every 10 min |
 | `campaigns-housekeeping` | hourly at :15 |
 | `outbox-auto-assign` (F28; spas with the default-off switch on; logged only when it assigned something) | every minute |
 | `document-reminders` | 09:00 |
@@ -823,7 +863,7 @@ i18n namespace `automations`.
 - **Tools** (`mcp/tools.ts` registry, domain code in `@spa/services` `meta-mcp.ts` on the existing Graph client +
   stored tokens): `instagram.list_comments|reply_comment|list_dms|draft_dm_reply|create_post_draft|publish_approved_post`,
   `facebook_page.list_comments|reply_comment|create_post_draft|publish_approved_post` (only with a connected
-  `social_accounts` platform `facebook` row = Page id + Page token; **no Page connect flow yet**), `whatsapp.read_inbox_summary`,
+  `social_accounts` platform `facebook` row = Page id + Page token, connected via F19 Facebook Login), `whatsapp.read_inbox_summary`,
   `whatsapp.draft_message` (outbox row `custom`/`queued` for tap-send). **No WhatsApp send tool**; `isForbiddenTool`
   drops any WhatsApp send-like tool from every server (name rules + description/schema mentioning WhatsApp).
 - **Exposure** = agent allow-list (`AGENT_META_TOOLS`: dm_agent, comment_agent, content_agent, slot_filler, meta_agent)

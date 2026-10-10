@@ -24,13 +24,13 @@ export function PrivateReplyBox({
   slug,
   id,
   state,
-  notice,
+  blocked,
 }: {
   slug: string
   id: string
   state: State
-  /** Why replies can't reach Instagram right now (not configured / connected). */
-  notice: string | null
+  /** Instagram isn't set up / connected here, so nothing can be sent right now (nothing is saved either). */
+  blocked: boolean
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
@@ -76,7 +76,7 @@ export function PrivateReplyBox({
       <p className="text-xs text-muted">
         {t('inbox.private.hint')} {state.until}
       </p>
-      {notice && <p className="text-[13px] text-warning">{notice}</p>}
+      {blocked && <p className="text-[13px] text-warning">{t('inbox.private.blocked')}</p>}
       <Textarea
         aria-label={t('inbox.private.aria')}
         dir="auto"

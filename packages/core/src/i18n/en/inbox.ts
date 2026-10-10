@@ -141,6 +141,8 @@ export const inbox = {
     notSent: 'Not sent: {reason}',
     drafted: 'AI draft ready, check it and send',
     inappropriate: 'The AI marked this comment as inappropriate. Check the draft before sending.',
+    blocked:
+      'Instagram isn’t set up or connected yet, so a private reply can’t be sent from here (nothing is saved).',
   },
   validation: { writeFirst: 'Write a message first', enterName: 'Enter a name' },
 } as const

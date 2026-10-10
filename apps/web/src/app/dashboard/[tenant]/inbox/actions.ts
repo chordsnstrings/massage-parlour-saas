@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
+import { fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
 import { publicSiteUrl } from '@/server/sites'
 
@@ -327,6 +328,7 @@ export async function draftPrivateReplyAction(slug: string, conversationId: stri
       tenantId: ctx.tenant.id,
       comment: comment.text,
       bookingUrl: bookingLink(await publicSiteUrl(ctx.tenant), 'ig'),
+      client: fixtureClient(slug),
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

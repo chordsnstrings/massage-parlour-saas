@@ -146,6 +146,56 @@ host later means adding it to `packages/core/src/security-headers.ts`.
    shows where access goes ("Approving sends access to claude.ai"). Registrations nobody approves are deleted after a
    day. Every approval is in the audit log (`platform.mcp.client_authorized`).
 
+## Google: Business Profile, Book button, Search Console (F17)
+
+One OAuth client (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) in the platform's Google Cloud project serves every spa.
+Owner steps in that project (console.cloud.google.com → APIs & Services):
+1. **Enable the APIs**: My Business Account Management API, My Business Business Information API, Google My Business
+   API (v4: reviews + local posts), **My Business Place Actions API** (the "Book" button) and **Google Search Console
+   API**. A missing one shows on the spa's card as "this Google API isn't enabled for the platform yet" (the stored
+   code is `api_disabled`). Business Profile APIs need Google's access approval (the GBP API access form) before they
+   answer with real quota.
+2. **OAuth consent screen → scopes**: `https://www.googleapis.com/auth/business.manage` and
+   `https://www.googleapis.com/auth/webmasters` (both sensitive: Google verifies the app before external users see no
+   warning). The connect flow asks for both; spas connected before F17 see "Reconnect Google and allow Search Console
+   access" until they reconnect once.
+3. **Authorized redirect URIs**: `https://app.<domain>/api/integrations/google/callback` for each platform domain
+   (spamanagement.co and, while it lives, spamanagement.ae).
+
+What spas get (Premium): Settings → Instagram & Google → Google card → **Book button on Google** (adds/updates/removes
+the location's APPOINTMENT link → `https://<site>/book?src=google`; the `gbp-site-sync` worker job re-points it within
+10 minutes when the site address changes, e.g. a custom domain becomes primary) and **Search Console** (sitemap sent
+after each publish, or with "Send sitemap"; the spa's Google account must own or fully manage a property covering
+the address — a custom domain without one is added with `sites.add` and must then be verified in Search Console).
+**Platform marketing sitemap stays an owner step:** in Search Console add the `sc-domain:spamanagement.co` property
+(DNS TXT verification in Cloudflare) and submit `https://spamanagement.co/sitemap.xml` once. Spa free addresses
+(`{slug}.spamanagement.co`) are covered by that Domain property; spa Google accounts can't verify them.
+
+## Meta: Instagram + Facebook Page (F18, F19)
+
+One Meta app (`META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`) with two products:
+1. **Instagram API with Instagram Login** (existing): redirect `https://app.<domain>/api/integrations/meta/callback`,
+   webhook `…/api/integrations/meta/webhook` (fields `messages`, `comments`), deauthorize + data-deletion URLs (the
+   Instagram card lists them). Permissions for app review: `instagram_business_basic`,
+   `instagram_business_manage_messages`, `instagram_business_manage_comments` (comment replies **and private
+   replies**), `instagram_business_content_publish` (feed posts, **reels, stories, carousels**).
+2. **Facebook Login for Business** (F19): add the product, then **Valid OAuth Redirect URIs** =
+   `https://app.<domain>/api/integrations/meta/facebook/callback` per platform domain (the Facebook card shows it).
+   Optional: create a Login for Business **configuration** (user access token, the permissions below) and set
+   `META_FB_CONFIG_ID` to its id; unset = the dialog asks for the permission list directly. Permissions for app
+   review: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
+   `pages_read_user_content`, `pages_manage_engagement`, `business_management`, `instagram_basic`,
+   `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`. Also subscribe the app's
+   **Instagram** webhook object to `comments` (Facebook Login path) so comments on a Page-linked account reach the
+   inbox; the app is installed on the chosen Page (`subscribed_apps`, field `feed`) automatically.
+   Deauthorize / data-deletion callbacks are the same URLs as Instagram's (they also clear Page tokens).
+
+Until app review passes, only people with a role on the Meta app (admins, developers, testers) can connect. Page
+tokens don't expire, but Meta's data access lapses 90 days after the person last signed in: the card warns 14 days
+before (daily `instagram-token-refresh` job runs `debug_token`) and asks to reconnect. Videos for reels/stories must be
+public https `.mp4`/`.mov` links (the media library holds images only); Instagram processes them for up to a few
+minutes and the 5-minute `instagram-publish` job finishes the post.
+
 ## Client IP (rate limits, audit IPs)
 
 The app takes the visitor's IP from one header only, `Cf-Connecting-Ip`, and Caddy overwrites it on every request:

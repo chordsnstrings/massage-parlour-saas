@@ -248,7 +248,7 @@ export function ThreadView({
                 ? { status: 'sent', at: fmt.dateTime(privateState.at) }
                 : { status: privateState.status }
           }
-          notice={sendNotice}
+          blocked={Boolean(sendNotice)}
         />
       )}
       {c.mode === 'closed' ? (

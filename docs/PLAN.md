@@ -1254,6 +1254,30 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
   auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
 
+- ✅ **F17. Google Book button + Search Console** (Premium 'marketing'). Shipped 2026-10-10: Google card → "Book
+  button on Google" sets/updates/removes the location's Place Actions APPOINTMENT link (preferred) →
+  `{site}/book?src=google` (owner spec: F13 attribution `google`); other providers' links untouched; worker
+  `gbp-site-sync` (10 min) re-points it when the address changes, failures retried every 6 h. "Search Console":
+  sitemap queued on every publish (sent ~2 min after the last) + "Send sitemap"; picks an owned/full property covering
+  the address (URL prefix or `sc-domain:`), custom domain without one → `sites.add` + "verify it", free address →
+  "no access" (platform marketing property = owner step). Errors stored as codes (`api_disabled`, `scope`, …) shown in
+  EN/TH. Connect now asks for `business.manage` + `webmasters`. Owner steps: deploy/droplet/README.md "Google".
+- ✅ **F18. Instagram reels, stories, carousels + private replies** (Premium). Shipped 2026-10-10: post "Format" sheet
+  (feed / reel / story / carousel, 1–10 https image/video links); publisher builds the containers (REELS with
+  `share_to_feed` + optional cover, STORIES without caption, carousel children `is_carousel_item` then CAROUSEL),
+  polls status; a video still processing is parked (`social_posts.meta` container ids, "Processing video") and the
+  5-minute job publishes the same container. Comment threads get "Reply privately": one DM per comment within 7 days
+  (Private Replies API, `kind = private_reply` in the thread, claimed so two staff can't both send), "Draft with AI"
+  fills the box through the gateway (`comment_agent`, budget/kill switch); staff always press Send. Migration 0042
+  (`conversation_messages.kind`, `social_posts.meta`).
+- ✅ **F19. Facebook Page connect** (Premium). Shipped 2026-10-10: Facebook Login for Business (config id
+  `META_FB_CONFIG_ID` or scope list) → pending row with the encrypted long-lived user token → Page picker (shows the
+  linked Instagram account) → Page token stored encrypted (user token deleted), app installed on the Page; card shows
+  Page + IG account, data-access expiry warning (14 days), expired state, disconnect (any plan). Daily token check
+  (`debug_token`). A Page-linked IG account is used for publishing / private replies / replies when there's no
+  Instagram Login connection (graph.facebook.com) and its comment webhooks reach the spa. Owner steps (app review
+  permissions, redirect URI): deploy/droplet/README.md "Meta".
+
 ### Remaining backlog (Website Studio items)
 - ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after
   the last change and on blur / tab hidden, with the edit stamp (never overwrites silently: "Changed elsewhere
