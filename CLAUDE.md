@@ -108,6 +108,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Links are domain-agnostic (server/origin.ts): `requestUrls()`/`appUrl()`… for getting around (visitor's platform
   domain, from the ROOT_DOMAIN + EXTRA_ROOT_DOMAINS allow-list; unknown hosts → canonical); `canonicalUrls()` for
   addresses that are shared, stored or sent (spa site/`publicSiteUrl`, invites, preview share links, public file URLs).
+  Links to a spa's live site always via `publicSiteUrl` (worker: `publicSiteBase`/`spaSiteUrl`): own domain once primary,
+  the temporary address 301s there (R20); `.site()` only for the free address itself (CODEMAP URLs).
   OAuth runs on the domain it starts on (register each domain's callback); CNAME target = CF_CNAME_TARGET
   (site.env move block: customers.spamanagement.co; unset = APP_URL host); worker jobs use APP_URL.
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.

@@ -26,6 +26,8 @@ const viaHost = (page: Page, url: string) => {
   })
 }
 const altSite = (slug: string) => (PATH ? `${altBase}/s/${slug}` : `http://${slug}.alt.localhost:${PORT}`)
+/** The site's home page (path routing serves it without the trailing slash). */
+const home = (slug: string) => (PATH ? site(slug) : `${site(slug)}/`)
 
 // F23: a super-admin renames a spa's address; the old site + dashboard addresses 301 to the new ones (every platform
 // domain, path + query kept), the old slug stays reserved to the spa for 12 months, and generated links follow.
@@ -64,15 +66,16 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
   await test.step('old site address → 301 to the new one, path + query kept, on both platform domains', async () => {
     for (const [from, to] of [
       [`${site(old)}/book?src=qr&lang=ar`, `${site(next)}/book?src=qr&lang=ar`],
-      [`${site(old)}/`, `${site(next)}/`],
+      [home(old), home(next)],
       [`${altSite(old)}/sitemap.xml`, `${altSite(next)}/sitemap.xml`],
     ]) {
       const res = await viaHost(ops, from!)
       expect(res.status(), from).toBe(301)
-      expect(res.headers().location).toBe(to)
+      // Next sends a same-host Location relative (path routing): compare it resolved.
+      expect(new URL(res.headers().location!, from).href).toBe(to)
     }
     // The new address serves the site.
-    expect((await viaHost(ops, `${site(next)}/`)).status()).toBe(200)
+    expect((await viaHost(ops, home(next))).status()).toBe(200)
   })
 
   await test.step('old dashboard paths → 301 (both domains), the owner lands on the new dashboard', async () => {
@@ -83,7 +86,7 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
     ]) {
       const res = await viaHost(ops, from!)
       expect(res.status(), from).toBe(301)
-      expect(res.headers().location).toBe(to)
+      expect(new URL(res.headers().location!, from).href).toBe(to)
     }
     await owner.goto(`${app}/${old}/clients?q=x`)
     await owner.waitForURL(`${app}/${next}/clients?q=x`)

@@ -22,6 +22,7 @@ import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
+import { forgetOwnDomains } from '@/server/own-domain'
 import { invalidateSiteHost } from '@/server/sites'
 
 /** A service message as a field error: its `errors.domain.*` key when it has no parameters, else the text. */
@@ -130,6 +131,7 @@ export async function setPrimaryDomainAction(slug: string, id: string | null): P
   if (id !== null && !domainId.safeParse(id).success) return fail('settings.domains.result.notFound')
   try {
     await setPrimaryDomain(tenantDomainRun(ctx.tenant.id), ctx.tenant.id, id)
+    forgetOwnDomains() // R20: the temporary address starts or stops redirecting to the own domain right away
     await record(ctx, 'domain.primary_set', id ?? ctx.tenant.id, { domainId: id, subdomain: id === null })
     refresh(slug)
     return ok(id ? 'settings.domains.result.primaryUpdated' : 'settings.domains.result.freePrimary')

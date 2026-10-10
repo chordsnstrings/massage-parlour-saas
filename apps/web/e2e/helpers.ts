@@ -206,6 +206,8 @@ export async function signInPlatformAdmin(page: Page) {
   const signIn = async () => {
     await page.goto(`${admin}/login`)
     if (await overview.isVisible()) return 'in' as const
+    // Path routing (one host): the verification link already signed this browser in, so the console asks for 2FA.
+    if (page.url().includes('admin2fa=1')) return 'enrol' as const
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
     await page.getByRole('button', { name: 'Sign in' }).click()
@@ -219,7 +221,10 @@ export async function signInPlatformAdmin(page: Page) {
     await expect(overview).toHaveCount(0)
     // Open the emailed verification link (same token Better Auth sends).
     const token = await createEmailVerificationToken(AUTH_SECRET, email)
-    await page.goto(`${app}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`)
+    // The API lives on the bare host with path routing (`/app/api/…` would be a dashboard path).
+    await page.goto(
+      `${PATH ? base : app}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`,
+    )
     outcome = await signIn()
   }
   if (outcome === 'enrol') {
@@ -229,6 +234,11 @@ export async function signInPlatformAdmin(page: Page) {
     await page.goto(`${admin}/`)
   } else if (outcome === 'twoFactor') {
     await passTwoFactor(page, email)
+    // Path routing: the two-step page lands on the dashboard root; the console is a path away.
+    if (PATH) {
+      await page.waitForURL((u) => !u.pathname.includes('two-factor'))
+      await page.goto(`${admin}/`)
+    }
   }
   await expect(overview).toBeVisible()
 }
