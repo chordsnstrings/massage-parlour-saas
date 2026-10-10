@@ -82,6 +82,17 @@
     letter-spacing: -0.015em;
     line-height: 1.15;
   }
+  /* keyboard focus: the marketing accent (globals.css would use the app's :root accent, which also flips in OS
+     dark mode); lime on the dark grounds — 6.5:1 on white, 5.2:1+ on the dark green / near-black */
+  .mkt :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .mkt-dark :focus-visible,
+  .mkt-demo :focus-visible,
+  .mkt-pc-spot :focus-visible {
+    outline-color: var(--lime);
+  }
   .mkt-head {
     font-family: var(--head);
     letter-spacing: -0.03em;
@@ -292,6 +303,7 @@
       color 0.25s;
   }
   .mkt-btn svg {
+    flex-shrink: 0;
     width: 18px;
     height: 18px;
     transition: transform 0.25s;
@@ -981,6 +993,9 @@
     margin-inline-start: -1.1em;
   }
   .mkt-psub-in > *::before {
+    /* fallback first: engines without alt text (Safari < 17.4, Firefox < 128) drop the second declaration */
+    content: "·";
+    /* biome-ignore lint/suspicious/noDuplicateProperties: deliberate fallback for the alt-text syntax */
     content: "·" / "";
     display: inline-block;
     width: 1.1em;
@@ -990,10 +1005,16 @@
     color: var(--text);
     font-weight: 600;
   }
+  /* the CTA carries the DB plan name: it wraps (balanced) instead of overflowing the card; full width, so a
+     16px side padding is enough and keeps "Apply for Standard" on one line in the 1024px home split */
   .mkt-pc .mkt-btn {
     width: 100%;
     min-height: 52px;
     margin-top: 24px;
+    padding: 12px 16px;
+    white-space: normal;
+    text-align: center;
+    text-wrap: balance;
   }
   .mkt-btn-lime {
     background: var(--lime);
