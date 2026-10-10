@@ -18,6 +18,8 @@ import {
   billingStageSummary,
   flagOn,
   offeredPlans,
+  SLUG_COOLING_MONTHS,
+  slugHistoryOf,
   tenantEntitlements,
 } from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
@@ -33,7 +35,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
-import { appUrl } from '@/server/origin'
+import { appUrl, canonicalUrls } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
 import {
   createInvoiceAction,
@@ -43,6 +45,7 @@ import {
   paymentReminderAction,
   purgeTenantAction,
   recordPaymentAction,
+  renameSlugAction,
   setInvoicePaidAction,
   setTenantStatusAction,
   updateSubscriptionAction,
@@ -60,40 +63,54 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) })
   if (!tenant) notFound()
   const today = todayDubai()
-  const [sub, planRows, invoices, payments, team, events, branch, alert, ent, offered, rules, autoBilling] =
-    await Promise.all([
-      db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
-      db.select().from(plans).orderBy(asc(plans.sort)),
-      db
-        .select()
-        .from(platformInvoices)
-        .where(eq(platformInvoices.tenantId, id))
-        .orderBy(desc(platformInvoices.issueDate)),
-      db
-        .select()
-        .from(platformPayments)
-        .where(eq(platformPayments.tenantId, id))
-        .orderBy(desc(platformPayments.receivedAt)),
-      db
-        .select({
-          id: members.id,
-          name: user.name,
-          email: user.email,
-          role: roles.name,
-          status: members.status,
-        })
-        .from(members)
-        .innerJoin(user, eq(user.id, members.userId))
-        .innerJoin(roles, eq(roles.id, members.roleId))
-        .where(eq(members.tenantId, id)),
-      db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
-      db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
-      billingAlert(db, id, today),
-      tenantEntitlements(db, id),
-      offeredPlans(db),
-      billingRules(db),
-      flagOn(db, 'billing.autoTransitions', id),
-    ])
+  const [
+    sub,
+    planRows,
+    invoices,
+    payments,
+    team,
+    events,
+    branch,
+    alert,
+    ent,
+    offered,
+    rules,
+    autoBilling,
+    oldSlugs,
+  ] = await Promise.all([
+    db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
+    db.select().from(plans).orderBy(asc(plans.sort)),
+    db
+      .select()
+      .from(platformInvoices)
+      .where(eq(platformInvoices.tenantId, id))
+      .orderBy(desc(platformInvoices.issueDate)),
+    db
+      .select()
+      .from(platformPayments)
+      .where(eq(platformPayments.tenantId, id))
+      .orderBy(desc(platformPayments.receivedAt)),
+    db
+      .select({
+        id: members.id,
+        name: user.name,
+        email: user.email,
+        role: roles.name,
+        status: members.status,
+      })
+      .from(members)
+      .innerJoin(user, eq(user.id, members.userId))
+      .innerJoin(roles, eq(roles.id, members.roleId))
+      .where(eq(members.tenantId, id)),
+    db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
+    db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
+    billingAlert(db, id, today),
+    tenantEntitlements(db, id),
+    offeredPlans(db),
+    billingRules(db),
+    flagOn(db, 'billing.autoTransitions', id),
+    slugHistoryOf(db, id),
+  ])
   const stage = billingStageSummary(tenant, rules)
   const currentPlan = planRows.find((p) => p.id === (sub?.planId ?? tenant.planId))
   const ownerPhone =
@@ -324,6 +341,37 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   </Select>
                   <SubmitButton variant="secondary">Update</SubmitButton>
                 </ActionForm>
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader
+                title="Web address"
+                description={`Free address ${canonicalUrls().site(tenant.slug)} — also the dashboard path. The old address redirects (301) to the new one and stays reserved to this spa for ${SLUG_COOLING_MONTHS} months.`}
+              />
+              <CardBody className="space-y-4">
+                <ActionForm action={renameSlugAction.bind(null, id)} className="flex items-end gap-3">
+                  <Field label="New address" name="slug" className="flex-1">
+                    <Input
+                      id="slug"
+                      name="slug"
+                      defaultValue={tenant.slug}
+                      autoComplete="off"
+                      spellCheck={false}
+                      required
+                    />
+                  </Field>
+                  <SubmitButton variant="secondary">Rename</SubmitButton>
+                </ActionForm>
+                {oldSlugs.length > 0 && (
+                  <ul className="space-y-1 text-[13px] text-muted" aria-label="Previous addresses">
+                    {oldSlugs.map((o) => (
+                      <li key={o.slug}>
+                        <span className="font-mono text-fg">{o.slug}</span> · renamed{' '}
+                        {formatDate(o.renamedAt)} · reserved until {formatDate(o.reservedUntil)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardBody>
             </Card>
             <Card>

@@ -14,6 +14,14 @@ export const errors: Omit<Messages['errors'], 'domain'> = {
     ref: 'รหัสอ้างอิง {digest}',
     retry: 'ลองอีกครั้ง',
   },
+  // F24 (2026-10-10): needs native review.
+  page: {
+    notFoundTitle: 'ไม่พบหน้านี้',
+    notFoundBody: 'ไม่มีหน้าที่คุณกำลังค้นหา หรือหน้านี้ถูกย้ายไปแล้ว',
+    toDashboard: 'ไปที่แดชบอร์ดของคุณ',
+    toHome: 'กลับไปหน้าแรกของแดชบอร์ด',
+    signIn: 'เข้าสู่ระบบ',
+  },
   file: {
     empty: 'ไฟล์นี้ว่างเปล่า',
     tooLarge: 'ไฟล์ต้องมีขนาดไม่เกิน {size}',

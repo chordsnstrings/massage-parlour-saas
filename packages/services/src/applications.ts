@@ -47,6 +47,7 @@ import {
   invoiceTotals,
   recordPlatformPayment,
 } from './platform-billing'
+import { claimSlugTx, slugReservation } from './tenant-slug'
 
 const addDays = (isoDate: string, days: number) => {
   const d = new Date(`${isoDate}T00:00:00Z`)
@@ -79,6 +80,8 @@ export async function provisionTenantTx(tx: Tx, input: ProvisionInput) {
         .orderBy(asc(plans.sort), asc(plans.createdAt))
         .limit(1)
   if (input.subscription && !plan) throw new DomainError('Plan not found', 'not_found')
+  // F23: another spa's previous address stays reserved for its cooling period; an expired one stops redirecting now.
+  await claimSlugTx(tx, input.slug)
   const active = Boolean(input.subscription)
   const [tenant] = await tx
     .insert(tenants)
@@ -137,15 +140,19 @@ export async function provisionTenantTx(tx: Tx, input: ProvisionInput) {
 export const provisionTenant = (db: Db, input: ProvisionInput) =>
   db.transaction((tx) => provisionTenantTx(tx, input))
 
-/** Why a web address can't be used: bad format/reserved, an existing spa, or another pending application. */
+/**
+ * Why a web address can't be used: bad format/reserved, an existing spa, a spa's previous address in its cooling
+ * period (F23), or another pending application.
+ */
 export async function slugStatus(
   db: DbOrTx,
   slug: string,
-  opts: { exceptApplicationId?: string } = {},
-): Promise<'free' | 'invalid' | 'tenant' | 'application'> {
+  opts: { exceptApplicationId?: string; now?: Date } = {},
+): Promise<'free' | 'invalid' | 'tenant' | 'previous' | 'application'> {
   if (!checkSlug(slug).ok) return 'invalid'
   const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug)).limit(1)
   if (tenant) return 'tenant'
+  if (await slugReservation(db, slug, { now: opts.now })) return 'previous'
   const [app] = await db
     .select({ id: spaApplications.id })
     .from(spaApplications)

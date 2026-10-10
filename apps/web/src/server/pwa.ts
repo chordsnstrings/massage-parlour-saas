@@ -105,6 +105,14 @@ export async function pwaTenant(slug: string, opts: { fresh?: boolean } = {}): P
   return found
 }
 
+/** After a slug rename (F23): the old slug stops being an app, the new one becomes one. */
+export function forgetPwaSlugs(...slugs: string[]) {
+  for (const s of slugs) {
+    tenantCache.delete(s.toLowerCase())
+    missCache.delete(s.toLowerCase())
+  }
+}
+
 /** Web app manifest (https://www.w3.org/TR/appmanifest/) for one spa's dashboard. */
 export function pwaManifest(t: PwaTenant) {
   const app = pwaFor(t)

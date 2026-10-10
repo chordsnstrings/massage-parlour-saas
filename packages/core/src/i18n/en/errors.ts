@@ -12,6 +12,14 @@ export const errors = {
     ref: 'Ref {digest}',
     retry: 'Try again',
   },
+  /** F24: the dashboard's 404 / error pages (also outside the spa shell: sign-in pages, unknown spa addresses). */
+  page: {
+    notFoundTitle: 'Page not found',
+    notFoundBody: 'The page you’re looking for doesn’t exist or has moved.',
+    toDashboard: 'Go to your dashboard',
+    toHome: 'Back to the dashboard home',
+    signIn: 'Sign in',
+  },
   file: {
     empty: 'The file is empty',
     tooLarge: 'Files can be up to {size}',

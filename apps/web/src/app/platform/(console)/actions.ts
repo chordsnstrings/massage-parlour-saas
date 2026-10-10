@@ -15,6 +15,7 @@ import {
   pauseTenant,
   purgeTenant,
   recordPlatformPayment,
+  renameTenantSlug,
   resumeTenant,
   saveEmailSettings,
   saveTurnstileSettings,
@@ -35,6 +36,9 @@ import { audit } from '@/server/audit'
 import { discountsFromForm } from '@/server/discounts'
 import { invalidateEmailSettings, registerEmailSettings } from '@/server/email-settings'
 import { canonicalUrls } from '@/server/origin'
+import { forgetPwaSlugs } from '@/server/pwa'
+import { forgetSiteTenants } from '@/server/sites'
+import { forgetSlugRedirects } from '@/server/slug-redirect'
 import { invalidateTurnstileSettings } from '@/server/turnstile'
 
 const money = z.coerce
@@ -679,6 +683,43 @@ export async function pauseTenantAction(
     return ok(pause ? `${row.name} paused` : `${row.name} resumed`)
   } catch (e) {
     return domainFail(e)
+  }
+}
+
+/**
+ * F23: rename a spa's web address. The old one (site + dashboard, every platform domain) 301s to the new one and stays
+ * reserved to this spa for 12 months (SLUG_COOLING_MONTHS); everything else builds its links from the slug.
+ */
+export async function renameSlugAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId)) return fail('Spa not found')
+  const parsed = z
+    .object({ slug: z.string().trim().min(1, 'Enter the new address').max(80) })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  try {
+    const r = await renameTenantSlug(platformDb(), { tenantId, slug: parsed.data.slug, actorUserId: user.id })
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.tenant.slug_renamed',
+      entity: 'tenant',
+      entityId: tenantId,
+      data: { from: r.from, to: r.to, reservedUntil: r.reservedUntil.toISOString() },
+    })
+    forgetSlugRedirects()
+    forgetSiteTenants()
+    forgetPwaSlugs(r.from, r.to)
+    refresh(tenantId)
+    revalidatePath('/platform/tenants')
+    return ok(`Address changed to ${r.to} — ${r.from} now redirects to it`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { slug: e.message })
+    throw e
   }
 }
 

@@ -22,6 +22,7 @@ export const metadata: Metadata = { title: 'Application' }
 const SLUG_TEXT = {
   free: { tone: 'success', text: 'Available' },
   tenant: { tone: 'danger', text: 'Taken by an existing spa' },
+  previous: { tone: 'danger', text: 'A renamed spa’s previous address (reserved for 12 months)' },
   application: { tone: 'danger', text: 'Held by another pending application' },
   invalid: { tone: 'danger', text: 'Not a valid address' },
 } as const

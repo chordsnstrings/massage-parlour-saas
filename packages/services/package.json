@@ -6,6 +6,7 @@
     ".": "./src/index.ts",
     "./intake-pdf": "./src/pdf/intake-pdf.ts",
     "./site-kit": "./src/site-kit/index.ts",
+    "./tenant-slug": "./src/tenant-slug.ts",
     "./xlsx": "./src/xlsx.ts"
   },
   "scripts": {

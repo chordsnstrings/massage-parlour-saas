@@ -483,6 +483,28 @@ export const platformJobRuns = pgTable(
 )
 
 /**
+ * F23: a spa's previous web addresses (slug → the spa that renamed away from it). `{old}.{root}` and `app/{old}/…`
+ * 301 to the spa's current slug while no live spa holds the old one; another spa may claim it only after
+ * `reserved_until` (rename + 12 months), which deletes the row. Platform-only (no tenant policy): host routing reads
+ * it before any tenant is known. Not `tenant_id`: that column name marks RLS tenant tables (db rls test).
+ */
+export const tenantSlugHistory = pgTable(
+  'tenant_slug_history',
+  {
+    slug: text('slug').primaryKey(),
+    renamedTenantId: uuid('renamed_tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Super-admin user id who renamed it. */
+    renamedBy: text('renamed_by'),
+    renamedAt: timestamp('renamed_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Until then only this spa may take the address back (cooling period). */
+    reservedUntil: timestamp('reserved_until', { withTimezone: true }).notNull(),
+  },
+  (t) => [index('tenant_slug_history_tenant').on(t.renamedTenantId), ...platformPolicies()],
+)
+
+/**
  * G12: one row per permanently purged spa. No FK to `tenants` (the tenant row is gone) so the record survives the
  * purge: who, when, how many rows per table, and how many stored objects were removed.
  */

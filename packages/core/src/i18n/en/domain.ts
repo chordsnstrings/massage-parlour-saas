@@ -290,6 +290,8 @@ export const domain = {
   applicationPending: 'You already have an application waiting for approval',
   applicationSlugFormat: 'Use 3–40 lowercase letters, numbers or hyphens.',
   applicationSlugTaken: 'That address is taken.',
+  // F23 slug rename (console)
+  slugUnchanged: 'That is already this spa’s address.',
   applicationNotFound: 'Application not found',
   applicationReviewed: 'This application was already reviewed',
   applicantClosed: 'The applicant’s login is closed',
