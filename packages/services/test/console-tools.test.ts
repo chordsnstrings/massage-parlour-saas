@@ -10,7 +10,6 @@ import {
   members,
   notifications,
   plans,
-  platformInvoices,
   platformSettings,
   roles,
   session,
