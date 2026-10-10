@@ -120,7 +120,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      (served as before): other methods (forms/server actions started there), `/book/embed` (widget iframe; snippets
      on other sites point at it), `robots.txt` (the host still serves `/book/embed`, so its Disallow must stay readable
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
-     everything the proxy never sees (`/api` incl. the Caddy ask, `/files`, `_next`, `/widget.js`, `/t.js`).
+     `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
+     for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
      `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio/editor previews + preview-share links
      live on the app host (`/{slug}/website/preview`, `/website/preview?token=`), never on the temporary address.
      Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;

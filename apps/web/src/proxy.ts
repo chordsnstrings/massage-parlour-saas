@@ -111,8 +111,8 @@ export async function proxy(req: NextRequest) {
   if (safe) {
     // R20: the spa's own domain is active + primary → its temporary address ({slug}.{any platform root}, /s/{slug}) 301s
     // there, path + query kept, one hop (a renamed slug too). Not: other methods (forms/server actions started here),
-    // the widget iframe /book/embed, robots.txt; /api, /files, _next and static files never reach the proxy. Short
-    // browser cache, like F23: a domain change applies within minutes.
+    // the widget iframe /book/embed, robots.txt; /api and /.well-known (only the platform-only check above sees them),
+    // /files, _next and static files never get here. Short browser cache, like F23: a domain change applies in minutes.
     const own = await ownDomainTarget(url.pathname, req.nextUrl.search)
     if (own) {
       const res = NextResponse.redirect(own, 301)
