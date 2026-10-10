@@ -154,7 +154,10 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
     await expect(status(other)).toHaveText('View only')
     await expect(other.getByRole('button', { name: 'Save draft' })).toBeDisabled()
     await expect(other.getByRole('button', { name: 'Publish', exact: true })).toHaveCount(0)
+    // Taking over reloads the editor (window.location.reload): an edit typed before that load would be wiped.
+    const reloaded = other.waitForEvent('load')
     await lock.getByRole('button', { name: 'Take over' }).click()
+    await reloaded
     await expect(other.getByRole('region', { name: 'Editing lock' })).toHaveCount(0, { timeout: 30_000 })
     await expect(other.getByRole('button', { name: 'Save draft' })).toBeEnabled()
     await expect
