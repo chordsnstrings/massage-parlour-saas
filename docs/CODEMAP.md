@@ -384,8 +384,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   connect-src limit what it can load. img-src `https:`: image fields accept any https URL (AI images, pasted links,
   Instagram/Google media); stored files are served by the app (`/files`), never from the S3/R2 host. Stripe Checkout
   and OAuth (Google, Meta, MCP consent) are top-level navigations, not form posts, so `form-action 'self'` holds. Puck
-  needs nothing extra: the editors import `@puckeditor/core/no-external.css` (Puck's runtime styles `@import`
-  rsms.me's Inter; the editor uses local Inter Variable).
+  needs nothing extra: both editors import `components/site/editor/puck-css.ts` first (Puck's `no-external.css` + the
+  `--_puck-styles-loaded` flag set before Puck renders; otherwise Puck injects its own copy, which `@import`s rsms.me's
+  Inter — the editor uses local Inter Variable). Zod in the browser is jitless (`lib/zod-jitless.ts`, imported first by
+  `components/campaigns/rules.ts`): its JIT probes `new Function`, which the CSP blocks and reports.
 - **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy` (camera, mic, geolocation, payment, usb, serial, hid, midi, sensors, display-capture,
   browsing-topics off); `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
@@ -406,7 +408,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **Steps**: service → when (up to 14 days ahead, 60-min lead time) → details (name, UAE phone, honeypot `website`) →
   done (.ics + WhatsApp confirm).
 - **`bookOnline`**:
-  1. In-memory per-IP limits: 20 attempts/h, 5 bookings/h; honeypot; Turnstile `passesBotCheck` (F9).
+  1. In-memory per-IP limits: 20 attempts/h, 5 bookings/h (off with `AUTH_RATE_LIMIT=off`, the e2e server); honeypot;
+     Turnstile `passesBotCheck` (F9).
   2. `findOrCreateClient`; blocklisted clients are refused.
   3. `createBooking` with status `pending`, source `online`, `attribution` (F13) = core `bookingAttribution` of the
      `entry` the flow sends (t.js `sessionStorage.spa_entry`, else the page's own tags + external referrer; widget
