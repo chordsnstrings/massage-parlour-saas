@@ -28,7 +28,7 @@ export const metadata: Metadata = { title: 'Spas' }
 
 /** "3 h ago" / "5 d ago" / a date — the console list only needs a feel for recency. */
 function ago(d: Date | null, now: number) {
-  if (!d) return '—'
+  if (!d) return 'never'
   const mins = Math.max(0, Math.round((now - d.getTime()) / 60_000))
   if (mins < 60) return `${mins} min ago`
   const hours = Math.round(mins / 60)
@@ -45,7 +45,7 @@ function bytes(n: number) {
 
 const STAGE_LABEL = { overdue: 'overdue', grace: 'grace', read_only: 'read-only (billing)' } as const
 const DAY = 86_400_000
-/** Dormancy cue (amber): no staff sign-in for 14+ days / no booking for 30+ days. */
+/** Dormancy cue (amber): no staff sign-in for 14+ days / no booking for 30+ days (never = counted from joining). */
 const STALE = { signin: 14 * DAY, booking: 30 * DAY }
 
 const SORT_LABEL: Record<TenantSort, string> = {
@@ -151,7 +151,7 @@ function NumLine({ ctx, k, label, value }: { ctx: Ctx; k: TenantSort; label: str
 }
 
 function Activity({ r, ctx }: { r: TenantUsageRow; ctx: Ctx }) {
-  const old = (d: Date | null, ms: number) => live(r) && !!d && ctx.now - d.getTime() > ms
+  const old = (d: Date | null, ms: number) => live(r) && ctx.now - (d ?? r.createdAt).getTime() > ms
   return (
     <div className="tl-kv">
       <Line
@@ -482,7 +482,8 @@ export default async function TenantsPage({
           Sign-in = newest sign-in of an active team member. Booking = newest booking created. Joined = date
           the spa was created. Bookings 30 d = bookings created in the last 30 days (any source). Team =
           active members. Storage = uploaded files. AI = this Dubai month&apos;s spend (USD) / budget. Amber =
-          no staff sign-in for 14+ days or no booking for 30+ days. Empty values sort last.
+          no staff sign-in for 14+ days or no booking for 30+ days (counted from joining when there has been
+          none). Empty values (never, no plan) sort last.
         </p>
       </PageBody>
     </>

@@ -15,6 +15,15 @@
     background: color-mix(in oklab, var(--bg) 88%, transparent);
     backdrop-filter: blur(8px);
   }
+  /* WCAG 2.4.11: the sticky toolbar (two lines below 1280 px) must not hide a focused link or paged-past rows. */
+  html:has(.tl-toolbar) {
+    scroll-padding-top: 7rem;
+  }
+}
+@media (min-width: 1280px) {
+  html:has(.tl-toolbar) {
+    scroll-padding-top: 5rem;
+  }
 }
 .tl-dir {
   display: inline-flex;
@@ -139,6 +148,12 @@
   display: inline-flex;
   margin-inline-start: -0.3125rem;
   font-size: 11px;
+}
+/* A single-key column's title is its sort link: dotted underline so it reads as one (no room for an icon). */
+.tl-sort.tl-th-title:not([data-on]) {
+  text-decoration: underline dotted color-mix(in oklab, var(--muted) 70%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
 }
 .tl-sort:hover {
   background: var(--subtle);

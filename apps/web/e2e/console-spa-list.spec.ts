@@ -113,6 +113,13 @@ async function noSideScroll(page: Page, width: number) {
     return { doc: doc.scrollWidth - doc.clientWidth, card: card.scrollWidth - card.clientWidth, overflowing }
   })
   expect(m, `no sideways overflow at ${width} px`).toEqual({ doc: 0, card: 0, overflowing: 0 })
+  if (width < 768) return
+  // WCAG 2.4.11: scroll padding covers the sticky toolbar (+ room for the focus ring).
+  const bar = await page.evaluate(() => ({
+    h: document.querySelector('.tl-toolbar')!.getBoundingClientRect().height,
+    pad: Number.parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop),
+  }))
+  expect(bar.h + 8, `scroll padding clears the toolbar at ${width} px`).toBeLessThanOrEqual(bar.pad)
 }
 
 test('console spa list: one page at every width, every metric sortable', async ({ page }) => {
@@ -139,6 +146,26 @@ test('console spa list: one page at every width, every metric sortable', async (
     await page.setViewportSize({ width: 1280, height: 900 })
   })
 
+  await test.step('Shift+Tab never leaves the focused spa link under the sticky toolbar', async () => {
+    await page.setViewportSize({ width: 1024, height: 600 })
+    await page.goto(list)
+    const links = page.locator('.tl-table .tl-name')
+    // Second spa name just inside the top of the viewport (under the toolbar); focus the third, then Shift+Tab.
+    await links.nth(1).evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 30))
+    await links.nth(2).evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }))
+    await page.keyboard.press('Shift+Tab')
+    await expect(links.nth(1)).toBeFocused()
+    const gap = await links
+      .nth(1)
+      .evaluate(
+        (el) =>
+          el.getBoundingClientRect().top -
+          document.querySelector('.tl-toolbar')!.getBoundingClientRect().bottom,
+      )
+    expect(gap).toBeGreaterThanOrEqual(0)
+    await page.setViewportSize({ width: 1280, height: 900 })
+  })
+
   await test.step('every figure is shown, incl. the billing-stage date, tier override and AI budget', async () => {
     await page.goto(list)
     const big = page.getByRole('row', { name: /Be Relax Massage Center Spa/ })
@@ -153,6 +180,14 @@ test('console spa list: one page at every width, every metric sortable', async (
     const alNoor = page.getByRole('row', { name: /Al Noor Thai/ })
     await expect(alNoor.getByText('past due')).toBeVisible()
     await expect(alNoor.getByText(/^Read-only from /)).toBeVisible()
+    // Dormancy: no sign-in / booking ever counts from joining — amber 200 d in, neutral for a 2-day-old trial.
+    await expect(alNoor.locator('[data-key="signin"]')).toHaveText('never')
+    await expect(alNoor.locator('[data-key="signin"]')).toHaveClass(/tl-stale/)
+    await expect(alNoor.locator('[data-key="booking"]')).toHaveClass(/tl-stale/)
+    const lotus = page.getByRole('row', { name: /Lotus Garden Spa/ }).locator('[data-key="signin"]')
+    await expect(lotus).toHaveText('never')
+    await expect(lotus).not.toHaveClass(/tl-stale/)
+    await expect(big.locator('[data-key="booking"]')).not.toHaveClass(/tl-stale/)
     const serenity = page.getByRole('row', { name: /Serenity Hammam/ })
     await expect(serenity.getByText('read-only (billing)')).toBeVisible()
     await expect(serenity.getByText('Read-only until paid')).toBeVisible()
@@ -202,6 +237,12 @@ test('console spa list: one page at every width, every metric sortable', async (
   await test.step('Sort by + direction controls (the only sort control on phones)', async () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(list)
+    // Looks like a dropdown: chevron image and the control background (not see-through).
+    const look = await page
+      .getByLabel('Sort by')
+      .evaluate((el) => [getComputedStyle(el).backgroundImage, getComputedStyle(el).backgroundColor])
+    expect(look[0]).toContain('data:image/svg+xml')
+    expect(look[1]).not.toBe('rgba(0, 0, 0, 0)')
     await page.getByLabel('Sort by').selectOption('storage')
     await page.getByRole('button', { name: 'Sort', exact: true }).click()
     await expect(page).toHaveURL(/sort=storage$/)
@@ -211,9 +252,12 @@ test('console spa list: one page at every width, every metric sortable', async (
     await expect(page).toHaveURL(/sort=storage&dir=asc/)
     await expect(page.getByRole('link', { name: /^Order: Lowest first/ })).toBeVisible()
     // Search keeps the sort; old links (?sort=…&dir=…) keep working.
-    await page.getByRole('searchbox', { name: /Search spas/ }).fill('lotus')
+    // Tagged slug, so tenants named "Lotus …" from other specs (or a repeat run) can't match.
+    await page.getByRole('searchbox', { name: /Search spas/ }).fill(`${tag}-lotus`)
     await page.getByRole('searchbox', { name: /Search spas/ }).press('Enter')
-    await expect(page).toHaveURL(/sort=storage&dir=asc&q=lotus|q=lotus.*sort=storage/)
+    await expect(page).toHaveURL(
+      new RegExp(`sort=storage&dir=asc&q=${tag}-lotus|q=${tag}-lotus.*sort=storage`),
+    )
     expect(await names(page)).toEqual(['Lotus Garden Spa'])
   })
 })
