@@ -30,6 +30,7 @@ const altSite = (slug: string) => (PATH ? `${altBase}/s/${slug}` : `http://${slu
 // F23: a super-admin renames a spa's address; the old site + dashboard addresses 301 to the new ones (every platform
 // domain, path + query kept), the old slug stays reserved to the spa for 12 months, and generated links follow.
 test('F23: renaming a spa slug redirects the old site and dashboard addresses (301)', async ({ browser }) => {
+  test.slow() // owner + super-admin sign-up, console, site and dashboard in one run (dev server compiles each)
   const ownerCtx = await browser.newContext()
   const adminCtx = await browser.newContext()
   const owner = await ownerCtx.newPage()
@@ -52,7 +53,7 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
     await ops.reload()
     await expect(ops.getByRole('list', { name: 'Previous addresses' })).toContainText(old)
     await expect(ops.getByRole('list', { name: 'Previous addresses' })).toContainText('reserved until')
-    await expect(ops.getByRole('link', { name: 'Website' })).toHaveAttribute('href', site(next))
+    await expect(ops.getByRole('link', { name: 'Website', exact: true })).toHaveAttribute('href', site(next))
     const [row] = await db
       .select()
       .from(auditLog)
