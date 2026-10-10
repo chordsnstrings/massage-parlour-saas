@@ -108,7 +108,7 @@ export async function VoucherCheckPage({
             </div>
           </div>
           <a
-            href={`${base}/voucher/${token}${locale === 'ar' ? '' : '?lang=ar'}`}
+            href={`${base}/voucher/${encodeURIComponent(token)}${locale === 'ar' ? '' : '?lang=ar'}`}
             className="text-sm text-accent underline-offset-4 hover:underline"
             lang={locale === 'ar' ? 'en' : 'ar'}
           >

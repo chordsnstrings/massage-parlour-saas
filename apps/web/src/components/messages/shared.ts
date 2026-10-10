@@ -39,8 +39,8 @@ export const KIND_TONE: Record<MessageKind, Tone> = {
 }
 
 /** Variables staff can insert (shown as chips). `{link}` and `{text}` are accepted too. */
-export const TEMPLATE_VARIABLES = ['first_name', 'service', 'day', 'time', 'spa', 'ref'] as const
-export const ALLOWED_VARIABLES = [...TEMPLATE_VARIABLES, 'name', 'link', 'text'] as const
+export const TEMPLATE_VARIABLES = ['first_name', 'service', 'day', 'time', 'spa', 'ref', 'link'] as const
+export const ALLOWED_VARIABLES = [...TEMPLATE_VARIABLES, 'name', 'text'] as const
 
 /** Same substitution rule as the server-side renderer: unknown variables are left as typed. */
 export const previewTemplate = (body: string, vars: Record<string, string>) =>
