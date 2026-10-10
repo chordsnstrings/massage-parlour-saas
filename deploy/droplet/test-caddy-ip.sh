@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # F26 (G6): validates deploy/droplet/Caddyfile, then runs its client-IP handling against a header-echo upstream and
 # checks what the app (web:3000) would receive:
-#  - direct hits (grey-cloud hosts, spa custom domains, anyone reaching the droplet IP): forged Cf-Connecting-Ip /
+#  - direct hits (our own domains, spa custom domains, anyone reaching the droplet IP): forged Cf-Connecting-Ip /
 #    X-Forwarded-For / X-Real-Ip / Do-Connecting-Ip / True-Client-Ip become, or are stripped to, the real peer IP;
 #  - Cloudflare-proxied hits (the loopback is added to trusted_proxies to play Cloudflare): Cloudflare's
 #    Cf-Connecting-Ip passes through (IPv4 + IPv6); X-Forwarded-For alone or a junk value is not a source.
-# Both site blocks (SITE_HOST + the custom-domain catch-all) are exercised through the shared proxy_to_web snippet.
+# Both site blocks (SITE_HOST + the custom-domain catch-all) are exercised through the shared proxy_to_web snippet,
+# and /_status/ (basic auth) on the main site and on the catch-all for the droplet's own <ip>.sslip.io fallback.
 # Needs curl + python3, and `caddy` on PATH (or CADDY=/path/to/caddy), else docker with caddy:2-alpine (compose.yml).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -24,18 +25,28 @@ trap 'stop; rm -rf "$work"' EXIT
 
 caddy_cmd() { # caddy_cmd <dir> <env SITE_HOST> <args...>: run the caddy CLI with <dir> holding the config
   local dir=$1 site=$2
+  local -a acme=()
+  [ -z "${ACME_EMAIL+set}" ] || acme=(-e "ACME_EMAIL=$ACME_EMAIL") # passed on only when set (docker)
   shift 2
   if [ -n "$CADDY" ]; then
     (cd "$dir" && SITE_HOST="$site" STATUS_HASH="$HASH" XDG_DATA_HOME="$dir/data" XDG_CONFIG_HOME="$dir/cfg" "$CADDY" "$@")
   else
-    docker run --rm -v "$dir:/w" -w /w -e SITE_HOST="$site" -e STATUS_HASH="$HASH" "$IMAGE" caddy "$@"
+    docker run --rm -v "$dir:/w" -w /w -e SITE_HOST="$site" -e STATUS_HASH="$HASH" "${acme[@]}" "$IMAGE" caddy "$@"
   fi
 }
 
 echo "== caddy validate (production Caddyfile)"
 mkdir -p "$work/prod"
 cp "$here/Caddyfile" "$work/prod/Caddyfile"
-caddy_cmd "$work/prod" example.com validate --config Caddyfile --adapter caddyfile 2>&1 | tail -n 3
+(unset ACME_EMAIL; caddy_cmd "$work/prod" example.com validate --config Caddyfile --adapter caddyfile 2>&1 | tail -n 3)
+# compose.yml always sets ACME_EMAIL for caddy, and Caddy only takes the Caddyfile's {$ACME_EMAIL:…} default when the
+# variable is unset: an empty value leaves `email` without an argument and Caddy won't start. So compose's own
+# default must be a non-empty address, and the Caddyfile must load with it.
+echo "== caddy validate with compose.yml's ACME_EMAIL default"
+acme_default=$(sed -n -E 's/^[[:space:]]*ACME_EMAIL: \$\{ACME_EMAIL:-([^}]+)\}.*/\1/p' "$here/compose.yml")
+[[ $acme_default =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] ||
+  { echo "compose.yml must give caddy a non-empty ACME_EMAIL default (got '$acme_default')" >&2; exit 1; }
+ACME_EMAIL=$acme_default caddy_cmd "$work/prod" example.com validate --config Caddyfile --adapter caddyfile 2>&1 | tail -n 3
 
 # Test copy: same global options + snippet + site blocks; local ports, plain HTTP, upstream = header echo.
 make_config() { # make_config <out dir> <extra trusted ranges>
@@ -50,10 +61,10 @@ def swap(old, new):
 assert s.startswith('{\n'), 'Caddyfile must start with the global options block'
 s = '{\n\tadmin off\n\thttp_port 18081\n\thttps_port 18443\n' + s[2:]
 swap('reverse_proxy web:3000', 'reverse_proxy 127.0.0.1:18090')
-swap('https:// {\n\ttls {\n\t\ton_demand\n\t}\n', 'http://127.0.0.1:18082 {\n')
+swap('https:// {\n\ttls {\n\t\ton_demand\n\t}\n', 'http://:18082 {\n')
 if extra:
     swap('trusted_proxies static ', f'trusted_proxies static {extra} ')
-s += ('\nhttp://127.0.0.1:18090 {\n\trespond "cf=[{header.Cf-Connecting-Ip}] xff=[{header.X-Forwarded-For}] '
+s += ('\nhttp://:18090 {\n\trespond "cf=[{header.Cf-Connecting-Ip}] xff=[{header.X-Forwarded-For}] '
       'real=[{header.X-Real-Ip}] do=[{header.Do-Connecting-Ip}] true=[{header.True-Client-Ip}]"\n}\n')
 open(out, 'w').write(s)
 PY
@@ -100,6 +111,22 @@ for port in 18080 18082; do
     'cf=[127.0.0.1] xff=[127.0.0.1] real=[] do=[] true=[]' "${forged[@]}"
 done
 check "no headers: peer IP" 18080 'cf=[127.0.0.1]'
+
+echo "== /_status: main site, and the <ip>.sslip.io fallback on the catch-all (app hosts still reach the app)"
+status_check() { # status_check <name> <want: http code | body substring> <port> <host> [curl args...]
+  local name=$1 want=$2 port=$3 host=$4 got
+  shift 4
+  got=$(curl -s -w ' %{http_code}' -H "Host: $host" "$@" "http://127.0.0.1:$port/_status/deploy.json")
+  if [[ $got == *"$want"* ]]; then echo "ok   $name"; else
+    echo "FAIL $name: want '$want', got '$got'"
+    fails=$((fails + 1))
+  fi
+}
+status_check "main site asks for the password" ' 401' 18080 127.0.0.1:18080
+status_check "fallback asks for the password" ' 401' 18082 134-209-145-162.sslip.io
+status_check "fallback serves files once signed in (none here: 404)" ' 404' 18082 134-209-145-162.sslip.io -u ops:test
+status_check "app.<ip>.sslip.io goes to the app" 'cf=[127.0.0.1]' 18082 app.134-209-145-162.sslip.io
+status_check "a spa custom domain goes to the app" 'cf=[127.0.0.1]' 18082 book.example.com
 stop
 
 echo "== via Cloudflare (loopback trusted)"

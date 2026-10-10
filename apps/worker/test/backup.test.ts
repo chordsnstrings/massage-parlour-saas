@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { backupDatabase, backupKeys, dubaiDate, offsiteConfig } from '../src/jobs/backup'
+import { backupDatabase, backupKeys, dubaiDate, offsiteClient, offsiteConfig } from '../src/jobs/backup'
 
 describe('backups', () => {
   it('adds a monthly copy on the 1st', () => {
@@ -36,9 +36,26 @@ describe('backups', () => {
     expect(offsiteConfig({ ...s3, R2_BUCKET: 'b' })).toBeNull()
     expect(offsiteConfig({})).toBeNull()
   })
+  it('signs for R2_REGION (DigitalOcean Spaces), default auto (R2)', async () => {
+    const r2 = { R2_ENDPOINT: 'https://fra1.digitaloceanspaces.com', R2_BUCKET: 'b', R2_ACCESS_KEY_ID: 'k' }
+    const spaces = offsiteConfig({ ...r2, R2_SECRET_ACCESS_KEY: 's', R2_REGION: 'fra1' })!
+    expect(spaces.region).toBe('fra1')
+    expect(offsiteConfig({ ...r2, R2_SECRET_ACCESS_KEY: 's', R2_REGION: ' ' })?.region).toBe('auto')
+    const signed = await offsiteClient(spaces).sign(`${spaces.endpoint}/b/backups/daily/x.dump`, {
+      method: 'PUT',
+    })
+    expect(signed.headers.get('authorization')).toMatch(/Credential=k\/\d{8}\/fra1\/s3\/aws4_request/)
+  })
   it('passes the off-site vars to the worker in the droplet compose file', () => {
     const compose = readFileSync(new URL('../../../deploy/droplet/compose.yml', import.meta.url), 'utf8')
-    for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'S3_BUCKET'])
+    for (const k of [
+      'R2_ENDPOINT',
+      'R2_BUCKET',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+      'R2_REGION',
+      'S3_BUCKET',
+    ])
       expect(compose).toContain(`${k}: \${${k}:-}`)
   })
 })

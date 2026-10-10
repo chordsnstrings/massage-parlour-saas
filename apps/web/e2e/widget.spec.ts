@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { expect, test } from '@playwright/test'
 import { bookings, webEvents } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
-import { app, base, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { app, base, PATH, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 /** A spa's own website on another origin (a real loopback server, so Chromium's local-network rules apply as in
  * production), carrying the copy-paste snippet from Settings → Booking widget. */
@@ -89,4 +89,22 @@ test('booking widget: snippet in settings, frameable embed route, booking throug
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
   own.close()
+
+  // Host routing: a snippet from the path-routing days (data-url on /s/{slug}/book/embed of a platform domain) gets its
+  // frame redirected to the spa's own address, and the widget still takes that frame's messages.
+  if (PATH) return
+  const old = await ownWebsite(`<!doctype html><html><body>
+<script src="${base}/widget.js" data-spa="${slug}" data-url="${base}/s/${slug}/book/embed" data-text="Book now"></script>
+</body></html>`)
+  await page.goto(old.url)
+  await page.getByRole('button', { name: 'Book now' }).click()
+  await expect(frame.getByRole('heading', { name: 'Book a treatment' })).toBeVisible()
+  expect(page.frames().some((f) => f.url().startsWith(`${site(slug)}/book/embed?`))).toBe(true)
+  // Escape inside the frame (the host page never sees that key) → the frame's close message closes the modal.
+  await expect(async () => {
+    await frame.getByRole('heading', { name: 'Book a treatment' }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 2000 })
+  }).toPass()
+  old.close()
 })
