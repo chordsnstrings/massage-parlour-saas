@@ -124,6 +124,37 @@ export function hostRoutedUrl(
   return `${scheme}://${address.surface}.${root}${`${slug ? `/${slug}` : ''}${address.rest}` || '/'}`
 }
 
+/**
+ * R20: site paths a spa's temporary address keeps serving after its own domain is primary — the booking widget's iframe
+ * (`/book/embed`, where snippets on the spa's other websites point) and `robots.txt` (that host still serves
+ * `/book/embed`, so its own rules disallowing it must stay readable to crawlers that don't follow a robots.txt redirect).
+ */
+export function keepsTemporaryAddress(path: string): boolean {
+  return /^\/book\/embed(?:\/|$)/.test(path) || path === '/robots.txt'
+}
+
+/**
+ * R20: the spa site request behind proxy.ts's rewrite (`/site/{slug}` + the site path, '' or '/…') that the temporary
+ * address — `{slug}.{platform root}` (host routing) or `/s/{slug}` (path routing) — hands to the spa's own domain once
+ * that is active and primary; null for every other surface and for the paths it keeps serving.
+ */
+export function temporarySitePath(internalPath: string): { slug: string; path: string } | null {
+  const m = /^\/site\/([^/]+)(\/.*)?$/.exec(internalPath)
+  if (!m) return null
+  const path = m[2] ?? ''
+  return keepsTemporaryAddress(path) ? null : { slug: m[1]!.toLowerCase(), path }
+}
+
+/** R20: the same site path + query on the spa's own domain (https; `hostname` = its active primary domain row). */
+export function ownDomainUrl(hostname: string, path: string, search = ''): string {
+  return `https://${hostname}${path || '/'}${search}`
+}
+
+/** Platform-only endpoints (sign-in API, OAuth discovery, MCP, integrations) a spa's custom domain never answers (R20). */
+export function platformOnlyPath(pathname: string): boolean {
+  return /^\/(?:api\/(?:auth|mcp|integrations)|\.well-known)(?:\/|$)/.test(pathname)
+}
+
 /** Scheme of canonical platform URLs: APP_URL's, else http for a local root (localhost, *.localhost, an IP), else https. */
 export function canonicalScheme(root: string, appUrl = ''): 'http' | 'https' {
   if (appUrl.startsWith('https:')) return 'https'

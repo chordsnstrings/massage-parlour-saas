@@ -75,5 +75,4 @@ export const canonicalUrls = () => builders(canonicalDomain())
 
 export const appUrl = async (path = '/') => (await requestUrls()).app(path)
 export const adminUrl = async (path = '/') => (await requestUrls()).admin(path)
-export const tenantSiteUrl = async (slug: string) => (await requestUrls()).site(slug)
 export const marketingUrl = async () => (await requestUrls()).marketing()

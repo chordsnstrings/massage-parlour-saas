@@ -478,7 +478,8 @@ export const settings = {
     buy: 'Buy a domain',
     buySub: 'Don’t have one yet? Find a name and we’ll buy it and connect it for you.',
     free: 'Free address',
-    freeSub: 'Always works, even with your own domain connected.',
+    freeSub:
+      'Your temporary address. Once your own domain is connected and primary, {host} redirects visitors to it.',
     primary: 'Primary',
     copyLink: 'Copy link',
     how: 'How it works',

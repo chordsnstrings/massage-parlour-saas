@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalScheme, hostRoutedUrl, parseRoots, pathRoutedAddress } from '../src'
+import {
+  canonicalScheme,
+  hostRoutedUrl,
+  keepsTemporaryAddress,
+  ownDomainUrl,
+  parseRoots,
+  pathRoutedAddress,
+  platformOnlyPath,
+  temporarySitePath,
+} from '../src'
 
 // The move from path routing (sslip.io, ROUTING=path) to host routing on spamanagement.co: old addresses on any platform
 // root (or its www.) → their host-routed home on the canonical root (proxy.ts).
@@ -110,5 +119,75 @@ describe('path-routed → host-routed addresses', () => {
     expect(canonicalScheme('localhost:3000')).toBe('http')
     expect(canonicalScheme('10.0.0.5')).toBe('http')
     expect(canonicalScheme('localhost:3000', 'https://app.localhost:3000')).toBe('https')
+  })
+})
+
+// R20: once a spa's own domain is active + primary, its temporary address 301s there (proxy.ts, server/own-domain.ts).
+describe('temporary site address → own domain', () => {
+  it.each([
+    ['/site/pilot', { slug: 'pilot', path: '' }],
+    ['/site/pilot/', { slug: 'pilot', path: '/' }],
+    ['/site/Pilot/book', { slug: 'pilot', path: '/book' }],
+    ['/site/pilot/ar/services', { slug: 'pilot', path: '/ar/services' }],
+    ['/site/pilot/sitemap.xml', { slug: 'pilot', path: '/sitemap.xml' }],
+    ['/site/pilot/voucher/abc', { slug: 'pilot', path: '/voucher/abc' }],
+    ['/site/pilot/book/embedded', { slug: 'pilot', path: '/book/embedded' }],
+  ])('%s is handed to the own domain', (internal, expected) => {
+    expect(temporarySitePath(internal)).toEqual(expected)
+  })
+
+  it.each([
+    '/site/pilot/book/embed',
+    '/site/pilot/book/embed/',
+    '/site/pilot/robots.txt',
+    '/marketing/s/pilot',
+    '/dashboard/pilot',
+    '/platform/tenants',
+    '/domain/www.pilot.ae/book',
+    '/site',
+    '/sitex/pilot',
+  ])('%s is served where it is', (internal) => {
+    expect(temporarySitePath(internal)).toBeNull()
+  })
+
+  it('keeps only the widget iframe and robots.txt on the temporary address', () => {
+    expect(keepsTemporaryAddress('/book/embed')).toBe(true)
+    expect(keepsTemporaryAddress('/robots.txt')).toBe(true)
+    expect(keepsTemporaryAddress('/book')).toBe(false)
+    expect(keepsTemporaryAddress('/sitemap.xml')).toBe(false)
+    expect(keepsTemporaryAddress('')).toBe(false)
+  })
+
+  it('keeps path + query on https://{own domain}; the host stays the domain row whatever the path holds', () => {
+    expect(ownDomainUrl('www.pilot.ae', '')).toBe('https://www.pilot.ae/')
+    expect(ownDomainUrl('www.pilot.ae', '/book', '?src=qr&lang=ar')).toBe(
+      'https://www.pilot.ae/book?src=qr&lang=ar',
+    )
+    const odd = new URL(ownDomainUrl('www.pilot.ae', '//evil.example/x', '?a=@evil.example'))
+    expect(odd.host).toBe('www.pilot.ae')
+  })
+
+  it('knows the platform-only endpoints a custom domain never answers', () => {
+    for (const p of [
+      '/api/auth',
+      '/api/auth/get-session',
+      '/api/mcp',
+      '/api/mcp/meta',
+      '/api/integrations/google/callback',
+      '/.well-known/oauth-authorization-server',
+    ])
+      expect(platformOnlyPath(p), p).toBe(true)
+    for (const p of [
+      '/api/collect',
+      '/api/csp-report',
+      '/api/client-error',
+      '/api/health',
+      '/api/html-design/frame',
+      '/api/domains/allowed',
+      '/api/authx',
+      '/book',
+      '/files/abc',
+    ])
+      expect(platformOnlyPath(p), p).toBe(false)
   })
 })

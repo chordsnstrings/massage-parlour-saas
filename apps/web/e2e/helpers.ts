@@ -219,7 +219,10 @@ export async function signInPlatformAdmin(page: Page) {
     await expect(overview).toHaveCount(0)
     // Open the emailed verification link (same token Better Auth sends).
     const token = await createEmailVerificationToken(AUTH_SECRET, email)
-    await page.goto(`${app}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`)
+    // The API lives on the bare host with path routing (`/app/api/…` would be a dashboard path).
+    await page.goto(
+      `${PATH ? base : app}/api/auth/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`,
+    )
     outcome = await signIn()
   }
   if (outcome === 'enrol') {
