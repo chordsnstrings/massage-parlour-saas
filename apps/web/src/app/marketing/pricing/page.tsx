@@ -62,7 +62,8 @@ export default async function PricingPage() {
           className="mkt-h1 mkt-rise mx-auto mt-6 max-w-4xl"
           style={{ '--d': 1 } as React.CSSProperties}
         >
-          Pick your plan. We handle the rest.
+          Pick your plan. <br />
+          <span className="mkt-plx-2 inline-block">We handle the rest.</span>
         </h1>
         <p
           className="mkt-lead mkt-rise mx-auto mt-6 max-w-[44rem]"
