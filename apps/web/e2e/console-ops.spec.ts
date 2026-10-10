@@ -104,8 +104,8 @@ test('console: tenant usage columns and automatic billing transitions', async ({
     await expect(row).toBeVisible()
     // The owner just signed in (F21 stamp); no bookings yet.
     await expect(row).toContainText(/min ago|h ago/)
-    await expect(row.getByRole('cell').nth(5)).toHaveText('0')
-    await ops.getByRole('link', { name: 'Bookings 30 d' }).click()
+    await expect(row.locator('[data-key="bookings30"]')).toHaveText('0')
+    await ops.getByRole('link', { name: 'Sort by Bookings 30 d' }).click()
     await expect(ops).toHaveURL(/sort=bookings30/)
     await expect(ops.getByRole('row', { name: /Late Spa/ })).toBeVisible()
   })
