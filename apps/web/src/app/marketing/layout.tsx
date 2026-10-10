@@ -7,6 +7,7 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { LEGAL } from '@/components/marketing/legal-config'
 import { activePlans, companyContact, DEFAULT_CONTACT_EMAIL } from '@/components/marketing/plans'
+import { getNonce } from '@/server/nonce'
 import { canonicalUrls } from '@/server/origin'
 
 /** Canonical domain for every page's canonical link, og:image and Twitter card (relative URLs in page metadata). */
@@ -34,6 +35,8 @@ export default async function MarketingLayout({ children }: { children: React.Re
     <>
       <script
         type="application/ld+json"
+        nonce={await getNonce()}
+        suppressHydrationWarning
         // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD, escaped by jsonLdString (no tag breakout)
         dangerouslySetInnerHTML={{ __html: jsonLdString(ld) }}
       />

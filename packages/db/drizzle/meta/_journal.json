@@ -288,6 +288,13 @@
       "when": 1791592923266,
       "tag": "0040_site_page_locks",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791593551631,
+      "tag": "0041_csp_turnstile_settings",
+      "breakpoints": true
     }
   ]
 }

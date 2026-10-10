@@ -36,6 +36,8 @@ const attempts = new Map<string, number[]>()
 const successes = new Map<string, number[]>()
 const MAX_ATTEMPTS = 20
 const MAX_BOOKINGS = 5
+/** Off only with AUTH_RATE_LIMIT=off (the e2e server: every spec books from 127.0.0.1), like the other per-IP limits. */
+const limited = () => process.env.AUTH_RATE_LIMIT !== 'off'
 
 function recent(map: Map<string, number[]>, ip: string) {
   const now = Date.now()
@@ -182,7 +184,8 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
   const ip = ipRateLimitKey(await clientIp())
-  if (recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS)
+  const tooMany = recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS
+  if (tooMany && limited())
     return fail(
       lang === 'ar'
         ? 'طلبات كثيرة. يرجى المحاولة لاحقاً أو التواصل معنا عبر واتساب.'

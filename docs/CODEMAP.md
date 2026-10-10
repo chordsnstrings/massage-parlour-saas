@@ -89,6 +89,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    - Path routing (`NEXT_PUBLIC_ROUTING=path`, inlined at build): `/app`, `/admin`, `/s/{slug}`; non-platform hosts
      go to `/domain/{host}`.
    - Sets `x-original-path`. A trailing-dot host gets a 308 redirect.
+   - F10: sets the page security headers with a fresh nonce (see "Security headers").
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
      `/robots.txt` + `/sitemap.xml` ARE rewritten, so each surface answers its own (F12, see "Search + social").
 2. **`server/session.ts`**: `getSession` reads `headers()` first; `requireUser` redirects to `{surface}/login?next=`.
@@ -288,8 +289,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **HTML designs (R17)**: `/platform/templates` "Upload HTML" (`uploadHtmlTemplateAction`) saves a studio template
   whose home page is one hidden `HtmlDesign` block (`components/site/blocks/html-design.tsx`, category `design`,
   `visible: false` ⇒ out of the AI schema) with the raw file in `props.html`; root prop `htmlDesign: true` makes the root
-  render skip `SiteFrame`. Render = `<iframe srcdoc sandbox="allow-scripts allow-forms allow-popups…">` (no
-  `allow-same-origin`: design scripts can't touch platform cookies/APIs); `{{placeholders}}` filled + HTML-escaped from
+  render skip `SiteFrame`. Render = `HtmlDesignFrame` (`components/site/html-design-frame.tsx`): `<iframe
+  src=/api/html-design/frame sandbox="allow-scripts allow-forms allow-popups…">` (no `allow-same-origin`: design scripts
+  can't touch platform cookies/APIs). F10: not `srcdoc` (it would inherit the page's strict CSP): the shell route answers
+  with the design's own CSP (anything, but CSP `sandbox` + `frame-ancestors 'self'`), asks the hosting page for the
+  design by postMessage and `document.write`s it once (with a `<base>` = hosting page URL); a new design/adjustment
+  reloads the shell. The design shows after hydration. `{{placeholders}}` filled + HTML-escaped from
   `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
   when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
 - **Map links (owner, 2026-10-09)**: every rendered branch address links to Google Maps (new tab, label "Open in Google
@@ -411,15 +416,64 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   a custom domain without `TURNSTILE_CUSTOM_DOMAINS=on`. Used by `bookOnline` (booking page + widget iframe, action
   `booking`), `signupAction` (`apply`, after the IP limit, before the login is created) and `sendEnquiryAction`
   (`contact`). Honeypots + per-IP limits stay. e2e runs with Cloudflare's always-pass test keys (playwright.config);
-  `online.spec` also covers a blocked script → refused. CSP has no script-src yet; F10 must allow
-  `challenges.cloudflare.com` (script + frame).
+  `online.spec` also covers a blocked script → refused. CSP (F10) allows `challenges.cloudflare.com` (script + frame) on
+  marketing/app/site/domain pages, not the admin console.
+- Keys from the console (owner, 2026-10-09): console Company page → "Bot check (Cloudflare Turnstile)" card
+  (`saveTurnstileSettingsAction`; services `turnstile-settings.ts`, `platform_settings.turnstile_*`): site key visible,
+  secret write-only (`…last4`, sealed with `sealEmailKey`, never audited/logged), "Also check spa custom domains" switch
+  (null = env). Core `resolveTurnstile(saved, env)`: each value console first, then env; `turnstileStatusText` feeds the
+  Configuration row ("from console/env", or which key is missing). Web `server/turnstile.ts` caches the console values
+  30 s per process (`invalidateTurnstileSettings()` on save); `turnstileSiteKey()` is async. E2E: `security-headers.spec`.
+
+## Security headers (F10, G11)
+
+- Pure builders in `@spa/core` `security-headers.ts` (tests `packages/core/test/security-headers.test.ts`):
+  `pageKindOf(internalPath)` → surface (marketing/app/admin/site/domain) + `embed` (only `/{site|domain}/x/book/embed`),
+  `contentSecurityPolicy`, `pageSecurityHeaders`, `newNonce`, `API_CSP`, `htmlDesignFrameCsp`, `parseCspReports`.
+- **Pages** (everything `proxy.ts` matches): proxy makes a 128-bit nonce per request, puts the CSP on the response and
+  on the request (Next reads the nonce from the request CSP and stamps its own scripts/chunks) plus `x-nonce` for ours
+  (`server/nonce.ts` `getNonce()`: root layout `scenes-on` bootstrap, dashboard early-prompt listener, marketing + spa
+  JSON-LD). The root layout reads it, so every page renders per request (nonces can't be prerendered).
+  Policy: `default-src 'self'`; `script-src 'self' 'nonce-…' 'strict-dynamic'` (+ Turnstile origin outside the admin
+  console; + `'unsafe-eval'` on `next dev` only) — Next chunks, `t.js` (next/script), Turnstile load via strict-dynamic;
+  `style-src 'self' 'unsafe-inline'`; `img-src 'self' data: blob: https:`; `font-src 'self' data:`; `connect-src 'self'`;
+  `frame-src 'self'` (+ Turnstile); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
+  `form-action 'self'`; `frame-ancestors 'self'` (embed: `*`); `upgrade-insecure-requests` on https;
+  `report-uri /api/csp-report?s={surface}`. Also `X-Frame-Options: SAMEORIGIN` (not embed), COOP `same-origin`
+  (dashboard: `same-origin-allow-popups`, the outbox reuses one named WhatsApp tab), HSTS on https only
+  (`includeSubDomains` on platform hosts, not on spa custom domains).
+- **Decisions:** style-src keeps `'unsafe-inline'`: React renders `style` props as attributes (theme colours, Puck
+  per-device overrides), and Radix (scroll lock), Puck (copies styles into its canvas iframe) and Turnstile insert
+  `<style>` without a nonce; a nonce in style-src would disable `'unsafe-inline'`. CSS can't run script and img/font/
+  connect-src limit what it can load. img-src `https:`: image fields accept any https URL (AI images, pasted links,
+  Instagram/Google media); stored files are served by the app (`/files`), never from the S3/R2 host. Stripe Checkout
+  and OAuth (Google, Meta, MCP consent) are top-level navigations, not form posts, so `form-action 'self'` holds. Puck
+  needs nothing extra: both editors import `components/site/editor/puck-css.ts` first (Puck's `no-external.css` + the
+  `--_puck-styles-loaded` flag set before Puck renders; otherwise Puck injects its own copy, which `@import`s rsms.me's
+  Inter — the editor uses local Inter Variable). Zod in the browser is jitless (`lib/zod-jitless.ts`, imported first by
+  `components/campaigns/rules.ts`): its JIT probes `new Function`, which the CSP blocks and reports.
+- **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` (camera, mic, geolocation, payment, usb, serial, hid, midi, sensors, display-capture,
+  browsing-topics off); `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
+  `X-Frame-Options: DENY`; `/files/*` keeps its own sandbox CSP (`app/files/serve.ts`) + XFO SAMEORIGIN; HSTS (no
+  includeSubDomains) on those when `x-forwarded-proto: https`. Never set CSP/XFO/HSTS there for a proxied path (a
+  second CSP is enforced too; only the first HSTS counts). `/api/html-design/frame` sends its own CSP (excluded).
+- **Reports:** `app/api/csp-report` (public; 30/min per IP in memory, ≤ 16 KB, CSP2 + Reporting API bodies, extension
+  noise dropped) logs `[csp] {surface} {directive} blocked {origin|inline|eval} on {path}` and counts into
+  `csp_violations` (day × surface × directive × blocked, path without query; > 300 rows/day fold into `other`;
+  services `csp-reports.ts`). Console Overview → Server health row "Content-Security-Policy" (`health-csp`, 7 days, top 3).
+- E2E `security-headers.spec`: headers per surface + API/MCP/.well-known, nonce on every `<script>`, fresh per response,
+  HSTS behind https, injected un-nonced script/handler never runs, no violations across the main screens (Apply,
+  contact, dashboard, editor, spa site + booking with Turnstile, widget, console), reports → console row, console
+  Turnstile keys win over env. `widget.spec` frames the embed from another origin; `templates.spec` runs designs.
 
 ## Online booking (`components/booking`)
 
 - **Steps**: service → when (up to 14 days ahead, 60-min lead time) → details (name, UAE phone, honeypot `website`) →
   done (.ics + WhatsApp confirm).
 - **`bookOnline`**:
-  1. In-memory per-IP limits: 20 attempts/h, 5 bookings/h; honeypot; Turnstile `passesBotCheck` (F9).
+  1. In-memory per-IP limits: 20 attempts/h, 5 bookings/h (off with `AUTH_RATE_LIMIT=off`, the e2e server); honeypot;
+     Turnstile `passesBotCheck` (F9).
   2. `findOrCreateClient`; blocklisted clients are refused.
   3. `createBooking` with status `pending`, source `online`, `attribution` (F13) = core `bookingAttribution` of the
      `entry` the flow sends (t.js `sessionStorage.spa_entry`, else the page's own tags + external referrer; widget

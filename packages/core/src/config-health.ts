@@ -1,6 +1,6 @@
 // Production config health (G9, console overview): which settings are present. Booleans + non-secret hints only:
 // a value is never returned.
-import { turnstileOnCustomDomains } from './turnstile'
+import { type ResolvedTurnstile, resolveTurnstile, turnstileStatusText } from './turnstile'
 
 type Env = Record<string, string | undefined>
 
@@ -35,20 +35,19 @@ function encryptionKey(env: Env): { ok: boolean; detail?: string } {
   return bytes === 32 ? { ok: true } : { ok: false, detail: 'not 32 bytes base64' }
 }
 
-function turnstileDetail(env: Env) {
-  const site = set(env, 'TURNSTILE_SITE_KEY')
-  const secret = set(env, 'TURNSTILE_SECRET_KEY')
-  if (site !== secret) return site ? 'secret key missing' : 'site key missing'
-  if (!site) return undefined
-  return turnstileOnCustomDomains(env) ? 'incl. custom domains' : 'platform hosts (custom domains off)'
-}
-
 /** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */
 const WEB_ONLY = new Set(['TURNSTILE'])
 
-/** Every production setting except the Resend key (shown on its own with its source). */
-export function configChecks(env: Env = process.env): ConfigCheck[] {
+/**
+ * Every production setting except the Resend key (shown on its own with its source). `turnstile`: the console-aware
+ * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags).
+ */
+export function configChecks(
+  env: Env = process.env,
+  opts: { turnstile?: ResolvedTurnstile } = {},
+): ConfigCheck[] {
   const backup = backupBucketSource(env)
+  const turnstile = opts.turnstile ?? resolveTurnstile(null, env)
   const enc = encryptionKey(env)
   return [
     {
@@ -85,9 +84,9 @@ export function configChecks(env: Env = process.env): ConfigCheck[] {
       // F9: unset = public forms stay open (honeypot + per-IP limits only), so spas are never locked out.
       key: 'TURNSTILE',
       label: 'TURNSTILE_* (bot check)',
-      ok: set(env, 'TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY'),
+      ok: Boolean(turnstile.config),
       required: true,
-      detail: turnstileDetail(env),
+      detail: turnstileStatusText(turnstile),
       effect:
         'Online booking, the booking widget, Apply and Contact have no bot check (honeypot + rate limits only).',
     },

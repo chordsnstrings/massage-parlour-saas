@@ -50,6 +50,10 @@ export function SignupForm({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const effectiveSlug = touched ? slug : business
+  // What the visitor has typed by the time a check answers: a slower answer for the spa name must not overwrite (or
+  // report on) a web address typed meanwhile.
+  const current = useRef(effectiveSlug)
+  current.current = effectiveSlug
   useEffect(() => {
     clearTimeout(timer.current)
     if (!effectiveSlug.trim()) {
@@ -59,6 +63,7 @@ export function SignupForm({
     timer.current = setTimeout(() => {
       startCheck(async () => {
         const res = await checkSlugAction(effectiveSlug)
+        if (current.current !== effectiveSlug) return
         if (!touched) setSlug(res.slug)
         setStatus({ ok: res.ok, reason: res.reason })
       })

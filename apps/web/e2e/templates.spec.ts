@@ -296,12 +296,18 @@ test('HTML design images: kept inside the screen, focal point adjusted on upload
 body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;margin-right:-160px}
 </style></head><body><h1>Frame</h1><img id="hero" class="hero" src="${svg(1200, 800, 'c96')}">
 <img id="wide" src="${svg(1600, 500, '369')}" style="width:1600px"><p style="clear:both">End</p></body></html>`
+  // F10: the design arrives in its shell document after the page hydrates (and again after each adjustment), so wait
+  // for it instead of reading the empty shell or a frame that is reloading.
+  const inDesign = <T>(frame: Frame, read: () => T) =>
+    frame
+      .evaluate(`document.getElementById('hero') ? (${read})() : null`)
+      .catch(() => null) as Promise<T | null>
   const frameOk = async (frame: Frame, position: string) => {
     await expect
-      .poll(() => frame.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .poll(() => inDesign(frame, () => document.documentElement.scrollWidth - window.innerWidth))
       .toBeLessThanOrEqual(0)
     await expect
-      .poll(() => frame.evaluate(() => getComputedStyle(document.getElementById('hero')!).objectPosition))
+      .poll(() => inDesign(frame, () => getComputedStyle(document.getElementById('hero')!).objectPosition))
       .toBe(position)
   }
   const frameOf = async (el: Locator) => (await (await el.elementHandle())!.contentFrame())!

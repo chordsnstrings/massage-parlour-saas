@@ -94,13 +94,26 @@ per-IP limits. Until both keys are set the forms stay open and console → Overv
 2. **Hostnames:** `spamanagement.co` (a hostname also covers its subdomains, so `app.`, `admin.` and every spa's
    `<slug>.spamanagement.co`) and `spamanagement.ae` while the old domain is live.
 3. **Custom domains (option):** a spa's own domain (e.g. `book.saffronspa.ae`) works only once it is in the
-   widget's hostname list. Add them there, then set `TURNSTILE_CUSTOM_DOMAINS=on`. Without it, custom-domain booking
-   pages skip the bot check (honeypot + limits only) instead of breaking. The free plan caps hostnames per widget.
-4. Copy the **Site key** and **Secret key** into the secrets overlay ("Secrets without SSH" below):
-   `TURNSTILE_SITE_KEY=…` and `TURNSTILE_SECRET_KEY=…` (both needed; web container only). Push; the next update
-   restarts web and the Configuration row turns green.
+   widget's hostname list. Add them there, then tick **Also check spa custom domains** (step 4; or set
+   `TURNSTILE_CUSTOM_DOMAINS=on`). Without it, custom-domain booking pages skip the bot check (honeypot + limits only)
+   instead of breaking. The free plan caps hostnames per widget.
+4. **Enter the keys in the console** (easiest): super-admin console → **Company** (Settings) → **Bot check (Cloudflare
+   Turnstile)**: paste the **Site key** and **Secret key**, Save. Works at once, no deploy. The secret is write-only
+   (shown as `…last 4`), stored encrypted when an encryption key exists; console values win over env. "Remove the
+   stored keys" falls back to env. Alternative: the secrets overlay ("Secrets without SSH" below)
+   `TURNSTILE_SITE_KEY=…` / `TURNSTILE_SECRET_KEY=…` (web container only; push, the next update restarts web).
+   The Configuration row then turns green and says where the keys come from (console / env).
 5. Check: open a spa's `/book` and book a test slot. A visitor who fails the check sees "We couldn't confirm you're
    not a robot" and nothing is stored.
+
+## Security headers (F10)
+
+Every page sends a strict Content-Security-Policy with a fresh nonce per request (scripts run only when the server
+stamped them), plus HSTS (https), `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` and COOP.
+Only the booking widget route (`/book/embed`) may be framed by other sites. Nothing to configure. If a browser blocks
+something, it reports it: console → Overview → **Server health → Content-Security-Policy** shows the count of the last
+7 days with the directive, blocked origin and page (web logs: `[csp] …`). Adding an outside script, font or frame
+host later means adding it to `packages/core/src/security-headers.ts`.
 
 ## Super-admins
 

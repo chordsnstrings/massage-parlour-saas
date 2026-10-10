@@ -78,7 +78,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
           hint: t('logo.hint'),
           tooLarge: t('logo.tooLarge', { size: '1 MB' }),
         }}
-        turnstileSiteKey={turnstileSiteKey()}
+        turnstileSiteKey={await turnstileSiteKey()}
       />
       <LegalLinks />
     </AuthLayout>

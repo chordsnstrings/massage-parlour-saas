@@ -73,7 +73,7 @@ export default async function ContactPage() {
           <EnquiryForm
             action={sendEnquiryAction}
             maxLength={ENQUIRY_MESSAGE_MAX}
-            turnstileSiteKey={turnstileSiteKey()}
+            turnstileSiteKey={await turnstileSiteKey()}
           />
           <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-1">
             {cards.map((k) => (

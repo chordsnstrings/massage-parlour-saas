@@ -5,6 +5,7 @@ import {
   HTML_DESIGN_BASE_CSS,
   htmlDesignDocument,
   listHtmlDesignImages,
+  withBaseHref,
 } from '../src/html-design'
 
 const doc = `<!doctype html><html><head><style>
@@ -127,5 +128,20 @@ describe('applyHtmlImageAdjustments', () => {
   })
   it('returns the file unchanged without adjustments', () => {
     expect(applyHtmlImageAdjustments(doc, [])).toBe(doc)
+  })
+})
+
+describe('withBaseHref (F10)', () => {
+  it('adds the hosting page as <base> after <head>, escaped; a design with its own base keeps it', () => {
+    const out = withBaseHref(
+      '<!doctype html><html><head><title>x</title></head><body></body></html>',
+      'https://a.test/?q="1"&b=<2>',
+    )
+    expect(out).toBe(
+      '<!doctype html><html><head><base href="https://a.test/?q=&quot;1&quot;&amp;b=&lt;2&gt;"><title>x</title></head><body></body></html>',
+    )
+    const own = '<html><head><base href="https://cdn.test/"></head></html>'
+    expect(withBaseHref(own, 'https://a.test/')).toBe(own)
+    expect(withBaseHref('<p>hi</p>', 'https://a.test/')).toBe('<base href="https://a.test/"><p>hi</p>')
   })
 })

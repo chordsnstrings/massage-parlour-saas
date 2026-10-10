@@ -5,8 +5,10 @@ import {
   bookingAttribution,
   configChecks,
   configFlags,
+  resolveTurnstile,
   TURNSTILE_VERIFY_URL,
   turnstileConfig,
+  turnstileStatusText,
   verifyTurnstileToken,
   webEntrySource,
 } from '../src'
@@ -106,8 +108,45 @@ describe('Turnstile config (F9)', () => {
       TURNSTILE_SECRET_KEY: 'b',
       TURNSTILE_CUSTOM_DOMAINS: 'on',
     })
-    expect(on.find((c) => c.key === 'TURNSTILE')).toMatchObject({ ok: true, detail: 'incl. custom domains' })
+    expect(on.find((c) => c.key === 'TURNSTILE')).toMatchObject({
+      ok: true,
+      detail: 'from env · incl. custom domains',
+    })
     expect('TURNSTILE' in configFlags({})).toBe(false)
+  })
+
+  it('console values win over env, key by key, and the row names each source (never a value)', () => {
+    const env = {
+      TURNSTILE_SITE_KEY: 'env-site',
+      TURNSTILE_SECRET_KEY: 'env-secret',
+      TURNSTILE_CUSTOM_DOMAINS: 'on',
+    }
+    expect(resolveTurnstile(null, env)).toEqual({
+      config: { siteKey: 'env-site', secretKey: 'env-secret' },
+      customDomains: true,
+      siteKeySource: 'env',
+      secretKeySource: 'env',
+      customDomainsSource: 'env',
+    })
+    const both = resolveTurnstile({ siteKey: ' db-site ', secretKey: 'db-secret', customDomains: false }, env)
+    expect(both).toMatchObject({
+      config: { siteKey: 'db-site', secretKey: 'db-secret' },
+      customDomains: false,
+      siteKeySource: 'console',
+      secretKeySource: 'console',
+      customDomainsSource: 'console',
+    })
+    expect(turnstileStatusText(both)).toBe('from console · platform hosts (custom domains off)')
+    const mixed = resolveTurnstile({ siteKey: '', secretKey: 'db-secret', customDomains: null }, env)
+    expect(mixed.config).toEqual({ siteKey: 'env-site', secretKey: 'db-secret' })
+    expect(turnstileStatusText(mixed)).toBe('site key from env, secret from console · incl. custom domains')
+    const half = resolveTurnstile({ siteKey: 'db-site' }, {})
+    expect(half.config).toBeNull()
+    expect(turnstileStatusText(half)).toBe('secret key missing')
+    expect(turnstileStatusText(resolveTurnstile(null, {}))).toBe('keys missing')
+    const row = configChecks(env, { turnstile: both }).find((c) => c.key === 'TURNSTILE')!
+    expect(row).toMatchObject({ ok: true, detail: 'from console · platform hosts (custom domains off)' })
+    expect(JSON.stringify(row)).not.toContain('db-secret')
   })
 })
 

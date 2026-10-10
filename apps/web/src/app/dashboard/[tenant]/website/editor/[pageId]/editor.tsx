@@ -1,4 +1,6 @@
 'use client'
+// Puck styles without outside fonts (F10 CSP); first, before Puck renders.
+import '@/components/site/editor/puck-css'
 import '@/components/site/site.css'
 import {
   ActionBar,
