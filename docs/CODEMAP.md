@@ -156,14 +156,30 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · timeclock · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
-  - Finance: Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll (payroll + WPS SIF),
-    Billing (Stripe Checkout for platform invoices only).
+  - Finance: Reports (F31, below), Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll
+    (payroll + WPS SIF), Billing (Stripe Checkout for platform invoices only).
   - System: Settings (incl. logo, hours, intake, integrations, domains, data).
   - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
     (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
   - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
     `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG.
+  - **Reports (F31)** `reports/` (`reports.view`; RevPATH card also `dashboard.revenue`, liability `accounting.view`):
+    `data.ts` `loadReports` (branch scoping as on Home, `performanceRange` keys 7/30/90/month/last-month, today =
+    business date at the branch cutoff, `?rebook=30|60|90`, `?asOf=` ≤ today) → services `kpi-reports.ts`, one query
+    per KPI: `rebookingRate` (completed visits with a client; rebooked = another non-cancelled booking starting later,
+    business date ≤ visit + N; per therapist via `booking_items.staff_ids`; `pending` = window still open),
+    `retentionCohorts` (12 months ending at the period month; cohort = first completed visit in scope, whole spa also
+    `clients.first_visit_at` at the cutoff so imports stay in old cohorts; +1…+6 months, null = not started),
+    `revPath` (ex-VAT service lines of paid|refunded sales + package/membership session values matched to the 0-priced
+    line's therapist − service `refund_lines` by refund date ÷ bookable staff hours: shifts clipped to the business-day
+    window, else time entries; reception = not bookable), `roomUtilisation` (booked `duration_min` of bookings not
+    cancelled/no-show ÷ `openIntervals` × rooms; inactive rooms only when used), `prepaidLiability(asOf)` (spa-wide,
+    rebuilt from movements: gift-card txns by sale / refund / cutoff date; packages + memberships = price − redemptions,
+    0 from the refund line or `package_expiry`/`membership_expiry` entry date; vs ledger 2100/2110 credit − debit,
+    `difference` = ledger − items). `export/route.ts` = .xlsx (R10), one sheet per KPI, viewer's language.
+    Console Performance detail adds `tenantOperations` (whole-spa aggregates only). Migration 0037: indexes
+    `booking_items_booking`, `shifts_branch_time`.
   - Calendar ranges: `calendar/page.tsx` `?range=week|month` → `loadCalendarSpan` (data.ts) → services
     `loadCalendarRange` → `components/calendar/span-view.tsx`; Day view takes `?open=<bookingId>` (PLAN §14.6 Phase 3).
   - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
@@ -184,7 +200,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   ai models, domains (order approval), templates
   (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via
   `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
-  `tenantPerformance`; detail adds `tenantPerformanceDetail`). Revenue there = sales (paid|refunded) by sale business
+  `tenantPerformance`; detail adds `tenantPerformanceDetail` + F31 `tenantOperations`). Revenue there = sales (paid|refunded) by sale business
   date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
 - **`marketing/`**: `/`, features, crm, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
   scoped `.mkt`; Space Grotesk + DM Sans; Noto Sans Thai as the Thai-glyph fallback in `--font`/`--head`) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,

@@ -37,6 +37,7 @@ import { permissions } from './th/permissions'
 import { plan } from './th/plan'
 import { purchases } from './th/purchases'
 import { pwa } from './th/pwa'
+import { reports } from './th/reports'
 import { reviews } from './th/reviews'
 import { role } from './th/role'
 import { roles } from './th/roles'
@@ -90,6 +91,7 @@ export const th: Messages = {
   marketing,
   ai,
   analytics,
+  reports,
   reviews,
   website,
   widget,

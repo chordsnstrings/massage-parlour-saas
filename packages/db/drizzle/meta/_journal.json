@@ -267,6 +267,13 @@
       "when": 1791592302203,
       "tag": "0037_plans_premium_standard",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791592727973,
+      "tag": "0038_kpi_indexes",
+      "breakpoints": true
     }
   ]
 }

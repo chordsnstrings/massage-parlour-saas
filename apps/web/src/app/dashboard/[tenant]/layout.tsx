@@ -196,6 +196,7 @@ export default async function TenantLayout({
       ),
     ]),
     ...group(t('nav.group.finance'), [
+      ...single('reports', 'reports.view', '/reports', t('nav.reports')),
       ...single('accounts', 'accounting.view', '/accounts', t('nav.accounts')),
       ...single('vat', 'staff.manage', '/payroll', t('nav.vatPayroll')),
       ...single('billing', 'billing.view', '/billing', t('nav.billing')),

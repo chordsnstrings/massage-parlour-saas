@@ -38,6 +38,7 @@ import { permissions } from './en/permissions'
 import { plan } from './en/plan'
 import { purchases } from './en/purchases'
 import { pwa } from './en/pwa'
+import { reports } from './en/reports'
 import { reviews } from './en/reviews'
 import { role } from './en/role'
 import { roles } from './en/roles'
@@ -90,6 +91,7 @@ export const en = {
   marketing,
   ai,
   analytics,
+  reports,
   reviews,
   website,
   widget,
