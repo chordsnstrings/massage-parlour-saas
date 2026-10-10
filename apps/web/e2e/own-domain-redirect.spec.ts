@@ -85,8 +85,27 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     await served(`http://${HOST}/`, 404)
   })
 
+  await test.step('activated by the worker’s check: the 301 starts only once the own domain serves', async () => {
+    // As saveDomain on first activation, from another process (no web cache cleared); HOST's 404 above is cached.
+    await db
+      .update(domains)
+      .set({ status: 'active', isPrimary: true, verifiedAt: new Date() })
+      .where(eq(domains.hostname, HOST))
+    let toA404 = false
+    await expect
+      .poll(
+        async () => {
+          if ((await viaHost(ops, home(slug))).status() !== 301) return false
+          toA404 ||= (await viaHost(ops, `http://${HOST}/`)).status() !== 200
+          return true
+        },
+        { timeout: 45_000 }, // the own-domain map refreshes every 30 s
+      )
+      .toBe(true)
+    expect(toA404, 'a 301 to an own domain that still answered 404').toBe(false)
+  })
+
   await test.step('active + primary → GET/HEAD 301 to the own domain, path + query kept', async () => {
-    await consoleOp('Activate', 'activated')
     await redirects(home(slug), own('/'))
     await redirects(`${site(slug)}/book?src=qr&lang=ar`, own('/book?src=qr&lang=ar'))
     await redirects(`${site(slug)}/book`, own('/book'), 'HEAD')
