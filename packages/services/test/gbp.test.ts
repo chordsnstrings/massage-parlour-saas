@@ -134,8 +134,7 @@ describe('OAuth state + PKCE', () => {
     )
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth')
     expect(Object.fromEntries(url.searchParams)).toMatchObject({
-      scope:
-        'https://www.googleapis.com/auth/business.manage https://www.googleapis.com/auth/webmasters',
+      scope: 'https://www.googleapis.com/auth/business.manage https://www.googleapis.com/auth/webmasters',
       access_type: 'offline',
       prompt: 'consent',
       code_challenge: challenge,

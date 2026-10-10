@@ -1,5 +1,6 @@
 import {
   aiAgentSettings,
+  aiUsage,
   closeAllDbs,
   conversationMessages,
   conversations,
@@ -12,7 +13,7 @@ import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { encryptSecret, ingestInstagramWebhook } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createModelArkClient, respondToInstagram } from '../src'
+import { createModelArkClient, draftPrivateReply, respondToInstagram } from '../src'
 
 process.env.BETTER_AUTH_SECRET ??= 'test-secret-test-secret-test-secret'
 const { platform, app } = testDbs()
@@ -222,5 +223,23 @@ describe('Instagram agent hand-off', () => {
       sender: 'ai_draft',
       text: 'We can only help with spa services and bookings.',
     })
+  })
+
+  it('drafts a private reply through the gateway without storing or sending anything (F18)', async () => {
+    const before = await withTenant(ids.tenant!, (tx) => tx.select().from(conversationMessages), app)
+    const long = 'مرحبا '.repeat(300)
+    const r = await draftPrivateReply({
+      tenantId: ids.tenant!,
+      comment: 'How much is the hot stone massage?',
+      bookingUrl: 'https://lotus.spamanagement.co/book?src=ig',
+      client: modelReply(JSON.stringify({ reply: long, inappropriate: false })),
+    })
+    // Clipped to Instagram's 1,000-byte DM limit (Arabic letters take 2 bytes).
+    expect(new TextEncoder().encode(r.reply).length).toBeLessThanOrEqual(1000)
+    expect(r.inappropriate).toBe(false)
+    const after = await withTenant(ids.tenant!, (tx) => tx.select().from(conversationMessages), app)
+    expect(after).toHaveLength(before.length)
+    const usage = await platform.select().from(aiUsage).where(eq(aiUsage.tenantId, ids.tenant!))
+    expect(usage.some((u) => u.agentKey === 'comment_agent')).toBe(true)
   })
 })
