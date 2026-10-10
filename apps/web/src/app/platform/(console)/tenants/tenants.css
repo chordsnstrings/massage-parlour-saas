@@ -4,8 +4,9 @@
    Container query on the list block itself (its width = list width + 24 px), not the viewport:
      ≥ 1224 px  wide       (1920 screens)
      1084–1223  default    (1440)
-     884–1083   tight      (1280 with the 272 px sidebar, 1024 with the icon rail): 6 px cell padding
-     < 884 px   cards      (900, tablets, phones); the table is display:none, so it keeps its semantics
+     884–1083   tight      (1280 with the 272 px sidebar, ~1000 with the icon rail): 6 px cell padding
+     < 884 px   cards      (1024 with the sidebar, 900, tablets, phones); the table is display:none, so it keeps
+                           its semantics
    table-layout: fixed: the data columns have set widths and the spa column takes the rest, so the table is never
    wider than the page. Tokens come from brand-app.css (.mkt-app). */
 
@@ -114,17 +115,22 @@
     width: 120px;
   }
 }
-/* 1280 / 1024: every px the data columns don't need goes to the spa name. Rare long values wrap (a legacy plan
-   name, the override tag line, "Read-only until paid"); the common ones fit on one line. */
+/* 1280: every px the data columns don't need goes to the spa name. Rare long values wrap (a legacy plan name, the
+   override tag line); the common ones fit on one line, and the late-invoice note ("Overdue · read-only" / "from
+   16 Oct", 11 px here) on two. */
 @container sl (width < 1084px) {
   .sl-table {
     --sl-pad: 6px;
   }
   .sl-table col.c-status {
-    width: 106px;
+    width: 116px;
   }
   .sl-table col.c-plan {
-    width: 118px;
+    width: 108px;
+  }
+  .sl-table .sl-billing {
+    font-size: 11px;
+    line-height: 15px;
   }
   .sl-table col.c-when {
     width: 82px;
@@ -132,8 +138,9 @@
   .sl-table col.c-b30 {
     width: 92px;
   }
+  /* 54, not less: the sort arrow hangs 15 px before "Team" and must stay clear of "Bookings 30 d" */
   .sl-table col.c-team {
-    width: 44px;
+    width: 54px;
   }
   .sl-table col.c-storage {
     width: 70px;
@@ -247,15 +254,17 @@
   display: block;
 }
 
-/* rows: hairlines on the page background; hover / keyboard focus lifts the row to white */
-.sl-table tbody td {
+/* rows: hairlines on the page background; hover / keyboard focus lifts the row to white. The first cell is the
+   row header (th scope=row), styled like the data cells. */
+.sl-table tbody :is(th, td) {
   border-bottom: 1px solid var(--sl-hair);
+  font-weight: inherit;
   transition: background-color 0.15s;
 }
-.sl-table tbody tr:is(:hover, :focus-within) td {
+.sl-table tbody tr:is(:hover, :focus-within) :is(th, td) {
   background: var(--surface);
 }
-.sl-table tbody tr:is(:hover, :focus-within) td:first-child {
+.sl-table tbody tr:is(:hover, :focus-within) :first-child:is(th, td) {
   border-start-start-radius: 8px;
   border-end-start-radius: 8px;
 }
@@ -324,7 +333,8 @@
 .sl-billing {
   text-wrap: balance;
 }
-.sl-until {
+.sl-until,
+.sl-nowrap {
   white-space: nowrap;
 }
 .sl-tag {
@@ -376,6 +386,61 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.sl-defs {
+  margin-block-start: 0.5rem;
+  padding-inline: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sl-defs summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  border-radius: 6px;
+  color: var(--fg);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.sl-defs summary::-webkit-details-marker {
+  display: none;
+}
+.sl-defs summary:hover {
+  color: var(--accent);
+}
+.sl-defs summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sl-chev {
+  width: 14px;
+  height: 14px;
+  transition: rotate 0.15s;
+}
+.sl-defs[open] .sl-chev {
+  rotate: 180deg;
+}
+.sl-defs dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 6px 24px;
+  margin-block-start: 6px;
+  color: var(--muted);
+}
+.sl-defs dt {
+  display: inline;
+  color: var(--fg);
+  font-weight: 600;
+}
+.sl-defs dt::after {
+  content: " – ";
+  color: var(--sl-quiet);
+  font-weight: 400;
+}
+.sl-defs dd {
+  display: inline;
 }
 .sl-dot {
   display: inline-block;

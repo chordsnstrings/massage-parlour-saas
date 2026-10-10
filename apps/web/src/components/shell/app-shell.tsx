@@ -7,7 +7,7 @@ import { BottomNav, type NavItem, SidebarNav } from './nav'
 import { UserMenu } from './user-menu'
 
 /**
- * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 272px from xl (1280 px; icon rail 72px on md–xl, so wide tables fit at 1024), full page height with a sticky inner panel, top bar + bottom tabs on phones.
+ * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 272px on lg, icon rail 72px on md, top bar + bottom tabs on phones. The sidebar runs the full page height (sticky inner panel); 32 px page gutter until 1440 px (rem breakpoint: a px one would sort before md and lose), so wide tables keep their room at 1280.
  */
 export function AppShell({
   title,
@@ -33,14 +33,14 @@ export function AppShell({
   const primary = nav.slice(0, 4)
   const more = nav.slice(4)
   return (
-    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)]">
+    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[272px_minmax(0,1fr)]">
       {/* The dark column is a plain grid cell (full page height); only its inner panel is sticky, so the nav stays in view. */}
       <aside className="mkt-app-dark hidden md:block">
         <div className="mkt-app-glow sticky top-0 flex h-dvh flex-col">
           <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
-            <LogoMark className="size-9 xl:hidden" />
-            <span className="min-w-0 md:hidden xl:flex xl:flex-col xl:items-center xl:text-center">
-              <Logo className="mb-3.5 hidden h-12 xl:block" />
+            <LogoMark className="size-9 lg:hidden" />
+            <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
+              <Logo className="mb-3.5 hidden h-12 lg:block" />
               <span className="mkt-app-chip">{title}</span>
               {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
             </span>
@@ -62,7 +62,7 @@ export function AppShell({
           </Link>
           <UserMenu user={user} compact switchHref={switchHref} accountHref={accountHref} />
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-28 sm:px-6 md:px-8 md:pt-10 md:pb-16 xl:px-12">
+        <main className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-28 sm:px-6 md:px-8 md:pt-10 md:pb-16 min-[90rem]:px-12">
           {children}
         </main>
       </div>

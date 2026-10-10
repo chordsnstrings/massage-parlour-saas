@@ -10,7 +10,7 @@ import {
   type TenantUsageRow,
   tenantUsageList,
 } from '@spa/services'
-import { ArrowDown, ArrowDownUp, ArrowUp, Building2, Search } from 'lucide-react'
+import { ArrowDown, ArrowDownUp, ArrowUp, Building2, ChevronDown, Search } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -25,24 +25,24 @@ export const metadata: Metadata = { title: 'Spas' }
 
 // F21 spa list (owner 2026-10-10: "all data in one page", then "what is this mess … remove the big box"): a flat
 // table on the page background, one value per cell, one header line per column (each a server sort link), Joined
-// folded into the spa's second line. Layout modes + widths: tenants.css.
+// folded into the spa's second line, column definitions in a disclosure under the list. Layout modes: tenants.css.
 
 const en = createFormat('en')
 const year = (d: Date | string) => en.date(d).slice(-4)
 /** "30 Oct", with the year only when it isn't this year. */
 const shortDate = (d: Date | string, now: Date) => (year(d) === year(now) ? en.dateShort(d) : en.date(d))
 
-/** Relative time only ("12 min ago" … "4 mo ago"), so the activity columns stay narrow; exact time in the title. */
-function ago(d: Date | null, now: number) {
+/** "12 min ago" … "59 d ago", then the date ("10 Jun"; "Jun 2025" in an earlier year), so the activity columns stay
+ *  narrow; the exact Dubai date + time (with the year) is in the title. */
+function ago(d: Date | null, now: Date) {
   if (!d) return 'never'
-  const mins = Math.max(0, Math.round((now - d.getTime()) / 60_000))
+  const mins = Math.max(0, Math.round((now.getTime() - d.getTime()) / 60_000))
   if (mins < 60) return `${mins} min ago`
   const hours = Math.round(mins / 60)
   if (hours < 48) return `${hours} h ago`
   const days = Math.round(hours / 24)
   if (days < 60) return `${days} d ago`
-  const months = Math.round(days / 30.44)
-  return months < 24 ? `${months} mo ago` : `${Math.round(days / 365.25)} y ago`
+  return year(d) === year(now) ? en.dateShort(d) : `${en.monthShort(d)} ${year(d)}`
 }
 
 function bytes(n: number) {
@@ -67,7 +67,22 @@ const SORT_LABEL: Record<TenantSort, string> = {
   ai: 'AI this month',
   joined: 'Joined',
 }
-/** Column definitions (header tooltips), so the legend under the list stays one line. */
+/** Column headings: the table headers, the card labels and the definitions list use the same words. */
+const COLUMN: Record<TenantSort, string> = {
+  name: 'Spa',
+  joined: 'Joined',
+  status: 'Status',
+  plan: 'Plan',
+  signin: 'Sign-in',
+  booking: 'Booking',
+  bookings30: 'Bookings 30 d',
+  members: 'Team',
+  storage: 'Storage',
+  ai: 'AI this month',
+}
+/** Table order (Joined sits with the spa name). */
+const COLUMN_ORDER = Object.keys(COLUMN) as TenantSort[]
+/** What each column counts: the "What the columns count" list under the list (all widths) + header tooltips. */
 const DEFINITION: Record<TenantSort, string> = {
   name: 'Spa name; below it the address and the date the spa joined',
   joined: 'Date the spa was created',
@@ -135,7 +150,7 @@ function StatusBadge({ r }: { r: TenantUsageRow }) {
   )
 }
 
-/** One quiet line when an invoice is late; the stage and full date are in the title (and read out). */
+/** One quiet line when an invoice is late: the stage and the day the spa turns read-only (full date in the title). */
 function BillingNote({ r, ctx }: { r: TenantUsageRow; ctx: Ctx }) {
   const stage = r.deletedAt ? null : billingStageSummary(r, ctx.rules)
   if (!stage) return null
@@ -149,14 +164,15 @@ function BillingNote({ r, ctx }: { r: TenantUsageRow; ctx: Ctx }) {
         Read-only until paid
       </span>
     )
-  const what = stage.stage === 'grace' ? 'Grace period' : 'Invoice overdue'
+  const grace = stage.stage === 'grace'
   return (
     <span
       className="sl-sub sl-billing"
       data-tone="warning"
-      title={`${what}: read-only from ${en.date(stage.readOnlyFrom)}`}
+      title={`${grace ? 'Grace period' : 'Invoice overdue'}: read-only from ${en.date(stage.readOnlyFrom)}`}
     >
-      <span className="sr-only">{what}, </span>read-only {shortDate(stage.readOnlyFrom, ctx.now)}
+      {grace ? 'Grace' : 'Overdue'} · <span className="sl-nowrap">read-only</span> from{' '}
+      <span className="sl-nowrap">{shortDate(stage.readOnlyFrom, ctx.now)}</span>
     </span>
   )
 }
@@ -215,9 +231,9 @@ function When({ r, ctx, k }: { r: TenantUsageRow; ctx: Ctx; k: 'signin' | 'booki
     <span
       data-key={k}
       className={cn(stale ? 'sl-stale' : !d && 'sl-quiet')}
-      title={d ? en.dateTime(d) : undefined}
+      title={d ? `${en.date(d)}, ${en.time(d)}` : undefined}
     >
-      {ago(d, ctx.now.getTime())}
+      {ago(d, ctx.now)}
     </span>
   )
 }
@@ -293,9 +309,9 @@ export default async function TenantsPage({
       </Link>
     )
   }
-  const th = (key: TenantSort, label: string, num?: boolean) => (
+  const th = (key: TenantSort, num?: boolean) => (
     <th scope="col" className={cn(num && 'sl-num')} aria-sort={sort === key ? ariaSort : undefined}>
-      {sortLink(key, label)}
+      {sortLink(key, COLUMN[key])}
     </th>
   )
   const open = (r: TenantUsageRow) => adminPath(`/tenants/${r.id}`)
@@ -384,32 +400,33 @@ export default async function TenantsPage({
                   <tr>
                     <th scope="col" aria-sort={sort === 'name' || sort === 'joined' ? ariaSort : undefined}>
                       <span className="sl-pair">
-                        {sortLink('name', 'Spa')}
+                        {sortLink('name', COLUMN.name)}
                         <span className="sl-sep" aria-hidden="true">
                           ·
                         </span>
-                        {sortLink('joined', 'Joined')}
+                        {sortLink('joined', COLUMN.joined)}
                       </span>
                     </th>
-                    {th('status', 'Status')}
-                    {th('plan', 'Plan')}
-                    {th('signin', 'Sign-in')}
-                    {th('booking', 'Booking')}
-                    {th('bookings30', 'Bookings 30 d', true)}
-                    {th('members', 'Team', true)}
-                    {th('storage', 'Storage', true)}
-                    {th('ai', 'AI this month', true)}
+                    {th('status')}
+                    {th('plan')}
+                    {th('signin')}
+                    {th('booking')}
+                    {th('bookings30', true)}
+                    {th('members', true)}
+                    {th('storage', true)}
+                    {th('ai', true)}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id}>
-                      <td>
+                      {/* Row header: moving down any column, a screen reader names the spa. */}
+                      <th scope="row">
                         <Link href={open(r)} className="sl-name" data-key="name">
                           {r.name}
                         </Link>
                         <SpaSub r={r} />
-                      </td>
+                      </th>
                       <td>
                         <StatusBadge r={r} />
                         <BillingNote r={r} ctx={ctx} />
@@ -454,43 +471,43 @@ export default async function TenantsPage({
                     <BillingNote r={r} ctx={ctx} />
                     <dl className="sl-card-grid">
                       <div className="sl-card-plan">
-                        <dt>Plan</dt>
+                        <dt>{COLUMN.plan}</dt>
                         <dd>
                           <Plan r={r} ctx={ctx} />
                         </dd>
                       </div>
                       <div>
-                        <dt>Sign-in</dt>
+                        <dt>{COLUMN.signin}</dt>
                         <dd>
                           <When r={r} ctx={ctx} k="signin" />
                         </dd>
                       </div>
                       <div>
-                        <dt>Booking</dt>
+                        <dt>{COLUMN.booking}</dt>
                         <dd>
                           <When r={r} ctx={ctx} k="booking" />
                         </dd>
                       </div>
                       <div>
-                        <dt>{'Bookings 30 d'}</dt>
+                        <dt>{COLUMN.bookings30}</dt>
                         <dd className="tabular">
                           <Num k="bookings30" n={r.bookings30d} />
                         </dd>
                       </div>
                       <div>
-                        <dt>Team</dt>
+                        <dt>{COLUMN.members}</dt>
                         <dd className="tabular">
                           <Num k="members" n={r.activeMembers} />
                         </dd>
                       </div>
                       <div>
-                        <dt>Storage</dt>
+                        <dt>{COLUMN.storage}</dt>
                         <dd className="tabular">
                           <Num k="storage" n={r.storageBytes} text={bytes(r.storageBytes)} />
                         </dd>
                       </div>
                       <div>
-                        <dt>AI this month</dt>
+                        <dt>{COLUMN.ai}</dt>
                         <dd className="tabular">
                           <Ai r={r} />
                         </dd>
@@ -503,9 +520,23 @@ export default async function TenantsPage({
           )}
           <p className="sl-legend">
             <span className="sl-dot" aria-hidden="true" />
-            Amber: no staff sign-in for 14+ days or no booking for 30+ days. Empty values sort last. Hover a
-            heading for what it counts.
+            Amber: no staff sign-in for 14+ days or no booking for 30+ days (counted from joining when there
+            has been none). Empty values sort last.
           </p>
+          <details className="sl-defs">
+            <summary>
+              What the columns count
+              <ChevronDown className="sl-chev" strokeWidth={2} aria-hidden="true" />
+            </summary>
+            <dl>
+              {COLUMN_ORDER.map((k) => (
+                <div key={k}>
+                  <dt>{COLUMN[k]}</dt>
+                  <dd>{DEFINITION[k]}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
         </div>
       </PageBody>
     </>

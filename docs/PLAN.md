@@ -673,7 +673,8 @@ Applies to every non-public screen: owner/manager/receptionist/therapist/account
 - Breakpoints 360 / 640 / 768 / 1024 / 1280 / 1536, plus **container queries** so widgets adapt to their slot, not just the viewport.
 - Super-admin console shell (`AppShell`, owner 2026-10-10): the dark sidebar column is a full-page-height grid cell with a
   sticky inner panel (logo, nav, user menu; glow + clipping on `.mkt-app-glow`, never on the aside); full 272 px sidebar
-  from 1280 px, 72 px icon rail 768–1279 (so wide tables fit at 1024), top bar + bottom tabs below 768.
+  from 1024 px (unchanged), 72 px icon rail 768–1023, top bar + bottom tabs below 768. Page gutter 32 px until 1440 px
+  (48 from 1440), so wide tables keep their room at 1280.
 
 ### 12.5 Component stack
 - shadcn/ui (Radix) restyled to the tokens; TanStack Table for data grids; Recharts styled to tokens for charts.
@@ -1289,15 +1290,18 @@ others till end — finish everything"), built after the Premium/Standard plans 
   the big box, make the side bar till end of the page"): a flat table straight on the page background (no card),
   hairline rows, one value per cell, one header line per column; each header is the server sort link (`aria-sort` on
   its `th`, solid arrow on the sorted one, ghost arrow on hover; old `?sort=&dir=&q=` links unchanged). Columns: Spa
-  (name; slug · joined date, so "Spa · Joined" are two sort links) | Status (badge + one quiet billing line:
-  "read-only 16 Oct", stage + full date in the title / screen-reader text, or "Read-only until paid") | Plan (name; tier
-  tag only when the name doesn't say it, override as a green "→ Standard" tag; "until 30 Oct", year only when not this
-  year) | Sign-in | Booking (relative times only, "4 mo ago" past 60 d, exact time in the title) | Bookings 30 d | Team |
-  Storage | AI this month ("$27.40 / 25"; "76% of budget" amber ≥ 70 %, red ≥ 100 %). Numbers right-aligned, tabular;
-  zeros / never in AA-safe #6B6B77. Column definitions live in header tooltips; legend one line. Sticky header row
-  (scroll padding, WCAG 2.4.11). Container-query widths on the list block (`tenants.css`): wide ≥ 1224 px, default
-  1084–1223 (1440 screens), tight 884–1083 (1280 / 1024, 6 px cell padding), hairline cards < 884 (Sort by select +
-  direction link shown only there). Amber dates = no staff sign-in 14+ d / no booking 30+ d, counted from joining when
+  (name, the row header `th scope=row`; slug · joined date, so "Spa · Joined" are two sort links) | Status (badge + one
+  quiet billing line: "Overdue · read-only from 16 Oct" / "Grace · read-only from 11 Oct", full date in the title, or
+  "Read-only until paid") | Plan (name; tier tag only when the name doesn't say it, override as a green "→ Standard"
+  tag; "until 30 Oct", year only when not this year) | Sign-in | Booking ("12 min ago" … "59 d ago", then the date
+  "10 Jun" / "Jun 2025"; Dubai date + time with the year in the title) | Bookings 30 d | Team | Storage | AI this month
+  ("$27.40 / 25"; "76% of budget" amber ≥ 70 %, red ≥ 100 %). Numbers right-aligned, tabular; zeros / never in AA-safe
+  #6B6B77. Column definitions: a "What the columns count" disclosure under the list (every width; header tooltips
+  too); one-line amber legend. Sticky header row (scroll padding, WCAG 2.4.11). Container-query widths on the list
+  block (`tenants.css`): wide ≥ 1224 px, default 1084–1223 (1440 screens), tight 884–1083 (1280, ~1000 with the icon
+  rail; 6 px cell padding, Team ≥ 54 px so its arrow clears "Bookings 30 d", Status 116 / Plan 108 with the
+  late-invoice note at 11 px so it stays two lines), hairline cards < 884 (1024 and below;
+  Sort by select + direction link shown only there). Amber dates = no staff sign-in 14+ d / no booking 30+ d, counted from joining when
   there has been none ("never"; a new trial stays neutral).
 - ✅ **F22. Billing auto-transitions** (core `billing-stages.ts`, services `billing-transitions.ts`, worker
   `billing-transitions` 09:05). An unpaid platform invoice is late *N* days after its due date (console Company →

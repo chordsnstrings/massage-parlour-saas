@@ -1,6 +1,17 @@
 import { mkdirSync } from 'node:fs'
 import { expect, type Page, test } from '@playwright/test'
-import { aiUsage, branches, members, plans, roles, storedFiles, subscriptions, tenants, user } from '@spa/db'
+import {
+  aiUsage,
+  auditLog,
+  branches,
+  members,
+  plans,
+  roles,
+  storedFiles,
+  subscriptions,
+  tenants,
+  user,
+} from '@spa/db'
 import { eq, sql } from 'drizzle-orm'
 import { admin, planIdOf, signInPlatformAdmin, testDb, uniqueSlug } from './helpers'
 
@@ -338,6 +349,30 @@ const sortLink = (page: Page, label: string) =>
     name: new RegExp(`^Sort by ${label.replace(/[()]/g, '\\$&')}( \\(sorted, .+\\))?$`),
   })
 
+/** The sorted header's arrow never touches a header label (its own or a neighbour's): text rects, 2 px clearance. */
+const arrowClash = (page: Page) =>
+  page.evaluate(() => {
+    const arrow = document
+      .querySelector('.sl-table thead .sl-sort[data-on] .sl-arrow')
+      ?.getBoundingClientRect()
+    if (!arrow) return 'no arrow'
+    for (const link of document.querySelectorAll('.sl-table thead .sl-sort'))
+      for (const node of link.childNodes) {
+        if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) continue
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const t = range.getBoundingClientRect()
+        if (
+          arrow.left < t.right + 2 &&
+          arrow.right > t.left - 2 &&
+          arrow.top < t.bottom &&
+          arrow.bottom > t.top
+        )
+          return node.textContent
+      }
+    return null
+  })
+
 async function noSideScroll(page: Page, width: number) {
   await page.setViewportSize({ width, height: width < 768 ? 844 : 900 })
   await page.waitForTimeout(300)
@@ -355,18 +390,23 @@ async function noSideScroll(page: Page, width: number) {
 test('console spa list: flat table on one page at every width, every metric sortable', async ({ page }) => {
   test.setTimeout(240_000)
   const tag = uniqueSlug('fit')
+  const filled = uniqueSlug('fil')
   await seed(tag)
-  await fill(uniqueSlug('fil'))
+  await fill(filled)
   await signInPlatformAdmin(page)
   const list = `${admin}/tenants?q=${tag}`
 
-  await test.step('worst-case rows fit: table at 1024 / 1280 / 1440 / 1920, cards at 900 / 768 / 390 / 360', async () => {
+  await test.step('worst-case rows fit: table at 1000 (icon rail) / 1280 / 1440 / 1920, cards at 1024 / 900 / 768 / 390 / 360', async () => {
     await page.goto(`${list}&sort=signin`)
     await expect(page.getByText('6 spas')).toBeVisible()
-    for (const width of [1024, 1280, 1440, 1920, 900, 768, 390, 360]) {
+    for (const width of [1000, 1280, 1440, 1920, 1024, 900, 768, 390, 360]) {
       await noSideScroll(page, width)
-      await expect(page.getByRole('table')).toBeVisible({ visible: width >= 1024 })
+      await expect(page.getByRole('table')).toBeVisible({ visible: [1000, 1280, 1440, 1920].includes(width) })
     }
+    // Each spa's name heads its row (screen readers name the spa when moving down a column).
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await expect(page.getByRole('rowheader')).toHaveCount(6)
+    await expect(page.getByRole('rowheader', { name: /^Lotus Garden Spa/ })).toBeVisible()
   })
 
   await test.step('the whole (long) list: no sideways scroll, sidebar as tall as the page, nav stays in view', async () => {
@@ -383,9 +423,12 @@ test('console spa list: flat table on one page at every width, every metric sort
           bottom: aside.bottom + window.scrollY,
           page: document.documentElement.scrollHeight,
           screen: window.innerHeight,
+          gutter: getComputedStyle(document.querySelector('main')!).paddingInlineStart,
         }
       })
       expect(side.page, `the list is longer than the screen at ${width} px`).toBeGreaterThan(side.screen)
+      // 32 px page gutter until 1440 px (the list keeps its room at 1280), 48 px from 1440.
+      expect(side.gutter, `page gutter at ${width} px`).toBe(width >= 1440 ? '48px' : '32px')
       expect(side.bottom, `sidebar reaches the page bottom at ${width} px`).toBeGreaterThanOrEqual(
         side.page - 1,
       )
@@ -404,33 +447,72 @@ test('console spa list: flat table on one page at every width, every metric sort
     await expect(page.getByRole('row', { name: /The Pearl Spa/ }).locator('.sl-tag')).toHaveText(
       '→ Premium tier (override)',
     )
-    // The sidebar runs the page height on other long console pages too (same shell).
-    await page.goto(`${admin}/`)
-    const overview = await page.evaluate(() => ({
-      bottom: document.querySelector('aside')!.getBoundingClientRect().bottom + window.scrollY,
-      page: document.documentElement.scrollHeight,
-      screen: window.innerHeight,
-    }))
-    expect(overview.page).toBeGreaterThan(overview.screen)
-    expect(overview.bottom).toBeGreaterThanOrEqual(overview.page - 1)
-    await page.mouse.move(1438, 2)
-    await page.screenshot({ path: `${SHOTS}/overview-1440.png`, fullPage: true })
+    // The sidebar runs the page height on other long console pages too (same shell). Enough audit rows that the
+    // log is longer than the screen even when this spec runs alone.
+    await testDb()
+      .insert(auditLog)
+      .values(
+        Array.from({ length: 20 }, (_, n) => ({
+          action: 'e2e.sidebar.check',
+          entity: 'e2e',
+          entityId: `${n}`,
+        })),
+      )
+    for (const [path, shot] of [
+      ['/', 'overview-1440'],
+      ['/audit', 'audit-1440'],
+    ]) {
+      await page.goto(`${admin}${path}`)
+      const other = await page.evaluate(() => ({
+        bottom: document.querySelector('aside')!.getBoundingClientRect().bottom + window.scrollY,
+        page: document.documentElement.scrollHeight,
+        screen: window.innerHeight,
+      }))
+      expect(other.page, `${path} is longer than the screen`).toBeGreaterThan(other.screen)
+      expect(other.bottom, `sidebar reaches the bottom of ${path}`).toBeGreaterThanOrEqual(other.page - 1)
+      await page.mouse.move(1438, 2)
+      await page.screenshot({ path: `${SHOTS}/${shot}.png`, fullPage: true })
+    }
+    // The full sidebar (logo, labels, user name) still starts at 1024 px; the icon rail only below.
+    await page.setViewportSize({ width: 1024, height: 768 })
+    await expect(page.locator('aside').getByText('Audit log')).toBeVisible()
+    await expect(page.locator('aside').getByText('Platform Admin')).toBeVisible()
+    await page.setViewportSize({ width: 1000, height: 768 })
+    await expect(page.locator('aside').getByText('Audit log')).toBeHidden()
+    await expect(page.locator('aside').getByRole('link', { name: 'Audit log' })).toBeVisible()
   })
 
   await test.step('one line per spa at ≥ 1280 px for a normal-length name (plus the address line)', async () => {
-    await page.goto(list)
+    await page.goto(`${admin}/tenants?q=${filled}`)
     for (const width of [1280, 1440, 1920]) {
       await page.setViewportSize({ width, height: 900 })
-      const row = page.getByRole('row', { name: /Lotus Garden Spa/ })
-      const name = await row.locator('.sl-name').boundingBox()
-      const box = await row.boundingBox()
-      expect(name!.height, `name on one line at ${width} px`).toBeLessThanOrEqual(22)
-      expect(box!.height, `two-line row at ${width} px`).toBeLessThanOrEqual(64)
+      for (const spa of [
+        'Oud & Amber Hammam',
+        'Sukhumvit Thai Spa – Business Bay',
+        'The Pearl Spa – Abu Dhabi Corniche',
+        'Palm Jumeirah Wellness Retreat',
+      ]) {
+        const row = page.getByRole('row', { name: new RegExp(`^${spa}`) })
+        const name = await row.locator('.sl-name').boundingBox()
+        expect(name!.height, `${spa}: name on one line at ${width} px`).toBeLessThanOrEqual(22)
+        // The Pearl's plan cell carries the override tag line, so only its name is checked.
+        if (spa.startsWith('The Pearl')) continue
+        const box = await row.boundingBox()
+        expect(box!.height, `${spa}: two-line row at ${width} px`).toBeLessThanOrEqual(64)
+      }
     }
+    // Grace shows its stage on screen too, and when the spa turns read-only.
+    await expect(page.getByRole('row', { name: /^Zen Garden/ }).locator('.sl-billing')).toHaveText(
+      /^Grace · read-only from \d{1,2} [A-Z][a-z]{2}( \d{4})?$/,
+    )
+    // Past 60 days the activity columns show the date; the title has the full Dubai date + time.
+    const sharjah = page.getByRole('row', { name: /^Sharjah Ladies/ }).locator('[data-key="signin"]')
+    await expect(sharjah).toHaveText(/^(\d{1,2} [A-Z][a-z]{2}|[A-Z][a-z]{2} \d{4})$/)
+    await expect(sharjah).toHaveAttribute('title', /^\d{1,2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2}$/)
   })
 
   await test.step('Shift+Tab never leaves the focused spa link under the sticky header row', async () => {
-    await page.setViewportSize({ width: 1024, height: 600 })
+    await page.setViewportSize({ width: 1280, height: 600 })
     await page.goto(list)
     const links = page.locator('.sl-table .sl-name')
     const head = page.locator('.sl-table thead th').first()
@@ -465,7 +547,7 @@ test('console spa list: flat table on one page at every width, every metric sort
     const alNoor = page.getByRole('row', { name: /Al Noor Thai/ })
     await expect(alNoor.getByText('past due')).toBeVisible()
     await expect(alNoor.locator('.sl-billing')).toHaveText(
-      /^Invoice overdue, read-only \d{1,2} [A-Z][a-z]{2}( \d{4})?$/,
+      /^Overdue · read-only from \d{1,2} [A-Z][a-z]{2}( \d{4})?$/,
     )
     await expect(alNoor.locator('.sl-billing')).toHaveAttribute('title', /^Invoice overdue: read-only from /)
     // Dormancy: no sign-in / booking ever counts from joining — amber 200 d in, neutral for a 2-day-old trial.
@@ -498,6 +580,7 @@ test('console spa list: flat table on one page at every width, every metric sort
       ['AI this month', 'ai', (n) => expect(n[0]).toBe(B)],
       ['Plan', 'plan', (n) => expect(n.slice(0, 3)).toEqual([S, B, A])],
     ]
+    await page.setViewportSize({ width: 1280, height: 900 }) // tight columns: the arrows have the least room
     await page.goto(`${list}&sort=signin`)
     for (const [label, key, check] of cases) {
       await sortLink(page, label).click()
@@ -505,6 +588,14 @@ test('console spa list: flat table on one page at every width, every metric sort
       await expect(sortLink(page, label)).toHaveAccessibleName(/\(sorted, /)
       await expect(page.locator('th[aria-sort]')).toHaveCount(1)
       check(await names(page))
+      expect(await arrowClash(page), `${label}: arrow clear of every header label`).toBeNull()
+      if (key === 'members') {
+        await page.mouse.move(1278, 2)
+        await page.screenshot({
+          path: `${SHOTS}/spa-list-1280-team.png`,
+          clip: { x: 0, y: 0, width: 1280, height: 420 },
+        })
+      }
     }
     // Plan, flipped: Z → A, and the three spas without a plan stay last.
     await sortLink(page, 'Plan').click()
@@ -548,8 +639,17 @@ test('console spa list: flat table on one page at every width, every metric sort
       new RegExp(`sort=storage&dir=asc&q=${tag}-lotus|q=${tag}-lotus.*sort=storage`),
     )
     expect(await names(page)).toEqual(['Lotus Garden Spa'])
+    // What the columns count: a visible disclosure under the list, on cards and table alike (no hover needed).
+    await expect(page.locator('.sl-legend')).not.toContainText('Hover')
+    await expect(page.locator('.sl-legend')).toContainText('counted from joining')
+    const defs = page.getByText('What the columns count')
+    await defs.click()
+    await expect(page.getByText('Active team members')).toBeVisible()
     // On desktop the table headers are the sort control; the select is hidden.
     await page.setViewportSize({ width: 1280, height: 900 })
     await expect(page.getByLabel('Sort by')).toBeHidden()
+    await expect(defs).toBeVisible()
+    await page.mouse.move(1278, 2)
+    await page.locator('[data-testid="spa-list"]').screenshot({ path: `${SHOTS}/spa-list-defs-1280.png` })
   })
 })
