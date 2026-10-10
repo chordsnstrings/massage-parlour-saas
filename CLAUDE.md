@@ -35,14 +35,17 @@ fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.
 - Brand name + domain: **spamanagement.co** (owner, 2026-10-08). Everything uses it (copy, auth appName/TOTP issuer,
-  `PLATFORM_NAME`/`DEFAULT_EMAIL_FROM` in core/email.ts, env examples); old spamanagement.ae stays live via `EXTRA_ROOT_DOMAINS`
-  (B1 done; owner DNS/env checklist: deploy/droplet/README.md "Move to a new domain"). **The only spamanagement.co email
-  address anywhere (site, legal pages, sender once .co is verified, ops contacts) is `ask@spamanagement.co`** (owner 2026-10-09).
+  `PLATFORM_NAME`/`DEFAULT_EMAIL_FROM` in core/email.ts, env examples); spamanagement.ae is dropped; `EXTRA_ROOT_DOMAINS`
+  keeps the old `134-209-145-162.sslip.io` address working (B1; steps: deploy/droplet/README.md "Move to spamanagement.co").
+  **The only spamanagement.co email address anywhere (site, legal pages, default sender, ops contacts) is
+  `ask@spamanagement.co`** (owner 2026-10-09).
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.
 - AI = BytePlus ModelArk, Seed 2.0 family by default; model IDs live in DB config (`ai_model_config`), never hard-coded.
-- Infra ≤ USD 50/month: one DO droplet (docker compose: postgres, migrate, web, worker, caddy — no cloudflared in the running stack) behind Cloudflare Free. No Redis.
+- Infra ≤ USD 50/month: one DO droplet (docker compose: postgres, migrate, web, worker, caddy). DNS at Namecheap (BasicDNS:
+  A @ and A * → droplet), no Cloudflare in front (owner 2026-10-10); Caddy issues certificates on demand. Off-site backups:
+  DigitalOcean Spaces (recommended). No Redis.
 - Price (owner 2026-10-09, PLAN §18.8): **Premium** AED 14,000 setup + 3,000/month; **Standard** AED 9,000 setup + 2,000/month
   (no AI/Instagram automation, no marketing tools, one branch); excl. VAT, VAT optional; existing spas keep AED 24,000/yr
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
@@ -111,7 +114,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Deploys: the droplet's `spa-update` timer pulls the deploy branch **`claude/intelligent-heisenberg-g9e81o`** (also the
   GitHub default; every push there reaches production) every 2 min and rebuilds; check
   `https://<host>/_status/deploy.json` (basic auth `ops`). Secrets without SSH: commit `deploy/droplet/secrets.env.enc`
-  (see deploy/droplet/README.md). The worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
+  (see deploy/droplet/README.md). Public deploy settings (domain, routing, ACME email): `deploy/droplet/site.env`
+  (applied over the overlay, CI-validated by test-update.sh). A changed update.sh runs from the next deploy on.
+  The worker needs `DATABASE_URL_APP` too (tenant-scoped jobs).
 - CSP (F10, CODEMAP "Security headers"): every page has a nonce + `'strict-dynamic'` script policy. Our own inline
   `<script>` needs `nonce={await getNonce()}` (server/nonce.ts); a new outside script/frame/font host goes into
   `@spa/core` security-headers.ts; never `srcdoc` for untrusted HTML (inherits the page CSP; use the design shell).

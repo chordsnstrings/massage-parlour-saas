@@ -39,7 +39,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 - Reserved slugs: `www app admin api mail customers status cdn assets help docs blog`. Rename = old slug 301-redirects. **MVP**
 - **AI onboarding:** paste Instagram handle / Google Maps link → AI drafts services, copy, photos, hours, colours → site ready to tweak. **P3**
 - CSV import: clients, services, products (Fresha-style exports). **P2**
-- Custom domain (`www.theirspa.ae`) via Cloudflare for SaaS (§3.3). **P2**
+- Custom domain (`www.theirspa.ae`): CNAME + Caddy on-demand TLS (§3.3). **P2**
 - Multi-location (branches) per tenant — schema from day 1, UI **MVP** for 1 branch, multi-branch **P2**.
 - Tenant data export (zip of CSV/JSON). **P2**
 
@@ -170,9 +170,9 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 Reception → "Walk-in" → service → "next in rotation" therapist + free room suggested → start → checkout → daily close.
 
 **Custom domain**
-Tenant enters `www.theirspa.ae` → API creates Cloudflare custom hostname → UI shows `CNAME www → customers.spamanagement.co`
+Tenant enters `www.theirspa.ae` → UI shows `CNAME www → customers.spamanagement.co`
 + ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
-(many .ae registrars lack CNAME flattening). On the droplet (no Cloudflare for SaaS) Caddy issues certificates on demand,
+(many .ae registrars lack CNAME flattening). Caddy issues certificates on demand (Cloudflare for SaaS is optional code, unused),
 asking `/api/domains/allowed` first; in path-routing mode any non-platform host is served as `/domain/{host}`.
 
 **Buy a domain (Namecheap)**
@@ -185,7 +185,7 @@ recorded on the order and added to the spa's next manual invoice. A failed regis
 once registered, connection problems are notes, never a failed order. API calls only work from the whitelisted droplet IP.
 
 **Publish site**
-Editor saves draft JSON → Publish creates immutable `page_version` → cache tag revalidated + Cloudflare purge for the host.
+Editor saves draft JSON → Publish creates immutable `page_version` → cache tag revalidated.
 
 **Instagram DM → booking (P3)**
 Webhook → `conversations` (store `last_customer_msg_at`) → DM agent (Seed 2.0 lite, tools: `get_services`, `check_availability`,
@@ -200,58 +200,62 @@ Inappropriate messages: brief, neutral reply, no engagement, flagged in inbox.
 ```
 Visitors (tenant subdomains + custom domains)        Staff / owners (app.spamanagement.co)
                     │                                           │
-         Cloudflare (Free): DNS, proxy, Universal SSL (*.spamanagement.co),
-         Cloudflare for SaaS (custom hostnames), edge cache (Dubai PoP), WAF basics
-                    │  Cloudflare Tunnel (no open inbound ports)
-         ┌──────────┴────────── DO Droplet (Premium AMD 4 GB / 2 vCPU) ───────────┐
+         DNS: Namecheap BasicDNS (A @ and A * → droplet; no proxy, no Cloudflare in front)
+                    │  ports 80/443
+         ┌──────────┴────────── DO Droplet (Basic 4 GB / 2 vCPU, s-2vcpu-4gb) ────┐
          │ docker compose:                                                       │
-         │  cloudflared · web (Next.js 16 standalone: marketing, dashboard,      │
-         │  admin, tenant sites by host) · worker (pg-boss jobs, AI agents,      │
-         │  social posting, cron) · postgres 16                                  │
+         │  caddy (HTTPS, certificates on demand) · web (Next.js 16 standalone:  │
+         │  marketing, dashboard, admin, tenant sites by host) · worker (pg-boss │
+         │  jobs, AI agents, social posting, cron) · postgres 16 · migrate       │
          └───────────────────────────────────────────────────────────────────────┘
                     │                                   │
-         Cloudflare R2 (media, AI assets,        BytePlus ModelArk ap-southeast (Johor):
-         nightly pg_dump; free ≤10 GB)           Seed 2.0 chat, Seedream images
+         DigitalOcean Spaces (S3 API:            BytePlus ModelArk ap-southeast (Johor):
+         nightly pg_dump off-site)               Seed 2.0 chat, Seedream images
 ```
 - **One Next.js process** serves everything (route groups + host-based rewrite) to save RAM.
 - **No Redis**: pg-boss (Postgres-backed queue + cron) and in-process LRU caches.
-- Fallback if Tunnel + Cloudflare for SaaS origin doesn't work as expected: Caddy with Cloudflare Origin CA cert, firewall
-  allowing only Cloudflare IPs. *(verify in P0 spike)*
+- No Cloudflare DNS/proxy/Tunnel (owner, 2026-10-10). Turnstile (optional bot check) is a free widget and needs no
+  Cloudflare DNS; Caddy still trusts Cloudflare's ranges for `Cf-Connecting-Ip` because a spa's own domain may sit
+  behind its own Cloudflare (deploy/droplet/README.md "Client IP").
 
 ### 3.2 Region
 - DO has no Middle-East region. Published data: Dubai→Frankfurt ≈ 92 ms, Dubai→London ≈ 93 ms, Dubai→Bangalore ≈ 154 ms.
 - **Default FRA1**; confirm with a 5-minute ping from the pilot spa's connection to
-  `speedtest-{fra1,lon1,ams3,blr1}.digitalocean.com`. Cloudflare caches tenant sites in Dubai anyway.
+  `speedtest-{fra1,lon1,ams3,blr1}.digitalocean.com`.
 - AI calls go to Johor regardless; they're async/background so the extra latency is irrelevant.
 
 ### 3.3 Domains & TLS
 - `spamanagement.co` (marketing), `app.` (dashboard), `admin.` (super-admin), `{slug}.` (tenant sites),
-  `customers.` (CNAME target for custom domains). Nameservers delegated to Cloudflare.
-- Universal SSL covers apex + first-level wildcard → no wildcard cert work on the server.
-- Custom domains: Cloudflare for SaaS — **100 hostnames free**, then USD 0.10/hostname/month. No Let's Encrypt rate-limit concerns.
+  `customers.` (CNAME target for custom domains). DNS at Namecheap (BasicDNS): `A @` and `A *` → droplet.
+- Caddy gets the apex certificate at start and every other host's (`www.`, `app.`, `admin.`, `{slug}.`, spa custom
+  domains, the old sslip.io address) on its first visit, approved by `/api/domains/allowed`. Let's Encrypt's weekly
+  limit per registered domain (ZeroSSL is Caddy's fallback issuer) is far above the expected spa sign-ups.
+- Public deploy settings (domain, routing, ACME email) live in `deploy/droplet/site.env` (CI-checked, CODEMAP "Deploy").
 
 ### 3.4 Monthly cost
 
 | Item | USD/mo |
 |---|---|
-| DO Premium AMD droplet 4 GB / 2 vCPU / 80 GB (FRA1) | 28.00 |
-| DO daily backups (30%) | 8.40 |
-| Cloudflare Free (DNS, proxy, SSL, Tunnel, for SaaS ≤100 hostnames) | 0 |
-| Cloudflare R2 (≤10 GB free, zero egress) | 0 |
+| DO Basic droplet 4 GB / 2 vCPU / 80 GB (`s-2vcpu-4gb`, BLR1) | 24.00 |
+| DO droplet backups (weekly, 20 %; daily = 30 %, 7.20) | 4.80 |
+| DO Spaces (250 GB + 1 TB transfer; off-site DB backups) | 5.00 |
+| Namecheap BasicDNS + Email Forwarding (`ask@`), Let's Encrypt certificates | 0 |
 | Resend free (staff/owner email only) | 0 |
 | Sentry free, uptime monitor free | 0 |
 | GitHub Actions + GHCR (watch 500 MB private-package quota; prune old tags) | 0 |
-| **Total** | **≈ 36.40** (+ domain renewal) |
+| **Total** | **≈ 33.80** (≈ 36.20 with daily backups; + domain renewal) |
 
 AI usage (ModelArk) is metered per tenant and priced into plans — not part of the infra budget.
 
 **Scaling steps (in order):** move Postgres to DO Managed PostgreSQL (USD 15, PITR) → bigger droplet or 2nd app droplet →
-R2 paid tier → ClickHouse for analytics only if Postgres rollups get slow.
+more Spaces storage → ClickHouse for analytics only if Postgres rollups get slow.
 
 ### 3.5 Ops
 - Postgres tuned for 4 GB (shared_buffers ≈ 1 GB); container memory limits so the worker can't starve web.
-- Images built in CI, never on the droplet. Deploy = pull image tag → `docker compose up -d` with healthcheck; rollback = previous tag.
-- Backups: nightly `pg_dump` → R2 (30 daily, 12 monthly) + DO daily disk backups; **monthly restore drill** script.
+- Pull-based deploys: the droplet builds the CI-green commit of the deploy branch (`deploy/green`) every 2 min →
+  `docker compose up -d` + health check; rollback = the last good commit (deploy/droplet/README.md).
+- Backups: nightly `pg_dump` → DO Spaces (30 daily, 12 monthly; `R2_*` vars + `R2_REGION`) + DO droplet backups;
+  **monthly restore drill**.
 - No always-on staging (budget): CI runs e2e against an ephemeral docker compose stack at phase milestones.
 - Monitoring: Sentry (errors), uptime checks on `app.` and a sample tenant host, `pg_stat_statements`, structured JSON logs.
 
@@ -617,7 +621,7 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
 - Only interactive blocks ship client JS (booking widget, carousels, motion); everything else is static HTML.
 - Self-hosted subset fonts (Latin + Arabic, `font-display: swap`); sharp → AVIF/WebP + blur placeholders.
 - Budgets: LCP < 2.5 s on mid-range Android over 4G, CLS < 0.1, INP < 200 ms, ≤ 100 KB JS excluding the booking widget.
-- Cached per host + path by tag; Cloudflare edge cache; publish = revalidate tag + purge.
+- Cached per host + path by tag; publish = revalidate tag.
 
 ### 11.9 Phasing
 - **P1 (MVP):** primitives, 15 core + smart blocks, 3 templates (Zen Minimal, Dark Luxury, Nordic Clean), layers 1–5 with
@@ -699,9 +703,9 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 ## 14. Phase 0 task list
 
 **You (accounts & approvals — start now, they have lead time)**
-1. `spamanagement.co` (canonical since B1) and the old `spamanagement.ae` (kept via `EXTRA_ROOT_DOMAINS`); nameservers → Cloudflare.
+1. `spamanagement.co` (canonical since B1; `spamanagement.ae` dropped 2026-10-10); DNS at Namecheap BasicDNS (A @ and A * → droplet).
 2. DigitalOcean account; run the region ping test from the pilot spa (command provided in P0).
-3. Cloudflare account (Free); later enable Cloudflare for SaaS on the zone.
+3. Cloudflare account (Free) only for the optional Turnstile widget; no Cloudflare DNS/proxy (owner, 2026-10-10).
 4. Meta: business portfolio for the platform company → **Business Verification** (trade licence) → developer app with Instagram API (Instagram Login); add the pilot's IG (professional, public) as tester.
 5. Google: Cloud project; get **Manager** on the pilot's GBP; submit the GBP API Basic Access form.
 6. BytePlus ModelArk (ap-southeast): enable Seed 2.0 lite/pro/mini + Seedream; create `ARK_API_KEY`.
@@ -729,7 +733,7 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 - Tenant memberships, roles and invitations are our own RLS-scoped tables instead of Better Auth's organization plugin.
 - RLS uses per-role policies (`spa_app` tenant-scoped, `spa_platform` all rows) — no BYPASSRLS, portable to managed Postgres.
 - The worker and pg-boss use the owner role (pg-boss manages its own schema); web never does.
-- Backups go to Cloudflare R2 (free tier); Sentry is deferred to P1, before the pilot goes live.
+- Off-site backups: DigitalOcean Spaces (S3 API, ≈ USD 5/month; was Cloudflare R2 until 2026-10-10); Sentry is deferred to P1, before the pilot goes live.
 
 ### 14.1 Build status — P1, P2 and P3 complete (2026-10-06)
 
@@ -758,7 +762,8 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 | Still open | Meta + Google API approvals (code ready; set META_* / GOOGLE_*), Reserve with Google, notification centre, low-stock pushes |
 
 Deployed on one DigitalOcean droplet (blr1, Compose + Caddy) with path routing (`/app`, `/admin`, `/s/{slug}`) on an sslip.io hostname
-until the domain is wired in; the switch to `spamanagement.co` (old `.ae` kept via `EXTRA_ROOT_DOMAINS`) is the owner checklist in deploy/droplet/README.md (B1).
+until the domain is wired in; the switch to `spamanagement.co` (host routing; the sslip.io address stays in `EXTRA_ROOT_DOMAINS` and its
+path links redirect) is `deploy/droplet/site.env`, steps in deploy/droplet/README.md "Move to spamanagement.co" (B1).
 
 ### 14.2 P2/P3 implementation decisions (recorded at integration)
 - **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
@@ -990,9 +995,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   no WhatsApp send tool (also filtered from any external server); optional external server in super-admin AI settings;
   Settings → Integrations "AI tools via Meta MCP" card (groups, autopilot for public replies, Ask the AI); write tools
   audit-logged. Gap: no Facebook Page connect flow yet (Page tools appear once a Page token is stored). Details: CODEMAP "Meta MCP".
-- **B1 decision (2026-10-08):** staff emails (invites, password reset, 2FA) keep sending from spamanagement.ae
-  (`EMAIL_FROM`; compose default + core `DEFAULT_EMAIL_FROM` stay `.ae`, UI/app names say .co) until spamanagement.co is
-  verified in Resend; then switch the env value.
+- **B1 decision (2026-10-08, updated 2026-10-10):** staff emails (invites, password reset, 2FA) send from
+  `spamanagement.co <ask@spamanagement.co>` (core `DEFAULT_EMAIL_FROM`; `EMAIL_FROM` / console override); spamanagement.ae
+  is dropped. Resend delivers once spamanagement.co is verified there (its DNS records go into Namecheap).
 - **Phone visibility (owner, 2026-10-09):** client phone numbers are shown only to owner, manager and receptionist —
   always; never to therapist, accountant, content editor or custom roles (no per-spa toggle).
 - **R8 Purchases:** purchase records (materials, cleaning, supplies…) with supplier, items, totals, VAT, receipt. Built (W3):

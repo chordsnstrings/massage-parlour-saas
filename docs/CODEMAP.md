@@ -111,7 +111,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      `packages/core/test/hosts.test.ts`; e2e `path-redirects.spec` + a host-mode step in `slug-rename.spec`. Never
      redirected (not proxied, served on every host incl. the old one): `/api/*` (OAuth callbacks, Meta webhook /
      deauthorize / data-deletion, `/api/mcp`, `/api/health`, Caddy ask), `/files/*`, `/.well-known/*`, `_next`, static
-     files (`/widget.js`); `/_status/*` is Caddy's, on `SITE_HOST` only. Owner steps: deploy/droplet/README.md.
+     files (`/widget.js`); `/_status/*` is Caddy's (`SITE_HOST`, and the sslip.io fallback). Owner steps:
+     deploy/droplet/README.md "Move to spamanagement.co".
    - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
      lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
@@ -145,7 +146,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
      shared, stored or sent. Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
-     (old spamanagement.ae); droplet compose lets `APP_URL`/`ADMIN_URL` be overridden for `ROUTING=host`.
+     (production: the old `134-209-145-162.sslip.io`); droplet `APP_URL`/`ADMIN_URL`/`ROUTING` come from site.env.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
 ## Web routes (`apps/web/src/app`)
@@ -937,11 +938,16 @@ i18n namespace `automations`.
 - **Droplet stack** (`deploy/droplet/compose.yml`):
   - postgres 16 (1200m);
   - `migrate` (worker image: migrate + seed);
-  - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`);
+  - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`, also set at run time for web + worker: services
+    `freeSiteUrl` reads it from `process.env`, which Next doesn't inline);
   - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`);
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
-  - caddy: on-demand TLS that asks `/api/domains/allowed`, a 25 MB body cap, and `/_status` behind basic auth.
+  - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
+    catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
+    stops Caddy).
     Client IP (F26): `trusted_proxies static` = Cloudflare ranges (+ `trusted_proxies_strict`), `client_ip_headers
     Cf-Connecting-Ip` only; `proxy_to_web` sets `Cf-Connecting-Ip {client_ip}` (Cloudflare's header from a Cloudflare
     peer, else the TCP peer) and strips Do-Connecting-Ip / X-Real-Ip / True-Client-Ip. `test-caddy-ip.sh` (caddy or
@@ -957,7 +963,15 @@ i18n namespace `automations`.
     (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
     file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
     Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.
-  - It applies the `secrets.env.enc` overlay (AES-256-CBC, pbkdf2 200k).
+  - `build_env` (each `deploy_commit`, so a rollback brings the last good commit's own settings): `.env` =
+    `.env.base` (first-boot env; copied from `.env` once) < `secrets.env.enc` (AES-256-CBC, pbkdf2 200k, key
+    `/opt/spa/secrets.key`; unknown contents, only the droplet can decrypt) < `deploy/droplet/site.env` (plain,
+    public; allow-list `SITE_KEYS` = SITE_HOST ROUTING APP_URL ADMIN_URL EXTRA_ROOT_DOMAINS ACME_EMAIL VAPID_SUBJECT
+    CF_CNAME_TARGET EMAIL_FROM; other lines skipped + logged to build.log, never fatal), later layer wins per key,
+    written atomically, mode 600. No overlay + no site.env = `.env` untouched; overlay that won't decrypt = untouched
+    + status error (as before). Main body guarded (`BASH_SOURCE`) so `test-update.sh` can source the functions.
+  - A changed `update.sh` takes effect from the deploy after the one that ships it (`updater-sync` installs it during
+    `up`), so a change that relies on it (e.g. a site.env value) must land in a later push.
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch; a push reaches production once its CI run
   is green (job `promote` → `deploy/green`), ~2 min after that.
@@ -966,7 +980,9 @@ i18n namespace `automations`.
   `pnpm db:check-drift` (packages/db/scripts/check-drift.sh: drizzle-kit generate into a scratch copy of drizzle/ via
   `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
   --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
-  date each) and `deploy/droplet/test-caddy-ip.sh`. `promote` needs both. Also: `codeql.yml` (codeql-action v3,
+  date each), `deploy/droplet/test-caddy-ip.sh` and `deploy/droplet/test-update.sh` (build_env fixtures + the
+  committed site.env: allowed keys, no duplicates, SITE_HOST/ROUTING/APP_URL/ADMIN_URL together and matching).
+  `promote` needs both. Also: `codeql.yml` (codeql-action v3,
   javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
   `js/insufficient-password-hash` in restore-drill.ts, for the owner to dismiss ("won't fix", §17); trailing-run trims use core `trimTrailing`, not
   `/x+$/`), `cloudflare-ips.yml` (Mondays + PRs
