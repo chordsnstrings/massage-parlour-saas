@@ -40,6 +40,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `withinIpLimit` → services `withinRateLimits` — per-IP limits for public actions Better Auth's HTTP limiter never sees,
   e.g. apply, contact form), `contact_enquiries` (PLAN §18.4; marketing Contact form, services `enquiries.ts`), `tenant_purges` (G12 purge record; its column is
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
+  `tenant_slug_history` (F23: old slug PK → `renamed_tenant_id`, `reserved_until`; services `tenant-slug.ts`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
   tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
@@ -90,6 +91,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      go to `/domain/{host}`.
    - Sets `x-original-path`. A trailing-dot host gets a 308 redirect.
    - F10: sets the page security headers with a fresh nonce (see "Security headers").
+   - F23: GET/HEAD for a renamed spa's previous slug (site `{old}.{root}` / `/s/{old}`, dashboard `app/{old}`) →
+     301 to the current slug, path + query kept (`server/slug-redirect.ts`: one old→current map per process from
+     services `slugRedirects`, 30 s TTL, cleared by the console rename; imports `@spa/services/tenant-slug`, never the
+     services barrel). `api/domains/allowed` (Caddy ask) allows the old host too.
+   - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
+     lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
      `/robots.txt` + `/sitemap.xml` ARE rewritten, so each surface answers its own (F12, see "Search + social").
 2. **`server/session.ts`**: `getSession` reads `headers()` first; `requireUser` redirects to `{surface}/login?next=`.
@@ -222,6 +229,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. Footer = brand + 5 link columns into
   section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
+- **Status pages (F24)**: root `not-found.tsx` (server, per surface via `requestSurface()`), `error.tsx` (client,
+  `SurfaceProvider` context from the root layout → `errorCopy`), `global-error.tsx` (no layout: surface guessed from
+  `<html data-surface>` / host / path), all through `components/status/status-page.tsx` + `status.css` (looks `crm`,
+  `marketing`, `console`, `site`; self-contained so they render when a surface layout failed). The spa shell keeps
+  its own `[tenant]/not-found.tsx` (unknown paths via `[tenant]/[...missing]`) and `[tenant]/error.tsx`. Copy:
+  dashboard `errors.page.*` / `errors.boundary.*` (EN/TH), sites `components/site/i18n.ts` (EN/AR). Only the
+  digest is shown. `<html lang/dir>`: marketing + console en, dashboard `getLocale()`, sites `?lang=ar` → ar/rtl.
+- **Slug rename (F23)**: console spa page "Web address" → `renameSlugAction` → services `renameTenantSlug` (checks as
+  Apply + `claimSlugTx`; `provisionTenantTx` claims too; `slugStatus` adds `previous`) → audit
+  `platform.tenant.slug_renamed` → clears the redirect map, `resolveSiteTenant` cache and PWA slug caches
+  (globalThis-backed so the action reaches the bundles that read them).
 - **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
   receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
   "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=`.

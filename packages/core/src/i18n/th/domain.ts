@@ -261,6 +261,8 @@ export const domain: Messages['errors']['domain'] = {
   applicationPending: 'คุณมีใบสมัครที่รอการอนุมัติอยู่แล้ว',
   applicationSlugFormat: 'ใช้ตัวพิมพ์เล็กภาษาอังกฤษ ตัวเลข หรือขีดกลาง 3–40 ตัว',
   applicationSlugTaken: 'ที่อยู่นี้มีผู้ใช้แล้ว',
+  // F23 (2026-10-10): needs native review.
+  slugUnchanged: 'นี่เป็นที่อยู่ของสปาแห่งนี้อยู่แล้ว',
   applicationNotFound: 'ไม่พบใบสมัคร',
   applicationReviewed: 'ใบสมัครนี้ได้รับการพิจารณาแล้ว',
   applicantClosed: 'บัญชีเข้าสู่ระบบของผู้สมัครถูกปิดแล้ว',

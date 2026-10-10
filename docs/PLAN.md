@@ -1253,6 +1253,26 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
 - ✅ **F28. Outbox assignment.** Shipped 2026-10-09: "Assigned to" per message (active members with marketing.send),
   Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
   auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
+- ✅ **F23. Slug rename with 301 from the old slug.** Shipped 2026-10-10: console spa page → "Web address" card
+  (super-admin + 2FA; same rules as Apply: format, reserved names, live spa, pending application, plus previous
+  addresses). Old slug → `tenant_slug_history` (platform-only table, migration 0042); `{old}.{root}` on every platform
+  domain, `/s/{old}/…` and `app/{old}/…` answer **301** to the new slug with path + query (proxy, GET/HEAD; 5-min
+  private browser cache); Caddy's TLS ask allows the old host. **Decision: cooling period 12 months**
+  (`SLUG_COOLING_MONTHS`) — only the same spa may take an old address back meanwhile; afterwards another spa may claim
+  it (the history row goes, redirects stop), an unclaimed old address keeps redirecting. Chains resolve to the current
+  slug. Audit `platform.tenant.slug_renamed` {from, to, reservedUntil}. Every slug URL is generated per request
+  (publicSiteUrl, canonical/hreflang, sitemaps, PWA manifest, GBP/campaign booking links); stored copies (sent
+  messages, Google posts, widget snippets, notification links ≤ 90 days) reach the new address through the 301. An
+  installed dashboard app keeps opening via the redirect; reinstall from the new address for the new app id.
+- ✅ **F24. i18n error / 404 / global-error pages + `<html lang/dir>` per surface.** Shipped 2026-10-10: root layout
+  sets `lang`/`dir`/`data-surface` from the proxy's rewrite (`x-internal-path`, `server/surface.ts`): marketing +
+  console `en`, dashboard the member's `en|th`, spa sites `en` / `ar` + `rtl` (`?lang=ar`); CSP nonce read kept.
+  404s: root `not-found.tsx` per surface (marketing look + home/contact; console look + console home; CRM look +
+  dashboard or sign-in; theme-neutral site look with the spa name + its home, "website isn't available" for unknown
+  spas) and an in-shell 404 for unknown dashboard paths (`[tenant]/[...missing]` → `[tenant]/not-found.tsx`). Errors:
+  root `error.tsx` + `global-error.tsx` in the surface's look and language (global-error guesses the surface from the
+  page), retry + way back, digest only (never message/stack). New EN/TH (`errors.page.*`) and EN/AR site strings
+  need native review.
 
 ### Remaining backlog (Website Studio items)
 - ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after
