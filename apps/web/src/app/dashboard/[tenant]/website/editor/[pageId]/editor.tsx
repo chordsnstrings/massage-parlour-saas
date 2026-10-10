@@ -512,20 +512,36 @@ function EditorHeader() {
   const history = usePuckStore((s) => s.history)
   const now = useNow()
 
-  const { setBaseline, markSaved, stampRef, takeStamp, localKey, setRestore, setSaveState, setSavedAt } =
-    chrome
+  const {
+    setBaseline,
+    markSaved,
+    stampRef,
+    takeStamp,
+    localKey,
+    setRestore,
+    setSaveState,
+    setSavedAt,
+    noteChange,
+  } = chrome
   // Baseline for "unsaved changes" once Puck has normalised the initial data; then offer back an unsaved local
   // copy from an earlier session (dropped silently when it matches what was saved).
   useEffect(() => {
     const t = setTimeout(() => {
-      const json = JSON.stringify(getPuck().appState.data)
+      const puck = getPuck()
+      // An edit made before this timer (quick typist, busy machine) is already in the undo history: the baseline is
+      // the state Puck recorded first, so that edit still counts as unsaved (else it was never autosaved).
+      const first = puck.history.hasPast
+        ? (puck.history.histories[0]?.state as { data?: Data } | undefined)?.data
+        : undefined
+      const json = JSON.stringify(first ?? puck.appState.data)
       setBaseline(json)
+      if (first) noteChange(puck.appState.data)
       const copy = readLocalCopy(localKey)
       if (copy && JSON.stringify(copy.data) !== json) setRestore(copy)
       else if (copy) clearLocalCopy(localKey)
     }, 400)
     return () => clearTimeout(t)
-  }, [getPuck, setBaseline, localKey, setRestore])
+  }, [getPuck, setBaseline, localKey, setRestore, noteChange])
 
   // F29 autosave: ~2 s after the last change, on blur / tab hidden, retried when back online. Sends the edit stamp,
   // so it never silently overwrites a change made elsewhere (→ "Changed elsewhere": reload or keep mine).
