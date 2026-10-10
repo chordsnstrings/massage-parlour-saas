@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview; `TURNSTILE` is web-only, left out of the worker flags). `turnstile.ts` (F9): `turnstileConfig` (both keys or off), `turnstileOnCustomDomains`, `verifyTurnstileToken` (siteverify, fail closed). `attribution.ts` (F13): `webEntrySource` (raw web_events.source), `attributionOf`/`bookingAttribution` → `BOOKING_ATTRIBUTIONS` (= db `booking_attribution` enum). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
@@ -479,6 +479,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      `entry` the flow sends (t.js `sessionStorage.spa_entry`, else the page's own tags + external referrer; widget
      iframe → `widget`). Shown as "Online · Instagram" (`bookingSourceLabel`), counted in `kpis.byAttribution`
      (dashboard Booking sources card) and `tenantPerformance.onlineSources` (console Performance detail).
+     F16: `entry.utm.partner` (t.js + booking page keep `?partner=`) → `partnerByCode` (active partners only) →
+     `bookings.partner_id`; booking detail shows "Online · QR · {partner}".
   4. `enqueueBookingMessage`.
   5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
   5. Push to the spa via `after(notifyTenant)`.
@@ -508,7 +510,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   invoice). Where enforced: web `server/access.ts` `guard(slug, perm, feature)` + `server/entitlements.ts`
   (`getEntitlements` per request, `featureRef`), `components/plan/upsell.tsx` (`PlanUpsell`, `FeatureGate` used by
   the `layout.tsx` of inbox, campaigns, ai/content, ai/reviews, ai/try; ai/page + settings/branches check inline),
-  tenant layout nav (`gated()`), SettingsTabs `showBranches`, automations page (Premium pill), integrations note,
+  tenant layout nav (`gated()`), SettingsTabs `showBranches`, automations page (Premium pill), F15 vouchers + F16
+posters (`vouchers/layout.tsx`, `posters/layout.tsx` FeatureGate; Packages gift-card list shows a Premium pill),
+integrations note,
   billing page, receipt scan, insights card; AI gateway `assertAiAllowed` (`AiNotInPlanError`); worker via
   `automationOnSql` (includes `entitledSql`) and `tenantsWithDueReplies` (`ai` flag → rows dropped).
 
@@ -688,6 +692,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     Gated by the `bookingMessages` automation + client mobile. Queues hide rows of cancelled/no-show bookings
     (`outboxBookingLive()`: messages page, dashboard count, `navCounts`).
   - `queueCampaign` takes a row lock plus a per-tenant advisory lock.
+  - Marketing rows = campaign rows + automatic `birthday` / `winback` / `review_request` drafts (F15):
+    `campaignConsentWithdrawn` re-checks consent for all of them at send time (messages page, counts, hourly
+    withdrawal); `planAudience`'s 7-day cap also counts birthday / win-back drafts.
   - Assignment (F28, services `outbox-assign.ts`): `outbox.assigned_to` (members.id, set null on delete) /
     `assigned_at` / `assigned_by` (user; null with an assignee = the auto rule). `assignableMembers` = active
     members whose role resolves `marketing.send` (+ branch scope); `assignOutbox` changes unsent rows only and skips
@@ -698,6 +705,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     worker `outbox-auto-assign` every minute → `autoAssignDueOutbox` (advisory lock per spa; due + unassigned rows,
     round-robin by member id after the last auto pick, among receptionist-role members whose linked staff has a shift
     covering now in the message's branch; nobody on shift → stays unassigned).
+- **Gift vouchers + booking partners (F15/F16, services `vouchers.ts`, migration 0042)**: `gift_cards.check_token`
+  (random 32-hex, default `gen_random_uuid()` without dashes, globally unique) is the QR key, never the code;
+  `voucher_service_id` = treatment voucher (shows the service; value stays the AED balance). `voucherCheck(tx, token)`
+  returns only status / value / balance / expiry / treatment / code's last 4 (public page
+  `components/voucher/voucher-check.tsx`, routes `site/[slug]/voucher/[token]` + `domain/[hostname]/voucher/[token]`,
+  `withinIpLimit('voucher-check')`, noindex + no-referrer; `/api/collect` rewrites `/voucher/{token}` → `/voucher`).
+  `giftCardForPayment` / `giftCardCode` accept a scanned check URL (core `giftCardInput`); `createSale` stores the
+  card's code as the payment reference. `updateVoucher` edits display fields only (recipient phone only for
+  `clients.phone` roles). Dashboard print views (`vouchers/[id]`, `posters`) = inline print CSS (container units,
+  `@page` A6/A5/A4) + server-side SVG from `qrcode` 1.5.4 (pinned). Partners: `booking_partners` (name, unique
+  `(tenant, code)`, active); `createPartner` retries a code clash in a savepoint; `partnerBookingStats` = per partner
+  (cancelled excluded) + reception (attribution `qr`, no partner). i18n namespace `growth` (+ `nav.posters`).
 - **Intake PDFs (F27)**: services `intake.ts` (main entry: `intakeContentHash` = SHA-256 of the canonical record —
   ids, template version, sorted answers, waiver, signature, signed_at, ip — stored as `content_sha256` at signing;
   `intakeAnswerRows`, export list, filenames) + `pdf/intake-pdf.ts` (subpath `@spa/services/intake-pdf`):
@@ -743,6 +762,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `gbp-reviews-sync` | every 2 h at :15 |
 | `campaigns-housekeeping` | hourly at :15 |
 | `outbox-auto-assign` (F28; spas with the default-off switch on; logged only when it assigned something) | every minute |
+| `client-drafts` (F15 review / birthday / win-back drafts; default-off switches, Premium) | hourly at :25 |
 | `document-reminders` | 09:00 |
 | `weekly-insights` | Mon 08:00 |
 | `daily-digest` | 09:30 |
@@ -752,10 +772,16 @@ Integration jobs do nothing until their credentials are configured.
 **Automation switches (B3).** `tenants.settings.automations` = `{ [AutomationKey]: boolean }`, missing = on
 (`AUTOMATIONS` / `automationOn` in `packages/core/src/automations.ts`; `automationOnSql` / `setAutomation` (atomic
 jsonb merge) / `getAutomations` / `isAutomationOn` in `services/src/automations.ts`). Gates: `bookingMessages`
-(confirmation + reminder) and `thankYou` (thank_you + review_request) inside `enqueueBookingMessage` (returns null
-when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `membershipRenewals`, `instagram` (in
+(confirmation + reminder), `thankYou` (thank_you) and `reviewRequests` (review_request) inside `enqueueBookingMessage`
+(returns null when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `membershipRenewals`, `instagram` (in
 `publishDueInstagramPosts`), `googleReviews`, `weeklyInsights`, `dailyDigest`, `documentAlerts` in the worker's
-tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). Backups + domain checks are locked on. Not
+tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). F15 `reviewRequests` / `birthdayMessages` /
+`winbackMessages` (default off, Premium `marketing`): hourly `client-drafts` → services `client-drafts.ts`
+(`queueReviewRequests` / `queueBirthdayMessages` / `queueWinbackMessages`; advisory lock per spa + kind; consent via
+growth `marketingConsent`; due time through `afterQuietHours`; caps `CLIENT_DRAFT_LIMITS`; branch = the client's last
+booking, else the default branch; `{link}` = review link / `spaSiteUrl(slug)/book`); logged as `review-requests` /
+`birthday-messages` / `winback-messages` only when something was queued. Timing card on `/automations`
+(`saveClientDraftsAction`, settings.manage + marketing). Backups + domain checks are locked on. Not
 switchable (housekeeping): analytics, media prune, campaigns housekeeping, Instagram token refresh. **Run log:**
 tenant-scoped `job_runs` (job, status ok·skipped·failed, `summary` counts; RLS) written by `recordRun()` (never
 throws; prunes > 7 days); Instagram logs only when it published/failed. UI: `/automations` (`settings.manage`),
