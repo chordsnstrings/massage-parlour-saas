@@ -13,6 +13,7 @@ import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { cn, formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
+import { canonicalUrls } from '@/server/origin'
 import { DomainRowActions } from './domain-row-actions'
 import { OrderActions } from './order-actions'
 
@@ -105,7 +106,9 @@ export default async function PlatformDomainsPage({
     <>
       <PageHeader
         title="Domains"
-        description="Custom domains across every spa: DNS verification, Cloudflare hostnames and certificates."
+        description={`Custom domains across every spa: DNS verification, Cloudflare hostnames and certificates. Once a spa's domain is active and primary, its temporary address ${canonicalUrls()
+          .site('{slug}')
+          .replace(/^https?:\/\//, '')} redirects (301) to it.`}
       />
       <PageBody>
         <div

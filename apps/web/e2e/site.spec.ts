@@ -205,9 +205,11 @@ test('owner picks a template, publishes from the editor and the public site rend
       .insert(domains)
       .values({ tenantId: tenant!.id, hostname: custom, kind: 'custom', status: 'active', isPrimary: true })
     try {
-      await page.goto(site(slug))
-      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://${custom}/`)
-      expect((await jsonLd())['@graph'][0]!.url).toBe(`https://${custom}/`)
+      // R20: the free address now redirects there (own-domain-redirect.spec), so read the page on the domain itself.
+      const html = await (await fetchAs(`http://${custom}/`)).text()
+      expect(html).toContain(`rel="canonical" href="https://${custom}/"`)
+      const ld = html.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
+      expect(JSON.parse(ld)['@graph'][0].url).toBe(`https://${custom}/`)
       const robots = await (await fetchAs(`http://${custom}/robots.txt`)).text()
       expect(robots).toContain(`Sitemap: https://${custom}/sitemap.xml`)
       const xml = await (await fetchAs(`http://${custom}/sitemap.xml`)).text()

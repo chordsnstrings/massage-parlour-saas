@@ -2,6 +2,7 @@ import { branches, domains, platformDb, tenants, withTenant } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
 import { canonicalUrls } from '@/server/origin'
+import { forgetOwnDomains } from '@/server/own-domain'
 
 type SiteTenant = { id: string; slug: string; name: string; status: string }
 // globalThis: the console's rename / domain actions must clear the same cache the site pages read (F23).
@@ -38,14 +39,16 @@ export async function resolveSiteTenant(
   return value
 }
 
-/** Drops a custom hostname from the host cache after its domain changes (activate, deactivate, remove). */
+/** Drops a custom hostname from the host cache after its domain changes (activate, deactivate, remove); R20 map too. */
 export function invalidateSiteHost(hostname: string) {
   cache.delete(`h:${hostname.toLowerCase()}`)
+  forgetOwnDomains()
 }
 
-/** After a slug rename (F23, rare): every cached entry may carry the old slug (custom domains too). */
+/** After a slug rename (F23, rare): every cached entry may carry the old slug (custom domains, R20 map too). */
 export function forgetSiteTenants() {
   cache.clear()
+  forgetOwnDomains()
 }
 
 /** The spa's public address: its primary active custom domain, else the free subdomain (or /s/{slug}). */
