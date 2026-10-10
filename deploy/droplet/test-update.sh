@@ -10,7 +10,7 @@ R=$work/root
 export SPA_ROOT=$R
 # shellcheck source=deploy/droplet/update.sh
 source "$here/update.sh" # defines the functions and stops before the deploy itself
-BRANCH="test"            # read by status()
+export BRANCH="test"     # read by status()
 
 fails=0
 ok() { echo "ok   $1"; }
@@ -155,6 +155,7 @@ printf '# nothing set\n' >"$work/site.env"
 echo "== committed deploy/droplet/site.env"
 problems=$(check_site "$here/site.env")
 keys=$(site_lines "$here/site.env" 2>/dev/null | sed 's/=.*//' | tr '\n' ' ')
+keys=${keys% }
 [ -z "$problems" ] && ok "valid (sets: ${keys:-nothing})" ||
   bad "deploy/droplet/site.env: $problems"
 
