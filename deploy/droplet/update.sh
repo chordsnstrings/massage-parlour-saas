@@ -8,19 +8,11 @@
 set -uo pipefail
 # SPA_ROOT / SPA_LOCK / DOCKER_DAEMON_JSON exist for the shell test (deploy/droplet/test-update.sh) only.
 ROOT=${SPA_ROOT:-/opt/spa}
-exec 9>"${SPA_LOCK:-/var/lock/spa-update.lock}"
-flock -n 9 || exit 0
-
 REPO=$ROOT/repo
 STATUS=$ROOT/status
 ENV=$ROOT/.env
 BACKUPS=$ROOT/backups
 LAST_GOOD_FILE=$ROOT/last-good
-BRANCH=$(cat $ROOT/branch)
-GREEN=$(cat $ROOT/green-ref 2>/dev/null || echo deploy/green)
-FORCE=${1:-}
-cd "$REPO" || exit 1
-mkdir -p "$STATUS" "$BACKUPS"
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
 status() { # state message
@@ -41,19 +33,51 @@ snapshot() {
   } > "$STATUS/runtime.txt.tmp" 2>&1 && mv "$STATUS/runtime.txt.tmp" "$STATUS/runtime.txt"
 }
 
-# Encrypted secrets overlay committed in the repo (deploy/droplet/secrets.env.enc, AES-256 with the key in
-# /opt/spa/secrets.key): lets the operator add or rotate secrets without SSH. Overlay keys win over /opt/spa/.env.
-apply_overlay() {
-  local enc="$REPO/deploy/droplet/secrets.env.enc" base=$ROOT/.env.base
-  [ -f $ROOT/secrets.key ] && [ -f "$enc" ] || return 0
+# .env is rebuilt on every deploy from three layers, a later one replacing an earlier value of the same key:
+#   /opt/spa/.env.base (first-boot env)
+#   < deploy/droplet/secrets.env.enc (encrypted overlay, AES-256 with the key in /opt/spa/secrets.key: secrets
+#     without SSH)
+#   < deploy/droplet/site.env (plain, public settings only: the SITE_KEYS lines; CI checks the file, test-update.sh)
+# Each commit carries its own layers, so a rollback (deploy_commit LAST_GOOD) also restores the previous env. With
+# neither an overlay nor a site.env, .env is left as it is.
+SITE_KEYS="SITE_HOST ROUTING APP_URL ADMIN_URL EXTRA_ROOT_DOMAINS ACME_EMAIL VAPID_SUBJECT CF_CNAME_TARGET EMAIL_FROM"
+
+# site_lines <file>: its KEY=value lines with a SITE_KEYS key (comments + blank lines ignored); others → stderr.
+site_lines() {
+  local line n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    line=${line%$'\r'}
+    [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+    if [[ $line =~ ^([A-Z][A-Z0-9_]*)= ]] && [[ " $SITE_KEYS " == *" ${BASH_REMATCH[1]} "* ]]; then
+      printf '%s\n' "$line"
+    elif [[ $line =~ ^([A-Z][A-Z0-9_]*)= ]]; then
+      echo "site.env line $n skipped: ${BASH_REMATCH[1]} is not a site.env key ($SITE_KEYS)" >&2
+    else
+      echo "site.env line $n skipped: not KEY=value" >&2
+    fi
+  done <"$1"
+}
+
+# layer <dotenv text>: stdin without the lines for keys the text sets, then the text.
+layer() {
+  grep -v -E -f <(printf '%s\n' "$1" | sed -n 's/^\([A-Z0-9_]*\)=.*/^\1=/p')
+  printf '%s\n' "$1"
+}
+
+build_env() {
+  local enc=$REPO/deploy/droplet/secrets.env.enc site_file=$REPO/deploy/droplet/site.env base=$ROOT/.env.base
+  local overlay='' plain site=''
+  [ -f $ROOT/secrets.key ] && [ -f "$enc" ] && overlay=1
+  [ -n "$overlay" ] || [ -f "$site_file" ] || return 0
   [ -f "$base" ] || cp $ROOT/.env "$base"
-  local plain
-  plain=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass file:$ROOT/secrets.key -in "$enc" 2>/dev/null) || { status error "secrets overlay could not be decrypted"; return 1; }
+  if [ -n "$overlay" ]; then
+    plain=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -pass file:$ROOT/secrets.key -in "$enc" 2>/dev/null) || { status error "secrets overlay could not be decrypted"; return 1; }
+  fi
+  [ -f "$site_file" ] && site=$(site_lines "$site_file" 2>>"$STATUS/build.log")
   umask 077
-  {
-    grep -v -E -f <(printf '%s\n' "$plain" | sed -n 's/^\([A-Z0-9_]*\)=.*/^\1=/p') "$base"
-    printf '%s\n' "$plain"
-  } > $ROOT/.env.new && mv $ROOT/.env.new $ROOT/.env
+  if [ -n "$overlay" ]; then layer "$plain" <"$base"; else cat "$base"; fi |
+    if [ -n "$site" ]; then layer "$site"; else cat; fi > $ROOT/.env.new && mv $ROOT/.env.new $ROOT/.env
   umask 022
 }
 
@@ -143,7 +167,7 @@ caddy_sync() {
 deploy_commit() {
   local sha=$1
   git reset -q --hard "$sha" || return 12
-  apply_overlay || true
+  build_env || true
   export APP_RELEASE="${sha:0:7}"
   compose build --pull >>"$STATUS/build.log" 2>&1 || return 10
   if [ "${2:-}" != "--no-dump" ]; then pre_migrate_dump "$sha" || return 11; fi
@@ -160,6 +184,17 @@ reason() {
     *) echo "web not healthy (/api/health)" ;;
   esac
 }
+
+# Sourced by deploy/droplet/test-update.sh for the functions above: stop here.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+
+exec 9>"${SPA_LOCK:-/var/lock/spa-update.lock}"
+flock -n 9 || exit 0
+BRANCH=$(cat $ROOT/branch)
+GREEN=$(cat $ROOT/green-ref 2>/dev/null || echo deploy/green)
+FORCE=${1:-}
+cd "$REPO" || exit 1
+mkdir -p "$STATUS" "$BACKUPS"
 
 ensure_log_rotation
 pick_commit || { snapshot; exit 1; }
