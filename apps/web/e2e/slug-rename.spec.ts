@@ -103,9 +103,12 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
     if (!PATH) {
       const ask = await ops.request.get(`${base}/api/domains/allowed?domain=${old}.localhost`)
       expect(ask.status()).toBe(200)
-      const unknown = await ops.request.get(`${base}/api/domains/allowed?domain=${uniqueSlug('nope')}.localhost`, {
-        failOnStatusCode: false,
-      })
+      const unknown = await ops.request.get(
+        `${base}/api/domains/allowed?domain=${uniqueSlug('nope')}.localhost`,
+        {
+          failOnStatusCode: false,
+        },
+      )
       expect(unknown.status()).toBe(404)
     }
   })

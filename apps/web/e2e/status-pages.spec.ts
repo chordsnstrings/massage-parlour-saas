@@ -59,7 +59,10 @@ test('F24: 404 pages per surface in the right language, with lang/dir on <html>'
     await expect(html(page)).toHaveAttribute('lang', 'th')
     await expect(card(page)).toHaveAttribute('data-look', 'crm')
     await expect(page.getByRole('heading', { level: 1, name: 'ไม่พบหน้านี้' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'ไปที่แดชบอร์ดของคุณ' })).toHaveAttribute('href', PATH ? '/app' : '/')
+    await expect(page.getByRole('link', { name: 'ไปที่แดชบอร์ดของคุณ' })).toHaveAttribute(
+      'href',
+      PATH ? '/app' : '/',
+    )
   })
 
   await test.step('spa site: English and Arabic (rtl) 404 with the spa name and a way home', async () => {
