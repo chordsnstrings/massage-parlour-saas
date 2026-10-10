@@ -20,6 +20,8 @@ export const errors = {
     unreadable: 'We couldn’t read that image — it may be damaged.',
     svg: 'SVG files aren’t supported — please upload a JPG, PNG or WebP.',
     notImage: 'That file isn’t an image we can use (JPG, PNG, WebP, AVIF or GIF).',
+    notVideo: 'That file isn’t a video we can play (MP4 or WebM).',
+    videoTooLarge: 'Videos can be up to {size}',
     uploadFailed: 'Upload failed — please try again.',
     choose: 'Choose an image to upload.',
   },

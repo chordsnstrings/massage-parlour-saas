@@ -1,5 +1,6 @@
 import type { Config, Field, PuckContext } from '@puckeditor/core'
 import { ButtonGroup, Gallery, Heading, Hero, Image, RichText } from './blocks/elements'
+import { BlogList, BlogPost, EnquiryForm, InstagramFeed, MapBlock, Reviews, Video } from './blocks/extras'
 import { globalSectionBlock } from './blocks/global'
 import { HtmlDesign } from './blocks/html-design'
 import { Columns, Section, Spacer, Stack, withAdvanced } from './blocks/layout'
@@ -28,17 +29,29 @@ export const siteConfig: Config = {
     layout: { title: 'Layout', components: ['Section', 'Columns', 'Stack', 'Spacer'] },
     content: {
       title: 'Content',
-      components: ['Hero', 'Heading', 'RichText', 'ButtonGroup', 'Image', 'Gallery'],
+      components: ['Hero', 'Heading', 'RichText', 'ButtonGroup', 'Image', 'Gallery', 'Video'],
     },
     smart: {
       title: 'Live from your dashboard',
-      components: ['ServicesMenu', 'Team', 'OpeningHours', 'BookingCTA', 'WhatsAppButton'],
+      components: [
+        'ServicesMenu',
+        'Team',
+        'OpeningHours',
+        'Map',
+        'BookingCTA',
+        'WhatsAppButton',
+        'Reviews',
+        'InstagramFeed',
+        'BlogList',
+      ],
     },
-    more: { title: 'More', components: ['Testimonials', 'FAQ', 'Footer'] },
+    more: { title: 'More', components: ['Testimonials', 'FAQ', 'EnquiryForm', 'Footer'] },
     // Inserted from the editor's library only (it references a saved section).
     global: { title: 'Global sections', components: ['GlobalSection'], visible: false },
     // Uploaded from the Templates library only (PLAN §11.2): a whole page shown exactly as designed.
     design: { title: 'HTML design', components: ['HtmlDesign'], visible: false },
+    // F15: a blog post page's article (PublicSite renders it from the post; never placed by hand).
+    post: { title: 'Blog post', components: ['BlogPost'], visible: false },
   },
   components: {
     // Bands carry the Advanced group (schedule + scoped custom CSS, PLAN §11.3 layer 6).
@@ -60,6 +73,14 @@ export const siteConfig: Config = {
     Testimonials: withAdvanced(Testimonials),
     FAQ: withAdvanced(FAQ),
     Footer: withAdvanced(Footer),
+    // F15 blocks.
+    Map: withAdvanced(MapBlock),
+    Video: withAdvanced(Video),
+    Reviews: withAdvanced(Reviews),
+    InstagramFeed: withAdvanced(InstagramFeed),
+    BlogList: withAdvanced(BlogList),
+    EnquiryForm: withAdvanced(EnquiryForm),
+    BlogPost,
     GlobalSection: globalSectionBlock(() => siteConfig),
     HtmlDesign,
   },

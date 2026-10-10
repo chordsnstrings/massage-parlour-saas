@@ -22,6 +22,10 @@ export const CONTENT_KEYS = new Set([
   'images',
   'items',
   'buttons',
+  // F15: video link/upload + poster, enquiry thank-you text.
+  'url',
+  'poster',
+  'success',
 ])
 
 type Node = { type?: unknown; props?: Record<string, unknown> }

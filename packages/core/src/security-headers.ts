@@ -10,6 +10,11 @@
 //   img-src/font-src/connect-src keep CSS from loading from or reporting to anything but https images.
 // - img-src https:: image fields accept any https URL (AI images, pasted links, Instagram/Google media); stored files
 //   are served by the app itself (/files), never straight from the S3/R2 bucket.
+// - frame-src on spa sites (+ the app, for the Studio preview): the F15 Map and Video blocks' players only —
+//   www.google.com (Maps embed), www.youtube-nocookie.com, player.vimeo.com. Videos load nothing from those hosts
+//   until the visitor clicks play; uploaded videos play from /files (media-src = default-src 'self').
+
+import { MAPS_EMBED_ORIGIN, VIMEO_EMBED_ORIGIN, YOUTUBE_EMBED_ORIGIN } from './site-embeds'
 
 export type CspSurface = 'marketing' | 'app' | 'admin' | 'site' | 'domain'
 
@@ -20,8 +25,12 @@ export const CSP_REPORT_PATH = '/api/csp-report'
 /** Shell document that runs uploaded HTML designs (R17) under their own policy (CSP sandbox). */
 export const HTML_DESIGN_FRAME_PATH = '/api/html-design/frame'
 
-/** Surfaces with a Turnstile form: marketing Contact, app Apply (/signup), spa sites' /book + widget. */
+/** Surfaces with a Turnstile form: marketing Contact, app Apply (/signup), spa sites' /book + widget + enquiry form. */
 const TURNSTILE_SURFACES: readonly CspSurface[] = ['marketing', 'app', 'site', 'domain']
+
+/** F15: players the Map + Video site blocks may frame (spa sites, and the app for the Studio preview). */
+export const SITE_EMBED_ORIGINS = [MAPS_EMBED_ORIGIN, YOUTUBE_EMBED_ORIGIN, VIMEO_EMBED_ORIGIN] as const
+const EMBED_SURFACES: readonly CspSurface[] = ['app', 'site', 'domain']
 
 export type PageKind = {
   surface: CspSurface
@@ -66,6 +75,7 @@ export type CspOptions = PageKind & {
 /** The page CSP for one response. */
 export function contentSecurityPolicy(o: CspOptions): string {
   const turnstile = TURNSTILE_SURFACES.includes(o.surface) ? [TURNSTILE_ORIGIN] : []
+  const embeds = EMBED_SURFACES.includes(o.surface) ? SITE_EMBED_ORIGINS : []
   const directives: [string, ...string[]][] = [
     ['default-src', "'self'"],
     [
@@ -80,7 +90,7 @@ export function contentSecurityPolicy(o: CspOptions): string {
     ['img-src', "'self'", 'data:', 'blob:', 'https:'],
     ['font-src', "'self'", 'data:'],
     ['connect-src', "'self'"],
-    ['frame-src', "'self'", ...turnstile],
+    ['frame-src', "'self'", ...turnstile, ...embeds],
     ['worker-src', "'self'"],
     ['manifest-src', "'self'"],
     ['object-src', "'none'"],

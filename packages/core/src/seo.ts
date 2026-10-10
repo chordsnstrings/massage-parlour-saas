@@ -228,6 +228,40 @@ export function spaJsonLd(input: SpaJsonLdInput): Json {
   return { '@context': 'https://schema.org', '@graph': graph }
 }
 
+export type BlogPostJsonLdInput = {
+  url: string
+  headline: string
+  description?: string | null
+  image?: string | null
+  datePublished?: Date | null
+  dateModified?: Date | null
+  /** 'en' | 'ar'. */
+  inLanguage?: string
+}
+
+/**
+ * F15 blog post page: the spa graph (DaySpa + breadcrumb Home → post) plus a BlogPosting published by the spa.
+ * Serialise with jsonLdString.
+ */
+export function blogPostJsonLd(spa: SpaJsonLdInput, post: BlogPostJsonLdInput): Json {
+  const base = spaJsonLd({ ...spa, pageUrl: post.url, pageName: post.headline })
+  const article: Json = {
+    '@type': 'BlogPosting',
+    '@id': `${post.url}#post`,
+    headline: post.headline.slice(0, 110),
+    url: post.url,
+    mainEntityOfPage: post.url,
+    publisher: { '@id': `${spa.url}#spa` },
+    author: { '@id': `${spa.url}#spa` },
+  }
+  if (text(post.description)) article.description = text(post.description)
+  if (post.image) article.image = post.image
+  if (post.datePublished) article.datePublished = post.datePublished.toISOString()
+  if (post.dateModified) article.dateModified = post.dateModified.toISOString()
+  if (post.inLanguage) article.inLanguage = post.inLanguage
+  return { ...base, '@graph': [...(base['@graph'] as Json[]), article] }
+}
+
 export type PlatformJsonLdInput = {
   /** Canonical marketing origin, e.g. https://spamanagement.co */
   url: string

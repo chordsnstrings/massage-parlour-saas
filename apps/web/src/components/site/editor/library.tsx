@@ -37,6 +37,7 @@ const CATEGORY_LABEL: Record<PresetCategory, string> = {
   faq: 'FAQ',
   contact: 'Contact & hours',
   cta: 'Calls to action',
+  media: 'Video & blog',
   motion: '3D motion',
 }
 const categoryLabel = (c: string) =>

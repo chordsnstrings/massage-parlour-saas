@@ -70,4 +70,34 @@ export const DEMO_SITE: Omit<SiteData, 'pages'> = {
     },
     { id: 'demo-sara', name: 'Sara', photoUrl: null, bio: { en: 'Deep tissue.', ar: 'الأنسجة العميقة.' } },
   ],
+  // F15 blocks: sample Google reviews; no posts / Instagram (those blocks stay empty in previews).
+  reviews: {
+    average: 4.9,
+    count: 214,
+    items: [
+      {
+        id: 'demo-r1',
+        author: 'Layla M.',
+        rating: 5,
+        text: 'Calm, spotless and genuinely skilled.',
+        reviewedAt: null,
+      },
+      {
+        id: 'demo-r2',
+        author: 'Daniel K.',
+        rating: 5,
+        text: 'Best deep tissue in Dubai. On time, too.',
+        reviewedAt: null,
+      },
+      {
+        id: 'demo-r3',
+        author: 'Mariam A.',
+        rating: 5,
+        text: 'I always leave lighter. Lovely team.',
+        reviewedAt: null,
+      },
+    ],
+  },
+  posts: [],
+  instagram: { username: null, profileUrl: null, items: [] },
 }

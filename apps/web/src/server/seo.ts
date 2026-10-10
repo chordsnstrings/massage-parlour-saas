@@ -1,6 +1,6 @@
 import { robotsTxt, type SitemapEntry, sitemapXml } from '@spa/core'
 import { sites, socialAccounts, tenants, withTenant } from '@spa/db'
-import { fileUrl, listPublishedPages } from '@spa/services'
+import { fileUrl, listPublishedPages, listPublishedPosts } from '@spa/services'
 import { imageSrc, walkNodes } from '@spa/services/site-kit'
 import { and, eq, ne } from 'drizzle-orm'
 import { cache } from 'react'
@@ -59,6 +59,8 @@ export const siteSeo = cache(async (tenant: SiteTenant) => {
       locales: site?.locales ?? ['en'],
       ig,
       pages: await listPublishedPages(tx, tenant.id),
+      // F15 blog posts (sitemap entries at /blog/{slug}).
+      posts: await listPublishedPosts(tx, 1000),
     }
   })
   const username = facts.ig?.username?.replace(/^@/, '')
@@ -71,6 +73,7 @@ export const siteSeo = cache(async (tenant: SiteTenant) => {
     instagram:
       username && /^[A-Za-z0-9._]{1,30}$/.test(username) ? `https://www.instagram.com/${username}/` : null,
     pages: facts.pages.map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })),
+    posts: facts.posts.map((p) => ({ slug: p.slug, arabic: Boolean(p.title.ar), updatedAt: p.updatedAt })),
     /** Suspended spas and sites with nothing published stay out of search (pages say noindex; empty sitemap). */
     indexable: tenant.status !== 'suspended' && facts.pages.length > 0,
   }
@@ -111,19 +114,21 @@ export async function siteRobots(tenant: SiteTenant | null): Promise<Response> {
   )
 }
 
-/** sitemap.xml: the spa's published pages (+ /book) at their canonical address, with EN/AR alternates. */
+/** sitemap.xml: the spa's published pages (+ /book, + blog posts) at their canonical address, with EN/AR alternates. */
 export async function siteSitemap(tenant: SiteTenant | null): Promise<Response> {
   const entries: SitemapEntry[] = []
   if (tenant) {
     const seo = await siteSeo(tenant)
     if (seo.indexable) {
-      const add = (slug: string, lastModified: Date | null) => {
-        const alternates = hreflang(seo.base, slug, seo.arabic)
+      const add = (slug: string, lastModified: Date | null, arabic = seo.arabic) => {
+        const alternates = hreflang(seo.base, slug, arabic)
         entries.push({ url: sitePageUrl(seo.base, slug), lastModified, alternates })
-        if (seo.arabic) entries.push({ url: sitePageUrl(seo.base, slug, 'ar'), lastModified, alternates })
+        if (arabic) entries.push({ url: sitePageUrl(seo.base, slug, 'ar'), lastModified, alternates })
       }
       for (const p of seo.pages) add(p.slug, p.publishedAt)
       if (!seo.pages.some((p) => p.slug === 'book')) add('book', null)
+      // Posts have an Arabic version only when their title was translated.
+      for (const p of seo.posts) add(`blog/${p.slug}`, p.updatedAt, seo.arabic && p.arabic)
     }
   }
   return text(sitemapXml(entries), 'application/xml; charset=utf-8')

@@ -21,6 +21,7 @@ import { clientsMerge } from './en/clientsMerge'
 import { common } from './en/common'
 import { documents } from './en/documents'
 import { domain } from './en/domain'
+import { enquiries } from './en/enquiries'
 import { enums } from './en/enums'
 import { equipment } from './en/equipment'
 import { errors } from './en/errors'
@@ -89,6 +90,7 @@ export const en = {
   documents,
   roles,
   inbox,
+  enquiries,
   messages,
   campaigns,
   marketing,

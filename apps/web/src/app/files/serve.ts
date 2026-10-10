@@ -7,6 +7,7 @@ import {
   jpegVariant,
   resizeVariant,
   VARIANT_WIDTHS,
+  VIDEO_TYPES,
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
@@ -26,7 +27,19 @@ import { getSession } from '@/server/session'
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IMAGES = new Set<string>(IMAGE_TYPES)
-const INLINE = new Set<string>([...IMAGE_TYPES, 'application/pdf'])
+const VIDEOS = new Set<string>(VIDEO_TYPES)
+const INLINE = new Set<string>([...IMAGE_TYPES, ...VIDEO_TYPES, 'application/pdf'])
+
+/** F15: one `bytes=a-b` / `bytes=a-` / `bytes=-n` range of a video (Safari only plays video served with ranges). */
+function byteRange(header: string | null, size: number): [number, number] | 'invalid' | null {
+  const m = header?.match(/^bytes=(\d*)-(\d*)$/)
+  if (!m || (!m[1] && !m[2])) return null
+  let start = m[1] ? Number(m[1]) : size - Number(m[2])
+  let end = m[1] && m[2] ? Number(m[2]) : size - 1
+  if (start < 0) start = 0
+  if (end >= size) end = size - 1
+  return start > end || start >= size ? 'invalid' : [start, end]
+}
 
 // Rendered thumbnails, so a busy library page doesn't re-run sharp per tile (browsers and the edge cache them too).
 const g = globalThis as unknown as { __spaVariants?: LRUCache<string, Buffer> }
@@ -156,8 +169,25 @@ export async function serveFile(req: Request, id: string) {
   let name = file.filename ? asciiName(file.filename) : null
   if (name && jpeg && type === 'image/jpeg') name = `${name.replace(/\.[a-z0-9]{2,5}$/i, '')}.jpg`
   headers['content-type'] = type
-  headers['content-length'] = String(body.length)
   headers['content-disposition'] =
     `${INLINE.has(type) ? 'inline' : 'attachment'}${name ? `; filename="${name}"` : ''}`
+  if (VIDEOS.has(type)) {
+    headers['accept-ranges'] = 'bytes'
+    const range = byteRange(req.headers.get('range'), body.length)
+    if (range === 'invalid') {
+      headers['content-range'] = `bytes */${body.length}`
+      return new Response(null, { status: 416, headers })
+    }
+    if (range) {
+      const [start, end] = range
+      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
+      headers['content-length'] = String(end - start + 1)
+      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
+        status: 206,
+        headers,
+      })
+    }
+  }
+  headers['content-length'] = String(body.length)
   return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
 }

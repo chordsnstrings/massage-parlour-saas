@@ -9,6 +9,8 @@ import type { Permission } from './permissions'
 export const NOTIFICATION_KINDS = {
   'booking.online': { permission: 'calendar.manage' },
   'booking.pending': { permission: 'calendar.manage' },
+  // F15: a lead from the website's enquiry form (Inbox → Enquiries).
+  'enquiry.site': { permission: 'clients.view' },
   'stock.low': { permission: 'inventory.manage' },
   'document.expiry': { permission: 'staff.manage' },
   'ai.drafts': { permission: 'ai.approve' },

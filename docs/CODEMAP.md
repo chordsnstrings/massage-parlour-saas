@@ -158,7 +158,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   ≤860 px drawer). Look = `crm.css` (tokens on `:root:has(.crm)`, lifted under `[data-crm-off]` = site editor/preview
   overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
   with several pages show section tabs under the top bar):
-  - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns).
+  - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns · enquiries — F15,
+    `clients.view`).
   - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · timeclock · team · documents).
   - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
     (ai/reviews).
@@ -169,7 +170,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
   - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
   - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
-    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG.
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG
+    + new website enquiries (`enquiriesNew`, F15).
   - **Reports (F31)** `reports/` (`reports.view`; RevPATH card also `dashboard.revenue`, liability `accounting.view`):
     `data.ts` `loadReports` (branch scoping as on Home, `performanceRange` keys 7/30/90/month/last-month, today =
     business date at the branch cutoff, `?rebook=30|60|90`, `?asOf=` ≤ today) → services `kpi-reports.ts`, one query
@@ -310,12 +312,49 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 ## Site builder
 
-- **Puck config** (`components/site/config.tsx`), 19 blocks:
+- **Puck config** (`components/site/config.tsx`), 25 blocks:
   - layout: Section, Columns, Stack, Spacer;
-  - content: Hero, Heading, RichText, ButtonGroup, Image, Gallery;
-  - smart: ServicesMenu, Team, OpeningHours, BookingCTA, WhatsAppButton;
-  - more: Testimonials, FAQ, Footer;
-  - hidden: GlobalSection.
+  - content: Hero, Heading, RichText, ButtonGroup, Image, Gallery, Video;
+  - smart: ServicesMenu, Team, OpeningHours, Map, BookingCTA, WhatsAppButton, Reviews, InstagramFeed, BlogList;
+  - more: Testimonials, FAQ, EnquiryForm, Footer;
+  - hidden: GlobalSection, HtmlDesign, BlogPost (post page article).
+- **F15 blocks** (`blocks/extras.tsx`; data loaded per request in `data.ts` `loadLive` → `SiteData.posts/reviews/
+  instagram`; data blocks with nothing to show render nothing live and a dashed `[data-editor-note]` in the editor):
+  - Map: card (address via `addressLinkProps`, "Open in Google Maps" = `mapHref`, WhatsApp) + optional embed
+    `@spa/core` `mapEmbedSrc` (pin coordinates from the Maps link, else the address; `google.com/maps?…&output=embed`,
+    no API key) in a lazy sandboxed iframe; editor shows a placeholder (no Google iframe in the canvas). Layouts
+    split / embed / map / card.
+  - Video: `url` = `videoField` (`video-field.tsx`: link or upload, AI kind `text`) parsed by core `parseVideoUrl`
+    (YouTube watch/share/shorts/embed/nocookie, Vimeo + private hash, or a same-origin `/files/{id}`). YouTube/Vimeo =
+    `VideoPlayer` (client): poster button (custom poster, else YouTube's still), iframe only after the click
+    (`videoEmbedSrc`: youtube-nocookie autoplay rel=0, Vimeo dnt=1). Uploads: `POST /files/upload?kind=video`
+    (`site.design`, MP4/WebM by magic bytes `sniffVideoType`, ≤ 8 MB = stored-file cap, `media_assets.kind = 'video'`,
+    kept out of the photo library/pickers via `listAssets` kind filter); `/files` serves videos with single byte
+    ranges (206/416, Safari needs them); `<video preload="none">`. Preflight warns "Video has no video yet".
+  - Reviews / InstagramFeed: Premium `marketing` (`hasFeature` in `loadSite`; null = not on plan). Services
+    `site-feeds.ts`: `siteReviews` (Google rows, avg + count over all, newest with text ≥ min rating, name shown as
+    "Layla M." `reviewerName`), `siteInstagram` (connected account + `social_posts` published on Instagram, first
+    picture, `/files/…` or https only; links to the profile — no Graph API call, no permalinks).
+  - Blog: `site_posts` (tenant, RLS; slug unique per spa; EN/AR title/excerpt/body/SEO; plain-text body →
+    `site-kit` `postBlocks`: blank line = paragraph, `## ` = h2, `- ` = bullets). Studio card "Blog" on
+    `website/page.tsx` → `website/blog/[postId]` (`new` = create; `post-form.tsx`, cover via `ImageInput`) →
+    `blog-actions.ts` (studioGuard: save `site.content`, publish/unpublish/delete `site.publish`; audit
+    `site.post.*`). BlogList links `{base}/blog/{slug}`; `public.tsx` `postSlugOf` + `PostPage` renders hidden
+    `BlogPost` + the home page's last Footer/WhatsAppButton through the same config (published theme); metadata
+    `postMetadata` (canonical/hreflang only when the title has Arabic, og:type article, cover → og:image), JSON-LD
+    core `blogPostJsonLd` (DaySpa graph + BlogPosting), sitemap `blog/{slug}` entries (`siteSeo.posts`).
+  - EnquiryForm: client `blocks/enquiry-form.tsx` (honeypot `company`, Turnstile action `enquiry`, action imported on
+    submit so the block config stays importable outside Next) → `components/site/enquiry-actions.ts`
+    (`sendSiteEnquiryAction`: honeypot → services `siteEnquirySchema` (error codes → EN/AR site strings) →
+    `withinIpLimit('site-enquiry', 5/h, 20/day)` → `passesBotCheck` → `resolveSiteTenant` + `acceptsBookings` →
+    `site_enquiries` (keyed `ip_hash`) → audit `site.enquiry.received` (ip null) → bell/push `enquiry.site`).
+    `SiteMeta.form` (site key + Turnstile key) is set only by `PublicSite`; editor/previews show the form disabled.
+    Dashboard `enquiries/` (EN+TH `enquiries` namespace; filter new/replied/closed/all + search; phone only with
+    `clients.phone`; "Reply on WhatsApp" = wa.me with `siteEnquiryReplyText` in the visitor's language, marks
+    replied; status moves `clients.manage`, audit `site.enquiry.status`). Nothing is emailed to the visitor.
+  - Presets (Library): google-reviews, instagram-feed, contact-map, contact-enquiry, video-feature, blog-latest
+    (category `media` = "Video & blog"). Template defaults via `templates.ts` `extraBlocks(key)` (own id prefix
+    `{key}-x-…`, so existing node ids don't shift). E2E `site-blocks.spec.ts`.
 - **Props**:
   - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
   - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
@@ -457,7 +496,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   as is, IPv6 by /64, null → `unknown`; Better Auth's limiter uses the same header and `ipv6Subnet: 64`.
 - Callers: web `server/rate-limit.ts` `clientIp()` / `withinIpLimit` (signup, admin join, contact), booking
   `bookOnline` in-memory limits, `/api/collect` + `/api/client-error` limits, `audit()` IP, intake signature IP,
-  enquiry `ipHash` (null without IP), Turnstile `remoteip`, auth MCP consent audit. `packages/core/test/client-ip.test.ts`
+  enquiry `ipHash` (null without IP; also website enquiries, F15), Turnstile `remoteip`, auth MCP consent audit. `packages/core/test/client-ip.test.ts`
   fails if any `apps/*/src` / `packages/*/src` file names an IP header itself.
 
 ## Bot check (F9, Cloudflare Turnstile)
@@ -467,8 +506,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `reset()` after every non-ok answer (single-use tokens). Server `server/turnstile.ts`: `turnstileSiteKey()` for the
   page, `passesBotCheck(token, action)` in the action (siteverify + `clientIp()`); both skip when keys are unset or on
   a custom domain without `TURNSTILE_CUSTOM_DOMAINS=on`. Used by `bookOnline` (booking page + widget iframe, action
-  `booking`), `signupAction` (`apply`, after the IP limit, before the login is created) and `sendEnquiryAction`
-  (`contact`). Honeypots + per-IP limits stay. e2e runs with Cloudflare's always-pass test keys (playwright.config);
+  `booking`), `signupAction` (`apply`, after the IP limit, before the login is created), `sendEnquiryAction`
+  (`contact`) and the website enquiry form `sendSiteEnquiryAction` (`enquiry`, F15). Honeypots + per-IP limits stay. e2e runs with Cloudflare's always-pass test keys (playwright.config);
   `online.spec` also covers a blocked script → refused. CSP (F10) allows `challenges.cloudflare.com` (script + frame) on
   marketing/app/site/domain pages, not the admin console.
 - Keys from the console (owner, 2026-10-09): console Company page → "Bot check (Cloudflare Turnstile)" card
@@ -490,7 +529,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Policy: `default-src 'self'`; `script-src 'self' 'nonce-…' 'strict-dynamic'` (+ Turnstile origin outside the admin
   console; + `'unsafe-eval'` on `next dev` only) — Next chunks, `t.js` (next/script), Turnstile load via strict-dynamic;
   `style-src 'self' 'unsafe-inline'`; `img-src 'self' data: blob: https:`; `font-src 'self' data:`; `connect-src 'self'`;
-  `frame-src 'self'` (+ Turnstile); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
+  `frame-src 'self'` (+ Turnstile; + www.google.com, www.youtube-nocookie.com, player.vimeo.com on site/domain/app for
+  the F15 Map/Video players — `SITE_EMBED_ORIGINS`); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'self'` (embed: `*`); `upgrade-insecure-requests` on https;
   `report-uri /api/csp-report?s={surface}`. Also `X-Frame-Options: SAMEORIGIN` (not embed), COOP `same-origin`
   (dashboard: `same-origin-allow-popups`, the outbox reuses one named WhatsApp tab), HSTS on https only

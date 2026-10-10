@@ -20,6 +20,7 @@ import { clientsMerge } from './th/clientsMerge'
 import { common } from './th/common'
 import { documents } from './th/documents'
 import { domain } from './th/domain'
+import { enquiries } from './th/enquiries'
 import { enums } from './th/enums'
 import { equipment } from './th/equipment'
 import { errors } from './th/errors'
@@ -89,6 +90,7 @@ export const th: Messages = {
   documents,
   roles,
   inbox,
+  enquiries,
   messages,
   campaigns,
   marketing,

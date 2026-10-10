@@ -1,8 +1,17 @@
 import { enumLabel } from '@spa/core/i18n'
 import { domains, platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
-import { getSite, listChangeRequests, listPages, templateUndoChanges } from '@spa/services'
+import { getSite, listChangeRequests, listPages, listPosts, templateUndoChanges } from '@spa/services'
 import { asc, sql } from 'drizzle-orm'
-import { ArrowRight, ExternalLink, FileText, Globe, MessageSquare, PencilLine } from 'lucide-react'
+import {
+  ArrowRight,
+  ExternalLink,
+  FileText,
+  Globe,
+  MessageSquare,
+  Newspaper,
+  PencilLine,
+  Plus,
+} from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -57,7 +66,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
   const slug = ctx.tenant.slug
   const reports = can(ctx, 'reports.view')
   const { t, fmt } = await getI18n()
-  const { site, pages, undoBlocked, requests, hosts, glance, themeWarnings } = await withTenant(
+  const { site, pages, posts, undoBlocked, requests, hosts, glance, themeWarnings } = await withTenant(
     ctx.tenant.id,
     async (tx) => {
       const site = await getSite(tx, ctx.tenant.id)
@@ -73,6 +82,8 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
             ).rows[0] as { visitors: number; booked: number })
           : null,
         pages: await listPages(tx, ctx.tenant.id),
+        // F15 blog posts (studio-written).
+        posts: await listPosts(tx),
         requests: await listChangeRequests(tx, ctx.tenant.id),
         // Undo is only offered while nothing the switch wrote has been edited or published since.
         undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
@@ -353,6 +364,83 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
     </Card>
   )
 
+  // F15 blog: posts live at /blog/{slug}; the BlogList block shows the published ones.
+  const blogCard = site && (
+    <Card
+      flush
+      title={t('website.blog.title')}
+      sub={t('website.blog.sub')}
+      actions={
+        canEdit && (
+          <Button variant="secondary" size="sm" asChild>
+            <Link href={appPath(`/${slug}/website/blog/new`)}>
+              <Plus /> {t('website.blog.newPost')}
+            </Link>
+          </Button>
+        )
+      }
+    >
+      <div className="mt-3">
+        <DataTable
+          rows={posts}
+          rowKey={(p) => p.id}
+          empty={
+            <EmptyState
+              icon={<Newspaper className="size-5" />}
+              title={t('website.blog.empty')}
+              description={t('website.blog.emptySub')}
+            />
+          }
+          columns={[
+            {
+              key: 'post',
+              header: t('website.blog.colPost'),
+              primary: true,
+              cell: (p) => (
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{p.title.en}</span>
+                  <span className="crm-muted block truncate text-xs">/blog/{p.slug}</span>
+                </span>
+              ),
+            },
+            {
+              key: 'status',
+              header: t('website.blog.colStatus'),
+              cell: (p) => (
+                <span className="inline-flex flex-col items-end gap-1 md:items-start">
+                  <Pill tone={p.status === 'published' ? 'ok' : 'warn'} dot={p.status === 'published'}>
+                    {enumLabel(t, 'sitePostStatus', p.status)}
+                  </Pill>
+                  {p.publishedAt && (
+                    <span className="crm-muted crm-num text-xs">
+                      {t('website.blog.publishedOn', { date: fmt.date(p.publishedAt) })}
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              key: 'edit',
+              header: <span className="sr-only">{t('website.actions')}</span>,
+              className: 'text-end',
+              cell: (p) =>
+                canEdit && (
+                  <Button variant="secondary" size="sm" asChild>
+                    <Link
+                      href={appPath(`/${slug}/website/blog/${p.id}`)}
+                      aria-label={t('website.editPage', { name: p.title.en })}
+                    >
+                      <PencilLine /> {t('website.edit')}
+                    </Link>
+                  </Button>
+                ),
+            },
+          ]}
+        />
+      </div>
+    </Card>
+  )
+
   return (
     <>
       <PageHeader
@@ -493,6 +581,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ tenant
                   </Card>
                 )}
                 {pagesCard}
+                {blogCard}
                 <Card
                   title={t('website.domain')}
                   actions={

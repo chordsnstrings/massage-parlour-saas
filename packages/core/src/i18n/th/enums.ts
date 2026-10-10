@@ -172,5 +172,7 @@ export const enums: Messages['enums'] = {
   },
   siteStudioStatus: { building: 'กำลังสร้าง', review: 'พร้อมให้ตรวจ', approved: 'อนุมัติแล้ว' },
   pageVersionStatus: { draft: 'ฉบับร่าง', published: 'เผยแพร่แล้ว' },
+  sitePostStatus: { draft: 'ฉบับร่าง', published: 'เผยแพร่แล้ว' },
+  siteEnquiryStatus: { new: 'ใหม่', replied: 'ตอบแล้ว', closed: 'ปิดแล้ว' },
   changeRequestStatus: { open: 'เปิดอยู่', done: 'เสร็จสิ้น', declined: 'ปฏิเสธแล้ว' },
 }

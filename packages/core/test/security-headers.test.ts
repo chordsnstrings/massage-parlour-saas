@@ -9,6 +9,7 @@ import {
   pageKindOf,
   pageSecurityHeaders,
   parseCspReports,
+  SITE_EMBED_ORIGINS,
   TURNSTILE_ORIGIN,
 } from '../src'
 
@@ -65,11 +66,31 @@ describe('contentSecurityPolicy (F10)', () => {
     for (const surface of ['marketing', 'app', 'site', 'domain'] as const) {
       const d = directives(contentSecurityPolicy({ surface, embed: false, nonce }))
       expect(d['script-src']).toContain(TURNSTILE_ORIGIN)
-      expect(d['frame-src']).toEqual(["'self'", TURNSTILE_ORIGIN])
+      expect(d['frame-src']?.slice(0, 2)).toEqual(["'self'", TURNSTILE_ORIGIN])
     }
     const admin = directives(contentSecurityPolicy({ surface: 'admin', embed: false, nonce }))
     expect(admin['script-src']).not.toContain(TURNSTILE_ORIGIN)
     expect(admin['frame-src']).toEqual(["'self'"])
+  })
+
+  it('frames only the Map/Video players, and only on spa sites + the app (Studio preview)', () => {
+    for (const surface of ['app', 'site', 'domain'] as const) {
+      const d = directives(contentSecurityPolicy({ surface, embed: false, nonce }))
+      expect(d['frame-src']).toEqual([
+        "'self'",
+        TURNSTILE_ORIGIN,
+        'https://www.google.com',
+        'https://www.youtube-nocookie.com',
+        'https://player.vimeo.com',
+      ])
+      // Uploaded videos play from /files only.
+      expect(d['media-src']).toBeUndefined()
+      expect(d['default-src']).toEqual(["'self'"])
+    }
+    for (const surface of ['marketing', 'admin'] as const) {
+      const d = directives(contentSecurityPolicy({ surface, embed: false, nonce }))
+      for (const origin of SITE_EMBED_ORIGINS) expect(d['frame-src']).not.toContain(origin)
+    }
   })
 
   it('lets any site frame the booking widget, adds eval only in dev and upgrades only over https', () => {

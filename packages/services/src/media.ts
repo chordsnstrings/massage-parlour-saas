@@ -37,6 +37,7 @@ import {
   ne,
   notLike,
   or,
+  type SQL,
   sql,
 } from 'drizzle-orm'
 import { DomainError } from './errors'
@@ -71,6 +72,41 @@ export function sniffImageType(b: Uint8Array): ImageType | null {
     const brands = [ascii(b, 8, 12)]
     for (let i = 16; i + 4 <= boxSize; i += 4) brands.push(ascii(b, i, i + 4))
     if (brands.includes('avif') || brands.includes('avis')) return 'image/avif'
+  }
+  return null
+}
+
+// F15 Video block: short clips (≤ 8 MB) uploaded as-is (no transcoding), played from /files with Range support.
+export const VIDEO_TYPES = ['video/mp4', 'video/webm'] as const
+export type VideoType = (typeof VIDEO_TYPES)[number]
+/** ISO-BMFF brands browsers play as MP4 (QuickTime `qt  ` / HEIF / AVIF are refused). */
+const MP4_BRANDS = new Set([
+  'isom',
+  'iso2',
+  'iso4',
+  'iso5',
+  'iso6',
+  'mp41',
+  'mp42',
+  'avc1',
+  'M4V ',
+  'dash',
+  'mmp4',
+  'MSNV',
+])
+
+/** MP4 (ISO-BMFF with a video brand) or WebM (EBML with DocType "webm") from the magic bytes; null otherwise. */
+export function sniffVideoType(b: Uint8Array): VideoType | null {
+  if (b.length < 16) return null
+  if (ascii(b, 4, 8) === 'ftyp') {
+    const boxSize = Math.min(((b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0, b.length, 64)
+    const brands = [ascii(b, 8, 12)]
+    for (let i = 16; i + 4 <= boxSize; i += 4) brands.push(ascii(b, i, i + 4))
+    if (brands.includes('avif') || brands.includes('avis') || brands.includes('heic')) return null
+    return brands.some((x) => MP4_BRANDS.has(x)) ? 'video/mp4' : null
+  }
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) {
+    return ascii(b, 0, Math.min(b.length, 64)).includes('webm') ? 'video/webm' : null
   }
   return null
 }
@@ -228,6 +264,55 @@ export async function createAsset(
   return { ...row!, filename: name }
 }
 
+/** Stores an uploaded video (bytes as uploaded, after the magic-byte check) as a public library file. */
+export async function createVideoAsset(
+  tx: Tx,
+  a: {
+    tenantId: string
+    bytes: Buffer
+    filename?: string | null
+    tags?: string[]
+    createdBy?: string | null
+  },
+) {
+  if (a.bytes.length === 0) throw new MediaError('The file is empty', 'invalid', { key: 'errors.file.empty' })
+  // Stored like every file (≤ 8 MB, storage.ts): short clips; longer videos belong on YouTube / Vimeo.
+  if (a.bytes.length > MAX_FILE_BYTES)
+    throw new MediaError('Videos can be up to 8 MB', 'invalid', {
+      key: 'errors.file.videoTooLarge',
+      params: { size: '8 MB' },
+    })
+  const type = sniffVideoType(a.bytes)
+  if (!type)
+    throw new MediaError('That file isn’t a video we can play (MP4 or WebM).', 'invalid', {
+      key: 'errors.file.notVideo',
+    })
+  const ext = type === 'video/webm' ? 'webm' : 'mp4'
+  const name = a.filename ? `${a.filename.replace(/\.[a-z0-9]{2,5}$/i, '').slice(0, 80)}.${ext}` : null
+  const file = await putFile(tx, {
+    tenantId: a.tenantId,
+    bytes: a.bytes,
+    contentType: type,
+    filename: name,
+    isPublic: true,
+    purpose: 'media',
+    createdBy: a.createdBy ?? null,
+  })
+  const [row] = await tx
+    .insert(mediaAssets)
+    .values({
+      tenantId: a.tenantId,
+      url: fileUrl(file.id),
+      fileId: file.id,
+      bytes: file.size,
+      kind: 'video',
+      source: 'upload',
+      tags: cleanTags(a.tags),
+    })
+    .returning()
+  return { ...row!, filename: name }
+}
+
 export type AssetFilter = {
   source?: MediaSource
   tag?: string
@@ -236,11 +321,13 @@ export type AssetFilter = {
   offset?: number
   /** Leave out AI rows still on their temporary (7-day) generator link — for pickers that embed the URL. */
   storedOnly?: boolean
+  /** Asset kind; the photo library and pickers list images only (videos live in their Video blocks). */
+  kind?: 'image' | 'video'
 }
 
 /** Library listing, newest first, with the original filename. */
 export async function listAssets(tx: Tx, f: AssetFilter = {}) {
-  const where = []
+  const where: (SQL | undefined)[] = [eq(mediaAssets.kind, f.kind ?? 'image')]
   if (f.source) where.push(eq(mediaAssets.source, f.source))
   if (f.tag) where.push(arrayContains(mediaAssets.tags, [f.tag]))
   if (f.storedOnly)
@@ -275,7 +362,7 @@ export async function listAssets(tx: Tx, f: AssetFilter = {}) {
     })
     .from(mediaAssets)
     .leftJoin(storedFiles, eq(storedFiles.id, mediaAssets.fileId))
-    .where(where.length ? and(...where) : undefined)
+    .where(and(...where))
     .orderBy(desc(mediaAssets.createdAt), desc(mediaAssets.id))
     .limit(Math.min(f.limit ?? 60, 1000))
     .offset(f.offset ?? 0)

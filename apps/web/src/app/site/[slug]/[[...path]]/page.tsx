@@ -20,5 +20,13 @@ export default async function SubdomainSite({ params, searchParams }: Props) {
   if (!tenant) notFound()
   // Links stay inside the tenant site: /s/{slug}/… on a single host, root-relative on {slug}.domain.
   const base = PATH_ROUTING ? `/s/${tenant.slug}` : ''
-  return <PublicSite tenant={tenant} path={path} lang={(await searchParams).lang} base={base} />
+  return (
+    <PublicSite
+      tenant={tenant}
+      path={path}
+      lang={(await searchParams).lang}
+      base={base}
+      site={{ slug: tenant.slug }}
+    />
+  )
 }

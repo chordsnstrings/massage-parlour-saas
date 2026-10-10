@@ -11,6 +11,10 @@ export const ui = {
   more: 'More',
   /** Media upload / library picker (also used in the website editor and outside the dashboard). */
   media: {
+    uploadVideo: 'Upload video',
+    videoFormats: 'MP4 or WebM up to {size} MB, played from your own site.',
+    uploadingVideo: 'Uploading video…',
+    removeVideo: 'Remove video',
     dropZone: 'Drop zone',
     dropToUpload: 'Drop to upload',
     dropHere: 'Drop images here',

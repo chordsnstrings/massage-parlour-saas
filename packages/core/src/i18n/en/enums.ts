@@ -168,5 +168,7 @@ export const enums = {
   },
   siteStudioStatus: { building: 'In progress', review: 'Ready for review', approved: 'Approved' },
   pageVersionStatus: { draft: 'Draft', published: 'Published' },
+  sitePostStatus: { draft: 'Draft', published: 'Published' },
+  siteEnquiryStatus: { new: 'New', replied: 'Replied', closed: 'Closed' },
   changeRequestStatus: { open: 'Open', done: 'Done', declined: 'Declined' },
 } as const

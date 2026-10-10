@@ -233,6 +233,9 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
       return Array.isArray(v) ? v.length : 0
     }
     if (node.type === 'Section' && slot('content') === 0) empty('Section is empty', path, true)
+    // F15: a Video block without a video shows nothing on the live site.
+    if (node.type === 'Video' && !String(node.props.url ?? '').trim())
+      empty('Video has no video yet', path, true)
     if (node.type === 'Stack' && slot('items') === 0) empty('Stack is empty', path, true)
     if (node.type === 'Columns') {
       const n = columnCount(node.props.ratio)

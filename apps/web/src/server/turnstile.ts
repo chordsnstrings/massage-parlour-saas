@@ -7,7 +7,7 @@ import { platformDb } from '@spa/db'
 import { cachedTurnstileSettings } from '@spa/services'
 import { clientIp } from './rate-limit'
 
-export type BotCheckAction = 'booking' | 'apply' | 'contact'
+export type BotCheckAction = 'booking' | 'apply' | 'contact' | 'enquiry'
 
 // One cached source per process (globalThis: route bundles are separate module graphs).
 const g = globalThis as { __spaTurnstileCache?: ReturnType<typeof cachedTurnstileSettings> }

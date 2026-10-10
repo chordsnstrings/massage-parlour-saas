@@ -165,8 +165,10 @@ export default async function TenantLayout({
           ...page('marketing.send', '/messages', t('nav.whatsapp')),
           ...gated('ai', page('marketing.send', '/inbox', t('nav.instagram'))),
           ...gated('marketing', page('marketing.campaigns', '/campaigns', t('nav.campaigns'))),
+          // F15: leads from the website's enquiry form (every plan).
+          ...page('clients.view', '/enquiries', t('enquiries.nav')),
         ]),
-        counts.outboxDue + (ent.features.includes('ai') ? counts.igUnread : 0),
+        counts.outboxDue + (ent.features.includes('ai') ? counts.igUnread : 0) + counts.enquiriesNew,
         'inbox',
       ).map((i) => ({
         ...i,

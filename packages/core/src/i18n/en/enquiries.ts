@@ -1,0 +1,30 @@
+// `enquiries` namespace (EN source, F15): Inbox → Enquiries — messages sent from the spa's website enquiry form.
+// Names and messages the visitors typed are never translated. Mirror every key in th/enquiries.ts.
+export const enquiries = {
+  title: 'Website enquiries',
+  nav: 'Enquiries',
+  description:
+    'Messages from the enquiry form on your website. Reply on WhatsApp — nothing is emailed to the guest.',
+  filter: { new: 'New', replied: 'Replied', closed: 'Closed', all: 'All' },
+  filterLabel: 'Show',
+  search: 'Search name, phone or message',
+  searchButton: 'Search',
+  colFrom: 'From',
+  colMessage: 'Message',
+  colReceived: 'Received',
+  colStatus: 'Status',
+  fromPage: 'From the {page} page',
+  homePage: 'home',
+  arabic: 'Wrote in Arabic',
+  reply: 'Reply on WhatsApp',
+  replyLabel: 'Reply to {name} on WhatsApp',
+  markReplied: 'Mark replied',
+  close: 'Close',
+  reopen: 'Reopen',
+  phoneHidden: 'Phone hidden',
+  emptyTitle: 'No enquiries yet',
+  empty: 'When a guest sends a message from your website, it shows up here.',
+  emptyFilter: 'No enquiries match.',
+  total: { one: '{count} enquiry', other: '{count} enquiries' },
+  moved: 'Enquiry updated',
+} as const
