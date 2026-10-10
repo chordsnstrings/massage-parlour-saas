@@ -71,9 +71,11 @@ export function freeSiteUrl(slug: string, env: { ROOT_DOMAIN?: string; APP_URL?:
   return pathRouting ? `${scheme}://${root}/s/${slug}` : `${scheme}://${slug}.${root}`
 }
 
-/** `s` without trailing `/`s (a loop: `/\/+$/` rescans a long `/` run that doesn't end the string, quadratic). */
-export function trimTrailingSlashes(s: string): string {
+/** `s` without trailing `char`s (a loop: `/\/+$/` rescans a long `/` run that doesn't end the string, quadratic). */
+export function trimTrailing(s: string, char: string): string {
   let n = s.length
-  while (n > 0 && s[n - 1] === '/') n--
+  while (n > 0 && s[n - 1] === char) n--
   return s.slice(0, n)
 }
+
+export const trimTrailingSlashes = (s: string) => trimTrailing(s, '/')

@@ -832,7 +832,18 @@ export function headerRowIndex(rows: string[][]): number {
 }
 
 /** Row error without the cell values quoted in it (for the audit log, which outlives the upload). */
-export const withoutValues = (message: string) => message.replace(/“[^”]*”/g, '“…”')
+export function withoutValues(message: string): string {
+  // /“[^”]*”/g as a scan: the regex rescans to the end from every unclosed “ (quadratic on a long run).
+  let out = ''
+  let i = 0
+  for (;;) {
+    const open = message.indexOf('“', i)
+    const close = open < 0 ? -1 : message.indexOf('”', open + 1)
+    if (close < 0) return out + message.slice(i)
+    out += `${message.slice(i, open)}“…”`
+    i = close + 1
+  }
+}
 
 /**
  * Validates and normalises every data row with the chosen mapping (column index → field key). Blank rows

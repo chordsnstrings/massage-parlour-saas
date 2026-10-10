@@ -217,7 +217,11 @@ export function scopeSectionCss(input: string | null | undefined, sectionId: str
   let text = source.replace(/\/\*[\s\S]*?(\*\/|$)/g, '')
   if (text.includes('<')) {
     removed.add('HTML tags')
-    text = text.replace(/<\s*\/?\s*[a-z!][^<>]*>?/gi, '').replace(/</g, '')
+    // Every "<" goes; one that opens a tag takes the tag with it (per piece, so no "<" can survive or re-form).
+    text = text
+      .split('<')
+      .map((part, i) => (i === 0 ? part : part.replace(/^\s*(?:\/\s*)?[a-z!][^>]*>?/i, '')))
+      .join('')
   }
   if (/@import/i.test(text)) removed.add('@import')
   const css = compile(text, sectionSelector(sectionId), removed, 0)

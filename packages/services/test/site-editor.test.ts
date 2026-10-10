@@ -79,6 +79,16 @@ describe('section custom CSS', () => {
     )
   })
 
+  it('leaves no "<" behind, even from nested or broken tags', () => {
+    const { css, removed } = scopeSectionCss(
+      '.a { color: red }<scr<script>ipt>alert(1)</scr</script>ipt> < /style>',
+      id,
+    )
+    expect(css).not.toContain('<')
+    expect(css).toContain(`${scope} .a{color:red}`)
+    expect(removed).toContain('HTML tags')
+  })
+
   it('ignores anything over 4 KB instead of applying half a stylesheet', () => {
     const big = `.a{color:red}${' '.repeat(4100)}`
     expect(scopeSectionCss(big, id)).toMatchObject({ css: '', tooLarge: true })

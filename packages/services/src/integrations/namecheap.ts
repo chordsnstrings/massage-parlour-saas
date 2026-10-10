@@ -52,7 +52,8 @@ const decode = (s: string) =>
 
 export function attrs(tagSource: string): Record<string, string> {
   const out: Record<string, string> = {}
-  for (const m of tagSource.matchAll(/([A-Za-z_][\w.-]*)="([^"]*)"/g)) out[m[1]!] = decode(m[2]!)
+  // Names start after whitespace (XML attributes are space-separated), so a long name-like run is scanned once.
+  for (const m of ` ${tagSource}`.matchAll(/\s([A-Za-z_][\w.-]*)="([^"]*)"/g)) out[m[1]!] = decode(m[2]!)
   return out
 }
 
@@ -65,8 +66,12 @@ export function parseResponse(xml: string, partialTag?: string) {
   const status = /<ApiResponse\b[^>]*Status="(\w+)"/.exec(xml)?.[1]
   // Some commands (domains.check) report per-item errors as a failed response that still carries the good items.
   if (status !== 'OK' && !(partialTag && xml.includes(`<${partialTag}`))) {
-    const err = /<Error\b[^>]*Number="(\d+)"[^>]*>([\s\S]*?)<\/Error>/.exec(xml)
-    throw new NamecheapError(err ? decode(err[2]!.trim()) : 'Namecheap request failed', err?.[1])
+    // Tag and text can't hold "<" in well-formed XML; excluding it keeps every scan linear.
+    const err = /<Error\b([^<>]*)>([^<]*)<\/Error>/.exec(xml)
+    throw new NamecheapError(
+      err ? decode(err[2]!.trim()) : 'Namecheap request failed',
+      err ? attrs(err[1]!).Number : undefined,
+    )
   }
   return xml
 }
@@ -146,7 +151,7 @@ export async function checkDomains(cfg: NamecheapConfig, domains: string[], fetc
 
 /** One-year registration price (your price) per TLD in USD. */
 export async function registerPrices(cfg: NamecheapConfig, tlds: string[], fetchImpl?: typeof fetch) {
-  const out: Record<string, number> = {}
+  const out = new Map<string, number>() // a Map: a TLD can't name a prototype key
   for (const tld of tlds) {
     const xml = await call(
       cfg,
@@ -163,9 +168,9 @@ export async function registerPrices(cfg: NamecheapConfig, tlds: string[], fetch
       (p) => p.Duration === '1' && (p.DurationType ?? 'YEAR').toUpperCase() === 'YEAR',
     )
     const price = Number(oneYear?.YourPrice ?? oneYear?.Price)
-    if (price > 0) out[tld] = price
+    if (price > 0) out.set(tld, price)
   }
-  return out
+  return Object.fromEntries(out)
 }
 
 export type Contact = {

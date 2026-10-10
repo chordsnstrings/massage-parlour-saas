@@ -14,6 +14,7 @@ import {
   SYSTEM_ROLES,
   toE164,
   toUaeE164,
+  trimTrailing,
   trimTrailingSlashes,
   whatsappLink,
 } from '../src'
@@ -88,6 +89,13 @@ describe('trimTrailingSlashes', () => {
     expect(trimTrailingSlashes('///')).toBe('')
     const t = Date.now()
     expect(trimTrailingSlashes(`${'/'.repeat(200_000)}x`)).toBe(`${'/'.repeat(200_000)}x`)
+    expect(Date.now() - t).toBeLessThan(500)
+  })
+
+  it('trims any one character the same way', () => {
+    expect(trimTrailing('a.test...', '.')).toBe('a.test')
+    const t = Date.now()
+    expect(trimTrailing(`${'.'.repeat(200_000)}x`, '.')).toBe(`${'.'.repeat(200_000)}x`)
     expect(Date.now() - t).toBeLessThan(500)
   })
 })
