@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
-import { auditLog, plans, spaApplications, subscriptions, tenants } from '@spa/db'
+import { auditLog, plans, spaApplications, subscriptions, tenants, user } from '@spa/db'
 import { and, eq, inArray, isNull, ne } from 'drizzle-orm'
 import {
   admin,
@@ -214,7 +214,8 @@ test('discounts set at acceptance show on the setup invoice and the monthly invo
 
 // R19 (owner 2026-10-10): Delete on Console → Plans & prices. An unused plan is deleted; a plan a spa is on is
 // archived — off Plans & prices, /pricing and sign-up, still named on the spa's row in Console → Spas — and can be
-// restored (hidden until edited); the last plan new spas can get is refused. Cards are found by their unique names.
+// restored (hidden until edited); a built-in plan, or one only a past application chose, is archived too; the last
+// plan new spas can get is refused. Cards are found by their unique names.
 const SHOTS = process.env.E2E_SHOTS_DIR ?? 'test-results/screens'
 /** Desktop + 390 px screenshots of the current state (an open sheet stays open across the resize). */
 async function shot(page: Page, file: string, fullPage = true) {
@@ -236,10 +237,10 @@ test('console: delete an unused plan, archive a used one and restore it; the las
   const tag = uniqueSlug('r19')
   const db = testDb()
   const name = (k: string) => `R19 ${k} ${tag}`
-  const [unused, used, only] = await db
+  const [unused, used, only, applied] = await db
     .insert(plans)
     .values(
-      ['Unused', 'Archive', 'Only'].map((k, i) => ({
+      ['Unused', 'Archive', 'Only', 'Applied'].map((k, i) => ({
         code: `${tag}-${i}`,
         name: name(k),
         priceAed: `${133_200 + i * 120}`,
@@ -248,6 +249,25 @@ test('console: delete an unused plan, archive a used one and restore it; the las
         sort: i === 1 ? 0 : 900 + i,
       })),
     )
+    .returning()
+  // `Applied`: only a rejected application points at it (a kept record, never accepted).
+  const applicant = `${tag}-applicant`
+  await db.insert(user).values({ id: applicant, name: 'R19 Applicant', email: `${applicant}@plans.test` })
+  const [pastApp] = await db
+    .insert(spaApplications)
+    .values({
+      userId: applicant,
+      applicantName: 'R19 Applicant',
+      email: `${applicant}@plans.test`,
+      phone: '+971501234567',
+      spaName: `R19 Applied ${tag}`,
+      slug: `${tag}-applied`,
+      emirate: 'dubai',
+      streetAddress: 'Street 1',
+      planId: applied!.id,
+      preferredStart: '2026-11-01',
+      status: 'rejected',
+    })
     .returning()
   const spaName = `R19 Spa ${tag}`
   const [spa] = await db
@@ -280,6 +300,30 @@ test('console: delete an unused plan, archive a used one and restore it; the las
     await page.setViewportSize({ width: 360, height: 780 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.setViewportSize({ width: 1280, height: 800 })
+
+    await test.step('a built-in plan, or one only a past application chose, is archived, not deleted', async () => {
+      // Built in (the deploy seed would add a deleted one back): Archive, whatever its use; the dialog is just closed.
+      const [standard] = await db.select().from(plans).where(eq(plans.code, 'standard'))
+      await card(standard!.name).getByRole('button', { name: 'Delete' }).click()
+      const builtIn = page.getByRole('dialog', { name: `Delete ${standard!.name}?` })
+      await expect(builtIn.getByRole('button', { name: 'Archive plan' })).toBeVisible()
+      await expect(builtIn).not.toContainText("This can't be undone.")
+      await page.keyboard.press('Escape')
+      await expect(builtIn).toHaveCount(0)
+
+      await card(name('Applied')).getByRole('button', { name: 'Delete' }).click()
+      const dialog = page.getByRole('dialog', { name: `Delete ${name('Applied')}?` })
+      await expect(dialog).toContainText(
+        `1 past application chose ${name('Applied')}, so it is archived, not deleted. It will be removed from this page, the pricing page and new sign-ups. You can restore it from Archived plans.`,
+      )
+      await shot(page, 'past-application-dialog', false)
+      await dialog.getByRole('button', { name: 'Archive plan' }).click()
+      await expect(
+        page.getByText(`${name('Applied')} archived. Restore it from Archived plans.`),
+      ).toBeVisible()
+      await expect(card(name('Applied'))).toHaveCount(0)
+      expect((await db.select().from(plans).where(eq(plans.id, applied!.id)))[0]?.archivedAt).toBeTruthy()
+    })
 
     await test.step('a plan nothing points at is deleted', async () => {
       await card(name('Unused')).getByRole('button', { name: 'Delete' }).click()
@@ -395,7 +439,9 @@ test('console: delete an unused plan, archive a used one and restore it; the las
   } finally {
     // Whatever happened above, no test plan stays offered (the pricing tests read the first Premium-tier plan).
     await db.update(plans).set({ active: false }).where(eq(plans.id, used!.id))
-    await db.delete(plans).where(inArray(plans.id, [unused!.id, only!.id]))
+    await db.delete(spaApplications).where(eq(spaApplications.id, pastApp!.id))
+    await db.delete(user).where(eq(user.id, applicant))
+    await db.delete(plans).where(inArray(plans.id, [unused!.id, only!.id, applied!.id]))
     await visitor.close()
   }
 })

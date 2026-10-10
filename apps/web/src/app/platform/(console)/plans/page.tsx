@@ -1,6 +1,6 @@
 import { FEATURE_LABELS, monthlyAed, PLAN_CODES, planFeatures, planTier } from '@spa/core'
 import { plans, platformDb } from '@spa/db'
-import { type PlanUse, planUsage } from '@spa/services'
+import { isBuiltInPlan, NO_PLAN_USE, type PlanUse, planUsage } from '@spa/services'
 import { asc } from 'drizzle-orm'
 import { Plus, Trash2 } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -21,8 +21,7 @@ export const metadata: Metadata = { title: 'Plans & prices' }
 
 type Plan = typeof plans.$inferSelect
 
-const fixedCode = (plan?: Plan) =>
-  Boolean(plan && (Object.values(PLAN_CODES) as string[]).includes(plan.code))
+const fixedCode = (plan?: Plan) => Boolean(plan && isBuiltInPlan(plan))
 
 function PlanFields({ plan }: { plan?: Plan }) {
   return (
@@ -89,18 +88,32 @@ function PlanFields({ plan }: { plan?: Plan }) {
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** R19: what Delete will do — delete an unused plan, archive one that spas (or applications) point at. */
+/**
+ * R19: what Delete will do — delete an unused plan; archive one that spas or applications point at, and always a
+ * built-in plan (`isBuiltInPlan`: the deploy seed would add a deleted one back).
+ */
 function deleteCopy(p: Plan, use: PlanUse) {
-  if (!use.spas && !use.applications) return { description: "This can't be undone.", submit: 'Delete plan' }
+  if (!use.spas && !use.applications && !isBuiltInPlan(p))
+    return { description: "This can't be undone.", submit: 'Delete plan' }
   const restore = 'You can restore it from Archived plans.'
   const hidden = 'It will be removed from this page, the pricing page and new sign-ups.'
-  const apps = use.applications
-    ? `${count(use.applications, 'application', 'applications')} chose ${use.spas ? 'it' : p.name}`
+  const pending = use.pendingApplications
+  const past = use.applications - pending
+  const apps = [
+    pending && count(pending, 'pending application', 'pending applications'),
+    past && count(past, 'past application', 'past applications'),
+  ]
+    .filter(Boolean)
+    .join(' and ')
+  const accept = pending
+    ? ` You choose another plan when you accept the pending ${pending === 1 ? 'application' : 'applications'}.`
     : ''
   return {
     description: use.spas
-      ? `${count(use.spas, 'spa is', 'spas are')} on ${p.name}${apps ? ` and ${apps}` : ''}. ${hidden} Those spas keep their plan and price until you change their subscription. ${restore}`
-      : `${apps}. ${hidden} You choose another plan when you accept ${use.applications === 1 ? 'it' : 'them'}. ${restore}`,
+      ? `${count(use.spas, 'spa is', 'spas are')} on ${p.name}${apps ? ` and ${apps} chose it` : ''}. ${hidden} Those spas keep their plan and price until you change their subscription. ${restore}`
+      : apps
+        ? `${apps} chose ${p.name}, so it is archived, not deleted. ${hidden}${accept} ${restore}`
+        : `${p.name} is a built-in plan, so it is archived, not deleted. ${hidden} ${restore}`,
     submit: 'Archive plan',
   }
 }
@@ -128,7 +141,7 @@ export default async function PlansPage({ searchParams }: { searchParams: Promis
     db.select().from(plans).orderBy(asc(plans.sort), asc(plans.createdAt)),
     planUsage(db),
   ])
-  const usageOf = (p: Plan) => usage.get(p.id) ?? { spas: 0, applications: 0 }
+  const usageOf = (p: Plan) => usage.get(p.id) ?? NO_PLAN_USE
   const rows = all.filter((p) => !p.archivedAt)
   const archived = all.filter((p) => p.archivedAt)
   const page = adminPath('/plans')

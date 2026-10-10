@@ -1029,14 +1029,17 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   that uses the Resend API (with the console key) to add spamanagement.co, shows the DNS records to copy into Namecheap,
   and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone). In progress.
 - **R19 Delete a plan (owner, 2026-10-10):** Console → Plans & prices: each plan card has Delete (confirm sheet). A
-  plan nothing points at (no tenant, subscription or application row) is deleted; a used plan is archived instead
+  plan nothing points at (no tenant, subscription or application row) is deleted; a used plan, and always a built-in
+  one (Premium / Standard / Yearly (legacy): every deploy re-runs the seed, which would add a deleted one back), is
+  archived instead
   (`plans.archived_at` + inactive): gone from Plans & prices, /pricing, sign-up and approval, while its spas keep their
   plan, agreed price, name everywhere and entitlements until a super-admin changes their subscription. "Archived plans
   (n)" lists them with Restore (back inactive; edit to offer it again). The last plan new spas can get is never removed.
   Built (2026-10-10): services `removePlan` / `restorePlan` / `planUsage` (subscription-plans.ts; one transaction that
   locks every plan row, so use counts + the last-plan check hold at write time), DB check `plans_archived_inactive`
-  (archived ⇒ inactive, so every `active = true` list hides archived plans), `acceptApplication` and a new
-  subscription refuse an archived plan, Edit refused while archived; audit `platform.plan.deleted` {code, name} /
+  (archived ⇒ inactive, so every `active = true` list hides archived plans), `acceptApplication`, `switchPlan` and a
+  new subscription refuse an archived plan (they read it FOR SHARE, so a removal in flight is seen), Edit refused
+  while archived; audit `platform.plan.deleted` {code, name} /
   `platform.plan.archived` {code, name, spas} / `platform.plan.restored` {code, name}; tests: services
   `plan-delete.test.ts`, e2e plans.spec "console: delete an unused plan …".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file

@@ -651,8 +651,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   days before renewal, new period on the old end date, no setup fee; `setSubscriptionDiscounts`; `setFeatureTier`;
   `reissueUnpaidInvoices` voids + re-issues unpaid, not-yet-due invoices, setup keeps due date + VAT choice; all
   return from/to for the audit; R19 `removePlan` deletes an unused plan or archives a used one — spas = distinct tenants
-  via `tenants.plan_id` or `subscriptions.plan_id`, plus `spa_applications` rows, counted under a lock on every plan
-  row; refused for the last plan new spas can get (`offeredToNewSpas`: active, not archived, not legacy) —
+  via `tenants.plan_id` or `subscriptions.plan_id`, plus `spa_applications` rows (any status; the sheet's copy tells
+  pending from past ones), counted under a lock on every plan row; the built-in `PLAN_CODES` plans (`isBuiltInPlan`)
+  are always archived, never deleted, because every deploy re-runs the seed (`insert … on conflict do nothing` by
+  code) and would add a deleted one back; `acceptApplication`, `switchPlan` and the new-subscription save read their
+  plan FOR SHARE, so they wait for a removal in flight and then see the plan archived or gone; refused for the last
+  plan new spas can get (`offeredToNewSpas`: active, not archived, not legacy) —
   `restorePlan` clears `archived_at` but leaves it inactive; DB check `plans_archived_inactive` keeps archived plans
   inactive, so the `active = true` lists (pricing `activePlans`, sign-up, `offeredPlans`, approval choices) never show
   them while spa pages read the plan by id and keep its name). Discounts apply in `generateBillingScheduleTx` / `acceptApplication` via

@@ -85,23 +85,28 @@ export async function updateSubscriptionAction(
   if (d.currentPeriodEnd < d.currentPeriodStart)
     return fail('End must be after start.', { currentPeriodEnd: 'End must be after start' })
   // PLAN §18.8: the plan itself changes only through "Switch plan" (legacy yearly kept until renewal); a new
-  // subscription can't start on the legacy plan.
-  const [current, target] = await Promise.all([
-    platformDb().query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) }),
-    platformDb().query.plans.findFirst({ where: eq(plans.id, d.planId) }),
-  ])
-  if (current && current.planId !== d.planId)
-    return fail('Change the plan with “Switch plan” under Plan & features.', {
-      planId: 'Use Switch plan',
-    })
-  if (!current && isLegacyPlan(target))
-    return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
-  if (!current && target?.archivedAt) return fail('This plan is archived.', { planId: 'Choose another plan' })
-  await platformDb()
-    .insert(subscriptions)
-    .values({ tenantId, ...d })
-    .onConflictDoUpdate({ target: subscriptions.tenantId, set: d })
-  await platformDb().update(tenants).set({ planId: d.planId }).where(eq(tenants.id, tenantId))
+  // subscription can't start on the legacy plan or an archived one (R19). The plan is read FOR SHARE in the write's
+  // transaction, so a Delete on Plans & prices running meanwhile finishes first and is seen here.
+  const refused = await platformDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId))
+    const [target] = await tx.select().from(plans).where(eq(plans.id, d.planId)).for('share')
+    if (current && current.planId !== d.planId)
+      return fail('Change the plan with “Switch plan” under Plan & features.', {
+        planId: 'Use Switch plan',
+      })
+    if (!target) return fail('Plan not found.', { planId: 'Choose another plan' })
+    if (!current && isLegacyPlan(target))
+      return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
+    if (!current && target.archivedAt)
+      return fail('This plan is archived.', { planId: 'Choose another plan' })
+    await tx
+      .insert(subscriptions)
+      .values({ tenantId, ...d })
+      .onConflictDoUpdate({ target: subscriptions.tenantId, set: d })
+    await tx.update(tenants).set({ planId: d.planId }).where(eq(tenants.id, tenantId))
+    return null
+  })
+  if (refused) return refused
   await audit({ tenantId, actorUserId: user.id, action: 'platform.subscription.updated', data: d })
   revalidatePath(`/platform/tenants/${tenantId}`)
   return ok('Subscription saved')
