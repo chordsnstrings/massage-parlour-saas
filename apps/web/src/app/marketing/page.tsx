@@ -1,15 +1,14 @@
-import { monthlyAed } from '@spa/core'
-import { ArrowRight, Check } from 'lucide-react'
+import { ArrowRight, Check, CreditCard, Receipt } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { AREAS, DAY } from '@/components/marketing/content'
 import { crmDemoCopy } from '@/components/marketing/crm-demo-copy'
 import { CrmShowcase } from '@/components/marketing/crm-showcase'
 import { CalendarMock } from '@/components/marketing/mocks'
+import { gatedSummary, PlanCards, pickPlans } from '@/components/marketing/plan-cards'
 import { activePlans } from '@/components/marketing/plans'
 import { marketingMetadata } from '@/components/marketing/seo'
 import { CtaBand, HeroDepth, MarketingShell } from '@/components/marketing/shell'
-import { formatAed } from '@/lib/utils'
 import { appUrl } from '@/server/origin'
 
 export const metadata: Metadata = marketingMetadata('home', {
@@ -29,8 +28,9 @@ const SHOWCASE_BENEFITS = [
 ]
 
 export default async function MarketingPage() {
-  const plans = (await activePlans()).filter((p) => p.billingInterval === 'month')
   const signupUrl = await appUrl('/signup')
+  const plans = (await activePlans()).filter((p) => p.billingInterval === 'month')
+  const { premium, standard } = pickPlans(plans)
   return (
     <MarketingShell active="home">
       {/* Hero */}
@@ -173,32 +173,33 @@ export default async function MarketingPage() {
         </div>
       </section>
 
-      {/* Price */}
+      {/* Plans: copy + the shared plan cards (live prices, PLAN §18.8) */}
       <section className="mkt-sec">
-        <div data-rise className="mkt-wrap text-center">
-          <p className="mkt-eyebrow">Two plans</p>
-          <h2 className="mkt-h2 mx-auto max-w-2xl">Pick your plan. We handle the rest.</h2>
-          <div className="mx-auto mt-8 grid max-w-3xl gap-4 text-start sm:grid-cols-2">
-            {plans.map((p) => (
-              <div key={p.id} className="mkt-card">
-                <p className="mkt-head text-[20px] font-bold">{p.name}</p>
-                <p className="mkt-head mt-3 text-[34px] leading-none font-bold tabular-nums sm:text-[40px]">
-                  {formatAed(monthlyAed(p.priceAed))}
-                  <span className="text-base font-medium tracking-normal text-[var(--mute)]"> / month</span>
-                </p>
-                <p className="mt-2 text-[14px] text-[var(--mute)]">
-                  + {formatAed(p.setupFeeAed)} one-time setup · excl. VAT
-                </p>
-                {p.description && <p className="mt-4 text-[15px]">{p.description}</p>}
-              </div>
-            ))}
+        <div className="mkt-wrap mkt-plx">
+          <div data-rise className="mkt-plx-copy">
+            <p className="mkt-eyebrow">Pricing</p>
+            <h2 className="mkt-h2">
+              One setup fee.
+              <br />
+              <span className="mkt-plx-2">Then one monthly fee.</span>
+            </h2>
+            <p className="mkt-lead">
+              {standard?.name ?? 'Standard'} runs your whole spa. {premium?.name ?? 'Premium'} adds{' '}
+              {gatedSummary}.
+            </p>
+            <ul className="mkt-pnotes">
+              <li>
+                <Receipt aria-hidden /> All prices excl. VAT
+              </li>
+              <li>
+                <CreditCard aria-hidden /> Pay by card, bank transfer or cash
+              </li>
+            </ul>
+            <Link href="/pricing#compare" className="mkt-plink mkt-link">
+              Compare every feature <ArrowRight aria-hidden />
+            </Link>
           </div>
-          <Link
-            href="/pricing"
-            className="mkt-link mt-6 inline-flex items-center gap-1.5 text-[15px] font-semibold text-[var(--accent-ink)]"
-          >
-            Compare the plans <ArrowRight className="size-4" />
-          </Link>
+          <PlanCards plans={plans} signup={signupUrl} variant="compact" />
         </div>
       </section>
 
