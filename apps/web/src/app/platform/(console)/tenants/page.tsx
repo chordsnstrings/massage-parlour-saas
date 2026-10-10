@@ -87,7 +87,7 @@ const DEFINITION: Record<TenantSort, string> = {
   name: 'Spa name; below it the address and the date the spa joined',
   joined: 'Date the spa was created',
   status: 'Subscription status; a note when an invoice is late',
-  plan: 'Subscribed plan and when the current period ends; a tag shows the feature tier when the name does not',
+  plan: 'Subscribed plan and when the current period ends; a grey tag shows the feature tier when the name does not; a green → tag is a tier set by a super-admin (override)',
   signin: 'Newest sign-in of an active team member',
   booking: 'Newest booking created',
   bookings30: 'Bookings created in the last 30 days (any source)',
@@ -171,8 +171,8 @@ function BillingNote({ r, ctx }: { r: TenantUsageRow; ctx: Ctx }) {
       data-tone="warning"
       title={`${grace ? 'Grace period' : 'Invoice overdue'}: read-only from ${en.date(stage.readOnlyFrom)}`}
     >
-      {grace ? 'Grace' : 'Overdue'} · <span className="sl-nowrap">read-only</span> from{' '}
-      <span className="sl-nowrap">{shortDate(stage.readOnlyFrom, ctx.now)}</span>
+      {grace ? 'Grace' : 'Overdue'} · <span className="sl-nowrap">read-only</span>{' '}
+      <span className="sl-nowrap">from {shortDate(stage.readOnlyFrom, ctx.now)}</span>
     </span>
   )
 }

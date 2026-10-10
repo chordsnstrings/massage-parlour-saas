@@ -415,8 +415,16 @@ test('console spa list: flat table on one page at every width, every metric sort
     for (const width of [1920, 1440, 1280, 1024, 900, 390]) {
       await noSideScroll(page, width)
       await page.mouse.move(width - 2, 2) // no hover band in the shots
+      if (width < 768) {
+        // Phones: the bottom tab bar is fixed, so a full-page capture would paint it mid-list; shoot with
+        // the screen as tall as the page so the bar sits at the end, where a scrolled-down visitor sees it.
+        const height = await page.evaluate(() => document.documentElement.scrollHeight)
+        await page.setViewportSize({ width, height })
+        await page.screenshot({ path: `${SHOTS}/spa-list-${width}.png`, fullPage: true })
+        await page.setViewportSize({ width, height: 844 })
+        continue
+      }
       await page.screenshot({ path: `${SHOTS}/spa-list-${width}.png`, fullPage: true })
-      if (width < 768) continue
       const side = await page.evaluate(() => {
         const aside = document.querySelector('aside')!.getBoundingClientRect()
         return {
@@ -500,6 +508,15 @@ test('console spa list: flat table on one page at every width, every metric sort
         const box = await row.boundingBox()
         expect(box!.height, `${spa}: two-line row at ${width} px`).toBeLessThanOrEqual(64)
       }
+      // The grace note wraps as "Grace · read-only" / "from <date>" (never a lone "Grace ·").
+      const note = page.getByRole('row', { name: /^Zen Garden/ }).locator('.sl-billing')
+      const lh = await note.evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight))
+      const noteBox = (await note.boundingBox())!
+      expect(Math.round(noteBox.height / lh), `grace note on two lines at ${width} px`).toBe(2)
+      const from = (await note.getByText(/^from /).boundingBox())!
+      expect(from.y, `"from <date>" starts line two at ${width} px`).toBeGreaterThanOrEqual(
+        noteBox.y + lh - 1,
+      )
     }
     // Grace shows its stage on screen too, and when the spa turns read-only.
     await expect(page.getByRole('row', { name: /^Zen Garden/ }).locator('.sl-billing')).toHaveText(
@@ -645,6 +662,7 @@ test('console spa list: flat table on one page at every width, every metric sort
     const defs = page.getByText('What the columns count')
     await defs.click()
     await expect(page.getByText('Active team members')).toBeVisible()
+    await expect(page.getByText(/a green → tag is a tier set by a super-admin \(override\)$/)).toBeVisible()
     // On desktop the table headers are the sort control; the select is hidden.
     await page.setViewportSize({ width: 1280, height: 900 })
     await expect(page.getByLabel('Sort by')).toBeHidden()

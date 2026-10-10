@@ -330,9 +330,6 @@
   overflow-wrap: anywhere;
   text-wrap: pretty;
 }
-.sl-billing {
-  text-wrap: balance;
-}
 .sl-until,
 .sl-nowrap {
   white-space: nowrap;
