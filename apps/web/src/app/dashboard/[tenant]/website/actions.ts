@@ -14,6 +14,7 @@ import {
   hasCopySlots,
   listPages,
   lockSite,
+  markSitemapDue,
   type PageData,
   publishAll,
   publishPage,
@@ -455,6 +456,15 @@ export async function saveDraftAction(
  * The publish also takes the draft theme and this page's pending rename live, so with a stamp it is refused when
  * either changed since the editor loaded.
  */
+/** F17b: a publish queues a Search Console sitemap submission (the worker sends it; no-op without Google). */
+async function queueSitemap(tenantId: string) {
+  try {
+    await withTenant(tenantId, (tx) => markSitemapDue(tx, tenantId))
+  } catch (e) {
+    console.error('sitemap queue failed', e instanceof Error ? e.message : e)
+  }
+}
+
 export async function publishPageAction(
   slug: string,
   pageId: string,
@@ -482,6 +492,7 @@ export async function publishPageAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.page.published', 'site_page', pageId, { versionId: published.versionId })
+  await queueSitemap(ctx.tenant.id)
   revalidate(slug)
   return ok('Published — your page is live', { stamp: published.stamp })
 }
@@ -505,6 +516,7 @@ export async function publishSiteAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.published', 'site', undefined, result)
+  if (result.pages) await queueSitemap(ctx.tenant.id)
   revalidate(slug)
   const pages = result.pages ? `${result.pages} ${result.pages === 1 ? 'page' : 'pages'}` : ''
   return ok(

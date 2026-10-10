@@ -1,13 +1,17 @@
 import { withTenant } from '@spa/db'
 import {
   type GbpLocation,
+  gbpBookView,
   gbpConnectionView,
   gbpErrorMessage,
+  gbpSearchConsoleView,
   getGbpAccount,
+  googleBookingUrl,
   googleConfig,
   listGbpAccounts,
   listGbpLocations,
   reviewStats,
+  sitemapUrlOf,
   withGbpToken,
 } from '@spa/services'
 import { AlertCircle, CheckCircle2, MapPin, Star } from 'lucide-react'
@@ -22,12 +26,15 @@ import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import type { MemberContext } from '@/server/access'
 import { can } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
+import { publicSiteUrl } from '@/server/sites'
 import {
   ChangeLocationButton,
   ConnectGoogleButton,
   DisconnectGoogleButton,
   SyncGoogleButton,
 } from './gbp-card-actions'
+import { GbpSiteSection } from './gbp-site'
 
 type Choice = GbpLocation & { accountName: string; accountLabel: string }
 
@@ -79,13 +86,17 @@ export async function GbpCard({
   const manage = can(ctx, 'ai.manage')
   /** Sync now and the reviews page need ai.approve (settings.manage alone can open this card). */
   const approve = can(ctx, 'ai.approve')
-  const { conn, stats } = await withTenant(ctx.tenant.id, async (tx) => {
+  const { conn, stats, book, sc } = await withTenant(ctx.tenant.id, async (tx) => {
     const row = await getGbpAccount(tx, ctx.tenant.id)
     return {
       conn: gbpConnectionView(row),
       stats: row ? await reviewStats(tx, ctx.tenant.id) : null,
+      book: gbpBookView(row),
+      sc: gbpSearchConsoleView(row),
     }
   })
+  const siteBase = conn ? await publicSiteUrl(ctx.tenant) : ''
+  const premium = await hasFeature(ctx.tenant.id, 'marketing')
   const picker =
     conn?.status === 'pending_location' && configured && manage ? await loadLocations(ctx.tenant.id) : null
   const noticeKey = typeof searchParams.gbp === 'string' ? searchParams.gbp : undefined
@@ -220,6 +231,17 @@ export async function GbpCard({
           <p className="text-[13px] text-danger" role="alert">
             {t('settings.integrations.gbp.lastSyncFailed', { error: conn.lastError })}
           </p>
+        )}
+        {configured && conn && conn.status !== 'error' && (
+          <GbpSiteSection
+            slug={slug}
+            book={book}
+            sc={sc}
+            manage={manage}
+            premium={premium}
+            bookingUrl={googleBookingUrl(siteBase)}
+            sitemapUrl={sitemapUrlOf(siteBase)}
+          />
         )}
       </div>
 

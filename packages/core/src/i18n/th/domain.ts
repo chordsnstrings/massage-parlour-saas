@@ -289,4 +289,8 @@ export const domain: Messages['errors']['domain'] = {
   flagKeyFormat: 'ใช้ชื่อตัวพิมพ์เล็กคั่นด้วยจุด เช่น calendar.newDayView',
   flagInCode: 'โค้ดใช้แฟล็กนี้อยู่ — ให้เปลี่ยนค่าเริ่มต้นแทนการลบ',
   flagNotFound: 'ไม่พบแฟล็ก',
+  privateReplyOnlyComments: 'ตอบกลับแบบส่วนตัวได้เฉพาะความคิดเห็นเท่านั้น',
+  privateReplyAlreadySent: 'ส่งข้อความตอบกลับแบบส่วนตัวสำหรับความคิดเห็นนี้แล้ว',
+  privateReplyExpired: 'Instagram อนุญาตให้ตอบกลับแบบส่วนตัวได้ภายใน 7 วันหลังความคิดเห็นเท่านั้น',
+  facebookSignInAgain: 'ลงชื่อเข้าใช้ด้วย Facebook อีกครั้งเพื่อเลือกเพจ',
 }

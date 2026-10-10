@@ -3,13 +3,15 @@ import { socialPosts, withTenant } from '@spa/db'
 import {
   gbpConnectionView,
   getGbpAccount,
-  instagramStatus,
+  getInstagramSender,
+  instagramPublishPlan,
+  isProcessing,
   isPublishing,
+  mediaKind,
   metaConfig,
-  publicImageUrl,
 } from '@spa/services'
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
-import { ArrowLeft, Image as ImageIcon, Sparkles } from 'lucide-react'
+import { ArrowLeft, Film, Image as ImageIcon, Sparkles } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -25,6 +27,7 @@ import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { draftPostAction } from '../actions'
 import { PostActions } from './post-actions'
+import { PostFormatSheet } from './post-format'
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('marketing.title') }
@@ -84,7 +87,8 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
       posts,
       agg: agg!,
       sources,
-      ig: await instagramStatus(tx),
+      // Instagram Login, or a Facebook Page with a linked Instagram account (F19).
+      ig: Boolean(await getInstagramSender(tx)),
       gbp: gbpConnectionView(await getGbpAccount(tx, ctx.tenant.id)),
       onGoogle: new Set(copies.map((c) => c.caption)),
     }
@@ -92,16 +96,17 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
   // Why "Publish to Instagram" can't run for a post (null = ready).
   const accountBlocker = !metaConfig()
     ? t('marketing.blockNotConfigured')
-    : ig?.status !== 'connected'
+    : !ig
       ? t('marketing.blockConnect')
       : null
   const publishBlocker = (p: (typeof posts)[number]) => {
     if (isPublishing(p)) return t('marketing.blockPublishing')
     if (accountBlocker) return accountBlocker
-    if (!p.media[0]?.url) return t('marketing.blockNoImage')
-    if (!publicImageUrl(p.media[0].url)) return t('marketing.blockPrivateImage')
-    return null
+    const plan = instagramPublishPlan(p)
+    return plan.ok ? null : t(`marketing.problem.${plan.problem}`)
   }
+  const typeLabel = (type: string) =>
+    type === 'reel' || type === 'story' || type === 'carousel' ? t(`marketing.format.types.${type}`) : null
   const top = sources[0]
   return (
     <>
@@ -199,7 +204,11 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
             {posts.map((p) => (
               <StaggerItem key={p.id}>
                 <Card as="article" flush className="flex h-full flex-col overflow-hidden">
-                  {p.media[0] ? (
+                  {p.media[0] && mediaKind(p.media[0]) === 'video' ? (
+                    <div className="grid aspect-square place-items-center bg-subtle text-muted">
+                      <Film className="size-6" strokeWidth={1.5} />
+                    </div>
+                  ) : p.media[0] ? (
                     // biome-ignore lint/performance/noImgElement: remote AI image URL
                     <img
                       src={p.media[0].url}
@@ -219,9 +228,19 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                           <Pill tone="info" dot>
                             {t('marketing.publishing')}
                           </Pill>
+                        ) : isProcessing(p) ? (
+                          <Pill tone="info" dot>
+                            {t('marketing.processing')}
+                          </Pill>
                         ) : (
                           <Pill tone={p.status === 'pending_approval' ? 'warn' : statusTone(p.status)} dot>
                             {enumLabel(t, 'postStatus', p.status)}
+                          </Pill>
+                        )}
+                        {typeLabel(p.type) && (
+                          <Pill>
+                            {typeLabel(p.type)}
+                            {p.type === 'carousel' ? ` · ${fmt.number(p.media.length)}` : ''}
                           </Pill>
                         )}
                         {p.platform === 'gbp' && <Pill>{t('marketing.google')}</Pill>}
@@ -248,8 +267,14 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                         {p.publishedAt ? ` · ${fmt.dateTime(p.publishedAt)}` : ''}
                       </p>
                     )}
-                    {p.status === 'scheduled' && p.scheduledAt && !publishBlocker(p) && (
-                      <p className="crm-muted text-[13px]">{t('marketing.autoPublish')}</p>
+                    {isProcessing(p) ? (
+                      <p className="crm-muted text-[13px]">{t('marketing.processingNote')}</p>
+                    ) : (
+                      p.status === 'scheduled' &&
+                      p.scheduledAt &&
+                      !publishBlocker(p) && (
+                        <p className="crm-muted text-[13px]">{t('marketing.autoPublish')}</p>
+                      )
                     )}
                     <PostActions
                       slug={slug}
@@ -260,6 +285,12 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
                         p.platform === 'instagram' ? publishBlocker(p) : t('marketing.blockNotIg')
                       }
                     />
+                    {p.platform === 'instagram' &&
+                      p.status !== 'published' &&
+                      !isPublishing(p) &&
+                      !isProcessing(p) && (
+                        <PostFormatSheet slug={slug} postId={p.id} type={p.type} media={p.media} />
+                      )}
                     {p.platform !== 'gbp' && onGoogle.has(p.caption) ? (
                       <Pill tone="ok" className="self-start">
                         {t('marketing.onGoogle')}

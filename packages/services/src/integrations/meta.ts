@@ -1,10 +1,13 @@
-// Instagram API with Instagram Login (no Facebook Page): OAuth, webhook verification + parsing, Graph calls.
-// Pure helpers and a fetch-based client — no database access here (see ../social.ts).
+// Instagram API with Instagram Login (no Facebook Page): OAuth, webhook verification + parsing, Graph calls; plus
+// Facebook Login for Business (F19: pick the Page linked to the Instagram professional account) and the same Instagram
+// calls on graph.facebook.com with that Page's token. Pure helpers and fetch-based clients — no database access here
+// (see ../social.ts, ../facebook.ts).
 // Never log or return access tokens: errors are sanitised before they leave this module.
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 export const GRAPH_VERSION = 'v21.0'
 const GRAPH = 'https://graph.instagram.com'
+const FB_GRAPH = 'https://graph.facebook.com'
 const OAUTH_AUTHORIZE = 'https://www.instagram.com/oauth/authorize'
 const OAUTH_TOKEN = 'https://api.instagram.com/oauth/access_token'
 
@@ -44,6 +47,8 @@ export const appOrigin = (env: Record<string, string | undefined> = process.env)
 /** URLs to paste into the Meta app dashboard. */
 export const metaUrls = (origin = appOrigin()) => ({
   callback: `${origin}/api/integrations/meta/callback`,
+  /** Facebook Login for Business redirect (F19) — a second "Valid OAuth Redirect URI" in the Meta app. */
+  facebookCallback: `${origin}/api/integrations/meta/facebook/callback`,
   webhook: `${origin}/api/integrations/meta/webhook`,
   deauthorize: `${origin}/api/integrations/meta/deauthorize`,
   dataDeletion: `${origin}/api/integrations/meta/data-deletion`,
@@ -291,10 +296,27 @@ const json = (body: unknown): RequestInit => ({
 })
 
 export type InstagramClient = ReturnType<typeof instagramClient>
+/** Which Graph host an Instagram call goes to: Instagram Login tokens → graph.instagram.com, Facebook Page tokens (F19)
+ * → graph.facebook.com. Paths are the same for the calls both support (media, comments, messages, private replies). */
+export type InstagramHost = 'instagram' | 'facebook'
 
-export function instagramClient(fetchImpl: FetchFn = fetch) {
-  const graph = (path: string) => `${GRAPH}/${GRAPH_VERSION}${path}`
+/** Container parameters for `/{ig-user-id}/media` (image_url, video_url, media_type, children, caption, …). */
+export type ContainerParams = Record<string, string | boolean>
+
+export function instagramClient(fetchImpl: FetchFn = fetch, host: InstagramHost = 'instagram') {
+  const graph = (path: string) => `${host === 'facebook' ? FB_GRAPH : GRAPH}/${GRAPH_VERSION}${path}`
+  /** Any media container: feed image, REELS, STORIES, carousel item or CAROUSEL parent (F18). */
+  const createContainer = async (o: { igUserId: string; params: ContainerParams; accessToken: string }) => {
+    const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media`), {
+      ...json(o.params),
+      token: o.accessToken,
+    })
+    const id = str(data.id)
+    if (!id) throw new MetaApiError(502, 'Instagram did not create the media container')
+    return { id }
+  }
   return {
+    host,
     /** Short-lived user token from the OAuth code. */
     async exchangeCode(o: { appId: string; appSecret: string; redirectUri: string; code: string }) {
       const body = new URLSearchParams({
@@ -373,19 +395,18 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
       })
       return { id: str(data.id) }
     },
+    createContainer,
     async createMediaContainer(o: {
       igUserId: string
       imageUrl: string
       caption: string
       accessToken: string
     }) {
-      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media`), {
-        ...json({ image_url: o.imageUrl, caption: o.caption }),
-        token: o.accessToken,
+      return createContainer({
+        igUserId: o.igUserId,
+        params: { image_url: o.imageUrl, caption: o.caption },
+        accessToken: o.accessToken,
       })
-      const id = str(data.id)
-      if (!id) throw new MetaApiError(502, 'Instagram did not create the media container')
-      return { id }
     },
     async containerStatus(containerId: string, accessToken: string) {
       const data = await request<Obj>(
@@ -394,6 +415,17 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
         { token: accessToken },
       )
       return str(data.status_code) ?? 'FINISHED'
+    },
+    /**
+     * Private Replies API: one DM to the person who wrote a comment, within 7 days of it (`recipient.comment_id`).
+     * The same path on both hosts (Instagram user token or the linked Page's token).
+     */
+    async sendPrivateReply(o: { igUserId: string; commentId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/messages`), {
+        ...json({ recipient: { comment_id: o.commentId }, message: { text: o.text } }),
+        token: o.accessToken,
+      })
+      return { messageId: str(data.message_id), recipientId: str(data.recipient_id) }
     },
     async publishMedia(o: { igUserId: string; creationId: string; accessToken: string }) {
       const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media_publish`), {
@@ -406,8 +438,6 @@ export function instagramClient(fetchImpl: FetchFn = fetch) {
     },
   }
 }
-
-const FB_GRAPH = 'https://graph.facebook.com'
 
 export type FacebookPageClient = ReturnType<typeof facebookPageClient>
 
@@ -455,6 +485,168 @@ export function facebookPageClient(fetchImpl: FetchFn = fetch) {
       const id = str(data.post_id) ?? str(data.id)
       if (!id) throw new MetaApiError(502, 'Facebook did not return the post id')
       return { id }
+    },
+  }
+}
+
+// ── Facebook Login for Business (F19) ───────────────────────────────────────
+
+/**
+ * Permissions asked for when no Facebook Login for Business configuration id (`META_FB_CONFIG_ID`) is set: the Page
+ * list + Page posts/comments (Meta MCP Page tools) and the linked Instagram account's comments, messages and
+ * publishing (reels, stories, carousels, private replies). Each needs Meta app review before other businesses can use it.
+ */
+export const FACEBOOK_SCOPES = [
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_metadata',
+  'pages_manage_posts',
+  'pages_read_user_content',
+  'pages_manage_engagement',
+  'business_management',
+  'instagram_basic',
+  'instagram_manage_comments',
+  'instagram_manage_messages',
+  'instagram_content_publish',
+] as const
+
+/** The Facebook Login dialog: a Login for Business configuration when one is set, else the scope list above. */
+export function facebookAuthorizeUrl(opts: {
+  appId: string
+  redirectUri: string
+  state: string
+  configId?: string | null
+}) {
+  const q = new URLSearchParams({
+    client_id: opts.appId,
+    redirect_uri: opts.redirectUri,
+    response_type: 'code',
+    state: opts.state,
+  })
+  if (opts.configId) q.set('config_id', opts.configId)
+  else q.set('scope', FACEBOOK_SCOPES.join(','))
+  return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${q.toString()}`
+}
+
+/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use. */
+export const facebookConfigId = (env: Record<string, string | undefined> = process.env) =>
+  env.META_FB_CONFIG_ID?.trim() || null
+
+export type FacebookPageChoice = {
+  id: string
+  name: string
+  accessToken: string
+  tasks: string[]
+  instagram: { id: string; username?: string; profilePictureUrl?: string } | null
+}
+
+export type FacebookTokenInfo = {
+  isValid: boolean
+  /** null = the token itself never expires (Page tokens from a long-lived user token). */
+  expiresAt: Date | null
+  /** When Meta stops returning data until the person logs in again (90 days after their last login). */
+  dataAccessExpiresAt: Date | null
+  scopes: string[]
+}
+
+const epoch = (v: unknown) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1000) : null
+}
+
+export type FacebookLoginClient = ReturnType<typeof facebookLoginClient>
+
+export function facebookLoginClient(fetchImpl: FetchFn = fetch) {
+  const graph = (path: string) => `${FB_GRAPH}/${GRAPH_VERSION}${path}`
+  return {
+    /** Code → short-lived user token. */
+    async exchangeCode(o: { appId: string; appSecret: string; redirectUri: string; code: string }) {
+      const q = new URLSearchParams({
+        client_id: o.appId,
+        client_secret: o.appSecret,
+        redirect_uri: o.redirectUri,
+        code: o.code.replace(/#_$/, ''),
+      })
+      const data = await request<Obj>(fetchImpl, graph(`/oauth/access_token?${q}`))
+      const accessToken = str(data.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Facebook did not return an access token')
+      return { accessToken, expiresIn: Number(data.expires_in) || 3600 }
+    },
+    /** Short-lived → long-lived (≈ 60-day) user token; Page tokens read with it don't expire. */
+    async longLivedUserToken(o: { appId: string; appSecret: string; accessToken: string }) {
+      const q = new URLSearchParams({
+        grant_type: 'fb_exchange_token',
+        client_id: o.appId,
+        client_secret: o.appSecret,
+        fb_exchange_token: o.accessToken,
+      })
+      const data = await request<Obj>(fetchImpl, graph(`/oauth/access_token?${q}`))
+      const accessToken = str(data.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Facebook did not return a long-lived token')
+      return { accessToken, expiresIn: Number(data.expires_in) || 60 * 86_400 }
+    },
+    async me(accessToken: string) {
+      const data = await request<Obj>(fetchImpl, graph('/me?fields=id,name'), { token: accessToken })
+      const id = str(data.id)
+      if (!id) throw new MetaApiError(502, 'Facebook did not return the account id')
+      return { id, name: str(data.name) }
+    },
+    /** Pages the person manages, each with its Page token and linked Instagram professional account. */
+    async pages(userToken: string): Promise<FacebookPageChoice[]> {
+      const fields = 'id,name,access_token,tasks,instagram_business_account{id,username,profile_picture_url}'
+      const out: FacebookPageChoice[] = []
+      let url: string | undefined = graph(`/me/accounts?${new URLSearchParams({ fields, limit: '100' })}`)
+      for (let i = 0; url && i < 5; i++) {
+        const data: Obj = await request<Obj>(fetchImpl, url, { token: userToken })
+        for (const raw of arr(data.data)) {
+          const p = obj(raw)
+          const id = str(p?.id)
+          const accessToken = str(p?.access_token)
+          if (!p || !id || !accessToken) continue
+          const ig = obj(p.instagram_business_account)
+          const igId = str(ig?.id)
+          out.push({
+            id,
+            name: str(p.name) ?? id,
+            accessToken,
+            tasks: arr(p.tasks).map(String),
+            instagram: igId
+              ? { id: igId, username: str(ig?.username), profilePictureUrl: str(ig?.profile_picture_url) }
+              : null,
+          })
+        }
+        const next = str(obj(data.paging)?.next)
+        url = next?.startsWith(`${FB_GRAPH}/`) ? next : undefined
+      }
+      return out
+    },
+    /** Token validity + expiry (app token = `{app-id}|{app-secret}`, sent as the bearer, never logged). */
+    async debugToken(o: { appId: string; appSecret: string; token: string }): Promise<FacebookTokenInfo> {
+      const q = new URLSearchParams({ input_token: o.token })
+      const data = await request<Obj>(fetchImpl, graph(`/debug_token?${q}`), {
+        token: `${o.appId}|${o.appSecret}`,
+      })
+      const d = obj(data.data) ?? {}
+      return {
+        isValid: d.is_valid === true,
+        expiresAt: epoch(d.expires_at),
+        dataAccessExpiresAt: epoch(d.data_access_expires_at),
+        scopes: arr(d.scopes).map(String),
+      }
+    },
+    /** Installs the app on the Page (Page webhooks; also lets Instagram comment webhooks reach us via the Page). */
+    async subscribePage(o: { pageId: string; pageToken: string }) {
+      const q = new URLSearchParams({ subscribed_fields: 'feed' })
+      await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps?${q}`), {
+        method: 'POST',
+        token: o.pageToken,
+      })
+    },
+    async unsubscribePage(o: { pageId: string; pageToken: string }) {
+      await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps`), {
+        method: 'DELETE',
+        token: o.pageToken,
+      })
     },
   }
 }

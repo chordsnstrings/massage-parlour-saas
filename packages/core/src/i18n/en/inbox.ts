@@ -123,5 +123,26 @@ export const inbox = {
     flagCleared: 'Flag cleared',
     clientLinked: 'Client linked',
   },
+  // F18 private replies (new strings, flagged for native TH review)
+  private: {
+    tag: 'Private reply',
+    until: 'You can send one private reply until {when}.',
+    alreadySent: 'Private reply sent {when}. Instagram allows only one per comment.',
+    sending: 'A private reply is being sent…',
+    expired: 'More than 7 days since the comment: Instagram no longer allows a private reply.',
+    open: 'Reply privately',
+    title: 'Private reply (DM)',
+    hint: 'Goes to the commenter’s Instagram messages. Only one per comment; follow-ups only after they answer.',
+    aria: 'Private reply',
+    placeholder: 'Write a private message to this person…',
+    draft: 'Draft with AI',
+    send: 'Send private reply',
+    sent: 'Private reply sent',
+    notSent: 'Not sent: {reason}',
+    drafted: 'AI draft ready, check it and send',
+    inappropriate: 'The AI marked this comment as inappropriate. Check the draft before sending.',
+    blocked:
+      'Instagram isn’t set up or connected yet, so a private reply can’t be sent from here (nothing is saved).',
+  },
   validation: { writeFirst: 'Write a message first', enterName: 'Enter a name' },
 } as const

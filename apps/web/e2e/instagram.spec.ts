@@ -3,7 +3,7 @@ import { conversations, createDb, socialAccounts, socialPosts, tenants } from '@
 import { testUrls } from '@spa/db/testing'
 import { encryptSecret, ingestInstagramWebhook, storeDraft } from '@spa/services'
 import { eq } from 'drizzle-orm'
-import { app, screenshotAt, signUpOwner, testDb } from './helpers'
+import { app, mockAiReply, screenshotAt, signUpOwner, testDb } from './helpers'
 
 // Same secret as the dev server (playwright.config.ts) so the seeded token is readable there.
 process.env.BETTER_AUTH_SECRET ??= 'e2e-secret-e2e-secret-e2e-secret-e2e'
@@ -128,4 +128,92 @@ test('Instagram: not-configured card, inbox with an AI draft, take over and repl
   await page.goto(`${app}/${slug}/ai/content`)
   await expect(page.getByRole('button', { name: 'Publish to Instagram' })).toBeDisabled()
   await expect(page.getByText(/Instagram publishing isn’t configured on this server yet/)).toBeVisible()
+})
+
+test('F18/F19: Facebook card, carousel format and a private reply drafted by AI', async ({ page }) => {
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
+
+  // META_* unset: the Facebook Page card explains it (no Connect button).
+  await page.goto(`${app}/${slug}/settings/integrations`)
+  const fb = page.getByTestId('facebook-card')
+  await expect(fb.getByText('Facebook Page', { exact: true })).toBeVisible()
+  await expect(fb.getByText(/Facebook Login needs the platform’s Meta app/)).toBeVisible()
+  await expect(fb.getByRole('button', { name: 'Connect Facebook' })).toHaveCount(0)
+
+  const db = testDb()
+  const appDb = createDb(testUrls.app, 2)
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const tenantId = tenant!.id
+  await db.insert(socialAccounts).values({
+    tenantId,
+    platform: 'instagram',
+    externalId: IG,
+    username: 'serenity.spa',
+    tokenEnc: encryptSecret('IGQfake-token-for-e2e'),
+    tokenExpiresAt: new Date(Date.now() + 50 * 86_400_000),
+    meta: { igUserId: IG, tokenIssuedAt: new Date().toISOString(), webhooks: 'subscribed' },
+    status: 'connected',
+  })
+
+  // Content: turn an approved post into a two-item carousel.
+  await db.insert(socialPosts).values({
+    tenantId,
+    platform: 'instagram',
+    caption: 'Three rooms, one calm.',
+    media: [{ url: 'https://images.example.com/room-1.jpg' }],
+    status: 'scheduled',
+  })
+  await page.goto(`${app}/${slug}/ai/content`)
+  await page.getByTestId('post-format').click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByText('Carousel', { exact: true }).click()
+  await sheet.getByRole('button', { name: 'Add image or video' }).click()
+  await sheet.getByLabel('Media link 2').fill('https://images.example.com/room-2.mp4')
+  await expect(sheet.getByLabel('Media 2 type')).toHaveValue('video')
+  await sheet.getByRole('button', { name: 'Save format' }).click()
+  await expect(page.getByText('Format saved')).toBeVisible()
+  await expect(page.getByText('Carousel · 2')).toBeVisible()
+  const [saved] = await db.select().from(socialPosts).where(eq(socialPosts.tenantId, tenantId))
+  expect(saved).toMatchObject({
+    type: 'carousel',
+    media: [
+      { url: 'https://images.example.com/room-1.jpg', type: 'image' },
+      { url: 'https://images.example.com/room-2.mp4', type: 'video' },
+    ],
+  })
+
+  // Inbox: a comment gets the private-reply box; the AI fills it, staff sends (not configured → not sent).
+  await ingestInstagramWebhook(
+    webhook({
+      changes: [
+        {
+          field: 'comments',
+          value: {
+            id: `pc-${slug}`,
+            text: 'How much is the hot stone?',
+            from: { id: '778', username: 'mira.dxb' },
+          },
+        },
+      ],
+    }),
+    { platform: db, app: appDb },
+  )
+  await mockAiReply(slug, {
+    reply: 'Hi Mira! Our 60-minute hot stone massage is AED 350. Reply here or book online anytime.',
+    inappropriate: false,
+  })
+  await page.goto(`${app}/${slug}/inbox`)
+  await page
+    .getByTestId('conversation-list')
+    .getByRole('link', { name: /@mira\.dxb/ })
+    .click()
+  const thread = page.getByTestId('thread')
+  await expect(thread.getByText(/You can send one private reply until/)).toBeVisible()
+  await thread.getByTestId('private-reply-open').click()
+  await thread.getByRole('button', { name: 'Draft with AI' }).click()
+  await expect(thread.getByLabel('Private reply')).toHaveValue(/hot stone massage is AED 350/)
+  await thread.getByRole('button', { name: 'Send private reply' }).click()
+  await expect(page.getByText(/Not sent: Instagram isn't set up on this server yet/)).toBeVisible()
+  await expect(thread.getByLabel('Private reply')).toHaveValue(/AED 350/)
+  await screenshotAt(page, 'instagram-private-reply')
 })
