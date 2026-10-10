@@ -27,8 +27,10 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
 
   const menu = page.getByRole('navigation', { name: 'Main menu' })
   // The whole sidebar scrolls as one (PLAN §18.6): the menu never scrolls inside its own box, and the last item can be
-  // scrolled into view without the plan card + badge covering it.
+  // scrolled into view without the plan card + badge covering it. Toasts of earlier steps float above everything
+  // (phone: full width, 80 px up) and live 3.8 s, so they are waited out first.
   const lastItemReachable = async () => {
+    await expect(page.getByTestId('toasts').getByRole('button')).toHaveCount(0)
     expect(await menu.evaluate((n) => n.scrollHeight - n.clientHeight)).toBeLessThanOrEqual(1)
     const last = menu.getByRole('link', { name: 'Settings', exact: true })
     await last.scrollIntoViewIfNeeded()
