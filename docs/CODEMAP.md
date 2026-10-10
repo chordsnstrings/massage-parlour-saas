@@ -126,7 +126,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;
      core/test/hosts.test.ts); lookup `server/own-domain.ts` `ownDomainTarget` (one slug → hostname map per process,
      30 s TTL for the worker's checks; `forgetOwnDomains()` from sites.ts `invalidateSiteHost`/`forgetSiteTenants` and
-     the spa "Make primary" action). Pending/failed domains never redirect. e2e `own-domain-redirect.spec`.
+     the spa "Make primary" action). Pending/failed domains never redirect. The 301 starts only once the own domain
+     serves: each map load drops sites.ts host-cache `'missing'` entries (`h:{hostname}`, read via globalThis, no import
+     cycle) for its hostnames, and no redirect while one says `'missing'`. e2e `own-domain-redirect.spec`.
    - R20: a custom-domain host never answers platform-only endpoints (core `platformOnlyPath`: `/api/auth`,
      `/api/mcp`, `/api/integrations`, `/.well-known` — extra matcher entries → 404 there, `NextResponse.next()` on
      platform hosts, no rewrite/page headers). Its pages are always `/domain/{host}/…` (no /login, /dashboard, …).
