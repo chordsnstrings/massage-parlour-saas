@@ -1244,6 +1244,38 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   X-Real-Ip / True-Client-Ip / Do-Connecting-Ip stripped; `test-caddy-ip.sh` (CI) proves direct hits can't forge it
   and Cloudflare's value passes through. Found + fixed: deploys never applied Caddyfile edits (bind-mounted file,
   hard reset swaps the inode); `update.sh` `caddy_sync` restarts caddy when it changed.
+- ✅ **F20. Feature flags + announcements to spas.** Shipped 2026-10-10: console **Feature flags** (`/flags`):
+  boolean flags with a global default + per-spa overrides (`feature_flags` platform-only, `feature_flag_overrides`
+  tenant table); code reads only keys declared in core `FEATURE_FLAGS` via the typed `flag(key, tenantId)` (web
+  `server/flags.ts`, React-cached) / services `flagOn`·`flagValues`; code flags can't be deleted, owner-defined keys
+  can (ahead of the code). First real flag: `billing.autoTransitions` (F22 pause). Console **Announcements**
+  (`/announcements`): title + message EN (TH optional, falls back to EN), severity info/warning/critical, audience
+  every spa / plan codes / selected spas, Dubai start/end, End now / Delete; shown at the top of the spa dashboard
+  (most severe first, ≤ 3), dismissible per member (`announcement_dismissals`, works while read-only); never
+  email/SMS. Every change audited (`platform.flag.*`, `platform.announcement.*`). Thai UI strings need native review.
+- ✅ **F21. Console spa list usage.** Shipped 2026-10-10: Spas list adds last staff sign-in (new `user.last_sign_in_at`
+  stamped by a Better Auth session hook, or the newest session; active members only), last booking created,
+  bookings created in the last 30 days, active team, storage (uploaded files), AI spend this Dubai month / budget,
+  billing stage badge; every column sorts server-side (`?sort=&dir=`, nulls last). One platform-role query
+  (services `tenantUsageList`, index-backed subqueries; new indexes `bookings_tenant_created`,
+  `session_user_created`). Whole-spa aggregates only, no client data.
+- ✅ **F22. Billing auto-transitions.** Shipped 2026-10-10 (rules core `billing-stages.ts`, services
+  `billing-transitions.ts`, worker `billing-transitions` 09:05): an unpaid platform invoice is late *N* days after its
+  due date (console Company → Billing rules, default 1 = the day after); the first late day the spa enters
+  **overdue** (status `past_due`, the grace clock starts), the next day **grace**, and *grace days* (default 7) after
+  the first late day **read-only** (status `read_only`). Paying every late invoice lifts it at once (console Mark
+  paid / Record payment, Stripe Checkout — same transaction) back to active/trial. Notices: in-dashboard
+  `billing.late` / `billing.read_only` / `billing.restored` (billing.view) + staff email to the spa's owners and
+  every super-admin when email is configured; every transition audited `platform.billing.stage`. Legacy yearly spas
+  included (any issued platform invoice). **Decisions:** the grace clock counts from the first day the job finds the
+  spa late (not the due date), so spas already overdue at deploy get the full grace period first; read-only =
+  existing R12 behaviour: staff writes blocked (`guard`), the Billing page (card payment), notifications, dismissing
+  announcements, account/2FA keep working, and **the public site + online booking keep working** (bookings arrive
+  as pending; staff confirm them after paying); pause per spa on the spa page (= `billing.autoTransitions` override
+  off; pausing freezes escalation, paying still lifts) or for every spa via the flag default; a manual "Pause spa"
+  is left to the super-admin (never auto-lifted); "Resume spa" clears the stage (a still-late spa starts a fresh
+  grace period); "Check now" applies today's rules to one spa. The unused per-subscription "Grace days" field was
+  removed from the Subscription form (column kept).
 
 ### Remaining backlog F16–F32 — shipped on this branch
 - ✅ **F27. Intake/waiver PDFs stored.** Shipped 2026-10-09: every signed intake renders a PDF server-side (pdfkit,

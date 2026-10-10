@@ -313,4 +313,13 @@ export const domain = {
   featureTierChoose: 'Choose a feature tier',
   intakeNotFound: 'Intake form not found',
   outboxNotAssignable: 'That team member cannot send WhatsApp messages',
+  // F20 / F22 console tools (super-admin messages; mapped like every DomainError).
+  endBeforeStart: 'The end must be after the start',
+  pickPlan: 'Pick at least one plan',
+  pickSpa: 'Pick at least one spa',
+  announcementNotFound: 'Announcement not found',
+  daysPositive: 'Days must be positive',
+  flagKeyFormat: 'Use lower-case dotted names, e.g. calendar.newDayView',
+  flagInCode: 'The code reads this flag — change its default instead of deleting it',
+  flagNotFound: 'Flag not found',
 } as const

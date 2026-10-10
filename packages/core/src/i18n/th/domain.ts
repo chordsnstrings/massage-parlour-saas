@@ -281,4 +281,12 @@ export const domain: Messages['errors']['domain'] = {
   featureTierChoose: 'เลือกระดับฟีเจอร์',
   intakeNotFound: 'ไม่พบแบบฟอร์มสุขภาพ',
   outboxNotAssignable: 'พนักงานคนนี้ส่งข้อความ WhatsApp ไม่ได้',
+  endBeforeStart: 'เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น',
+  pickPlan: 'เลือกอย่างน้อยหนึ่งแพ็กเกจ',
+  pickSpa: 'เลือกอย่างน้อยหนึ่งสปา',
+  announcementNotFound: 'ไม่พบประกาศ',
+  daysPositive: 'จำนวนวันต้องเป็นค่าบวก',
+  flagKeyFormat: 'ใช้ชื่อตัวพิมพ์เล็กคั่นด้วยจุด เช่น calendar.newDayView',
+  flagInCode: 'โค้ดใช้แฟล็กนี้อยู่ — ให้เปลี่ยนค่าเริ่มต้นแทนการลบ',
+  flagNotFound: 'ไม่พบแฟล็ก',
 }

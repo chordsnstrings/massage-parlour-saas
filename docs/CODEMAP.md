@@ -47,6 +47,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `platform_settings.auto_purge_days`), `eraseClient` (anonymise, keep financial rows; a new client FK in
   `CLIENT_REFERENCES` must also be decided here: keep or delete on erase). Erase deletes the signed intake PDFs
   (`deleteClientIntakePdfs`, file row + bucket object) before the submissions; purge removes them with `stored_files`.
+- **F20 tables (`schema/console.ts`)**: `feature_flags` + `announcements` platform-only; `feature_flag_overrides` +
+  `announcement_dismissals` tenant tables (cascade on tenant delete). F22 columns: `tenants.billing_stage`
+  (`billing_stage` enum) / `billing_overdue_since` / `billing_stage_at`, `platform_settings.billing_overdue_after_days`
+  / `billing_grace_days`; F21: `user.last_sign_in_at`. Migration 0042.
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
@@ -199,6 +203,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     shared with push via `lib/sw.ts`; answers every in-scope page load with the preload response — never return early
     for a navigation, or it is fetched twice), stores the localised offline page, "Install app" menu item + tip.
 - **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
+- **Console tools (F20–F22, PLAN §17)**: `platform/(console)/flags` (feature flags: services `feature-flags.ts`, core
+  `flags.ts` `FEATURE_FLAGS` = keys code may read; web `server/flags.ts` `flag(key, tenantId)`), `announcements`
+  (services `announcements.ts`; spa side `server/announcements.ts` `announcementsFor` (platform read, plan code from
+  entitlements) → `components/shell/announcements.tsx` in the SpaShell banner slot, dismiss =
+  `dashboard/[tenant]/announcements/actions.ts` (requireMember, not guard; `announcement_dismissals` via withTenant)),
+  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable), billing transitions =
+  `billing-actions.ts` (rules card on Company, per-spa pause + Check now on the spa page) → services
+  `billing-transitions.ts`; payment paths (`setInvoicePaid`, `recordPlatformPayment` → `.billing`,
+  `settleCheckoutSession`) call `liftBillingHold` in their tx and `billingTransitionEffects` after commit. Tenant
+  layout banners: `tenants.billing_stage` overdue/grace → red "read-only on {date}" bar, read_only → read-only notice.
 - **`platform/(console)`**: overview, applications (PLAN §18.3), enquiries (PLAN §18.4: list/search/filter, detail with
   tel/wa.me/mailto, status + note via `updateEnquiry`; nav badge = `newEnquiryCount`), tenants, plans, settings, audit,
   ai models, domains (order approval), templates
@@ -746,6 +760,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 | `document-reminders` | 09:00 |
 | `weekly-insights` | Mon 08:00 |
 | `daily-digest` | 09:30 |
+| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
 
 Integration jobs do nothing until their credentials are configured.
 
