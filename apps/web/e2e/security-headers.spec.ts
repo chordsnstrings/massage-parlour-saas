@@ -92,7 +92,14 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
   const adminCsp = directives((await viaHost(page, pages.admin)).headers()['content-security-policy'])
   expect(adminCsp['frame-src']).toEqual(["'self'"])
   const siteCsp = directives((await viaHost(page, pages.site)).headers()['content-security-policy'])
-  expect(siteCsp['frame-src']).toEqual(["'self'", 'https://challenges.cloudflare.com'])
+  // + the F15 Map / Video players.
+  expect(siteCsp['frame-src']).toEqual([
+    "'self'",
+    'https://challenges.cloudflare.com',
+    'https://www.google.com',
+    'https://www.youtube-nocookie.com',
+    'https://player.vimeo.com',
+  ])
   // JSON-LD on the spa site carries the nonce too.
   const siteHome = await (await viaHost(page, `${site(slug)}/`)).text()
   for (const tag of siteHome.match(/<script type="application\/ld\+json"[^>]*>/g) ?? [])

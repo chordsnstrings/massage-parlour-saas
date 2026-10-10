@@ -16,8 +16,8 @@ type Props = {
   readOnly?: boolean
 }
 
-/** Same cap as the upload route (services MAX_UPLOAD_BYTES). */
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+/** Same cap as services createVideoAsset (stored files are ≤ 8 MB). */
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 const control =
   'w-full rounded-lg border bg-surface px-3 py-2 text-sm text-fg placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15'

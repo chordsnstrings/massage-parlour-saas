@@ -10,7 +10,7 @@ import { getSession } from '@/server/session'
 /**
  * POST /files/upload?tenant={slug}[&kind=video] (multipart: file[, tags]) — one image per request so the browser can
  * show per-file progress. `kind=video` (F15 Video block): an MP4/WebM clip stored as uploaded (magic bytes checked,
- * same 20 MB cap, `site.design`). Lives under /files (not the dashboard) so proxy.ts doesn't buffer the body (10 MB cap).
+ * ≤ 8 MB like every stored file, `site.design`). Lives under /files (not the dashboard) so proxy.ts doesn't buffer the body (10 MB cap).
  * The session, tenant membership and `site.content` are checked before the body is read, and the body is
  * streamed through a byte counter (Content-Length is optional behind proxies), so nobody can push an unbounded
  * upload into memory.

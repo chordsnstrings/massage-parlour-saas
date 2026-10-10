@@ -6,7 +6,6 @@ import { useEffect, useId, useRef, useState, useTransition } from 'react'
 import { useTurnstile } from '@/components/turnstile'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
-import { sendSiteEnquiryAction } from '../enquiry-actions'
 import type { Locale } from '../types'
 
 export type EnquiryLabels = {
@@ -74,6 +73,8 @@ export function SiteEnquiryForm({
         if (pending || disabled || !form) return
         const fd = new FormData(e.currentTarget)
         start(async () => {
+          // Loaded on submit: keeps the block config importable outside Next (e2e schema checks).
+          const { sendSiteEnquiryAction } = await import('../enquiry-actions')
           const res = await sendSiteEnquiryAction({
             site: form.site,
             locale,

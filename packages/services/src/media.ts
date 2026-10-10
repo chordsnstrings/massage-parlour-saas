@@ -76,7 +76,7 @@ export function sniffImageType(b: Uint8Array): ImageType | null {
   return null
 }
 
-// F15 Video block: short clips uploaded as-is (no transcoding) and played from /files with Range support.
+// F15 Video block: short clips (≤ 8 MB) uploaded as-is (no transcoding), played from /files with Range support.
 export const VIDEO_TYPES = ['video/mp4', 'video/webm'] as const
 export type VideoType = (typeof VIDEO_TYPES)[number]
 /** ISO-BMFF brands browsers play as MP4 (QuickTime `qt  ` / HEIF / AVIF are refused). */
@@ -276,10 +276,11 @@ export async function createVideoAsset(
   },
 ) {
   if (a.bytes.length === 0) throw new MediaError('The file is empty', 'invalid', { key: 'errors.file.empty' })
-  if (a.bytes.length > MAX_UPLOAD_BYTES)
-    throw new MediaError('Videos can be up to 20 MB', 'invalid', {
+  // Stored like every file (≤ 8 MB, storage.ts): short clips; longer videos belong on YouTube / Vimeo.
+  if (a.bytes.length > MAX_FILE_BYTES)
+    throw new MediaError('Videos can be up to 8 MB', 'invalid', {
       key: 'errors.file.videoTooLarge',
-      params: { size: '20 MB' },
+      params: { size: '8 MB' },
     })
   const type = sniffVideoType(a.bytes)
   if (!type)

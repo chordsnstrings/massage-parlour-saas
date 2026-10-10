@@ -84,9 +84,9 @@ either place.
 
 ## Bot check on public forms (Cloudflare Turnstile, F9)
 
-Online booking (`/book`), the booking widget (`/book/embed`), **Apply** (`/signup`) and marketing **Contact** check
-visitors with Cloudflare Turnstile (managed, invisible unless Cloudflare wants a click), on top of the honeypot and
-per-IP limits. Until both keys are set the forms stay open and console → Overview → Configuration shows
+Online booking (`/book`), the booking widget (`/book/embed`), the website **Enquiry form** block (F15), **Apply**
+(`/signup`) and marketing **Contact** check visitors with Cloudflare Turnstile (managed, invisible unless Cloudflare
+wants a click), on top of the honeypot and per-IP limits. Until both keys are set the forms stay open and console → Overview → Configuration shows
 `TURNSTILE_*` red. Owner steps:
 
 1. Cloudflare dashboard → **Turnstile** → **Add widget**: name `spamanagement forms`, **Widget mode: Managed**,

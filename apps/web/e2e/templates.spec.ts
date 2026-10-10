@@ -58,7 +58,15 @@ test('presets, page templates and templates only use real blocks with their requ
   expect(SECTION_PRESETS.length).toBeGreaterThanOrEqual(24)
   const perCategory: Record<string, number> = {}
   for (const p of SECTION_PRESETS) perCategory[p.category] = (perCategory[p.category] ?? 0) + 1
-  expect(perCategory).toMatchObject({ hero: 4, services: 3, about: 3, team: 2, offers: 3, 'social-proof': 3 })
+  expect(perCategory).toMatchObject({
+    hero: 4,
+    services: 3,
+    about: 3,
+    team: 2,
+    offers: 3,
+    'social-proof': 5, // + F15 Google reviews, Instagram feed
+    media: 2, // F15 video, blog posts
+  })
   expect(new Set(SECTION_PRESETS.map((p) => p.key)).size).toBe(SECTION_PRESETS.length)
   for (const p of SECTION_PRESETS) expect(checkNodes([p.node], spec), p.key).toEqual([])
   expect(PAGE_TEMPLATES.map((t) => t.name)).toEqual([

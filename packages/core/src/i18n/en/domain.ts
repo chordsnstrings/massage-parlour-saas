@@ -147,6 +147,7 @@ export const domain = {
   pageTitleLength: 'Page titles need 1–80 characters',
   homeSlugFixed: 'The home page address can’t change',
   pageSlugTaken: 'Another page already uses that address',
+  postSlugTaken: 'Another post already uses that address',
   pendingSlugTaken: 'Another page now uses /{slug} — rename this page to a free address before publishing',
   editedElsewhere:
     'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',

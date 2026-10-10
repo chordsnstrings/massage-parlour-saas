@@ -1222,6 +1222,15 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   row past the cookie cache); `/files` let members of a deleted spa, and owners/managers held by "Require 2FA", read
   private files (now the same rules as `requireMember`).
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
+  - ✅ **F15 site blocks** shipped 2026-10-10 (other F15 parts: separate branch): Puck blocks Map (address card + "Open in
+    Google Maps" + lazy Google embed), Video (YouTube privacy-enhanced / Vimeo dnt, click-to-load poster; or an uploaded
+    MP4/WebM ≤ 8 MB served with byte ranges), Google reviews + Instagram feed (stored data only; Premium `marketing`,
+    nothing on Standard / no data, editor note instead), Blog list + post pages `/blog/{slug}` (Studio → Blog, EN/AR,
+    SEO title/description, BlogPosting JSON-LD, sitemap), Enquiry form (honeypot, zod, per-IP 5/h 20/day, Turnstile →
+    `site_enquiries` → Inbox → Enquiries, WhatsApp click-to-send reply, bell/push). In the palette, presets, AI/MCP
+    schema and a few templates (zen, nordic, desert, hotel contact; luxury video; bali Instagram; hotel reviews + blog).
+    CSP: frame-src + www.google.com, www.youtube-nocookie.com, player.vimeo.com on site/domain/app. Migration 0042.
+    Details: CODEMAP "Site builder" → "F15 blocks".
 - ✅ **F31. Extra KPIs** (backlog F16–F32, batch C) — shipped 2026-10-09: Reports page (`/{slug}/reports`, Finance menu;
   owner/manager/accountant via `reports.view`, RevPATH needs `dashboard.revenue`, liability `accounting.view`) with
   rebooking rate (30/60/90 days, by therapist), retention cohorts (12 months × +1…+6), RevPATH (net treatment revenue
