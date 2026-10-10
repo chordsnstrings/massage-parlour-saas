@@ -3,7 +3,7 @@ import { backupDatabase } from './backup'
 import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
-import { syncAllGbpReviews } from './gbp'
+import { syncAllGbpReviews, syncGbpSite } from './gbp'
 import { heartbeat } from './heartbeat'
 import {
   publishScheduledInstagramPosts,
@@ -47,6 +47,7 @@ export const jobs: JobDef[] = [
   { name: 'instagram-reply', cron: '* * * * *', handler: () => replyToInstagramMessages() },
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
+  { name: 'gbp-site-sync', cron: '*/10 * * * *', handler: () => syncGbpSite() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
   { name: 'outbox-auto-assign', cron: '* * * * *', handler: () => autoAssignOutbox() },
   { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },

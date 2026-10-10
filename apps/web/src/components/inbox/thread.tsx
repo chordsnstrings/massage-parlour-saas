@@ -1,12 +1,13 @@
 import type { Format } from '@spa/core/i18n/format'
 import type { Translator } from '@spa/core/i18n/translate'
 import type { getThread, InboxFilter } from '@spa/services'
-import { dmWindowLeftMs } from '@spa/services'
+import { dmWindowLeftMs, privateReplyState } from '@spa/services'
 import {
   ArrowLeft,
   Bot,
   CalendarDays,
   Link2,
+  LockKeyhole,
   MessageSquareText,
   TriangleAlert,
   UserRound,
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { inboxHref } from './conversation-list'
 import { channelLabel, dayKey, dayLabel, displayName, modeLabel, windowLeft } from './format'
 import { InstagramGlyph } from './icons'
+import { PrivateReplyBox } from './private-reply'
 import { Composer, DraftCard, MarkRead, MessageScroller, RetryButton, ThreadActions } from './thread-client'
 
 type Thread = NonNullable<Awaited<ReturnType<typeof getThread>>>
@@ -56,6 +58,7 @@ export function ThreadView({
   const sent = thread.messages.filter((m) => m.sender !== 'ai_draft')
   const drafts = thread.messages.filter((m) => m.sender === 'ai_draft')
   const unread = Boolean(c.lastCustomerMsgAt && (!c.readAt || c.lastCustomerMsgAt > c.readAt))
+  const privateState = isComment ? privateReplyState(c, thread.messages, now) : null
 
   return (
     <Card flush className="flex flex-col overflow-hidden" data-testid="thread">
@@ -185,6 +188,17 @@ export function ThreadView({
                     {m.text}
                   </div>
                   <p className="flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-muted">
+                    {m.kind === 'private_reply' && (
+                      <>
+                        <span
+                          className="inline-flex items-center gap-1 font-medium"
+                          data-testid="private-reply-tag"
+                        >
+                          <LockKeyhole className="size-3" strokeWidth={1.75} /> {t('inbox.private.tag')}
+                        </span>
+                        <span aria-hidden>·</span>
+                      </>
+                    )}
                     {out &&
                       (m.sender === 'bot' ? (
                         <span className="inline-flex items-center gap-1">
@@ -200,7 +214,9 @@ export function ThreadView({
                     <p className="flex flex-wrap items-center justify-end gap-x-1.5 px-1 text-xs text-warning">
                       <TriangleAlert className="size-3.5 shrink-0" strokeWidth={1.75} />
                       <span>{t('inbox.thread.notSent', { reason: m.error })}</span>
-                      {!m.error.includes('24 hours') && <RetryButton slug={slug} messageId={m.id} />}
+                      {!m.error.includes('24 hours') && m.kind !== 'private_reply' && (
+                        <RetryButton slug={slug} messageId={m.id} />
+                      )}
                     </p>
                   )}
                 </div>
@@ -218,6 +234,23 @@ export function ThreadView({
         ))}
       </MessageScroller>
 
+      {privateState && privateState.status !== 'not_comment' && (
+        <PrivateReplyBox
+          slug={slug}
+          id={c.id}
+          state={
+            privateState.status === 'available'
+              ? {
+                  status: 'available',
+                  until: t('inbox.private.until', { when: fmt.dateTime(privateState.until) }),
+                }
+              : privateState.status === 'sent'
+                ? { status: 'sent', at: fmt.dateTime(privateState.at) }
+                : { status: privateState.status }
+          }
+          notice={sendNotice}
+        />
+      )}
       {c.mode === 'closed' ? (
         <p className="border-t border-[var(--crm-line)] px-4 py-4 text-sm text-muted sm:px-5">
           {t('inbox.thread.closed')}

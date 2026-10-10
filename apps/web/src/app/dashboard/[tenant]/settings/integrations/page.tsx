@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Grid, Note } from '@/components/crm'
+import { FacebookCard } from '@/components/integrations/facebook-card'
 import { GbpCard } from '@/components/integrations/gbp-card'
 import { InstagramCard } from '@/components/integrations/instagram-card'
 import { MetaMcpCard } from '@/components/integrations/meta-mcp-card'
@@ -40,6 +41,7 @@ export default async function IntegrationsPage({
       <Grid cols="col-2">
         <InstagramCard ctx={ctx} searchParams={sp} />
         <GbpCard ctx={ctx} searchParams={sp} />
+        <FacebookCard ctx={ctx} searchParams={sp} />
         {features.includes('ai') && <MetaMcpCard ctx={ctx} />}
       </Grid>
     </>

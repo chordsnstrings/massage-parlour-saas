@@ -313,4 +313,9 @@ export const domain = {
   featureTierChoose: 'Choose a feature tier',
   intakeNotFound: 'Intake form not found',
   outboxNotAssignable: 'That team member cannot send WhatsApp messages',
+  // F17–F19 (new strings, flagged for native TH review)
+  privateReplyOnlyComments: 'Private replies are only for comments.',
+  privateReplyAlreadySent: 'A private reply was already sent for this comment.',
+  privateReplyExpired: 'Instagram only allows a private reply within 7 days of the comment.',
+  facebookSignInAgain: 'Sign in with Facebook again to choose a Page.',
 } as const

@@ -281,4 +281,8 @@ export const domain: Messages['errors']['domain'] = {
   featureTierChoose: 'เลือกระดับฟีเจอร์',
   intakeNotFound: 'ไม่พบแบบฟอร์มสุขภาพ',
   outboxNotAssignable: 'พนักงานคนนี้ส่งข้อความ WhatsApp ไม่ได้',
+  privateReplyOnlyComments: 'ตอบกลับแบบส่วนตัวได้เฉพาะความคิดเห็นเท่านั้น',
+  privateReplyAlreadySent: 'ส่งข้อความตอบกลับแบบส่วนตัวสำหรับความคิดเห็นนี้แล้ว',
+  privateReplyExpired: 'Instagram อนุญาตให้ตอบกลับแบบส่วนตัวได้ภายใน 7 วันหลังความคิดเห็นเท่านั้น',
+  facebookSignInAgain: 'ลงชื่อเข้าใช้ด้วย Facebook อีกครั้งเพื่อเลือกเพจ',
 }

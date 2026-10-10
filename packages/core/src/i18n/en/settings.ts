@@ -365,6 +365,101 @@ export const settings = {
       errInstruction: 'Write an instruction (3–1,000 characters)',
       notConfigured: 'AI isn’t configured on this server yet.',
     },
+    google: {
+      // F17 (new strings, flagged for native TH review)
+      error: 'Google: {reason}',
+      errors: {
+        api_disabled:
+          'this Google API isn’t enabled for the platform yet. The platform team needs to enable it in Google Cloud.',
+        scope: 'permission missing. Reconnect Google and allow every requested access.',
+        auth: 'sign-in expired or was revoked. Reconnect Google Business Profile.',
+        client_config:
+          'the server’s Google sign-in settings were rejected. The platform team needs to check them.',
+        permission: 'this Google account has no access to it.',
+        not_found: 'Google could not find the location or site any more.',
+        quota: 'too many requests right now. It is retried later.',
+        network: 'couldn’t reach Google. Please try again in a moment.',
+        other: 'something went wrong. Please try again.',
+      },
+      book: {
+        title: 'Book button on Google',
+        live: 'Live',
+        failed: 'Not updated',
+        off: 'Adds a Book button to your Google listing that opens your online booking page. Bookings from it show as Google in booking sources.',
+        points: 'Opens {url}',
+        synced: 'updated {when}',
+        add: 'Add Book button',
+        update: 'Update link',
+        remove: 'Remove',
+        saved: 'The Book button on Google points to your booking page',
+        removed: 'Book button removed from Google',
+      },
+      sc: {
+        title: 'Google Search Console',
+        submittedPill: 'Sitemap sent',
+        sub: 'Tells Google about your site’s pages. The sitemap is sent again after each publish.',
+        needsScope: 'Reconnect Google and allow Search Console access to send your sitemap.',
+        lastSubmitted: 'Sent {when} to {site}',
+        pending: 'Google hasn’t read it yet',
+        state: {
+          needs_verification:
+            'Your domain was added to Search Console. Verify it there with this Google account, then send the sitemap again.',
+          no_access:
+            'This Google account can’t manage your site in Search Console. The free address is covered by the platform; connect your own domain to manage it yourself.',
+        },
+        queued: 'Queued: it is sent a few minutes after the last publish.',
+        sitemap: 'Sitemap: {url}',
+        submit: 'Send sitemap',
+        submitted: 'Sitemap sent to Google Search Console',
+      },
+    },
+    fb: {
+      // F19 (new strings, flagged for native TH review)
+      title: 'Facebook Page',
+      sub: 'Connect the Facebook Page linked to your Instagram account, for Page posts and Instagram publishing.',
+      notConfigured:
+        'Facebook Login needs the platform’s Meta app before spas can connect. The platform team sets it up once.',
+      intro:
+        'Sign in with Facebook and choose the Page linked to your Instagram professional account. The AI tools can then read Page comments and publish approved Page posts.',
+      premium: 'Connecting a Facebook Page is part of the Premium plan.',
+      pendingOther: 'Someone signed in with Facebook; an owner or manager still needs to choose the Page.',
+      pagesFailed: 'Facebook didn’t return your Pages. Sign in with Facebook again.',
+      choosePill: 'Choose Page',
+      whichPage: 'Which Page belongs to this spa?',
+      usePage: 'Use this Page',
+      choosePage: 'Choose a Page',
+      linkedIg: 'Instagram {account}',
+      noIg: 'No Instagram account linked to this Page',
+      expired: 'Facebook access expired or was revoked. Reconnect to keep using the Page.',
+      expiresSoon: 'Facebook access ends on {date}. Reconnect before then to keep it working.',
+      validUntil: 'Valid until {date}',
+      noExpiry: 'Doesn’t expire',
+      connectedOn: 'Connected',
+      uses: 'Used for Facebook Page posts and comments (AI tools) and, when Instagram isn’t connected directly, for Instagram publishing and private replies.',
+      connect: 'Connect Facebook',
+      reconnect: 'Reconnect Facebook',
+      redirectUri: 'Facebook Login redirect URI (add one for each platform domain)',
+      disconnectTitle: 'Disconnect the Facebook Page?',
+      disconnectBody:
+        '{page} stops working with this spa: Page tools turn off. Posts already published stay on Facebook.',
+      notConnected: 'Facebook is not connected.',
+      disconnected: 'Facebook Page disconnected',
+      saved: 'Facebook Page connected',
+      pageGone: 'That Page isn’t available for this Facebook sign-in any more. Sign in again.',
+      notices: {
+        connected: 'The Facebook Page is connected.',
+        choose: 'Signed in with Facebook. Now choose the Page of this spa.',
+        denied: 'Facebook access was not granted, so nothing was connected.',
+        state: 'That connect link expired or was opened in another browser. Please try again.',
+        forbidden: 'Only an owner or manager on the Premium plan can connect Facebook.',
+        in_use:
+          'That Page or its Instagram account is already connected to another spa. Disconnect it there first.',
+        no_pages:
+          'This Facebook account doesn’t manage any Pages. Sign in with the account that manages the spa’s Page.',
+        not_configured: 'Facebook Login isn’t configured on this server yet.',
+        error: 'Facebook did not accept the connection. Please try again in a moment.',
+      },
+    },
   },
   domains: {
     title: 'Domains',
