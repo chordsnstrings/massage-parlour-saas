@@ -1,5 +1,7 @@
 /** Client-safe segment rule + campaign helpers (no DB imports). */
 
+// First: builds the schemas below without zod's eval probe in the browser (F10 CSP).
+import '@/lib/zod-jitless'
 import type { Format } from '@spa/core/i18n/format'
 import type { Translator } from '@spa/core/i18n/translate'
 import type { SegmentRule } from '@spa/db'
