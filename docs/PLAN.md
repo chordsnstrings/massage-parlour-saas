@@ -1027,7 +1027,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   "Site builder → Ask AI".
 - **R18 Resend sending-domain setup (owner, 2026-10-10):** Console → Company → Email: a "Set up sending domain" button
   that uses the Resend API (with the console key) to add spamanagement.co, shows the DNS records to copy into Namecheap,
-  and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone). In progress.
+  and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone).
+  **Built (2026-10-10):** "Sending domain" section in the Email card. Domain = `emailDomain(effective From)`. Set up:
+  effective key (console, then env) → Resend list (find) or create (region `eu-west-1`, on create only) → get → records.
+  Check: get → verify (async; skipped when verified or still pending), showing the last finished result + records. Records table for Namecheap → Advanced DNS: Type | Host
+  (relative: `send`, `resend._domainkey`; a full name loses the domain suffix) | Value + Copy | Priority | TTL
+  Automatic | status; Resend's domain statuses as a badge; verified → "Sending works … from {From}". MX row warns
+  that Custom MX turns off Namecheap Email Forwarding (README Resend step). A sending-access key is refused by the
+  domains API → the section asks for a "Full-access key for setup" (sent only with Set up / Check; never stored,
+  logged, audited or returned). No table/migration: records live in the action result. Audit `platform.email.domain_setup`
+  {domain, created, status} / `platform.email.domain_checked` {domain, status}. Details: CODEMAP "Staff email (Resend)".
 - **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** a spa's website lives on its own domain (e.g.
   berelaxspa.com; connect it in spa Settings → Domains or Console → Domains, or buy one, R14); spamanagement.co hosts only
   the CRM (app.) and console (admin.). Until a spa connects its domain it uses the temporary address {slug}.spamanagement.co;

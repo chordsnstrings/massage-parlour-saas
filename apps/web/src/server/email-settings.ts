@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { setEmailSettingsSource, setEmailTransport } from '@spa/core'
 import { platformDb } from '@spa/db'
 import { cachedEmailSettings } from '@spa/services'
+import { fakeResendFetch } from './resend-fake'
 
 // One cached source per process (globalThis: instrumentation and route bundles are separate module graphs).
 const g = globalThis as { __spaEmailCache?: ReturnType<typeof cachedEmailSettings> }
@@ -28,3 +29,6 @@ export function registerEmailSettings() {
 export function invalidateEmailSettings() {
   g.__spaEmailCache?.invalidate()
 }
+
+/** Fetch for the R18 Resend domains client: undefined = real Resend; E2E only (RESEND_E2E_FAKE) an in-memory fake. */
+export const resendDomainsFetch = () => (process.env.RESEND_E2E_FAKE ? fakeResendFetch : undefined)
