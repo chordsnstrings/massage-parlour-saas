@@ -47,10 +47,25 @@ export const ASSISTANT_LIMITS = {
 
 export type AssistantLocale = 'en' | 'th'
 export type AssistantTurn = { role: 'user' | 'assistant'; text: string }
-export type AssistantScreen = 'overview' | 'calendar' | 'bookings' | 'reports' | 'clients' | 'client' | 'staff'
+export type AssistantScreen =
+  | 'overview'
+  | 'calendar'
+  | 'bookings'
+  | 'reports'
+  | 'clients'
+  | 'client'
+  | 'staff'
 /** Paths are relative to the spa's dashboard (`/calendar?date=…`); the web app prefixes them. */
 export type AssistantLink =
-  | { kind: 'screen'; screen: AssistantScreen; path: string; date?: string; from?: string; to?: string; name?: string }
+  | {
+      kind: 'screen'
+      screen: AssistantScreen
+      path: string
+      date?: string
+      from?: string
+      to?: string
+      name?: string
+    }
   | { kind: 'whatsapp'; name: string; href: string }
 
 export type AssistantScope = {
@@ -93,9 +108,15 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 const date = z
   .string()
   .regex(DATE)
-  .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d))
+  .refine(
+    (d) =>
+      !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d),
+  )
 const optDate = date.optional().or(z.literal('').transform(() => undefined))
-const branchArg = z.uuid().optional().or(z.literal('').transform(() => undefined))
+const branchArg = z
+  .uuid()
+  .optional()
+  .or(z.literal('').transform(() => undefined))
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1
 const dubaiTime = (d: Date, onDate?: string) => {
   const p = dubaiParts(d)
@@ -137,7 +158,12 @@ const withQuery = (path: string, ...parts: string[]) => {
 }
 
 /** KPIs for the whole spa, or summed over the member's branches (kpis reads one branch or all). */
-async function kpisOver(tx: Tx, sel: { branches: { id: string }[]; whole: boolean }, from: string, to: string) {
+async function kpisOver(
+  tx: Tx,
+  sel: { branches: { id: string }[]; whole: boolean },
+  from: string,
+  to: string,
+) {
   if (sel.whole) return [await kpis(tx, { from, to })]
   const out: Kpis[] = []
   for (const b of sel.branches) out.push(await kpis(tx, { branchId: b.id, from, to }))
@@ -215,8 +241,20 @@ const TOOLS: Tool[] = [
       const showClient = ctx.scope.permissions.has('clients.view')
       const showMoney = ctx.scope.permissions.has('dashboard.revenue')
       const bq = branchQuery(sel, a.branch_id)
-      if (from === to) ctx.link({ kind: 'screen', screen: 'calendar', path: withQuery(`/calendar?date=${from}`, bq), date: from })
-      ctx.link({ kind: 'screen', screen: 'bookings', path: withQuery(`/bookings?from=${from}&to=${to}`, bq), from, to })
+      if (from === to)
+        ctx.link({
+          kind: 'screen',
+          screen: 'calendar',
+          path: withQuery(`/calendar?date=${from}`, bq),
+          date: from,
+        })
+      ctx.link({
+        kind: 'screen',
+        screen: 'bookings',
+        path: withQuery(`/bookings?from=${from}&to=${to}`, bq),
+        from,
+        to,
+      })
       return {
         from,
         to,
@@ -277,9 +315,17 @@ const TOOLS: Tool[] = [
       const period = periodNumbers(await kpisOver(ctx.tx, sel, a.from, a.to), a.from, a.to)
       const compare =
         a.compare_from && a.compare_to
-          ? periodNumbers(await kpisOver(ctx.tx, sel, a.compare_from, a.compare_to), a.compare_from, a.compare_to)
+          ? periodNumbers(
+              await kpisOver(ctx.tx, sel, a.compare_from, a.compare_to),
+              a.compare_from,
+              a.compare_to,
+            )
           : null
-      ctx.link({ kind: 'screen', screen: 'reports', path: withQuery('/reports', branchQuery(sel, a.branch_id)) })
+      ctx.link({
+        kind: 'screen',
+        screen: 'reports',
+        path: withQuery('/reports', branchQuery(sel, a.branch_id)),
+      })
       return {
         currency: 'AED',
         period,
@@ -355,7 +401,12 @@ const TOOLS: Tool[] = [
     }),
     run: async (ctx, a: { days: number; limit: number }) => {
       const limited = ctx.scope.memberId ? await memberBranchIds(ctx.tx, ctx.scope.memberId) : null
-      const res = await lapsedClients(ctx.tx, { days: a.days, limit: a.limit, branchIds: limited, now: ctx.now })
+      const res = await lapsedClients(ctx.tx, {
+        days: a.days,
+        limit: a.limit,
+        branchIds: limited,
+        now: ctx.now,
+      })
       ctx.link({ kind: 'screen', screen: 'clients', path: '/clients' })
       for (const c of res.rows.slice(0, 4))
         ctx.link({ kind: 'screen', screen: 'client', path: `/clients/${c.id}`, name: c.name })
@@ -390,7 +441,12 @@ const TOOLS: Tool[] = [
       const rows = await shiftsOnDate(ctx.tx, { date: a.date, branchIds: sel.branches.map((b) => b.id) })
       const bq = branchQuery(sel, a.branch_id)
       if (ctx.scope.permissions.has('calendar.view'))
-        ctx.link({ kind: 'screen', screen: 'calendar', path: withQuery(`/calendar?date=${a.date}`, bq), date: a.date })
+        ctx.link({
+          kind: 'screen',
+          screen: 'calendar',
+          path: withQuery(`/calendar?date=${a.date}`, bq),
+          date: a.date,
+        })
       else ctx.link({ kind: 'screen', screen: 'staff', path: '/staff' })
       return {
         date: a.date,
@@ -412,7 +468,10 @@ const TOOLS: Tool[] = [
       type: 'object',
       properties: {
         client_id: { type: 'string' },
-        message: { type: 'string', description: 'Short, friendly message in the client’s language, max 500 characters' },
+        message: {
+          type: 'string',
+          description: 'Short, friendly message in the client’s language, max 500 characters',
+        },
       },
       required: ['client_id', 'message'],
     },
@@ -421,7 +480,7 @@ const TOOLS: Tool[] = [
       client_id: z.uuid(),
       message: z
         .string()
-        .transform((s) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim())
+        .transform((s) => s.replace(/\p{Cc}/gu, (c) => (c === '\n' ? c : '')).trim())
         .pipe(z.string().min(1).max(500)),
     }),
     run: async (ctx, a: { client_id: string; message: string }) => {
@@ -432,7 +491,11 @@ const TOOLS: Tool[] = [
       if (!c.consent)
         return refuse('no_consent', 'This client does not accept marketing messages (opted out or blocked).')
       ctx.link({ kind: 'whatsapp', name: c.name, href: whatsappLink(c.phone, a.message) })
-      return { ok: true, client: c.name, note: 'A WhatsApp draft button is shown to the user. Nothing was sent.' }
+      return {
+        ok: true,
+        client: c.name,
+        note: 'A WhatsApp draft button is shown to the user. Nothing was sent.',
+      }
     },
   },
 ]
@@ -527,7 +590,10 @@ export async function runAssistant(opts: {
       if (missing.length) {
         calls.push({ name: tool.name, ok: false, denied: true })
         denied.push(tool.name)
-        return refuse('not_allowed', `This team member's role cannot see this (needs ${missing.join(' + ')}).`)
+        return refuse(
+          'not_allowed',
+          `This team member's role cannot see this (needs ${missing.join(' + ')}).`,
+        )
       }
       const args = tool.args.safeParse(raw ?? {})
       if (!args.success) {
@@ -550,7 +616,9 @@ export async function runAssistant(opts: {
   }))
 
   const history: ChatMessage[] = (opts.history ?? [])
-    .filter((t) => (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string' && t.text.trim())
+    .filter(
+      (t) => (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string' && t.text.trim(),
+    )
     .slice(-ASSISTANT_LIMITS.historyTurns)
     .map((t) => ({ role: t.role, content: clip(t.text.trim(), ASSISTANT_LIMITS.turnChars) }))
 

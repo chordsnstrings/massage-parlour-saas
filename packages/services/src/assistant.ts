@@ -129,7 +129,7 @@ export async function assistantDraftTarget(tx: Tx, clientId: string, branchIds?:
     })
     .from(clients)
     .where(eq(clients.id, clientId))
-  return c && c.visible ? c : null
+  return c?.visible ? c : null
 }
 
 /** The staff profile linked to a member (therapist-style roles see only their own bookings). */
