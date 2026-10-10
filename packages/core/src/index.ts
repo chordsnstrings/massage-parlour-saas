@@ -1,6 +1,7 @@
 export * from './attribution'
 export * from './automations'
 export * from './booking'
+export * from './client-ip'
 export * from './config-health'
 export * from './email'
 export * from './emirates'

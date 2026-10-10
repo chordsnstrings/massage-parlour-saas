@@ -69,7 +69,8 @@ test('contact form → super-admin Enquiries (badge) → marked contacted with a
       spaName: spa,
       message: MESSAGE,
     })
-    expect(row?.ipHash).toMatch(/^[0-9a-f]{32}$/)
+    // F26: the IP comes only from Cf-Connecting-Ip (set by Caddy); the e2e server has none → no hash.
+    expect(row?.ipHash).toBeNull()
   })
 
   const ctx = await page.context().browser()!.newContext()
@@ -169,6 +170,7 @@ test('a new enquiry emails the super-admins (reply-to = sender); its audit row k
     await ctx.close()
     const [row] = await testDb().select().from(contactEnquiries).where(eq(contactEnquiries.email, email))
     expect(row?.phone).toBe('+442079460958')
+    expect(row?.ipHash).toMatch(/^[0-9a-f]{32}$/) // from the Cf-Connecting-Ip header above
 
     const sentTo = async () => {
       const files = await readdir(outbox).catch(() => [] as string[])

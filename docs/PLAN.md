@@ -1214,6 +1214,21 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   private files (now the same rules as `requireMember`).
 - **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
 
+### Remaining backlog F16–F32
+- ✅ **F25. CI hardening.** Shipped 2026-10-09: CI job `guards` (parallel to `check`; `promote` needs both) runs the
+  schema-drift check `pnpm db:check-drift` (fails when `pnpm db:generate` would write a migration), the migration-journal
+  tests and `pnpm audit --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`,
+  reason + review date each); `codeql.yml` (v3, security-extended; deploy-branch pushes, PRs, weekly);
+  `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped, stack-pin majors / 0.x minors held). Audit fix
+  on the way: `@modelcontextprotocol/sdk` 1.30.1 → 1.31.0 (GHSA-6qxp-vccf-f47h, high).
+- ✅ **F26. Trusted client IP (G6).** Shipped 2026-10-09: every IP read goes through `@spa/core` `clientIpFrom`
+  (`Cf-Connecting-Ip` only, validated; guard test bans direct header reads), limits bucket IPv6 by /64
+  (`ipRateLimitKey`, same as Better Auth, which now reads only that header). Caddy: Cloudflare ranges (verified
+  current, `cloudflare-ips.sh` + weekly workflow) with strict mode, `Cf-Connecting-Ip` the only client-IP header,
+  X-Real-Ip / True-Client-Ip / Do-Connecting-Ip stripped; `test-caddy-ip.sh` (CI) proves direct hits can't forge it
+  and Cloudflare's value passes through. Found + fixed: deploys never applied Caddyfile edits (bind-mounted file,
+  hard reset swaps the inode); `update.sh` `caddy_sync` restarts caddy when it changed.
+
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
 - **Blockers:** ✅ G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·
@@ -1221,7 +1236,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   ✅ G3 super-admins not forced to 2FA · ✅ G4 reminders: only staff-created bookings get one; cancel/reschedule leaves stale outbox rows; no 2 h reminder ·
   G5 ✅ /privacy, /terms, /data-deletion marketing pages (footer + login/signup links; company details placeholders in
   components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
-- **Important:** G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
+- **Important:** ✅ G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) (F26) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
   ✅ G10 worker holds superuser URL (F11) · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
   G10 worker holds superuser URL · G11 no script-src CSP / security headers · G12 no tenant purge / client erase · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
@@ -1244,7 +1259,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
 - **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
-  IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, CI schema-drift/audit/CodeQL.
+  IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, ✅ CI schema-drift/audit/CodeQL (F25).
 
 ### 18.1 Owner decisions (2026-10-09)
 - Order: G1–G5 first, then the access change below.

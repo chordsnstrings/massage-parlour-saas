@@ -105,7 +105,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
 4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
    - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
-     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
+     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP (core `clientIpFrom`) unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
    - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
      rethrow to the error boundary.
    - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
@@ -340,6 +340,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - `/api/collect` caps bodies at 4 KB, allows 240 requests/min per IP and uses a daily-salted session hash.
   - Events land in `web_events`, are rolled up hourly and pruned after 90 days. `source` = core `webEntrySource`
     (`?src`/`utm_source` tag, known referrer, referrer host, `direct`).
+
+## Client IP (F26, G6)
+
+- One source: `@spa/core` `client-ip.ts`. `clientIpFrom(headers)` reads only `CLIENT_IP_HEADER` (`cf-connecting-ip`,
+  which Caddy overwrites on every request: deploy/droplet/README.md "Client IP"), returns null unless it's a single
+  valid IPv4/IPv6 (dev/e2e without Caddy → null). `ipRateLimitKey(ip)` = rate-limit bucket: IPv4 (and IPv4-mapped)
+  as is, IPv6 by /64, null → `unknown`; Better Auth's limiter uses the same header and `ipv6Subnet: 64`.
+- Callers: web `server/rate-limit.ts` `clientIp()` / `withinIpLimit` (signup, admin join, contact), booking
+  `bookOnline` in-memory limits, `/api/collect` + `/api/client-error` limits, `audit()` IP, intake signature IP,
+  enquiry `ipHash` (null without IP), Turnstile `remoteip`, auth MCP consent audit. `packages/core/test/client-ip.test.ts`
+  fails if any `apps/*/src` / `packages/*/src` file names an IP header itself.
 
 ## Bot check (F9, Cloudflare Turnstile)
 
@@ -628,6 +639,10 @@ i18n namespace `automations`.
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
   - caddy: on-demand TLS that asks `/api/domains/allowed`, a 25 MB body cap, and `/_status` behind basic auth.
+    Client IP (F26): `trusted_proxies static` = Cloudflare ranges (+ `trusted_proxies_strict`), `client_ip_headers
+    Cf-Connecting-Ip` only; `proxy_to_web` sets `Cf-Connecting-Ip {client_ip}` (Cloudflare's header from a Cloudflare
+    peer, else the TCP peer) and strips Do-Connecting-Ip / X-Real-Ip / True-Client-Ip. `test-caddy-ip.sh` (caddy or
+    docker) runs the real file against a header echo; `cloudflare-ips.sh [--write]` checks/refreshes the ranges.
   - There is no cloudflared in the running stack.
 - **`update.sh`**:
   - The systemd timer runs it every 2 minutes. G7: it deploys the CI-green ref `deploy/green` (moved by CI job
@@ -635,14 +650,23 @@ i18n namespace `automations`.
     tip. Steps: build → `pg_dump -Fc` `/opt/spa/backups/pre-migrate-<sha12>.dump` (keep 5) → `up` (migrate with
     `lock_timeout`/`statement_timeout`, `migrationUrl` in packages/db/src/migrate.ts) → `/api/health`; any failure →
     redeploy `/opt/spa/last-good`, `deploy.json` state `failed`, commit in `status/failed` (not retried without
-    `--force`). Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`.
+    `--force`). Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
+    (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
+    file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
     Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.
   - It applies the `secrets.env.enc` overlay (AES-256-CBC, pbkdf2 200k).
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch; a push reaches production once its CI run
   is green (job `promote` → `deploy/green`), ~2 min after that.
-- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main` and the deploy branch: bootstrap `spa_test` → lint → typecheck →
-  test → web build → Playwright e2e.
+- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main` and the deploy branch: job `check`
+  (bootstrap `spa_test` → lint → typecheck → test → web build → Playwright e2e) and, in parallel, job `guards` (F25):
+  `pnpm db:check-drift` (packages/db/scripts/check-drift.sh: drizzle-kit generate into a scratch copy of drizzle/ via
+  `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
+  --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
+  date each) and `deploy/droplet/test-caddy-ip.sh`. `promote` needs both. Also: `codeql.yml` (codeql-action v3,
+  javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays), `cloudflare-ips.yml` (Mondays + PRs
+  touching the Caddyfile; not a deploy gate), `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped;
+  stack pins' majors, and 0.x/minor pins' minors, ignored).
 - **e2e**:
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
   - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
@@ -705,8 +729,8 @@ i18n namespace `automations`.
   `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
   authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on
   `/oauth2/consent` audits grants. Prune: services `oauth-clients.ts` `pruneUnusedOAuthClients` (worker
-  `oauth-clients-prune`, hourly). Real client IP: Caddyfile `trusted_proxies` (Cloudflare ranges) +
-  `header_up Cf-Connecting-Ip {client_ip}`.
+  `oauth-clients-prune`, hourly). Real client IP: see "Client IP" below (Better Auth `ipAddressHeaders` =
+  `[CLIENT_IP_HEADER]`, `ipv6Subnet: 64`).
 - **Draft concurrency + publish** (services sites.ts): `lockSite` (FOR UPDATE on `sites`, re-entrant) at the start of
   saveDraft / publishPage / publishAll / addPage / renamePage / restoreVersion / runSiteEdit (non-dry) /
   restoreSiteEdit and the Theme panel action. `editStamp` / `assertEditStamp` / `EDITED_ELSEWHERE`: the editor page

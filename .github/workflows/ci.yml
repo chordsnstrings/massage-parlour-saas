@@ -56,10 +56,32 @@ jobs:
           path: apps/web/test-results
           retention-days: 7
 
+  # F25 + F26: quick guards without a database, in parallel with `check` (no extra wall time).
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Schema drift (pnpm db:generate must have nothing to write)
+        run: pnpm db:check-drift
+      - name: Migration journal guard
+        run: pnpm --filter @spa/db exec vitest run test/migrate.test.ts -t 'migration journal|skippedMigrations'
+      - name: Dependency audit (production, high + critical)
+        # Accepted advisories go in pnpm-workspace.yaml `auditConfig.ignoreGhsas` (one line each: why + review date).
+        run: pnpm audit --prod --audit-level=high
+      - name: Caddyfile client-IP handling (validate + forged-header checks)
+        run: bash deploy/droplet/test-caddy-ip.sh
+
   # G7: the droplet deploys `deploy/green`, never the raw branch tip. Only a commit of the deploy branch whose checks
   # passed moves it (forward only; the built-in token, no extra secret). Pushes made with it start no workflow.
   promote:
-    needs: check
+    needs: [check, guards]
     if: github.event_name == 'push' && github.ref == 'refs/heads/claude/intelligent-heisenberg-g9e81o'
     runs-on: ubuntu-latest
     timeout-minutes: 5

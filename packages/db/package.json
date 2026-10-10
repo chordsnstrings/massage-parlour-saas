@@ -11,6 +11,7 @@
   },
   "scripts": {
     "generate": "drizzle-kit generate",
+    "check:drift": "bash scripts/check-drift.sh",
     "migrate": "tsx --env-file-if-exists=../../.env src/bin/migrate.ts",
     "seed": "tsx --env-file-if-exists=../../.env src/bin/seed.ts",
     "typecheck": "tsc --noEmit",
