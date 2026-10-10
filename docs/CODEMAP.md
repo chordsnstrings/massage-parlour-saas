@@ -245,6 +245,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Each list ends on a `.mkt-pl-end` link row pinned to the foot of the shared row (`margin-top: auto`), so the cards end
   level whatever the wrapping; CTAs wrap (DB names). Marketing focus ring = `.mkt :focus-visible` in marketing.css
   (accent, lime on `.mkt-dark`/`.mkt-demo`/`.mkt-pc-spot`) — globals.css's ring uses the app's `:root` accent.
+  `.mkt-link:hover` turns links `--accent-hover` (dark green), so the Premium card overrides it to white
+  (`.mkt-pc-spot .mkt-link:hover`); don't redefine `--accent-hover` there (the card shadow uses it). Two-sentence
+  headings: `<br />` + the second sentence in `.mkt-plx-2` (inline-block on the /pricing h1 so phones still balance it).
   Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
   `withinIpLimit`, Turnstile (F9), `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
   email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
