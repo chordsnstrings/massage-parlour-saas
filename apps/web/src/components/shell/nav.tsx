@@ -125,19 +125,19 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
         return (
           <Fragment key={item.href}>
             {heading && (
-              <p className="mt-4 mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/80 first:mt-0 md:hidden xl:block">
+              <p className="mt-4 mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-muted/80 first:mt-0 md:hidden lg:block">
                 {heading}
               </p>
             )}
             {heading && i > 0 && (
-              <span className="mx-3 my-2 hidden border-t md:block xl:hidden" aria-hidden />
+              <span className="mx-3 my-2 hidden border-t md:block lg:hidden" aria-hidden />
             )}
             <Link
               href={item.href}
               title={item.label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center xl:justify-start',
+                'relative flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors md:justify-center lg:justify-start',
                 active ? 'text-fg' : 'text-muted hover:bg-subtle/70 hover:text-fg',
               )}
             >
@@ -149,10 +149,10 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
                 />
               )}
               <Icon className="relative size-[18px] shrink-0" strokeWidth={1.5} />
-              <span className="relative md:hidden xl:inline">{item.label}</span>
+              <span className="relative md:hidden lg:inline">{item.label}</span>
               <CountPill
                 n={item.badge}
-                className="relative ms-auto md:absolute md:end-1 md:top-0.5 xl:static xl:ms-auto"
+                className="relative ms-auto md:absolute md:end-1 md:top-0.5 lg:static lg:ms-auto"
               />
             </Link>
           </Fragment>

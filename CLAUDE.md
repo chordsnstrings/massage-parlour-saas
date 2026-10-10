@@ -119,4 +119,5 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
   which React then calls as the cleanup.
 - Tailwind arbitrary classes: no escaped quotes or spaces inside `[…]` (the scanner skips them; percent-encode data URLs),
   and type-hint ambiguous `bg-[…]` (`bg-[position:…]`, `bg-[length:…]`) or `cn()`/tailwind-merge drops the bg colour.
+  Arbitrary breakpoints in px (`min-[1440px]:`) sort before the rem theme ones (`md:`) and lose; write them in rem (`min-[90rem]:`).
 - Sandbox-only: Docker builds need the proxy CA (`--build-context ca=/root/.ccr` on a temp Dockerfile copy); committed Dockerfiles stay clean.
