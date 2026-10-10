@@ -69,11 +69,12 @@ test('a Standard spa: no AI, marketing or branches until the super-admin grants 
     await expect(menu.getByRole('link', { name: 'Reviews', exact: true })).toHaveCount(0)
     await expect(page.getByText(/AI allowance/)).toHaveCount(0)
     await expect(page.getByText(/^Renews .* · AED\s?2,000\/mo$/)).toBeVisible()
-    // Inbox keeps only WhatsApp and Marketing only Analytics: one page each, so no section tabs at all.
+    // Inbox keeps WhatsApp + Enquiries (website enquiry form, every plan — F15), no Instagram or Campaigns;
+    // Marketing keeps only Analytics: one page, so no section tabs.
     await page.goto(`${dashboard}/messages`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expect(menu.getByRole('link', { name: 'Inbox & follow-ups', exact: true })).toBeVisible()
-    await expect(tabs).toHaveCount(0)
+    await expect(tabs.getByRole('link')).toHaveText(['WhatsApp', 'Enquiries'])
     await page.goto(`${dashboard}/analytics`)
     await expect(menu.getByRole('link', { name: 'Marketing', exact: true })).toBeVisible()
     await expect(tabs).toHaveCount(0)
@@ -140,7 +141,7 @@ test('a Standard spa: no AI, marketing or branches until the super-admin grants 
     await expect(page.getByRole('heading', { name: 'Campaigns', exact: true })).toBeVisible()
     await expect(page.getByTestId('plan-upsell')).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Reviews', exact: true })).toBeVisible()
-    await expect(tabs.getByRole('link', { name: 'Instagram' })).toBeVisible()
+    await expect(tabs.getByRole('link')).toHaveText(['WhatsApp', 'Instagram', 'Campaigns', 'Enquiries'])
     await page.goto(`${dashboard}/analytics`)
     await expect(tabs.getByRole('link', { name: 'Social posts' })).toBeVisible()
     await expect(tabs.getByRole('link', { name: 'AI studio' })).toBeVisible()
