@@ -33,6 +33,15 @@ const UI = {
   openToday: { en: 'Open today', ar: 'مفتوح اليوم' },
   treatments: { en: 'Treatments', ar: 'الجلسات' },
   bookMinute: { en: 'Book in a minute', ar: 'احجز في دقيقة' },
+  // F24 404 / error pages (Arabic needs native review).
+  notFoundTitle: { en: 'Page not found', ar: 'الصفحة غير موجودة' },
+  notFoundBody: { en: 'This page doesn’t exist or has moved.', ar: 'هذه الصفحة غير موجودة أو تم نقلها.' },
+  siteMissing: { en: 'This website isn’t available.', ar: 'هذا الموقع غير متاح.' },
+  backHome: { en: 'Back to the home page', ar: 'العودة إلى الصفحة الرئيسية' },
+  errorTitle: { en: 'Something went wrong', ar: 'حدث خطأ ما' },
+  errorBody: { en: 'Please try again in a moment.', ar: 'يرجى المحاولة مرة أخرى بعد قليل.' },
+  retry: { en: 'Try again', ar: 'حاول مرة أخرى' },
+  errorRef: { en: 'Ref {digest}', ar: 'المرجع {digest}' },
 } as const satisfies Record<string, Record<Locale, string>>
 
 export const ui = (key: keyof typeof UI, locale: Locale) => UI[key][locale]

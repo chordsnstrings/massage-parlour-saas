@@ -1,11 +1,13 @@
 'use client'
 import { RotateCcw } from 'lucide-react'
+import { useParams } from 'next/navigation'
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { useT } from '@/i18n/client'
+import { appPath } from '@/lib/paths'
 import { reportClientError } from '@/lib/report-client'
 
-/** Dashboard error boundary: renders inside the spa shell, in the viewer's language. */
+/** Dashboard error boundary: renders inside the spa shell, in the viewer's language (digest only, never the stack). */
 export default function DashboardError({
   error,
   reset,
@@ -14,6 +16,7 @@ export default function DashboardError({
   reset: () => void
 }) {
   const t = useT()
+  const { tenant } = useParams<{ tenant: string }>()
   useEffect(() => {
     reportClientError(error)
   }, [error])
@@ -24,9 +27,14 @@ export default function DashboardError({
       {error.digest && (
         <p className="font-mono text-xs text-muted">{t('errors.boundary.ref', { digest: error.digest })}</p>
       )}
-      <Button onClick={reset}>
-        <RotateCcw /> {t('errors.boundary.retry')}
-      </Button>
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button onClick={reset}>
+          <RotateCcw /> {t('errors.boundary.retry')}
+        </Button>
+        <Button variant="secondary" asChild>
+          <a href={appPath(`/${tenant}`)}>{t('errors.page.toHome')}</a>
+        </Button>
+      </div>
     </div>
   )
 }
