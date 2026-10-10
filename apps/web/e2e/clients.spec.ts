@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
 
 test('client profile: preferences, treatment note, intake template and a signed intake', async ({ page }) => {
+  test.setTimeout(180_000) // + the F27 PDF, regenerate and zip steps
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
   await seedBooking(seed)
