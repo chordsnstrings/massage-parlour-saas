@@ -1018,9 +1018,9 @@ i18n namespace `automations`.
   - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
     (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
   - Host routing by default; set `E2E_ROUTING=path` for path routing (needs a build with `NEXT_PUBLIC_ROUTING=path`).
-    The super-admin helper works in both since R20 (verify link on the bare host; one-host 2FA landing → console).
-    Still path-mode only: same-host F23 redirects come back with a relative Location (slug-rename.spec expects
-    absolute); CI runs host mode.
+    The super-admin helper and slug-rename.spec work in both since R20 (verify link on the bare host; one-host 2FA
+    landing → console). Same-host redirects come back with a relative Location (Next `getRelativeURL`), so specs
+    compare `new URL(location, from).href`; CI runs host mode.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin; `createLogin` (login only, browser
     sign-up) + `addMember(slug, email, role)` for staff; `consoleEmailKey(page, key|null)` routes staff mail to the
