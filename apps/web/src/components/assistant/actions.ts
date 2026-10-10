@@ -50,6 +50,8 @@ export async function askAssistantAction(
   const { ctx, error } = await guard(slug, 'dashboard.view', 'ai')
   if (error) return { ok: false, error }
   const { t, fmt, locale } = await getI18n()
+  // Members only: a super-admin acting on a spa sees no spa data (PLAN §18), so impersonation can't ask.
+  if (!ctx.member) return { ok: false, error: t('errors.forbidden') }
   const parsed = input.safeParse({ question, history })
   if (!parsed.success) return { ok: false, error: t('assistant.errors.question') }
   if (!aiConfigured() && !aiFixturesOn()) return { ok: false, error: t('assistant.errors.off') }

@@ -356,6 +356,10 @@ test('Website Studio: Ask AI is off for a super-admin outside SITE_AI_EDITOR_EMA
   const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
   await mockAiReply(slug, { ops: [{ op: 'remove', id: 'hero-1' }], note: 'Removed.' })
   await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+  // The canvas renders once the editor is hydrated; a click before that is lost.
+  await expect(page.frameLocator('#preview-frame').first().getByRole('heading', { name: HERO })).toBeVisible({
+    timeout: 30_000,
+  })
   await page.getByRole('button', { name: 'Ask AI' }).click()
   await expect(page.getByRole('note')).toHaveText('AI site editing isn’t enabled for your account.')
   await expect(page.getByPlaceholder('What should change?')).toHaveCount(0)

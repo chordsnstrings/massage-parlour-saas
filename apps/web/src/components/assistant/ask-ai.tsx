@@ -5,6 +5,7 @@
 // `.crm-ask*`. The conversation lives in this component only (short history, gone on reload).
 import { ExternalLink, MessageCircle, SendHorizontal, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Dialog } from 'radix-ui'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useI18n } from '@/i18n/client'
@@ -18,13 +19,17 @@ export function AskAi({
   slug,
   enabled,
   upsell,
+  hiddenUnder,
 }: {
   slug: string
   /** The spa's plan includes AI (Premium). */
   enabled: boolean
   upsell: { compareHref: string; billingHref: string | null }
+  /** Routes where the button is left out: the Website Studio editors (super-admin sessions, PLAN §18.1). */
+  hiddenUnder: string[]
 }) {
   const { t, locale } = useI18n()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [turns, setTurns] = useState<Turn[]>([])
   const [q, setQ] = useState('')
@@ -53,6 +58,8 @@ export function AskAi({
     })
   }
 
+  if (hiddenUnder.some((p) => pathname.startsWith(`${p}/`))) return null
+
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -60,7 +67,7 @@ export function AskAi({
           type="button"
           className="crm-ask-btn"
           data-testid="ask-ai-open"
-          aria-label={t('assistant.open')}
+          aria-label={t('assistant.openLabel')}
         >
           <Sparkles aria-hidden strokeWidth={1.8} />
           <span>{t('assistant.open')}</span>

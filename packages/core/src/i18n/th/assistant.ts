@@ -4,6 +4,7 @@ import type { Messages } from '../types'
 
 export const assistant: Messages['assistant'] = {
   open: 'ถาม AI',
+  openLabel: 'ถาม AI เรื่องสปาของคุณ',
   title: 'ถาม AI',
   subtitle: 'ถามเรื่องสปาของคุณ ตอบจากข้อมูลของคุณเอง อ่านอย่างเดียว',
   close: 'ปิดถาม AI',

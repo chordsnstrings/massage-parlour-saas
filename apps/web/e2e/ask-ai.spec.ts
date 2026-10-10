@@ -2,14 +2,17 @@ import { expect, test } from '@playwright/test'
 import { aiUsage, auditLog } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
+  ADMIN,
   addMember,
   app,
   createLogin,
   hoursOnToday,
   mockAiReply,
   OWNER_PASSWORD,
+  passTwoFactor,
   seedBooking,
   seedCatalog,
+  signInPlatformAdmin,
   signUpOwner,
   testDb,
   today,
@@ -33,6 +36,7 @@ test('Premium spa: staff ask, get an answer with deep links; a role without repo
   await seedBooking(seed, hoursOnToday(2))
   const db = testDb()
   const drawer = owner.getByTestId('ask-ai')
+  let asked: { action: string; type: string; body: string } | undefined
 
   await test.step('owner asks about today: the tool reads the calendar, the answer links to it', async () => {
     await mockAiReply(slug, {
@@ -89,6 +93,15 @@ test('Premium spa: staff ask, get an answer with deep links; a role without repo
         },
       ],
     })
+    // The ask request, kept to replay it as a super-admin below.
+    desk.on('request', (r) => {
+      if (r.headers()['next-action'] && r.postData()?.includes('What was revenue today?'))
+        asked = {
+          action: r.headers()['next-action']!,
+          type: r.headers()['content-type'] ?? 'text/plain;charset=UTF-8',
+          body: r.postData() ?? '',
+        }
+    })
     await desk.goto(`${app}/${slug}`)
     await desk.getByTestId('ask-ai-open').click()
     const deskDrawer = desk.getByTestId('ask-ai')
@@ -104,6 +117,45 @@ test('Premium spa: staff ask, get an answer with deep links; a role without repo
     expect(rows.map((r) => r.data)).toContainEqual(
       expect.objectContaining({ question: 'What was revenue today?', denied: ['revenue_summary'] }),
     )
+  })
+
+  await test.step('a super-admin acting on the spa gets no Ask AI, and the action refuses them', async () => {
+    const ctx = await browser.newContext()
+    const admin = await ctx.newPage()
+    await signInPlatformAdmin(admin)
+    await admin.goto(`${app}/login?next=${encodeURIComponent(new URL(dashboard).pathname)}`)
+    if (await admin.getByLabel('Email').isVisible()) {
+      await admin.getByLabel('Email').fill(ADMIN.email)
+      await admin.getByLabel('Password').fill(ADMIN.password)
+      await admin.getByRole('button', { name: 'Sign in' }).click()
+      await admin.waitForURL(/\/two-factor/)
+      await passTwoFactor(admin)
+    }
+    await admin.waitForURL(dashboard)
+    await expect(admin.getByRole('navigation', { name: 'Main menu' })).toBeVisible()
+    await expect(admin.getByTestId('ask-ai-open')).toHaveCount(0)
+    const before = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.tenantId, seed.tenantId), eq(auditLog.action, 'ai.assistant.asked')))
+    const text = await admin.evaluate(
+      async ({ action, type, body }) =>
+        (
+          await fetch(window.location.href, {
+            method: 'POST',
+            headers: { 'next-action': action, 'content-type': type, accept: 'text/x-component' },
+            body,
+          })
+        ).text(),
+      asked!,
+    )
+    expect(text).toContain("You don't have permission to do that.")
+    const after = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.tenantId, seed.tenantId), eq(auditLog.action, 'ai.assistant.asked')))
+    expect(after).toHaveLength(before.length)
+    await ctx.close()
   })
 })
 

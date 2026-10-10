@@ -2,6 +2,8 @@
 // th/assistant.ts. New strings (2026-10-10) still need the owner's native review (TH).
 export const assistant = {
   open: 'Ask AI',
+  /** Accessible name of the top-bar button (keeps the visible "Ask AI"; distinct from the Studio's page editor AI). */
+  openLabel: 'Ask AI about your spa',
   title: 'Ask AI',
   subtitle: 'Questions about your spa, answered from your own data. Read-only.',
   close: 'Close Ask AI',

@@ -350,8 +350,9 @@ export default async function TenantLayout({
           bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
           search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
           assistant={
-            // F30: staff with the dashboard; Standard spas get the Premium upsell in the drawer.
-            can(ctx, 'dashboard.view') ? (
+            // F30: staff with the dashboard; Standard spas get the Premium upsell in the drawer. Never for a
+            // super-admin acting on the spa (no spa data, PLAN §18) nor on the Website Studio editors.
+            can(ctx, 'dashboard.view') && ctx.member ? (
               <AskAi
                 slug={ctx.tenant.slug}
                 enabled={ent.features.includes('ai')}
@@ -359,6 +360,7 @@ export default async function TenantLayout({
                   compareHref: `${canonicalUrls().marketing()}/pricing`,
                   billingHref: can(ctx, 'billing.view') ? `${base}/billing` : null,
                 }}
+                hiddenUnder={[`${base}/website/editor`, `${base}/website/blog`]}
               />
             ) : null
           }
