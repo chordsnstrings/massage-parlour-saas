@@ -118,8 +118,13 @@ test('super-admin changes the plan price and the marketing page follows', async 
   await screenshotAt(page, 'platform-overview')
 
   await page.goto(`${admin}/plans`)
-  // Premium (first card): the stored price covers 12 months; the pricing page shows it per month.
-  await page.getByRole('button', { name: 'Edit' }).first().click()
+  // Premium: the stored price covers 12 months; the pricing page shows it per month. Find its card by name (other
+  // specs add plans, so it isn't always the first card).
+  await page
+    .getByRole('heading', { name: 'Premium', exact: true })
+    .locator('xpath=ancestor::*[.//button[normalize-space()="Edit"]][1]')
+    .getByRole('button', { name: 'Edit' })
+    .click()
   await page.getByLabel('Price per 12 months (AED)').fill('37200')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByText('Plan saved')).toBeVisible()
