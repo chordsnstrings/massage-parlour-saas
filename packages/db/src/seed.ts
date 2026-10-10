@@ -139,7 +139,8 @@ export const defaultPlans: (typeof plans.$inferInsert)[] = [
   {
     code: 'legacy-yearly',
     name: 'Yearly (legacy)',
-    description: 'The original AED 24,000 per year plan with every feature. Kept for existing spas until renewal.',
+    description:
+      'The original AED 24,000 per year plan with every feature. Kept for existing spas until renewal.',
     priceAed: '24000',
     billingInterval: 'year',
     trialDays: 14,

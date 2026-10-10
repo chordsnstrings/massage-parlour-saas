@@ -49,12 +49,7 @@ function checkLimit(count: number, { limit, multiBranch = true }: LimitOpts) {
 }
 
 /** New branch; opening hours start as a copy of the main branch's (edit them under Settings → Opening hours). */
-export async function createBranch(
-  tx: Tx,
-  tenantId: string,
-  input: BranchInput,
-  opts: LimitOpts = {},
-) {
+export async function createBranch(tx: Tx, tenantId: string, input: BranchInput, opts: LimitOpts = {}) {
   checkLimit(await activeCount(tx), opts)
   const [main] = await tx
     .select({ hours: branches.openingHours })
@@ -101,12 +96,7 @@ export async function updateBranch(tx: Tx, branchId: string, input: BranchInput)
  * Archive (active=false) or restore a branch. Archived branches leave pickers, online booking and member scopes,
  * but their history (sales, bookings, ledger) stays. The main branch can't be archived.
  */
-export async function setBranchActive(
-  tx: Tx,
-  branchId: string,
-  active: boolean,
-  opts: LimitOpts = {},
-) {
+export async function setBranchActive(tx: Tx, branchId: string, active: boolean, opts: LimitOpts = {}) {
   const [row] = await tx.select().from(branches).where(eq(branches.id, branchId))
   if (!row) throw notFound()
   if (row.active === active) return row
