@@ -1,3 +1,5 @@
+import { checkSlug } from './slug'
+
 export type Surface =
   | { kind: 'marketing' }
   | { kind: 'app' }
@@ -69,6 +71,61 @@ export function freeSiteUrl(slug: string, env: { ROOT_DOMAIN?: string; APP_URL?:
   const scheme = app?.protocol === 'http:' || (!app && root.startsWith('localhost')) ? 'http' : 'https'
   const pathRouting = app ? app.host.toLowerCase() === root : false
   return pathRouting ? `${scheme}://${root}/s/${slug}` : `${scheme}://${slug}.${root}`
+}
+
+/**
+ * An address from the path-routing days (`ROUTING=path`: `/app/…`, `/admin/…`, `/s/{slug}/…` on a platform domain or its
+ * www.), parsed for the move to host routing. `slug`: the spa (site) or the dashboard path's first segment when it could
+ * be a slug (app; F23 may rename it); `rest`: the path after it ('' or '/…').
+ */
+export type PathRoutedAddress = { surface: 'app' | 'admin' | 'site'; slug: string | null; rest: string }
+
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
+
+/** The old path-routed address a request is for, or null (not a platform root/www. host, another path, `/s/{not a slug}`). */
+export function pathRoutedAddress(
+  hostHeader: string,
+  pathname: string,
+  roots: readonly string[],
+): PathRoutedAddress | null {
+  if (resolveSurface(hostHeader, roots).kind !== 'marketing') return null
+  const m = /^\/(app|admin|s)(?=\/|$)/.exec(pathname)
+  if (!m) return null
+  const tail = pathname.slice(m[0].length)
+  if (m[1] === 'admin') return { surface: 'admin', slug: null, rest: tail }
+  const segment = tail.split('/')[1] ?? ''
+  const after = tail.slice(segment.length + 1)
+  if (m[1] === 's') {
+    const slug = segment.toLowerCase()
+    return checkSlug(slug).ok ? { surface: 'site', slug, rest: after } : null
+  }
+  return LABEL.test(segment)
+    ? { surface: 'app', slug: segment, rest: after }
+    : { surface: 'app', slug: null, rest: tail }
+}
+
+/**
+ * Its host-routed URL (no query) on `root` — the canonical platform root, port kept: `app.` / `admin.` / `{slug}.` +
+ * the rest of the path. `current` = the slug's current name after a rename (F23). The host is built from config and a
+ * validated slug only, never from other request input (no open redirect).
+ */
+export function hostRoutedUrl(
+  address: PathRoutedAddress,
+  root: string,
+  scheme: 'http' | 'https',
+  current?: string | null,
+): string {
+  const slug = current || address.slug
+  if (address.surface === 'site') return `${scheme}://${slug}.${root}${address.rest || '/'}`
+  return `${scheme}://${address.surface}.${root}${`${slug ? `/${slug}` : ''}${address.rest}` || '/'}`
+}
+
+/** Scheme of canonical platform URLs: APP_URL's, else http for a local root (localhost, *.localhost, an IP), else https. */
+export function canonicalScheme(root: string, appUrl = ''): 'http' | 'https' {
+  if (appUrl.startsWith('https:')) return 'https'
+  if (appUrl.startsWith('http:')) return 'http'
+  const bare = stripPort(root)
+  return bare === 'localhost' || bare.endsWith('.localhost') || /^[\d.]+$/.test(bare) ? 'http' : 'https'
 }
 
 /** `s` without trailing `char`s (a loop: `/\/+$/` rescans a long `/` run that doesn't end the string, quadratic). */

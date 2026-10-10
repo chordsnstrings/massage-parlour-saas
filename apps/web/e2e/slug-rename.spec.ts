@@ -93,6 +93,21 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
     expect(manifest.start_url).toBe(PATH ? `/app/${next}` : `/${next}`)
   })
 
+  await test.step('host routing: an old path-routed address with the old slug → the current one, one hop', async () => {
+    if (PATH) return
+    for (const [from, to] of [
+      [`${base}/s/${old}/book?src=qr`, `${site(next)}/book?src=qr`],
+      [`${altBase}/app/${old}/calendar?date=2026-10-10`, `${app}/${next}/calendar?date=2026-10-10`],
+    ]) {
+      const res = await viaHost(ops, from!)
+      expect(res.status(), from).toBe(301)
+      expect(res.headers().location).toBe(to)
+    }
+    await owner.goto(`${base}/app/${old}/clients?q=y`)
+    await owner.waitForURL(`${app}/${next}/clients?q=y`)
+    await expect(owner.getByRole('heading', { name: 'Clients' }).first()).toBeVisible()
+  })
+
   await test.step('the old address is reserved: Apply refuses it; Caddy may still issue its certificate', async () => {
     const fresh = await browser.newContext()
     const visitor = await fresh.newPage()

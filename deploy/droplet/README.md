@@ -313,6 +313,53 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
 7. Super-admin → Platform settings: update the company name / contact email if they still say `.ae` (the DB column
    default only applies to a fresh install).
 
+### From the sslip.io address (path routing) to spamanagement.co (host routing)
+
+Production started on `SITE_HOST=auto` (`134-209-145-162.sslip.io`, `ROUTING=path`: `/app`, `/admin`, `/s/{slug}`).
+Same checklist as above, in this order — the website first, Cloudflare second, the switch last:
+
+1. **Website first** (safe before any DNS exists): overlay `EXTRA_ROOT_DOMAINS=spamanagement.co`, nothing else.
+   `SITE_HOST` and `ROUTING=path` stay, so every current link works as before; the platform answers on
+   `https://spamanagement.co/…` (path routing) as soon as its DNS points at the droplet.
+2. **Cloudflare DNS** (step 1 above, grey cloud). Check `https://spamanagement.co` loads, and that `app.`, `admin.` and
+   a `{slug}.` name resolve to the droplet (`dig +short app.spamanagement.co`).
+3. **The switch** (steps 3–5 above; register the step 4 callbacks first):
+   ```dotenv
+   SITE_HOST=spamanagement.co
+   EXTRA_ROOT_DOMAINS=134-209-145-162.sslip.io   # the old address keeps answering (and redirecting)
+   ROUTING=host
+   APP_URL=https://app.spamanagement.co
+   ADMIN_URL=https://admin.spamanagement.co
+   ```
+   Every old path address then redirects to the new one on spamanagement.co, so only switch once step 2 works.
+   Undo = `ROUTING=path` again (the redirects are cached by browsers for 5 minutes only).
+
+**Old links keep working** (shared links, invites, QR posters, widget snippets, bookmarks): on any platform domain
+(the sslip.io one, spamanagement.co itself, and their `www.`) the proxy redirects, keeping the rest of the path and the
+query, in one hop (a renamed spa's old slug goes straight to its current one):
+
+| Old (path routing) | New (host routing) |
+|---|---|
+| `https://<old>/app/…` | `https://app.spamanagement.co/…` |
+| `https://<old>/admin/…` | `https://admin.spamanagement.co/…` |
+| `https://<old>/s/{slug}/…` | `https://{slug}.spamanagement.co/…` |
+
+GET/HEAD get a 301, other methods a 308 (method and body kept). Never redirected, served as they are on every host,
+the old one included while it stays in `EXTRA_ROOT_DOMAINS`:
+- `/api/*`: Google/Meta OAuth callbacks (`/api/integrations/google/callback`, `/api/integrations/meta/callback`,
+  `/api/integrations/meta/facebook/callback`), Meta webhook / deauthorize / data-deletion, the Claude connector
+  `/api/mcp`, `/api/health`, Caddy's `/api/domains/allowed`.
+- `/files/*` (images in sent links and emails), `/.well-known/*`, `/widget.js` (an old snippet still loads it from the
+  old host; its `/s/{slug}/book/embed` frame redirects to `{slug}.spamanagement.co/book/embed`).
+- `/_status/*` is Caddy's and lives on `SITE_HOST` only: after the switch `https://spamanagement.co/_status/deploy.json`.
+
+Not carried over: sign-in (cookies are per domain: everyone signs in once more on spamanagement.co; 2FA stays as it
+is); an installed dashboard app leaves its own scope on the redirect, so reinstall it from
+`https://app.spamanagement.co/{slug}`; the Claude connector (Console → Websites shows the new URL
+`https://app.spamanagement.co/api/mcp`; reconnect, old tokens were issued for the old address); a Google/Meta connect
+started before the switch must be started again. Move the Meta webhook / deauthorize / data-deletion URLs to
+`https://app.spamanagement.co/api/integrations/meta/…` (step 4) before the old address is ever removed.
+
 Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first, register its OAuth callbacks,
 then make it `SITE_HOST` and keep the old one in `EXTRA_ROOT_DOMAINS` so links already sent keep working.
 
