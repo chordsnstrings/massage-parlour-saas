@@ -318,29 +318,34 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
 Production started on `SITE_HOST=auto` (`134-209-145-162.sslip.io`, `ROUTING=path`: `/app`, `/admin`, `/s/{slug}`).
 Same checklist as above, in this order — the website first, Cloudflare second, the switch last:
 
-1. **Website first** (safe before any DNS exists): add `EXTRA_ROOT_DOMAINS=spamanagement.co` to the current overlay
-   and change nothing else (keep every key it already holds; re-encrypt and push as in step 5). `SITE_HOST` and
+1. **Website first** (safe before any DNS exists): add `EXTRA_ROOT_DOMAINS=spamanagement.co` to the current overlay,
+   or, if the overlay already has an `EXTRA_ROOT_DOMAINS` line, append `,spamanagement.co` to that line (one line
+   only: with two, the last wins and the other domains silently stop answering). Change nothing else (keep every key
+   it already holds; re-encrypt and push as in step 5). `SITE_HOST` and
    `ROUTING=path` stay, so every current link works as before; the platform answers on
    `https://spamanagement.co/…` (path routing) as soon as its DNS points at the droplet.
 2. **Cloudflare DNS** (step 1 above, grey cloud). Check `https://spamanagement.co` loads, and that `app.`, `admin.` and
    a `{slug}.` name resolve to the droplet (`dig +short app.spamanagement.co`).
-3. **The switch** (steps 3–5 above; register the step 4 callbacks first):
+3. **The switch** (steps 3–5 above; register the step 4 callbacks first). These lines replace the `SITE_HOST`,
+   `EXTRA_ROOT_DOMAINS`, `ROUTING`, `APP_URL` and `ADMIN_URL` lines of the step 3 block above (its other keys still
+   apply); keep exactly one `EXTRA_ROOT_DOMAINS` line holding every old domain:
    ```dotenv
    SITE_HOST=spamanagement.co
-   EXTRA_ROOT_DOMAINS=134-209-145-162.sslip.io   # the old address keeps answering (and redirecting)
+   # the old address keeps answering (and redirecting); keep spamanagement.ae only while its DNS is live
+   EXTRA_ROOT_DOMAINS=134-209-145-162.sslip.io,spamanagement.ae
    ROUTING=host
    APP_URL=https://app.spamanagement.co
    ADMIN_URL=https://admin.spamanagement.co
    ```
-   Every old path address then redirects to the new one on spamanagement.co, so only switch once step 2 works.
+   `spamanagement.co` leaves `EXTRA_ROOT_DOMAINS` here (it is `SITE_HOST` now). Every old path address then redirects to the new one on spamanagement.co, so only switch once step 2 works.
    Undo = `ROUTING=path` and remove `APP_URL` / `ADMIN_URL` from the overlay (they then default to
    `https://$SITE_HOST` and `…/admin`; left in, every link built from them — invites, sign-in fallback, worker jobs —
    would point at `app.`/`admin.` names that path routing treats as spa custom domains, so 404). `ROUTING` is a build
    arg, so the undo applies once the web image has rebuilt (the redirects are cached by browsers for 5 minutes only).
 
 **Old links keep working** (shared links, invites, QR posters, widget snippets, bookmarks): on any platform domain
-(the sslip.io one, spamanagement.co itself, and their `www.`) the proxy redirects, keeping the rest of the path and the
-query, in one hop (a renamed spa's old slug goes straight to its current one):
+(the sslip.io one, spamanagement.ae while listed, spamanagement.co itself, and their `www.`) the proxy redirects,
+keeping the rest of the path and the query, in one hop (a renamed spa's old slug goes straight to its current one):
 
 | Old (path routing) | New (host routing) |
 |---|---|
