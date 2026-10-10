@@ -187,6 +187,11 @@
   --sp-focus: rgba(94, 125, 107, 0.45);
 }
 
+/* R22: the Arabic console (IBM Plex Sans Arabic, as in components/shell/console-ar.css). */
+.sp-status[data-look="console"]:lang(ar) {
+  --sp-font: "IBM Plex Sans Arabic", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Spa sites: theme-neutral (each spa has its own theme; none is loaded here), no platform branding. */
 .sp-status[data-look="site"] {
   --sp-bg: #faf9f7;

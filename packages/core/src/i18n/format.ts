@@ -1,6 +1,7 @@
-// Locale-aware formatting for the spa dashboard. Thai uses the Gregorian calendar and Latin digits (the design shows
-// "2027", not the Buddhist year); money stays "AED 1,234" in every language; times are 24 h in Asia/Dubai.
-import type { Locale } from './types'
+// Locale-aware formatting for the spa dashboard (EN/TH) and the super-admin console (EN/AR, R22). Thai uses the
+// Gregorian calendar and Latin digits (the design shows "2027", not the Buddhist year); Arabic uses Western digits too
+// (owner: never Arabic-Indic); money stays "AED 1,234" in every language; times are 24 h in Asia/Dubai.
+import type { AnyLocale } from './types'
 
 const TZ = 'Asia/Dubai'
 
@@ -8,9 +9,24 @@ export type Format = ReturnType<typeof build>
 
 const toDate = (value: Date | string | number) => (value instanceof Date ? value : new Date(value))
 
+const AR_MONTHS = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+]
+
 // Names are our own tables (not ICU's): Node and browsers ship different ICU data ("Thu, 8 Oct" vs "Thu 8 Oct",
 // "Sep" vs "Sept"), which breaks hydration when a client component formats a date the server also rendered.
-const NAMES: Record<Locale, { mon: string[]; month: string[]; wd: string[] }> = {
+const NAMES: Record<AnyLocale, { mon: string[]; month: string[]; wd: string[] }> = {
   en: {
     mon: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     month: [
@@ -46,6 +62,12 @@ const NAMES: Record<Locale, { mon: string[]; month: string[]; wd: string[] }> = 
       'ธันวาคม',
     ],
     wd: ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'],
+  },
+  // Arabic has no month abbreviations: short and long names are the same (the names used across the UAE).
+  ar: {
+    mon: AR_MONTHS,
+    month: AR_MONTHS,
+    wd: ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
   },
 }
 
@@ -85,7 +107,11 @@ const money0 = money(0)
 const money2 = money(2)
 const NBSP = '\u00a0'
 
-function build(locale: Locale) {
+// Arabic pages are RTL: an amount is kept in a left-to-right isolate so "-AED 1,234" never reorders to "AED 1,234-".
+const LRI = '\u2066'
+const PDI = '\u2069'
+
+function build(locale: AnyLocale) {
   const n = NAMES[locale]
   const dayMon = (p: Parts) => `${p.d} ${n.mon[p.m - 1]}`
   const hm = (p: Parts) => `${p.hh}:${p.mm}`
@@ -106,7 +132,7 @@ function build(locale: Locale) {
     /** 8 Oct, 14:05 · 8 ต.ค. 14:05 */
     dateTime: (v: Date | string | number) => {
       const p = parts(v)
-      return `${dayMon(p)}${locale === 'en' ? ',' : ''} ${hm(p)}`
+      return `${dayMon(p)}${locale === 'en' ? ',' : locale === 'ar' ? '،' : ''} ${hm(p)}`
     },
     /** 14:05 */
     time: (v: Date | string | number) => hm(parts(v)),
@@ -125,13 +151,14 @@ function build(locale: Locale) {
       const v = Number(value)
       const abs = Math.abs(v)
       const body = (Math.round(abs * 100) % 100 === 0 ? money0 : money2).format(abs)
-      return `${v < 0 && body !== '0' && body !== '0.00' ? '-' : ''}AED${NBSP}${body}`
+      const text = `${v < 0 && body !== '0' && body !== '0.00' ? '-' : ''}AED${NBSP}${body}`
+      return locale === 'ar' ? `${LRI}${text}${PDI}` : text
     },
   }
 }
 
-const cache = new Map<Locale, Format>()
-export function createFormat(locale: Locale): Format {
+const cache = new Map<AnyLocale, Format>()
+export function createFormat(locale: AnyLocale): Format {
   let f = cache.get(locale)
   if (!f) {
     f = build(locale)

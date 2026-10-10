@@ -1,6 +1,8 @@
 // F24: the shared 404 / error card, in each surface's look (status.css). No hooks: server not-found pages and client
 // error boundaries both render it. Never shows an error message or stack — only the digest, for support.
 import '@fontsource-variable/dm-sans'
+import '@fontsource/ibm-plex-sans-arabic/400.css'
+import '@fontsource/ibm-plex-sans-arabic/600.css'
 import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './status.css'

@@ -1,6 +1,6 @@
 // Tiny in-house translator: dotted keys, `{param}` placeholders, plurals via Intl.PluralRules. No catalogue imports
 // here, so client bundles only carry the messages they are handed.
-import type { Leaf, Locale, MessageKey, Params } from './types'
+import type { AnyLocale, Leaf, Locale, MessageKey, Params } from './types'
 
 type Tree = { readonly [key: string]: unknown }
 
@@ -22,8 +22,8 @@ export function lookup(messages: Tree, key: string): Leaf | undefined {
   return isLeaf(node) ? node : undefined
 }
 
-const plurals = new Map<Locale, Intl.PluralRules>()
-const pluralRules = (locale: Locale) => {
+const plurals = new Map<AnyLocale, Intl.PluralRules>()
+const pluralRules = (locale: AnyLocale) => {
   let rules = plurals.get(locale)
   if (!rules) {
     rules = new Intl.PluralRules(locale)
@@ -32,7 +32,7 @@ const pluralRules = (locale: Locale) => {
   return rules
 }
 
-export function render(locale: Locale, leaf: Leaf, params?: Record<string, string | number>) {
+export function render(locale: AnyLocale, leaf: Leaf, params?: Record<string, string | number>) {
   const text =
     typeof leaf === 'string'
       ? leaf
@@ -41,30 +41,38 @@ export function render(locale: Locale, leaf: Leaf, params?: Record<string, strin
   return text.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match))
 }
 
-export type Translator = {
-  (key: MessageKey, params?: Params): string
-  locale: Locale
+/** Spa dashboard by default (`MessageKey`, EN/TH); the console uses `Translator<ConsoleKey, ConsoleLocale>`. */
+export type Translator<K extends string = MessageKey, L extends AnyLocale = Locale> = {
+  (key: K, params?: Params<K>): string
+  locale: L
   /** True when `key` names a message (used for keys that arrive as plain strings, e.g. from action results). */
-  has: (key: string) => key is MessageKey
-  /** Translates a runtime string key, or returns undefined when it isn't one. */
-  maybe: (key: string | undefined | null, params?: Params) => string | undefined
+  has: (key: string) => key is K
+  /** Translates a runtime string key, or returns undefined when it isn't one (params as they travel, untyped). */
+  maybe: (key: string | undefined | null, params?: Params<string>) => string | undefined
 }
 
 /** `messages` = the locale's catalogue; `fallback` (usually EN) covers keys a partial catalogue lacks. */
-export function createTranslator(locale: Locale, messages: Tree, fallback?: Tree): Translator {
+export function createTranslator<K extends string = MessageKey, L extends AnyLocale = Locale>(
+  locale: L,
+  messages: Tree,
+  fallback?: Tree,
+): Translator<K, L> {
   const find = (key: string) => lookup(messages, key) ?? (fallback ? lookup(fallback, key) : undefined)
   // Nested `{ key }` params (e.g. a status word inside a sentence) are translated first.
-  const flat = (params?: Params) =>
+  const flat = (params?: Params<string>) =>
     params &&
     Object.fromEntries(
-      Object.entries(params).map(([name, v]) => [name, typeof v === 'object' ? t(v.key, v.params) : v]),
+      Object.entries(params).map(([name, v]) => [
+        name,
+        typeof v === 'object' ? t(v.key as K, v.params as Params<K>) : v,
+      ]),
     )
-  const t = ((key: MessageKey, params?: Params) => {
+  const t = ((key: K, params?: Params<K>) => {
     const leaf = find(key)
     return leaf === undefined ? key : render(locale, leaf, flat(params))
-  }) as Translator
+  }) as Translator<K, L>
   t.locale = locale
-  t.has = (key: string): key is MessageKey => find(key) !== undefined
+  t.has = (key: string): key is K => find(key) !== undefined
   t.maybe = (key, params) => {
     if (!key) return undefined
     const leaf = find(key)

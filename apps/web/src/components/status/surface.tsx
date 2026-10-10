@@ -2,6 +2,8 @@
 // F24: the request's surface + document language, from the root layout (server/surface.ts), for the client error
 // boundaries that render outside every surface layout (and its i18n provider).
 import { PLATFORM_CONTACT_EMAIL } from '@spa/core'
+import { chrome as arChrome } from '@spa/core/i18n/console/ar/chrome'
+import { chrome as enChrome } from '@spa/core/i18n/console/en/chrome'
 import { errors as enErrors } from '@spa/core/i18n/en/errors'
 import { errors as thErrors } from '@spa/core/i18n/th/errors'
 import { createContext, use } from 'react'
@@ -28,7 +30,7 @@ export type ErrorCopy = {
   reference: (digest: string) => string
 }
 
-/** Error-page copy in the surface's language: dashboard EN/TH (catalogue), spa sites EN/AR, marketing + console EN. */
+/** Error-page copy in the surface's language: dashboard EN/TH (catalogue), spa sites + console EN/AR, marketing EN. */
 export function errorCopy(surface: DocSurface, lang: string): ErrorCopy {
   const look = lookOf(surface)
   if (look === 'crm') {
@@ -53,15 +55,23 @@ export function errorCopy(surface: DocSurface, lang: string): ErrorCopy {
       reference: (digest) => ui('errorRef', l).replace('{digest}', digest),
     }
   }
+  if (look === 'console') {
+    const b = (lang === 'ar' ? arChrome : enChrome).boundary
+    return {
+      look,
+      title: b.title,
+      body: b.body,
+      retry: b.retry,
+      home: b.home,
+      reference: (digest) => b.ref.replace('{digest}', digest),
+    }
+  }
   return {
     look,
     title: 'Something went wrong',
-    body:
-      look === 'console'
-        ? 'The error was logged. Try again; the reference below finds it in the server logs.'
-        : `We’ve been notified. Try again — if it keeps happening, write to ${PLATFORM_CONTACT_EMAIL} with the reference below.`,
+    body: `We’ve been notified. Try again — if it keeps happening, write to ${PLATFORM_CONTACT_EMAIL} with the reference below.`,
     retry: 'Try again',
-    home: look === 'console' ? 'Back to the console' : 'Back to home',
+    home: 'Back to home',
     reference: (digest) => `Ref ${digest}`,
   }
 }

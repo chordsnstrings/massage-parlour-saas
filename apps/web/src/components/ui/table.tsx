@@ -30,7 +30,7 @@ export function DataTable<T>({
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-[length:var(--ui-td-fs,0.875rem)]">
           <thead>
-            <tr className="border-b text-left text-[length:var(--ui-th-fs,0.75rem)] font-medium uppercase tracking-[0.06em] text-muted">
+            <tr className="border-b text-start text-[length:var(--ui-th-fs,0.75rem)] font-medium uppercase tracking-[0.06em] text-muted">
               {columns.map((c) => (
                 <th
                   key={c.key}

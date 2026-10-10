@@ -1,4 +1,5 @@
 import { createTranslator, en, type MessageKey, type MessageRef, type Params } from '@spa/core/i18n'
+import { type ConsoleKey, type ConsoleMessageRef, consoleEn } from '@spa/core/i18n/console'
 import type { ZodError } from 'zod'
 import { domainErrorRef } from '@/i18n/domain-errors'
 
@@ -6,21 +7,36 @@ import { domainErrorRef } from '@/i18n/domain-errors'
  * Server-action result. `message`/`error` are English (logs, tests); when the text came from the i18n catalogue,
  * `key` + `params` travel too and the client renders them in the viewer's language (`resultText`, i18n/client.tsx).
  * Field errors may be plain text or catalogue keys (Phase 2 turns zod messages into keys).
+ * Keys come from the spa catalogue or, in super-admin console actions (R22), the console catalogue: their namespaces
+ * never overlap except shared paths with identical English (packages/core/test/console-i18n.test.ts).
  */
 export type ActionResult =
-  | { ok: true; message?: string; key?: MessageKey; params?: Params; data?: Record<string, unknown> }
-  | { ok: false; error: string; key?: MessageKey; params?: Params; fieldErrors?: Record<string, string> }
+  | { ok: true; message?: string; key?: ResultKey; params?: Params<ResultKey>; data?: Record<string, unknown> }
+  | {
+      ok: false
+      error: string
+      key?: ResultKey
+      params?: Params<ResultKey>
+      fieldErrors?: Record<string, string>
+    }
   | null
 
-/** Plain text, a catalogue key (`'errors.forbidden'`) or a key with params. */
-export type Msg = string | MessageRef
+type ResultKey = MessageKey | ConsoleKey
+
+/** Plain text, a catalogue key (`'errors.forbidden'`, console `'actions.planSaved'`) or a key with params. */
+export type Msg = string | MessageRef | ConsoleMessageRef
 
 const english = createTranslator('en', en)
-const resolve = (m: Msg): { text: string; key?: MessageKey; params?: Params } => {
-  if (typeof m !== 'string') return { text: english(m.key, m.params), key: m.key, params: m.params }
-  return english.has(m) ? { text: english(m), key: m } : { text: m }
+const consoleEnglish = createTranslator<ConsoleKey, 'en'>('en', consoleEn)
+const resolve = (m: Msg): { text: string; key?: ResultKey; params?: Params<ResultKey> } => {
+  if (typeof m !== 'string') {
+    const text = english.maybe(m.key, m.params) ?? consoleEnglish.maybe(m.key, m.params) ?? m.key
+    return { text, key: m.key, params: m.params }
+  }
+  if (english.has(m)) return { text: english(m), key: m }
+  return consoleEnglish.has(m) ? { text: consoleEnglish(m), key: m } : { text: m }
 }
-const withKey = (r: { key?: MessageKey; params?: Params }) => ({
+const withKey = (r: { key?: ResultKey; params?: Params<ResultKey> }) => ({
   ...(r.key ? { key: r.key } : {}),
   ...(r.params ? { params: r.params } : {}),
 })

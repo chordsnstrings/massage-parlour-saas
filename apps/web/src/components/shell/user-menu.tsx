@@ -1,25 +1,44 @@
 'use client'
 import { authClient } from '@spa/auth/client'
-import { ArrowLeftRight, LogOut, UserRound } from 'lucide-react'
+import { CONSOLE_LANGUAGE_NAMES } from '@spa/core/i18n/console/labels'
+import { CONSOLE_LOCALES, type ConsoleLocale } from '@spa/core/i18n/types'
+import { ArrowLeftRight, Check, Languages, LogOut, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import { DropdownMenu } from 'radix-ui'
+import { useTransition } from 'react'
+import { setConsoleLocaleAction } from '@/i18n/console-actions'
 import { surfaceBaseOf } from '@/lib/paths'
 import { cn, initials } from '@/lib/utils'
 
 const item =
   'flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-fg outline-none data-[highlighted]:bg-subtle [&_svg]:size-4 [&_svg]:text-muted'
 
+export type UserMenuLabels = { account: string; switchSpa: string; signOut: string; language: string }
+const ENGLISH: UserMenuLabels = {
+  account: 'Account & security',
+  switchSpa: 'Switch spa',
+  signOut: 'Sign out',
+  language: 'Language',
+}
+
 export function UserMenu({
   user,
   compact,
   accountHref = '/account',
   switchHref,
+  labels = ENGLISH,
+  language,
 }: {
   user: { name: string; email: string }
   compact?: boolean
   accountHref?: string
   switchHref?: string
+  /** Menu texts; the console passes its EN/AR ones (R22), elsewhere English. */
+  labels?: UserMenuLabels
+  /** Console only (R22): the current console language → the English | العربية switch. */
+  language?: ConsoleLocale
 }) {
+  const [switching, startSwitch] = useTransition()
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
@@ -52,15 +71,45 @@ export function UserMenu({
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item asChild className={item}>
             <Link href={accountHref}>
-              <UserRound /> Account & security
+              <UserRound /> {labels.account}
             </Link>
           </DropdownMenu.Item>
           {switchHref && (
             <DropdownMenu.Item asChild className={item}>
               <Link href={switchHref}>
-                <ArrowLeftRight /> Switch spa
+                <ArrowLeftRight /> {labels.switchSpa}
               </Link>
             </DropdownMenu.Item>
+          )}
+          {language && (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Label className="flex items-center gap-2.5 px-2.5 pt-1.5 pb-1 text-xs text-muted [&_svg]:size-4">
+                <Languages /> {labels.language}
+              </DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={language}
+                onValueChange={(next) => {
+                  if (next !== language) startSwitch(() => setConsoleLocaleAction(next).then(() => {}))
+                }}
+              >
+                {CONSOLE_LOCALES.map((l) => (
+                  <DropdownMenu.RadioItem
+                    key={l}
+                    value={l}
+                    lang={l}
+                    disabled={switching}
+                    className={cn(item, 'ps-9 data-[disabled]:opacity-60')}
+                  >
+                    <DropdownMenu.ItemIndicator className="absolute start-2.5 inline-flex">
+                      <Check />
+                    </DropdownMenu.ItemIndicator>
+                    {CONSOLE_LANGUAGE_NAMES[l]}
+                  </DropdownMenu.RadioItem>
+                ))}
+              </DropdownMenu.RadioGroup>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+            </>
           )}
           <DropdownMenu.Item
             className={item}
@@ -69,7 +118,7 @@ export function UserMenu({
               window.location.href = `${surfaceBaseOf(window.location.pathname)}/login`
             }}
           >
-            <LogOut /> Sign out
+            <LogOut /> {labels.signOut}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

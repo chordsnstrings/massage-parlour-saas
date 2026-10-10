@@ -1,0 +1,53 @@
+/* R22: the super-admin console + admin sign-in pages in Arabic (<html lang="ar" dir="rtl">, server/surface.ts).
+   Loaded by the console and admin sign-in layouts; every rule sits under :lang(ar) / [dir="rtl"], so English pages
+   are untouched and never download the Arabic font (fontsource faces load only when a page uses them). Layout
+   mirroring itself comes from CSS logical properties (grid columns, ms-/me-/ps-/pe-/start-/end-, text-start). */
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/600.css";
+@import "@fontsource/ibm-plex-sans-arabic/700.css";
+
+/* One face for Arabic text, headings and the Latin names inside them (Space Grotesk / DM Sans have no Arabic). */
+:root:lang(ar):has(.mkt-app) {
+  --mkt-font: "IBM Plex Sans Arabic", "DM Sans Variable", ui-sans-serif, sans-serif;
+  --mkt-head: "IBM Plex Sans Arabic", "Space Grotesk Variable", ui-sans-serif, sans-serif;
+}
+/* Arabic letters join: letter-spacing breaks them (headings, stat figures, small labels and table heads). */
+:root:lang(ar):has(.mkt-app) :is(h1, h2, h3, [class*="--ui-stat-fs"], [class*="tracking-"]) {
+  letter-spacing: normal;
+}
+
+/* Icons that point a direction mirror (back arrows, chevrons, external links, sign out); clocks and refresh don't. */
+:root[dir="rtl"]:has(.mkt-app)
+  :is(
+    .lucide-arrow-left,
+    .lucide-arrow-right,
+    .lucide-arrow-up-right,
+    .lucide-arrow-up-left,
+    .lucide-chevron-left,
+    .lucide-chevron-right,
+    .lucide-chevrons-left,
+    .lucide-chevrons-right,
+    .lucide-external-link,
+    .lucide-square-arrow-out-up-right,
+    .lucide-log-out,
+    .lucide-log-in,
+    .lucide-move-left,
+    .lucide-move-right,
+    .lucide-undo-2,
+    .lucide-redo-2,
+    .lucide-corner-down-left,
+    .lucide-corner-down-right
+  ) {
+  transform: scaleX(-1);
+}
+
+/* The dark panels' green glow starts at the inline start; let it drift inward on the mirrored side too. */
+:root[dir="rtl"] .mkt-app-glow::before {
+  animation-name: mkt-app-drift-rtl;
+}
+@keyframes mkt-app-drift-rtl {
+  to {
+    transform: translate(-18%, 22%) scale(1.1);
+  }
+}

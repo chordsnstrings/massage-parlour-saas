@@ -1,10 +1,12 @@
 // F24: which surface a page request is for (proxy.ts sets `x-internal-path` = its rewrite) and that surface's document
-// language: marketing + console English, spa dashboard the viewer's EN/TH, spa sites EN/AR (`?lang=ar`, RTL).
+// language: marketing English, spa dashboard the viewer's EN/TH, console EN/AR (R22: the super-admin's choice, RTL
+// for Arabic), spa sites EN/AR (`?lang=ar`, RTL).
 import { pageKindOf } from '@spa/core'
 import { headers } from 'next/headers'
 import { unstable_rethrow } from 'next/navigation'
 import { cache } from 'react'
 import type { SurfaceInfo } from '@/components/status/surface'
+import { getConsoleLocale } from '@/i18n/console'
 import { getLocale } from '@/i18n/server'
 import { adminPath, appPath, PATH_ROUTING } from '@/lib/paths'
 
@@ -34,7 +36,11 @@ export const requestSurface = cache(async (): Promise<RequestSurface> => {
     })
     return { surface, lang, dir: 'ltr', home: appPath('/') }
   }
-  if (surface === 'admin') return { surface, lang: 'en', dir: 'ltr', home: adminPath('/') }
+  if (surface === 'admin') {
+    // The admin-host account page is the spa dashboard's (EN/TH, i18n/server), so it stays English + LTR.
+    const ar = !internal.startsWith('/platform/account') && (await getConsoleLocale()) === 'ar'
+    return { surface, lang: ar ? 'ar' : 'en', dir: ar ? 'rtl' : 'ltr', home: adminPath('/') }
+  }
   if (surface === 'site' || surface === 'domain') {
     const key = safeDecode(internal.split('/')[2] ?? '').toLowerCase()
     const ar = new URLSearchParams(original.split('?')[1] ?? '').get('lang') === 'ar'

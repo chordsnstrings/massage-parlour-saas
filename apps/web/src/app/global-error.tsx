@@ -43,7 +43,9 @@ function guess(): Guess {
         ? ar || html.lang === 'ar'
           ? 'ar'
           : 'en'
-        : 'en'
+        : surface === 'admin' && html.lang === 'ar'
+          ? 'ar'
+          : 'en'
   const home =
     surface === 'app'
       ? PATH_ROUTING

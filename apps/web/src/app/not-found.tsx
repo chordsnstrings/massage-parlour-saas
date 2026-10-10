@@ -1,5 +1,6 @@
 import { PLATFORM_NAME } from '@spa/core'
 import { translator } from '@spa/core/i18n'
+import { consoleTranslator } from '@spa/core/i18n/console'
 import { unstable_rethrow } from 'next/navigation'
 import { Logo } from '@/components/brand'
 import { ui } from '@/components/site/i18n'
@@ -42,20 +43,23 @@ export default async function NotFound() {
       </StatusPage>
     )
   }
-  if (s.surface === 'admin')
+  if (s.surface === 'admin') {
+    const t = consoleTranslator(s.lang === 'ar' ? 'ar' : 'en')
     return (
       <StatusPage
         look="console"
-        lang="en"
+        lang={s.lang}
+        dir={s.dir}
         code="404"
-        title="Page not found"
-        body="This page doesn’t exist in the console, or it has moved."
+        title={t('chrome.notFound.title')}
+        body={t('chrome.notFound.body')}
       >
         <a className="sp-btn" href={s.home}>
-          Back to the console
+          {t('chrome.notFound.back')}
         </a>
       </StatusPage>
     )
+  }
   if (s.site) {
     const locale = s.lang === 'ar' ? 'ar' : 'en'
     const tenant = await resolveSiteTenant(s.site).catch((e) => {
