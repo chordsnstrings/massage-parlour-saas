@@ -121,12 +121,20 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
     })
   })
 
+  // The second super-admin signs in up front: the first editor's lock heartbeat (30 s) must not learn about the
+  // take-over before its own save is refused (last step), and a first-time admin sign-in alone can take ~20 s.
+  const other = await (await browser.newContext()).newPage()
+  await adminOnApp(other, `/${slug}/website`)
+
   await test.step('offline: changes are kept on the device and offered back after a crash', async () => {
     await page.context().setOffline(true)
     await editHeading(page, 'About our calm spa', 'About our offline spa')
     await expect(status(page)).toHaveText('Offline – changes kept locally', { timeout: 15_000 })
     expect(await draft()).not.toContain('About our offline spa')
-    // The tab dies before the network comes back.
+    // The tab dies before the network comes back. Its requests are cut at the browser first: closing runs the
+    // editor's hide/pagehide flush, and that last save escapes the emulated offline state while the page detaches
+    // (it reached the server ~50 ms after close on a production build).
+    await page.route('**/*', (r) => r.abort('internetdisconnected'))
     await page.close()
     page = await page.context().newPage()
     await page.context().setOffline(false)
@@ -139,9 +147,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
     expect(await draft()).toContain('About our offline spa')
   })
 
-  const other = await (await browser.newContext()).newPage()
   await test.step('a second super-admin sees who is editing (view only) and takes over', async () => {
-    await adminOnApp(other, `/${slug}/website`)
     await other.goto(editorUrl)
     const lock = other.getByRole('region', { name: 'Editing lock' })
     await expect(lock).toContainText('Ahmed Saleh is editing this page — view only', { timeout: 30_000 })

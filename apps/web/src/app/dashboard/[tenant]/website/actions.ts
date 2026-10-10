@@ -379,9 +379,10 @@ async function storeDraft(
   stamp: EditStampInput,
 ) {
   await lockSite(tx, ctx.tenant.id)
-  await assertEditStamp(tx, ctx.tenant.id, pageId, stamp)
-  // F29: refused while another super-admin holds the page's editor lock (they took over, or it was theirs).
+  // F29: refused while another super-admin holds the page's editor lock (they took over, or it was theirs). Checked
+  // before the stamp: a taken-over editor must hear "X took over" (→ view only), not "changed elsewhere — keep mine".
   await assertPagesUnlocked(tx, { tenantId: ctx.tenant.id, pageIds: [pageId], userId: ctx.user.id })
+  await assertEditStamp(tx, ctx.tenant.id, pageId, stamp)
   const current = await getEditablePage(tx, ctx.tenant.id, pageId)
   if (!current) throw new DomainError('Page not found', 'not_found')
   if (!can(ctx, 'site.design') && designSignature(current.data) !== designSignature(data)) {
@@ -481,8 +482,8 @@ export async function publishPageAction(
   try {
     published = await withTenant(ctx.tenant.id, async (tx) => {
       await lockSite(tx, ctx.tenant.id)
-      await assertEditStamp(tx, ctx.tenant.id, pageId, expected, { site: true })
       await assertPagesUnlocked(tx, { tenantId: ctx.tenant.id, pageIds: [pageId], userId: ctx.user.id })
+      await assertEditStamp(tx, ctx.tenant.id, pageId, expected, { site: true })
       if (can(ctx, 'site.content'))
         await storeDraft(tx, ctx, pageId, data as Record<string, unknown>, undefined)
       const version = await publishPage(tx, { tenantId: ctx.tenant.id, pageId, userId: ctx.user.id })
