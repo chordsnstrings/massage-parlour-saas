@@ -27,7 +27,7 @@ import {
   setSubscriptionDiscounts,
   switchPlan,
 } from '@spa/services'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
@@ -317,7 +317,9 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
   if (!parsed.success) return fromZod(parsed.error)
   const { id, tier, ...rest } = parsed.data
   const existing = id ? await platformDb().query.plans.findFirst({ where: eq(plans.id, id) }) : undefined
-  if (existing?.archivedAt) return fail(`Restore ${existing.name} before editing it.`)
+  const restoreFirst = (name: string) => fail(`Restore ${name} before editing it.`)
+  if (id && !existing) return fail('Plan not found.')
+  if (existing?.archivedAt) return restoreFirst(existing.name)
   // PLAN §18.8: plans are found by code (premium / standard / legacy-yearly) — those codes never change; the tier
   // sets the feature switches in `limits` (other limits, e.g. a branch cap, are kept).
   const fixed = existing && (Object.values(PLAN_CODES) as string[]).includes(existing.code)
@@ -327,11 +329,26 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
     limits: { ...(existing?.limits ?? {}), ...tierLimits(tier) },
   }
   try {
-    if (id) await platformDb().update(plans).set(d).where(eq(plans.id, id))
-    else await platformDb().insert(plans).values(d)
+    if (id) {
+      // R19: the archived check is part of the write, so a plan archived or deleted since the sheet opened is not edited.
+      const [row] = await platformDb()
+        .update(plans)
+        .set(d)
+        .where(and(eq(plans.id, id), isNull(plans.archivedAt)))
+        .returning({ id: plans.id })
+      if (!row) {
+        const now = await platformDb().query.plans.findFirst({
+          where: eq(plans.id, id),
+          columns: { name: true },
+        })
+        return now ? restoreFirst(now.name) : fail('Plan not found.')
+      }
+    } else await platformDb().insert(plans).values(d)
   } catch (e) {
-    if ((e as { cause?: { code?: string } }).cause?.code === '23505')
-      return fail('That code is already used.', { code: 'Already used' })
+    const code = (e as { cause?: { code?: string } }).cause?.code
+    if (code === '23505') return fail('That code is already used.', { code: 'Already used' })
+    // plans_archived_inactive: an archived plan can't be made available
+    if (code === '23514' && existing) return restoreFirst(existing.name)
     throw e
   }
   await audit({

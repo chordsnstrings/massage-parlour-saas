@@ -427,6 +427,20 @@ test('console: delete an unused plan, archive a used one and restore it; the las
         code: used!.code,
         name: name('Archive'),
       })
+
+      // Archived again (another admin) while this Edit sheet is open: the save is refused, nothing is written.
+      await back.getByRole('button', { name: 'Edit' }).click()
+      const sheet = page.getByRole('dialog', { name: `Edit ${name('Archive')}` })
+      await sheet.getByRole('checkbox', { name: 'Available for new spas' }).check()
+      await db.update(plans).set({ archivedAt: new Date(), active: false }).where(eq(plans.id, used!.id))
+      await sheet.getByRole('button', { name: 'Save' }).click()
+      await expect(page.getByText(`Restore ${name('Archive')} before editing it.`)).toBeVisible()
+      const [stale] = await db.select().from(plans).where(eq(plans.id, used!.id))
+      expect(stale).toMatchObject({ active: false, archivedAt: expect.any(Date) })
+      expect(await audited('platform.plan.updated')).not.toContainEqual(
+        expect.objectContaining({ code: used!.code }),
+      )
+      await db.update(plans).set({ archivedAt: null }).where(eq(plans.id, used!.id))
     })
 
     await test.step('the last plan new spas can get is refused', async () => {
