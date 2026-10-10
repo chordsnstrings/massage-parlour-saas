@@ -217,7 +217,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (services `announcements.ts`; spa side `server/announcements.ts` `announcementsFor` (platform read, plan code from
   entitlements) → `components/shell/announcements.tsx` in the SpaShell banner slot, dismiss =
   `dashboard/[tenant]/announcements/actions.ts` (requireMember, not guard; `announcement_dismissals` via withTenant)),
-  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable), billing transitions =
+  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable; also returns `featureTier` +
+  `planTier`) → `platform/(console)/tenants/page.tsx` + page-scoped `tenants.css` (own table, not DataTable: merged
+  columns Spa | Activity | Usage | AI | Plan with one header sort link per key, container query on the card:
+  ≥ 880 px 6 cols, 660–879 compact with Plan in the Spa cell, < 660 a `<ul>` of cards; no overflow-x by
+  construction, e2e `console-spa-list.spec`), billing transitions =
   `billing-actions.ts` (rules card on Company, per-spa pause + Check now on the spa page) → services
   `billing-transitions.ts`; payment paths (`setInvoicePaid`, `recordPlatformPayment` → `.billing`,
   `settleCheckoutSession`) call `liftBillingHold` in their tx and `billingTransitionEffects` after commit. Tenant
