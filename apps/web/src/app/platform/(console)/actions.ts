@@ -1,5 +1,16 @@
 'use server'
-import { FEATURE_TIERS, PLAN_CODES, sendStaffEmail, tierLimits } from '@spa/core'
+import {
+  checkSendingDomain,
+  emailDomain,
+  FEATURE_TIERS,
+  PLAN_CODES,
+  ResendDomainError,
+  resendDomains,
+  resolveEmailConfig,
+  sendStaffEmail,
+  setUpSendingDomain,
+  tierLimits,
+} from '@spa/core'
 import { aiModelConfig, plans, platformDb, platformSettings, subscriptions, tenants } from '@spa/db'
 import {
   billingTransitionEffects,
@@ -34,7 +45,7 @@ import { todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
 import { discountsFromForm } from '@/server/discounts'
-import { invalidateEmailSettings, registerEmailSettings } from '@/server/email-settings'
+import { invalidateEmailSettings, registerEmailSettings, resendDomainsFetch } from '@/server/email-settings'
 import { canonicalUrls } from '@/server/origin'
 import { forgetPwaSlugs } from '@/server/pwa'
 import { forgetSiteTenants } from '@/server/sites'
@@ -571,6 +582,74 @@ export async function sendTestEmailAction(_p: ActionResult): Promise<ActionResul
   }
   await audit({ actorUserId: user.id, action: 'platform.email.test_sent', data: { to: user.email } })
   return ok(`Test email sent to ${user.email}`)
+}
+
+/**
+ * R18 "Sending domain" (Email card): "setup" finds or adds the From domain in Resend, "check" asks Resend to verify it;
+ * both return status + DNS records in the result (nothing stored). Key: the optional one-off `setupKey` (the domains
+ * API needs full access; a sending-access key is refused), else the effective key (console, then env). Neither key
+ * is ever stored, logged, audited or returned; Resend failures come back as plain messages (core resend-domains.ts).
+ */
+export async function sendingDomainAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      intent: z.enum(['setup', 'check']),
+      setupKey: z
+        .string()
+        .trim()
+        .max(200)
+        .refine((v) => !v || /^re_[A-Za-z0-9_-]{8,}$/.test(v), 'A Resend API key starts with re_')
+        .optional(),
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  registerEmailSettings()
+  const eff = await resolveEmailConfig()
+  const domain = emailDomain(eff.from)
+  if (!domain) return fail('The From address has no domain. Fix it above first.')
+  const key = parsed.data.setupKey || eff.apiKey
+  if (!key) return fail('Save a Resend API key above first.')
+  const client = resendDomains(key, { fetch: resendDomainsFetch() })
+  try {
+    if (parsed.data.intent === 'setup') {
+      const { created, domain: d } = await setUpSendingDomain(client, domain)
+      await audit({
+        actorUserId: user.id,
+        action: 'platform.email.domain_setup',
+        data: { domain, created, status: d.status },
+      })
+      return ok(
+        created
+          ? `${domain} added to Resend. Add the DNS records below in Namecheap.`
+          : `${domain} is already in Resend. Its DNS records are below.`,
+        { domain: d, from: eff.from },
+      )
+    }
+    // The last finished result (Resend's verify resets the status to pending, so it is read first).
+    const { domain: d, requested } = await checkSendingDomain(client, domain)
+    await audit({
+      actorUserId: user.id,
+      action: 'platform.email.domain_checked',
+      data: { domain, status: d.status },
+    })
+    return ok(
+      d.status === 'verified'
+        ? `${domain} is verified`
+        : d.status === 'pending'
+          ? 'Resend is still checking the records. Click Check verification again in a minute.'
+          : d.status === 'not_started'
+            ? 'Verification started. Click Check verification again in a minute.'
+            : `Last check: ${d.status.replaceAll('_', ' ')}. Fix the records not marked Verified, then check again${requested ? ' (re-check requested)' : ''}.`,
+      { domain: d, from: eff.from },
+    )
+  } catch (e) {
+    if (!(e instanceof ResendDomainError)) throw e
+    // Under the setup-key field when that key was the one refused.
+    return e.code === 'restricted_key' || (e.code === 'invalid_key' && parsed.data.setupKey)
+      ? fail(e.message, { setupKey: e.message })
+      : fail(e.message)
+  }
 }
 
 /**
