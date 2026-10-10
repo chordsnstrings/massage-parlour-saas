@@ -82,6 +82,17 @@
     letter-spacing: -0.015em;
     line-height: 1.15;
   }
+  /* keyboard focus: the marketing accent (globals.css would use the app's :root accent, which also flips in OS
+     dark mode); lime on the dark grounds — 6.5:1 on white, 5.2:1+ on the dark green / near-black */
+  .mkt :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .mkt-dark :focus-visible,
+  .mkt-demo :focus-visible,
+  .mkt-pc-spot :focus-visible {
+    outline-color: var(--lime);
+  }
   .mkt-head {
     font-family: var(--head);
     letter-spacing: -0.03em;
@@ -94,8 +105,7 @@
 
   /* dark band / panel: near-black ground, #17171D cards, #C2C2CC text, lime accents */
   .mkt-dark,
-  .mkt-demo,
-  .mkt-plan {
+  .mkt-demo {
     --text: #ffffff;
     --muted: var(--dark-text);
     --mute: #8e8e9a;
@@ -113,8 +123,7 @@
   .mkt-dark::before,
   .mkt-dark::after,
   .mkt-demo::before,
-  .mkt-demo::after,
-  .mkt-plan::before {
+  .mkt-demo::after {
     content: "";
     position: absolute;
     z-index: -1;
@@ -294,6 +303,7 @@
       color 0.25s;
   }
   .mkt-btn svg {
+    flex-shrink: 0;
     width: 18px;
     height: 18px;
     transition: transform 0.25s;
@@ -549,11 +559,6 @@
     border: 1px solid var(--line);
     border-inline-start: 6px solid var(--lime);
     background: var(--surface);
-  }
-  .mkt-plan {
-    padding: 34px 30px;
-    border-radius: 20px;
-    box-shadow: var(--shadow);
   }
   .mkt-chip {
     display: inline-flex;
@@ -829,6 +834,502 @@
     .mkt-tile,
     .mkt-card {
       padding: 22px;
+    }
+  }
+
+  /* ---- plans (home + /pricing): components/marketing/plan-cards.tsx ---------------------------------------- */
+  /* One column on phones (Premium first); from 768px two columns whose rows are shared (subgrid), so name,
+     description, price, setup line, CTA and list line up across both cards whatever the DB text length.
+     --rows = rows per card (set by the component). */
+  .mkt-plans {
+    display: grid;
+    gap: 20px;
+  }
+  @media (min-width: 768px) {
+    .mkt-plans {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 18px;
+      row-gap: 0;
+    }
+    .mkt-plans > .mkt-pc {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span var(--rows, 6);
+      align-content: start;
+    }
+    /* the spotlight: Premium stands 16px proud of Standard at top and bottom — margins plus matching padding,
+       never a transform ([data-rise] owns transform and opacity) */
+    .mkt-plans > .mkt-pc:not(.mkt-pc-spot) {
+      margin-block: 16px;
+    }
+    .mkt-plans > .mkt-pc-spot {
+      padding-block: calc(var(--pc-pad) + 16px);
+    }
+  }
+  .mkt-pc {
+    --pc-pad: 30px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: var(--pc-pad);
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow:
+      0 1px 2px rgba(11, 11, 15, 0.04),
+      0 22px 44px -30px rgba(11, 11, 15, 0.28);
+  }
+  .mkt-pc > * {
+    min-width: 0;
+  }
+  /* Premium: dark-green feature card (accent into accent mixed with --dark), lime top edge + corner glow.
+     Text tones keep 4.5:1+ on the lightest green (the glow stays in the corner, away from the price). */
+  .mkt-pc-spot {
+    --text: var(--on-accent);
+    --muted: color-mix(in srgb, var(--on-accent) 90%, transparent);
+    --mute: color-mix(in srgb, var(--on-accent) 84%, transparent);
+    --line: color-mix(in srgb, var(--on-accent) 16%, transparent);
+    --accent-ink: var(--lime);
+    color: var(--text);
+    border-color: transparent;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(
+      165deg,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent) 50%, var(--dark)) 80%
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--lime) 34%, transparent),
+      0 40px 70px -34px color-mix(in srgb, var(--accent-hover) 75%, transparent),
+      0 14px 28px -18px rgba(11, 11, 15, 0.35);
+  }
+  .mkt-pc-spot::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 320px;
+    height: 320px;
+    top: -160px;
+    inset-inline-end: -160px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(circle, color-mix(in srgb, var(--lime) 26%, transparent), transparent 62%);
+  }
+  .mkt-pc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mkt .mkt-pc-name {
+    font-size: 24px;
+    letter-spacing: -0.02em;
+  }
+  .mkt-pc-tag {
+    flex-shrink: 0;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--grey);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .mkt-pc-spot .mkt-pc-tag {
+    background: var(--lime);
+    color: var(--dark);
+  }
+  .mkt-pc-desc {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  /* price: small top-aligned "AED", a large tabular amount sized to the card width (cqi of the price row
+     itself: a containment on the card would stop it being a subgrid), then "/ month" */
+  .mkt-price {
+    --pn: clamp(40px, 16cqi, 64px);
+    container-type: inline-size;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-top: 22px;
+    color: var(--text);
+    font-family: var(--head);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+  .mkt-price-cur {
+    align-self: flex-start;
+    margin-top: calc(var(--pn) * 0.1);
+    font-size: 17px;
+    letter-spacing: 0;
+  }
+  .mkt-price-num {
+    font-size: var(--pn);
+  }
+  .mkt-price-per {
+    margin-inline-start: 6px;
+    color: var(--mute);
+    font-family: var(--font);
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  /* setup line: its parts wrap as whole pieces, and the "·" before a piece that starts a line is clipped */
+  .mkt-psub {
+    margin-top: 12px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .mkt-psub-in {
+    display: flex;
+    flex-wrap: wrap;
+    margin-inline-start: -1.1em;
+  }
+  .mkt-psub-in > *::before {
+    /* fallback first: engines without alt text (Safari < 17.4, Firefox < 128) drop the second declaration */
+    content: "·";
+    /* biome-ignore lint/suspicious/noDuplicateProperties: deliberate fallback for the alt-text syntax */
+    content: "·" / "";
+    display: inline-block;
+    width: 1.1em;
+    text-align: center;
+  }
+  .mkt-psub strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  /* the CTA carries the DB plan name: it wraps (balanced) instead of overflowing the card; full width, so a
+     16px side padding is enough and keeps "Apply for Standard" on one line in the 1024px home split */
+  .mkt-pc .mkt-btn {
+    width: 100%;
+    min-height: 52px;
+    margin-top: 24px;
+    padding: 12px 16px;
+    white-space: normal;
+    text-align: center;
+    text-wrap: balance;
+  }
+  .mkt-btn-lime {
+    background: var(--lime);
+    color: var(--dark);
+    box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--lime) 65%, transparent);
+  }
+  .mkt-btn-lime:hover {
+    background: color-mix(in srgb, var(--lime) 82%, var(--bg));
+    transform: translateY(-2px);
+  }
+  /* "what you get" list (rows from PLAN_FEATURES, groups from FEATURE_LABELS) */
+  .mkt-pl-box {
+    display: flex;
+    flex-direction: column;
+    margin-top: 26px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+  .mkt-pl-h {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .mkt .mkt-pl-g {
+    margin-top: 18px;
+    color: var(--accent-ink);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .mkt-pl {
+    display: grid;
+    gap: 9px;
+    margin-top: 14px;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .mkt-pl-g + .mkt-pl {
+    margin-top: 9px;
+  }
+  .mkt-pl li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .mkt-pl-box .mkt-ic {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--sage-soft);
+    color: var(--accent);
+  }
+  .mkt-ic svg {
+    width: 12px;
+    height: 12px;
+  }
+  .mkt-pc-spot .mkt-pl-box .mkt-ic {
+    background: color-mix(in srgb, var(--lime) 16%, transparent);
+    color: var(--lime);
+  }
+  /* link row: 44px tap target, the negative margin keeps the 9px list rhythm */
+  .mkt-pl-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    margin-block: -12px;
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .mkt-pl-box .mkt-pl-more .mkt-ic {
+    background: transparent;
+    border: 1.5px dashed currentColor;
+    color: inherit;
+  }
+  /* on the dark-green card the generic --accent-hover (#0a4f37) would sink the lime link to ~1.3:1; white keeps
+     6.5:1+ (don't override --accent-hover there: the card's shadow uses it) */
+  .mkt-pc-spot .mkt-link:hover {
+    color: var(--on-accent);
+  }
+  /* closing link row ("9 more spa tools"): at the foot of the shared list row, so both cards end level */
+  .mkt-pl-end {
+    display: flex;
+    margin-top: auto;
+    padding-top: 9px;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .mkt-plans:not(.mkt-plans-compact) .mkt-pl-end {
+    padding-top: 18px;
+  }
+  .mkt-pl li.is-strong {
+    font-weight: 600;
+  }
+  .mkt-pl li.is-off {
+    color: var(--mute);
+  }
+  .mkt-pl li.is-off .mkt-ic {
+    background: var(--grey);
+    color: var(--mute);
+  }
+  /* home: compact cards */
+  .mkt-plans-compact .mkt-pc {
+    --pc-pad: 26px;
+  }
+  .mkt-plans-compact .mkt-price {
+    --pn: clamp(36px, 15cqi, 48px);
+    margin-top: 20px;
+  }
+  .mkt-plans-compact .mkt-psub {
+    font-size: 14.5px;
+  }
+  .mkt-plans-compact .mkt-pl-box {
+    margin-top: 22px;
+    padding-top: 20px;
+  }
+  .mkt-plans-compact .mkt-pl {
+    margin-top: 0;
+  }
+  .mkt-plans-compact .mkt-pc .mkt-btn {
+    margin-top: 22px;
+  }
+  /* home: split section (copy left, cards right from 1024px) */
+  .mkt-plx {
+    display: grid;
+    gap: 44px;
+  }
+  .mkt-plx-copy {
+    max-width: 40rem;
+  }
+  .mkt-plx .mkt-lead {
+    font-size: 17px;
+    text-wrap: pretty;
+  }
+  .mkt-plx-2 {
+    color: var(--accent);
+  }
+  @media (min-width: 1024px) {
+    .mkt-plx {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 8fr);
+      gap: 48px;
+      align-items: center;
+    }
+    .mkt-plx .mkt-h2 {
+      font-size: clamp(34px, 3.2vw, 40px);
+    }
+  }
+  .mkt-pnotes {
+    display: grid;
+    gap: 10px;
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .mkt-pnotes li,
+  .mkt-assure li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mkt-pnotes svg,
+  .mkt-assure svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+  }
+  .mkt-plink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin-top: 12px;
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .mkt-plink svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* /pricing: jump pills under the lead, assurance line under the cards */
+  .mkt-jump {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line2);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    font-size: 15px;
+    font-weight: 600;
+    transition:
+      border-color 0.25s,
+      background-color 0.25s;
+  }
+  .mkt-jump:hover {
+    border-color: var(--text);
+    background: var(--bg);
+  }
+  .mkt-assure {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 28px;
+    margin-top: 34px;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+  /* /pricing: comparison table — grouped rows, Premium column tinted */
+  .mkt-cmp {
+    overflow-x: auto;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .mkt-cmp table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .mkt-cmp :is(th, td) {
+    padding: 13px 24px;
+    border-bottom: 1px solid var(--line);
+    text-align: start;
+  }
+  .mkt-cmp tbody:last-child tr:last-child > * {
+    border-bottom: 0;
+  }
+  .mkt-cmp thead th {
+    padding-block: 18px;
+    vertical-align: bottom;
+  }
+  .mkt-cmp thead th:not(:first-child),
+  .mkt-cmp td {
+    width: 9rem;
+    text-align: center;
+  }
+  .mkt-cmp tbody th {
+    font-weight: 400;
+  }
+  .mkt-cmp-plan {
+    display: block;
+    font-family: var(--head);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .mkt-cmp-price {
+    display: block;
+    margin-top: 3px;
+    color: var(--mute);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .mkt-cmp .is-spot {
+    background: color-mix(in srgb, var(--sage-soft) 70%, transparent);
+  }
+  .mkt-cmp thead .is-spot {
+    box-shadow: inset 0 3px 0 var(--accent);
+  }
+  .mkt-cmp .mkt-grp th {
+    padding-block: 12px 10px;
+    background: color-mix(in srgb, var(--grey) 80%, transparent);
+    color: var(--mute);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  .mkt-cmp td svg {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+  }
+  .mkt-cmp .is-no {
+    color: var(--mute);
+  }
+  @media (max-width: 640px) {
+    .mkt-pc {
+      padding: 24px 22px;
+    }
+    .mkt-assure {
+      flex-direction: column;
+      align-items: flex-start;
+      width: fit-content;
+      margin-inline: auto;
+    }
+    .mkt-cmp table {
+      font-size: 14px;
+    }
+    .mkt-cmp :is(th, td) {
+      padding: 12px 8px;
+    }
+    .mkt-cmp :is(tbody th, thead th:first-child) {
+      padding-inline-start: 16px;
+    }
+    .mkt-cmp thead th:not(:first-child),
+    .mkt-cmp td {
+      width: 4.75rem;
+    }
+    .mkt-cmp-plan {
+      font-size: 15px;
+    }
+    .mkt-cmp-price {
+      display: none;
     }
   }
 

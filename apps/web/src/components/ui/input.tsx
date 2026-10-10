@@ -12,11 +12,17 @@ export function Textarea({ className, ...props }: React.ComponentProps<'textarea
 }
 
 export function Select({ className, ...props }: React.ComponentProps<'select'>) {
+  // List boxes (multiple / size > 1) are not dropdowns: no chevron, full width for the option text.
+  const list = props.multiple || Number(props.size) > 1
   return (
     <select
       className={cn(
         control,
-        "h-[var(--ui-ctl-h,2.5rem)] appearance-none bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b6a66' stroke-width='1.5'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E\")] bg-[length:16px] bg-[right_0.75rem_center] bg-no-repeat pe-9",
+        'h-[var(--ui-ctl-h,2.5rem)]',
+        // Chevron: no quotes or spaces in the class (Tailwind's scanner must see it); bg-[position:…] so
+        // tailwind-merge doesn't read it as a colour and drop the control background.
+        !list &&
+          'appearance-none bg-[url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2716%27%20height=%2716%27%20fill=%27none%27%20stroke=%27%236b6a66%27%20stroke-width=%271.5%27%3E%3Cpath%20d=%27m4%206%204%204%204-4%27/%3E%3C/svg%3E)] bg-[length:16px] bg-[position:right_0.75rem_center] bg-no-repeat pe-9',
         className,
       )}
       {...props}

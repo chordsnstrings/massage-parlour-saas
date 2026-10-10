@@ -537,6 +537,9 @@ describe('console tools (db)', () => {
         lastBookingAt: new Date('2027-02-14T10:00:00Z'),
       })
       expect(rows[1]).toMatchObject({ bookings30d: 0, activeMembers: 0, storageBytes: 0, lastSignInAt: null })
+      // The plan's own tier comes from its limits; no super-admin override set.
+      expect(rows[1]).toMatchObject({ plan: 'Premium', planTier: 'premium', featureTier: null })
+      expect(rows[1]).not.toHaveProperty('planLimits')
       expect(
         (await tenantUsageList(platform, { now, sort: 'name', dir: 'desc' })).map((r) => r.slug),
       ).toEqual(['tools-b', 'tools-a'])

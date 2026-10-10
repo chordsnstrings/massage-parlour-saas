@@ -49,6 +49,9 @@ test('console: feature flags and announcements', async ({ browser }) => {
     await ops.getByLabel('Message (English)').fill('The dashboard pauses 02:00–02:15.')
     await ops.getByLabel('Severity').selectOption('warning')
     await ops.getByLabel('Show to').selectOption('tenants')
+    // The multi-pick list box is not a dropdown: no chevron (dropdown Selects keep theirs).
+    await expect(ops.getByLabel('Spas')).toHaveCSS('background-image', 'none')
+    await expect(ops.getByLabel('Severity')).not.toHaveCSS('background-image', 'none')
     await ops.getByLabel('Spas').selectOption({ label: `Flags Spa (${slug})` })
     await ops.getByRole('button', { name: 'Publish' }).click()
     await expect(ops.getByText('Announcement published')).toBeVisible()
@@ -104,8 +107,8 @@ test('console: tenant usage columns and automatic billing transitions', async ({
     await expect(row).toBeVisible()
     // The owner just signed in (F21 stamp); no bookings yet.
     await expect(row).toContainText(/min ago|h ago/)
-    await expect(row.getByRole('cell').nth(5)).toHaveText('0')
-    await ops.getByRole('link', { name: 'Bookings 30 d' }).click()
+    await expect(row.locator('[data-key="bookings30"]')).toHaveText('0')
+    await ops.getByRole('link', { name: 'Sort by Bookings 30 d' }).click()
     await expect(ops).toHaveURL(/sort=bookings30/)
     await expect(ops.getByRole('row', { name: /Late Spa/ })).toBeVisible()
   })

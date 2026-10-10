@@ -217,7 +217,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (services `announcements.ts`; spa side `server/announcements.ts` `announcementsFor` (platform read, plan code from
   entitlements) → `components/shell/announcements.tsx` in the SpaShell banner slot, dismiss =
   `dashboard/[tenant]/announcements/actions.ts` (requireMember, not guard; `announcement_dismissals` via withTenant)),
-  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable), billing transitions =
+  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable; also returns `featureTier` +
+  `planTier`) → `platform/(console)/tenants/page.tsx` + page-scoped `tenants.css` (own table, not DataTable: merged
+  columns Spa | Activity | Usage | AI | Plan with one header sort link per key, container query on the card:
+  ≥ 880 px 6 cols, 660–879 compact with Plan in the Spa cell, < 660 a `<ul>` of cards; no overflow-x by
+  construction, e2e `console-spa-list.spec`), billing transitions =
   `billing-actions.ts` (rules card on Company, per-spa pause + Check now on the spa page) → services
   `billing-transitions.ts`; payment paths (`setInvoicePaid`, `recordPlatformPayment` → `.billing`,
   `settleCheckoutSession`) call `liftBillingHold` in their tx and `billingTransitionEffects` after commit. Tenant
@@ -236,6 +240,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Home CRM showcase = `crm-showcase.tsx` (same mock, `overview`, + 4 floating cards): CSS scroll-driven 3D
   (`.mkt-show*` in marketing.css; timelines on untransformed wrappers, unitless `--show-*` amounts the JS fallback
   reads) — keep it out of MarketingMotion (no `data-tilt`/`data-rise` inside); PLAN §18.8.
+  Plan cards = `components/marketing/plan-cards.tsx`, one server component for home (`compact`) + /pricing (`full`):
+  `activePlans()` rows (pricing keeps `FALLBACK_PLANS` for a DB-less build), Premium/Standard via `planTier`, lists
+  from `PLAN_FEATURES`/`FEATURE_LABELS`, `formatAed` split at its NBSP; `.mkt-plans`/`.mkt-pc*` use a row subgrid from
+  768px (never put containment on `.mkt-pc` — it stops being a subgrid; the price row is the cqi container) and the
+  Premium raise is margin + padding, not a transform (`data-rise="card"` owns transform). /pricing keeps one
+  `signup?plan=` link per plan (applications.spec), so none in the comparison header.
+  Each list ends on a `.mkt-pl-end` link row pinned to the foot of the shared row (`margin-top: auto`), so the cards end
+  level whatever the wrapping; CTAs wrap (DB names). Marketing focus ring = `.mkt :focus-visible` in marketing.css
+  (accent, lime on `.mkt-dark`/`.mkt-demo`/`.mkt-pc-spot`) — globals.css's ring uses the app's `:root` accent.
+  `.mkt-link:hover` turns links `--accent-hover` (dark green), so the Premium card overrides it to white
+  (`.mkt-pc-spot .mkt-link:hover`); don't redefine `--accent-hover` there (the card shadow uses it). Two-sentence
+  headings: `<br />` + the second sentence in `.mkt-plx-2` (inline-block on the /pricing h1 so phones still balance it).
   Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
   `withinIpLimit`, Turnstile (F9), `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
   email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.

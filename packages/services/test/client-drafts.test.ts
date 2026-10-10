@@ -316,6 +316,9 @@ describe('client message drafts (F15)', () => {
       `Hi Lina, we miss you at Drafts Spa. Come back for a relaxing treatment soon: ${SITE}/book`,
     )
     expect(await tx((db) => queueWinbackMessages(db, ids.tenant!, NOW, SITE))).toBe(0)
+    // Drafts are stamped with the real clock (created_at); pin this one to the simulated NOW so "once per absence"
+    // doesn't depend on the time of day the test runs.
+    await tx((db) => db.update(outbox).set({ createdAt: NOW }).where(eq(outbox.kind, 'winback')))
     // After a new visit and another long absence, they can get one again.
     await tx((db) =>
       db

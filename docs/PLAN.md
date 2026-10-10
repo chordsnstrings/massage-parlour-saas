@@ -671,6 +671,9 @@ Applies to every non-public screen: owner/manager/receptionist/therapist/account
   calendar → agenda list with swipe between days on phones; charts simplify axes on small screens; touch targets ≥ 44 px;
   safe-area insets; tablet landscape and portrait both supported.
 - Breakpoints 360 / 640 / 768 / 1024 / 1280 / 1536, plus **container queries** so widgets adapt to their slot, not just the viewport.
+- Super-admin console shell (`AppShell`, owner 2026-10-10): the dark sidebar column is a full-page-height grid cell with a
+  sticky inner panel (logo, nav, user menu; glow + clipping on `.mkt-app-glow`, never on the aside); full 272 px sidebar
+  from 1280 px, 72 px icon rail 768–1279 (so wide tables fit at 1024), top bar + bottom tabs below 768.
 
 ### 12.5 Component stack
 - shadcn/ui (Radix) restyled to the tokens; TanStack Table for data grids; Recharts styled to tokens for charts.
@@ -1282,6 +1285,20 @@ others till end — finish everything"), built after the Premium/Standard plans 
   active team, storage, AI spend this Dubai month / budget, billing stage badge; every column sorts server-side
   (`?sort=&dir=`, nulls last). One platform-role query (services `tenantUsageList`; indexes `bookings_tenant_created`,
   `session_user_created`). Whole-spa aggregates only, no client data. Migration 0042.
+  Fitted to one page (owner 2026-10-10, "all data in one page without go left/right", then "what is this mess … remove
+  the big box, make the side bar till end of the page"): a flat table straight on the page background (no card),
+  hairline rows, one value per cell, one header line per column; each header is the server sort link (`aria-sort` on
+  its `th`, solid arrow on the sorted one, ghost arrow on hover; old `?sort=&dir=&q=` links unchanged). Columns: Spa
+  (name; slug · joined date, so "Spa · Joined" are two sort links) | Status (badge + one quiet billing line:
+  "read-only 16 Oct", stage + full date in the title / screen-reader text, or "Read-only until paid") | Plan (name; tier
+  tag only when the name doesn't say it, override as a green "→ Standard" tag; "until 30 Oct", year only when not this
+  year) | Sign-in | Booking (relative times only, "4 mo ago" past 60 d, exact time in the title) | Bookings 30 d | Team |
+  Storage | AI this month ("$27.40 / 25"; "76% of budget" amber ≥ 70 %, red ≥ 100 %). Numbers right-aligned, tabular;
+  zeros / never in AA-safe #6B6B77. Column definitions live in header tooltips; legend one line. Sticky header row
+  (scroll padding, WCAG 2.4.11). Container-query widths on the list block (`tenants.css`): wide ≥ 1224 px, default
+  1084–1223 (1440 screens), tight 884–1083 (1280 / 1024, 6 px cell padding), hairline cards < 884 (Sort by select +
+  direction link shown only there). Amber dates = no staff sign-in 14+ d / no booking 30+ d, counted from joining when
+  there has been none ("never"; a new trial stays neutral).
 - ✅ **F22. Billing auto-transitions** (core `billing-stages.ts`, services `billing-transitions.ts`, worker
   `billing-transitions` 09:05). An unpaid platform invoice is late *N* days after its due date (console Company →
   Billing rules, default 1); first late day → **overdue** (`past_due`, grace clock starts), next day **grace**, *grace
