@@ -458,7 +458,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `editorLockStatusAction`, `releaseEditorLockAction`); the editor page reads the holder (read only, so a prefetch
   never locks) and opens view-only. Services `site-locks.ts`: `site_page_locks` (unique page, RLS), `acquirePageLock`
   (atomic upsert with `setWhere`: ours / expired / take over), `getPageLock`, `pageLocksHeldByOthers`,
-  `assertPagesUnlocked` (`PageLockedError`), TTL 2 min. Checked in `storeDraft`, `publishPageAction`,
+  `assertPagesUnlocked` (`PageLockedError`), TTL 2 min. Checked (before the edit stamp, so a taken-over editor gets
+  `pageLocked`, not "changed elsewhere — keep mine") in `storeDraft`, `publishPageAction`,
   `restoreVersionAction`, `runSiteEdit` (changed + renamed pages, dry runs too) and `restoreSiteEdit`; MCP `get_site`
   shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
 - **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
@@ -952,9 +953,13 @@ i18n namespace `automations`.
 ## Ask AI (F30, dashboard assistant)
 
 - **UI** `components/assistant/ask-ai.tsx` (top-bar button → Radix side drawer, crm.css `.crm-ask*`; full screen
-  ≤680 px), rendered by the tenant layout for `dashboard.view` (SpaShell `assistant` prop). Standard (no `ai`): the
+  ≤680 px), rendered by the tenant layout for members with `dashboard.view` (SpaShell `assistant` prop) — never for a
+  super-admin acting on the spa (no spa data) and left out on the Studio editor routes (`hiddenUnder`
+  `/website/editor`, `/website/blog`); accessible name "Ask AI about your spa" (`assistant.openLabel`, the Studio's
+  page AI is "Ask AI to edit this page"). Standard (no `ai`): the
   drawer is the Premium upsell (`plan.upsell.*`). Conversation state is client-only; i18n namespace `assistant`.
-- **Action** `components/assistant/actions.ts` `askAssistantAction`: guard(dashboard.view, 'ai') → zod →
+- **Action** `components/assistant/actions.ts` `askAssistantAction`: guard(dashboard.view, 'ai') → members only
+  (`ctx.member`; impersonation → `errors.forbidden`) → zod →
   `withinRateLimits` (`assistant`, tenant:user, 30/h + 150/day) → `runAssistant` (fixtureClient in e2e) → audit
   `ai.assistant.asked` {question ≤200, locale, outcome, tools, denied, costUsd} (never the answer). Maps gateway
   errors (budget / paused / plan / disabled / busy) to `assistant.errors.*`; translates link labels; prefixes
