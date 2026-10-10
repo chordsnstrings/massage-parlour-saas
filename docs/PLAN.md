@@ -1037,6 +1037,21 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   domains API → the section asks for a "Full-access key for setup" (sent only with Set up / Check; never stored,
   logged, audited or returned). No table/migration: records live in the action result. Audit `platform.email.domain_setup`
   {domain, created, status} / `platform.email.domain_checked` {domain, status}. Details: CODEMAP "Staff email (Resend)".
+- **R19 Delete a plan (owner, 2026-10-10):** Console → Plans & prices: each plan card has Delete (confirm sheet). A
+  plan nothing points at (no tenant, subscription or application row) is deleted; a used plan, and always a built-in
+  one (Premium / Standard / Yearly (legacy): every deploy re-runs the seed, which would add a deleted one back), is
+  archived instead
+  (`plans.archived_at` + inactive): gone from Plans & prices, /pricing, sign-up and approval, while its spas keep their
+  plan, agreed price, name everywhere and entitlements until a super-admin changes their subscription. "Archived plans
+  (n)" lists them with Restore (back inactive; edit to offer it again). The last plan new spas can get is never removed.
+  Built (2026-10-10): services `removePlan` / `restorePlan` / `planUsage` (subscription-plans.ts; one transaction that
+  locks every plan row, so use counts + the last-plan check hold at write time), DB check `plans_archived_inactive`
+  (archived ⇒ inactive, so every `active = true` list hides archived plans), `acceptApplication`, `switchPlan` and a
+  new subscription refuse an archived plan (they read it FOR SHARE, so a removal in flight is seen), Edit refused
+  while archived; a pending application on a plan that is no longer offered shows "(no longer offered)" and its
+  Accept sheet preselects no plan ("The plan this applicant chose … Choose one."); audit `platform.plan.deleted` {code, name} /
+  `platform.plan.archived` {code, name, spas} / `platform.plan.restored` {code, name}; tests: services
+  `plan-delete.test.ts`, e2e plans.spec "console: delete an unused plan …".
 - **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** a spa's website lives on its own domain (e.g.
   berelaxspa.com; connect it in spa Settings → Domains or Console → Domains, or buy one, R14); spamanagement.co hosts only
   the CRM (app.) and console (admin.). Until a spa connects its domain it uses the temporary address {slug}.spamanagement.co;
@@ -1045,7 +1060,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   heights. ✅ Items share the sidebar height (24–40 px each, `flex-[1_1_0]`), logo block shrinks below 820 px tall; fits
   down to ~590 px (e2e `console-sidebar.spec.ts`). Overview health/config rows aligned with the card padding.
 - **R22 Console in English + Arabic (owner, 2026-10-10):** the super-admin console only (spa CRM stays EN + TH), RTL for
-  Arabic, a language switch in the user menu; new Arabic copy reviewed by the owner's team. Planned.
+  Arabic, a language switch in the user menu. **On hold (owner, 2026-10-10: "console keep english for now")**: the console
+  stays English; an unfinished foundation is kept only on Claude's local branch `r22` (not pushed).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

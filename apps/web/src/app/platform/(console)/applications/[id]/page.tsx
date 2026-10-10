@@ -54,6 +54,9 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
       feeAed: p.setupFeeAed,
       monthlyAed: p.billingInterval === 'month' ? (Number(p.priceAed) / 12).toFixed(2) : null,
     }))
+  // The applicant's plan is gone from the offer (archived, R19; inactive; or the legacy plan): say so, and make the
+  // super-admin pick one on accept instead of quietly defaulting to the first offered plan.
+  const offered = Boolean(plan && choices.some((c) => c.id === plan.id))
   const logo =
     app.logoBytes && app.logoContentType
       ? `data:${app.logoContentType};base64,${app.logoBytes.toString('base64')}`
@@ -81,10 +84,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
     ],
     ['Emirate', emirateName(app.emirate)],
     ['Street address', app.streetAddress],
-    [
-      'Plan',
-      plan ? `${plan.name} · ${planPriceLine(plan)}${isLegacyPlan(plan) ? ' (no longer offered)' : ''}` : '—',
-    ],
+    ['Plan', plan ? `${plan.name} · ${planPriceLine(plan)}${offered ? '' : ' (no longer offered)'}` : '—'],
     ['Preferred start', formatDate(app.preferredStart)],
     ['Notes', app.notes ?? '—'],
     ['Sent', formatDateTime(app.createdAt)],
@@ -146,7 +146,8 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
                   <AcceptSheet
                     action={acceptApplicationAction.bind(null, app.id)}
                     plans={choices}
-                    planId={choices.find((c) => c.id === app.planId)?.id ?? choices[0]?.id ?? ''}
+                    planId={plan ? (offered ? plan.id : '') : (choices[0]?.id ?? '')}
+                    unofferedPlan={plan && !offered ? plan.name : undefined}
                     startDate={app.preferredStart}
                     today={today}
                     vatRate={Number(settings?.vatRate ?? 5)}

@@ -299,4 +299,8 @@ export const domain: Messages['errors']['domain'] = {
   partnerNameRequired: 'กรอกชื่อพาร์ทเนอร์',
   partnerNotFound: 'ไม่พบพาร์ทเนอร์',
   partnerCodeClash: 'สร้างรหัสลิงก์ไม่สำเร็จ กรุณาลองอีกครั้ง',
+  // R19 (new strings, flagged for native TH review)
+  planAlreadyArchived: '{name} ถูกเก็บถาวรแล้ว',
+  planOnlyOffered: '{name} เป็นแพ็กเกจเดียวที่สปาใหม่เลือกได้ เพิ่มแพ็กเกจอื่นหรือเปิดให้เลือกก่อน',
+  planNotArchived: '{name} ยังไม่ได้ถูกเก็บถาวร',
 }
