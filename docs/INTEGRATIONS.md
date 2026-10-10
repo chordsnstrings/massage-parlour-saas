@@ -88,8 +88,9 @@ record). The spa adds two DNS records, shown on *Settings → Custom domain*:
 - `CNAME <their host>` → `CF_CNAME_TARGET` (a root domain may use an ALIAS/flattened record with the same address)
 
 The worker checks the DNS every 10 minutes and activates the domain. Caddy gets its certificate on the first visit,
-once `/api/domains/allowed` approves the host (any custom domain a spa added and hasn't removed). A super-admin can
-also activate or deactivate a domain from the console's **Domains** page (`admin.spamanagement.co/domains`).
+once `/api/domains/allowed` approves the host (a custom domain that is pending, verifying or active; not a failed or
+deactivated one). A super-admin can also activate or deactivate a domain from the console's **Domains** page
+(`admin.spamanagement.co/domains`).
 
 Cloudflare for SaaS (`CF_API_TOKEN`, `CF_ZONE_ID`: custom hostnames + certificates at Cloudflare) is optional code,
 not used.

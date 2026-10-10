@@ -850,8 +850,8 @@ path links redirect) is `deploy/droplet/site.env`, steps in deploy/droplet/READM
 - Shared/stored/sent addresses use the canonical domain (`canonicalUrls()`): a spa's site address (`publicSiteUrl`,
   GBP booking link, campaign and WhatsApp links), invites, preview share links, public file URLs for Instagram.
 - OAuth (Meta, Google) runs entirely on the domain it starts on — session and nonce cookies are per host — so each
-  platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: spa CNAME target,
-  Meta webhooks/deauthorize/data-deletion, worker jobs.
+  platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: Meta
+  webhooks/deauthorize/data-deletion, worker jobs; the spa CNAME target is `CF_CNAME_TARGET` (unset = the `APP_URL` host).
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
 - **Colours + fonts superseded 2026-10-09 (owner): brand look, see §18.6.** Layout, density and menu stay as below.

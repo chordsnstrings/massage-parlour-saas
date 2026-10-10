@@ -254,15 +254,16 @@ Links are domain-agnostic (apps/web/src/server/origin.ts): getting around and si
 visitor is on; addresses that are shared, stored or sent use the canonical `SITE_HOST`. The app only needs to know
 which domains are ours:
 - `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN` derives from it). Every address that is shared
-  or stored uses it (spa site links, invites, campaign links), as do CNAME targets and worker jobs.
+  or stored uses it (spa site links, invites, campaign links), as do worker jobs (`APP_URL`). The CNAME target shown
+  to spas is `CF_CNAME_TARGET` (`customers.<SITE_HOST>`; unset = the `APP_URL` host).
 - `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform (one line
   holding all of them).
 
 **TLS (no Caddyfile edit):** Caddy gets the `SITE_HOST` certificate at start; every other host (`www.`, `app.`,
 `admin.`, `{slug}.`, the extra domains, spa custom domains) gets one **on demand** on its first visit, approved by
-`/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing and renamed spa slugs, registered
-custom domains; anything else is refused). `/_status/` is served on `SITE_HOST` and on the droplet's own
-`<ip>.sslip.io`.
+`/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing and renamed spa slugs, custom
+domains that are pending, verifying or active; anything else is refused). `/_status/` is served on `SITE_HOST` and
+on the droplet's own `<ip>.sslip.io`.
 
 ### Move to spamanagement.co
 
@@ -296,7 +297,7 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    - old links redirect: `https://134-209-145-162.sslip.io/app` → `https://app.spamanagement.co/`,
      `…/s/{slug}` → `https://{slug}.spamanagement.co/` (table below)
    - console → Company: set the company name / contact email to `spamanagement.co` / `ask@spamanagement.co` if they
-     still show `.ae` (the DB default applies only to a fresh install)
+     still show `.ae` (migration 0047 already replaces the old default company name)
 5. **Re-register** (only what is configured):
    - Turnstile (only if console → Overview → Configuration shows the `TURNSTILE` row green; do it before the switch,
      it is harmless early): Cloudflare → Turnstile → the widget → Hostnames: add `spamanagement.co` (covers `app.`,
@@ -315,9 +316,13 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    - Stripe: nothing (no webhook; the Checkout return address follows the domain the payer is on).
    - Claude connector: reconnect with `https://app.spamanagement.co/api/mcp` (console → Websites shows it).
    - Later, for staff email: Resend → Domains → add `spamanagement.co`, add exactly the records it shows in Namecheap
-     → Advanced DNS (they use their own names, such as `send` and `resend._domainkey`; leave the Email Forwarding
-     records as they are), wait for "Verified", then add the Resend key (console → Company → Email). The default
-     sender is already `spamanagement.co <ask@spamanagement.co>`.
+     → Advanced DNS (they use their own names, such as `send` and `resend._domainkey`), wait for "Verified", then
+     add the Resend key (console → Company → Email). The default sender is already
+     `spamanagement.co <ask@spamanagement.co>`. **Careful:** Resend's `send` MX record needs Namecheap Mail Settings
+     = Custom MX, which switches off Email Forwarding, so `ask@spamanagement.co` stops receiving. Before switching,
+     write down the current forwarding MX records (`eforward…registrar-servers.com`) and ask Namecheap support how to
+     keep forwarding next to a `send` MX (or move `ask@` to another forwarder first); afterwards send a test mail to
+     `ask@spamanagement.co`.
 6. **Undo:** Claude reverts the switch commit (a PR); the next deploy rebuilds `.env` from the reverted site.env and
    is back on the sslip.io address with path routing (web rebuilds; browsers keep the redirects for 5 minutes). If
    the switch's build, start or health check fails, the updater rolls back to the last good commit on its own
@@ -347,8 +352,10 @@ the old one included while it stays in `EXTRA_ROOT_DOMAINS`:
 Not carried over: sign-in (cookies are per domain: everyone signs in once more on spamanagement.co; 2FA stays as it
 is); an installed dashboard app leaves its own scope on the redirect, so reinstall it from
 `https://app.spamanagement.co/{slug}`; the Claude connector (old tokens were issued for the old address); a
-Google/Meta connect started before the switch must be started again. Keep the old address in `EXTRA_ROOT_DOMAINS`
-while Meta's URLs or old links may still point at it.
+Google/Meta connect started before the switch must be started again; push notifications (they belong to the old
+address, which keeps showing them): staff who had them on enable them again on `app.spamanagement.co` and block
+notifications for `134-209-145-162.sslip.io` in the browser's site settings (else every one arrives twice). Keep the
+old address in `EXTRA_ROOT_DOMAINS` while Meta's URLs or old links may still point at it.
 
 Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first, register its OAuth callbacks,
 then make it `SITE_HOST` (with `APP_URL` / `ADMIN_URL` to match) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
@@ -375,6 +382,8 @@ The secrets file needs these keys:
 - strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REGION` (off-site DB
   backups; DigitalOcean Spaces, see "Backups"),
   `RESEND_API_KEY` (password reset + email verification fail loudly in production without it; it can also be set later in the console → Settings → Email)
+- first boot writes the optional and recommended keys above into `/opt/spa/.env` too (empty when unset); later
+  changes go through the secrets overlay ("Secrets without SSH")
 - super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
   sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens. See
   "Super-admins" below for the addresses compose appends and how a new one gets its login.

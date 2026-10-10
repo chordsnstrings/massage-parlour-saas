@@ -107,7 +107,8 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Links are domain-agnostic (server/origin.ts): `requestUrls()`/`appUrl()`… for getting around (visitor's platform
   domain, from the ROOT_DOMAIN + EXTRA_ROOT_DOMAINS allow-list; unknown hosts → canonical); `canonicalUrls()` for
   addresses that are shared, stored or sent (spa site/`publicSiteUrl`, invites, preview share links, public file URLs).
-  OAuth runs on the domain it starts on (register each domain's callback); CNAME target + worker jobs use APP_URL.
+  OAuth runs on the domain it starts on (register each domain's callback); CNAME target = CF_CNAME_TARGET
+  (site.env: customers.spamanagement.co; unset = APP_URL host); worker jobs use APP_URL.
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
