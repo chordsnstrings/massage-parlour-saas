@@ -275,22 +275,33 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    Check: `dig +short app.spamanagement.co` gives `134.209.145.162`.
 2. **Merge in two pushes** (the first deploy of a changed `update.sh` still runs the previous copy, which doesn't
    read site.env; the switch also needs a rollback target without it):
-   1. the updater commit, with the move lines in `site.env` commented out (no visible change). Wait until
-      `https://134-209-145-162.sslip.io/_status/deploy.json` shows that commit with `"state":"ok"`;
-   2. the switch: the commit that uncomments the move block in `site.env`.
+   1. PR 1, the updater, with the move lines in `site.env` commented out (no visible change). Wait until
+      `https://134-209-145-162.sslip.io/_status/deploy.json` shows the deploy branch's commit for PR 1 (the merge
+      commit) with `"state":"ok"`;
+   2. only then PR 2, the switch, rebased on the deploy branch so its diff is `site.env` only (it uncomments the
+      move block).
+
+   If both landed in one deploy (`deploy.json` shows PR 2's commit with `"state":"ok"` but the site is still on the
+   sslip.io address), the next push would make the switch with no rollback target: first push a commit that
+   comments the move block out again, wait for `"state":"ok"`, then make the switch again.
 3. **What happens:** CI runs on the deploy branch → `deploy/green` → within ~2 min the droplet rebuilds `.env`,
    rebuilds web (`ROUTING` is a build arg; a few minutes) and restarts. Caddy gets the spamanagement.co certificate at
    start and each other host's on its first visit (that first request takes a few seconds).
 4. **Verify:**
    - `https://spamanagement.co` (marketing), `https://app.spamanagement.co` (sign in again: cookies are per domain),
      `https://admin.spamanagement.co`
-   - a spa at `https://{slug}.spamanagement.co`
-   - `https://spamanagement.co/_status/deploy.json` (user `ops`) shows the switch commit with `"state":"ok"`
+   - a spa at `https://{slug}.spamanagement.co`; book a test slot on `https://{slug}.spamanagement.co/book`
+     (catches a missing Turnstile hostname, step 5)
+   - `https://spamanagement.co/_status/deploy.json` (user `ops`) shows PR 2's commit with `"state":"ok"`
    - old links redirect: `https://134-209-145-162.sslip.io/app` → `https://app.spamanagement.co/`,
      `…/s/{slug}` → `https://{slug}.spamanagement.co/` (table below)
    - console → Company: set the company name / contact email to `spamanagement.co` / `ask@spamanagement.co` if they
      still show `.ae` (the DB default applies only to a fresh install)
 5. **Re-register** (only what is configured):
+   - Turnstile (only if console → Overview → Configuration shows the `TURNSTILE` row green; do it before the switch,
+     it is harmless early): Cloudflare → Turnstile → the widget → Hostnames: add `spamanagement.co` (covers `app.`,
+     `admin.` and every `{slug}.`). Without it every protected form (booking, widget, Enquiry, Apply, Contact)
+     refuses with "We couldn't confirm you're not a robot".
    - Google Cloud → Credentials → OAuth client → Authorized redirect URIs:
      `https://app.spamanagement.co/api/integrations/google/callback`; OAuth consent screen → Authorized domains
      `spamanagement.co`, privacy policy `https://spamanagement.co/privacy`, terms `https://spamanagement.co/terms`.

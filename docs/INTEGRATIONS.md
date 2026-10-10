@@ -77,29 +77,26 @@ The spa owner (or a Manager on the profile) connects from *Settings → Instagra
   when it has a public https URL).
 - Without the env vars the card shows "Not configured yet" and reviews are pasted in by hand (manual fallback).
 
-## 3. Custom domains (Cloudflare for SaaS)
+## 3. Custom domains
 
-Production design: spa domains point at a Cloudflare for SaaS **fallback origin** (our Tunnel/App), and Cloudflare issues SSL per hostname.
+Production design: spa domains point at the droplet, and Caddy issues each one's certificate on demand. No
+Cloudflare zone, proxy or Tunnel (our DNS is at Namecheap).
 
-1. In the `spamanagement.co` zone, enable **SSL for SaaS** and set the fallback origin (e.g. `customers.spamanagement.co`, proxied).
-2. Create an API token with **Zone → SSL and Certificates: Edit** and **Zone → Custom Hostnames: Edit** for that zone.
-3. Env:
+`CF_CNAME_TARGET` = `customers.spamanagement.co` (deploy/droplet/site.env; it resolves through the Namecheap `*`
+record). The spa adds two DNS records, shown on *Settings → Custom domain*:
+- `TXT _spamanagement.<their host>` = token (proves ownership)
+- `CNAME <their host>` → `CF_CNAME_TARGET` (a root domain may use an ALIAS/flattened record with the same address)
 
-| Var | Value |
-|---|---|
-| `CF_API_TOKEN` | the token |
-| `CF_ZONE_ID` | zone ID |
-| `CF_CNAME_TARGET` | `customers.spamanagement.co` |
+The worker checks the DNS every 10 minutes and activates the domain. Caddy gets its certificate on the first visit,
+once `/api/domains/allowed` approves the host (any custom domain a spa added and hasn't removed). A super-admin can
+also activate or deactivate a domain from the console's **Domains** page (`admin.spamanagement.co/domains`).
 
-The spa adds two DNS records, shown on *Settings → Custom domain*:
-- `TXT _spamanagement.<their host>` = token
-- `CNAME <their host>` → `CF_CNAME_TARGET`
-
-The worker verifies every 10 minutes and activates the domain. Without Cloudflare configured, verification still checks DNS, and a super-admin can activate the domain from `/admin/domains`.
+Cloudflare for SaaS (`CF_API_TOKEN`, `CF_ZONE_ID`: custom hostnames + certificates at Cloudflare) is optional code,
+not used.
 
 ## 3a. Buying domains (Namecheap, optional)
 
-Lets a spa request a domain under **Settings → Domains → Buy a domain**; you approve it in **/admin/domains**, which buys it on
+Lets a spa request a domain under **Settings → Domains → Buy a domain**; you approve it on the console's **Domains** page, which buys it on
 the platform's Namecheap account and points it at the spa's site (see PLAN.md §2 "Buy a domain").
 
 1. Namecheap → Profile → Tools → **API Access** → on (needs account balance/spend thresholds Namecheap requires).
@@ -107,7 +104,7 @@ the platform's Namecheap account and points it at the spa's site (see PLAN.md §
 3. Set `NAMECHEAP_API_USER` (your Namecheap username), `NAMECHEAP_API_KEY` and `NAMECHEAP_CLIENT_IP` (the droplet IP;
    cloud-init fills it). Optional: `NAMECHEAP_USERNAME` if it differs from the API user, `NAMECHEAP_SANDBOX=1` for the sandbox.
 4. Fill in the platform company details (admin → Settings): they become the domains' admin/tech/billing contacts.
-5. Keep funds on the Namecheap account — the balance shows on /admin/domains; each approval charges it.
+5. Keep funds on the Namecheap account — the balance shows on the console's Domains page; each approval charges it.
 
 ## 3b. Card payments for the subscription (Stripe, optional)
 
