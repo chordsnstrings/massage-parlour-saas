@@ -10,7 +10,7 @@ import type { ModelArkClient } from '@spa/ai'
 export function fixtureClient(slug: string): ModelArkClient | undefined {
   const dir = process.env.AI_E2E_FIXTURE_DIR
   if (!dir || !/^[a-z0-9-]+$/i.test(slug)) return undefined // tenant slugs only: never a path
-  const file = path.join(dir, `${slug}.json`)
+  const file = path.join(dir, `${path.basename(slug)}.json`)
   return {
     chat: async (req: { messages: { role: string; tool_calls?: unknown[] }[] }) => {
       const raw = await readFile(file, 'utf8')
