@@ -494,7 +494,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
   Unsaved baseline: taken 400 ms after load, always from Puck's first history entry (the loaded page as normalised),
   never the canvas: an edit made before the timer still autosaves, even one Puck's 250 ms history debounce hasn't
-  recorded yet (the CI take-over race, 2026-10-10). Take over reloads the page
+  recorded yet (the CI take-over race, 2026-10-10). Publish waits for an autosave in flight and no autosave starts while
+  publishing (server actions run one at a time: a queued publish would carry the pre-save stamp → "changed elsewhere").
+  Take over reloads the page
   (`reloadEditor` → `window.location.reload`).
 - **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
   (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
