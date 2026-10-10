@@ -35,7 +35,7 @@ const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/
 /** Numeric-looking text that must stay text (leading zeros, codes, phone numbers). */
 const TEXT_HEADER = /sku|ref|code|mobile|phone|account|\bid$|_id$|^id$|iban|postcode|e164/i
 const MONEY_HEADER = /\bAED\b|_aed$/i
-const PERCENT_HEADER = /%|vat_rate|_rate$/i
+const PERCENT_HEADER = /%|_rate$|vat_rate/i
 
 const FMT: Record<CellKind, string | undefined> = {
   text: '@',

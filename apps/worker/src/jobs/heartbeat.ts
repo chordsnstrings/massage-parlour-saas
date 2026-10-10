@@ -93,7 +93,7 @@ export async function heartbeat(env: Env = process.env, now = new Date()) {
         lt(platformJobRuns.finishedAt, new Date(now.getTime() - 86_400_000)),
       ),
     )
-  await writeFile(HEARTBEAT_FILE, now.toISOString()).catch(() => {})
+  await writeFile(HEARTBEAT_FILE, now.toISOString(), { mode: 0o600 }).catch(() => {})
 
   const anyBackup = await lastRun(db, 'db-backup')
   const okBackup = await lastRun(db, 'db-backup', 'ok')

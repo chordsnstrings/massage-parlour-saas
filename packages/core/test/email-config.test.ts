@@ -102,6 +102,14 @@ describe('email settings precedence (console, then env, then default)', () => {
   it('extracts the sender domain', () => {
     expect(emailDomain('Spa <no-reply@SpaManagement.co>')).toBe('spamanagement.co')
     expect(emailDomain('a@b.test')).toBe('b.test')
+    expect(emailDomain('Spa <a@b.test>  ')).toBe('b.test')
+    expect(emailDomain('a@b.test >')).toBeNull()
+    expect(emailDomain('a@')).toBeNull()
+    expect(emailDomain('no address')).toBeNull()
+    // Linear: the old regex rescanned the tail from every "@" (quadratic on a long "@!" run).
+    const t = Date.now()
+    expect(emailDomain(`@${'@!'.repeat(100_000)} x>`)).toBeNull()
+    expect(Date.now() - t).toBeLessThan(500)
   })
 })
 

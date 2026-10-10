@@ -933,7 +933,9 @@ i18n namespace `automations`.
   `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
   --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
   date each) and `deploy/droplet/test-caddy-ip.sh`. `promote` needs both. Also: `codeql.yml` (codeql-action v3,
-  javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays), `cloudflare-ips.yml` (Mondays + PRs
+  javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
+  `js/insufficient-password-hash` in restore-drill.ts, owner-dismissed; trailing-run trims use core `trimTrailing`, not
+  `/x+$/`), `cloudflare-ips.yml` (Mondays + PRs
   touching the Caddyfile; not a deploy gate), `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped;
   stack pins' majors, and 0.x/minor pins' minors, ignored).
 - **e2e**:

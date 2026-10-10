@@ -9,6 +9,7 @@ import {
   cfCreateHostname,
   checkDomain,
   cloudflareConfig,
+  cnameTarget,
   type DnsLookup,
   type DomainDeps,
   type DomainRow,
@@ -145,6 +146,15 @@ describe('normaliseHostname', () => {
       'old-platform.ae',
     )
     expect(normaliseHostname('www.serenity.ae', 'localhost:3000')).toBe('www.serenity.ae')
+  })
+
+  it('drops trailing dots in linear time', () => {
+    expect(normaliseHostname('www.serenity.ae...', ROOT)).toBe('www.serenity.ae')
+    expect(cnameTarget({ CF_CNAME_TARGET: ' Edge.Example.com.:443 ' })).toBe('edge.example.com')
+    const t = Date.now()
+    expect(() => normaliseHostname(`a${'.'.repeat(200_000)}a`, ROOT)).toThrow()
+    expect(cnameTarget({ CF_CNAME_TARGET: `a${'.'.repeat(200_000)}a` })).toHaveLength(200_002)
+    expect(Date.now() - t).toBeLessThan(500)
   })
 })
 

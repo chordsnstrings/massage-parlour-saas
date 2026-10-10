@@ -68,7 +68,14 @@ export async function resolveEmailConfig(
 }
 
 /** The domain part of a From header (`Name <a@b.co>` or `a@b.co`). */
-export const emailDomain = (from: string) => from.match(/@([^\s>]+)>?\s*$/)?.[1]?.toLowerCase() ?? null
+export function emailDomain(from: string): string | null {
+  // Same as /@([^\s>]+)>?\s*$/ but linear (that regex rescans the tail from every "@"): the last token, one ">" off.
+  let s = from.trimEnd()
+  if (s.endsWith('>')) s = s.slice(0, -1)
+  const token = s.split(/[\s>]/).at(-1) ?? ''
+  const at = token.indexOf('@')
+  return at >= 0 && at < token.length - 1 ? token.slice(at + 1).toLowerCase() : null
+}
 
 async function resend(m: StaffEmail & { from: string; apiKey: string }) {
   const res = await fetch('https://api.resend.com/emails', {

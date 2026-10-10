@@ -12,7 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { Resolver } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { domainToASCII } from 'node:url'
-import { parseRoots } from '@spa/core'
+import { parseRoots, trimTrailing } from '@spa/core'
 import { type Db, type DbOrTx, domains, platformDb, tenants, withTenant } from '@spa/db'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import { DomainError, pgCode } from './errors'
@@ -68,7 +68,7 @@ const RESERVED_TLDS = new Set([
 /** Second-level registries (theirspa.co.ae, x.com.au) so apex detection and relative record names work. */
 const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'ac', 'gov', 'sch', 'mil', 'edu'])
 
-const stripHost = (h: string) => h.trim().toLowerCase().replace(/:\d+$/, '').replace(/\.+$/, '')
+const stripHost = (h: string) => trimTrailing(h.trim().toLowerCase().replace(/:\d+$/, ''), '.')
 const notIp = () => new DomainError('Enter a domain name (like www.yourspa.ae), not an IP address')
 
 /**
@@ -83,7 +83,7 @@ export function normaliseHostname(
   host = host.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
   host = (host.split(/[/?#\\\s]/)[0] ?? '').replace(/^.*@/, '')
   if (host.startsWith('[') || isIP(host)) throw notIp()
-  host = host.replace(/:\d*$/, '').replace(/\.+$/, '')
+  host = trimTrailing(host.replace(/:\d*$/, ''), '.')
   if (!host) throw new DomainError('Enter your domain, e.g. www.yourspa.ae')
   if (isIP(host)) throw notIp()
   const ascii = domainToASCII(host)

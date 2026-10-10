@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  attrs,
   checkDomains,
   getBalance,
   NamecheapError,
   namecheapConfig,
   namecheapPhone,
+  parseResponse,
   platformRecords,
   registerDomain,
   registerPrices,
@@ -75,6 +77,23 @@ describe('namecheap', () => {
     })
   })
 
+  it('parses tags and errors in linear time', () => {
+    expect(attrs(' Domain="a.com"\n Available="true" Note="x y=&quot;z&quot;"/')).toEqual({
+      Domain: 'a.com',
+      Available: 'true',
+      Note: 'x y="z"',
+    })
+    expect(() =>
+      parseResponse('<ApiResponse Status="ERROR"><Error Number="7">Bad &amp; worse</Error>'),
+    ).toThrow(expect.objectContaining({ code: '7', message: 'Bad & worse' }))
+    const t = Date.now()
+    expect(attrs('A'.repeat(100_000))).toEqual({})
+    expect(() => parseResponse(`<ApiResponse Status="ERROR"><Error ${'Number="0"'.repeat(20_000)}`)).toThrow(
+      'Namecheap request failed',
+    )
+    expect(Date.now() - t).toBeLessThan(500)
+  })
+
   it('reads one-year register prices', async () => {
     const f = reply(
       ok(
@@ -85,6 +104,10 @@ describe('namecheap', () => {
       ),
     )
     expect(await registerPrices(cfg, ['com'], f)).toEqual({ com: 10.28 })
+    // A TLD is only ever an own key, never the prototype.
+    const proto = await registerPrices(cfg, ['__proto__'], f)
+    expect(Object.getPrototypeOf(proto)).toBe(Object.prototype)
+    expect(Object.hasOwn(proto, '__proto__')).toBe(true)
   })
 
   it('registers a domain and sets platform DNS records', async () => {

@@ -178,6 +178,13 @@ describe('mapping and validation', () => {
     expect(rows[0]!.errors).toEqual(['Cost “x” should be a number of 0 or more'])
     expect(withoutValues(rows[0]!.errors[0]!)).toBe('Cost “…” should be a number of 0 or more')
   })
+
+  it('drops quoted values in linear time, leaving an unclosed quote as is', () => {
+    expect(withoutValues('“a” and “b“c” then “open')).toBe('“…” and “…” then “open')
+    const t = Date.now()
+    expect(withoutValues('“'.repeat(200_000))).toBe('“'.repeat(200_000))
+    expect(Date.now() - t).toBeLessThan(500)
+  })
 })
 
 describe('Thai export headers re-import', () => {
