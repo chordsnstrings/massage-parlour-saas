@@ -100,9 +100,13 @@
       if (!a || a.hasAttribute('data-no-track')) return
       var b = a.closest('[data-block-id]')
       var href = a.getAttribute('href') || ''
+      var host = ''
+      try {
+        host = new URL(href, location.href).hostname
+      } catch (_) {}
       var type = /wa\.me|whatsapp/.test(href)
         ? 'wa_click'
-        : /instagram\.com/.test(href)
+        : host === 'instagram.com' || host.endsWith('.instagram.com')
           ? 'ig_click'
           : a.hasAttribute('data-track-booking') || /(^|\/)book(\/|$|\?)/.test(href)
             ? 'booking_start'

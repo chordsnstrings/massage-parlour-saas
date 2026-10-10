@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from '@spa/core'
 import { contrastRatio, MIN_TEXT_CONTRAST } from './contrast'
 import { scopeSectionCss } from './css'
 import { imageSrc, withImageSrc } from './image'
@@ -189,10 +190,11 @@ export function preflight(data: unknown, ctx: PreflightContext): PreflightIssue[
       }
     }
     if (obj.action === 'page') {
-      const slug = String(obj.target ?? '')
-        .trim()
-        .replace(/^\/+|\/+$/g, '')
-        .toLowerCase()
+      const slug = trimTrailingSlashes(
+        String(obj.target ?? '')
+          .trim()
+          .replace(/^\/+/, ''),
+      ).toLowerCase()
       const page = pages.get(slug)
       const problem = !page
         ? 'a page that doesn’t exist'

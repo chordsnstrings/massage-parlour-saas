@@ -145,7 +145,13 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
   const result = await withTenant(ctx.tenant.id, (tx) =>
     runSiteEdit(
       tx,
-      { tenantId: ctx.tenant.id, userId: ctx.user.id, ops, dryRun: true, base: { [pageId]: data } },
+      {
+        tenantId: ctx.tenant.id,
+        userId: ctx.user.id,
+        ops,
+        dryRun: true,
+        base: Object.fromEntries([[pageId, data]]),
+      },
       deps(ctx),
     ),
   )
@@ -197,7 +203,7 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
           userId: ctx.user.id,
           ops,
           dryRun: false,
-          base: { [pageId]: parsed.data.data },
+          base: Object.fromEntries([[pageId, parsed.data.data]]),
         },
         deps(ctx),
       )

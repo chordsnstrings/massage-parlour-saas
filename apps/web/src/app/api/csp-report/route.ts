@@ -8,6 +8,8 @@ import { cspSurfaceOf, recordCspViolations } from '@spa/services'
 
 const MAX_BODY = 16_000
 const PER_MINUTE = 30
+// One log line per violation: the logged fields are already reduced (no CR/LF can survive), this keeps it that way.
+const oneLine = (s: string) => s.replace(/[\r\n\u2028\u2029]/g, '')
 const hits = new Map<string, { n: number; reset: number }>()
 const limited = (ip: string) => {
   const now = Date.now()
@@ -35,7 +37,9 @@ export async function POST(req: Request) {
   if (!violations.length) return new Response(null, { status: 204 })
   const surface = cspSurfaceOf(new URL(req.url).searchParams.get('s'))
   for (const v of violations)
-    console.warn(`[csp] ${surface} ${v.directive} blocked ${v.blocked}${v.path ? ` on ${v.path}` : ''}`)
+    console.warn(
+      oneLine(`[csp] ${surface} ${v.directive} blocked ${v.blocked}${v.path ? ` on ${v.path}` : ''}`),
+    )
   try {
     await recordCspViolations(platformDb(), surface, violations)
   } catch (e) {

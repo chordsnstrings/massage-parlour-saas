@@ -14,6 +14,7 @@ import {
   SYSTEM_ROLES,
   toE164,
   toUaeE164,
+  trimTrailingSlashes,
   whatsappLink,
 } from '../src'
 
@@ -77,6 +78,17 @@ describe('platform roots', () => {
       kind: 'custom',
       hostname: 'www.serenityspa.ae',
     })
+  })
+})
+
+describe('trimTrailingSlashes', () => {
+  it('drops only trailing slashes, linear on long runs', () => {
+    expect(trimTrailingSlashes('https://a.test//')).toBe('https://a.test')
+    expect(trimTrailingSlashes('/a/b')).toBe('/a/b')
+    expect(trimTrailingSlashes('///')).toBe('')
+    const t = Date.now()
+    expect(trimTrailingSlashes(`${'/'.repeat(200_000)}x`)).toBe(`${'/'.repeat(200_000)}x`)
+    expect(Date.now() - t).toBeLessThan(500)
   })
 })
 

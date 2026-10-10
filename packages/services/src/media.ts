@@ -477,7 +477,8 @@ const PRIVATE_V4 = [
 /** IPv6 text → 8 hextets (handles ::, and a trailing dotted IPv4). */
 function v6Hextets(ip: string): number[] {
   let s = ip.toLowerCase().split('%')[0]!
-  const dotted = s.match(/(\d+\.\d+\.\d+\.\d+)$/)
+  // Only reached after isIP(…) === 6: a valid IPv6 text is at most 45 characters.
+  const dotted = s.length <= 45 ? s.match(/(\d+\.\d+\.\d+\.\d+)$/) : null
   if (dotted) {
     const n = v4ToInt(dotted[1]!)
     s = `${s.slice(0, -dotted[1]!.length)}${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`

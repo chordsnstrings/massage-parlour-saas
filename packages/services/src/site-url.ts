@@ -1,7 +1,7 @@
 // A spa's public site address outside a web request (worker jobs, services): the same rule as the web app's
 // `publicSiteUrl` (apps/web server/sites.ts) — primary active custom domain, else the free address on the canonical
 // platform domain ({slug}.{root}, or {root}/s/{slug} with path routing).
-import { parseRoots } from '@spa/core'
+import { parseRoots, trimTrailingSlashes } from '@spa/core'
 import { domains, type Tx } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 
@@ -40,7 +40,7 @@ export async function publicSiteBase(tx: Tx, slug: string, env: Env = process.en
 
 /** Online booking link with an F13 entry tag (`?src=`), e.g. the Google "Book" button → `src=google`. */
 export const bookingLink = (siteBase: string, src: string) =>
-  `${siteBase.replace(/\/+$/, '')}/book?src=${src}`
+  `${trimTrailingSlashes(siteBase)}/book?src=${src}`
 
 /** The site's sitemap (F12: every site host answers /sitemap.xml). */
-export const sitemapUrlOf = (siteBase: string) => `${siteBase.replace(/\/+$/, '')}/sitemap.xml`
+export const sitemapUrlOf = (siteBase: string) => `${trimTrailingSlashes(siteBase)}/sitemap.xml`

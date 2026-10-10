@@ -85,7 +85,7 @@ function cssBackgrounds(css: string, offset: number, endChars: string, out: Omit
     if (!BG_PROP.test(before)) continue
     const raw = m[1] ?? m[2] ?? m[3] ?? ''
     const src = decode(raw.replace(/^(?:&quot;|&#39;)|(?:&quot;|&#39;)$/g, ''))
-    if (!src || /^data:font|\.(?:woff2?|ttf|otf|eot)(?:[?#]|$)/i.test(src)) continue
+    if (!src || /(?:^data:font)|(?:\.(?:woff2?|ttf|otf|eot)(?:[?#]|$))/i.test(src)) continue
     let declEnd = m.index + m[0].length
     while (declEnd < css.length && !endChars.includes(css[declEnd]!)) declEnd++
     out.push({
