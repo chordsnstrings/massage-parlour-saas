@@ -754,8 +754,8 @@ function readJsonLd(docs: unknown[]): Ld {
     }
     for (const s of list(n.sameAs)) {
       const u = str(s)
-      if (u && /instagram\.com\//i.test(u)) ld.instagram ??= u
-      if (u && /facebook\.com\//i.test(u)) ld.facebook ??= u
+      if (u && /^https?:\/\/(?:www\.)?instagram\.com\//i.test(u)) ld.instagram ??= u
+      if (u && /^https?:\/\/(?:www\.)?facebook\.com\//i.test(u)) ld.facebook ??= u
     }
   }
   ld.hours = ld.hours.map((h) => clip(h, 160)).slice(0, 8)

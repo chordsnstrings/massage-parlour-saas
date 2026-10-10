@@ -12,10 +12,11 @@ export function parseRobots(text: string): RobotsGroup[] {
   for (const raw of text.split(/\r\n|\r|\n/)) {
     const line = raw.replace(/#.*/, '').trim()
     if (!line) continue
-    const m = line.match(/^([a-z-]+)\s*:\s*(.*)$/i)
-    if (!m) continue
-    const key = m[1]!.toLowerCase()
-    const value = m[2]!.trim()
+    // `key: value` split at the first colon (no backtracking regex: the body comes from any site).
+    const colon = line.indexOf(':')
+    const key = line.slice(0, Math.max(colon, 0)).trimEnd().toLowerCase()
+    if (!/^[a-z-]+$/.test(key)) continue
+    const value = line.slice(colon + 1).trim()
     if (key === 'user-agent') {
       if (!current || !lastWasAgent) {
         current = { agents: [], rules: [] }
@@ -35,17 +36,31 @@ export function parseRobots(text: string): RobotsGroup[] {
   return groups
 }
 
-/** RFC 9309 path pattern: `*` = any run of characters, a trailing `$` = end of the path. */
+/**
+ * RFC 9309 path pattern: `*` = any run of characters, a trailing `$` = end of the path. A wildcard match with one
+ * resume point (O(pattern × path) worst case), not a regex built from the pattern: `.*a.*a…` backtracks exponentially.
+ */
 function matches(pattern: string, path: string) {
-  const anchored = pattern.endsWith('$')
-  const body = anchored ? pattern.slice(0, -1) : pattern
-  const re = new RegExp(
-    `^${body
-      .split('*')
-      .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-      .join('.*')}${anchored ? '$' : ''}`,
-  )
-  return re.test(path)
+  // Unanchored = a prefix match, i.e. an implicit trailing `*`.
+  const p = pattern.endsWith('$') ? pattern.slice(0, -1) : `${pattern}*`
+  let i = 0
+  let j = 0
+  let star = -1
+  let resume = 0
+  while (i < path.length) {
+    if (p[j] === '*') {
+      star = j++
+      resume = i
+    } else if (j < p.length && p[j] === path[i]) {
+      i++
+      j++
+    } else if (star >= 0) {
+      j = star + 1
+      i = ++resume
+    } else return false
+  }
+  while (p[j] === '*') j++
+  return j === p.length
 }
 
 const normalisePath = (p: string) => {

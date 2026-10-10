@@ -217,7 +217,7 @@ export function buildImportOps(site: ImportedSite, o: { slug: string; title: str
 /** Placeholder indexes the ops use (only those images are downloaded). */
 export function usedImportImages(ops: unknown[]): number[] {
   const found = new Set<number>()
-  const re = new RegExp(`${IMPORT_IMAGE_PLACEHOLDER.replace(/[/-]/g, '\\$&')}(\\d+)`, 'g')
+  const re = new RegExp(`${IMPORT_IMAGE_PLACEHOLDER.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')}(\\d+)`, 'g')
   for (const m of JSON.stringify(ops).matchAll(re)) found.add(Number(m[1]))
   return [...found].sort((a, b) => a - b)
 }

@@ -191,6 +191,28 @@ Disallow:
     expect(robotsAllows(parseRobots('User-agent: *\nDisallow: /'), 'SpaManagementBot', '/')).toBe(false)
     expect(robotsAllows(parseRobots(''), 'SpaManagementBot', '/anything')).toBe(true)
   })
+
+  it('stays fast on hostile robots.txt (no backtracking regex on lines or patterns)', () => {
+    const star = `/${'*a'.repeat(30)}X`
+    const t = Date.now()
+    const hostile = parseRobots(
+      `User-agent: *\n-:${' '.repeat(50_000)}x\u2028y\nDisallow: ${star}\nDisallow: /a*b$\n`,
+    )
+    expect(hostile).toEqual([
+      {
+        agents: ['*'],
+        rules: [
+          { allow: false, pattern: star },
+          { allow: false, pattern: '/a*b$' },
+        ],
+      },
+    ])
+    expect(robotsAllows(hostile, 'SpaManagementBot', `/${'a'.repeat(5000)}`)).toBe(true)
+    expect(robotsAllows(hostile, 'SpaManagementBot', `/${'a'.repeat(40)}X`)).toBe(false)
+    expect(robotsAllows(hostile, 'SpaManagementBot', '/a/zzb')).toBe(false)
+    expect(robotsAllows(hostile, 'SpaManagementBot', '/a/zzbc')).toBe(true)
+    expect(Date.now() - t).toBeLessThan(1000)
+  })
 })
 
 describe('content extraction (fixture spa page)', () => {
@@ -262,6 +284,25 @@ describe('content extraction (fixture spa page)', () => {
       'https://lotusgarden.example/our-treatments',
       'https://lotusgarden.example/contact-us',
     ])
+  })
+
+  it('takes JSON-LD sameAs social links only from the real hosts', () => {
+    const ld = {
+      '@type': 'DaySpa',
+      name: 'X',
+      sameAs: [
+        'https://evil.example/?u=instagram.com/x',
+        'javascript://facebook.com/%0aalert(1)',
+        'https://www.instagram.com/realspa/',
+        'https://facebook.com/realspa',
+      ],
+    }
+    const p = extractPage(
+      `<script type="application/ld+json">${JSON.stringify(ld)}</script><h1>X</h1>`,
+      'https://x.example/',
+    )
+    expect(p.contact.instagram).toBe('https://www.instagram.com/realspa/')
+    expect(p.contact.facebook).toBe('https://facebook.com/realspa')
   })
 
   it('reads Arabic pages (lang/dir, Arabic-Indic digits, Arabic currency)', () => {
