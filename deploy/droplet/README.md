@@ -81,7 +81,8 @@ such as Namecheap.
 ## Staff email (Resend)
 
 Super-admin console → Settings → **Email (Resend)**: API key (write-only; shows "Set ✓ (…last 4)") and From
-address, plus **Send test email to me**. Console values win over `RESEND_API_KEY` / `EMAIL_FROM` in the env (web and
+address, plus **Send test email to me** and **Sending domain** (R18: set up the From domain in Resend, copy its DNS
+records into Namecheap, check verification; see the move steps below). Console values win over `RESEND_API_KEY` / `EMAIL_FROM` in the env (web and
 worker, re-read within a minute). The key is stored encrypted when `APP_ENCRYPTION_KEY` (or `BETTER_AUTH_SECRET`)
 is available, else as entered; it is never shown, logged or audited. Production refuses to send without a key from
 either place.
@@ -324,9 +325,14 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
      `https://spamanagement.co/terms`.
    - Stripe: nothing (no webhook; the Checkout return address follows the domain the payer is on).
    - Claude connector: reconnect with `https://app.spamanagement.co/api/mcp` (console → Websites shows it).
-   - Later, for staff email: Resend → Domains → add `spamanagement.co`, add exactly the records it shows in Namecheap
-     → Advanced DNS (they use their own names, such as `send` and `resend._domainkey`), wait for "Verified", then
-     add the Resend key (console → Company → Email). The default sender is already
+   - Later, for staff email: add the Resend key (console → Company → Email (Resend)), then **Set up sending domain**
+     in the same card: it adds `spamanagement.co` to Resend (or finds it) and lists the records to add in Namecheap
+     → Advanced DNS, with the Host as Namecheap wants it (`send`, `resend._domainkey`), Value (Copy), Priority, TTL
+     Automatic. A sending-access key cannot use Resend's domains API: the card then asks for a full-access key; Set up
+     and Check verification both need it (paste it again after a page reload; never stored). Add the records, click
+     **Check verification** (Resend checks in the background, so click it again a minute later) until it says
+     Verified; if it says Failed or Partially …, fix the rows not marked Verified and check again. Delete the
+     full-access key in Resend once the domain says Verified, then **Send test email to me**. The default sender is already
      `spamanagement.co <ask@spamanagement.co>`. **Careful:** Resend's `send` MX record needs Namecheap Mail Settings
      = Custom MX, which switches off Email Forwarding, so `ask@spamanagement.co` stops receiving. Before switching,
      write down the current forwarding MX records (`eforward…registrar-servers.com`) and ask Namecheap support how to

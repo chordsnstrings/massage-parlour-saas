@@ -68,6 +68,8 @@ export default defineConfig({
       // F32 site import: the local fixture site (site-import.spec, port E2E_PORT + 1) is exempt from the SSRF rules.
       SITE_IMPORT_E2E_ALLOW: `127.0.0.1:${PORT + 1}`,
       EMAIL_E2E_OUTBOX_DIR: emailOutboxDir,
+      // R18: the console's Resend domain setup talks to an in-memory fake (server/resend-fake.ts), never to Resend.
+      RESEND_E2E_FAKE: '1',
     },
   },
 })

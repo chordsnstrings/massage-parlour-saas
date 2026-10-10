@@ -552,12 +552,17 @@ function EditorHeader() {
   chromeRef.current = chrome
   const busy = useRef(false)
   const again = useRef(false)
+  // The save in flight, so Publish can wait for it (server actions run one at a time: a publish queued behind an
+  // autosave would carry the stamp from before that save and be refused as "changed elsewhere").
+  const inflight = useRef<Promise<void> | null>(null)
+  // While publishing no autosave starts: the publish stores the draft itself.
+  const publishing = useRef(false)
   const persistRef = useRef<(mode: 'auto' | 'manual' | 'overwrite') => Promise<void>>(async () => {})
   const persist = useCallback(
     async (mode: 'auto' | 'manual' | 'overwrite') => {
       const c = chromeRef.current
       if (lockRef.current.kind === 'other' || c.previewing.current) return
-      if (mode === 'auto' && !dirtyRef.current) return
+      if (mode === 'auto' && (!dirtyRef.current || publishing.current)) return
       if (busy.current) {
         again.current = true
         return
@@ -570,6 +575,13 @@ function EditorHeader() {
         return
       }
       busy.current = true
+      let settle = () => {}
+      inflight.current = new Promise<void>((resolve) => {
+        settle = () => {
+          inflight.current = null
+          resolve()
+        }
+      })
       setSaveState('saving')
       let r: ActionResult
       try {
@@ -582,11 +594,14 @@ function EditorHeader() {
       } catch {
         // Network / server unreachable: the local copy keeps the changes until the next try.
         busy.current = false
+        settle()
         writeLocalCopy(localKey, json, stampRef.current.page)
         setSaveState('offline')
         return
       }
       busy.current = false
+      // The new stamp is in stampRef now (takeStamp above), so a waiting Publish sends it.
+      settle()
       if (r?.ok) {
         markSaved(json, 'draft')
         setSavedAt(Date.now())
@@ -820,9 +835,18 @@ function EditorHeader() {
               pageTitle={props.pageTitle}
               liveHref={props.liveHref}
               context={chrome.preflight}
-              publish={async (data) =>
-                takeStamp(await publishCheckedAction(props.slug, props.pageId, data, stampRef.current))
-              }
+              publish={async (data) => {
+                publishing.current = true
+                try {
+                  // A just-started autosave (debounce or blur) must finish first, so the stamp below is current.
+                  await inflight.current
+                  return takeStamp(
+                    await publishCheckedAction(props.slug, props.pageId, data, stampRef.current),
+                  )
+                } finally {
+                  publishing.current = false
+                }
+              }}
               onPublished={(data) => {
                 markSaved(JSON.stringify(data), 'published')
                 setSaveState('idle')

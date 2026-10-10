@@ -1,4 +1,10 @@
-import { BILLING_RULE_LIMITS, emailDomain, resolveEmailConfig, turnstileStatusText } from '@spa/core'
+import {
+  BILLING_RULE_LIMITS,
+  emailDomain,
+  PLATFORM_CONTACT_EMAIL,
+  resolveEmailConfig,
+  turnstileStatusText,
+} from '@spa/core'
 import { platformDb, platformSettings } from '@spa/db'
 import { billingRules, emailSettingsStatus, turnstileSettingsStatus } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -18,6 +24,7 @@ import {
   sendTestEmailAction,
 } from '../actions'
 import { saveBillingRulesAction } from '../billing-actions'
+import { SendingDomainSection } from './sending-domain'
 import { SuperAdminsCard } from './super-admins-card'
 
 export const metadata: Metadata = { title: 'Company' }
@@ -100,6 +107,12 @@ export default async function CompanyPage() {
               <SubmitButton variant="secondary">Send test email to me</SubmitButton>
             </ActionForm>
           </CardBody>
+          <SendingDomainSection
+            domain={emailDomain(eff.from)}
+            forwarding={
+              emailDomain(PLATFORM_CONTACT_EMAIL) === emailDomain(eff.from) ? PLATFORM_CONTACT_EMAIL : null
+            }
+          />
         </Card>
         <Card data-testid="turnstile-settings">
           <CardHeader
