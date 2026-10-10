@@ -1,5 +1,5 @@
 import { withTenant } from '@spa/db'
-import { createAsset, DomainError, MAX_UPLOAD_BYTES, processImage } from '@spa/services'
+import { createAsset, createVideoAsset, DomainError, MAX_UPLOAD_BYTES, processImage } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { getT } from '@/i18n/server'
@@ -8,8 +8,9 @@ import { audit } from '@/server/audit'
 import { getSession } from '@/server/session'
 
 /**
- * POST /files/upload?tenant={slug} (multipart: file[, tags]) — one image per request so the browser can show
- * per-file progress. Lives under /files (not the dashboard) so proxy.ts doesn't buffer the body (10 MB cap).
+ * POST /files/upload?tenant={slug}[&kind=video] (multipart: file[, tags]) — one image per request so the browser can
+ * show per-file progress. `kind=video` (F15 Video block): an MP4/WebM clip stored as uploaded (magic bytes checked,
+ * same 20 MB cap, `site.design`). Lives under /files (not the dashboard) so proxy.ts doesn't buffer the body (10 MB cap).
  * The session, tenant membership and `site.content` are checked before the body is read, and the body is
  * streamed through a byte counter (Content-Length is optional behind proxies), so nobody can push an unbounded
  * upload into memory.
@@ -56,7 +57,9 @@ export async function POST(req: Request) {
   if (!(await getSession())) return json(401, { ok: false, error: t('errors.signInAgain') })
   const tenant = Tenant.safeParse(new URL(req.url).searchParams.get('tenant'))
   if (!tenant.success) return json(400, { ok: false, error: t('errors.file.uploadFailed') })
-  const { ctx, error } = await guard(tenant.data, 'site.content') // 404s for non-members
+  const video = new URL(req.url).searchParams.get('kind') === 'video'
+  // 404s for non-members. Videos only go into Video blocks, which the studio places (design).
+  const { ctx, error } = await guard(tenant.data, video ? 'site.design' : 'site.content')
   if (error) return json(403, { ok: false, error })
 
   let form: FormData
@@ -73,6 +76,30 @@ export async function POST(req: Request) {
   if (file.size > MAX_UPLOAD_BYTES) return json(413, { ok: false, error: tooLarge })
 
   try {
+    if (video) {
+      const bytes = Buffer.from(await file.arrayBuffer())
+      const asset = await withTenant(ctx.tenant.id, (tx) =>
+        createVideoAsset(tx, {
+          tenantId: ctx.tenant.id,
+          bytes,
+          filename: file.name,
+          tags: ['video', ...(tags.data?.split(',') ?? [])],
+          createdBy: ctx.user.id,
+        }),
+      )
+      await audit({
+        tenantId: ctx.tenant.id,
+        actorUserId: ctx.user.id,
+        action: 'media.uploaded',
+        entity: 'media_asset',
+        entityId: asset.id,
+        data: { filename: asset.filename, bytes: asset.bytes, kind: 'video' },
+      })
+      return json(200, {
+        ok: true,
+        asset: { id: asset.id, url: asset.url, bytes: asset.bytes, kind: 'video' },
+      })
+    }
     // Re-encode before opening the transaction (CPU work shouldn't hold a DB connection).
     const image = await processImage(Buffer.from(await file.arrayBuffer()))
     const asset = await withTenant(ctx.tenant.id, (tx) =>

@@ -18,7 +18,11 @@ type FieldProps<V> = {
 // biome-ignore lint/suspicious/noExplicitAny: Puck types field values per prop; ours are checked in the renderers
 type Loose = any
 /** What a custom field holds, for AI editing (R16): Puck only knows them as `custom`. See `ai-schema.ts`. */
-export type AiFieldMeta = { kind: 'bi' } | { kind: 'image' } | { kind: 'responsive'; options: string[] }
+export type AiFieldMeta =
+  | { kind: 'bi' }
+  | { kind: 'image' }
+  | { kind: 'text' }
+  | { kind: 'responsive'; options: string[] }
 const custom = <V,>(
   label: string,
   render: (props: FieldProps<V | undefined>) => React.ReactElement,
@@ -106,6 +110,19 @@ export const imageField = (label = 'Image'): Field =>
       </Suspense>
     ),
     { kind: 'image' },
+  )
+
+/** F15 Video block: YouTube / Vimeo link or an uploaded clip ('/files/{id}'); AI edits it as plain text. */
+const VideoFieldControl = lazy(() => import('./video-field').then((m) => ({ default: m.VideoFieldControl })))
+export const videoField = (label = 'Video'): Field =>
+  custom<string>(
+    label,
+    (props) => (
+      <Suspense fallback={<div className="h-16 animate-pulse rounded-lg bg-subtle" />}>
+        <VideoFieldControl {...props} />
+      </Suspense>
+    ),
+    { kind: 'text' },
   )
 
 export const buttonsField = (): Field => ({

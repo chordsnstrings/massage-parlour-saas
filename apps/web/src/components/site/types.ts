@@ -28,6 +28,27 @@ export type SiteBranch = {
   /** Business day ends at this local time (HH:MM). */
   businessDayCutoff: string
 }
+/** F15 BlogList card: a published post without its body. */
+export type SitePostCard = {
+  slug: string
+  title: Bi
+  excerpt: Bi
+  coverImage: string | null
+  /** ISO instant. */
+  publishedAt: string | null
+}
+/** F15 Reviews block: synced Google reviews (good ones with text). */
+export type SiteReviewsData = {
+  average: number
+  count: number
+  items: { id: string; author: string; rating: number; text: string; reviewedAt: string | null }[]
+}
+/** F15 Instagram feed: the connected account + posts published from the dashboard. */
+export type SiteInstagramData = {
+  username: string | null
+  profileUrl: string | null
+  items: { id: string; image: string; caption: string }[]
+}
 /** Live dashboard data the smart blocks read (prices and hours never go stale). */
 export type SiteData = {
   tenant: { name: string; slug: string }
@@ -36,6 +57,12 @@ export type SiteData = {
   staff: SiteStaff[]
   /** Visible pages for navigation. */
   pages: { slug: string; title: Bi }[]
+  /** Published blog posts, newest first (F15). */
+  posts?: SitePostCard[]
+  /** Google reviews; null = not on the spa's plan (Premium `marketing`), undefined = not loaded (demo). */
+  reviews?: SiteReviewsData | null
+  /** Instagram feed; null = not on the spa's plan (Premium `marketing`). */
+  instagram?: SiteInstagramData | null
 }
 
 /** Passed to every block as Puck metadata. */
@@ -51,4 +78,14 @@ export type SiteMeta = {
   editing?: boolean
   /** Today's weekday in Dubai (mon…sun), for highlighting opening hours. */
   today?: string
+  /**
+   * Public site only (F15 EnquiryForm): which site the form posts for + the Turnstile site key (null = no bot
+   * check). Absent in the editor and previews, where the form can't be sent.
+   */
+  form?: { site: { slug: string } | { hostname: string }; turnstileSiteKey: string | null }
+  /** Blog post page only (F15): the post the hidden BlogPost block renders. */
+  post?: SitePostView
 }
+
+/** A published post on its own page (`{site}/blog/{slug}`). */
+export type SitePostView = SitePostCard & { body: Bi; backHref: string; backLabel: Bi }

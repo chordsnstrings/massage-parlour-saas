@@ -1,14 +1,28 @@
 import { businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
 import { branches, serviceCategories, services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
-import { editingTheme, getSite, listPages, publicPrice, type SiteRow, spaHidesPrices } from '@spa/services'
+import {
+  editingTheme,
+  getSite,
+  listPages,
+  listPublishedPosts,
+  publicPrice,
+  type SiteRow,
+  siteInstagram,
+  siteReviews,
+  spaHidesPrices,
+} from '@spa/services'
 import { and, asc, eq } from 'drizzle-orm'
+import { hasFeature } from '@/server/entitlements'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
 
 type TenantLite = { id: string; slug: string; name: string }
 
-/** Live data for the smart blocks (services + prices, bookable staff, main branch). */
-async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pages'>> {
+/**
+ * Live data for the smart blocks (services + prices, bookable staff, main branch, blog posts; Google reviews and the
+ * Instagram feed only when the plan has `marketing` — F15, PLAN §18.8).
+ */
+async function loadLive(tx: Tx, tenant: TenantLite, marketing: boolean): Promise<Omit<SiteData, 'pages'>> {
   const [branch] = await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1)
   const serviceRows = await tx
     .select({
@@ -39,6 +53,9 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
     .from(staff)
     .where(and(eq(staff.active, true), eq(staff.bookable, true)))
     .orderBy(asc(staff.sort), asc(staff.displayName))
+  const posts = await listPublishedPosts(tx, 24)
+  const reviews = marketing ? await siteReviews(tx, { limit: 12, minRating: 4 }) : null
+  const instagram = marketing ? await siteInstagram(tx, { limit: 12 }) : null
   return {
     tenant: { name: tenant.name, slug: tenant.slug },
     branch: branch
@@ -67,6 +84,18 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
       }))
       .filter((s) => s.variants.length > 0),
     staff: people.map((p) => ({ ...p, bio: p.bio ?? null })),
+    posts: posts.map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      excerpt: p.excerpt,
+      coverImage: p.coverImage,
+      publishedAt: p.publishedAt?.toISOString() ?? null,
+    })),
+    reviews: reviews && {
+      ...reviews,
+      items: reviews.items.map((r) => ({ ...r, reviewedAt: r.reviewedAt?.toISOString() ?? null })),
+    },
+    instagram,
   }
 }
 
@@ -75,9 +104,10 @@ async function loadLive(tx: Tx, tenant: TenantLite): Promise<Omit<SiteData, 'pag
  * (public site); the dashboard previews show every visible page.
  */
 export async function loadSite(tenant: TenantLite, opts: { published: boolean }) {
+  const marketing = await hasFeature(tenant.id, 'marketing')
   return withTenant(tenant.id, async (tx) => {
     const site = await getSite(tx, tenant.id)
-    const live = await loadLive(tx, tenant)
+    const live = await loadLive(tx, tenant, marketing)
     const pages = (await listPages(tx, tenant.id)).filter(
       (p) => p.visible && (!opts.published || p.publishedAt),
     )

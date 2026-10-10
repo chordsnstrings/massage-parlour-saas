@@ -109,6 +109,33 @@ figure > .sb-card {
   color: var(--fg);
 }
 
+/* F15 enquiry form fields: theme surfaces, ≥44px targets, visible focus. */
+.sb-input {
+  display: block;
+  min-height: 44px;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px;
+  transition:
+    border-color 150ms var(--ease),
+    box-shadow 150ms var(--ease);
+}
+.sb-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sb-input[aria-invalid="true"] {
+  border-color: #b42318;
+}
+.sb-input:disabled {
+  opacity: 0.7;
+}
+
 /* Buttons: ≥44px touch targets, theme shape, press + hover micro-interactions. */
 .sb-btn {
   display: inline-flex;

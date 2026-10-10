@@ -33,9 +33,60 @@ const UI = {
   openToday: { en: 'Open today', ar: 'مفتوح اليوم' },
   treatments: { en: 'Treatments', ar: 'الجلسات' },
   bookMinute: { en: 'Book in a minute', ar: 'احجز في دقيقة' },
+  // F15 blocks (Arabic copy: native review pending).
+  findUs: { en: 'Find us', ar: 'موقعنا' },
+  mapOf: { en: 'Map', ar: 'خريطة' },
+  playVideo: { en: 'Play video', ar: 'تشغيل الفيديو' },
+  playsFrom: { en: 'Plays from', ar: 'يُعرض من' },
+  googleReviews: { en: 'Google reviews', ar: 'تقييمات Google' },
+  seeOnGoogle: { en: 'See all on Google', ar: 'عرض الكل على Google' },
+  outOf5: { en: 'out of 5', ar: 'من 5' },
+  followInstagram: { en: 'Follow us on Instagram', ar: 'تابعونا على إنستغرام' },
+  instagramPost: { en: 'Instagram post', ar: 'منشور على إنستغرام' },
+  readMore: { en: 'Read more', ar: 'اقرأ المزيد' },
+  blog: { en: 'Blog', ar: 'المدونة' },
+  allPosts: { en: 'All posts', ar: 'كل المقالات' },
+  home: { en: 'Home', ar: 'الرئيسية' },
+  formName: { en: 'Your name', ar: 'الاسم' },
+  formPhone: { en: 'Phone (WhatsApp)', ar: 'رقم الهاتف (واتساب)' },
+  formPhoneHint: {
+    en: 'UAE mobile (05…) or a number with its country code.',
+    ar: 'جوال إماراتي (05…) أو رقم مع رمز الدولة.',
+  },
+  formMessage: { en: 'Message', ar: 'رسالتك' },
+  formSend: { en: 'Send', ar: 'إرسال' },
+  formSending: { en: 'Sending…', ar: 'جارٍ الإرسال…' },
+  formPreview: {
+    en: 'Preview — the form sends from the live site.',
+    ar: 'معاينة — يُرسل النموذج من الموقع المنشور.',
+  },
+  errRequiredName: { en: 'Enter your name', ar: 'أدخل اسمك' },
+  errLongName: { en: 'Keep your name under 80 characters', ar: 'يجب ألا يتجاوز الاسم 80 حرفًا' },
+  errRequiredPhone: { en: 'Enter your phone number', ar: 'أدخل رقم هاتفك' },
+  errPhone: {
+    en: 'Enter a UAE mobile (05…) or a number with its country code (+44…)',
+    ar: 'أدخل جوالًا إماراتيًا (05…) أو رقمًا مع رمز الدولة (+44…)',
+  },
+  errRequiredMessage: { en: 'Write your message', ar: 'اكتب رسالتك' },
+  errLongMessage: { en: 'Keep your message under 1,500 characters', ar: 'يجب ألا تتجاوز الرسالة 1500 حرف' },
+  errCheckFields: { en: 'Please check the highlighted fields.', ar: 'يرجى مراجعة الحقول المحددة.' },
+  errTooMany: {
+    en: 'Too many messages from your network. Please try again later or contact us on WhatsApp.',
+    ar: 'رسائل كثيرة من شبكتك. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.',
+  },
+  errBotCheck: {
+    en: "We couldn't confirm you're not a robot. Please try again.",
+    ar: 'تعذّر التأكد من أنك لست روبوتًا. يرجى المحاولة مرة أخرى.',
+  },
+  errUnavailable: {
+    en: 'This form is not available right now. Please contact us on WhatsApp.',
+    ar: 'هذا النموذج غير متاح حاليًا. يرجى التواصل معنا عبر واتساب.',
+  },
+  errFailed: { en: 'Something went wrong. Please try again.', ar: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.' },
 } as const satisfies Record<string, Record<Locale, string>>
 
-export const ui = (key: keyof typeof UI, locale: Locale) => UI[key][locale]
+export type SiteUiKey = keyof typeof UI
+export const ui = (key: SiteUiKey, locale: Locale) => UI[key][locale]
 
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 const DAY_NAMES: Record<Locale, Record<(typeof WEEKDAYS)[number], string>> = {
@@ -80,4 +131,14 @@ export function clock(hhmm: string, locale: Locale) {
   const suffix = h >= 12 && h < 24 ? 'pm' : 'am'
   const hour = h % 12 === 0 ? 12 : h % 12
   return `${hour}${m ? `:${String(m).padStart(2, '0')}` : ''} ${suffix}`
+}
+
+/** "9 October 2026" / "9 أكتوبر 2026" (Latin digits, Dubai day). */
+export function longDate(iso: string | Date, locale: Locale) {
+  return new Date(iso).toLocaleDateString(locale === 'ar' ? 'ar-AE-u-nu-latn' : 'en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Dubai',
+  })
 }
