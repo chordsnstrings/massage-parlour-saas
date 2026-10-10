@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { platformInvoices, tenants } from '@spa/db'
+import { announcementDismissals, platformInvoices, tenants } from '@spa/db'
 import { createPlatformInvoice } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { admin, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
@@ -10,6 +10,7 @@ const daysAgo = (n: number) =>
 // F20 (PLAN §17): feature flags (default + per-spa override, audited) and announcements shown in the spa dashboard
 // as a dismissible banner per member.
 test('console: feature flags and announcements', async ({ browser }) => {
+  test.setTimeout(180_000) // two surfaces, four console pages
   const ownerCtx = await browser.newContext()
   const adminCtx = await browser.newContext()
   const owner = await ownerCtx.newPage()
@@ -61,6 +62,10 @@ test('console: feature flags and announcements', async ({ browser }) => {
     await expect(banner).toContainText('The dashboard pauses 02:00–02:15.')
     await banner.getByRole('button', { name: 'Dismiss' }).click()
     await expect(banner).toHaveCount(0)
+    // The banner hides at once; the dismissal is stored by the server action in the background.
+    await expect
+      .poll(async () => (await testDb().select().from(announcementDismissals)).length)
+      .toBeGreaterThan(0)
     await owner.reload()
     await expect(owner.getByText('Maintenance tonight')).toHaveCount(0)
     await ops.reload()
@@ -74,6 +79,7 @@ test('console: feature flags and announcements', async ({ browser }) => {
 // F21 + F22 (PLAN §17): the spa list's usage columns + sorting; an unpaid invoice moves the spa overdue → read-only
 // (dashboard banner, writes blocked), "Pause automatic transitions", and marking it paid lifts it.
 test('console: tenant usage columns and automatic billing transitions', async ({ browser }) => {
+  test.setTimeout(180_000) // two surfaces, several reloads
   const ownerCtx = await browser.newContext()
   const adminCtx = await browser.newContext()
   const owner = await ownerCtx.newPage()
