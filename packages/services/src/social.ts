@@ -22,10 +22,12 @@ import { entitledSql } from './entitlements'
 import { DomainError } from './errors'
 import {
   appOrigin,
+  type ContainerParams,
   clipBytes,
   dmTooLong,
   dmWindowOpen,
   type InstagramEvent,
+  type InstagramHost,
   instagramClient,
   MetaApiError,
   metaConfig,
@@ -68,6 +70,39 @@ export async function getInstagramAccount(tx: Tx) {
     .orderBy(desc(socialAccounts.updatedAt))
     .limit(1)
   return row ?? null
+}
+
+/**
+ * Where Instagram calls go out from: the Instagram Login connection, else a connected Facebook Page (F19) with a
+ * linked Instagram professional account — the same account, reached on graph.facebook.com with the Page token.
+ */
+export type InstagramSender = {
+  via: InstagramHost
+  row: SocialAccount
+  igUserId: string
+  token: string
+}
+
+export async function getInstagramSender(tx: Tx): Promise<InstagramSender | null> {
+  const ig = await getInstagramAccount(tx)
+  const igToken = tokenOf(ig)
+  if (ig && igToken) return { via: 'instagram', row: ig, igUserId: ig.externalId, token: igToken }
+  const [fb] = await tx
+    .select()
+    .from(socialAccounts)
+    .where(
+      and(
+        eq(socialAccounts.platform, 'facebook'),
+        eq(socialAccounts.status, 'connected'),
+        sql`${socialAccounts.meta} ->> 'igUserId' is not null`,
+      ),
+    )
+    .orderBy(desc(socialAccounts.updatedAt))
+    .limit(1)
+  const fbToken = tokenOf(fb ?? null)
+  if (fb && fbToken && fb.meta.igUserId)
+    return { via: 'facebook', row: fb, igUserId: fb.meta.igUserId, token: fbToken }
+  return null
 }
 
 /** Token-free view for the settings card (latest connected or expired account). */
@@ -167,9 +202,9 @@ async function instagramOwners(igUserId: string, o: SocialOpts) {
     .innerJoin(tenants, eq(tenants.id, socialAccounts.tenantId))
     .where(
       and(
-        eq(socialAccounts.platform, 'instagram'),
-        eq(socialAccounts.externalId, igUserId),
         eq(socialAccounts.status, 'connected'),
+        sql`((${socialAccounts.platform} = 'instagram' and ${socialAccounts.externalId} = ${igUserId})
+          or (${socialAccounts.platform} = 'facebook' and ${socialAccounts.meta} ->> 'igUserId' = ${igUserId}))`,
       ),
     )
   const live = new Set<string>(LIVE_STATUSES)
@@ -191,10 +226,10 @@ export async function instagramAccountTenants(igUserId: string, o: SocialOpts = 
  * Matches the Instagram user id or the app-scoped id from the code exchange. Returns the number of accounts cleared.
  */
 export async function forgetInstagramUser(igUserId: string, o: SocialOpts = {}) {
-  const matches = and(
-    eq(socialAccounts.platform, 'instagram'),
-    sql`(${socialAccounts.externalId} = ${igUserId} or ${socialAccounts.meta}->>'appUserId' = ${igUserId})`,
-  )
+  // Facebook Login (F19) callbacks send the app-scoped Facebook user id stored on the Page row.
+  const matches = sql`((${socialAccounts.platform} = 'instagram' and (${socialAccounts.externalId} = ${igUserId}
+      or ${socialAccounts.meta}->>'appUserId' = ${igUserId}))
+    or (${socialAccounts.platform} = 'facebook' and ${socialAccounts.meta}->>'fbUserId' = ${igUserId}))`
   const rows = await platformOf(o)
     .select({ tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
@@ -481,14 +516,17 @@ export async function fillParticipant(tenantId: string, conversationId: string, 
     tenantId,
     async (tx) => {
       const [conv] = await tx.select().from(conversations).where(eq(conversations.id, conversationId))
-      return { conv, account: await getInstagramAccount(tx) }
+      return { conv, sender: await getInstagramSender(tx) }
     },
     appOf(o),
   )
-  const token = tokenOf(state.account)
-  if (!state.conv || state.conv.participant || state.conv.channel !== 'instagram_dm' || !token) return
+  const sender = state.sender
+  if (!state.conv || state.conv.participant || state.conv.channel !== 'instagram_dm' || !sender) return
   try {
-    const p = await instagramClient(o.fetch).userProfile(state.conv.externalThreadId, token)
+    const p = await instagramClient(o.fetch, sender.via).userProfile(
+      state.conv.externalThreadId,
+      sender.token,
+    )
     const name = p.username ? `@${p.username}` : p.name
     if (!name) return
     await withTenant(
@@ -627,18 +665,19 @@ export async function deliverReply(
     async (tx) => {
       const [conv] = await tx.select().from(conversations).where(eq(conversations.id, conversationId))
       if (!conv) throw new DomainError('Conversation not found', 'not_found')
-      return { conv, account: await getInstagramAccount(tx) }
+      return { conv, ig: await getInstagramSender(tx) }
     },
     appOf(opts),
   )
-  const { conv, account } = state
+  const { conv, ig } = state
+  const account = ig?.row ?? null
   const isDm = conv.channel === 'instagram_dm'
   // Staff text is never cut silently (the actions check it first); AI text is already byte-limited, clip as a backstop.
   const tooLong = isDm && opts.sender === 'staff' ? dmTooLong(text.trim()) : null
   if (tooLong) throw new DomainError(tooLong)
   const body = isDm ? clipBytes(text.trim()) : text.trim().slice(0, 2000)
   if (!body) throw new DomainError('Write a message first')
-  const token = tokenOf(account)
+  const token = ig?.token ?? null
   let error = replyBlocker(
     { channel: conv.channel, lastCustomerMsgAt: conv.lastCustomerMsgAt, account, token },
     now,
@@ -646,13 +685,13 @@ export async function deliverReply(
   )
   let externalId: string | null = null
   let expired = false
-  if (!error && account && token) {
+  if (!error && ig && token) {
     try {
-      const client = instagramClient(opts.fetch)
+      const client = instagramClient(opts.fetch, ig.via)
       externalId = isDm
         ? ((
             await client.sendMessage({
-              igUserId: account.externalId,
+              igUserId: ig.igUserId,
               recipientId: conv.externalThreadId,
               text: body,
               accessToken: token,
@@ -707,6 +746,156 @@ export async function deliverReply(
     appOf(opts),
   )
   return error ? { ok: false, messageId, error } : { ok: true, messageId }
+}
+
+// ── Private replies (F18: one DM answer per comment, within 7 days) ────────
+
+export const PRIVATE_REPLY_WINDOW_MS = 7 * 86_400_000
+/** Shown on a private reply while it is being sent; a send that never finished frees the slot after 3 minutes. */
+const PRIVATE_SENDING_MS = 3 * 60_000
+
+export type PrivateReplyState =
+  | { status: 'available'; until: Date }
+  | { status: 'sent'; at: Date; text: string }
+  | { status: 'sending' }
+  | { status: 'expired' }
+  | { status: 'not_comment' }
+
+type MsgLike = { kind: string; direction: string; error: string | null; createdAt: Date; text: string }
+
+/** Whether the comment thread can still get its one private reply (pure; `messages` = the thread's messages). */
+export function privateReplyState(
+  conv: { channel: string; createdAt: Date },
+  messages: MsgLike[],
+  now = new Date(),
+): PrivateReplyState {
+  if (conv.channel !== 'instagram_comment') return { status: 'not_comment' }
+  const mine = messages.filter((m) => m.kind === 'private_reply' && m.direction === 'out')
+  const sent = mine.find((m) => !m.error)
+  if (sent) return { status: 'sent', at: sent.createdAt, text: sent.text }
+  if (
+    mine.some((m) => m.error === SENDING_NOTE && now.getTime() - m.createdAt.getTime() < PRIVATE_SENDING_MS)
+  )
+    return { status: 'sending' }
+  const commentAt =
+    messages
+      .filter((m) => m.direction === 'in')
+      .map((m) => m.createdAt)
+      .sort((a, b) => a.getTime() - b.getTime())[0] ?? conv.createdAt
+  const until = new Date(commentAt.getTime() + PRIVATE_REPLY_WINDOW_MS)
+  return now < until ? { status: 'available', until } : { status: 'expired' }
+}
+
+export type PrivateReplyResult = { ok: true; messageId: string } | { ok: false; error: string }
+
+/**
+ * Sends the comment's private reply (Instagram Private Replies API) and keeps it in the comment thread as
+ * `kind = private_reply`. Claimed first (a `SENDING_NOTE` row under a row lock on the thread), so two staff members
+ * can't both send one; a failed send removes the claim and returns the reason (nothing is stored), so the text stays in
+ * the composer. Throws DomainError for rule problems (not a comment, already sent, 7 days passed, too long).
+ */
+export async function sendPrivateReply(
+  tenantId: string,
+  conversationId: string,
+  text: string,
+  o: SocialOpts = {},
+): Promise<PrivateReplyResult> {
+  const now = nowOf(o)
+  const body = text.trim()
+  if (!body) throw new DomainError('Write a message first')
+  const tooLong = dmTooLong(body)
+  if (tooLong) throw new DomainError(tooLong)
+  const claim = await withTenant(
+    tenantId,
+    async (tx) => {
+      const [conv] = await tx
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .for('update')
+      if (!conv) throw new DomainError('Conversation not found', 'not_found')
+      const msgs = await tx
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.conversationId, conversationId))
+      const state = privateReplyState(conv, msgs, now)
+      if (state.status === 'not_comment') throw new DomainError('Private replies are only for comments.')
+      if (state.status === 'sent' || state.status === 'sending')
+        throw new DomainError('A private reply was already sent for this comment.')
+      if (state.status === 'expired')
+        throw new DomainError('Instagram only allows a private reply within 7 days of the comment.')
+      const sender = await getInstagramSender(tx)
+      if (!metaConfig(o.env))
+        return { ok: false as const, error: "Instagram isn't set up on this server yet." }
+      if (!sender)
+        return { ok: false as const, error: "Instagram isn't connected — connect it in Settings first." }
+      if (sender.row.tokenExpiresAt && sender.row.tokenExpiresAt <= now)
+        return { ok: false as const, error: 'The Instagram connection expired — reconnect it in Settings.' }
+      // A stale claim from a send that never finished is dropped (Instagram rejects a second private reply anyway).
+      await tx
+        .delete(conversationMessages)
+        .where(
+          and(
+            eq(conversationMessages.conversationId, conversationId),
+            eq(conversationMessages.kind, 'private_reply'),
+            ne(sql`coalesce(${conversationMessages.error}, '')`, ''),
+          ),
+        )
+      const [row] = await tx
+        .insert(conversationMessages)
+        .values({
+          tenantId,
+          conversationId,
+          direction: 'out',
+          sender: 'staff',
+          kind: 'private_reply',
+          text: body,
+          error: SENDING_NOTE,
+          createdAt: now,
+        })
+        .returning({ id: conversationMessages.id })
+      if (conv.mode === 'bot')
+        await tx.update(conversations).set({ mode: 'human' }).where(eq(conversations.id, conversationId))
+      return { ok: true as const, messageId: row!.id, sender, commentId: conv.externalThreadId }
+    },
+    appOf(o),
+  )
+  if (!claim.ok) return claim
+  const { sender, messageId, commentId } = claim
+  let externalId: string | null = null
+  let error: string | null = null
+  let expired = false
+  try {
+    externalId =
+      (
+        await instagramClient(o.fetch, sender.via).sendPrivateReply({
+          igUserId: sender.igUserId,
+          commentId,
+          text: body,
+          accessToken: sender.token,
+        })
+      ).messageId ?? null
+  } catch (e) {
+    error = e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Something went wrong while sending.'
+    expired = e instanceof MetaApiError && e.code === 190
+  }
+  await withTenant(
+    tenantId,
+    async (tx) => {
+      if (expired)
+        await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, sender.row.id))
+      if (error) await tx.delete(conversationMessages).where(eq(conversationMessages.id, messageId))
+      else {
+        await tx
+          .update(conversationMessages)
+          .set({ error: null, externalId })
+          .where(eq(conversationMessages.id, messageId))
+        await tx.update(conversations).set({ updatedAt: now }).where(eq(conversations.id, conversationId))
+      }
+    },
+    appOf(o),
+  )
+  return error ? { ok: false, error } : { ok: true, messageId }
 }
 
 // ── Inbox (inside withTenant) ───────────────────────────────────────────────
@@ -891,11 +1080,19 @@ export function publicImageUrl(url: string | undefined, origin = appOrigin()) {
   }
 }
 
-export type PublishResult = { ok: true; externalId: string } | { ok: false; error: string }
+export type PublishResult =
+  | { ok: true; externalId: string }
+  | { ok: false; error: string; processing?: boolean }
 
 /** Marks a post while Instagram is publishing it (status stays `failed` so the job never picks it up twice). */
 export const PUBLISHING_NOTE = 'Publishing to Instagram… if this stays, check Instagram before trying again.'
+/** A video (reel, story, carousel with videos) Instagram is still processing: the 5-minute job finishes it. */
+export const PROCESSING_NOTE =
+  'Instagram is still processing the video — it is published automatically within a few minutes.'
 const PUBLISH_CLAIM_MS = 3 * 60_000
+/** Containers expire after 24 h; one older than this is recreated (and a video still processing after 1 h fails). */
+const CONTAINER_TTL_MS = 23 * 3600_000
+const PROCESSING_LIMIT_MS = 3600_000
 
 /** True while another request is publishing this post (claimed less than 3 minutes ago). */
 export const isPublishing = (
@@ -906,18 +1103,137 @@ export const isPublishing = (
   p.error === PUBLISHING_NOTE &&
   Boolean(p.publishedAt && now.getTime() - p.publishedAt.getTime() < PUBLISH_CLAIM_MS)
 
+/** True while Instagram processes the post's video (it goes out with the next 5-minute run). */
+export const isProcessing = (p: { status: string; error: string | null }) =>
+  p.status === 'scheduled' && p.error === PROCESSING_NOTE
+
+// ── Post formats (F18): feed image, reel, story, carousel ───────────────────
+
+export const IG_POST_TYPES = ['feed', 'reel', 'story', 'carousel'] as const
+export type IgPostType = (typeof IG_POST_TYPES)[number]
+export const isIgPostType = (v: unknown): v is IgPostType =>
+  typeof v === 'string' && (IG_POST_TYPES as readonly string[]).includes(v)
+export const CAROUSEL_MIN = 2
+export const CAROUSEL_MAX = 10
+
+export type PostMedia = { url: string; alt?: string; type?: 'image' | 'video' }
+/** Image or video: the stored type, else guessed from the file extension. */
+export const mediaKind = (m: PostMedia): 'image' | 'video' =>
+  m.type ?? (/\.(mp4|mov|m4v)(?:[?#]|$)/i.test(m.url) ? 'video' : 'image')
+
+/** Why a post can't be published in its format (null = ready); the dashboard translates the code. */
+export type PublishProblem =
+  | 'no_media'
+  | 'not_https'
+  | 'needs_image'
+  | 'needs_video'
+  | 'carousel_count'
+  | 'unknown_type'
+
+export const PUBLISH_PROBLEM_TEXT: Record<PublishProblem, string> = {
+  no_media: 'Instagram posts need an image — add one first.',
+  not_https:
+    'The image is not on a public https link, so Instagram cannot fetch it. Save it to the media library on the live site and try again.',
+  needs_image: 'Feed posts need an image — choose Reel to post a video.',
+  needs_video: 'Reels need a video (an .mp4 on a public https link).',
+  carousel_count: `Carousels need ${CAROUSEL_MIN}–${CAROUSEL_MAX} images or videos.`,
+  unknown_type: 'This post type cannot be published to Instagram.',
+}
+
+export type PublishPlan = { children: ContainerParams[]; main: ContainerParams; video: boolean }
+
 /**
- * Publishes one post (image + caption) to the connected account in three steps, so no transaction is held during the
- * Graph calls: (1) a short transaction checks the post and claims it, (2) Instagram creates and publishes the media,
- * (3) a second short transaction records the outcome. A claimed post is skipped by the 5-minute job and by a second
- * click; if step 3 never happens the post shows "check Instagram" instead of being published again automatically.
- * API failures mark the post `failed` with the reason. `recordBlockers` also marks posts failed for setup problems
- * (used by the job so it doesn't retry forever).
+ * The containers a post needs (Content Publishing API): feed = one image; REELS = one video (shared to the feed,
+ * optional image cover); STORIES = one image or video (no caption); CAROUSEL = 2–10 items (`is_carousel_item`,
+ * videos as media_type VIDEO) + the parent with `children`.
+ */
+export function instagramPublishPlan(
+  post: { type: string; caption: string; media: PostMedia[] },
+  origin = appOrigin(),
+): { ok: true; plan: PublishPlan } | { ok: false; problem: PublishProblem } {
+  const type = post.type === 'gbp_post' ? 'feed' : post.type || 'feed'
+  if (!isIgPostType(type)) return { ok: false, problem: 'unknown_type' }
+  const media = post.media.filter((m) => m?.url)
+  if (!media.length) return { ok: false, problem: type === 'reel' ? 'needs_video' : 'no_media' }
+  const items = media.map((m) => ({ kind: mediaKind(m), url: publicImageUrl(m.url, origin) }))
+  const caption = post.caption.slice(0, 2200)
+  const first = items[0]!
+  if (type === 'carousel') {
+    if (items.length < CAROUSEL_MIN || items.length > CAROUSEL_MAX)
+      return { ok: false, problem: 'carousel_count' }
+    if (items.some((i) => !i.url)) return { ok: false, problem: 'not_https' }
+    return {
+      ok: true,
+      plan: {
+        children: items.map(
+          (i): ContainerParams =>
+            i.kind === 'video'
+              ? { media_type: 'VIDEO', video_url: i.url!, is_carousel_item: true }
+              : { image_url: i.url!, is_carousel_item: true },
+        ),
+        main: { media_type: 'CAROUSEL', caption },
+        video: items.some((i) => i.kind === 'video'),
+      },
+    }
+  }
+  if (!first.url) return { ok: false, problem: 'not_https' }
+  if (type === 'reel') {
+    if (first.kind !== 'video') return { ok: false, problem: 'needs_video' }
+    const cover = items[1]?.kind === 'image' ? items[1].url : null
+    return {
+      ok: true,
+      plan: {
+        children: [],
+        main: {
+          media_type: 'REELS',
+          video_url: first.url,
+          caption,
+          share_to_feed: true,
+          ...(cover ? { cover_url: cover } : {}),
+        },
+        video: true,
+      },
+    }
+  }
+  if (type === 'story')
+    return {
+      ok: true,
+      plan: {
+        children: [],
+        main:
+          first.kind === 'video'
+            ? { media_type: 'STORIES', video_url: first.url }
+            : { media_type: 'STORIES', image_url: first.url },
+        video: first.kind === 'video',
+      },
+    }
+  if (first.kind !== 'image') return { ok: false, problem: 'needs_image' }
+  return { ok: true, plan: { children: [], main: { image_url: first.url, caption }, video: false } }
+}
+
+/** Container progress kept on the post between runs while Instagram processes a video. */
+type ContainerMeta = { containerId?: string; childIds?: string; containerAt?: string }
+
+class StillProcessing extends Error {
+  constructor(readonly state: ContainerMeta) {
+    super('processing')
+  }
+}
+
+/**
+ * Publishes one post (feed image, reel, story or carousel) to the connected account in three steps, so no
+ * transaction is held during the Graph calls: (1) a short transaction checks the post and claims it, (2) Instagram
+ * creates the container(s), each polled until FINISHED, then media_publish, (3) a second short transaction records the
+ * outcome. A video Instagram is still processing after the poll budget is parked (`PROCESSING_NOTE`, container ids
+ * in `social_posts.meta`) and the 5-minute job resumes it with the same containers. A claimed post is skipped by the
+ * job and by a second click; if step 3 never happens the post shows "check Instagram" instead of being published
+ * again automatically. API failures mark the post `failed` with the reason. `recordBlockers` also marks posts failed
+ * for setup problems (used by the job so it doesn't retry forever).
  */
 export async function publishInstagramPost(
   tenantId: string,
   postId: string,
-  o: SocialOpts & { recordBlockers?: boolean } = {},
+  o: SocialOpts & { recordBlockers?: boolean; maxPolls?: number } = {},
 ): Promise<PublishResult> {
   const now = nowOf(o)
   const sleep = o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
@@ -933,65 +1249,104 @@ export async function publishInstagramPost(
         if (record)
           await tx
             .update(socialPosts)
-            .set({ status: 'failed', error, publishedAt: null })
+            .set({ status: 'failed', error, publishedAt: null, meta: {} })
             .where(eq(socialPosts.id, post.id))
         return { ok: false as const, error }
       }
       if (post.platform !== 'instagram') return fail('Only Instagram posts can be published here.', false)
-      const account = await getInstagramAccount(tx)
-      const token = tokenOf(account)
+      const sender = await getInstagramSender(tx)
       if (!metaConfig(o.env))
         return fail("Instagram isn't set up on this server yet — copy the caption instead.", false)
-      if (!account || !token) return fail("Instagram isn't connected — connect it in Settings first.", false)
+      if (!sender) return fail("Instagram isn't connected — connect it in Settings first.", false)
       if (post.status !== 'scheduled' && post.status !== 'failed')
         return fail('Approve the post before publishing it.', false)
-      const image = post.media[0]?.url
-      const imageUrl = publicImageUrl(image)
-      if (!image) return fail('Instagram posts need an image — add one first.', Boolean(o.recordBlockers))
-      if (!imageUrl)
-        return fail(
-          'The image is not on a public https link, so Instagram cannot fetch it. Save it to the media library on the live site and try again.',
-          Boolean(o.recordBlockers),
-        )
+      const planned = instagramPublishPlan(post)
+      if (!planned.ok) return fail(PUBLISH_PROBLEM_TEXT[planned.problem], Boolean(o.recordBlockers))
+      const meta = (post.meta ?? {}) as ContainerMeta
+      const at = meta.containerAt ? new Date(meta.containerAt) : null
+      const resume = at && now.getTime() - at.getTime() < CONTAINER_TTL_MS ? meta : null
+      if (resume && at && now.getTime() - at.getTime() > PROCESSING_LIMIT_MS)
+        return fail('Instagram took too long to process the video — try again or use a shorter video.', true)
       await tx
         .update(socialPosts)
         .set({ status: 'failed', error: PUBLISHING_NOTE, publishedAt: now })
         .where(eq(socialPosts.id, post.id))
-      return { ok: true as const, post, account, token, imageUrl }
+      return { ok: true as const, post, sender, plan: planned.plan, resume }
     },
     appOf(o),
   )
   if (!claim.ok) return claim
 
-  const { post, account, token, imageUrl } = claim
-  const client = instagramClient(o.fetch)
+  const { post, sender, plan, resume } = claim
+  const client = instagramClient(o.fetch, sender.via)
+  const polls = o.maxPolls ?? 8
+  const waitMs = plan.video ? 3000 : 1500
+  /** Polls one container; true = ready to publish / use, false = still processing after the budget. */
+  const ready = async (id: string) => {
+    for (let i = 0; i < polls; i++) {
+      const status = await client.containerStatus(id, sender.token)
+      if (status === 'FINISHED' || status === 'PUBLISHED') return true
+      if (status === 'ERROR' || status === 'EXPIRED')
+        throw new MetaApiError(
+          422,
+          plan.video
+            ? 'Instagram could not process the video (use an MP4/MOV, H.264, under 15 minutes and 300 MB).'
+            : 'Instagram could not process the image (use a JPEG under 8 MB).',
+        )
+      if (i < polls - 1) await sleep(waitMs)
+    }
+    return false
+  }
+  const startedAt = resume?.containerAt ?? now.toISOString()
   let result: PublishResult
   let expired = false
+  let parked: ContainerMeta | null = null
   try {
-    const container = await client.createMediaContainer({
-      igUserId: account.externalId,
-      imageUrl,
-      caption: post.caption.slice(0, 2200),
-      accessToken: token,
-    })
-    for (let i = 0; i < 8; i++) {
-      const status = await client.containerStatus(container.id, token)
-      if (status === 'FINISHED' || status === 'PUBLISHED') break
-      if (status === 'ERROR' || status === 'EXPIRED')
-        throw new MetaApiError(422, 'Instagram could not process the image (use a JPEG under 8 MB).')
-      await sleep(1500)
+    let containerId = resume?.containerId ?? null
+    if (!containerId) {
+      let params = plan.main
+      if (plan.children.length) {
+        const childIds =
+          resume?.childIds?.split(',').filter(Boolean) ??
+          (await Promise.all(
+            plan.children.map(
+              async (c) =>
+                (
+                  await client.createContainer({
+                    igUserId: sender.igUserId,
+                    params: c,
+                    accessToken: sender.token,
+                  })
+                ).id,
+            ),
+          ))
+        if (plan.video)
+          for (const id of childIds)
+            if (!(await ready(id)))
+              throw new StillProcessing({ childIds: childIds.join(','), containerAt: startedAt })
+        params = { ...plan.main, children: childIds.join(',') }
+      }
+      containerId = (
+        await client.createContainer({ igUserId: sender.igUserId, params, accessToken: sender.token })
+      ).id
     }
+    if (!(await ready(containerId))) throw new StillProcessing({ containerId, containerAt: startedAt })
     const published = await client.publishMedia({
-      igUserId: account.externalId,
-      creationId: container.id,
-      accessToken: token,
+      igUserId: sender.igUserId,
+      creationId: containerId,
+      accessToken: sender.token,
     })
     result = { ok: true, externalId: published.id }
   } catch (e) {
-    expired = e instanceof MetaApiError && e.code === 190
-    result = {
-      ok: false,
-      error: e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Publishing failed — try again.',
+    if (e instanceof StillProcessing) {
+      parked = e.state
+      result = { ok: false, error: PROCESSING_NOTE, processing: true }
+    } else {
+      expired = e instanceof MetaApiError && e.code === 190
+      result = {
+        ok: false,
+        error: e instanceof MetaApiError ? `Instagram said: ${e.message}` : 'Publishing failed — try again.',
+      }
     }
   }
 
@@ -999,13 +1354,28 @@ export async function publishInstagramPost(
     tenantId,
     async (tx) => {
       if (expired)
-        await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, account.id))
+        await tx.update(socialAccounts).set({ status: 'expired' }).where(eq(socialAccounts.id, sender.row.id))
       await tx
         .update(socialPosts)
         .set(
           result.ok
-            ? { status: 'published', publishedAt: nowOf(o), externalId: result.externalId, error: null }
-            : { status: 'failed', error: result.error, publishedAt: null },
+            ? {
+                status: 'published',
+                publishedAt: nowOf(o),
+                externalId: result.externalId,
+                error: null,
+                meta: {},
+              }
+            : parked
+              ? // Back in the job's queue (due now) with the containers kept; nothing new is created on resume.
+                {
+                  status: 'scheduled',
+                  scheduledAt: now,
+                  error: PROCESSING_NOTE,
+                  publishedAt: null,
+                  meta: parked,
+                }
+              : { status: 'failed', error: result.error, publishedAt: null, meta: {} },
         )
         .where(eq(socialPosts.id, post.id))
     },
@@ -1020,6 +1390,7 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
     attempted: 0,
     published: 0,
     failed: 0,
+    processing: 0,
     byTenant: {} as Record<string, { published: number; failed: number }>,
   }
   if (!metaConfig(o.env)) return result
@@ -1028,13 +1399,15 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
     .select({ id: tenants.id })
     .from(tenants)
     .where(and(inArray(tenants.status, [...LIVE_STATUSES]), automationOnSql('instagram')))
+  // Instagram Login, or a Facebook Page with a linked Instagram account (F19).
   const connected = platformOf(o)
     .select({ tenantId: socialAccounts.tenantId })
     .from(socialAccounts)
     .where(
       and(
-        eq(socialAccounts.platform, 'instagram'),
         eq(socialAccounts.status, 'connected'),
+        sql`(${socialAccounts.platform} = 'instagram'
+          or (${socialAccounts.platform} = 'facebook' and ${socialAccounts.meta} ->> 'igUserId' is not null))`,
         inArray(socialAccounts.tenantId, switchedOn),
       ),
     )
@@ -1059,6 +1432,8 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
     if (r.ok) {
       result.published++
       per.published++
+    } else if (r.processing) {
+      result.processing++
     } else {
       result.failed++
       per.failed++

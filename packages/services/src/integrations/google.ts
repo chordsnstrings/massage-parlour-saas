@@ -1,10 +1,14 @@
 // Google Business Profile: OAuth 2.0 (PKCE S256 + HMAC-signed state), token exchange/refresh and the Business Profile
-// APIs (account management, business information, v4 reviews + local posts). Pure helpers and fetch calls only —
+// APIs (account management, business information, v4 reviews + local posts, Place Actions "Book" links) plus Search
+// Console (sites + sitemaps, F17). Pure helpers and fetch calls only —
 // no database access here (see ../gbp.ts and ../reviews.ts). Never log or return tokens: errors carry only the HTTP
 // status and Google's own message.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 export const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/business.manage'
+/** Search Console (F17b): sites.list/add + sitemaps.submit. Requested with the Business Profile scope on connect. */
+export const SEARCH_CONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters'
+export const GOOGLE_SCOPES = [GOOGLE_SCOPE, SEARCH_CONSOLE_SCOPE] as const
 export const GOOGLE_ENDPOINTS = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
   token: 'https://oauth2.googleapis.com/token',
@@ -12,6 +16,8 @@ export const GOOGLE_ENDPOINTS = {
   accounts: 'https://mybusinessaccountmanagement.googleapis.com/v1/accounts',
   businessInfo: 'https://mybusinessbusinessinformation.googleapis.com/v1',
   v4: 'https://mybusiness.googleapis.com/v4',
+  placeActions: 'https://mybusinessplaceactions.googleapis.com/v1',
+  searchConsole: 'https://www.googleapis.com/webmasters/v3',
 } as const
 const STATE_TTL_MS = 10 * 60_000
 
@@ -106,7 +112,7 @@ export function googleAuthorizeUrl(opts: {
     client_id: opts.clientId,
     redirect_uri: opts.redirectUri,
     response_type: 'code',
-    scope: GOOGLE_SCOPE,
+    scope: GOOGLE_SCOPES.join(' '),
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -125,6 +131,9 @@ export class GoogleApiError extends Error {
     readonly status: number,
     /** Google's machine reason, e.g. `invalid_grant`, `PERMISSION_DENIED`. */
     readonly reason?: string,
+    /** The finer cause when Google sends one: ErrorInfo reason (`SERVICE_DISABLED`, `ACCESS_TOKEN_SCOPE_INSUFFICIENT`)
+     * or a legacy `errors[0].reason` (`accessNotConfigured`, `insufficientPermissions`, `forbidden`). */
+    readonly detail?: string,
   ) {
     super(message)
     this.name = 'GoogleApiError'
@@ -185,14 +194,25 @@ async function call<T>(
   }
   if (!res.ok) {
     const b = body as {
-      error?: string | { message?: string; status?: string }
+      error?:
+        | string
+        | {
+            message?: string
+            status?: string
+            details?: { reason?: string }[]
+            errors?: { reason?: string }[]
+          }
       error_description?: string
     } | null
     const err = b?.error
     const reason = typeof err === 'string' ? err : err?.status
+    const detail =
+      typeof err === 'object' && err
+        ? (err.details?.find((d) => d?.reason)?.reason ?? err.errors?.find((d) => d?.reason)?.reason)
+        : undefined
     const message =
       (typeof err === 'string' ? b?.error_description || err : err?.message) || res.statusText || 'error'
-    throw new GoogleApiError(message.slice(0, 300), res.status, reason)
+    throw new GoogleApiError(message.slice(0, 300), res.status, reason, detail)
   }
   return body as T
 }
@@ -478,4 +498,214 @@ export async function createGbpLocalPost(
     { method: 'POST', token: accessToken, json: post },
   )
   return { name: r?.name ?? null, searchUrl: r?.searchUrl ?? null }
+}
+
+// ── Error codes (F17: shown as EN/TH text on the integrations card) ─────────
+
+/**
+ * Why a Google call failed, as a stable code the dashboard translates: `api_disabled` = the platform's Google Cloud
+ * project hasn't enabled that API (owner step), `scope` = the spa's grant lacks the permission (reconnect and allow
+ * it), `auth` = sign-in expired/revoked, `client_config` = our OAuth client was rejected, `permission` = the Google
+ * account has no access to that location / site, `not_found`, `quota`, `network`, `other`.
+ */
+export type GoogleErrorCode =
+  | 'api_disabled'
+  | 'scope'
+  | 'auth'
+  | 'client_config'
+  | 'permission'
+  | 'not_found'
+  | 'quota'
+  | 'network'
+  | 'other'
+
+export const GOOGLE_ERROR_CODES: readonly GoogleErrorCode[] = [
+  'api_disabled',
+  'scope',
+  'auth',
+  'client_config',
+  'permission',
+  'not_found',
+  'quota',
+  'network',
+  'other',
+]
+
+export function googleErrorCode(e: unknown): GoogleErrorCode {
+  if (!(e instanceof GoogleApiError)) return 'other'
+  const d = e.detail ?? ''
+  if (
+    d === 'SERVICE_DISABLED' ||
+    d === 'accessNotConfigured' ||
+    /has not been used in project|is disabled/i.test(e.message)
+  )
+    return 'api_disabled'
+  if (
+    d === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' ||
+    /insufficient authentication scopes/i.test(e.message) ||
+    (d === 'insufficientPermissions' && /scope/i.test(e.message))
+  )
+    return 'scope'
+  if (e.isClientConfig) return 'client_config'
+  if (e.isAuth) return 'auth'
+  if (e.status === 0) return 'network'
+  if (e.status === 429 || d === 'RATE_LIMIT_EXCEEDED' || d === 'rateLimitExceeded') return 'quota'
+  if (e.status === 403) return 'permission'
+  if (e.status === 404) return 'not_found'
+  return 'other'
+}
+
+// ── Place Actions: the "Book" (APPOINTMENT) link on a location (F17a) ──────
+
+export type PlaceActionLink = {
+  name: string
+  uri: string
+  placeActionType: string
+  isPreferred?: boolean
+  isEditable?: boolean
+  providerType?: string
+}
+
+const LINK_TYPE = 'APPOINTMENT'
+
+/** The location's APPOINTMENT links (`locations/{id}`; one page of 100 is plenty). */
+export async function listBookLinks(accessToken: string, locationName: string, fetchFn: FetchFn = fetch) {
+  const q = new URLSearchParams({ filter: `placeActionType=${LINK_TYPE}`, pageSize: '100' })
+  const r = await call<{ placeActionLinks?: PlaceActionLink[] }>(
+    fetchFn,
+    `${GOOGLE_ENDPOINTS.placeActions}/${locationName}/placeActionLinks?${q}`,
+    { token: accessToken },
+  )
+  return (r?.placeActionLinks ?? []).filter((l) => l?.placeActionType === LINK_TYPE)
+}
+
+export async function createBookLink(
+  accessToken: string,
+  locationName: string,
+  uri: string,
+  fetchFn: FetchFn = fetch,
+) {
+  return call<PlaceActionLink>(fetchFn, `${GOOGLE_ENDPOINTS.placeActions}/${locationName}/placeActionLinks`, {
+    method: 'POST',
+    token: accessToken,
+    json: { uri, placeActionType: LINK_TYPE, isPreferred: true },
+  })
+}
+
+export async function updateBookLink(
+  accessToken: string,
+  name: string,
+  uri: string,
+  fetchFn: FetchFn = fetch,
+) {
+  const q = new URLSearchParams({ updateMask: 'uri,isPreferred' })
+  return call<PlaceActionLink>(fetchFn, `${GOOGLE_ENDPOINTS.placeActions}/${name}?${q}`, {
+    method: 'PATCH',
+    token: accessToken,
+    json: { name, uri, placeActionType: LINK_TYPE, isPreferred: true },
+  })
+}
+
+export async function deleteBookLink(accessToken: string, name: string, fetchFn: FetchFn = fetch) {
+  await call(fetchFn, `${GOOGLE_ENDPOINTS.placeActions}/${name}`, { method: 'DELETE', token: accessToken })
+}
+
+/** `locations/{l}/placeActionLinks/{id}` — only names of this shape are ever patched or deleted. */
+export const isBookLinkName = (name: string | null | undefined): name is string =>
+  typeof name === 'string' && /^locations\/[\w-]{1,64}\/placeActionLinks\/[\w-]{1,128}$/.test(name)
+
+const sameUri = (a: string, b: string) => a.replace(/\/+$/, '') === b.replace(/\/+$/, '')
+
+/**
+ * Our link among the location's APPOINTMENT links: the one we created (stored name), else an editable link already
+ * pointing at one of our addresses (adopted, e.g. after a reconnect), else null. Other providers' links are left alone.
+ */
+export function findOurBookLink(
+  links: PlaceActionLink[],
+  known: { name?: string | null; uris: string[] },
+): PlaceActionLink | null {
+  const editable = links.filter((l) => l.isEditable !== false && isBookLinkName(l.name))
+  return (
+    editable.find((l) => known.name && l.name === known.name) ??
+    editable.find((l) => known.uris.some((u) => sameUri(u, l.uri))) ??
+    null
+  )
+}
+
+// ── Search Console: sites + sitemaps (F17b) ─────────────────────────────────
+
+export type ScSite = { siteUrl: string; permissionLevel: string }
+/** Permission levels that may submit sitemaps. */
+const SUBMIT_LEVELS = new Set(['siteOwner', 'siteFullUser'])
+
+export async function listScSites(accessToken: string, fetchFn: FetchFn = fetch): Promise<ScSite[]> {
+  const r = await call<{ siteEntry?: ScSite[] }>(fetchFn, `${GOOGLE_ENDPOINTS.searchConsole}/sites`, {
+    token: accessToken,
+  })
+  return (r?.siteEntry ?? []).filter((s) => typeof s?.siteUrl === 'string')
+}
+
+/** sites.add: adds a URL-prefix property to the signed-in account (unverified until its owner verifies it). */
+export async function addScSite(accessToken: string, siteUrl: string, fetchFn: FetchFn = fetch) {
+  await call(fetchFn, `${GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}`, {
+    method: 'PUT',
+    token: accessToken,
+  })
+}
+
+const sitemapPath = (siteUrl: string, sitemapUrl: string) =>
+  `${GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/sitemaps/${encodeURIComponent(sitemapUrl)}`
+
+/** sitemaps.submit (no request body). */
+export async function submitScSitemap(
+  accessToken: string,
+  siteUrl: string,
+  sitemapUrl: string,
+  fetchFn: FetchFn = fetch,
+) {
+  await call(fetchFn, sitemapPath(siteUrl, sitemapUrl), { method: 'PUT', token: accessToken })
+}
+
+export type ScSitemap = {
+  lastSubmitted?: string
+  lastDownloaded?: string
+  isPending?: boolean
+  errors?: string | number
+  warnings?: string | number
+}
+
+export async function getScSitemap(
+  accessToken: string,
+  siteUrl: string,
+  sitemapUrl: string,
+  fetchFn: FetchFn = fetch,
+) {
+  return (
+    (await call<ScSitemap | null>(fetchFn, sitemapPath(siteUrl, sitemapUrl), { token: accessToken })) ?? {}
+  )
+}
+
+/**
+ * Search Console properties that cover a site address, most specific first: the URL-prefix property of the site
+ * (`https://host/`, or `https://host/s/slug/` with path routing), the origin, then Domain properties for the host and
+ * each parent domain.
+ */
+export function scPropertyCandidates(siteBase: string): string[] {
+  const u = new URL(siteBase)
+  const out = new Set<string>()
+  const path = u.pathname.replace(/\/+$/, '')
+  if (path) out.add(`${u.origin}${path}/`)
+  out.add(`${u.origin}/`)
+  const labels = u.hostname.split('.')
+  for (let i = 0; i <= labels.length - 2; i++) out.add(`sc-domain:${labels.slice(i).join('.')}`)
+  return [...out]
+}
+
+/** The first candidate property this account may submit sitemaps for, else null. */
+export function pickScProperty(sites: ScSite[], candidates: string[]): ScSite | null {
+  for (const c of candidates) {
+    const hit = sites.find((s) => s.siteUrl === c && SUBMIT_LEVELS.has(s.permissionLevel))
+    if (hit) return hit
+  }
+  return null
 }
