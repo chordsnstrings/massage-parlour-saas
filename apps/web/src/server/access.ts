@@ -1,4 +1,5 @@
 import {
+  type Feature,
   type Permission,
   requires2fa,
   resolvePermissions,
@@ -23,6 +24,7 @@ import { notFound, redirect } from 'next/navigation'
 import { cache } from 'react'
 import { getT } from '@/i18n/server'
 import { adminPath, appPath } from '@/lib/paths'
+import { featureRef, hasFeature } from './entitlements'
 import { requireUser } from './session'
 
 export type TenantRow = typeof tenants.$inferSelect
@@ -142,10 +144,17 @@ export const can = (ctx: MemberContext, permission: Permission) => ctx.permissio
 export const isWritable = (tenant: TenantRow) =>
   tenant.status === 'trial' || tenant.status === 'active' || tenant.status === 'past_due'
 
-/** Common guard for tenant server actions. Returns an error message or null. */
-export async function guard(slug: string, permission: Permission) {
+/**
+ * Common guard for tenant server actions. Returns an error message or null. `feature` (PLAN §18.8): the action needs
+ * that plan feature — a spa without it gets "… is available on the Premium plan." (impersonation included).
+ */
+export async function guard(slug: string, permission: Permission, feature?: Feature) {
   const ctx = await requireMember(slug)
   if (!can(ctx, permission)) return { ctx, error: (await getT())('errors.forbidden') }
+  if (feature && !(await hasFeature(ctx.tenant.id, feature))) {
+    const ref = featureRef(feature)
+    return { ctx, error: (await getT())(ref.key, ref.params) }
+  }
   if (!isWritable(ctx.tenant)) return { ctx, error: (await getT())('errors.readOnly') }
   return { ctx, error: null }
 }

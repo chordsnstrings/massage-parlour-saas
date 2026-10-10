@@ -16,7 +16,7 @@ const webhook = (entry: Record<string, unknown>) => ({
 })
 
 test('Instagram: not-configured card, inbox with an AI draft, take over and reply', async ({ page }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
 
   // META_* are unset for the e2e server: the card explains it and the inbox explains connecting.
   await page.goto(`${app}/${slug}/settings/integrations`)

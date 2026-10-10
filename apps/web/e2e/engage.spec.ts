@@ -15,7 +15,7 @@ const png = {
 }
 
 test('engage: document expiry tracker, notifications card, insights card, receipt scan', async ({ page }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   await seedCatalog(slug)
   const dubaiToday = businessDateOf(new Date(), '00:00')
 

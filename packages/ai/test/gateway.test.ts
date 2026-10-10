@@ -1,4 +1,4 @@
-import { aiUsage, closeAllDbs, notifications, platformSettings, tenants } from '@spa/db'
+import { aiUsage, closeAllDbs, notifications, plans, platformSettings, tenants } from '@spa/db'
 import { seedPlatform } from '@spa/db/seed'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { aiBudgetLevel } from '@spa/services'
@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   AiBudgetExceededError,
+  AiNotInPlanError,
   AiPausedError,
   costOf,
   createModelArkClient,
@@ -202,5 +203,34 @@ describe('budget thresholds and kill switches (G18)', () => {
 
     await platform.update(platformSettings).set({ aiEnabled: true })
     await expect(ask().run()).resolves.toMatchObject({ output: 'ok' })
+  })
+})
+
+describe('plan entitlement (PLAN §18.8)', () => {
+  const call = (tenant: string, agentKey: string, fetchMock = vi.fn(async () => reply('ok'))) => ({
+    fetchMock,
+    run: () =>
+      runChat({
+        tenantId: tenant,
+        agentKey,
+        messages: [{ role: 'user', content: 'hi' }],
+        db: platform,
+        client: createModelArkClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch }),
+      }),
+  })
+
+  it('refuses AI for a Standard spa (studio agents excepted) until Premium features are granted', async () => {
+    const standard = await platform.query.plans.findFirst({ where: eq(plans.code, 'standard') })
+    const [t] = await platform
+      .insert(tenants)
+      .values({ slug: 'std-ai', name: 'Std Spa', aiBudgetUsd: '50', planId: standard!.id })
+      .returning()
+    const dm = call(t!.id, 'dm_agent')
+    await expect(dm.run()).rejects.toBeInstanceOf(AiNotInPlanError)
+    expect(dm.fetchMock).not.toHaveBeenCalled()
+    // The website is on every plan: the studio's site agents still run.
+    await expect(call(t!.id, 'site_editor').run()).resolves.toMatchObject({ output: 'ok' })
+    await platform.update(tenants).set({ featureTier: 'premium' }).where(eq(tenants.id, t!.id))
+    await expect(call(t!.id, 'dm_agent').run()).resolves.toMatchObject({ output: 'ok' })
   })
 })

@@ -140,7 +140,7 @@ export async function disconnectGoogleAction(slug: string): Promise<ActionResult
 
 /** "Sync now": unanswered new reviews get AI drafts (at most 5 here; the 2-hourly job drafts the rest). */
 export async function syncGoogleReviewsAction(slug: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   const tenantId = ctx.tenant.id
   const res = await syncGbpReviews({
@@ -166,7 +166,7 @@ export async function syncGoogleReviewsAction(slug: string): Promise<ActionResul
 
 /** Publishes an approved AI-studio post as a Google local post with a "Book" button. */
 export async function postToGoogleAction(slug: string, postId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'ai.approve')
+  const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
   if (!z.uuid().safeParse(postId).success) return fail('Post not found.')
   const res = await publishGbpLocalPost({

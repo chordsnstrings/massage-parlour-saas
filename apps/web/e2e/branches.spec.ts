@@ -20,7 +20,7 @@ import { app, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './hel
 test('owner adds a second branch, scopes a receptionist to it, and a client books there online (G22)', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Twin Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Twin Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
 
@@ -75,8 +75,9 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
   const [scoped] = await db.select().from(members).where(eq(members.id, member!.id))
   expect(scoped!.allBranches).toBe(false)
 
-  // JLT gets a room and Ploy works there tomorrow.
-  const tomorrow = businessDateOf(new Date(Date.now() + 24 * 3600_000), '05:00')
+  // JLT gets a room and Ploy works there tomorrow — JLT's business day (cutoff 04:00, set above), as the booking
+  // page counts it (with 05:00 this failed every night between 04:00 and 05:00 Dubai).
+  const tomorrow = businessDateOf(new Date(Date.now() + 24 * 3600_000), '04:00')
   await db.insert(rooms).values({ tenantId: seed.tenantId, branchId: jlt!.id, name: 'JLT Room' })
   await db.delete(shifts).where(eq(shifts.staffId, seed.staffIds[1]!))
   await db.insert(shifts).values({
@@ -116,7 +117,7 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
 })
 
 test('staff issue a full tax invoice with the customer’s billing details (G16)', async ({ page }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa' })
+  const { slug } = await signUpOwner(page, { spa: 'Invoice Spa', plan: 'premium' })
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db

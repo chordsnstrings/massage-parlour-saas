@@ -43,8 +43,13 @@ export async function refreshInstagramAccessTokens() {
 export async function replyToInstagramMessages(now = new Date()) {
   let answered = 0
   let failed = 0
-  for (const tenantId of await tenantsWithDueReplies(now)) {
+  for (const { tenantId, ai } of await tenantsWithDueReplies(now)) {
     for (const { item, attempts } of await claimDueReplies(tenantId, now)) {
+      // PLAN §18.8: no AI in the spa's plan (Standard) → no AI turn; the row is dropped, the message stays unread.
+      if (!ai) {
+        await finishReply(item)
+        continue
+      }
       try {
         if (!(await inboundAnswered(item))) await respondToInstagram(item)
         await finishReply(item)

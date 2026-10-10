@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import { json, readScanUpload } from '@/components/documents/upload-request'
 import { getT } from '@/i18n/server'
 import { audit } from '@/server/audit'
+import { featureRef, hasFeature } from '@/server/entitlements'
 
 /**
  * "Scan receipt" (multipart: file): stores the photo privately (purpose 'receipt'), then asks the vision model for
@@ -48,6 +49,11 @@ export async function receiptScan(req: Request, slug: string, permission: Permis
 
   const attached = (status: string, message: string) => json(200, { ok: true, file, status, message })
   if (!aiConfigured()) return attached('unavailable', t('accounts.scan.unavailable'))
+  // Receipt scanning is part of Premium (PLAN §18.8): on Standard the receipt is attached, nothing is read.
+  if (!(await hasFeature(tenantId, 'ai'))) {
+    const ref = featureRef('ai')
+    return attached('unavailable', t(ref.key, ref.params))
+  }
   if (!upload.contentType.startsWith('image/')) return attached('pdf', t('accounts.scan.pdf'))
 
   try {

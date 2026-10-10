@@ -1,6 +1,7 @@
 // SaaS billing for spas (PLAN §14.3, §14.8 R3/R11/R12). Payments are recorded by a super-admin (cash / bank
 // transfer), or settled by Stripe Checkout for platform invoices; nothing here moves money.
 // All functions run on the platform role (or a tenant-scoped tx for the read-only helpers) and take `tenantId`.
+import { applyDiscount, type Discount, discountLabel, vatTotals } from '@spa/core'
 import {
   type Db,
   type DbOrTx,
@@ -69,16 +70,7 @@ export function planSchedule(sub: {
  * Subtotal / VAT / total for an entered amount, per the platform's VAT settings. `chargeVat: false` (a setup invoice
  * accepted without VAT, PLAN §18.3) → no VAT: the amount is the total.
  */
-export function invoiceTotals(
-  amount: number,
-  s?: { vatRate: string; pricesIncludeVat: boolean } | null,
-  chargeVat = true,
-) {
-  const rate = chargeVat ? Number(s?.vatRate ?? 5) : 0
-  const vat = s?.pricesIncludeVat ? (amount * rate) / (100 + rate) : (amount * rate) / 100
-  const subtotal = s?.pricesIncludeVat ? amount - vat : amount
-  return { subtotalAed: subtotal.toFixed(2), vatAed: vat.toFixed(2), totalAed: (subtotal + vat).toFixed(2) }
-}
+export const invoiceTotals = vatTotals
 
 type InvoiceInput = {
   description: string
@@ -91,6 +83,8 @@ type InvoiceInput = {
   installments?: number | null
   /** false = no VAT on this invoice (default: VAT per the platform settings). */
   vat?: boolean
+  /** PLAN §18.8: the list amount before a discount (`amountAed` is the discounted amount) and how it was set. */
+  discount?: { listAed: string; discountAed: string; label: string } | null
 }
 
 /**
@@ -132,11 +126,33 @@ export async function createPlatformInvoice(db: DbOrTx, tenantId: string, input:
       periodStart: input.periodStart ?? null,
       installment: input.installment ?? null,
       installments: input.installments ?? null,
+      ...(input.discount && Number(input.discount.discountAed) > 0
+        ? {
+            listAed: input.discount.listAed,
+            discountAed: input.discount.discountAed,
+            discountLabel: input.discount.label,
+          }
+        : {}),
       ...invoiceTotals(Number(input.amountAed), settings, input.vat ?? true),
     })
     .onConflictDoNothing()
     .returning()
   return row ?? null
+}
+
+/**
+ * An invoice amount after a per-spa discount (PLAN §18.8): the amount to bill, the invoice's discount columns and a
+ * note for its description ("· discount 10% (−AED 300.00)"). No discount → the list amount, no note.
+ */
+export function discounted(listAed: string, d: Discount | null | undefined, months = 1) {
+  const { netAed, discountAed } = applyDiscount(listAed, d, months)
+  if (!d || Number(discountAed) <= 0) return { amountAed: listAed, discount: null, note: '' }
+  const label = discountLabel(d)
+  return {
+    amountAed: netAed,
+    discount: { listAed: Number(listAed).toFixed(2), discountAed, label },
+    note: ` · discount ${label}${d.kind === 'amount' && months > 1 ? ' per month' : ''} (−AED ${discountAed})`,
+  }
 }
 
 const scheduleLabel = (r: ScheduleRow, periodStart: string) => {
@@ -186,25 +202,36 @@ export async function generateBillingScheduleTx(tx: Tx, tenantId: string, today:
   let created = 0
   if (Number(sub.priceAed) > 0)
     for (const r of schedule) {
+      // The monthly-fee discount (PLAN §18.8) applies per month: a one-time yearly invoice gets 12 × an amount.
+      const d = discounted(
+        r.amountAed,
+        sub.discounts?.monthly,
+        r.installments === 1 ? MONTHLY_INSTALLMENTS : 1,
+      )
       const row = await createPlatformInvoice(tx, tenantId, {
-        description: scheduleLabel(r, sub.currentPeriodStart),
-        amountAed: r.amountAed,
+        description: scheduleLabel(r, sub.currentPeriodStart) + d.note,
+        amountAed: d.amountAed,
         issueDate: today,
         dueDate: r.dueDate,
         kind: 'plan',
         periodStart: sub.currentPeriodStart,
         installment: r.installment,
         installments: r.installments,
+        discount: d.discount,
       })
       if (row) created++
     }
-  if (Number(sub.setupFeeAed) > 0) {
+  // A setup fee discounted to 0 is no setup fee (as at acceptance): no invoice.
+  const setup = discounted(sub.setupFeeAed, sub.discounts?.setup)
+  if (Number(setup.amountAed) > 0) {
+    const d = setup
     const row = await createPlatformInvoice(tx, tenantId, {
-      description: 'One-time setup fee',
-      amountAed: sub.setupFeeAed,
+      description: `One-time setup fee${d.note}`,
+      amountAed: d.amountAed,
       issueDate: today,
       dueDate: today,
       kind: 'setup',
+      discount: d.discount,
     })
     if (row) created++
   }

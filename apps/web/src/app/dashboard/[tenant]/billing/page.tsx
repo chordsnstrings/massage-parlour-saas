@@ -1,3 +1,4 @@
+import { applyDiscount, discountLabel, monthlyAed, FEATURES as PLAN_FEATURES } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import {
   plans,
@@ -26,6 +27,7 @@ import { DataTable } from '@/components/ui/table'
 import { getI18n, getT } from '@/i18n/server'
 import { todayDubai } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { getEntitlements } from '@/server/entitlements'
 import { PayByCardButton } from './pay-button'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,6 +35,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const FEATURES = ['f1', 'f3', 'f4', 'f5'] as const
+/** PLAN §18.8: what a plan without the Premium features lists (the last line is the upsell). */
+const STANDARD_FEATURES = ['f1Standard', 'f3', 'f5'] as const
 
 /** Card payments started on Stripe Checkout are confirmed by asking Stripe, never by trusting the return URL. */
 async function settlePendingCardPayments(tenantId: string) {
@@ -105,7 +109,28 @@ export default async function BillingPage({
     ...invoices.filter((i) => i.kind === 'setup' && i.status !== 'void'),
   ]
   const monthly = sub?.billingInterval === 'month'
-  const installment = sub ? fmt.aed((Math.round(Number(sub.priceAed) * 100) / 1200).toFixed(2)) : ''
+  // The stored price covers 12 months (R3); a monthly-fee discount (PLAN §18.8) applies to each installment.
+  const perMonth = sub ? applyDiscount(monthlyAed(sub.priceAed), sub.discounts?.monthly).netAed : '0'
+  const installment = sub ? fmt.aed(perMonth) : ''
+  const ent = await getEntitlements(ctx.tenant.id)
+  const premium = ent.features.length === PLAN_FEATURES.length
+  const discounts = [
+    sub?.discounts?.setup && t('billing.plan.discountSetup', { label: discountLabel(sub.discounts.setup) }),
+    sub?.discounts?.monthly &&
+      t('billing.plan.discountMonthly', { label: discountLabel(sub.discounts.monthly) }),
+  ].filter(Boolean)
+  const discountLine = (r: {
+    listAed: string | null
+    discountAed: string | null
+    discountLabel: string | null
+  }) =>
+    r.discountAed && Number(r.discountAed) > 0
+      ? t('billing.invoices.discount', {
+          list: fmt.aed(r.listAed ?? 0),
+          label: r.discountLabel ?? '',
+          amount: fmt.aed(r.discountAed),
+        })
+      : null
 
   return (
     <>
@@ -134,8 +159,10 @@ export default async function BillingPage({
               </div>
               <h2 className="mt-2 text-[26px] leading-tight">{plan?.name ?? t('billing.plan.fallback')}</h2>
               <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="crm-num text-[34px] font-semibold">{sub ? fmt.aed(sub.priceAed) : '—'}</span>
-                <span className="crm-muted">/ {t('billing.plan.per.year')}</span>
+                <span className="crm-num text-[34px] font-semibold">
+                  {sub ? fmt.aed(monthly ? perMonth : sub.priceAed) : '—'}
+                </span>
+                <span className="crm-muted">/ {t(`billing.plan.per.${monthly ? 'month' : 'year'}`)}</span>
               </div>
               {sub && (
                 <p className="mt-1 text-[13px] font-medium">
@@ -167,14 +194,23 @@ export default async function BillingPage({
                   })}
                 </p>
               )}
+              {discounts.length > 0 && (
+                <p className="mt-1 text-[12.5px] font-medium" data-testid="billing-discount">
+                  {t('billing.plan.discount', { items: discounts.join(' · ') })}
+                </p>
+              )}
               <Hairline />
               <ul className="flex flex-col gap-2 text-[13px]">
-                {FEATURES.map((f) => (
+                {(premium ? FEATURES : STANDARD_FEATURES).map((f) => (
                   <li key={f} className="flex gap-2">
                     <Check className="size-4 shrink-0 text-[var(--crm-accent)]" aria-hidden />
                     {t(`billing.plan.${f}`)}
                   </li>
                 ))}
+                {premium && ent.override === 'premium' && ent.plan?.tier === 'standard' && (
+                  <li className="crm-muted">{t('billing.plan.premiumGranted')}</li>
+                )}
+                {!premium && <li className="crm-muted">{t('billing.plan.premiumAdds')}</li>}
               </ul>
               {cardsOn && open && (
                 <div className="mt-4 flex flex-col items-stretch gap-2">
@@ -219,7 +255,16 @@ export default async function BillingPage({
                       key: 'total',
                       header: t('billing.invoices.total'),
                       className: 'text-end',
-                      cell: (r) => <span className="crm-num">{fmt.aed(r.totalAed)}</span>,
+                      cell: (r) => (
+                        <span className="crm-num">
+                          {fmt.aed(r.totalAed)}
+                          {discountLine(r) && (
+                            <span className="crm-muted block text-[11.5px] font-normal">
+                              {discountLine(r)}
+                            </span>
+                          )}
+                        </span>
+                      ),
                     },
                     {
                       key: 'status',
@@ -311,7 +356,9 @@ export default async function BillingPage({
                               balance: fmt.aed(Math.max(0, Number(i.totalAed) - (paidOn.get(i.id) ?? 0))),
                             })}`
                           : ''
-                      }${late ? ` · ${t('billing.schedule.overdue')}` : ''}`}
+                      }${late ? ` · ${t('billing.schedule.overdue')}` : ''}${
+                        discountLine(i) ? ` · ${discountLine(i)}` : ''
+                      }`}
                       time={<span className="crm-num">{fmt.aed(i.totalAed)}</span>}
                       end={
                         <Pill tone={paid ? 'ok' : partly(i) ? 'warn' : 'bad'} dot>

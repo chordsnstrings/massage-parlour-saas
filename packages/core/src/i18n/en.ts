@@ -35,6 +35,7 @@ import { overview } from './en/overview'
 import { packages } from './en/packages'
 import { payroll } from './en/payroll'
 import { permissions } from './en/permissions'
+import { plan } from './en/plan'
 import { purchases } from './en/purchases'
 import { pwa } from './en/pwa'
 import { reviews } from './en/reviews'
@@ -104,6 +105,7 @@ export const en = {
   auth,
   enums,
   permissions,
+  plan,
   notifications,
   search,
   audit,

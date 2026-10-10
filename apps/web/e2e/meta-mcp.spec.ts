@@ -18,7 +18,7 @@ const call = (name: string, args: unknown) => ({
 test('Meta MCP: the AI drafts a comment reply and a post through MCP tools, both wait for approval', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   const db = testDb()
   const appDb = createDb(testUrls.app, 2)
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))

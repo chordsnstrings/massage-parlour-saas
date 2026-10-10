@@ -1,5 +1,6 @@
+import { STUDIO_AI_AGENTS } from '@spa/core'
 import { aiModelConfig, aiUsage, type Db, platformDb, platformSettings, type Tx, tenants } from '@spa/db'
-import { aiBudgetLevel, aiMonth, createNotification } from '@spa/services'
+import { aiBudgetLevel, aiMonth, createNotification, tenantEntitlements } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
@@ -23,6 +24,12 @@ export class AiDisabledError extends Error {}
 export class AiPausedError extends AiDisabledError {
   constructor(readonly scope: 'spa' | 'platform') {
     super(scope === 'spa' ? 'AI disabled for this spa by the platform' : 'AI disabled platform-wide')
+  }
+}
+/** PLAN §18.8: the spa's plan doesn't include AI (Standard) — not a pause, an upgrade. */
+export class AiNotInPlanError extends AiDisabledError {
+  constructor(readonly tenantId: string) {
+    super('AI is not included in this spa’s plan: it is available on Premium')
   }
 }
 export class AiOutputError extends Error {}
@@ -50,10 +57,15 @@ export function dubaiMonthStart(now = new Date()) {
 }
 
 /**
- * Kill switches + budget before a call (G18). Throws AiPausedError / AiBudgetExceededError; returns the budget
- * so the caller can check thresholds after metering.
+ * Plan, kill switches + budget before a call (PLAN §18.8, G18). Throws AiNotInPlanError (the plan has no `ai`
+ * feature; studio agents excepted — the website is on every plan) / AiPausedError / AiBudgetExceededError; returns
+ * the budget so the caller can check thresholds after metering.
  */
-export async function assertAiAllowed(db: Db, tenantId: string, now = new Date()) {
+export async function assertAiAllowed(db: Db, tenantId: string, now = new Date(), agentKey?: string) {
+  if (!agentKey || !STUDIO_AI_AGENTS.includes(agentKey)) {
+    const { features } = await tenantEntitlements(db, tenantId)
+    if (!features.includes('ai')) throw new AiNotInPlanError(tenantId)
+  }
   const [tenant, settings] = await Promise.all([
     db.query.tenants.findFirst({
       where: eq(tenants.id, tenantId),
@@ -157,7 +169,7 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
   const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
   if (!cfg?.enabled || cfg.kind !== 'chat')
     throw new AiDisabledError(`AI agent "${opts.agentKey}" is disabled`)
-  const gate = await assertAiAllowed(db, opts.tenantId)
+  const gate = await assertAiAllowed(db, opts.tenantId, new Date(), opts.agentKey)
 
   const jsonSchema = opts.schema ? z.toJSONSchema(opts.schema) : undefined
   // Image parts go over the wire as-is; the client's ChatMessage type only models text.
@@ -248,7 +260,7 @@ export async function runImage(opts: {
   const cfg = await db.query.aiModelConfig.findFirst({ where: eq(aiModelConfig.agentKey, opts.agentKey) })
   if (!cfg?.enabled || cfg.kind !== 'image')
     throw new AiDisabledError(`AI image model "${opts.agentKey}" is disabled`)
-  const gate = await assertAiAllowed(db, opts.tenantId)
+  const gate = await assertAiAllowed(db, opts.tenantId, new Date(), opts.agentKey)
   const res = await client.image({ model: cfg.modelId, prompt: opts.prompt, size: opts.size })
   const cost = Number(cfg.pricePerImage)
   await db.insert(aiUsage).values({

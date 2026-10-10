@@ -1,5 +1,5 @@
 'use server'
-import { sendStaffEmail } from '@spa/core'
+import { FEATURE_TIERS, PLAN_CODES, sendStaffEmail, tierLimits } from '@spa/core'
 import { aiModelConfig, plans, platformDb, platformSettings, subscriptions, tenants } from '@spa/db'
 import {
   createPaymentReminder,
@@ -8,6 +8,7 @@ import {
   deleteTenant,
   encryptSecret,
   generateBillingSchedule,
+  isLegacyPlan,
   MIN_AUTO_PURGE_DAYS,
   markListedAdminVerified,
   pauseTenant,
@@ -15,7 +16,10 @@ import {
   recordPlatformPayment,
   resumeTenant,
   saveEmailSettings,
+  setFeatureTier,
   setInvoicePaid,
+  setSubscriptionDiscounts,
+  switchPlan,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -26,6 +30,7 @@ import { adminPath } from '@/lib/paths'
 import { todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { discountsFromForm } from '@/server/discounts'
 import { invalidateEmailSettings, registerEmailSettings } from '@/server/email-settings'
 import { canonicalUrls } from '@/server/origin'
 
@@ -70,6 +75,18 @@ export async function updateSubscriptionAction(
   const d = parsed.data
   if (d.currentPeriodEnd < d.currentPeriodStart)
     return fail('End must be after start.', { currentPeriodEnd: 'End must be after start' })
+  // PLAN §18.8: the plan itself changes only through "Switch plan" (legacy yearly kept until renewal); a new
+  // subscription can't start on the legacy plan.
+  const [current, target] = await Promise.all([
+    platformDb().query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) }),
+    platformDb().query.plans.findFirst({ where: eq(plans.id, d.planId) }),
+  ])
+  if (current && current.planId !== d.planId)
+    return fail('Change the plan with “Switch plan” under Plan & features.', {
+      planId: 'Use Switch plan',
+    })
+  if (!current && isLegacyPlan(target))
+    return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
   await platformDb()
     .insert(subscriptions)
     .values({ tenantId, ...d })
@@ -78,6 +95,100 @@ export async function updateSubscriptionAction(
   await audit({ tenantId, actorUserId: user.id, action: 'platform.subscription.updated', data: d })
   revalidatePath(`/platform/tenants/${tenantId}`)
   return ok('Subscription saved')
+}
+
+const revalidateSpa = (tenantId: string) => revalidatePath(`/platform/tenants/${tenantId}`)
+
+/** PLAN §18.8: move the spa to Premium / Standard (legacy yearly: only at its renewal). Audited from → to. */
+export async function switchPlanAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z.object({ planId: z.uuid('Choose a plan'), reissue: bool }).safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  let res: Awaited<ReturnType<typeof switchPlan>>
+  try {
+    res = await switchPlan(platformDb(), { tenantId, ...parsed.data, today: todayDubai() })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { planId: e.message })
+    throw e
+  }
+  await audit({
+    tenantId,
+    actorUserId: user.id,
+    action: 'platform.subscription.plan_switched',
+    data: { from: res.from, to: res.to, renewal: res.renewal, reissued: res.reissued },
+  })
+  revalidateSpa(tenantId)
+  return ok(
+    `Plan switched to ${res.to.name}${res.renewal ? ` from ${res.to.period.split('..')[0]}` : ''}${
+      res.reissued?.voided ? ` · ${res.reissued.voided} unpaid invoice(s) re-issued` : ''
+    }.${res.renewal ? ' Use “Generate payment schedule” to issue the new period’s invoices.' : ''}`,
+  )
+}
+
+/** PLAN §18.8: per-spa discounts on the setup fee and / or the monthly fee. Audited from → to. */
+export async function saveDiscountsAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = discountsFromForm(fd)
+  if (!parsed.ok) return fail(parsed.error, parsed.fieldErrors)
+  const reissue = fd.get('reissue') === 'on'
+  let res: Awaited<ReturnType<typeof setSubscriptionDiscounts>>
+  try {
+    res = await setSubscriptionDiscounts(platformDb(), {
+      tenantId,
+      discounts: parsed.discounts,
+      today: todayDubai(),
+      reissue,
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({
+    tenantId,
+    actorUserId: user.id,
+    action: 'platform.subscription.discounts',
+    data: { from: res.from, to: res.to, reissued: res.reissued },
+  })
+  revalidateSpa(tenantId)
+  return ok(
+    `Discounts saved${res.reissued?.voided ? ` · ${res.reissued.voided} unpaid invoice(s) re-issued` : ''}`,
+  )
+}
+
+/** PLAN §18.8: feature-tier override ("Grant Premium features" while billed at Standard). Audited from → to. */
+export async function setFeatureTierAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z.object({ tier: z.enum(['plan', 'premium', 'standard']) }).safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const tier = parsed.data.tier === 'plan' ? null : parsed.data.tier
+  let res: Awaited<ReturnType<typeof setFeatureTier>>
+  try {
+    res = await setFeatureTier(platformDb(), tenantId, tier)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({ tenantId, actorUserId: user.id, action: 'platform.tenant.feature_tier', data: res })
+  revalidateSpa(tenantId)
+  return ok(
+    tier === null
+      ? 'Features follow the plan'
+      : tier === 'premium'
+        ? 'Premium features granted'
+        : 'Standard features only',
+  )
 }
 
 export async function setTenantStatusAction(
@@ -183,10 +294,20 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
       trialDays: z.coerce.number().int().min(0).max(90),
       sort: z.coerce.number().int().min(0).max(999),
       active: bool,
+      tier: z.enum(FEATURE_TIERS),
     })
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
-  const { id, ...d } = parsed.data
+  const { id, tier, ...rest } = parsed.data
+  const existing = id ? await platformDb().query.plans.findFirst({ where: eq(plans.id, id) }) : undefined
+  // PLAN §18.8: plans are found by code (premium / standard / legacy-yearly) — those codes never change; the tier
+  // sets the feature switches in `limits` (other limits, e.g. a branch cap, are kept).
+  const fixed = existing && (Object.values(PLAN_CODES) as string[]).includes(existing.code)
+  const d = {
+    ...rest,
+    code: fixed ? existing.code : rest.code,
+    limits: { ...(existing?.limits ?? {}), ...tierLimits(tier) },
+  }
   try {
     if (id) await platformDb().update(plans).set(d).where(eq(plans.id, id))
     else await platformDb().insert(plans).values(d)

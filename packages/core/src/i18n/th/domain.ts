@@ -266,4 +266,9 @@ export const domain: Messages['errors']['domain'] = {
   adminAlready: 'คุณเป็นผู้ดูแลระบบสูงสุดอยู่แล้ว',
   adminConfirmNeeds2fa: 'เฉพาะผู้ดูแลระบบสูงสุดที่เปิดการยืนยันสองขั้นตอนเท่านั้นที่ยืนยันผู้ดูแลระบบสูงสุดได้',
   adminConfirmNotListed: 'ยืนยันได้เฉพาะบัญชีที่อีเมลอยู่ใน PLATFORM_ADMIN_EMAILS เท่านั้น',
+  featureNotInPlan: '{feature} มีให้ใช้ในแพ็กเกจ Premium',
+  planNotOffered: 'เลือกแพ็กเกจที่เปิดให้สปาสมัคร',
+  planAlreadyOn: 'สปานี้ใช้แพ็กเกจนี้อยู่แล้ว',
+  planLegacyUntilRenewal: 'แพ็กเกจรายปีแบบเดิมใช้ได้จนถึงวันต่ออายุ {end} เลือกแพ็กเกจใหม่ได้ตั้งแต่ {from}',
+  featureTierChoose: 'เลือกระดับฟีเจอร์',
 }

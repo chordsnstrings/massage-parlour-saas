@@ -4,7 +4,7 @@ import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
-import { isSystemRole, type Permission } from '@spa/core'
+import { type Feature, isSystemRole, monthlyAed, type Permission } from '@spa/core'
 import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -25,6 +25,7 @@ import { appPath } from '@/lib/paths'
 import { EARLY_PROMPT_SCRIPT } from '@/lib/sw'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { getEntitlements } from '@/server/entitlements'
 import { navBadgeCounts } from '@/server/nav-counts'
 import { bellData } from '@/server/notifications'
 import { canonicalUrls } from '@/server/origin'
@@ -99,7 +100,12 @@ export default async function TenantLayout({
   const ctx = await requireMember(slug)
   const i18n = await getI18n()
   const { locale, t, fmt, messages } = i18n
-  const [data, bell, counts] = await Promise.all([shellData(ctx), bellData(ctx, t, fmt), navBadgeCounts(ctx)])
+  const [data, bell, counts, ent] = await Promise.all([
+    shellData(ctx),
+    bellData(ctx, t, fmt),
+    navBadgeCounts(ctx),
+    getEntitlements(ctx.tenant.id),
+  ])
   const base = appPath(`/${ctx.tenant.slug}`)
   const app = pwaFor(ctx.tenant)
 
@@ -120,6 +126,8 @@ export default async function TenantLayout({
   const single = (icon: ShellItem['icon'], perm: Permission | null, path: string, label: string) =>
     item(icon, label, page(perm, path, label))
   const group = (label: string, items: ShellItem[]): ShellGroup[] => (items.length ? [{ label, items }] : [])
+  // PLAN §18.8: pages of a plan feature the spa doesn't have are left out (visiting one shows the Premium upsell).
+  const gated = (feature: Feature, links: ShellLink[]) => (ent.features.includes(feature) ? links : [])
   // Count badges (crm-spec §2.1 ③), already permission-filtered by navBadgeCounts.
   const badge = (items: ShellItem[], value: number, key: 'calendar' | 'bookings' | 'inbox') =>
     items.map((i) => ({ ...i, count: { value, label: t(`nav.count.${key}`, { count: value }) } }))
@@ -137,10 +145,10 @@ export default async function TenantLayout({
       ...badge(
         item('inbox', t('nav.inbox'), [
           ...page('marketing.send', '/messages', t('nav.whatsapp')),
-          ...page('marketing.send', '/inbox', t('nav.instagram')),
-          ...page('marketing.campaigns', '/campaigns', t('nav.campaigns')),
+          ...gated('ai', page('marketing.send', '/inbox', t('nav.instagram'))),
+          ...gated('marketing', page('marketing.campaigns', '/campaigns', t('nav.campaigns'))),
         ]),
-        counts.outboxDue + counts.igUnread,
+        counts.outboxDue + (ent.features.includes('ai') ? counts.igUnread : 0),
         'inbox',
       ),
     ]),
@@ -166,19 +174,26 @@ export default async function TenantLayout({
     ]),
     ...group(t('nav.group.growth'), [
       ...item('marketing', t('nav.marketing'), [
-        ...page('ai.approve', '/ai/content', t('nav.socialPosts')),
+        ...gated('marketing', page('ai.approve', '/ai/content', t('nav.socialPosts'))),
         ...page('reports.view', '/analytics', t('nav.analytics')),
         // AI studio sits here, not under Settings: AI roles (e.g. receptionist) shouldn't get a Settings item.
-        ...page(['ai.approve', 'ai.manage'], '/ai', t('nav.aiStudio'), {
-          exact: true,
-          match: [`${base}/ai/try`],
-        }),
+        ...gated(
+          'ai',
+          page(['ai.approve', 'ai.manage'], '/ai', t('nav.aiStudio'), {
+            exact: true,
+            match: [`${base}/ai/try`],
+          }),
+        ),
       ]),
       ...item('website', t('nav.website'), [
         ...page(['site.content', 'services.manage'], '/website', t('nav.site')),
         ...page('site.content', '/media', t('nav.media')),
       ]),
-      ...single('reviews', 'ai.approve', '/ai/reviews', t('nav.reviews')),
+      ...item(
+        'reviews',
+        t('nav.reviews'),
+        gated('marketing', page('ai.approve', '/ai/reviews', t('nav.reviews'))),
+      ),
     ]),
     ...group(t('nav.group.finance'), [
       ...single('accounts', 'accounting.view', '/accounts', t('nav.accounts')),
@@ -193,16 +208,20 @@ export default async function TenantLayout({
 
   // Plan card (crm-spec §2.1 ④): plan + renewal for billing.view; the AI meter for anyone who works with AI.
   const budget = Number(ctx.tenant.aiBudgetUsd)
-  const showAi = budget > 0 && (can(ctx, 'billing.view') || can(ctx, 'ai.approve') || can(ctx, 'ai.manage'))
+  const showAi =
+    budget > 0 &&
+    ent.features.includes('ai') &&
+    (can(ctx, 'billing.view') || can(ctx, 'ai.approve') || can(ctx, 'ai.manage'))
   const aiPercent = showAi ? Math.round((data.aiSpendUsd / budget) * 100) : 0
   const sub = can(ctx, 'billing.view') ? data.sub : undefined
   const renewal = sub
     ? sub.status === 'trialing'
       ? t('shell.plan.trialEnds', { date: fmt.date(sub.currentPeriodEnd) })
-      : t('shell.plan.renews', {
+      : // The stored price covers 12 months (R3): paid monthly (Premium / Standard) it reads per month.
+        t('shell.plan.renews', {
           date: fmt.date(sub.currentPeriodEnd),
-          price: fmt.aed(sub.priceAed),
-          interval: t('shell.plan.interval.year'), // subscription price is annual (R3)
+          price: fmt.aed(sub.billingInterval === 'month' ? monthlyAed(sub.priceAed) : sub.priceAed),
+          interval: t(`shell.plan.interval.${sub.billingInterval === 'month' ? 'month' : 'year'}`),
         })
     : null
   const plan =

@@ -6,7 +6,7 @@ import { app, signUpOwner, testDb } from './helpers'
 test('automations: switch one off (kept after reload), locked platform duties, last-24h run log', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   const [t] = await testDb().select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
   await testDb()
     .insert(jobRuns)

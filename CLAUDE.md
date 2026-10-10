@@ -17,6 +17,8 @@ fix backlog F1–F8 ✅, **F9–F15 open** (§17, remind the owner); production 
 - Phase 2 screen conversion: page kit `components/crm` + `crm-kit.css`, i18n per-namespace files, enum/permission/
   DomainError translation and the per-screen checklist → `docs/design/phase2-kit.md`.
 - Before touching POS/ledger/loyalty/inventory, check CODEMAP "Known gaps" (refund postings, refund side effects, …).
+- Plan gating (PLAN §18.8): features `ai` / `marketing` / `multiBranch` only via `@spa/core` plans.ts + `guard(slug, perm, feature)`
+  / `FeatureGate` / `entitledSql` — never check plan codes or ids in feature code (CODEMAP "Plans + entitlements").
 
 ## Standing owner instructions (2026-10-08)
 - **Fix backlog reminder:** PLAN §17: F1–F8 fixed; **F9–F15 open** (owner 2026-10-09: "always remind me"). While any is open,

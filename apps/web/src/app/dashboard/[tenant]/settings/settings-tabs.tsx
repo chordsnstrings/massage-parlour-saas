@@ -1,3 +1,4 @@
+import { branches, withTenant } from '@spa/db'
 import { EXPORT_DATASETS, type ExportDataset, IMPORT_KINDS } from '@spa/services'
 import { SectionTabs } from '@/components/crm'
 import { IMPORT_PERMISSION } from '@/components/data/kinds'
@@ -5,6 +6,17 @@ import { canExportAll } from '@/components/data/server'
 import { getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
+
+/**
+ * PLAN §18.8: Branches is a Premium page (`multiBranch`). A single-branch spa without it edits its branch under
+ * Profile; a downgraded spa that still has other branches keeps the tab (to see, edit or archive them).
+ */
+export async function showBranches(ctx: MemberContext) {
+  if (await hasFeature(ctx.tenant.id, 'multiBranch')) return true
+  const rows = await withTenant(ctx.tenant.id, (tx) => tx.select({ id: branches.id }).from(branches).limit(2))
+  return rows.length > 1
+}
 
 export type SettingsTab =
   | 'profile'
@@ -27,7 +39,7 @@ export async function SettingsTabs({ ctx, value }: { ctx: MemberContext; value: 
     canExportAll(ctx)
   const show: Record<SettingsTab, boolean> = {
     profile: manage,
-    branches: manage,
+    branches: manage && (await showBranches(ctx)),
     hours: manage,
     intake: manage,
     integrations: manage || can(ctx, 'ai.manage'),

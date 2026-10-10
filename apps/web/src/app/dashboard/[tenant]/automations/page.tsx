@@ -1,4 +1,10 @@
-import { AUTOMATION_JOBS, AUTOMATIONS, type AutomationKey, LOCKED_AUTOMATIONS } from '@spa/core'
+import {
+  AUTOMATION_FEATURE,
+  AUTOMATION_JOBS,
+  AUTOMATIONS,
+  type AutomationKey,
+  LOCKED_AUTOMATIONS,
+} from '@spa/core'
 import { withTenant } from '@spa/db'
 import { getAutomations, recentJobRuns } from '@spa/services'
 import {
@@ -22,6 +28,7 @@ import { Card, Grid, ListRow, Note, Pill, type Tone } from '@/components/crm'
 import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { can, requireMember } from '@/server/access'
+import { getEntitlements } from '@/server/entitlements'
 import { AutomationToggle } from './automation-toggle'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -56,7 +63,13 @@ export default async function AutomationsPage({ params }: { params: Promise<{ te
     switches: await getAutomations(tx, ctx.tenant.id),
     runs: await recentJobRuns(tx),
   }))
-  const active = AUTOMATIONS.filter((k) => switches[k]).length + LOCKED_AUTOMATIONS.length
+  // PLAN §18.8: automations of a plan feature the spa doesn't have never run (the worker skips them) — shown as such.
+  const { features } = await getEntitlements(ctx.tenant.id)
+  const inPlan = (k: AutomationKey) => {
+    const f = AUTOMATION_FEATURE[k]
+    return !f || features.includes(f)
+  }
+  const active = AUTOMATIONS.filter((k) => switches[k] && inPlan(k)).length + LOCKED_AUTOMATIONS.length
   const icon = (k: keyof typeof ICONS) => {
     const Icon = ICONS[k]
     return <Icon size={16} />
@@ -80,12 +93,16 @@ export default async function AutomationsPage({ params }: { params: Promise<{ te
               title={t(`automations.items.${k}.name`)}
               body={`${t(`automations.items.${k}.desc`)} · ${t(`automations.items.${k}.schedule`)}`}
               end={
-                <AutomationToggle
-                  slug={ctx.tenant.slug}
-                  id={k}
-                  on={switches[k]}
-                  label={t('automations.toggle', { name: { key: `automations.items.${k}.name` } })}
-                />
+                inPlan(k) ? (
+                  <AutomationToggle
+                    slug={ctx.tenant.slug}
+                    id={k}
+                    on={switches[k]}
+                    label={t('automations.toggle', { name: { key: `automations.items.${k}.name` } })}
+                  />
+                ) : (
+                  <Pill tone="acc">{t('plan.premiumBadge')}</Pill>
+                )
               }
             />
           ))}

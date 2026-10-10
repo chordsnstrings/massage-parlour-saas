@@ -10,6 +10,7 @@ import { formatDate, todayDubai } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { emailApplicationAccepted, emailApplicationRejected } from '@/server/applications'
 import { audit } from '@/server/audit'
+import { discountsFromForm } from '@/server/discounts'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date')
 const text = (max = 200) =>
@@ -63,6 +64,8 @@ export async function acceptApplicationAction(
         balanceDue: d.balanceDue,
       }
     : null
+  const off = discountsFromForm(fd)
+  if (!off.ok) return fail(off.error, off.fieldErrors)
   if (payment && !d.method) return fail('Choose how it was paid.', { method: 'Choose how it was paid' })
   if (payment && !d.paidOn) return fail('Pick the payment date.', { paidOn: 'Pick a date' })
   let res: Awaited<ReturnType<typeof acceptApplication>>
@@ -74,6 +77,7 @@ export async function acceptApplicationAction(
       startDate: d.startDate,
       today: todayDubai(),
       payment,
+      discounts: off.discounts,
     })
   } catch (e) {
     if (e instanceof DomainError) {
@@ -98,6 +102,7 @@ export async function acceptApplicationAction(
       slug: res.tenant.slug,
       plan: res.plan.code,
       startDate: d.startDate,
+      discounts: off.discounts,
       setupPayment: res.setupPayment,
       planInvoices: res.planInvoices,
     },

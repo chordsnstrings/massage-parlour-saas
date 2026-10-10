@@ -1,5 +1,12 @@
 import { respondToInstagram } from '@spa/ai'
-import { closeAllDbs, conversationMessages, conversations, instagramReplyQueue, tenants } from '@spa/db'
+import {
+  closeAllDbs,
+  conversationMessages,
+  conversations,
+  instagramReplyQueue,
+  plans,
+  tenants,
+} from '@spa/db'
 import { resetTestDatabase, testDbs, testUrls } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -106,5 +113,24 @@ describe('instagram-reply job (B6, DB queue)', () => {
     expect(await replyToInstagramMessages()).toEqual({ answered: 1, failed: 0 })
     expect(spy).not.toHaveBeenCalled()
     expect(await queue()).toHaveLength(0)
+  })
+
+  it('drops the rows of a spa whose plan has no AI (Standard, PLAN §18.8) without an AI turn', async () => {
+    const [std] = await owner
+      .insert(plans)
+      .values({
+        code: 'std-ig',
+        name: 'Standard',
+        priceAed: '24000',
+        limits: { ai: false, marketing: false },
+      })
+      .returning()
+    await owner.update(tenants).set({ planId: std!.id }).where(eq(tenants.id, item.tenantId))
+    await owner.delete(conversationMessages).where(eq(conversationMessages.direction, 'out'))
+    await enqueue()
+    expect(await replyToInstagramMessages()).toEqual({ answered: 0, failed: 0 })
+    expect(spy).not.toHaveBeenCalled()
+    expect(await queue()).toHaveLength(0)
+    await owner.update(tenants).set({ planId: null }).where(eq(tenants.id, item.tenantId))
   })
 })

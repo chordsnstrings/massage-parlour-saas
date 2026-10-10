@@ -90,10 +90,13 @@ test('apply, wait, accepted with a deposit by bank transfer (no VAT, 10 days), t
   await test.step('the address is held while the application is pending', async () => {
     const other = await page.context().browser()!.newContext()
     const visitor = await other.newPage()
-    // Each pricing card applies for its own plan (?plan=), preselected on the form.
+    // Each pricing card applies for its own plan (?plan=<code>, PLAN §18.8), preselected on the form.
     await visitor.goto(`${base}/pricing`)
-    await expect(visitor.locator(`a[href$="/signup?plan=${planId}"]`)).toHaveCount(1)
-    await visitor.goto(`${app}/signup?plan=${planId}`)
+    await expect(visitor.locator('a[href$="/signup?plan=premium"]')).toHaveCount(1)
+    await expect(visitor.locator('a[href$="/signup?plan=standard"]')).toHaveCount(1)
+    await visitor.goto(`${app}/signup?plan=setup-${tag}`)
+    await expect(visitor.getByLabel('Plan')).toHaveValue(planId)
+    await visitor.goto(`${app}/signup?plan=${planId}`) // a plan id still works
     await expect(visitor.getByLabel('Plan')).toHaveValue(planId)
     await visitor.getByLabel('Web address').fill(slug)
     await expect(visitor.getByText('That address is taken.')).toBeVisible()

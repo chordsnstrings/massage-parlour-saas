@@ -32,7 +32,7 @@ export async function sendReplyAction(
   conversationId: string,
   text: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z.object({ conversationId: uuid, text: Text }).safeParse({ conversationId, text })
   if (!parsed.success) return fromZod(parsed.error)
@@ -69,7 +69,7 @@ export async function approveDraftAction(
   messageId: string,
   text: string,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z.object({ messageId: uuid, text: Text }).safeParse({ messageId, text })
   if (!parsed.success) return fromZod(parsed.error)
@@ -100,7 +100,7 @@ export async function approveDraftAction(
 }
 
 export async function discardDraftAction(slug: string, messageId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
   if (!parsed.success) return fail('inbox.results.unknownDraft')
@@ -118,7 +118,7 @@ export async function discardDraftAction(slug: string, messageId: string): Promi
 
 /** Re-sends an outbound message that wasn't delivered. */
 export async function retryMessageAction(slug: string, messageId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(messageId)
   if (!parsed.success) return fail('inbox.results.unknownMessage')
@@ -163,7 +163,7 @@ export async function setModeAction(
   conversationId: string,
   mode: 'bot' | 'human' | 'closed',
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z
     .object({ conversationId: uuid, mode: z.enum(['bot', 'human', 'closed']) })
@@ -193,7 +193,7 @@ export async function setFlagAction(
   conversationId: string,
   flagged: boolean,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = z
     .object({ conversationId: uuid, flagged: z.boolean() })
@@ -215,7 +215,7 @@ export async function setFlagAction(
 
 /** Opening a thread clears its unread dot (read receipts aren't audited). */
 export async function markReadAction(slug: string, conversationId: string): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   const parsed = uuid.safeParse(conversationId)
   if (!parsed.success) return fail('inbox.results.unknownConversation')
@@ -234,7 +234,7 @@ export async function linkClientAction(
   _p: ActionResult,
   fd: FormData,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'marketing.send')
+  const { ctx, error } = await guard(slug, 'marketing.send', 'ai')
   if (error) return fail(error)
   if (!can(ctx, 'clients.manage')) return fail('errors.forbidden')
   const id = uuid.safeParse(conversationId)

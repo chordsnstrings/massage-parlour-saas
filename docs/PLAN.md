@@ -18,7 +18,7 @@ official docs on 2026-10-06; re-check anything marked *(verify)* when its phase 
 | Team | Owner + Claude. |
 | Domain | `spamanagement.co` (tenant sites at `{slug}.spamanagement.co`, optional custom domain). |
 | Customer payments | Recorded only (cash, card on the parlour's own terminal, bank transfer). Platform processes nothing. Stripe later. |
-| SaaS price | **AED 24,000 per spa per year** (setup fee / VAT treatment: open item), paid by cash or bank transfer, recorded manually by super-admin. |
+| SaaS price | **Premium** setup AED 14,000 + AED 3,000/month, **Standard** setup AED 9,000 + AED 2,000/month, excl. VAT (§18.8; the old AED 24,000/year plan = legacy until each spa's renewal), paid by cash, bank transfer or card (Stripe Checkout for platform invoices), recorded by the super-admin. |
 | Customer comms | **WhatsApp only**, receptionist click-to-send (no SMS, no email to customers, no unofficial automation). |
 | AI provider | BytePlus ModelArk, **Seed 2.0 family by default**; model per agent chosen by super-admin (GLM selectable, not default). |
 | Analytics | Block-level click/visibility analytics + funnels (no session replay in v1). |
@@ -140,7 +140,7 @@ Legend: **MVP** = pilot runs daily ops on it · **P2/P3/P4** = later phase (see 
 
 ### 1.17 Platform super-admin (`admin.spamanagement.co`)
 - Tenants (status, plan, usage, last activity), impersonation (audited, banner shown). **MVP**
-- Plans: launch plan **AED 24,000/year** (optional one-time setup fee), limits (branches, staff, AI budget, custom domain); more plans later. **MVP**
+- Plans: **Premium / Standard** (setup + monthly, §18.8; legacy AED 24,000/year until renewal), feature switches + limits (branches, staff, AI budget, custom domain). **MVP**
 - Platform invoices, **manual payment recording** (cash/bank transfer, reference, proof upload), due/overdue list,
   WhatsApp reminder links to tenant owners, grace period → dashboard read-only (public site stays live). **MVP**
 - AI: model per agent (Seed 2.0 defaults), price table, usage & cost per tenant, budgets, global + per-tenant kill switch. **P0/P3**
@@ -1661,3 +1661,42 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
   till total; ≥ 1440 px the cards sit further out beside the page column. Probe (production build, 390 px slow
   scroll + 4 address-bar resizes, CSS and JS-fallback paths): 0 frames > 50 ms, 0 blank frames, CLS 0, no
   horizontal scroll. e2e: `marketing-crm.spec`.
+- **Implemented (2026-10-09, plans + entitlements + overrides + pricing page; the home page is a separate task):**
+  - Plans by **code** (`premium`, `standard`, `legacy-yearly`; `PLAN_CODES` in `@spa/core`): seed `defaultPlans` +
+    migration 0036 (hand-written data step: the old `standard` yearly row becomes `legacy-yearly`, inactive, same id,
+    every feature → existing subscriptions untouched; Premium/Standard inserted). `price_aed` stays the 12-month
+    price (36,000 / 24,000) billed as 12 monthly invoices (`billing_interval = month`); shown per month everywhere.
+  - **Entitlements** = one source of truth in `packages/core/src/plans.ts`: features `ai` (AI receptionist, Instagram
+    inbox + DM replies/booking from chat, AI insights, receipt scan, AI tools/Meta MCP), `marketing` (campaigns incl.
+    win-back/birthday segments, Google Business + Instagram posting, review requests/replies, quiet-slot offers),
+    `multiBranch`. Plan switches in `plans.limits` (missing = included, so custom/old plans keep everything);
+    effective = `tenants.feature_tier` override (`premium` | `standard`) else the plan. `PLAN_FEATURES` drives the
+    pricing comparison; `AUTOMATION_FEATURE` maps gated automations (slotFiller, instagram, googleReviews,
+    weeklyInsights). Website Studio AI agents (`STUDIO_AI_AGENTS`) are on every plan (the website is).
+  - **Enforced server-side:** `guard(slug, perm, feature)` on every gated action (AI studio, inbox, campaigns,
+    content/posting, reviews, Google sync/post, Meta MCP, insights refresh); route segments gate with `FeatureGate`
+    layouts → "Available on Premium" page (`components/plan/upsell.tsx`, EN + TH); nav leaves them out (also the IG
+    unread badge, AI meter/banners, insights card, receipt-scan reading — the receipt is still attached); AI gateway
+    `assertAiAllowed` throws `AiNotInPlanError` (like the budget pause); worker: `automationOnSql` includes the
+    entitlement (slot filler, IG publish, GBP sync, weekly insights skip), `instagram-reply` drops a Standard spa's
+    rows unanswered. Impersonating super-admins see the spa's gating. DomainError `featureNotInPlan` (EN + TH).
+  - **Standard = 1 active branch:** add / restore refused (`featureError('multiBranch')`). Decision: a downgraded spa's
+    extra branches **keep working** (bookings, staff, reports — nothing hidden or broken); they can be edited and
+    archived, not added or restored; the Branches tab stays for such a spa (with the Premium note), otherwise the
+    single branch is edited under Settings → Profile and /settings/branches shows the upsell.
+  - **Console spa page → Plan & features:** switch Premium ↔ Standard (optionally re-issuing unpaid invoices not yet
+    due at the new price); legacy is read-only until **30 days before renewal**, then "Choose plan for renewal" starts
+    a new 12-month period on the old end date (no setup fee; no automatic money movement — "Generate payment
+    schedule" issues it); discounts on the setup fee and/or monthly fee (AED or %, `subscriptions.discounts`), applied
+    when invoices are generated, optional re-issue of unpaid not-yet-due invoices (setup keeps its due date + VAT
+    choice); feature tier (follow plan / grant Premium / Standard only). Audits: `platform.subscription.plan_switched`,
+    `platform.subscription.discounts`, `platform.tenant.feature_tier` (from → to). The Subscription form no longer
+    changes the plan. Plans page: per-month price, feature tier per plan, fixed codes.
+  - **Accept dialog:** offered plans only (never legacy) with setup + monthly; setup + monthly discount fields with live
+    totals (a setup fee discounted to 0 = no setup invoice); stored on the subscription. Invoices keep `list_aed`,
+    `discount_aed`, `discount_label` + a description note; console, spa Billing page and application summary show them.
+  - **Sign-up:** Premium + Standard with setup + monthly (EN + TH); `/signup?plan=<code>` (an id still works).
+  - **Pricing page:** two plan cards, comparison generated from `PLAN_FEATURES`, FAQ (plans, setup fee, VAT, switching,
+    existing yearly customers keep their plan until renewal), CTAs `/signup?plan=premium|standard`.
+  - Open: the marketing **home page** still has its "One simple price … / year" block (not touched here — owner asked
+    for a separate home-page task); it now shows the first plan's 12-month price.

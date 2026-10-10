@@ -379,6 +379,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 
 ## Service invariants (`packages/services`)
 
+- **Plans + entitlements (PLAN §18.8)**: rules only in `@spa/core` `plans.ts` (`PLAN_CODES`, `FEATURES` ai /
+  marketing / multiBranch, `effectiveFeatures` = `tenants.feature_tier` override else `plans.limits` switches with
+  missing = on, `branchCap`, `PLAN_FEATURES` pricing rows, `AUTOMATION_FEATURE`, `STUDIO_AI_AGENTS`, discounts
+  `parseDiscount`/`applyDiscount`, `vatTotals` = services `invoiceTotals`, `planPriceLine`). Lookup: services
+  `entitlements.ts` (`tenantEntitlements`, `assertFeature`, `featureError` → `errors.domain.featureNotInPlan`,
+  `entitledSql` for platform-role cross-tenant SQL — plans are invisible to the app role, so it fails closed there;
+  `planByCode`, `isLegacyPlan`). Super-admin controls: `subscription-plans.ts` (`switchPlan` — legacy only from 30
+  days before renewal, new period on the old end date, no setup fee; `setSubscriptionDiscounts`; `setFeatureTier`;
+  `reissueUnpaidInvoices` voids + re-issues unpaid, not-yet-due invoices, setup keeps due date + VAT choice; all
+  return from/to for the audit). Discounts apply in `generateBillingScheduleTx` / `acceptApplication` via
+  `discounted()` (invoice `list_aed`/`discount_aed`/`discount_label` + description note; setup discounted to 0 = no
+  invoice). Where enforced: web `server/access.ts` `guard(slug, perm, feature)` + `server/entitlements.ts`
+  (`getEntitlements` per request, `featureRef`), `components/plan/upsell.tsx` (`PlanUpsell`, `FeatureGate` used by
+  the `layout.tsx` of inbox, campaigns, ai/content, ai/reviews, ai/try; ai/page + settings/branches check inline),
+  tenant layout nav (`gated()`), SettingsTabs `showBranches`, automations page (Premium pill), integrations note,
+  billing page, receipt scan, insights card; AI gateway `assertAiAllowed` (`AiNotInPlanError`); worker via
+  `automationOnSql` (includes `entitledSql`) and `tenantsWithDueReplies` (`ai` flag → rows dropped).
+
 - **Spreadsheets (R10)**: every export is .xlsx via `@spa/services/xlsx` (server-only subpath, exceljs, external in
   next.config; the main entry stays client-safe). `toXlsx` = streaming writer, title + subtitle rows, bold frozen
   header + autofilter, kinds inferred (`*AED` money, ISO dates/`YYYY-MM-DD HH:MM` → date cells, Date → Dubai wall

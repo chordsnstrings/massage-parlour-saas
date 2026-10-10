@@ -23,6 +23,7 @@ import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { allowedBranches } from '../calendar/data'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -165,6 +166,8 @@ export default async function MessagesPage({
   }))
 
   const base = appPath(`/${slug}`)
+  // The Instagram inbox (AI replies) is part of Premium (PLAN §18.8): no card on a plan without `ai`.
+  const igInbox = await hasFeature(ctx.tenant.id, 'ai')
   const aside = (
     <>
       {seeCampaigns && (
@@ -207,21 +210,23 @@ export default async function MessagesPage({
           )}
         </Card>
       )}
-      <Card title={t('messages.aiCard.title')} sub={t('messages.aiCard.sub')}>
-        <Grid cols="g3">
-          <Stat label={t('messages.aiCard.open')} value={fmt.number(data.inbox.open)} />
-          <Stat label={t('messages.aiCard.unread')} value={fmt.number(data.inbox.unread)} />
-          <Stat label={t('messages.aiCard.flagged')} value={fmt.number(data.inbox.flagged)} />
-        </Grid>
-        <Note tone="acc" icon={<Info />} className="mt-3">
-          {t('messages.aiCard.note')}
-        </Note>
-        <Button variant="secondary" size="sm" className="mt-3" asChild>
-          <Link href={`${base}/inbox`}>
-            <InstagramGlyph /> {t('messages.aiCard.link')}
-          </Link>
-        </Button>
-      </Card>
+      {igInbox && (
+        <Card title={t('messages.aiCard.title')} sub={t('messages.aiCard.sub')}>
+          <Grid cols="g3">
+            <Stat label={t('messages.aiCard.open')} value={fmt.number(data.inbox.open)} />
+            <Stat label={t('messages.aiCard.unread')} value={fmt.number(data.inbox.unread)} />
+            <Stat label={t('messages.aiCard.flagged')} value={fmt.number(data.inbox.flagged)} />
+          </Grid>
+          <Note tone="acc" icon={<Info />} className="mt-3">
+            {t('messages.aiCard.note')}
+          </Note>
+          <Button variant="secondary" size="sm" className="mt-3" asChild>
+            <Link href={`${base}/inbox`}>
+              <InstagramGlyph /> {t('messages.aiCard.link')}
+            </Link>
+          </Button>
+        </Card>
+      )}
     </>
   )
 

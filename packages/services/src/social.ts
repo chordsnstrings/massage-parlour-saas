@@ -18,6 +18,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-orm'
 import { automationOnSql } from './automations'
 import { findOrCreateClient } from './clients'
+import { entitledSql } from './entitlements'
 import { DomainError } from './errors'
 import {
   appOrigin,
@@ -312,13 +313,17 @@ export const INSTAGRAM_REPLY_RETRY = { retryLimit: 5, retryDelay: 30, retryDelay
 /** A claimed row is leased this long (a crashed worker's rows come back after it). */
 const REPLY_LEASE_MS = 5 * 60_000
 
-/** Tenants with due instagram-reply rows (cross-tenant discovery for the worker; platform role). */
+/**
+ * Tenants with due instagram-reply rows (cross-tenant discovery for the worker; platform role). `ai: false` = the
+ * spa's plan has no AI (PLAN §18.8): the worker drops its rows unanswered (the messages stay for staff).
+ */
 export async function tenantsWithDueReplies(now = new Date(), o: SocialOpts = {}) {
   const rows = await (o.platform ?? platformDb())
-    .selectDistinct({ tenantId: instagramReplyQueue.tenantId })
+    .selectDistinct({ tenantId: instagramReplyQueue.tenantId, ai: sql<boolean>`${entitledSql('ai')}` })
     .from(instagramReplyQueue)
+    .innerJoin(tenants, eq(tenants.id, instagramReplyQueue.tenantId))
     .where(and(isNull(instagramReplyQueue.failedAt), lte(instagramReplyQueue.nextAt, now)))
-  return rows.map((r) => r.tenantId)
+  return rows.map((r) => ({ tenantId: r.tenantId, ai: Boolean(r.ai) }))
 }
 
 /** Claims up to `limit` due rows for one spa (lease via next_at, SKIP LOCKED) and returns them as agent items. */

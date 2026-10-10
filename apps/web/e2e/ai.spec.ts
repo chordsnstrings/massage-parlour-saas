@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { app, screenshotAt, seedCatalog, signUpOwner } from './helpers'
 
 test('AI studio: configure the receptionist and open the live chat', async ({ page }) => {
-  const { slug } = await signUpOwner(page)
+  const { slug } = await signUpOwner(page, { plan: 'premium' })
   await seedCatalog(slug)
   await page.goto(`${app}/${slug}/ai`)
   await expect(page.getByRole('heading', { name: 'Your AI team' })).toBeVisible()
