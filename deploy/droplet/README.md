@@ -270,6 +270,8 @@ on the droplet's own `<ip>.sslip.io`.
 
 ### Move to spamanagement.co
 
+**Done 2026-10-10** (PR #27, then PR #28; live 15:45 UTC). Kept below as the record and for the undo steps.
+
 From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with host routing (`app.`, `admin.`,
 `{slug}.`). The old sslip.io address keeps working through `EXTRA_ROOT_DOMAINS`. Steps:
 

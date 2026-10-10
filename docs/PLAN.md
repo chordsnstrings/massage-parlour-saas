@@ -762,9 +762,10 @@ Meta/Google approvals run in parallel from P0; the pilot uses tester access duri
 | P3 AI | ✅ AI site writer, Instagram publishing + DM/comment inbox with AI drafts/autopilot, GBP review sync/replies + local posts, receipt scanning, weekly insights, AI assists in the editor |
 | Still open | Meta + Google API approvals (code ready; set META_* / GOOGLE_*), Reserve with Google, notification centre, low-stock pushes |
 
-Deployed on one DigitalOcean droplet (blr1, Compose + Caddy) with path routing (`/app`, `/admin`, `/s/{slug}`) on an sslip.io hostname
-until the domain is wired in; the switch to `spamanagement.co` (host routing; the sslip.io address stays in `EXTRA_ROOT_DOMAINS` and its
-path links redirect) is `deploy/droplet/site.env`, steps in deploy/droplet/README.md "Move to spamanagement.co" (B1).
+Deployed on one DigitalOcean droplet (blr1, Compose + Caddy), **live at https://spamanagement.co since 2026-10-10**
+(host routing: `app.`, `admin.`, `{slug}.`; PR #27 installed the site.env updater, PR #28 switched `deploy/droplet/site.env`).
+The old `134-209-145-162.sslip.io` address stays in `EXTRA_ROOT_DOMAINS`; its `/app`, `/admin`, `/s/{slug}` links 301 to the
+new hosts. Steps and undo: deploy/droplet/README.md "Move to spamanagement.co" (B1).
 
 ### 14.2 P2/P3 implementation decisions (recorded at integration)
 - **Instagram:** AI replies are stored as `ai_draft` messages (one pending draft per thread); delivery errors on
@@ -920,7 +921,7 @@ path links redirect) is `deploy/droplet/site.env`, steps in deploy/droplet/READM
 ### 14.7 Work split (owner, 2026-10-08)
 - Track A (Claude): spa dashboard UI (`apps/web/src/app/dashboard/[tenant]/**`, `apps/web/src/components/**`,
   `packages/core/src/i18n/**`) — §14.6 Phase 2, then Phase 3 screens on Track B's services.
-- Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch ✅ (code + checklist in deploy/droplet/README.md; owner runs DNS/env steps)
+- Track B (partner): `packages/services`, `packages/db`, `apps/worker`, `packages/auth`, `deploy/`. Items B1 domain switch ✅ (live 2026-10-10; checklist in deploy/droplet/README.md)
   to spamanagement.co · B2 notifications (table + worker pushes) · B3 per-spa automation switches · B4 global search,
   bookings list, audit-log query · B5 waitlist, merge duplicate clients, equipment resource (`resource_kind`), staff time
   clock + leave, embeddable booking widget · B6 restore drill, Instagram autopilot as a pg-boss job.
@@ -1024,6 +1025,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   remove / update incl. bilingual + per-device style / theme), validated against the real Puck schema, previewed on the
   canvas, Apply saves the draft (+ theme, site-wide), one-click Undo, audited, never publishes. Details: CODEMAP
   "Site builder → Ask AI".
+- **R18 Resend sending-domain setup (owner, 2026-10-10):** Console → Company → Email: a "Set up sending domain" button
+  that uses the Resend API (with the console key) to add spamanagement.co, shows the DNS records to copy into Namecheap,
+  and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone). In progress.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
