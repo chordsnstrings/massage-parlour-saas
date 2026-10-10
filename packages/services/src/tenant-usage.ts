@@ -2,6 +2,7 @@
 // whole-spa aggregates only — no client data). Each figure is an index-backed correlated subquery per spa:
 // bookings (tenant_id, created_at) · members (tenant_id, user_id) → user.last_sign_in_at / session (user_id,
 // created_at) · stored_files (tenant_id, …) · ai_usage (tenant_id, created_at).
+import { planTier } from '@spa/core'
 import {
   aiUsage,
   bookings,
@@ -80,7 +81,9 @@ export async function tenantUsageList(
       deletedAt: tenants.deletedAt,
       billingStage: tenants.billingStage,
       billingOverdueSince: tenants.billingOverdueSince,
+      featureTier: tenants.featureTier,
       plan: plans.name,
+      planLimits: plans.limits,
       periodEnd: subscriptions.currentPeriodEnd,
       createdAt: tenants.createdAt,
       aiBudgetUsd: tenants.aiBudgetUsd,
@@ -102,8 +105,10 @@ export async function tenantUsageList(
     )
     .limit(o.limit ?? 200)
   // node-postgres returns timestamps from raw subqueries as strings and bigint as string.
-  return rows.map((r) => ({
+  return rows.map(({ planLimits, ...r }) => ({
     ...r,
+    /** The subscribed plan's own tier (PLAN §18.8); `featureTier` is the super-admin override (null = the plan decides). */
+    planTier: planLimits ? planTier(planLimits) : null,
     lastSignInAt: r.lastSignInAt ? new Date(r.lastSignInAt) : null,
     lastBookingAt: r.lastBookingAt ? new Date(r.lastBookingAt) : null,
     storageBytes: Number(r.storageBytes ?? 0),
