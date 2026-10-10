@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -56,7 +56,7 @@ async function downloadLatest(cfg: OffsiteConfig, dest: string) {
   if (!key) throw new Error('no backup found in R2 (backups/daily/)')
   const res = await r2.fetch(`${base}/${key}`)
   if (!res.ok) throw new Error(`R2 download ${key} failed: ${res.status}`)
-  await writeFile(dest, Buffer.from(await res.arrayBuffer()))
+  await writeFile(dest, Buffer.from(await res.arrayBuffer()), { mode: 0o600 })
   return key
 }
 
@@ -182,7 +182,9 @@ export async function restoreDrill(
     await record(env, startedAt, r)
     throw new Error(`restore drill failed: ${r.error}`)
   }
-  const file = join(tmpdir(), `spa-drill-${Date.now()}.dump`)
+  // The dump is the whole production database: a fresh 0700 directory (no predictable /tmp name), 0600 files.
+  const dir = await mkdtemp(join(tmpdir(), 'spa-drill-'))
+  const file = join(dir, 'backup.dump')
   const scratch = `spa_restore_drill_${Date.now()}`
   const scratchUrl = withDb(admin, scratch)
   const base = { role: role.name, database: scratch }
@@ -202,7 +204,7 @@ export async function restoreDrill(
     const { stdout: toc } = await run('pg_restore', ['--list', file], { maxBuffer: 1 << 24 })
     const plan = restoreList(toc, untrusted.split('\n').filter(Boolean))
     skipped = plan.skipped
-    await writeFile(`${file}.list`, plan.list)
+    await writeFile(`${file}.list`, plan.list, { mode: 0o600 })
     created = true // before CREATE: the drop below is by this run's own unique name only
     await psql(admin, `CREATE DATABASE "${scratch}"`)
     const target = conn(scratchUrl)
@@ -231,8 +233,7 @@ export async function restoreDrill(
       await psql(admin, `DROP DATABASE IF EXISTS "${scratch}" WITH (FORCE)`).catch((e) =>
         log('error', 'restore drill: drop scratch database failed', { scratch, error: errorText(e) }),
       )
-    await rm(file, { force: true })
-    await rm(`${file}.list`, { force: true })
+    await rm(dir, { recursive: true, force: true })
   }
   await record(env, startedAt, result)
   if (result.status === 'failed') throw new Error(`restore drill failed: ${result.error}`)

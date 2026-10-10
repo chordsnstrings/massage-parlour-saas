@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
-import { writeFile } from 'node:fs/promises'
+import { stat, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import { promisify } from 'node:util'
 import { drillRoleProblem } from '@spa/core'
 import { closeAllDbs, platformJobRuns, tenants } from '@spa/db'
@@ -174,7 +175,16 @@ describe('restore drill (B6, F11)', () => {
   })
 
   it('restores as spa_drill into its own scratch database, counts, drops only it and records the run', async () => {
-    const r = await restoreDrill(env, { download: dumpLive })
+    let dir = ''
+    const r = await restoreDrill(env, {
+      download: async (dest) => {
+        // The dump lands in a fresh private directory (not a predictable /tmp name), removed afterwards.
+        dir = dirname(dest)
+        expect((await stat(dir)).mode & 0o777).toBe(0o700)
+        return dumpLive(dest)
+      },
+    })
+    await expect(stat(dir)).rejects.toThrow(/ENOENT/)
     expect(r).toMatchObject({
       status: 'ok',
       role: 'spa_drill',
