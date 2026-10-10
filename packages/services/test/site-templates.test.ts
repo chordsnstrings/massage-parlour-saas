@@ -166,7 +166,12 @@ describe('sanitising a site into a template', () => {
           content: [
             {
               type: 'Video',
-              props: { id: 'v1', url: 'https://youtu.be/dQw4w9WgXcQ', poster: '/files/x', title: { en: 'Tour' } },
+              props: {
+                id: 'v1',
+                url: 'https://youtu.be/dQw4w9WgXcQ',
+                poster: '/files/x',
+                title: { en: 'Tour' },
+              },
             },
           ],
         },

@@ -167,8 +167,8 @@ export function SiteEnquiryForm({
           </p>
         )}
       </div>
-      {/* Honeypot: off-screen, no tab stop; bots fill it. */}
-      <div aria-hidden className="absolute -start-[9999px] h-px w-px overflow-hidden">
+      {/* Honeypot: visually hidden (no offset, so no RTL overflow), no tab stop; bots fill it. */}
+      <div aria-hidden className="sr-only">
         <label>
           Company
           <input name="company" tabIndex={-1} autoComplete="off" />

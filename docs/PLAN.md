@@ -575,6 +575,8 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
   Booking widget (inline / modal / page), Team, Packages, Gift cards, Memberships, Offers, Google reviews, Testimonials,
   Instagram feed, Media-library gallery, Blog list/post, Branches & hours.
 - Each block ships 2–4 designed variants plus full layer 4–5 controls.
+- *Built (F15, 2026-10-10):* Map, Video, Enquiry form, Google reviews, Instagram feed, Blog list + post pages
+  (`components/site/blocks/extras.tsx`; CODEMAP "F15 blocks").
 
 ### 11.5 Responsive editing & output
 - Viewport switcher: mobile 375, tablet 768, laptop 1280, desktop 1536, plus drag-to-resize; edits apply to the active breakpoint.
