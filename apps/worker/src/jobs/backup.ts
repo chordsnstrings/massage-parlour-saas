@@ -15,6 +15,8 @@ export type OffsiteConfig = {
   bucket: string
   accessKeyId: string
   secretAccessKey: string
+  /** SigV4 signing region: `R2_REGION` / `S3_REGION`, default `auto` (R2); DigitalOcean Spaces: e.g. `fra1`. */
+  region: string
   source: 'R2' | 'S3'
 }
 
@@ -29,7 +31,14 @@ export function offsiteConfig(env: Env = process.env): OffsiteConfig | null {
     const accessKeyId = env[`${p}_ACCESS_KEY_ID`]
     const secretAccessKey = env[`${p}_SECRET_ACCESS_KEY`]
     return endpoint && bucket && accessKeyId && secretAccessKey
-      ? { endpoint: endpoint.replace(/\/$/, ''), bucket, accessKeyId, secretAccessKey, source: p }
+      ? {
+          endpoint: endpoint.replace(/\/$/, ''),
+          bucket,
+          accessKeyId,
+          secretAccessKey,
+          region: env[`${p}_REGION`]?.trim() || 'auto',
+          source: p,
+        }
       : null
   }
   const anyR2 = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'].some((k) => env[k])
@@ -41,7 +50,7 @@ export const offsiteClient = (c: OffsiteConfig) =>
     accessKeyId: c.accessKeyId,
     secretAccessKey: c.secretAccessKey,
     service: 's3',
-    region: 'auto',
+    region: c.region,
   })
 
 /** One row in platform_job_runs (super-admin console). Never throws: the log must not break a job. */
