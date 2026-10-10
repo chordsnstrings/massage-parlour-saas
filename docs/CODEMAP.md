@@ -242,6 +242,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   768px (never put containment on `.mkt-pc` — it stops being a subgrid; the price row is the cqi container) and the
   Premium raise is margin + padding, not a transform (`data-rise="card"` owns transform). /pricing keeps one
   `signup?plan=` link per plan (applications.spec), so none in the comparison header.
+  Each list ends on a `.mkt-pl-end` link row pinned to the foot of the shared row (`margin-top: auto`), so the cards end
+  level whatever the wrapping; CTAs wrap (DB names). Marketing focus ring = `.mkt :focus-visible` in marketing.css
+  (accent, lime on `.mkt-dark`/`.mkt-demo`/`.mkt-pc-spot`) — globals.css's ring uses the app's `:root` accent.
   Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
   `withinIpLimit`, Turnstile (F9), `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
   email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
