@@ -51,7 +51,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **F20 tables (`schema/console.ts`)**: `feature_flags` + `announcements` platform-only; `feature_flag_overrides` +
   `announcement_dismissals` tenant tables (cascade on tenant delete). F22 columns: `tenants.billing_stage`
   (`billing_stage` enum) / `billing_overdue_since` / `billing_stage_at`, `platform_settings.billing_overdue_after_days`
-  / `billing_grace_days`; F21: `user.last_sign_in_at`. Migration 0042.
+  / `billing_grace_days`; F21: `user.last_sign_in_at`. Migration 0042_console_flags_billing_usage.
 - **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
   `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
   reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
@@ -193,7 +193,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     rebuilt from movements: gift-card txns by sale / refund / cutoff date; packages + memberships = price − redemptions,
     0 from the refund line or `package_expiry`/`membership_expiry` entry date; vs ledger 2100/2110 credit − debit,
     `difference` = ledger − items). `export/route.ts` = .xlsx (R10), one sheet per KPI, viewer's language.
-    Console Performance detail adds `tenantOperations` (whole-spa aggregates only). Migration 0037: indexes
+    Console Performance detail adds `tenantOperations` (whole-spa aggregates only). Migration 0038_kpi_indexes: indexes
     `booking_items_booking`, `shifts_branch_time`.
     `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG;
     `outboxMine` (F28) = due messages assigned to the viewer → second, dark-green Inbox badge (`ShellItem.mine`).
@@ -236,13 +236,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Home CRM showcase = `crm-showcase.tsx` (same mock, `overview`, + 4 floating cards): CSS scroll-driven 3D
   (`.mkt-show*` in marketing.css; timelines on untransformed wrappers, unitless `--show-*` amounts the JS fallback
   reads) — keep it out of MarketingMotion (no `data-tilt`/`data-rise` inside); PLAN §18.8.
-- **`marketing/`**: `/`, features, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
-  scoped `.mkt`; Space Grotesk + DM Sans) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
-  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3.
   Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
   `withinIpLimit`, Turnstile (F9), `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
   email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
-  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. Footer = brand + 5 link columns into
+  Footer = brand + 5 link columns into
   section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
 - **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
 - **Status pages (F24)**: root `not-found.tsx` (server, per surface via `requestSurface()`), `error.tsx` (client,
@@ -816,7 +813,7 @@ integrations note,
     worker `outbox-auto-assign` every minute → `autoAssignDueOutbox` (advisory lock per spa; due + unassigned rows,
     round-robin by member id after the last auto pick, among receptionist-role members whose linked staff has a shift
     covering now in the message's branch; nobody on shift → stays unassigned).
-- **Gift vouchers + booking partners (F15/F16, services `vouchers.ts`, migration 0042)**: `gift_cards.check_token`
+- **Gift vouchers + booking partners (F15/F16, services `vouchers.ts`, migration 0044_vouchers_partners)**: `gift_cards.check_token`
   (random 32-hex, default `gen_random_uuid()` without dashes, globally unique) is the QR key, never the code;
   `voucher_service_id` = treatment voucher (shows the service; value stays the AED balance). `voucherCheck(tx, token)`
   returns only status / value / balance / expiry / treatment / code's last 4 (public page
@@ -977,7 +974,7 @@ i18n namespace `automations`.
 
 ## Meta MCP (R7, AI tools)
 
-- **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.30.1, JSON
+- **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.31.0, JSON
   responses), one McpServer per request. Auth = `signMcpToken` (`mcp/token.ts`: HMAC of `META_MCP_SECRET` or
   `BETTER_AUTH_SECRET`, domain-separated; claims tenant, agent, acting user; ≤ 5 min). Live tenants only.
   Served at `/api/mcp/meta`; agents call it **in-process** through the same handler (`metaMcpSources`, real MCP client

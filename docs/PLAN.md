@@ -1177,252 +1177,210 @@ CLAUDE.md). Rules for the work:
 - **Past refunds** posted before F1 stay as they are (no correcting entries). Amount-only refunds recorded before
   F2 have no `refund_lines`; they still count against the sale total.
 
+### Backlog F9–F32
+**Status: all built 2026-10-09/10 on the integration branch claude/laughing-faraday-fjgrsu; awaiting the release PR
+(live once merged to the deploy branch and promoted).** Same reminder rule as F1–F8 (CLAUDE.md) until live. Origin:
+F9–F15 owner 2026-10-09 ("remind me later and always remind me"); F16–F32 owner 2026-10-09 ("after F15 start the
+others till end — finish everything"), built after the Premium/Standard plans (§18.8) so Premium items are gated
+(batch A = Premium `marketing`/`ai`: F16–F19; B: F20–F26; C: F27–F32).
 
-### Open backlog F9–F15 (owner 2026-10-09: "remind me later and always remind me" — not started; fix only when the owner says so)
-Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
-- ✅ **F9. Bot check on public booking** (G17): Cloudflare Turnstile on the booking page/widget + AI booking entry points; keep honeypot + per-IP limit.
-  Shipped 2026-10-09: managed widget (interaction-only) on `/book`, `/book/embed` (widget), Apply (`/signup`) and
-  marketing Contact; server siteverify with the visitor IP (core `verifyTurnstileToken`, web `server/turnstile.ts`),
-  fail closed when `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` are set; unset = open (console Configuration row red).
-  Custom spa domains opt in with `TURNSTILE_CUSTOM_DOMAINS=on` (domain must be on the widget first). No public AI
-  booking endpoint exists (the DM agent runs on signed Meta webhooks / the staff test chat). Owner step:
-  deploy/droplet/README.md "Bot check on public forms".
-- ✅ **F10. Security headers** (G11): `script-src` CSP (nonces) + standard headers on app, console, marketing and tenant sites; sandboxed HTML designs keep their own CSP.
-  Shipped 2026-10-09 (enforced, not report-only): proxy sets a per-request nonce CSP (`'strict-dynamic'`, Turnstile
-  where a Turnstile form exists, widget embed frameable by any site, everything else `frame-ancestors 'self'`) + XFO,
-  COOP, HSTS on https; next.config adds nosniff/Referrer/Permissions-Policy everywhere and a `default-src 'none'` CSP on
-  API/OAuth/MCP. `style-src 'unsafe-inline'` kept (React style attributes, Radix/Puck/Turnstile style injection; decision
-  in CODEMAP "Security headers"). HTML designs run in their own shell document (`/api/html-design/frame`, own sandbox
-  CSP) instead of `srcdoc`. Violations → `/api/csp-report` → console Server health row. Also (owner request): Turnstile
-  keys + custom-domain switch editable in console Company → "Bot check" (secret write-only, console wins over env).
-  Found on the way (full e2e on a production build): Apply form's spa-name slug check could overwrite a typed web
-  address (stale answer, fixed); the online-booking per-IP limit now follows `AUTH_RATE_LIMIT=off` (e2e only).
-- ✅ **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
-  Done: role `spa_drill` (bootstrap.sql; compose one-shot `db-roles` re-runs the bootstrap every deploy, so existing
-  droplets get it without SSH; password derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is set); worker
-  refuses a superuser role; console Configuration row "Restore drill role (spa_drill)".
-- **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
-- ✅ **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
-  Shipped 2026-10-09 as a separate `bookings.attribution` enum (instagram, gbp, google, qr, facebook, tiktok, whatsapp,
-  widget, campaign, referral, direct) so `source` stays the channel (`online`): the booking page sends t.js's tab
-  entry (`spa_entry`), core `bookingAttribution` maps it. Shown as "Online · Instagram" (calendar, bookings list +
-  detail), split on the dashboard Booking sources card (`kpis.byAttribution`) and console Performance detail
-  (`onlineSources`). Older online bookings show "Not recorded".
-- **F11. Worker without the superuser password** (G10): dedicated CREATEDB-only role for the restore drill instead of `RESTORE_DRILL_ADMIN_URL`.
-- ✅ **F12. Sitemap + Google data for spa sites** (G19): sitemap.xml/robots.txt per tenant site and marketing, schema.org JSON-LD (DaySpa/LocalBusiness), og:image.
-  Done 2026-10-09: every host answers its own robots.txt/sitemap.xml (proxy now rewrites them). Spa sites: canonical =
-  primary active custom domain else free address; sitemap = published pages + /book with EN/AR hreflang; suspended or
-  unpublished sites stay crawlable but `noindex` (no Sitemap line, empty sitemap). Pages: canonical/hreflang, og/twitter
-  (hero image, else logo), DaySpa JSON-LD (branch address, hours, Maps pin/geo, Instagram, services; AED prices only
-  where shown). Marketing: sitemap of the 9 pages, Organization (1997labs) + SoftwareApplication JSON-LD, generated
-  og:image per page (/og/{page}.png). App/admin hosts disallow all (path routing: /app/, /admin/). CODEMAP "Search + social".
-- **F13. Booking source attribution** (G20): carry `?src=ig|gbp|qr` from web sessions into `bookings.source` so reports split Instagram/Google/QR.
-- **F14. Tests for 2FA + password reset** (G13 remainder): e2e for 2FA enrol/verify/require2fa redirect, password reset, files access matrix.
-  ✅ Done (2026-10-09): e2e `two-factor.spec`, `password-reset.spec`, `files-access.spec`, commission reversal on refund
-  in `pos.spec`; `packages/auth/test/rate-limit.test.ts` (per-IP limits, production mode). Bugs fixed on the way: a
-  password reset left other sessions signed in (now `revokeSessionsOnPasswordReset` + `getSession` checks the session
-  row past the cookie cache); `/files` let members of a deleted spa, and owners/managers held by "Require 2FA", read
-  private files (now the same rules as `requireMember`).
-- ✅ **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
-  Vouchers + client drafts shipped 2026-10-10 (see "Shipped (F15–F30 batch)"); **F15 site blocks: other branch.**
-- **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
-  - ✅ **F15 site blocks** shipped 2026-10-10 (other F15 parts: separate branch): Puck blocks Map (address card + "Open in
-    Google Maps" + lazy Google embed), Video (YouTube privacy-enhanced / Vimeo dnt, click-to-load poster; or an uploaded
-    MP4/WebM ≤ 8 MB served with byte ranges), Google reviews + Instagram feed (stored data only; Premium `marketing`,
-    nothing on Standard / no data, editor note instead), Blog list + post pages `/blog/{slug}` (Studio → Blog, EN/AR,
-    SEO title/description, BlogPosting JSON-LD, sitemap), Enquiry form (honeypot, zod, per-IP 5/h 20/day, Turnstile →
-    `site_enquiries` → Inbox → Enquiries, WhatsApp click-to-send reply, bell/push). In the palette, presets, AI/MCP
-    schema and a few templates (zen, nordic, desert, hotel contact; luxury video; bali Instagram; hotel reviews + blog).
-    CSP: frame-src + www.google.com, www.youtube-nocookie.com, player.vimeo.com on site/domain/app. Migration 0042.
-    Details: CODEMAP "Site builder" → "F15 blocks".
-- ✅ **F31. Extra KPIs** (backlog F16–F32, batch C) — shipped 2026-10-09: Reports page (`/{slug}/reports`, Finance menu;
-  owner/manager/accountant via `reports.view`, RevPATH needs `dashboard.revenue`, liability `accounting.view`) with
-  rebooking rate (30/60/90 days, by therapist), retention cohorts (12 months × +1…+6), RevPATH (net treatment revenue
-  ex VAT ÷ therapist shift hours, time clock when no shifts; per therapist), room utilisation (per room/branch) and
-  outstanding prepaid liability as of a date vs ledger 2100/2110 with any difference; branch + period picker, Excel
-  export (R10 — .xlsx, not CSV); console Performance detail shows the whole-spa aggregates. Definitions: CODEMAP
-  "Reports (F31)". Migration 0037 (two indexes).
-
-### Remaining backlog F16–F32
-- ✅ **F25. CI hardening.** Shipped 2026-10-09: CI job `guards` (parallel to `check`; `promote` needs both) runs the
-  schema-drift check `pnpm db:check-drift` (fails when `pnpm db:generate` would write a migration), the migration-journal
-  tests and `pnpm audit --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`,
-  reason + review date each); `codeql.yml` (v3, security-extended; deploy-branch pushes, PRs, weekly);
-  `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped, stack-pin majors / 0.x minors held). Audit fix
-  on the way: `@modelcontextprotocol/sdk` 1.30.1 → 1.31.0 (GHSA-6qxp-vccf-f47h, high).
-- ✅ **F26. Trusted client IP (G6).** Shipped 2026-10-09: every IP read goes through `@spa/core` `clientIpFrom`
-  (`Cf-Connecting-Ip` only, validated; guard test bans direct header reads), limits bucket IPv6 by /64
-  (`ipRateLimitKey`, same as Better Auth, which now reads only that header). Caddy: Cloudflare ranges (verified
-  current, `cloudflare-ips.sh` + weekly workflow) with strict mode, `Cf-Connecting-Ip` the only client-IP header,
-  X-Real-Ip / True-Client-Ip / Do-Connecting-Ip stripped; `test-caddy-ip.sh` (CI) proves direct hits can't forge it
-  and Cloudflare's value passes through. Found + fixed: deploys never applied Caddyfile edits (bind-mounted file,
-  hard reset swaps the inode); `update.sh` `caddy_sync` restarts caddy when it changed.
-- ✅ **F20. Feature flags + announcements to spas.** Shipped 2026-10-10: console **Feature flags** (`/flags`):
-  boolean flags with a global default + per-spa overrides (`feature_flags` platform-only, `feature_flag_overrides`
-  tenant table); code reads only keys declared in core `FEATURE_FLAGS` via the typed `flag(key, tenantId)` (web
-  `server/flags.ts`, React-cached) / services `flagOn`·`flagValues`; code flags can't be deleted, owner-defined keys
-  can (ahead of the code). First real flag: `billing.autoTransitions` (F22 pause). Console **Announcements**
-  (`/announcements`): title + message EN (TH optional, falls back to EN), severity info/warning/critical, audience
-  every spa / plan codes / selected spas, Dubai start/end, End now / Delete; shown at the top of the spa dashboard
-  (most severe first, ≤ 3), dismissible per member (`announcement_dismissals`, works while read-only); never
-  email/SMS. Every change audited (`platform.flag.*`, `platform.announcement.*`). Thai UI strings need native review.
-- ✅ **F21. Console spa list usage.** Shipped 2026-10-10: Spas list adds last staff sign-in (new `user.last_sign_in_at`
-  stamped by a Better Auth session hook, or the newest session; active members only), last booking created,
-  bookings created in the last 30 days, active team, storage (uploaded files), AI spend this Dubai month / budget,
-  billing stage badge; every column sorts server-side (`?sort=&dir=`, nulls last). One platform-role query
-  (services `tenantUsageList`, index-backed subqueries; new indexes `bookings_tenant_created`,
-  `session_user_created`). Whole-spa aggregates only, no client data.
-- ✅ **F22. Billing auto-transitions.** Shipped 2026-10-10 (rules core `billing-stages.ts`, services
-  `billing-transitions.ts`, worker `billing-transitions` 09:05): an unpaid platform invoice is late *N* days after its
-  due date (console Company → Billing rules, default 1 = the day after); the first late day the spa enters
-  **overdue** (status `past_due`, the grace clock starts), the next day **grace**, and *grace days* (default 7) after
-  the first late day **read-only** (status `read_only`). Paying every late invoice lifts it at once (console Mark
-  paid / Record payment, Stripe Checkout — same transaction) back to active/trial. Notices: in-dashboard
-  `billing.late` / `billing.read_only` / `billing.restored` (billing.view) + staff email to the spa's owners and
-  every super-admin when email is configured; every transition audited `platform.billing.stage`. Legacy yearly spas
-  included (any issued platform invoice). **Decisions:** the grace clock counts from the first day the job finds the
-  spa late (not the due date), so spas already overdue at deploy get the full grace period first; read-only =
-  existing R12 behaviour: staff writes blocked (`guard`), the Billing page (card payment), notifications, dismissing
-  announcements, account/2FA keep working, and **the public site + online booking keep working** (bookings arrive
-  as pending; staff confirm them after paying); pause per spa on the spa page (= `billing.autoTransitions` override
-  off; pausing freezes escalation, paying still lifts) or for every spa via the flag default; a manual "Pause spa"
-  is left to the super-admin (never auto-lifted); "Resume spa" clears the stage (a still-late spa starts a fresh
-  grace period); "Check now" applies today's rules to one spa. The unused per-subscription "Grace days" field was
-  removed from the Subscription form (column kept).
-
-### Remaining backlog F16–F32 — shipped on this branch
-- ✅ **F27. Intake/waiver PDFs stored.** Shipped 2026-10-09: every signed intake renders a PDF server-side (pdfkit,
-  embedded OFL subsets of DM Sans / Noto Sans Thai / Noto Naskh Arabic; spa logo + name, answers, consent, signature,
-  submission id + record SHA-256), stored as a private file (clients.view), Download / Regenerate on the submission
-  page, PDF icon on the profile, zip in Settings → Data, removed by client erase and tenant purge. Migration 0037.
-- ✅ **F28. Outbox assignment.** Shipped 2026-10-09: "Assigned to" per message (active members with marketing.send),
-  Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
-  auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
-- ✅ **F30. Dashboard "Ask AI" for staff.** Shipped 2026-10-10: top-bar "Ask AI" drawer (SpaShell, EN + TH, answers in
-  the member's UI language) for members with `dashboard.view` on Premium (`ai`); Standard sees the Premium upsell in
-  the drawer. Tool-using agent `staff_assistant` (seeded `ai_model_config` row, Seed 2.0 lite) through runToolLoop →
-  runChat (plan, kill switches, per-tenant budget, ai_usage per step) with READ-ONLY tools over @spa/services in
-  withTenant, each re-checking permissions + the member's branch scope from the DB: bookings (calendar.view; own only
-  without calendar.manage), revenue (reports.view + dashboard.revenue), top treatments (reports.view), lapsed clients
+- ✅ **F9. Bot check on public forms** (G17). Cloudflare Turnstile managed widget (interaction-only) on `/book`,
+  `/book/embed` (widget), Apply (`/signup`) and marketing Contact; server siteverify with the visitor IP (core
+  `verifyTurnstileToken`, web `server/turnstile.ts`), fail closed when site + secret key are set, unset = open (console
+  Configuration row red); honeypot + per-IP limit kept. Custom spa domains opt in (`TURNSTILE_CUSTOM_DOMAINS=on`, domain
+  on the widget first). No public AI booking endpoint exists (the DM agent runs on signed Meta webhooks / the staff test
+  chat). Owner step: deploy/droplet/README.md "Bot check on public forms".
+- ✅ **F10. Security headers** (G11). Enforced, not report-only: proxy sets a per-request nonce CSP (`'strict-dynamic'`;
+  Turnstile only where a Turnstile form exists; widget embed frameable by any site, everything else
+  `frame-ancestors 'self'`) + XFO, COOP, HSTS on https; next.config adds nosniff / Referrer / Permissions-Policy everywhere
+  and `default-src 'none'` on API/OAuth/MCP. `style-src 'unsafe-inline'` kept (decision: CODEMAP "Security headers").
+  HTML designs run in their own shell document (`/api/html-design/frame`, own sandbox CSP) instead of `srcdoc`.
+  Violations → `/api/csp-report` → console Server health. Owner add-on: Turnstile keys + custom-domain switch in console
+  Company → "Bot check" (secret write-only, console wins over env). Bugs found (full e2e on a production build): the
+  Apply form's slug check could overwrite a typed web address (stale answer); the online-booking per-IP limit now
+  follows `AUTH_RATE_LIMIT=off` (e2e only). Migration 0041_csp_turnstile_settings.
+- ✅ **F11. Worker without the superuser password** (G10). The restore drill runs as the CREATEDB-only role `spa_drill`
+  instead of `RESTORE_DRILL_ADMIN_URL` (bootstrap.sql; compose one-shot `db-roles` re-runs the bootstrap every deploy, so
+  existing droplets get it without SSH; password derived from `SPA_OWNER_PASSWORD` unless `SPA_DRILL_PASSWORD` is set);
+  the worker refuses a superuser role; console Configuration row "Restore drill role (spa_drill)".
+- ✅ **F12. Sitemap + Google data for spa sites** (G19). Every host answers its own robots.txt/sitemap.xml (proxy
+  rewrites them). Spa sites: canonical = primary active custom domain else free address; sitemap = published pages +
+  /book with EN/AR hreflang; suspended or unpublished sites stay crawlable but `noindex` (no Sitemap line, empty
+  sitemap). Pages: canonical/hreflang, og/twitter (hero image, else logo), DaySpa JSON-LD (branch address, hours, Maps
+  pin/geo, Instagram, services; AED prices only where shown). Marketing: sitemap of the 9 pages, Organization (1997labs)
+  + SoftwareApplication JSON-LD, generated og:image per page (`/og/{page}.png`). App/admin hosts disallow all. CODEMAP
+  "Search + social".
+- ✅ **F13. Booking source attribution** (G20). Separate `bookings.attribution` enum (instagram, gbp, google, qr,
+  facebook, tiktok, whatsapp, widget, campaign, referral, direct) so `source` stays the channel (`online`): the booking
+  page sends t.js's tab entry (`spa_entry`, from `?src=…`), core `bookingAttribution` maps it. Shown as "Online ·
+  Instagram" (calendar, bookings list + detail), split on the dashboard Booking sources card (`kpis.byAttribution`) and
+  console Performance detail (`onlineSources`); older online bookings show "Not recorded". Migration 0036_breezy_masque.
+- ✅ **F14. Tests for 2FA + password reset** (G13 remainder). e2e `two-factor.spec`, `password-reset.spec`,
+  `files-access.spec`, commission reversal on refund in `pos.spec`; `packages/auth/test/rate-limit.test.ts` (per-IP
+  limits, production mode). Bugs fixed: a password reset left other sessions signed in (now
+  `revokeSessionsOnPasswordReset` + `getSession` checks the session row past the cookie cache); `/files` let members of
+  a deleted spa, and owners/managers held by "Require 2FA", read private files (now the same rules as `requireMember`).
+- ✅ **F15. Growth extras** (Premium `marketing`), three parts:
+  - **Gift vouchers with QR:** Packages → Gift cards → "Voucher" (`/{slug}/vouchers/{id}`, pos.use or services.manage):
+    A6/A5 print view (logo + name, amount or a chosen treatment, recipient + message as typed, code, expiry, EN + AR
+    labels), server-side SVG QR (`qrcode` 1.5.4, no external service) → public check page `/voucher/{token}` on the
+    spa's site (status, balance, expiry, treatment, code's last 4 only; noindex, no-referrer; 30 checks / 10 min + 200 /
+    day per IP; token kept out of analytics). Token = `gift_cards.check_token` (random, not the code), so the link alone
+    can't be spent. WhatsApp share = click-to-send. Redemption stays in POS (type the code or scan the QR). Standard:
+    "Premium" label + upsell; the public check keeps working after a downgrade. Migration 0044_vouchers_partners.
+  - **Automatic review / birthday / win-back drafts:** switches `reviewRequests`, `birthdayMessages`, `winbackMessages`
+    (off by default; Premium via `AUTOMATION_FEATURE` → `automationOnSql`); hourly worker `client-drafts` queues WhatsApp
+    drafts into the outbox (click-to-send; F28 assignment applies). Marketing consent re-checked at send time; quiet
+    hours (Dubai, default 21:00–10:00); caps: review once per booking, 1 per client / 90 days, checked out ≤ 48 h ago,
+    needs the spa's review link; birthday 1 per 300 days; win-back lapsed N–365 days (N default 60), nothing booked
+    ahead, once per absence, ≤ 25 per spa per day; birthday + win-back skip a client another marketing message reached
+    within 7 days, and campaigns count these drafts for their 7-day cap. Timing card on Automations; texts EN + AR per
+    spa in WhatsApp → Templates. "Thank-you & review requests" switch renamed "Thank-you messages".
+  - **Site blocks:** Map (address card + "Open in Google Maps" + lazy embed), Video (YouTube privacy-enhanced / Vimeo
+    dnt, click-to-load; or an uploaded MP4/WebM ≤ 8 MB served with byte ranges), Google reviews + Instagram feed (stored
+    data only; Premium, editor note otherwise), Blog list + post pages `/blog/{slug}` (Studio → Blog, EN/AR, SEO fields,
+    BlogPosting JSON-LD, sitemap), Enquiry form (honeypot, zod, per-IP 5/h + 20/day, Turnstile → `site_enquiries` →
+    Inbox → Enquiries, WhatsApp click-to-send reply, bell/push). In the palette, presets, AI/MCP schema and several
+    templates. CSP frame-src adds www.google.com, www.youtube-nocookie.com, player.vimeo.com. Migration
+    0045_site_blog_enquiries. CODEMAP "Site builder" → "F15 blocks".
+- ✅ **F16. QR posters for reception + hotel partners** (Premium `marketing`; Marketing → QR posters,
+  `marketing.campaigns`). Printable A4/A5 poster (logo + name, EN + AR, booking QR) for the reception (`/book?src=qr`,
+  F13 `qr`) or a partner (`booking_partners`: name as typed + 6-char code → `&partner={code}`); t.js + the booking page
+  carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or paused codes ignored). Partner table: bookings
+  all-time / 30 days / completed / latest (cancelled excluded) + "Reception poster" row; pause/resume audited. Booking
+  detail shows "Online · QR code · {partner}". Migration 0044_vouchers_partners.
+- ✅ **F17. Google Book button + Search Console** (Premium `marketing`). Google card → "Book button on Google" sets /
+  updates / removes the location's Place Actions APPOINTMENT link → `{site}/book?src=google` (F13 `google`); other
+  providers' links untouched; worker `gbp-site-sync` (10 min) re-points it when the address changes, failures retried
+  every 6 h. Search Console: sitemap queued on every publish (sent ~2 min after the last) + "Send sitemap"; picks an
+  owned/full property covering the address (URL prefix or `sc-domain:`); custom domain without one → `sites.add` +
+  "verify it"; free address → "no access". Errors stored as codes (`api_disabled`, `scope`, …) shown in EN/TH. Connect
+  asks for `business.manage` + `webmasters`. Owner steps: deploy/droplet/README.md "Google".
+- ✅ **F18. Instagram reels, stories, carousels + private replies** (Premium). Post "Format" sheet (feed / reel / story /
+  carousel, 1–10 https image/video links); the publisher builds the containers (REELS with `share_to_feed` + optional
+  cover, STORIES without caption, carousel children then CAROUSEL) and polls status; a video still processing is parked
+  (`social_posts.meta`, "Processing video") and the 5-minute job publishes the same container. Comment threads get "Reply
+  privately": one DM per comment within 7 days (Private Replies API, `kind = private_reply`, claimed so two staff can't
+  both send); "Draft with AI" via `comment_agent` (budget/kill switch); staff always press Send. Migration
+  0043_social_formats_private_replies.
+- ✅ **F19. Facebook Page connect** (Premium). Facebook Login for Business (`META_FB_CONFIG_ID` or scope list) → pending
+  row with the encrypted long-lived user token → Page picker (shows the linked IG account) → Page token stored encrypted
+  (user token deleted), app installed on the Page; card shows Page + IG account, data-access expiry warning (14 days),
+  expired state, disconnect (any plan); daily token check (`debug_token`). A Page-linked IG account is used for
+  publishing / private replies / replies when there's no Instagram Login connection, and its comment webhooks reach the
+  spa. Owner steps: deploy/droplet/README.md "Meta".
+- ✅ **F20. Feature flags + announcements to spas.** Console Feature flags (`/flags`): boolean flags, global default +
+  per-spa overrides (`feature_flags` platform-only, `feature_flag_overrides` tenant table); code reads only keys declared
+  in core `FEATURE_FLAGS` via the typed `flag(key, tenantId)` (web `server/flags.ts`) / services `flagOn`·`flagValues`;
+  code flags can't be deleted, owner-defined keys can. First flag: `billing.autoTransitions` (F22). Console
+  Announcements (`/announcements`): title + message EN (TH optional, falls back to EN), severity info/warning/critical,
+  audience every spa / plan codes / selected spas, Dubai start/end, End now / Delete; shown at the top of the spa
+  dashboard (most severe first, ≤ 3), dismissible per member (works while read-only); never email/SMS. Audited
+  `platform.flag.*` / `platform.announcement.*`. Migration 0042_console_flags_billing_usage (with F21, F22).
+- ✅ **F21. Console spa list usage.** Spas list adds last staff sign-in (new `user.last_sign_in_at` from a Better Auth
+  session hook, else the newest session; active members only), last booking created, bookings created in 30 days,
+  active team, storage, AI spend this Dubai month / budget, billing stage badge; every column sorts server-side
+  (`?sort=&dir=`, nulls last). One platform-role query (services `tenantUsageList`; indexes `bookings_tenant_created`,
+  `session_user_created`). Whole-spa aggregates only, no client data. Migration 0042.
+- ✅ **F22. Billing auto-transitions** (core `billing-stages.ts`, services `billing-transitions.ts`, worker
+  `billing-transitions` 09:05). An unpaid platform invoice is late *N* days after its due date (console Company →
+  Billing rules, default 1); first late day → **overdue** (`past_due`, grace clock starts), next day **grace**, *grace
+  days* (default 7) after the first late day → **read-only**. Paying every late invoice lifts it at once (Mark paid /
+  Record payment / Stripe Checkout, same transaction). Notices: in-dashboard `billing.late` / `billing.read_only` /
+  `billing.restored` (billing.view) + staff email to the spa's owners and every super-admin when email is configured;
+  audit `platform.billing.stage`; legacy yearly spas included. **Decisions:** the grace clock counts from the first day
+  the job finds the spa late (spas already overdue at deploy get the full grace first); read-only = R12 behaviour
+  (staff writes blocked; Billing page, notifications, dismissing announcements, account/2FA work; **public site +
+  online booking keep working**, bookings arrive pending); pause per spa (= `billing.autoTransitions` override off;
+  freezes escalation, paying still lifts) or for every spa via the flag default; a manual "Pause spa" is never
+  auto-lifted; "Resume spa" clears the stage (a still-late spa starts a fresh grace period); "Check now" per spa. The
+  unused per-subscription "Grace days" field left the form (column kept). Migration 0042.
+- ✅ **F23. Slug rename with 301 from the old slug.** Console spa page → "Web address" (super-admin + 2FA; Apply's rules
+  plus previous addresses). Old slug → `tenant_slug_history` (platform-only); `{old}.{root}` on every platform domain,
+  `/s/{old}/…` and `app/{old}/…` answer **301** to the new slug with path + query (proxy, GET/HEAD; 5-min private
+  cache); Caddy's TLS ask allows the old host; chains resolve to the current slug; audit
+  `platform.tenant.slug_renamed`. **Decision: cooling period 12 months** (`SLUG_COOLING_MONTHS`): only the same spa may
+  take an old address back meanwhile; afterwards another spa may claim it (history row goes, redirects stop); an
+  unclaimed old address keeps redirecting. Slug URLs are generated per request; stored copies (sent messages, Google
+  posts, widget snippets, notification links) reach the new address through the 301; an installed dashboard app keeps
+  working via the redirect (reinstall for the new app id). Migration 0046_tenant_slug_history.
+- ✅ **F24. i18n error / 404 / global-error pages + `<html lang/dir>` per surface.** Root layout sets `lang` / `dir` /
+  `data-surface` from the proxy rewrite (`x-internal-path`, `server/surface.ts`): marketing + console `en`, dashboard the
+  member's `en|th`, spa sites `en` / `ar` + `rtl`. 404s: root `not-found.tsx` per surface (marketing, console, CRM,
+  theme-neutral site look with the spa name; "website isn't available" for unknown spas) + in-shell dashboard 404
+  (`[tenant]/[...missing]` → `[tenant]/not-found.tsx`). Errors: root `error.tsx` + `global-error.tsx` in the surface's
+  look and language, retry + way back, digest only (never message/stack). New EN/TH (`errors.page.*`) and EN/AR site
+  strings need native review.
+- ✅ **F25. CI hardening.** CI job `guards` (parallel to `check`; `promote` needs both): `pnpm db:check-drift` (fails when
+  `pnpm db:generate` would write a migration), the migration-journal tests, `pnpm audit --prod --audit-level=high`
+  (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review date each); `codeql.yml` (v3,
+  security-extended; deploy-branch pushes, PRs, weekly); `.github/dependabot.yml` (npm + actions weekly, minor/patch
+  grouped, stack-pin majors / 0.x minors held). Fixed on the way: `@modelcontextprotocol/sdk` 1.30.1 → 1.31.0
+  (GHSA-6qxp-vccf-f47h, high). No migration.
+- ✅ **F26. Trusted client IP** (G6). Every IP read goes through `@spa/core` `clientIpFrom` (`Cf-Connecting-Ip` only,
+  validated; a guard test bans direct header reads); limits bucket IPv6 by /64 (`ipRateLimitKey`, same as Better Auth,
+  which now reads only that header). Caddy: Cloudflare ranges (`cloudflare-ips.sh` + weekly workflow) with strict mode,
+  `Cf-Connecting-Ip` the only client-IP header, X-Real-Ip / True-Client-Ip / Do-Connecting-Ip stripped;
+  `test-caddy-ip.sh` (CI) proves direct hits can't forge it. Bug fixed: deploys never applied Caddyfile edits
+  (bind-mounted file, hard reset swaps the inode) — `update.sh` `caddy_sync` restarts caddy when it changed. No migration.
+- ✅ **F27. Intake/waiver PDFs stored.** Every signed intake renders a PDF server-side (pdfkit, embedded OFL subsets of
+  DM Sans / Noto Sans Thai / Noto Naskh Arabic; logo + name, answers, consent, signature, submission id + record
+  SHA-256), stored as a private file (clients.view); Download / Regenerate on the submission page, PDF icon on the
+  profile, zip in Settings → Data; removed by client erase and tenant purge. Migration 0039_intake_pdf_outbox_assign.
+- ✅ **F28. Outbox assignment.** "Assigned to" per message (active members with marketing.send), Mine / Unassigned / All
+  filter, bulk assign, the assignee's own sidebar badge, audit per change, optional round-robin auto-assign among
+  receptionists on shift (Automations, off by default; worker every minute). Click-to-send only. Migration 0039.
+- ✅ **F29. Studio editor autosave + editing lock.** Autosave ~2 s after the last change and on blur / tab hidden, with
+  the edit stamp (never overwrites silently: "Changed elsewhere (Claude or another editor)" → Reload / Keep mine = an
+  audited overwrite); status line Saved / Saving… / Offline; an unsaved local copy per spa + page (localStorage) is
+  offered back after a crash. Soft lock per page (`site_page_locks`): taken on open, 30 s heartbeat, freed 2 min after
+  the last beat; others open view-only ("… is editing this page — view only / Take over"; take-over audited
+  `site.page.lock_taken_over`). Editor saves, publish, version restore, Ask AI and Claude MCP ops refuse a page locked
+  by someone else. **Decisions:** the lock is per user (two tabs of one super-admin share it; stamps guard those);
+  theme ops and new pages aren't page-locked; autosaves audit once per page + editor per 10 min (manual saves /
+  overwrites always). Migration 0040_site_page_locks.
+- ✅ **F30. Dashboard "Ask AI" for staff** (Premium `ai`). Top-bar drawer (SpaShell, EN + TH, answers in the member's
+  UI language) for `dashboard.view`; Standard sees the upsell. Agent `staff_assistant` (seeded `ai_model_config` row,
+  Seed 2.0 lite) via runToolLoop → runChat (plan, kill switches, per-tenant budget, ai_usage per step) with READ-ONLY
+  tools over @spa/services in `withTenant`, each re-checking permissions + branch scope: bookings (calendar.view; own
+  only without calendar.manage), revenue (reports.view + dashboard.revenue), top treatments, lapsed clients
   (clients.view), shifts (staff.view), WhatsApp click-to-send draft (marketing.send + clients.phone, consent rules).
   Deep links + wa.me drafts are built server-side, never by the model. Caps: 6 tool calls / 5 model calls per
-  question, 6-turn history, 30 questions/h + 150/day per member. Audit `ai.assistant.asked` (question ≤200 chars,
-  tools, denied, outcome, cost — never the answer). No migration. Details: CODEMAP "Ask AI (F30)".
-
-- ✅ **F17. Google Book button + Search Console** (Premium 'marketing'). Shipped 2026-10-10: Google card → "Book
-  button on Google" sets/updates/removes the location's Place Actions APPOINTMENT link (preferred) →
-  `{site}/book?src=google` (owner spec: F13 attribution `google`); other providers' links untouched; worker
-  `gbp-site-sync` (10 min) re-points it when the address changes, failures retried every 6 h. "Search Console":
-  sitemap queued on every publish (sent ~2 min after the last) + "Send sitemap"; picks an owned/full property covering
-  the address (URL prefix or `sc-domain:`), custom domain without one → `sites.add` + "verify it", free address →
-  "no access" (platform marketing property = owner step). Errors stored as codes (`api_disabled`, `scope`, …) shown in
-  EN/TH. Connect now asks for `business.manage` + `webmasters`. Owner steps: deploy/droplet/README.md "Google".
-- ✅ **F18. Instagram reels, stories, carousels + private replies** (Premium). Shipped 2026-10-10: post "Format" sheet
-  (feed / reel / story / carousel, 1–10 https image/video links); publisher builds the containers (REELS with
-  `share_to_feed` + optional cover, STORIES without caption, carousel children `is_carousel_item` then CAROUSEL),
-  polls status; a video still processing is parked (`social_posts.meta` container ids, "Processing video") and the
-  5-minute job publishes the same container. Comment threads get "Reply privately": one DM per comment within 7 days
-  (Private Replies API, `kind = private_reply` in the thread, claimed so two staff can't both send), "Draft with AI"
-  fills the box through the gateway (`comment_agent`, budget/kill switch); staff always press Send. Migration 0042
-  (`conversation_messages.kind`, `social_posts.meta`).
-- ✅ **F19. Facebook Page connect** (Premium). Shipped 2026-10-10: Facebook Login for Business (config id
-  `META_FB_CONFIG_ID` or scope list) → pending row with the encrypted long-lived user token → Page picker (shows the
-  linked Instagram account) → Page token stored encrypted (user token deleted), app installed on the Page; card shows
-  Page + IG account, data-access expiry warning (14 days), expired state, disconnect (any plan). Daily token check
-  (`debug_token`). A Page-linked IG account is used for publishing / private replies / replies when there's no
-  Instagram Login connection (graph.facebook.com) and its comment webhooks reach the spa. Owner steps (app review
-  permissions, redirect URI): deploy/droplet/README.md "Meta".
-
-### Shipped (F15–F30 batch)
-- ✅ **F15 — gift vouchers with QR.** Shipped 2026-10-10 (Premium `marketing`): Packages → Gift cards → "Voucher"
-  (`/{slug}/vouchers/{id}`, pos.use or services.manage): HTML print view A6 / A5 (spa logo + name, amount or a chosen
-  treatment, recipient + message as typed, code, expiry, EN + AR labels), server-side SVG QR (`qrcode` pinned 1.5.4,
-  no external service) → public check page `/voucher/{token}` on the spa's site (free address or custom domain;
-  status, balance, expiry, treatment, code's last 4 only; no buyer/recipient; noindex, no-referrer; 30 checks / 10 min
-  + 200 / day per IP; token kept out of analytics). Token = `gift_cards.check_token` (random, not the code), so the
-  link alone can't be spent. WhatsApp share = click-to-send link (recipient's mobile, else the buyer's; numbers only
-  for phone roles). Redemption stays in POS: type the code or scan the QR (scanner types the URL → resolved to the
-  card). Standard: "Premium" label in the list, upsell page on the route; the public check keeps working after a
-  downgrade (vouchers already handed out). Migration 0042.
-- ✅ **F15 — automatic review / birthday / win-back drafts.** Shipped 2026-10-10: three automation switches
-  (`reviewRequests`, `birthdayMessages`, `winbackMessages`; **off by default**, Premium `marketing` via
-  `AUTOMATION_FEATURE` → `automationOnSql`, so Standard spas never run them); hourly worker `client-drafts` queues
-  WhatsApp drafts into the outbox (click-to-send; F28 assignment / auto-assign apply). Rules: marketing consent
-  (mobile, not opted out / blocklisted / `no-marketing`, re-checked at send time like campaigns), quiet hours (Dubai,
-  default 21:00–10:00: due time moves to their end), caps (review: once per booking, 1 per client / 90 days, visits
-  checked out ≤ 48 h ago, needs the spa's review link; birthday: 1 per 300 days; win-back: lapsed N–365 days (N
-  default 60), no booking ahead, once per absence, ≤ 25 per spa per day; birthday + win-back skip a client another
-  marketing message reached within 7 days, and campaigns now count these drafts for their 7-day cap). Timing card on
-  Automations (quiet hours, review link, review delay, win-back days); texts EN + AR per spa in WhatsApp → Templates
-  (birthday / win-back defaults now end with the booking link). "Thank-you & review requests" switch renamed
-  "Thank-you messages" (review requests have their own switch).
-- ✅ **F16. QR posters for reception + hotel partners.** Shipped 2026-10-10 (Premium `marketing`, menu Marketing →
-  QR posters, `marketing.campaigns`): printable A4 / A5 poster (spa logo + name, EN + AR, booking QR) for the
-  reception (`/book?src=qr`, F13 attribution `qr`) or a partner (`booking_partners`: name as typed + 6-char code →
-  `&partner={code}`); t.js + the booking page carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or
-  paused codes ignored). Partner table: bookings all-time / 30 days / completed / latest (cancelled excluded) +
-  "Reception poster" row (QR without partner); pause / resume (audited). Booking detail shows "Online · QR code ·
-  {partner}". Migration 0042.
-- ✅ **F23. Slug rename with 301 from the old slug.** Shipped 2026-10-10: console spa page → "Web address" card
-  (super-admin + 2FA; same rules as Apply: format, reserved names, live spa, pending application, plus previous
-  addresses). Old slug → `tenant_slug_history` (platform-only table, migration 0042); `{old}.{root}` on every platform
-  domain, `/s/{old}/…` and `app/{old}/…` answer **301** to the new slug with path + query (proxy, GET/HEAD; 5-min
-  private browser cache); Caddy's TLS ask allows the old host. **Decision: cooling period 12 months**
-  (`SLUG_COOLING_MONTHS`) — only the same spa may take an old address back meanwhile; afterwards another spa may claim
-  it (the history row goes, redirects stop), an unclaimed old address keeps redirecting. Chains resolve to the current
-  slug. Audit `platform.tenant.slug_renamed` {from, to, reservedUntil}. Every slug URL is generated per request
-  (publicSiteUrl, canonical/hreflang, sitemaps, PWA manifest, GBP/campaign booking links); stored copies (sent
-  messages, Google posts, widget snippets, notification links ≤ 90 days) reach the new address through the 301. An
-  installed dashboard app keeps opening via the redirect; reinstall from the new address for the new app id.
-- ✅ **F24. i18n error / 404 / global-error pages + `<html lang/dir>` per surface.** Shipped 2026-10-10: root layout
-  sets `lang`/`dir`/`data-surface` from the proxy's rewrite (`x-internal-path`, `server/surface.ts`): marketing +
-  console `en`, dashboard the member's `en|th`, spa sites `en` / `ar` + `rtl` (`?lang=ar`); CSP nonce read kept.
-  404s: root `not-found.tsx` per surface (marketing look + home/contact; console look + console home; CRM look +
-  dashboard or sign-in; theme-neutral site look with the spa name + its home, "website isn't available" for unknown
-  spas) and an in-shell 404 for unknown dashboard paths (`[tenant]/[...missing]` → `[tenant]/not-found.tsx`). Errors:
-  root `error.tsx` + `global-error.tsx` in the surface's look and language (global-error guesses the surface from the
-  page), retry + way back, digest only (never message/stack). New EN/TH (`errors.page.*`) and EN/AR site strings
-  need native review.
-
-### Remaining backlog (Website Studio items)
-- ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after
-  the last change and on blur / tab hidden, with the edit stamp (never overwrites silently: "Changed elsewhere
-  (Claude or another editor)" → Reload / Keep mine, an audited overwrite); status line "Saved · just now / Saving… /
-  Offline – changes kept locally"; an unsaved local copy per spa + page (localStorage) is offered back after a crash.
-  Soft lock per page (`site_page_locks`, migration 0037): taken on open, 30 s heartbeat, frees itself 2 min after the
-  last beat; others open view-only ("Ahmed is editing this page — view only / Take over"; take-over audited
-  `site.page.lock_taken_over`, the previous holder turns view-only on its next save/heartbeat). Editor saves, publish,
-  version restore, Ask AI and the Claude MCP ops refuse a page locked by someone else with the holder's name.
-  **Decisions:** the lock is per user (two tabs of the same super-admin share it; stamps guard those); theme ops and
-  new pages aren't page-locked; autosaves audit once per page + editor per 10 min (manual saves / overwrites always).
-- ✅ **F32. Studio import of a spa's existing website.** Shipped 2026-10-09: Website Studio → Pages → "Import from
-  website" (URL, new page address, name; optional "Arrange the content with AI"). Server crawl: robots.txt per origin
-  (RFC 9309; 5xx/unreachable = don't crawl), start page + ≤ 4 same-site pages that look like treatments / prices /
-  contact / about, 2 MB per page, 30 s budget; SSRF guard on every hop (http/https, ports 80/443, no credentials,
-  every resolved address public, connection pinned to the checked IP, ≤ 4 redirects, size cap after decompression).
-  Extracts title/description/headline, sections, services + prices + durations (tables, lists, JSON-LD offers,
-  Arabic digits/currency), hours, phone/WhatsApp/email/address/Instagram, photos. Preview = dry run of site-edit ops
-  (new hidden draft page: Hero, Section+Heading+RichText per section, "Treatments & prices", "Visit us", Gallery);
-  Apply downloads the used photos (≤ 8 MB, magic-byte image types, re-encoded) into the media library (tags
-  `import` + host) and adds the page in one transaction; never publishes; audited `site.import.previewed` /
+  question, 6-turn history, 30/h + 150/day per member. Audit `ai.assistant.asked` (question ≤ 200 chars, tools,
+  outcome, cost — never the answer). No migration (seed row). CODEMAP "Ask AI (F30)".
+- ✅ **F31. Extra KPIs.** Reports page (`/{slug}/reports`, Finance menu; `reports.view`, RevPATH needs
+  `dashboard.revenue`, liability `accounting.view`): rebooking rate (30/60/90 days, by therapist), retention cohorts
+  (12 months × +1…+6), RevPATH (net treatment revenue ex VAT ÷ therapist shift hours, time clock when no shifts), room
+  utilisation, outstanding prepaid liability as of a date vs ledger 2100/2110 with any difference; branch + period
+  picker, Excel export (.xlsx, R10); console Performance detail shows the whole-spa aggregates. CODEMAP "Reports (F31)".
+  Migration 0038_kpi_indexes (two indexes).
+- ✅ **F32. Studio import of a spa's existing website.** Website Studio → Pages → "Import from website" (URL, page
+  address, name; optional "Arrange the content with AI"). Crawl: robots.txt per origin (RFC 9309; 5xx/unreachable =
+  don't crawl), start page + ≤ 4 same-site pages (treatments / prices / contact / about), 2 MB per page, 30 s budget;
+  SSRF guard on every hop (http/https, ports 80/443, no credentials, every resolved address public, connection pinned
+  to the checked IP, ≤ 4 redirects, size cap after decompression). Extracts text, services + prices + durations
+  (tables, lists, JSON-LD offers, Arabic digits/currency), hours, contacts, photos. Preview = dry run of site-edit ops
+  (new hidden draft page); Apply downloads the used photos (≤ 8 MB, magic-byte checked, re-encoded) into the media
+  library and adds the page in one transaction; never publishes; audited `site.import.previewed` /
   `site.page.imported`. AI mapping = `site_editor` agent (`planSiteImport`, budget + kill switch; falls back to the
-  standard layout), limited to `SITE_AI_EDITOR_EMAILS` accounts. **TODO(plans):** gate AI mapping on the Premium
-  'ai' entitlement once the plans branch exposes a check (`aiEntitled` hook in `website/import-actions.ts`).
-
-
-### Remaining backlog F16–F32 (owner 2026-10-09: "after F15 start the others till end — finish everything")
-Same reminder rule. Batches run after the Premium/Standard plans land (gating). Batch A = Premium 'marketing'/'ai' gated.
-- **A:** F16 QR poster (reception/hotel partners) · F17 GBP "Book" button (Place Actions) + Search Console submit ·
-  F18 Instagram reels/stories/carousels + private replies to comments · F19 Facebook Page connect flow.
-- **B:** F20 feature flags + announcements to spas · F21 console tenant usage/last-activity columns · F22 billing
-  auto-transitions (overdue → grace → read-only, owner-tunable) · F23 slug rename with 301 from the old slug ·
-  F24 i18n error/404/global-error pages + correct `lang`/`dir` on <html> per surface · F25 CI schema-drift check,
-  dependency audit, CodeQL · F26 G6 confirmation: rate limits keyed on the trusted client IP everywhere (Caddy trust).
-- **C:** F27 intake/waiver PDFs stored · F28 outbox assignment to a receptionist · F29 editor autosave + editing lock ·
-  F30 dashboard "Ask AI" assistant (Premium) · F31 extra KPIs (rebooking rate, retention cohorts, revenue per treatment
-  hour, room utilisation, package/gift-card liability) · F32 Studio import of a spa's existing website content.
+  standard layout), `SITE_AI_EDITOR_EMAILS` only, no plan gate (Studio AI runs on every plan, §18.8).
 - Not doable without Google partner approval: Reserve with Google (stays "Coming next").
 - Open owner question: monthly plans issue all 12 invoices at acceptance (current) vs one per month — default: keep current.
+
+**Owner steps after release** (details in deploy/droplet/README.md; none blocks the release):
+- Turnstile site + secret keys: console Company → "Bot check" or env (F9/F10) — README "Bot check on public forms".
+- Resend API key: console Settings → Email — README "Staff email (Resend)".
+- Make sure ask@spamanagement.co receives mail (mailbox/forwarding) — §18.4.
+- Google Cloud: enable My Business Place Actions API + Google Search Console API, add the `webmasters` scope to the
+  consent screen, register each domain's OAuth callback; spas connected before F17 reconnect — README "Google".
+- Search Console: add `sc-domain:spamanagement.co` and submit the marketing sitemap — README "Google".
+- Meta: Facebook Login for Business configuration (optional `META_FB_CONFIG_ID`), app review for the new permissions,
+  redirect URI, Instagram comments webhook field — README "Meta".
+- GitHub: if CodeQL "default setup" is on, switch to advanced so `codeql.yml` runs (a private repo needs GitHub Code
+  Security); turn on Dependabot alerts.
+- When the weekly "Cloudflare IP ranges" workflow fails: `deploy/droplet/cloudflare-ips.sh --write` and commit — README
+  "Client IP (rate limits, audit IPs)".
+- Native review of the new TH / AR strings (F20 announcements, F24 error pages, F15–F32 screens).
 
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
@@ -1433,26 +1391,11 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   components/marketing/legal-config.ts — company 1997labs, Dubai, UAE (owner 2026-10-09); owner reviews text; Terms point to /pricing for fees; URLs in deploy/droplet/README.md OAuth step).
 - **Important:** ✅ G6 rate limits trust spoofable `cf-connecting-ip` (no trusted_proxies / origin lock) (F26) · ✅ G7 deploy doesn't wait for CI; no pre-migrate dump / rollback ·
   ✅ G8 no worker heartbeat, uptime, disk alerts; Docker log rotation · ✅ G9 missing RESEND key prints reset links to logs (exposed in /_status/runtime.txt) ·
-  ✅ G10 worker holds superuser URL (F11) · ✅ G11 no script-src CSP / security headers (F10) · G12 no tenant purge / client erase · G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices ·
-  G10 worker holds superuser URL · ✅ G11 no script-src CSP / security headers (F10) · G12 no tenant purge / client erase · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
-  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  ✅ G17 no Turnstile on public booking (F9) · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
-  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  ✅ G17 no Turnstile on public booking (F9) · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
-  ✅ G20 source attribution (ig/gbp/qr) not carried to bookings (F13) · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
-  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
-  ✅ G17 no Turnstile on public booking (F9) · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · G19 no sitemap/robots/JSON-LD/og:image ·
-  ✅ G20 source attribution (ig/gbp/qr) not carried to bookings (F13) · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
-  G17 no Turnstile on public booking · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
-  G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · G16 no full tax invoice (customer name + TRN) ·
-  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
-  G20 source attribution (ig/gbp/qr) not carried to bookings · ✅ G21 auto-confirm returning clients · G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
-  G14 therapist role view-only (no check-in/out, own commission/tips) · G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
-  G17 no Turnstile on public booking · G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image ·
-  G20 source attribution (ig/gbp/qr) not carried to bookings · G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · G23 owner 2FA default off.
-- **Nice-to-have:** gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
+  ✅ G10 worker holds superuser URL (F11) · ✅ G11 no script-src CSP / security headers (F10) · ✅ G12 no tenant purge / client erase (§18.2) · ✅ G13 untested: 2FA, reset, impersonation, files access, commissions reversal, platform invoices (F14; invoices = billing/applications.spec) ·
+  ✅ G14 therapist role view-only (no check-in/out, own commission/tips) · ✅ G15 memberships not sellable/redeemable · ✅ G16 no full tax invoice (customer name + TRN) ·
+  ✅ G17 no Turnstile on public booking (F9) · ✅ G18 AI spend: no per-tenant usage/budget/kill switch, owner not told at cap · ✅ G19 no sitemap/robots/JSON-LD/og:image (F12) ·
+  ✅ G20 source attribution (ig/gbp/qr) not carried to bookings (F13) · ✅ G21 auto-confirm returning clients · ✅ G22 multi-branch UI (add branch, assign members) · ✅ G23 owner 2FA default off.
+- **Nice-to-have** (became backlog F15–F32, §17): gift-card vouchers (QR), waiver PDFs, outbox assignment, feature flags/announcements, tenant usage columns, billing auto-transitions, slug 301,
   missing site blocks (map, video, packages, reviews, IG feed, blog, enquiry form), editor autosave/lock, Studio B–E, QR poster, GBP Book button/Search Console,
   IG reels/stories, FB Page connect, Ask-AI, automatic review/birthday/rebook/win-back messages, extra KPIs, i18n of error/404 pages + `lang` attrs, ✅ CI schema-drift/audit/CodeQL (F25).
 
@@ -1873,7 +1816,7 @@ Owner decisions — **replace** the 2026-10-08 "Be Relax CRM design (blue)" look
   horizontal scroll. e2e: `marketing-crm.spec`.
 - **Implemented (2026-10-09, plans + entitlements + overrides + pricing page; the home page is a separate task):**
   - Plans by **code** (`premium`, `standard`, `legacy-yearly`; `PLAN_CODES` in `@spa/core`): seed `defaultPlans` +
-    migration 0036 (hand-written data step: the old `standard` yearly row becomes `legacy-yearly`, inactive, same id,
+    migration 0037_plans_premium_standard (hand-written data step: the old `standard` yearly row becomes `legacy-yearly`, inactive, same id,
     every feature → existing subscriptions untouched; Premium/Standard inserted). `price_aed` stays the 12-month
     price (36,000 / 24,000) billed as 12 monthly invoices (`billing_interval = month`); shown per month everywhere.
   - **Entitlements** = one source of truth in `packages/core/src/plans.ts`: features `ai` (AI receptionist, Instagram
