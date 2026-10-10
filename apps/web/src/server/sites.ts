@@ -4,7 +4,10 @@ import { LRUCache } from 'lru-cache'
 import { canonicalUrls } from '@/server/origin'
 
 type SiteTenant = { id: string; slug: string; name: string; status: string }
-const cache = new LRUCache<string, SiteTenant | 'missing'>({ max: 5000, ttl: 60_000 })
+// globalThis: the console's rename / domain actions must clear the same cache the site pages read (F23).
+const g = globalThis as unknown as { __spaSiteHosts?: LRUCache<string, SiteTenant | 'missing'> }
+if (!g.__spaSiteHosts) g.__spaSiteHosts = new LRUCache({ max: 5000, ttl: 60_000 })
+const cache = g.__spaSiteHosts
 
 /** Resolves a tenant for a public site request (subdomain slug or verified custom domain), cached 60 s. */
 export async function resolveSiteTenant(
@@ -38,6 +41,11 @@ export async function resolveSiteTenant(
 /** Drops a custom hostname from the host cache after its domain changes (activate, deactivate, remove). */
 export function invalidateSiteHost(hostname: string) {
   cache.delete(`h:${hostname.toLowerCase()}`)
+}
+
+/** After a slug rename (F23, rare): every cached entry may carry the old slug (custom domains too). */
+export function forgetSiteTenants() {
+  cache.clear()
 }
 
 /** The spa's public address: its primary active custom domain, else the free subdomain (or /s/{slug}). */
