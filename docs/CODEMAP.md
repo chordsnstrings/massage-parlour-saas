@@ -109,10 +109,27 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      `/s/{checkSlug-valid slug}` only; `hostRoutedUrl`: target host = fixed label or that
      validated slug on the canonical root, never other request input; `canonicalScheme` = APP_URL's) →
      `packages/core/test/hosts.test.ts`; e2e `path-redirects.spec` + a host-mode step in `slug-rename.spec`. Never
-     redirected (not proxied, served on every host incl. the old one): `/api/*` (OAuth callbacks, Meta webhook /
+     redirected (not rewritten, served on every platform host incl. the old one; R20's platform-only 404 aside): `/api/*` (OAuth callbacks, Meta webhook /
      deauthorize / data-deletion, `/api/mcp`, `/api/health`, Caddy ask), `/files/*`, `/.well-known/*`, `_next`, static
      files (`/widget.js`); `/_status/*` is Caddy's (`SITE_HOST`, and the sslip.io fallback). Owner steps:
      deploy/droplet/README.md "Move to spamanagement.co".
+   - R20 (own domain only): when a spa has an active **primary** custom domain (not cancelled), every GET/HEAD for its
+     site on the temporary address (`{slug}.{any platform root}`, `/s/{slug}` with path routing; an old `/s/{slug}`
+     path address under host routing too) → 301 to the same path + query on `https://{domain}`, one hop (a renamed
+     slug resolves through `currentSlugFor` first), `cache-control: private, max-age=300`; runs before F23. Kept
+     (served as before): other methods (forms/server actions started there), `/book/embed` (widget iframe; snippets
+     on other sites point at it), `robots.txt` (the host still serves `/book/embed`, so its Disallow must stay readable
+     to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
+     everything the proxy never sees (`/api` incl. the Caddy ask, `/files`, `_next`, `/widget.js`, `/t.js`).
+     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio/editor previews + preview-share links
+     live on the app host (`/{slug}/website/preview`, `/website/preview?token=`), never on the temporary address.
+     Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;
+     core/test/hosts.test.ts); lookup `server/own-domain.ts` `ownDomainTarget` (one slug → hostname map per process,
+     30 s TTL for the worker's checks; `forgetOwnDomains()` from sites.ts `invalidateSiteHost`/`forgetSiteTenants` and
+     the spa "Make primary" action). Pending/failed domains never redirect. e2e `own-domain-redirect.spec`.
+   - R20: a custom-domain host never answers platform-only endpoints (core `platformOnlyPath`: `/api/auth`,
+     `/api/mcp`, `/api/integrations`, `/.well-known` — extra matcher entries → 404 there, `NextResponse.next()` on
+     platform hosts, no rewrite/page headers). Its pages are always `/domain/{host}/…` (no /login, /dashboard, …).
    - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
      lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
@@ -145,7 +162,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    `setLocaleAction` (updateUser + cookie + `refresh()`). `lib/utils.ts` `formatAed/Date/DateTime` = English `fmt`.
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
-     shared, stored or sent. Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
+     shared, stored or sent. Links to a spa's site that are shown or sent use `publicSiteUrl` (sites.ts; services
+     `publicSiteBase`/`spaSiteUrl` in the worker) — own domain once primary (R20), so we never link to a redirect;
+     `canonicalUrls().site()` only where the free address itself is meant (Domains page, rename, applications,
+     `/files` origins). Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
      (production: the old `134-209-145-162.sslip.io`); droplet `APP_URL`/`ADMIN_URL`/`ROUTING` come from site.env.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
@@ -281,8 +301,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   digest is shown. `<html lang/dir>`: marketing + console en, dashboard `getLocale()`, sites `?lang=ar` → ar/rtl.
 - **Slug rename (F23)**: console spa page "Web address" → `renameSlugAction` → services `renameTenantSlug` (checks as
   Apply + `claimSlugTx`; `provisionTenantTx` claims too; `slugStatus` adds `previous`) → audit
-  `platform.tenant.slug_renamed` → clears the redirect map, `resolveSiteTenant` cache and PWA slug caches
-  (globalThis-backed so the action reaches the bundles that read them).
+  `platform.tenant.slug_renamed` → clears the redirect map, `resolveSiteTenant` cache, the R20 own-domain map and PWA
+  slug caches (globalThis-backed so the action reaches the bundles that read them).
 - **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
   receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
   "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=`.
@@ -995,9 +1015,10 @@ i18n namespace `automations`.
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
   - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
     (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
-  - Host routing by default; set `E2E_ROUTING=path` for path routing. Verified 2026-10-10: in path mode the
-    super-admin helper fails (its verify link `${app}/api/auth/verify-email` is `/app/api/…`, a dashboard path) and
-    same-host F23 redirects come back with a relative Location (slug-rename.spec expects absolute); CI runs host mode.
+  - Host routing by default; set `E2E_ROUTING=path` for path routing (needs a build with `NEXT_PUBLIC_ROUTING=path`).
+    The super-admin helper works in both since R20 (verify link on the bare host; one-host 2FA landing → console).
+    Still path-mode only: same-host F23 redirects come back with a relative Location (slug-rename.spec expects
+    absolute); CI runs host mode.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin; `createLogin` (login only, browser
     sign-up) + `addMember(slug, email, role)` for staff; `consoleEmailKey(page, key|null)` routes staff mail to the

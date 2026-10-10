@@ -206,6 +206,8 @@ export async function signInPlatformAdmin(page: Page) {
   const signIn = async () => {
     await page.goto(`${admin}/login`)
     if (await overview.isVisible()) return 'in' as const
+    // Path routing (one host): the verification link already signed this browser in, so the console asks for 2FA.
+    if (page.url().includes('admin2fa=1')) return 'enrol' as const
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
     await page.getByRole('button', { name: 'Sign in' }).click()
@@ -232,6 +234,11 @@ export async function signInPlatformAdmin(page: Page) {
     await page.goto(`${admin}/`)
   } else if (outcome === 'twoFactor') {
     await passTwoFactor(page, email)
+    // Path routing: the two-step page lands on the dashboard root; the console is a path away.
+    if (PATH) {
+      await page.waitForURL((u) => !u.pathname.includes('two-factor'))
+      await page.goto(`${admin}/`)
+    }
   }
   await expect(overview).toBeVisible()
 }
