@@ -1,6 +1,6 @@
 // E2E only (RESEND_E2E_FAKE, set by playwright.config.ts, never in deploy env): an in-memory Resend domains API
 // behind the real client (`resendDomains`), so CI never calls Resend. Keys containing "SendOnly" act as
-// sending-access keys. Verify flips a domain straight to verified (real Resend: pending first, minutes later).
+// sending-access keys. Verify sets pending (as Resend does); the next read finds it verified (real Resend: minutes).
 type FakeDomain = { id: string; name: string; region: string; status: string; created_at: string }
 const g = globalThis as { __resendFakeDomains?: Map<string, FakeDomain> }
 
@@ -60,6 +60,8 @@ export async function fakeResendFetch(url: string, init: RequestInit): Promise<R
     })
   const { pathname } = new URL(url)
   const method = init.method ?? 'GET'
+  // The "background" verification started by the last verify call is done.
+  for (const d of domains.values()) if (d.status === 'pending') d.status = 'verified'
   if (pathname === '/domains' && method === 'GET')
     return json(200, { object: 'list', has_more: false, data: [...domains.values()] })
   if (pathname === '/domains' && method === 'POST') {
@@ -78,7 +80,7 @@ export async function fakeResendFetch(url: string, init: RequestInit): Promise<R
   const d = m?.[1] ? domains.get(m[1]) : undefined
   if (!d) return json(404, { statusCode: 404, name: 'not_found', message: 'Domain not found' })
   if (m?.[2] && method === 'POST') {
-    d.status = 'verified'
+    d.status = 'pending'
     return json(200, { object: 'domain', id: d.id })
   }
   return json(200, view(d))

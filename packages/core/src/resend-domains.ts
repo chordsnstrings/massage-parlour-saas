@@ -6,10 +6,12 @@
 //   https://resend.com/docs/api-reference/domains/list-domains   GET /domains?limit=1..100&after=<id> → {data, has_more}
 //   https://resend.com/docs/api-reference/domains/get-domain     GET /domains/{id} → records [{record, name, type,
 //     value, ttl: "Auto", status, priority (MX only)}]; name is usually relative ("send"), sometimes the full name
-//   https://resend.com/docs/api-reference/domains/verify-domain  POST /domains/{id}/verify (async; pending meanwhile)
+//   https://resend.com/docs/api-reference/domains/verify-domain  POST /domains/{id}/verify (async; sets pending
+//     "regardless of its current status" while it runs)
 //   https://resend.com/docs/dashboard/domains/manage-domains     domain statuses (RESEND_DOMAIN_STATUSES)
 //   https://resend.com/docs/api-reference/errors                 {statusCode, name, message}; 401 restricted_api_key =
-//     "restricted to only send emails" (sending-access key), 403 restricted_api_key = key not active
+//     "restricted to only send emails" (sending-access key), 403 restricted_api_key = key not active. Not listed
+//     there: a wrong or deleted key gets 400 validation_error "API key is invalid" (live API, 2026-10-10)
 //   https://resend.com/docs/api-reference/introduction           User-Agent required; 10 requests/s per team
 //   https://resend.com/docs/api-reference/api-keys/create-api-key  full_access vs sending_access ("can only send")
 import { PLATFORM_NAME } from './email'
@@ -77,7 +79,7 @@ export class ResendDomainError extends Error {
 
 const MESSAGES: Record<Exclude<ResendDomainErrorCode, 'failed'>, string> = {
   restricted_key:
-    'This Resend key has sending access only; setting up the domain needs a full-access key. Paste one in "Full-access key for setup" (used for this request only, never stored).',
+    'This Resend key has sending access only; the domain setup and checks need a full-access key. Paste one in "Full-access key for setup" (sent only with these requests, never stored).',
   invalid_key: 'Resend refused the API key (invalid, revoked or not active). Check it in Resend → API Keys.',
   rate_limited: 'Resend is rate-limiting requests. Wait a few seconds and try again.',
   unreachable: 'Resend could not be reached or had a problem. Try again in a minute.',
@@ -95,7 +97,11 @@ function resendError(status: number, body: Record<string, unknown> | null, apiKe
     name === 'invalid_permission'
   )
     return err('restricted_key')
-  if (status === 401 || /^(invalid|missing|restricted|suspended)_api_key$|^invalid_access$/.test(name))
+  if (
+    status === 401 ||
+    /^(invalid|missing|restricted|suspended)_api_key$|^invalid_access$/.test(name) ||
+    (name === 'validation_error' && /\bapi key\b/i.test(message))
+  )
     return err('invalid_key')
   if (status === 429 || name === 'rate_limit_exceeded') return err('rate_limited')
   if (/registered already/i.test(message)) return err('domain_taken')
@@ -199,12 +205,18 @@ export async function setUpSendingDomain(
 }
 
 /**
- * "Check verification": asks Resend to verify (async — the answer may still say pending), then reads status +
- * records. Never adds the domain. An already verified domain is only read (nothing to verify).
+ * "Check verification": reads status + records, then asks Resend to (re)verify unless the domain is verified or a
+ * check is still running. Read first: verify sets the domain to pending whatever its status, which would hide the
+ * last result (which records failed). `requested` = a new check was started. Never adds the domain.
  */
-export async function checkSendingDomain(client: ResendDomainsClient, name: string): Promise<SendingDomain> {
+export async function checkSendingDomain(
+  client: ResendDomainsClient,
+  name: string,
+): Promise<{ domain: SendingDomain; requested: boolean }> {
   const found = await client.find(name)
   if (!found) throw err('not_set_up')
-  if (found.status !== 'verified') await client.verify(found.id)
-  return sendingDomainView(await client.get(found.id))
+  const domain = sendingDomainView(await client.get(found.id))
+  const requested = domain.status !== 'verified' && domain.status !== 'pending'
+  if (requested) await client.verify(found.id)
+  return { domain, requested }
 }

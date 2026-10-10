@@ -626,7 +626,8 @@ export async function sendingDomainAction(_p: ActionResult, fd: FormData): Promi
         { domain: d, from: eff.from },
       )
     }
-    const d = await checkSendingDomain(client, domain)
+    // The last finished result (Resend's verify resets the status to pending, so it is read first).
+    const { domain: d, requested } = await checkSendingDomain(client, domain)
     await audit({
       actorUserId: user.id,
       action: 'platform.email.domain_checked',
@@ -635,12 +636,19 @@ export async function sendingDomainAction(_p: ActionResult, fd: FormData): Promi
     return ok(
       d.status === 'verified'
         ? `${domain} is verified`
-        : `Verification requested. Status: ${d.status.replaceAll('_', ' ')}`,
+        : d.status === 'pending'
+          ? 'Resend is still checking the records. Click Check verification again in a minute.'
+          : d.status === 'not_started'
+            ? 'Verification started. Click Check verification again in a minute.'
+            : `Last check: ${d.status.replaceAll('_', ' ')}. Fix the records not marked Verified, then check again${requested ? ' (re-check requested)' : ''}.`,
       { domain: d, from: eff.from },
     )
   } catch (e) {
     if (!(e instanceof ResendDomainError)) throw e
-    return e.code === 'restricted_key' ? fail(e.message, { setupKey: e.message }) : fail(e.message)
+    // Under the setup-key field when that key was the one refused.
+    return e.code === 'restricted_key' || (e.code === 'invalid_key' && parsed.data.setupKey)
+      ? fail(e.message, { setupKey: e.message })
+      : fail(e.message)
   }
 }
 

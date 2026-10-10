@@ -89,7 +89,7 @@ export function SendingDomainSection({
               label="Full-access key for setup"
               name="setupKey"
               className="max-w-md"
-              hint="Used for this one request only: never stored, logged or shown. Create one in Resend → API Keys (Full access) and delete it there when done."
+              hint="Sent only with Set up and Check verification: never stored, logged or shown (paste it again after a reload). Create one in Resend → API Keys (Full access); delete it there once the domain says Verified."
             >
               <Input id="setupKey" name="setupKey" type="password" autoComplete="off" placeholder="re_…" />
             </Field>
@@ -137,12 +137,22 @@ export function SendingDomainSection({
                 className: NARROW,
                 cell: (r) => (
                   <div className="space-y-2">
-                    <div>
-                      <span className="me-2 md:hidden">{r.type}</span>
-                      <code className="font-mono text-[13px]">{r.host}</code>
+                    {/* Phones: the card has no column headers, so label the parts as Namecheap names them. */}
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <span className="md:hidden">
+                        <span className="me-1.5 text-sm font-normal text-muted">Type</span>
+                        {r.type}
+                      </span>
+                      <span>
+                        <span className="me-1.5 text-sm font-normal text-muted md:hidden">Host</span>
+                        <code className="font-mono text-[13px]">{r.host}</code>
+                      </span>
                     </div>
                     {/* Phones: the long value gets the full card width instead of half a row. */}
-                    <div className="font-normal md:hidden">{value(r)}</div>
+                    <div className="space-y-1 font-normal md:hidden">
+                      <div className="text-sm text-muted">Value</div>
+                      {value(r)}
+                    </div>
                   </div>
                 ),
               },

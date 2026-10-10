@@ -119,7 +119,10 @@ test('console sending domain (R18): Namecheap records, verification, one-off ful
   await expect(section.getByTestId('domain-records')).not.toContainText(`_domainkey.${domain}`)
   await expect(rows.nth(0).getByRole('button', { name: 'Copy' })).toBeVisible()
 
-  // Check → Resend verifies → verified, with the sender it applies to.
+  // Check starts Resend's (async) verification; the next check finds it verified, with the sender it applies to.
+  await section.getByRole('button', { name: 'Check verification' }).click()
+  await expect(page.getByText('Verification started.')).toBeVisible()
+  await expect(section.getByTestId('domain-status')).toHaveText('Not started')
   await section.getByRole('button', { name: 'Check verification' }).click()
   await expect(section.getByTestId('domain-status')).toHaveText('Verified')
   await expect(section.getByTestId('domain-verified')).toHaveText(
@@ -144,13 +147,15 @@ test('console sending domain (R18): Namecheap records, verification, one-off ful
     .from(auditLog)
     .where(inArray(auditLog.action, ['platform.email.domain_setup', 'platform.email.domain_checked']))
     .orderBy(desc(auditLog.createdAt))
-    .limit(3)
+    .limit(4)
   expect(audits.map((a) => a.action)).toEqual([
     'platform.email.domain_setup',
     'platform.email.domain_checked',
+    'platform.email.domain_checked',
     'platform.email.domain_setup',
   ])
-  expect(audits[2]?.data).toEqual({ domain, created: true, status: 'not_started' })
+  expect(audits[3]?.data).toEqual({ domain, created: true, status: 'not_started' })
+  expect(audits[2]?.data).toEqual({ domain, status: 'not_started' })
   expect(audits[1]?.data).toEqual({ domain, status: 'verified' })
   expect(audits[0]?.data).toEqual({ domain, created: false, status: 'verified' })
   expect(JSON.stringify(audits)).not.toMatch(/re_|ABCD|EFGH/)

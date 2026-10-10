@@ -1030,12 +1030,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone).
   **Built (2026-10-10):** "Sending domain" section in the Email card. Domain = `emailDomain(effective From)`. Set up:
   effective key (console, then env) → Resend list (find) or create (region `eu-west-1`, on create only) → get → records.
-  Check: verify (async; skipped when already verified) → get. Records table for Namecheap → Advanced DNS: Type | Host
+  Check: get → verify (async; skipped when verified or still pending), showing the last finished result + records. Records table for Namecheap → Advanced DNS: Type | Host
   (relative: `send`, `resend._domainkey`; a full name loses the domain suffix) | Value + Copy | Priority | TTL
   Automatic | status; Resend's domain statuses as a badge; verified → "Sending works … from {From}". MX row warns
   that Custom MX turns off Namecheap Email Forwarding (README Resend step). A sending-access key is refused by the
-  domains API → the section asks for a one-off "Full-access key for setup" (that request only; never stored, logged,
-  audited or returned). No table/migration: records live in the action result. Audit `platform.email.domain_setup`
+  domains API → the section asks for a "Full-access key for setup" (sent only with Set up / Check; never stored,
+  logged, audited or returned). No table/migration: records live in the action result. Audit `platform.email.domain_setup`
   {domain, created, status} / `platform.email.domain_checked` {domain, status}. Details: CODEMAP "Staff email (Resend)".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner

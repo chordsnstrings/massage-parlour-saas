@@ -572,14 +572,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `server/email-settings.ts` registers the cached console source; "Send test email to me" = `sendTestEmailAction`.
   **Sending domain (R18):** client `settings/sending-domain.tsx` → `sendingDomainAction` (intent `setup` | `check`,
   optional one-off `setupKey`): core `resend-domains.ts` against Resend (docs checked 2026-10-10, URLs in its header):
-  setup = list (all pages) → create `{name, region: eu-west-1}` only when missing → get; check = verify (skipped when
-  already verified) → get; never adds on check. Records → Namecheap rows (`namecheapHost`: relative host, `@` for the
+  setup = list (all pages) → create `{name, region: eu-west-1}` only when missing → get; check = get → verify unless
+  verified or pending (read first: verify resets the status to pending, hiding the last result and which records
+  failed) → message names the last result; never adds on check. Records → Namecheap rows (`namecheapHost`: relative host, `@` for the
   apex), rendered from the action result (no table). Errors → plain text (`restricted_key` (401 restricted_api_key /
   invalid_permission) → the section shows "Full-access key for setup" via `fieldErrors.setupKey`; `invalid_key`,
+  (also Resend's live 400 validation_error "API key is invalid"; under the setup field when that key was refused),
   `rate_limited`, `unreachable`, `domain_taken`, `not_set_up`, `failed` = Resend's message with any `re_…` scrubbed).
   The key never reaches the client, an error, a log line or an audit row (`platform.email.domain_setup` {domain,
   created, status}, `platform.email.domain_checked` {domain, status}). E2E: `RESEND_E2E_FAKE` (playwright.config only)
-  swaps in `server/resend-fake.ts` (in-memory Resend behind the real client; "SendOnly" keys = sending access);
+  swaps in `server/resend-fake.ts` (in-memory Resend behind the real client; "SendOnly" keys = sending access; verify → pending, next read verified);
   `email-settings.spec`.
 
 ## Security headers (F10, G11)

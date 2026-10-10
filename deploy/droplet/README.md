@@ -328,9 +328,11 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    - Later, for staff email: add the Resend key (console → Company → Email (Resend)), then **Set up sending domain**
      in the same card: it adds `spamanagement.co` to Resend (or finds it) and lists the records to add in Namecheap
      → Advanced DNS, with the Host as Namecheap wants it (`send`, `resend._domainkey`), Value (Copy), Priority, TTL
-     Automatic. A sending-access key cannot use Resend's domains API: the card then asks for a full-access key for
-     that one request (never stored; delete it in Resend afterwards). Add the records, click **Check verification**
-     until it says Verified, then **Send test email to me**. The default sender is already
+     Automatic. A sending-access key cannot use Resend's domains API: the card then asks for a full-access key; Set up
+     and Check verification both need it (paste it again after a page reload; never stored). Add the records, click
+     **Check verification** (Resend checks in the background, so click it again a minute later) until it says
+     Verified; if it says Failed or Partially …, fix the rows not marked Verified and check again. Delete the
+     full-access key in Resend once the domain says Verified, then **Send test email to me**. The default sender is already
      `spamanagement.co <ask@spamanagement.co>`. **Careful:** Resend's `send` MX record needs Namecheap Mail Settings
      = Custom MX, which switches off Email Forwarding, so `ask@spamanagement.co` stops receiving. Before switching,
      write down the current forwarding MX records (`eforward…registrar-servers.com`) and ask Namecheap support how to

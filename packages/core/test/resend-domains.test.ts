@@ -144,17 +144,39 @@ describe('setUpSendingDomain (R18)', () => {
 })
 
 describe('checkSendingDomain (R18)', () => {
-  it('asks Resend to verify, then reads status + records', async () => {
+  it.each(['not_started', 'failed', 'partially_failed', 'partially_verified', 'temporary_failure'])(
+    '%s: returns that last result (records included), then asks Resend to verify again',
+    async (status) => {
+      const failedRecords = records.map((r, i) => ({ ...r, status: i ? 'verified' : 'failed' }))
+      const { calls, client } = stub({
+        'GET /domains': () => [200, { has_more: false, data: [{ id: 'd-1', name: DOMAIN, status }] }],
+        'GET /domains/d-1': () => [200, { id: 'd-1', name: DOMAIN, status, records: failedRecords }],
+        'POST /domains/d-1/verify': () => [200, { object: 'domain', id: 'd-1' }],
+      })
+      const r = await checkSendingDomain(client, DOMAIN)
+      expect(r).toMatchObject({ requested: true, domain: { status } })
+      expect(r.domain.records[0]?.status).toBe('failed')
+      // Read before verify: verify turns the domain pending and would hide the result.
+      expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`).slice(1)).toEqual([
+        'GET /domains/d-1',
+        'POST /domains/d-1/verify',
+      ])
+    },
+  )
+
+  it('does not start another check while one is still pending', async () => {
     const { calls, client } = stub({
       'GET /domains': () => [
         200,
-        { has_more: false, data: [{ id: 'd-1', name: DOMAIN, status: 'not_started' }] },
+        { has_more: false, data: [{ id: 'd-1', name: DOMAIN, status: 'pending' }] },
       ],
-      'POST /domains/d-1/verify': () => [200, { object: 'domain', id: 'd-1' }],
       'GET /domains/d-1': () => [200, { id: 'd-1', name: DOMAIN, status: 'pending', records }],
     })
-    expect((await checkSendingDomain(client, DOMAIN)).status).toBe('pending')
-    expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toContain('POST /domains/d-1/verify')
+    expect(await checkSendingDomain(client, DOMAIN)).toMatchObject({
+      requested: false,
+      domain: { status: 'pending' },
+    })
+    expect(calls.some((c) => c.method === 'POST')).toBe(false)
   })
 
   it('only reads an already verified domain, and never adds a missing one', async () => {
@@ -165,7 +187,10 @@ describe('checkSendingDomain (R18)', () => {
       ],
       'GET /domains/d-1': () => [200, { id: 'd-1', name: DOMAIN, status: 'verified', records }],
     })
-    expect((await checkSendingDomain(verified.client, DOMAIN)).status).toBe('verified')
+    expect(await checkSendingDomain(verified.client, DOMAIN)).toMatchObject({
+      requested: false,
+      domain: { status: 'verified' },
+    })
     expect(verified.calls.some((c) => c.method === 'POST')).toBe(false)
     const missing = stub({ 'GET /domains': () => [200, { has_more: false, data: [] }] })
     expect((await errorOf(checkSendingDomain(missing.client, DOMAIN))).code).toBe('not_set_up')
@@ -190,7 +215,8 @@ describe('Resend errors → plain messages without the key', () => {
       'restricted_key',
     ],
     [403, { statusCode: 403, name: 'restricted_api_key', message: 'API key is not active' }, 'invalid_key'],
-    [400, { statusCode: 400, name: 'invalid_api_key', message: 'API key is invalid' }, 'invalid_key'],
+    // Resend's live answer for a wrong or deleted key (not on its errors page).
+    [400, { statusCode: 400, name: 'validation_error', message: 'API key is invalid' }, 'invalid_key'],
     [401, { statusCode: 401, name: 'missing_api_key', message: 'Missing API key' }, 'invalid_key'],
     [429, { statusCode: 429, name: 'rate_limit_exceeded', message: 'Too many requests' }, 'rate_limited'],
     [
