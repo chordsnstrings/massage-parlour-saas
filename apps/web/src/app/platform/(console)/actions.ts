@@ -23,10 +23,13 @@ import {
   isLegacyPlan,
   MIN_AUTO_PURGE_DAYS,
   markListedAdminVerified,
+  type PlanRemoval,
   pauseTenant,
   purgeTenant,
   recordPlatformPayment,
+  removePlan,
   renameTenantSlug,
+  restorePlan,
   resumeTenant,
   saveEmailSettings,
   saveTurnstileSettings,
@@ -35,7 +38,7 @@ import {
   setSubscriptionDiscounts,
   switchPlan,
 } from '@spa/services'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
@@ -93,22 +96,28 @@ export async function updateSubscriptionAction(
   if (d.currentPeriodEnd < d.currentPeriodStart)
     return fail('End must be after start.', { currentPeriodEnd: 'End must be after start' })
   // PLAN §18.8: the plan itself changes only through "Switch plan" (legacy yearly kept until renewal); a new
-  // subscription can't start on the legacy plan.
-  const [current, target] = await Promise.all([
-    platformDb().query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, tenantId) }),
-    platformDb().query.plans.findFirst({ where: eq(plans.id, d.planId) }),
-  ])
-  if (current && current.planId !== d.planId)
-    return fail('Change the plan with “Switch plan” under Plan & features.', {
-      planId: 'Use Switch plan',
-    })
-  if (!current && isLegacyPlan(target))
-    return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
-  await platformDb()
-    .insert(subscriptions)
-    .values({ tenantId, ...d })
-    .onConflictDoUpdate({ target: subscriptions.tenantId, set: d })
-  await platformDb().update(tenants).set({ planId: d.planId }).where(eq(tenants.id, tenantId))
+  // subscription can't start on the legacy plan or an archived one (R19). The plan is read FOR SHARE in the write's
+  // transaction, so a Delete on Plans & prices running meanwhile finishes first and is seen here.
+  const refused = await platformDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId))
+    const [target] = await tx.select().from(plans).where(eq(plans.id, d.planId)).for('share')
+    if (current && current.planId !== d.planId)
+      return fail('Change the plan with “Switch plan” under Plan & features.', {
+        planId: 'Use Switch plan',
+      })
+    if (!target) return fail('Plan not found.', { planId: 'Choose another plan' })
+    if (!current && isLegacyPlan(target))
+      return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
+    if (!current && target.archivedAt)
+      return fail('This plan is archived.', { planId: 'Choose another plan' })
+    await tx
+      .insert(subscriptions)
+      .values({ tenantId, ...d })
+      .onConflictDoUpdate({ target: subscriptions.tenantId, set: d })
+    await tx.update(tenants).set({ planId: d.planId }).where(eq(tenants.id, tenantId))
+    return null
+  })
+  if (refused) return refused
   await audit({ tenantId, actorUserId: user.id, action: 'platform.subscription.updated', data: d })
   revalidatePath(`/platform/tenants/${tenantId}`)
   return ok('Subscription saved')
@@ -319,6 +328,9 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
   if (!parsed.success) return fromZod(parsed.error)
   const { id, tier, ...rest } = parsed.data
   const existing = id ? await platformDb().query.plans.findFirst({ where: eq(plans.id, id) }) : undefined
+  const restoreFirst = (name: string) => fail(`Restore ${name} before editing it.`)
+  if (id && !existing) return fail('Plan not found.')
+  if (existing?.archivedAt) return restoreFirst(existing.name)
   // PLAN §18.8: plans are found by code (premium / standard / legacy-yearly) — those codes never change; the tier
   // sets the feature switches in `limits` (other limits, e.g. a branch cap, are kept).
   const fixed = existing && (Object.values(PLAN_CODES) as string[]).includes(existing.code)
@@ -328,11 +340,26 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
     limits: { ...(existing?.limits ?? {}), ...tierLimits(tier) },
   }
   try {
-    if (id) await platformDb().update(plans).set(d).where(eq(plans.id, id))
-    else await platformDb().insert(plans).values(d)
+    if (id) {
+      // R19: the archived check is part of the write, so a plan archived or deleted since the sheet opened is not edited.
+      const [row] = await platformDb()
+        .update(plans)
+        .set(d)
+        .where(and(eq(plans.id, id), isNull(plans.archivedAt)))
+        .returning({ id: plans.id })
+      if (!row) {
+        const now = await platformDb().query.plans.findFirst({
+          where: eq(plans.id, id),
+          columns: { name: true },
+        })
+        return now ? restoreFirst(now.name) : fail('Plan not found.')
+      }
+    } else await platformDb().insert(plans).values(d)
   } catch (e) {
-    if ((e as { cause?: { code?: string } }).cause?.code === '23505')
-      return fail('That code is already used.', { code: 'Already used' })
+    const code = (e as { cause?: { code?: string } }).cause?.code
+    if (code === '23505') return fail('That code is already used.', { code: 'Already used' })
+    // plans_archived_inactive: an archived plan can't be made available
+    if (code === '23514' && existing) return restoreFirst(existing.name)
     throw e
   }
   await audit({
@@ -342,6 +369,51 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
   })
   revalidatePath('/platform/plans')
   return ok('Plan saved')
+}
+
+const planIdForm = z.object({ id: z.uuid('Choose a plan') })
+
+/**
+ * R19: Delete on Plans & prices. Nothing points at the plan → deleted; spas or applications on it → archived (they
+ * keep their plan and price). The service re-checks use inside the transaction (`removePlan` locks the plans).
+ */
+export async function removePlanAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = planIdForm.safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  let res: PlanRemoval
+  try {
+    res = await platformDb().transaction((tx) => removePlan(tx, parsed.data.id))
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  const { code, name } = res
+  const archived = res.outcome === 'archived'
+  await audit({
+    actorUserId: user.id,
+    action: archived ? 'platform.plan.archived' : 'platform.plan.deleted',
+    data: res.outcome === 'archived' ? { code, name, spas: res.spas } : { code, name },
+  })
+  revalidatePath('/platform/plans')
+  return ok(archived ? `${name} archived. Restore it from Archived plans.` : `${name} deleted`)
+}
+
+/** R19: Restore an archived plan; it stays hidden from new spas until it is edited to available. */
+export async function restorePlanAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = planIdForm.safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  let res: Awaited<ReturnType<typeof restorePlan>>
+  try {
+    res = await platformDb().transaction((tx) => restorePlan(tx, parsed.data.id))
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({ actorUserId: user.id, action: 'platform.plan.restored', data: res })
+  revalidatePath('/platform/plans')
+  return ok(`${res.name} restored. Edit it to offer it to new spas again.`)
 }
 
 export async function saveCompanyAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {

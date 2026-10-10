@@ -337,6 +337,13 @@
       "when": 1791638047361,
       "tag": "0047_company_name_co",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791650489845,
+      "tag": "0048_plan_archived_at",
+      "breakpoints": true
     }
   ]
 }
