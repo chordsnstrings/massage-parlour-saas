@@ -82,6 +82,15 @@ export const defaultAiModels: (typeof aiModelConfig.$inferInsert)[] = [
     priceCachedInPerM: '0.10',
   },
   {
+    // F30: dashboard "Ask AI" for spa staff (read-only tools over the spa's own data).
+    agentKey: 'staff_assistant',
+    label: 'Dashboard Ask AI (staff questions)',
+    modelId: 'seed-2-0-lite-260428',
+    priceInPerM: '0.25',
+    priceOutPerM: '2.00',
+    priceCachedInPerM: '0.05',
+  },
+  {
     agentKey: 'translator',
     label: 'Translation & alt text',
     modelId: 'seed-2-0-mini-260428',
