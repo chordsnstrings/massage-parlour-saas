@@ -1236,6 +1236,15 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   and Cloudflare's value passes through. Found + fixed: deploys never applied Caddyfile edits (bind-mounted file,
   hard reset swaps the inode); `update.sh` `caddy_sync` restarts caddy when it changed.
 
+### Remaining backlog F16–F32 — shipped on this branch
+- ✅ **F27. Intake/waiver PDFs stored.** Shipped 2026-10-09: every signed intake renders a PDF server-side (pdfkit,
+  embedded OFL subsets of DM Sans / Noto Sans Thai / Noto Naskh Arabic; spa logo + name, answers, consent, signature,
+  submission id + record SHA-256), stored as a private file (clients.view), Download / Regenerate on the submission
+  page, PDF icon on the profile, zip in Settings → Data, removed by client erase and tenant purge. Migration 0037.
+- ✅ **F28. Outbox assignment.** Shipped 2026-10-09: "Assigned to" per message (active members with marketing.send),
+  Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
+  auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
+
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.
 - **Blockers:** ✅ G1 off-site backups + restore drill never run (worker reads `R2_*`, compose passes only `S3_*`; skip not alerted) ·

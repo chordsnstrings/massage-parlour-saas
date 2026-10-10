@@ -58,6 +58,11 @@ export const automations: Messages['automations'] = {
       desc: 'แจ้งผู้จัดการ 60, 30 และ 7 วันก่อนเอกสารพนักงานหมดอายุ',
       schedule: 'ทุกวัน 09:00',
     },
+    outboxAutoAssign: {
+      name: 'มอบหมายข้อความ WhatsApp',
+      desc: 'แบ่งข้อความ WhatsApp ที่ถึงเวลาส่งให้พนักงานต้อนรับที่เข้ากะอยู่ตอนนี้แบบวนรอบ (ปิด: ทุกคนเลือกจากคิวเอง)',
+      schedule: 'ทุกนาที',
+    },
     backups: { name: 'สำรองข้อมูลทุกคืน', desc: 'สำรองฐานข้อมูลแบบเข้ารหัส', schedule: 'ทุกคืน' },
     domains: { name: 'โดเมนและ SSL', desc: 'ตรวจสอบโดเมนและใบรับรอง', schedule: 'ทุก 10 นาที' },
   },

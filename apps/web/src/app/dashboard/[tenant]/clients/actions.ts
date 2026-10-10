@@ -1,5 +1,6 @@
 'use server'
-import { clientIpFrom, toUaeE164 } from '@spa/core'
+import { randomUUID } from 'node:crypto'
+import { clientIpFrom, reportError, toUaeE164 } from '@spa/core'
 import {
   bookings,
   clients,
@@ -9,7 +10,8 @@ import {
   treatmentNotes,
   withTenant,
 } from '@spa/db'
-import { DomainError, eraseClient, pgCode } from '@spa/services'
+import { DomainError, eraseClient, intakeContentHash, pgCode } from '@spa/services'
+import { generateIntakePdf } from '@spa/services/intake-pdf'
 import { and, desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -330,20 +332,32 @@ export async function submitIntakeAction(
       if (!isSignaturePath(signature)) fieldErrors.signature = ar ? 'يرجى التوقيع' : 'Please sign in the box'
       if (Object.keys(fieldErrors).length) throw new FieldErrors(fieldErrors)
       const waiverText = (ar ? template.waiver.ar : undefined) || template.waiver.en
+      const record = {
+        id: randomUUID(),
+        tenantId: ctx.tenant.id,
+        clientId,
+        templateId: template.id,
+        templateVersion: template.version,
+        answers: { ...answers, _lang: lang },
+        waiverText,
+        signature,
+        signedAt: new Date(),
+        ip,
+      }
       const [row] = await tx
         .insert(intakeSubmissions)
-        .values({
-          tenantId: ctx.tenant.id,
-          clientId,
-          templateId: template.id,
-          templateVersion: template.version,
-          answers: { ...answers, _lang: lang },
-          waiverText,
-          signature,
-          ip,
-        })
+        .values({ ...record, contentSha256: intakeContentHash(record) })
         .returning({ id: intakeSubmissions.id })
       return row!.id
+    })
+    // F27: the signed PDF, in its own transaction — the signature is kept even if rendering fails (the
+    // submission page then offers "Create PDF").
+    const pdf = await withTenant(ctx.tenant.id, (tx) =>
+      generateIntakePdf(tx, id, { createdBy: ctx.user.id }),
+    ).catch(async (err) => {
+      console.error('intake pdf failed', err)
+      await reportError(process.env.SENTRY_DSN, err, { source: 'web', tags: { action: 'intake_pdf' } })
+      return null
     })
     await audit({
       tenantId: ctx.tenant.id,
@@ -351,12 +365,50 @@ export async function submitIntakeAction(
       action: 'client.intake_signed',
       entity: 'intake_submission',
       entityId: id,
+      data: { pdfFileId: pdf?.fileId ?? null, contentSha256: pdf?.contentSha256 ?? null },
     })
     revalidatePath(`${clientsPath(slug)}/${clientId}`)
     return ok(ar ? 'تم الحفظ' : 'Intake signed', { id })
   } catch (e) {
     if (e instanceof FieldErrors)
       return fail(ar ? 'يرجى مراجعة الحقول المحددة' : 'Please check the highlighted fields.', e.fields)
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+}
+
+/** F27: (re)renders a signed intake's PDF and replaces the stored file (clients.manage). */
+export async function regenerateIntakePdfAction(
+  slug: string,
+  clientId: string,
+  submissionId: string,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'clients.manage')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(clientId).success || !z.uuid().safeParse(submissionId).success)
+    return fail('clients.intake.notFound')
+  try {
+    const pdf = await withTenant(ctx.tenant.id, async (tx) => {
+      const [s] = await tx
+        .select({ id: intakeSubmissions.id })
+        .from(intakeSubmissions)
+        .where(and(eq(intakeSubmissions.id, submissionId), eq(intakeSubmissions.clientId, clientId)))
+      if (!s) throw new DomainError('Intake form not found', 'not_found', { key: 'clients.intake.notFound' })
+      return generateIntakePdf(tx, submissionId, { createdBy: ctx.user.id })
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+      action: 'client.intake_pdf_generated',
+      entity: 'intake_submission',
+      entityId: submissionId,
+      data: { fileId: pdf.fileId, sha256: pdf.sha256 },
+    })
+    revalidatePath(`${clientsPath(slug)}/${clientId}`)
+    revalidatePath(`${clientsPath(slug)}/${clientId}/intake/${submissionId}`)
+    return ok('clients.intake.pdfReady', { fileId: pdf.fileId })
+  } catch (e) {
     if (e instanceof DomainError) return failDomain(e)
     throw e
   }

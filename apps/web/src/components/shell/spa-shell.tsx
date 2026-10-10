@@ -71,6 +71,8 @@ export type ShellItem = ShellLink & {
   pages?: ShellLink[]
   /** Count badge (hidden when 0) + its screen-reader text. */
   count?: { value: number; label: string }
+  /** F28: second badge for messages assigned to the viewer (hidden when 0). */
+  mine?: { value: number; label: string }
 }
 export type ShellGroup = { label: string; items: ShellItem[] }
 export type ShellPlan = {
@@ -285,6 +287,12 @@ export function SpaShell({
                         <span className="crm-ncount" title={item.count.label}>
                           <span aria-hidden>{item.count.value > 99 ? '99+' : item.count.value}</span>
                           <span className="sr-only">{item.count.label}</span>
+                        </span>
+                      )}
+                      {item.mine && item.mine.value > 0 && (
+                        <span className="crm-ncount crm-nmine" title={item.mine.label} data-testid="nav-mine">
+                          <span aria-hidden>{item.mine.value > 99 ? '99+' : item.mine.value}</span>
+                          <span className="sr-only">{item.mine.label}</span>
                         </span>
                       )}
                     </Link>

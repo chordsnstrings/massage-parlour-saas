@@ -12,7 +12,8 @@
       "!**/next-env.d.ts",
       "!**/public/t.js",
       "!**/public/widget.js",
-      "!docs/design"
+      "!docs/design",
+      "!**/pdf/fonts.generated.ts"
     ]
   },
   "formatter": {

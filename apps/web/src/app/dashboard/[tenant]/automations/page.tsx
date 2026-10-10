@@ -21,6 +21,7 @@ import {
   Sparkles,
   Star,
   Sunrise,
+  UserCheck,
 } from 'lucide-react'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
@@ -46,6 +47,7 @@ const ICONS = {
   weeklyInsights: LineChart,
   dailyDigest: Sunrise,
   documentAlerts: FileWarning,
+  outboxAutoAssign: UserCheck,
   backups: DatabaseBackup,
   domains: Globe,
 } as const

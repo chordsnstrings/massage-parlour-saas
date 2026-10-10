@@ -301,4 +301,6 @@ export const domain = {
   planLegacyUntilRenewal:
     'The legacy yearly plan stays until its renewal on {end}: choose the new plan from {from}.',
   featureTierChoose: 'Choose a feature tier',
+  intakeNotFound: 'Intake form not found',
+  outboxNotAssignable: 'That team member cannot send WhatsApp messages',
 } as const

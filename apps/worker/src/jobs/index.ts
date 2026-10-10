@@ -20,7 +20,7 @@ import {
 } from './notifications'
 import { autoPurgeTenants, pruneOAuthClients } from './purge'
 import { restoreDrill } from './restore-drill'
-import { expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
+import { autoAssignOutbox, expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
 
 export type JobDef = {
   name: string
@@ -48,6 +48,7 @@ export const jobs: JobDef[] = [
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
+  { name: 'outbox-auto-assign', cron: '* * * * *', handler: () => autoAssignOutbox() },
   { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
   { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
   { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },

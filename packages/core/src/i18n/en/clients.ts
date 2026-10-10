@@ -123,7 +123,23 @@ export const clients = {
     noTemplateSub: 'Create the questions and waiver clients sign before their treatment.',
     setup: 'Set up intake form',
     signedTitle: 'Signed intake',
-    print: 'Print or save PDF',
+    print: 'Print',
+    downloadPdf: 'Download PDF',
+    regeneratePdf: 'Regenerate PDF',
+    generatePdf: 'Create PDF',
+    pdfMissing: 'No PDF stored for this form yet.',
+    pdfStored: 'Signed PDF stored {date}',
+    pdfFailed: 'The form is signed, but the PDF could not be created. Open the form and press “Create PDF”.',
+    pdfReady: 'PDF ready',
+    notFound: 'Intake form not found',
+    integrity: {
+      title: 'Integrity',
+      record: 'Record SHA-256',
+      file: 'PDF SHA-256',
+      ok: 'Record unchanged since signing',
+      changed: 'Record changed since signing — the hash no longer matches',
+      unknown: 'Signed before hashes were kept — creating the PDF stores one now',
+    },
   },
   memberships: {
     title: 'Memberships',
@@ -181,7 +197,7 @@ export const clients = {
     button: 'Erase client',
     sheetSub: 'This cannot be undone. Download an export first if you need a copy.',
     removes:
-      'Removed: name, phone, email, birthday, nationality, tags, preferences, notes, treatment notes, intake forms and signatures, WhatsApp messages and conversations, waitlist entries and booking notes.',
+      'Removed: name, phone, email, birthday, nationality, tags, preferences, notes, treatment notes, intake forms, signatures and signed PDFs, WhatsApp messages and conversations, waitlist entries and booking notes.',
     keeps:
       'Kept for accounting: visits, sales, payments, packages and gift cards — shown as “Erased client”.',
     export: 'Download export',

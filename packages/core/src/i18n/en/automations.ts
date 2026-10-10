@@ -58,6 +58,11 @@ export const automations = {
       desc: 'Notifies managers 60, 30 and 7 days before staff documents expire',
       schedule: 'Daily 09:00',
     },
+    outboxAutoAssign: {
+      name: 'Assign WhatsApp messages',
+      desc: 'Shares due WhatsApp messages round-robin between receptionists on shift now (off: everyone picks from the queue)',
+      schedule: 'Every minute',
+    },
     backups: { name: 'Nightly backups', desc: 'Encrypted database backup', schedule: 'Nightly' },
     domains: {
       name: 'Domains & SSL',

@@ -1,6 +1,13 @@
 import { type Permission, requires2fa, resolvePermissions, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
 import { members, platformDb, roles, storedFiles, tenants, user as users, withTenant } from '@spa/db'
-import { getFile, IMAGE_TYPES, jpegVariant, resizeVariant, VARIANT_WIDTHS } from '@spa/services'
+import {
+  getFile,
+  IMAGE_TYPES,
+  INTAKE_PDF_PURPOSE,
+  jpegVariant,
+  resizeVariant,
+  VARIANT_WIDTHS,
+} from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
 import { isPlatformAdmin } from '@/server/access'
@@ -36,11 +43,15 @@ const notFound = () =>
     headers: { 'cache-control': 'no-store', 'content-type': 'text/plain' },
   })
 
-/** Private files by purpose: document scans need staff.manage, receipt scans need accounting access. */
+/**
+ * Private files by purpose: document scans need staff.manage, receipt scans need accounting access, signed intake
+ * PDFs (F27) need clients.view (same as the submission page).
+ */
 const PURPOSE_PERMISSIONS: Record<string, Permission[]> = {
   staff_document: ['staff.manage'],
   business_document: ['staff.manage'],
   receipt: ['accounting.view', 'accounting.manage'],
+  [INTAKE_PDF_PURPOSE]: ['clients.view'],
 }
 
 type FileTenant = { tenantId: string; purpose: string; deleted: boolean; settings: { require2fa?: boolean } }

@@ -390,6 +390,7 @@ export function fullExportReadme(opts: {
     '- Every cell is a plain value (no formulas). Values longer than an Excel cell holds (32,767 characters) are cut',
     '  and kept in full, in parts, on the long_values sheet.',
     '- Access tokens, invitation/session hashes and uploaded file bytes are not included.',
+    '- Signed intake forms as PDFs: Settings > Data > Signed intake forms (one .zip; intake_submissions.pdf_file_id).',
     ...(opts.phones ? [] : ['- Phone numbers are blank: your role cannot see phone numbers.']),
     '',
     'Sheets:',

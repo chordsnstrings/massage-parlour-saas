@@ -47,5 +47,9 @@ export const nav = {
       other: '{count} bookings today waiting for confirmation',
     },
     inbox: { one: '{count} message or chat to handle', other: '{count} messages or chats to handle' },
+    mine: {
+      one: '{count} WhatsApp message assigned to you',
+      other: '{count} WhatsApp messages assigned to you',
+    },
   },
 } as const

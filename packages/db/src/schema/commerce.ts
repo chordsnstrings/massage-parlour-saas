@@ -20,7 +20,7 @@ import { tenantPolicies } from './_rls'
 import { user } from './auth'
 import { type BillingDetails, bookings, clients, staff } from './operations'
 import { tenants } from './platform'
-import { branches } from './tenant'
+import { branches, members } from './tenant'
 
 const tenantId = () =>
   uuid('tenant_id')
@@ -271,10 +271,19 @@ export const outbox = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true }).notNull().defaultNow(),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     sentBy: text('sent_by').references(() => user.id),
+    /** F28: member responsible for sending it (any active member with marketing.send); null = unassigned. */
+    assignedTo: uuid('assigned_to').references(() => members.id, { onDelete: 'set null' }),
+    assignedAt: timestamp('assigned_at', { withTimezone: true }),
+    /** Who assigned it; null while `assigned_to` is set = the auto-assign rule (round-robin). */
+    assignedBy: text('assigned_by').references(() => user.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
   (t) => [
     index('outbox_queue').on(t.tenantId, t.status, t.dueAt),
+    index('outbox_assignee').on(t.tenantId, t.assignedTo, t.status, t.dueAt),
+    index('outbox_auto_assigned')
+      .on(t.tenantId, t.assignedAt)
+      .where(sql`${t.assignedTo} is not null and ${t.assignedBy} is null`),
     unique('outbox_booking_kind').on(t.bookingId, t.kind),
     index('outbox_campaign').on(t.campaignId),
     ...tenantPolicies(),

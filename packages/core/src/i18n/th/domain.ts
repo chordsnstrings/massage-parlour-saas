@@ -271,4 +271,6 @@ export const domain: Messages['errors']['domain'] = {
   planAlreadyOn: 'สปานี้ใช้แพ็กเกจนี้อยู่แล้ว',
   planLegacyUntilRenewal: 'แพ็กเกจรายปีแบบเดิมใช้ได้จนถึงวันต่ออายุ {end} เลือกแพ็กเกจใหม่ได้ตั้งแต่ {from}',
   featureTierChoose: 'เลือกระดับฟีเจอร์',
+  intakeNotFound: 'ไม่พบแบบฟอร์มสุขภาพ',
+  outboxNotAssignable: 'พนักงานคนนี้ส่งข้อความ WhatsApp ไม่ได้',
 }

@@ -45,5 +45,6 @@ export const nav: Messages['nav'] = {
     calendar: { other: 'วันนี้มี {count} การจอง' },
     bookings: { other: 'วันนี้มี {count} การจองที่รอการยืนยัน' },
     inbox: { other: 'มี {count} ข้อความหรือแชตที่ต้องจัดการ' },
+    mine: { other: 'มี {count} ข้อความ WhatsApp ที่มอบหมายให้คุณ' },
   },
 }
