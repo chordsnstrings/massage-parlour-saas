@@ -8,7 +8,7 @@ import {
   planTier,
   TIER_FEATURES,
 } from '@spa/core'
-import { ArrowRight, Check, Minus, Plus } from 'lucide-react'
+import { ArrowDown, ArrowRight, Check, Minus, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { formatAed } from '@/lib/utils'
 
@@ -128,9 +128,28 @@ const Limit = ({ children }: { children: React.ReactNode }) => (
   </li>
 )
 
+/** A link row ("9 more spa tools"): accent text, dashed-circle marker, 44px tap target. */
+const MoreLink = ({
+  href,
+  icon,
+  children,
+}: {
+  href: string
+  icon: React.ReactNode
+  children: React.ReactNode
+}) => (
+  <Link href={href} className="mkt-pl-more mkt-link">
+    <span aria-hidden className="mkt-ic">
+      {icon}
+    </span>
+    {children}
+  </Link>
+)
+
 /**
- * The plan cards of the home page (`compact`: price, CTA, short list) and /pricing (`full`: + description and every
- * row). Everything comes from the live plans and the @spa/core plan helpers; Premium is the spotlight card.
+ * The plan cards of the home page (`compact`: price, CTA, short list; the limit is only the "One branch" tag) and
+ * /pricing (`full`: + description and every row). Everything comes from the live plans and the @spa/core plan
+ * helpers; Premium is the spotlight card.
  */
 export function PlanCards({
   plans,
@@ -206,18 +225,26 @@ export function PlanCards({
             {CORE_ROWS.slice(0, 3).map((r) => (
               <Yes key={r.key}>{r.label}</Yes>
             ))}
-            {more > 0 && (
-              <li>
-                <Link href="/pricing#compare" className="mkt-pl-more mkt-link">
-                  <span aria-hidden className="mkt-ic">
-                    <Plus strokeWidth={3} />
-                  </span>
-                  {more} more spa tools
-                </Link>
-              </li>
-            )}
-            {oneBranch && <Limit>One branch</Limit>}
           </ul>
+        )
+        // closing link row, pinned to the foot of the shared list row so both cards end level
+        const plus = <Plus strokeWidth={3} />
+        const endLink = full ? (
+          spot && (
+            <MoreLink href="#compare" icon={<ArrowDown strokeWidth={3} />}>
+              Compare the plans row by row
+            </MoreLink>
+          )
+        ) : spot ? (
+          <MoreLink href="/pricing#compare" icon={plus}>
+            See every {p.name} feature
+          </MoreLink>
+        ) : (
+          more > 0 && (
+            <MoreLink href="/pricing#compare" icon={plus}>
+              {more} more spa tools
+            </MoreLink>
+          )
         )
         return (
           <article
@@ -238,7 +265,10 @@ export function PlanCards({
             {hasDesc && <p className="mkt-pc-desc">{p.description}</p>}
             <Price p={p} />
             {cta}
-            <div className="mkt-pl-box">{list}</div>
+            <div className="mkt-pl-box">
+              {list}
+              {endLink && <p className="mkt-pl-end">{endLink}</p>}
+            </div>
           </article>
         )
       })}

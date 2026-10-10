@@ -1027,6 +1027,8 @@
   }
   /* "what you get" list (rows from PLAN_FEATURES, groups from FEATURE_LABELS) */
   .mkt-pl-box {
+    display: flex;
+    flex-direction: column;
     margin-top: 26px;
     padding-top: 24px;
     border-top: 1px solid var(--line);
@@ -1061,7 +1063,7 @@
     align-items: flex-start;
     gap: 10px;
   }
-  .mkt-pl .mkt-ic {
+  .mkt-pl-box .mkt-ic {
     flex-shrink: 0;
     display: grid;
     place-items: center;
@@ -1075,23 +1077,35 @@
     width: 12px;
     height: 12px;
   }
-  .mkt-pc-spot .mkt-pl .mkt-ic {
+  .mkt-pc-spot .mkt-pl-box .mkt-ic {
     background: color-mix(in srgb, var(--lime) 16%, transparent);
     color: var(--lime);
   }
+  /* link row: 44px tap target, the negative margin keeps the 9px list rhythm */
   .mkt-pl-more {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: 28px;
-    margin-block: -4px;
+    min-height: 44px;
+    margin-block: -12px;
     color: var(--accent-ink);
     font-weight: 600;
   }
-  .mkt-pl .mkt-pl-more .mkt-ic {
+  .mkt-pl-box .mkt-pl-more .mkt-ic {
     background: transparent;
     border: 1.5px dashed currentColor;
     color: inherit;
+  }
+  /* closing link row ("9 more spa tools"): at the foot of the shared list row, so both cards end level */
+  .mkt-pl-end {
+    display: flex;
+    margin-top: auto;
+    padding-top: 9px;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .mkt-plans:not(.mkt-plans-compact) .mkt-pl-end {
+    padding-top: 18px;
   }
   .mkt-pl li.is-strong {
     font-weight: 600;
