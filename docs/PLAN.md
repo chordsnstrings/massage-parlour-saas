@@ -1178,8 +1178,8 @@ CLAUDE.md). Rules for the work:
   F2 have no `refund_lines`; they still count against the sale total.
 
 ### Backlog F9–F32
-**Status: all built 2026-10-09/10 on the integration branch claude/laughing-faraday-fjgrsu; awaiting the release PR
-(live once merged to the deploy branch and promoted).** Same reminder rule as F1–F8 (CLAUDE.md) until live. Origin:
+**Status: released 2026-10-10** (PR #22 merged 06:57 UTC; CI promoted `deploy/green` 07:17 UTC). Follow-up PR #24
+closes the older CodeQL alerts. Origin:
 F9–F15 owner 2026-10-09 ("remind me later and always remind me"); F16–F32 owner 2026-10-09 ("after F15 start the
 others till end — finish everything"), built after the Premium/Standard plans (§18.8) so Premium items are gated
 (batch A = Premium `marketing`/`ai`: F16–F19; B: F20–F26; C: F27–F32).
@@ -1377,7 +1377,8 @@ others till end — finish everything"), built after the Premium/Standard plans 
 - Meta: Facebook Login for Business configuration (optional `META_FB_CONFIG_ID`), app review for the new permissions,
   redirect URI, Instagram comments webhook field — README "Meta".
 - GitHub: if CodeQL "default setup" is on, switch to advanced so `codeql.yml` runs (a private repo needs GitHub Code
-  Security); turn on Dependabot alerts.
+  Security); turn on Dependabot alerts. Dismiss the CodeQL alert `js/insufficient-password-hash` (restore-drill.ts,
+  derived `spa_drill` password from a generated secret) as "Won't fix" — reasoning on PR #22.
 - When the weekly "Cloudflare IP ranges" workflow fails: `deploy/droplet/cloudflare-ips.sh --write` and commit — README
   "Client IP (rate limits, audit IPs)".
 - Native review of the new TH / AR strings (F20 announcements, F24 error pages, F15–F32 screens).

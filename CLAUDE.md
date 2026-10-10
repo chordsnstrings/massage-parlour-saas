@@ -2,7 +2,7 @@
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
-fix backlog F1–F8 ✅ live, **F9–F32 built, awaiting release** (§17, remind the owner until live); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
+fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch).
 
 ## Code map (details + verified known gaps: `docs/CODEMAP.md` — read it before structural work)
 - Packages: `core` (pure helpers: time/business date, slots, permissions, hosts, WhatsApp links) · `db` (schema, RLS,
@@ -21,7 +21,7 @@ fix backlog F1–F8 ✅ live, **F9–F32 built, awaiting release** (§17, remind
   / `FeatureGate` / `entitledSql` — never check plan codes or ids in feature code (CODEMAP "Plans + entitlements").
 
 ## Standing owner instructions (2026-10-08)
-- **Fix backlog reminder:** PLAN §17: F1–F8 live; **F9–F32 built, awaiting release** (owner 2026-10-09: "always remind me"; "finish everything"). While any is open,
+- **Fix backlog reminder:** PLAN §17: F1–F32 released 2026-10-10, nothing open (owner 2026-10-09: "always remind me"). While any is open,
   remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
   the next one in order. Don't fix them until the owner says so.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /

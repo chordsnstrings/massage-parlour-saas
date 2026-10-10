@@ -462,6 +462,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `pageLocked`, not "changed elsewhere — keep mine") in `storeDraft`, `publishPageAction`,
   `restoreVersionAction`, `runSiteEdit` (changed + renamed pages, dry runs too) and `restoreSiteEdit`; MCP `get_site`
   shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
+  Unsaved baseline: taken 400 ms after load; when the undo history already has an entry (an edit that fast), the
+  baseline is Puck's first recorded state so that edit still autosaves. Take over reloads the page
+  (`reloadEditor` → `window.location.reload`).
 - **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
   (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
   preset / update root on that page, used photos downloaded outside the tx, then `saveImportImages` + `runSiteEdit`
@@ -934,7 +937,7 @@ i18n namespace `automations`.
   --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
   date each) and `deploy/droplet/test-caddy-ip.sh`. `promote` needs both. Also: `codeql.yml` (codeql-action v3,
   javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
-  `js/insufficient-password-hash` in restore-drill.ts, owner-dismissed; trailing-run trims use core `trimTrailing`, not
+  `js/insufficient-password-hash` in restore-drill.ts, for the owner to dismiss ("won't fix", §17); trailing-run trims use core `trimTrailing`, not
   `/x+$/`), `cloudflare-ips.yml` (Mondays + PRs
   touching the Caddyfile; not a deploy gate), `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped;
   stack pins' majors, and 0.x/minor pins' minors, ignored).
