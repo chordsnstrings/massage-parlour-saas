@@ -1253,6 +1253,16 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
 - ✅ **F28. Outbox assignment.** Shipped 2026-10-09: "Assigned to" per message (active members with marketing.send),
   Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
   auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
+- ✅ **F30. Dashboard "Ask AI" for staff.** Shipped 2026-10-10: top-bar "Ask AI" drawer (SpaShell, EN + TH, answers in
+  the member's UI language) for members with `dashboard.view` on Premium (`ai`); Standard sees the Premium upsell in
+  the drawer. Tool-using agent `staff_assistant` (seeded `ai_model_config` row, Seed 2.0 lite) through runToolLoop →
+  runChat (plan, kill switches, per-tenant budget, ai_usage per step) with READ-ONLY tools over @spa/services in
+  withTenant, each re-checking permissions + the member's branch scope from the DB: bookings (calendar.view; own only
+  without calendar.manage), revenue (reports.view + dashboard.revenue), top treatments (reports.view), lapsed clients
+  (clients.view), shifts (staff.view), WhatsApp click-to-send draft (marketing.send + clients.phone, consent rules).
+  Deep links + wa.me drafts are built server-side, never by the model. Caps: 6 tool calls / 5 model calls per
+  question, 6-turn history, 30 questions/h + 150/day per member. Audit `ai.assistant.asked` (question ≤200 chars,
+  tools, denied, outcome, cost — never the answer). No migration. Details: CODEMAP "Ask AI (F30)".
 
 ### Remaining backlog (Website Studio items)
 - ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after

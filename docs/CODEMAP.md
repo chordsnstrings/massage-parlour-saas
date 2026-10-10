@@ -813,6 +813,29 @@ i18n namespace `automations`.
     unknown email, closed login), `files-access.spec`; per-IP limits are off on the e2e server (`AUTH_RATE_LIMIT=off`)
     and live in `packages/auth/test/rate-limit.test.ts`.
 
+## Ask AI (F30, dashboard assistant)
+
+- **UI** `components/assistant/ask-ai.tsx` (top-bar button → Radix side drawer, crm.css `.crm-ask*`; full screen
+  ≤680 px), rendered by the tenant layout for `dashboard.view` (SpaShell `assistant` prop). Standard (no `ai`): the
+  drawer is the Premium upsell (`plan.upsell.*`). Conversation state is client-only; i18n namespace `assistant`.
+- **Action** `components/assistant/actions.ts` `askAssistantAction`: guard(dashboard.view, 'ai') → zod →
+  `withinRateLimits` (`assistant`, tenant:user, 30/h + 150/day) → `runAssistant` (fixtureClient in e2e) → audit
+  `ai.assistant.asked` {question ≤200, locale, outcome, tools, denied, costUsd} (never the answer). Maps gateway
+  errors (budget / paused / plan / disabled / busy) to `assistant.errors.*`; translates link labels; prefixes
+  dashboard paths with `appPath('/{slug}')` and only passes `https://wa.me/` drafts.
+- **Agent** `packages/ai/src/agents/assistant.ts`: `runAssistant` → `runToolLoop` (agent key `staff_assistant`, seeded
+  in `defaultAiModels`; limits `ASSISTANT_LIMITS`). Tools (each: required permissions checked first, zod args, own
+  `withTenant`, branch scope re-read via `memberBranchIds`; super-admin view = all branches): `list_branches`,
+  `bookings_summary` (calendar.view; therapists-style roles = own bookings via `staffIdForMember`; client names need
+  clients.view, amounts dashboard.revenue), `revenue_summary` (reports.view + dashboard.revenue; `kpis` summed per
+  allowed branch), `top_services` (reports.view; revenue only with dashboard.revenue), `lapsed_clients` (clients.view;
+  limited members: clients who booked at their branches), `staff_on_shift` (staff.view), `whatsapp_draft`
+  (marketing.send + clients.phone; campaign consent rules; returns no phone to the model). Refusals come back as
+  `{error:'not_allowed'}` and are listed in `denied`. Links (`AssistantLink`) are pushed by tools, deduped, max 8.
+- **Services** `packages/services/src/assistant.ts`: `bookingStatusCounts`, `staffNames`, `lapsedClients`,
+  `shiftsOnDate`, `assistantDraftTarget`, `staffIdForMember` (no permission checks inside, as everywhere).
+- **Tests**: `packages/ai/test/assistant.test.ts` (scripted ModelArk fetch), e2e `ask-ai.spec.ts` (`__steps` fixture).
+
 ## Meta MCP (R7, AI tools)
 
 - **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.30.1, JSON
