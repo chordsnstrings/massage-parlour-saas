@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview; `TURNSTILE` is web-only, left out of the worker flags). `turnstile.ts` (F9): `turnstileConfig` (both keys or off), `turnstileOnCustomDomains`, `verifyTurnstileToken` (siteverify, fail closed). `attribution.ts` (F13): `webEntrySource` (raw web_events.source), `attributionOf`/`bookingAttribution` → `BOOKING_ATTRIBUTIONS` (= db `booking_attribution` enum). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
@@ -99,6 +99,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      301 to the current slug, path + query kept (`server/slug-redirect.ts`: one old→current map per process from
      services `slugRedirects`, 30 s TTL, cleared by the console rename; imports `@spa/services/tenant-slug`, never the
      services barrel). `api/domains/allowed` (Caddy ask) allows the old host too.
+   - Host routing only (the move off path routing): an old path-routed address — `/app/…`, `/admin/…`, `/s/{slug}/…` on
+     any platform root or its `www.` — → `app.` / `admin.` / `{slug}.` of the canonical root (`ROOT_DOMAIN`), rest of
+     the path + query kept, one hop (slug through `currentSlugFor`, so a renamed spa lands on its current slug; the app
+     path's first segment too). GET/HEAD 301 (as F23), other methods 308 (keeps method + body);
+     `cache-control: private, max-age=300` (a rename or a switch back to path routing applies within minutes). Runs
+     before the rewrite/F23/CSP, which stay unchanged. Pure parse/build in core `hosts.ts` (`pathRoutedAddress`:
+     null under path routing (`{ pathRouting }`, so the production guard is unit-tested), marketing-surface host +
+     `/s/{checkSlug-valid slug}` only; `hostRoutedUrl`: target host = fixed label or that
+     validated slug on the canonical root, never other request input; `canonicalScheme` = APP_URL's) →
+     `packages/core/test/hosts.test.ts`; e2e `path-redirects.spec` + a host-mode step in `slug-rename.spec`. Never
+     redirected (not proxied, served on every host incl. the old one): `/api/*` (OAuth callbacks, Meta webhook /
+     deauthorize / data-deletion, `/api/mcp`, `/api/health`, Caddy ask), `/files/*`, `/.well-known/*`, `_next`, static
+     files (`/widget.js`); `/_status/*` is Caddy's (`SITE_HOST`, and the sslip.io fallback). Owner steps:
+     deploy/droplet/README.md "Move to spamanagement.co".
    - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
      lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
@@ -132,7 +146,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 5. **URLs**:
    - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
      shared, stored or sent. Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
-     (old spamanagement.ae); droplet compose lets `APP_URL`/`ADMIN_URL` be overridden for `ROUTING=host`.
+     (production: the old `134-209-145-162.sslip.io`); droplet `APP_URL`/`ADMIN_URL`/`ROUTING` come from site.env.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
 ## Web routes (`apps/web/src/app`)
@@ -616,7 +630,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   modal; data attributes `data-spa`, `data-url` (spa site + `/book/embed`), `data-lang` en|ar, `data-color`, `data-text`.
   Iframe route `site/[slug]/book/embed` + `domain/[hostname]/book/embed` = `BookingPage embed` (chrome-less
   `BookingFlow`, noindex). postMessage to the parent: `spa-widget:resize` {height}, `spa-widget:booked` {ref,start,service}
-  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape). `next.config.ts` headers: only `/book/embed` and
+  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape); widget.js takes them only from the frame's
+  own window (`e.source`), origin pinned by that frame's first message (an old path-routed `data-url` 301s to the
+  spa's host-routed address; `widget.spec` host-mode step). `next.config.ts` headers: only `/book/embed` and
   `/s/:slug/book/embed` get `frame-ancestors *` and no X-Frame-Options; everything else stays SAMEORIGIN. Same
   `bookOnline` (limits + honeypot) with `via: 'widget'` (audit data only; booking source stays `online`). Analytics
   source `widget` comes from `?src=widget` (t.js: a tagged URL now starts a new session entry). Snippet:
@@ -922,11 +938,16 @@ i18n namespace `automations`.
 - **Droplet stack** (`deploy/droplet/compose.yml`):
   - postgres 16 (1200m);
   - `migrate` (worker image: migrate + seed);
-  - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`);
+  - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`, also set at run time for web + worker: services
+    `freeSiteUrl` reads it from `process.env`, which Next doesn't inline);
   - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`);
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
-  - caddy: on-demand TLS that asks `/api/domains/allowed`, a 25 MB body cap, and `/_status` behind basic auth.
+  - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
+    catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
+    stops Caddy).
     Client IP (F26): `trusted_proxies static` = Cloudflare ranges (+ `trusted_proxies_strict`), `client_ip_headers
     Cf-Connecting-Ip` only; `proxy_to_web` sets `Cf-Connecting-Ip {client_ip}` (Cloudflare's header from a Cloudflare
     peer, else the TCP peer) and strips Do-Connecting-Ip / X-Real-Ip / True-Client-Ip. `test-caddy-ip.sh` (caddy or
@@ -942,7 +963,17 @@ i18n namespace `automations`.
     (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
     file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
     Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.
-  - It applies the `secrets.env.enc` overlay (AES-256-CBC, pbkdf2 200k).
+  - `build_env` (each `deploy_commit`, so a rollback brings the last good commit's own settings): `.env` =
+    `.env.base` (first-boot env; copied from `.env` once) < `secrets.env.enc` (AES-256-CBC, pbkdf2 200k, key
+    `/opt/spa/secrets.key`; unknown contents, only the droplet can decrypt) < `deploy/droplet/site.env` (plain,
+    public; allow-list `SITE_KEYS` = SITE_HOST ROUTING APP_URL ADMIN_URL EXTRA_ROOT_DOMAINS ACME_EMAIL VAPID_SUBJECT
+    CF_CNAME_TARGET EMAIL_FROM; other lines skipped + logged to build.log, never fatal), later layer wins per key,
+    written atomically, mode 600. No overlay + no site.env = `.env` untouched; overlay that won't decrypt = untouched
+    + status error (as before). Main body guarded (`BASH_SOURCE`) so `test-update.sh` can source the functions.
+  - A changed `update.sh` takes effect from the deploy after the one that ships it (`updater-sync` installs it during
+    `up`), so a change that relies on it (e.g. a site.env value) must land in a later push, once a commit with the
+    new updater and without that value shows `"state":"ok"` (it is the rollback target; README "Move to
+    spamanagement.co" step 3). `.env` is generated: hand edits go to `.env.base` (SSH) or the overlay.
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch; a push reaches production once its CI run
   is green (job `promote` → `deploy/green`), ~2 min after that.
@@ -951,7 +982,9 @@ i18n namespace `automations`.
   `pnpm db:check-drift` (packages/db/scripts/check-drift.sh: drizzle-kit generate into a scratch copy of drizzle/ via
   `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
   --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
-  date each) and `deploy/droplet/test-caddy-ip.sh`. `promote` needs both. Also: `codeql.yml` (codeql-action v3,
+  date each), `deploy/droplet/test-caddy-ip.sh` and `deploy/droplet/test-update.sh` (build_env fixtures + the
+  committed site.env: allowed keys, no duplicates or empty values, SITE_HOST/ROUTING/APP_URL/ADMIN_URL together and matching).
+  `promote` needs both. Also: `codeql.yml` (codeql-action v3,
   javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
   `js/insufficient-password-hash` in restore-drill.ts, for the owner to dismiss ("won't fix", §17); trailing-run trims use core `trimTrailing`, not
   `/x+$/`), `cloudflare-ips.yml` (Mondays + PRs
@@ -961,7 +994,9 @@ i18n namespace `automations`.
   - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
   - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
     (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
-  - Host routing by default; set `E2E_ROUTING=path` for path routing.
+  - Host routing by default; set `E2E_ROUTING=path` for path routing. Verified 2026-10-10: in path mode the
+    super-admin helper fails (its verify link `${app}/api/auth/verify-email` is `/app/api/…`, a dashboard path) and
+    same-host F23 redirects come back with a relative Location (slug-rename.spec expects absolute); CI runs host mode.
   - `global-setup` resets the DB and seeds the platform.
   - Helpers sign up owners through the UI; `makeStudio` grants platform admin; `createLogin` (login only, browser
     sign-up) + `addMember(slug, email, role)` for staff; `consoleEmailKey(page, key|null)` routes staff mail to the

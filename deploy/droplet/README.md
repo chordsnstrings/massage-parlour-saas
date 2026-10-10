@@ -19,7 +19,8 @@ such as Namecheap.
     `deploy/green` that is not part of the deploy branch. Until `deploy/green` exists for the first time it deploys the
     branch tip (status `gate: none`); once seen, it never falls back (`/opt/spa/ci-gated`). A push therefore reaches
     production when CI finishes (~20 min), not 2 min later. Override the ref name in `/opt/spa/green-ref`.
-  - **Each deploy:** build the images → `pg_dump -Fc` to `/opt/spa/backups/pre-migrate-<sha>.dump` (newest 5 kept)
+  - **Each deploy:** rebuild `/opt/spa/.env` (first-boot env < secrets overlay < `site.env`, see "Hostname and public
+    settings") → build the images → `pg_dump -Fc` to `/opt/spa/backups/pre-migrate-<sha>.dump` (newest 5 kept)
     → `migrate` service (with `lock_timeout=10s`, `statement_timeout=15min`; tune with `MIGRATE_LOCK_TIMEOUT` /
     `MIGRATE_STATEMENT_TIMEOUT` in the env overlay) → restart → `/api/health` for up to 5 min.
   - **Automatic rollback:** if any step fails, the updater redeploys the last good commit (`/opt/spa/last-good`) and
@@ -47,9 +48,12 @@ such as Namecheap.
   - basic auth, user `ops`, password = `STATUS_PASSWORD` from the render step
 - **Backups:**
   - nightly `pg_dump` into `/opt/spa/backups` (7 rolling days)
-  - off-site via the worker's `db-backup` job (03:30 Dubai) to the `R2_*` bucket; without `R2_*` it falls back to the
-    `S3_*` file bucket (`backups/` prefix). **Recommended:** a separate private R2 bucket + its own key in `R2_*`,
-    with lifecycle rules `backups/daily/` 30 days and `backups/monthly/` 365 days.
+  - off-site via the worker's `db-backup` job (03:30 Dubai) to the `R2_*` bucket (any S3-compatible store); without
+    `R2_*` it falls back to the `S3_*` file bucket (`backups/` prefix). **Recommended:** a private **DigitalOcean
+    Spaces** bucket (about USD 5/month) with its own access key: `R2_ENDPOINT=https://<region>.digitaloceanspaces.com`
+    (e.g. `blr1`), `R2_REGION=<region>` (signing region; unset = `auto`, which Cloudflare R2 uses), `R2_BUCKET`,
+    `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (secrets overlay), and lifecycle rules `backups/daily/` 30 days and
+    `backups/monthly/` 365 days. `scripts/restore-drill.sh` reads the same variables.
   - every run (ok / skipped / failed) shows on the super-admin overview; it warns when the last good backup is > 36 h old
   - monthly **restore drill** (worker `restore-drill`, 2nd of the month): latest off-site dump → scratch database →
     counts → drop, as the least-privilege role `spa_drill` (CREATEDB only; it owns only its scratch database and has
@@ -92,7 +96,7 @@ wants a click), on top of the honeypot and per-IP limits. Until both keys are se
 1. Cloudflare dashboard → **Turnstile** → **Add widget**: name `spamanagement forms`, **Widget mode: Managed**,
    pre-clearance **No**.
 2. **Hostnames:** `spamanagement.co` (a hostname also covers its subdomains, so `app.`, `admin.` and every spa's
-   `<slug>.spamanagement.co`) and `spamanagement.ae` while the old domain is live.
+   `<slug>.spamanagement.co`). Turnstile is a free widget: it needs no Cloudflare DNS (ours is at Namecheap).
 3. **Custom domains (option):** a spa's own domain (e.g. `book.saffronspa.ae`) works only once it is in the
    widget's hostname list. Add them there, then tick **Also check spa custom domains** (step 4; or set
    `TURNSTILE_CUSTOM_DOMAINS=on`). Without it, custom-domain booking pages skip the bot check (honeypot + limits only)
@@ -117,7 +121,7 @@ host later means adding it to `packages/core/src/security-headers.ts`.
 
 ## Super-admins
 
-- **Who:** the droplet's base `PLATFORM_ADMIN_EMAILS` (`/opt/spa/.env`, e.g. `ahmed@arks.ae`) **plus**
+- **Who:** the droplet's base `PLATFORM_ADMIN_EMAILS` (`/opt/spa/.env.base`, e.g. `ahmed@arks.ae`) **plus**
   `ahmedabouseif1997@gmail.com` and `sefohh.aa45@gmail.com`, appended in compose.yml for web, worker and
   migrate/seed (owner, 2026-10-09; the base env can't be edited without SSH). To add or remove one later, edit those
   three lines (or set the full list in the secrets overlay and drop the appended part). Empty segments and duplicates
@@ -133,8 +137,9 @@ host later means adding it to `packages/core/src/security-headers.ts`.
 ## Connect Claude (edit spa sites from Claude)
 
 1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to the two owner-chosen super-admins `ahmedabouseif1997@gmail.com`
-   and `sefohh.aa45@gmail.com`; a value in `/opt/spa/.env` or the secrets overlay replaces it (comma-separated). Those
-   accounts must be super-admins with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
+   and `sefohh.aa45@gmail.com`; a value in `/opt/spa/.env.base` (first-boot env, needs SSH) or the secrets overlay
+   replaces it (comma-separated; `/opt/spa/.env` itself is regenerated on every deploy, so an edit there is lost).
+   Those accounts must be super-admins with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
 2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
    "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
    with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
@@ -159,8 +164,7 @@ Owner steps in that project (console.cloud.google.com → APIs & Services):
    `https://www.googleapis.com/auth/webmasters` (both sensitive: Google verifies the app before external users see no
    warning). The connect flow asks for both; spas connected before F17 see "Reconnect Google and allow Search Console
    access" until they reconnect once.
-3. **Authorized redirect URIs**: `https://app.<domain>/api/integrations/google/callback` for each platform domain
-   (spamanagement.co and, while it lives, spamanagement.ae).
+3. **Authorized redirect URIs**: `https://app.spamanagement.co/api/integrations/google/callback`.
 
 What spas get (Premium): Settings → Instagram & Google → Google card → **Book button on Google** (adds/updates/removes
 the location's APPOINTMENT link → `https://<site>/book?src=google`; the `gbp-site-sync` worker job re-points it within
@@ -168,7 +172,7 @@ the location's APPOINTMENT link → `https://<site>/book?src=google`; the `gbp-s
 after each publish, or with "Send sitemap"; the spa's Google account must own or fully manage a property covering
 the address — a custom domain without one is added with `sites.add` and must then be verified in Search Console).
 **Platform marketing sitemap stays an owner step:** in Search Console add the `sc-domain:spamanagement.co` property
-(DNS TXT verification in Cloudflare) and submit `https://spamanagement.co/sitemap.xml` once. Spa free addresses
+(DNS TXT verification: Namecheap → Advanced DNS) and submit `https://spamanagement.co/sitemap.xml` once. Spa free addresses
 (`{slug}.spamanagement.co`) are covered by that Domain property; spa Google accounts can't verify them.
 
 ## Meta: Instagram + Facebook Page (F18, F19)
@@ -180,7 +184,7 @@ One Meta app (`META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`) w
    `instagram_business_manage_messages`, `instagram_business_manage_comments` (comment replies **and private
    replies**), `instagram_business_content_publish` (feed posts, **reels, stories, carousels**).
 2. **Facebook Login for Business** (F19): add the product, then **Valid OAuth Redirect URIs** =
-   `https://app.<domain>/api/integrations/meta/facebook/callback` per platform domain (the Facebook card shows it).
+   `https://app.<domain>/api/integrations/meta/facebook/callback` (the Facebook card shows it).
    Optional: create a Login for Business **configuration** (user access token, the permissions below) and set
    `META_FB_CONFIG_ID` to its id; unset = the dialog asks for the permission list directly. Permissions for app
    review: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
@@ -199,10 +203,12 @@ minutes and the 5-minute `instagram-publish` job finishes the post.
 ## Client IP (rate limits, audit IPs)
 
 The app takes the visitor's IP from one header only, `Cf-Connecting-Ip`, and Caddy overwrites it on every request:
-- **Through Cloudflare** (orange-cloud hosts, or a spa domain proxied by its own Cloudflare account): the TCP peer is a
-  Cloudflare edge address, so Caddy keeps Cloudflare's `Cf-Connecting-Ip` (the real visitor).
-- **Direct to the droplet** (grey-cloud hosts, spa custom domains, anyone using the droplet IP): the peer is not
-  Cloudflare, so Caddy sets `Cf-Connecting-Ip` to the peer itself and a forged header is discarded.
+- **Through Cloudflare** (only a spa domain proxied by the spa's own Cloudflare account; our DNS is at Namecheap with
+  no proxy): the TCP peer is a Cloudflare edge address, so Caddy keeps Cloudflare's `Cf-Connecting-Ip` (the real
+  visitor).
+- **Direct to the droplet** (spamanagement.co and its subdomains, the sslip.io address, most spa custom domains,
+  anyone using the droplet IP): the peer is not Cloudflare, so Caddy sets `Cf-Connecting-Ip` to the peer itself and
+  a forged header is discarded.
 - `X-Real-Ip`, `True-Client-Ip` and `Do-Connecting-Ip` are stripped; `X-Forwarded-For` is rebuilt by Caddy and never
   read for the IP (behind Cloudflare its first entry is whatever the client sent).
 
@@ -219,102 +225,148 @@ git commit -am "chore(caddy): refresh Cloudflare IP ranges"
 
 ## Secrets without SSH
 
-`/opt/spa/.env` is written at first boot. To add or rotate secrets later:
+`/opt/spa/.env` is written at first boot; the updater keeps that copy as `/opt/spa/.env.base` and regenerates `.env`
+on every deploy (`.env.base` < overlay < `site.env`), so never edit `.env` by hand (with SSH, edit `.env.base`). To add
+or rotate secrets later:
 1. Encrypt a dotenv file with the key in `/opt/spa/secrets.key`:
    ```sh
    openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt -pass file:<key> -in overlay.env -out deploy/droplet/secrets.env.enc
    ```
 2. Commit and push.
 
-On its next run the updater decrypts the file and overrides those keys on top of the first-boot `.env`, then rebuilds.
+On its next run the updater decrypts the file and overrides those keys on top of the first-boot env (`.env.base`), then rebuilds.
+The updater replaces the previous overlay as a whole, so the new plaintext must hold every key the current one holds.
+Only the droplet has the key: public settings go in `site.env` instead (next section), which also wins over the
+overlay for its keys.
 
-## Hostname
+## Hostname and public settings (site.env)
 
-Until a domain is wired in, `SITE_HOST=auto` makes the site answer on `<ip-with-dashes>.sslip.io`, and Caddy gets a
-Let's Encrypt certificate for it. Routing is path-based (`/app`, `/admin`, `/s/{slug}`).
+First boot writes `SITE_HOST` (`auto` = `<ip-with-dashes>.sslip.io`) and `ROUTING=path` (`/app`, `/admin`,
+`/s/{slug}`) into `/opt/spa/.env`. Public settings are changed later in **`deploy/droplet/site.env`**: a plain file in
+git, never for secrets. On every deploy the updater rebuilds `/opt/spa/.env` as first-boot env < secrets overlay <
+site.env, so a line in site.env wins over both. Only these keys apply: `SITE_HOST`, `ROUTING`, `APP_URL`, `ADMIN_URL`,
+`EXTRA_ROOT_DOMAINS`, `ACME_EMAIL`, `VAPID_SUBJECT`, `CF_CNAME_TARGET`, `EMAIL_FROM`; any other line is skipped and
+noted in `/_status/build.log`. CI (`deploy/droplet/test-update.sh`) fails a site.env with another key, a key set
+twice, an empty value, or `SITE_HOST` / `ROUTING` / `APP_URL` / `ADMIN_URL` not set together and matching (`ROUTING=host` needs
+`APP_URL=https://app.<SITE_HOST>` and `ADMIN_URL=https://admin.<SITE_HOST>`; `ROUTING=path` needs
+`https://<SITE_HOST>` and `https://<SITE_HOST>/admin`). A rollback redeploys the last good commit with that commit's
+own site.env. A change to `update.sh` itself runs from the deploy after the one that ships it (`updater-sync` installs
+it during that deploy), so a site.env change that relies on new updater code must come in a later push.
 
 Links are domain-agnostic (apps/web/src/server/origin.ts): getting around and signing in use the platform domain the
 visitor is on; addresses that are shared, stored or sent use the canonical `SITE_HOST`. The app only needs to know
 which domains are ours:
-- `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN`/`APP_URL` derive from it). Every address that
-  is shared or stored uses it (spa site links, invites, campaign links), as do CNAME targets and worker jobs.
-- `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform. Caddy issues
-  their certificates on demand (approved by `/api/domains/allowed`), so no Caddyfile edit is needed.
+- `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN` derives from it). Every address that is shared
+  or stored uses it (spa site links, invites, campaign links), as do worker jobs (`APP_URL`). The CNAME target shown
+  to spas is `CF_CNAME_TARGET` (`customers.<SITE_HOST>`; unset = the `APP_URL` host).
+- `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform (one line
+  holding all of them).
 
-### Move to a new domain without downtime (spamanagement.ae → spamanagement.co)
+**TLS (no Caddyfile edit):** Caddy gets the `SITE_HOST` certificate at start; every other host (`www.`, `app.`,
+`admin.`, `{slug}.`, the extra domains, spa custom domains) gets one **on demand** on its first visit, approved by
+`/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing and renamed spa slugs, custom
+domains that are pending, verifying or active; anything else is refused). `/_status/` is served on `SITE_HOST` and
+on the droplet's own `<ip>.sslip.io`.
 
-The code already speaks spamanagement.co (auth app name, TOTP issuer, copy); staff email still sends from
-spamanagement.ae (B1 decision) until step 0 is done. The old domain
-keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checklist, in order:
+### Move to spamanagement.co
 
-0. **Email first.** Resend → Domains → add `spamanagement.co`, add the SPF/DKIM (TXT) and return-path (MX/TXT)
-   records it shows in Cloudflare DNS (DNS-only), wait for "Verified". Until then nothing to do: the compose default and `DEFAULT_EMAIL_FROM` stay
-   `spamanagement.ae <no-reply@spamanagement.ae>`; once verified set `EMAIL_FROM` (step 3).
-1. **DNS** (Cloudflare zone `spamanagement.co`, all at the droplet; start **DNS-only / grey cloud** so Caddy can get
-   its certificates directly):
+From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with host routing (`app.`, `admin.`,
+`{slug}.`). The old sslip.io address keeps working through `EXTRA_ROOT_DOMAINS`. Steps:
 
-   | Type | Name | Content |
-   |---|---|---|
-   | A | `@` (apex) | droplet IPv4 |
-   | CNAME | `www` | `spamanagement.co` |
-   | CNAME | `app` | `spamanagement.co` |
-   | CNAME | `admin` | `spamanagement.co` |
-   | CNAME | `*` | `spamanagement.co` (spa sites `{slug}.spamanagement.co`) |
-   | CNAME | `customers` | `spamanagement.co` (CNAME target shown to spas for custom domains) |
+1. **DNS (done).** Namecheap → Domain List → spamanagement.co → Advanced DNS, nameservers "Namecheap BasicDNS":
+   `A @ → 134.209.145.162` and `A * → 134.209.145.162` (the `*` covers `www.`, `app.`, `admin.`, every `{slug}.` and
+   `customers.`, the CNAME target shown to spas). Email Forwarding (MX + SPF TXT) delivers `ask@spamanagement.co`.
+   Check: `dig +short app.spamanagement.co` gives `134.209.145.162`.
+2. **Before merging PR 2** (only what is configured; each is an extra entry next to the old one, harmless early):
+   - Turnstile (only if console → Overview → Configuration shows the `TURNSTILE` row green): Cloudflare → Turnstile
+     → the widget → Hostnames: add `spamanagement.co` (covers `app.`, `admin.` and every `{slug}.`). Without it every
+     protected form (booking, widget, Enquiry, Apply, Contact) refuses with "We couldn't confirm you're not a robot"
+     from the moment of the switch.
+   - Google Cloud → Credentials → OAuth client → Authorized redirect URIs: add
+     `https://app.spamanagement.co/api/integrations/google/callback`; OAuth consent screen → Authorized domains: add
+     `spamanagement.co`.
+   - Meta app → Instagram API with Instagram login → Business login settings → OAuth redirect URIs: add
+     `https://app.spamanagement.co/api/integrations/meta/callback` (+ `/api/integrations/meta/facebook/callback` for
+     Facebook Login); App domains: add `spamanagement.co`.
+3. **Merge in two pushes** (the first deploy of a changed `update.sh` still runs the previous copy, which doesn't
+   read site.env; the switch also needs a rollback target without it):
+   1. PR 1, the updater, with the move lines in `site.env` commented out (no visible change). Wait until
+      `https://134-209-145-162.sslip.io/_status/deploy.json` shows the deploy branch's commit for PR 1 (the merge
+      commit) with `"state":"ok"`;
+   2. only then PR 2, the switch, rebased on the deploy branch so its diff is `site.env` only (it uncomments the
+      move block).
 
-   Optionally AAAA records for IPv6. Keep the `.ae` records as they are.
-2. **TLS (Caddy, no Caddyfile edit):** the canonical `SITE_HOST` gets its certificate at start; every other host
-   (`www.`, `app.`, `admin.`, `{slug}.`, the old domain, spa custom domains) gets one **on demand** on its first
-   visit, approved by `/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing spa slugs,
-   registered custom domains). After each host has loaded once over HTTPS you may switch the records to **proxied**
-   (orange cloud) with SSL/TLS mode **Full (strict)**; leave "Always Use HTTPS" off so HTTP-01 renewals reach Caddy.
-3. **Env values**: write an overlay dotenv (see "Secrets without SSH"):
-   ```dotenv
-   SITE_HOST=spamanagement.co             # canonical: ROOT_DOMAIN derives from it; shared/stored links use it
-   EXTRA_ROOT_DOMAINS=spamanagement.ae    # old domain keeps serving the whole platform (keep while links live)
-   EMAIL_FROM="spamanagement.co <ask@spamanagement.co>"   # only after step 0 is verified
-   ACME_EMAIL=ask@spamanagement.co
-   VAPID_SUBJECT=mailto:ask@spamanagement.co
-   CF_CNAME_TARGET=customers.spamanagement.co   # only if Cloudflare for SaaS is in use
-   # Host routing: add only once the step 1 records resolve for app./admin./*.
-   ROUTING=host
-   APP_URL=https://app.spamanagement.co
-   ADMIN_URL=https://admin.spamanagement.co
-   ```
-   With path routing (`ROUTING=path`, the default) leave `APP_URL`/`ADMIN_URL` out: they default to
-   `https://$SITE_HOST` and `…/admin`. `ROUTING` is a build arg, so the web image rebuilds on the next update.
-4. **OAuth callbacks**: add the new domain's URLs (keep the `.ae` ones until nobody connects from there):
-   - Google Cloud → Credentials → OAuth client → Authorized redirect URIs:
-     `https://app.spamanagement.co/api/integrations/google/callback` (path routing: on the bare domain); OAuth
-     consent screen → Authorized domains: add `spamanagement.co`.
-   - Meta app → Instagram API with Instagram login → Business login settings → OAuth redirect URIs:
-     `https://app.spamanagement.co/api/integrations/meta/callback` (path routing: on the bare domain). Then point the
-     Webhooks callback, Deauthorize callback and Data deletion request URLs at the `.co` origin and add
-     `spamanagement.co` to App domains.
-   - Legal URLs (both consoles; pages in apps/web/src/app/marketing, company details in
-     apps/web/src/components/marketing/legal-config.ts): Meta app → Settings → Basic → Privacy policy URL
-     `https://spamanagement.co/privacy`, Terms of service URL `https://spamanagement.co/terms`, User data deletion →
-     Data deletion instructions URL `https://spamanagement.co/data-deletion`. Google Cloud → OAuth consent screen →
-     Application privacy policy link `https://spamanagement.co/privacy`, terms of service link
+   If both landed in one deploy (`deploy.json` shows PR 2's commit with `"state":"ok"` but the site is still on the
+   sslip.io address), the next push would make the switch with no rollback target: first push a commit that
+   comments the move block out again, wait for `"state":"ok"`, then make the switch again.
+4. **What happens:** CI runs on the deploy branch → `deploy/green` → within ~2 min the droplet rebuilds `.env`,
+   rebuilds web (`ROUTING` is a build arg; a few minutes) and restarts. Caddy gets the spamanagement.co certificate at
+   start and each other host's on its first visit (that first request takes a few seconds).
+5. **Verify:**
+   - `https://spamanagement.co` (marketing), `https://app.spamanagement.co` (sign in again: cookies are per domain),
+     `https://admin.spamanagement.co`
+   - a spa at `https://{slug}.spamanagement.co`; book a test slot on `https://{slug}.spamanagement.co/book`
+     (catches a missing Turnstile hostname, step 2)
+   - `https://spamanagement.co/_status/deploy.json` (user `ops`) shows PR 2's commit with `"state":"ok"`
+   - old links redirect: `https://134-209-145-162.sslip.io/app` → `https://app.spamanagement.co/`,
+     `…/s/{slug}` → `https://{slug}.spamanagement.co/` (table below)
+   - console → Company: set the company name / contact email to `spamanagement.co` / `ask@spamanagement.co` if they
+     still show `.ae` (migration 0047 already replaces the old default company name)
+6. **After the switch** (only what is configured; these need the new address live):
+   - Meta app: Webhooks callback, Deauthorize callback and Data deletion request URLs on
+     `https://app.spamanagement.co/api/integrations/meta/…` (Meta calls them to check); Settings → Basic → Privacy
+     policy `https://spamanagement.co/privacy`, Terms `https://spamanagement.co/terms`, Data deletion instructions
+     `https://spamanagement.co/data-deletion` (pages in apps/web/src/app/marketing, company details in
+     apps/web/src/components/marketing/legal-config.ts).
+   - Google OAuth consent screen: privacy policy `https://spamanagement.co/privacy`, terms
      `https://spamanagement.co/terms`.
-5. **Re-encrypt the overlay**: the updater replaces the previous overlay as a whole, so the plaintext must hold
-   every key the current overlay holds (from your own copy) plus the ones above:
-   ```sh
-   # secrets.key = a copy of /opt/spa/secrets.key
-   openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -salt -pass file:secrets.key \
-     -in overlay.env -out deploy/droplet/secrets.env.enc
-   ```
-   Commit and push only `secrets.env.enc` (never `overlay.env` or the key). The droplet applies it within ~2 min
-   (or run `spa-update --force`).
-6. **Verify**: `https://spamanagement.co/_status/deploy.json` (user `ops`) shows the new commit; sign-in works on
-   both domains; a password-reset email arrives from `ask@spamanagement.co`; a spa site loads on
-   `{slug}.spamanagement.co` and on the old `{slug}.spamanagement.ae`; new 2FA enrolments show issuer
-   "spamanagement.co" (existing authenticator entries keep their old label and still work).
-7. Super-admin → Platform settings: update the company name / contact email if they still say `.ae` (the DB column
-   default only applies to a fresh install).
+   - Stripe: nothing (no webhook; the Checkout return address follows the domain the payer is on).
+   - Claude connector: reconnect with `https://app.spamanagement.co/api/mcp` (console → Websites shows it).
+   - Later, for staff email: Resend → Domains → add `spamanagement.co`, add exactly the records it shows in Namecheap
+     → Advanced DNS (they use their own names, such as `send` and `resend._domainkey`), wait for "Verified", then
+     add the Resend key (console → Company → Email). The default sender is already
+     `spamanagement.co <ask@spamanagement.co>`. **Careful:** Resend's `send` MX record needs Namecheap Mail Settings
+     = Custom MX, which switches off Email Forwarding, so `ask@spamanagement.co` stops receiving. Before switching,
+     write down the current forwarding MX records (`eforward…registrar-servers.com`) and ask Namecheap support how to
+     keep forwarding next to a `send` MX (or move `ask@` to another forwarder first); afterwards send a test mail to
+     `ask@spamanagement.co`.
+7. **Undo:** Claude reverts the switch commit (a PR); the next deploy rebuilds `.env` from the reverted site.env and
+   is back on the sslip.io address with path routing (web rebuilds; browsers keep the redirects for 5 minutes). If
+   the switch's build, start or health check fails, the updater rolls back to the last good commit on its own
+   (`deploy.json` says `failed` and why).
+
+**Old links keep working** (shared links, invites, QR posters, widget snippets, bookmarks): on any platform domain
+(the sslip.io one, spamanagement.co itself, and their `www.`) the proxy redirects old path addresses, keeping the
+rest of the path and the query, in one hop (a renamed spa's old slug goes straight to its current one):
+
+| Old (path routing) | New (host routing) |
+|---|---|
+| `https://<old>/app/…` | `https://app.spamanagement.co/…` |
+| `https://<old>/admin/…` | `https://admin.spamanagement.co/…` |
+| `https://<old>/s/{slug}/…` | `https://{slug}.spamanagement.co/…` |
+
+GET/HEAD get a 301, other methods a 308 (method and body kept). Never redirected, served as they are on every host,
+the old one included while it stays in `EXTRA_ROOT_DOMAINS`:
+- `/api/*`: Google/Meta OAuth callbacks (`/api/integrations/google/callback`, `/api/integrations/meta/callback`,
+  `/api/integrations/meta/facebook/callback`), Meta webhook / deauthorize / data-deletion, the Claude connector
+  `/api/mcp`, `/api/health`, Caddy's `/api/domains/allowed`.
+- `/files/*` (images in sent links and emails), `/.well-known/*`, `/widget.js` (an old snippet still loads it from the
+  old host; its `/s/{slug}/book/embed` frame redirects to `{slug}.spamanagement.co/book/embed`, and the widget takes
+  the messages of the frame it opened from whatever origin that frame lands on, so resize, Escape-to-close and the
+  `spa-widget:booked` event keep working; re-copying the snippet from Settings → Booking widget is optional).
+- `/_status/*` is Caddy's: `https://spamanagement.co/_status/deploy.json`, and on the old sslip.io address.
+
+Not carried over: sign-in (cookies are per domain: everyone signs in once more on spamanagement.co; 2FA stays as it
+is); an installed dashboard app leaves its own scope on the redirect, so reinstall it from
+`https://app.spamanagement.co/{slug}`; the Claude connector (old tokens were issued for the old address); a
+Google/Meta connect started before the switch must be started again; push notifications (they belong to the old
+address, which keeps showing them): staff who had them on enable them again on `app.spamanagement.co` and block
+notifications for `134-209-145-162.sslip.io` in the browser's site settings (else every one arrives twice). Keep the
+old address in `EXTRA_ROOT_DOMAINS` while Meta's URLs or old links may still point at it.
 
 Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first, register its OAuth callbacks,
-then make it `SITE_HOST` and keep the old one in `EXTRA_ROOT_DOMAINS` so links already sent keep working.
+then make it `SITE_HOST` (with `APP_URL` / `ADMIN_URL` to match) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
+already sent keep working.
 
 ## Creating the droplet
 
@@ -334,8 +386,11 @@ The secrets file needs these keys:
 - optional `SPA_DRILL_PASSWORD` (restore-drill role `spa_drill`; unset = derived from `SPA_OWNER_PASSWORD`)
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - optional: `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`, `SOURCE_DATABASE_URL`
-- strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (off-site DB backups),
+- strongly recommended: `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REGION` (off-site DB
+  backups; DigitalOcean Spaces, see "Backups"),
   `RESEND_API_KEY` (password reset + email verification fail loudly in production without it; it can also be set later in the console → Settings → Email)
+- first boot writes the optional and recommended keys above into `/opt/spa/.env` too (empty when unset); later
+  changes go through the secrets overlay ("Secrets without SSH")
 - super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
   sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens. See
   "Super-admins" below for the addresses compose appends and how a new one gets its login.

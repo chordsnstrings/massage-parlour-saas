@@ -77,6 +77,8 @@ jobs:
         run: pnpm audit --prod --audit-level=high
       - name: Caddyfile client-IP handling (validate + forged-header checks)
         run: bash deploy/droplet/test-caddy-ip.sh
+      - name: Updater env (.env.base < secrets overlay < site.env) + committed site.env
+        run: bash deploy/droplet/test-update.sh
 
   # G7: the droplet deploys `deploy/green`, never the raw branch tip. Only a commit of the deploy branch whose checks
   # passed moves it (forward only; the built-in token, no extra secret). Pushes made with it start no workflow.

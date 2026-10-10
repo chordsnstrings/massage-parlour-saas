@@ -1,6 +1,14 @@
-import { newNonce, pageSecurityHeaders, parseRoots, resolveSurface } from '@spa/core'
+import {
+  canonicalScheme,
+  hostRoutedUrl,
+  newNonce,
+  pageSecurityHeaders,
+  parseRoots,
+  pathRoutedAddress,
+  resolveSurface,
+} from '@spa/core'
 import { type NextRequest, NextResponse } from 'next/server'
-import { movedSlugTarget } from '@/server/slug-redirect'
+import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
 /** Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — every one serves the whole platform. */
@@ -58,6 +66,21 @@ export async function proxy(req: NextRequest) {
       req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
     const fixed = host.replace(/\.+(?=:\d+$|$)/, '')
     return NextResponse.redirect(`${proto}://${fixed}${req.nextUrl.pathname}${req.nextUrl.search}`, 308)
+  }
+  // Host routing only (null under path routing, which still serves them): an address from the path-routing days
+  // (`/app/…`, `/admin/…`, `/s/{slug}/…` on any platform domain or its www.: shared links, invites, QR posters, widget
+  // snippets, installed apps) → the same rest of the path + query on `app.` / `admin.` / `{slug}.` of the canonical
+  // domain, one hop (a renamed spa's slug resolves to the current one, F23). GET/HEAD 301 (like F23); any other method
+  // 308, which keeps the method and body (a 301 may turn a POST into a GET). Short browser cache: a later rename or a
+  // switch back to path routing takes effect within minutes.
+  const old = pathRoutedAddress(host, req.nextUrl.pathname, ROOTS, { pathRouting: PATH_ROUTING })
+  if (old) {
+    const current = old.slug ? await currentSlugFor(old.slug) : null
+    const target = hostRoutedUrl(old, ROOTS[0]!, canonicalScheme(ROOTS[0]!, process.env.APP_URL), current)
+    const safe = req.method === 'GET' || req.method === 'HEAD'
+    const res = NextResponse.redirect(`${target}${req.nextUrl.search}`, safe ? 301 : 308)
+    res.headers.set('cache-control', 'private, max-age=300')
+    return res
   }
   const url = req.nextUrl.clone()
   const originalPath = url.pathname

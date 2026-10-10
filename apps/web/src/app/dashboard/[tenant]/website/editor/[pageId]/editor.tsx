@@ -528,17 +528,16 @@ function EditorHeader() {
   useEffect(() => {
     const t = setTimeout(() => {
       const puck = getPuck()
-      // An edit made before this timer (quick typist, busy machine) is already in the undo history: the baseline is
-      // the state Puck recorded first, so that edit still counts as unsaved (else it was never autosaved).
-      const first = puck.history.hasPast
-        ? (puck.history.histories[0]?.state as { data?: Data } | undefined)?.data
-        : undefined
+      // The baseline is the loaded page as Puck normalised it (its first history entry), not the canvas now: an edit
+      // made before this timer (quick typist, busy machine) still counts as unsaved, even one Puck's 250 ms history
+      // debounce hasn't recorded yet (else it was never autosaved).
+      const first = (puck.history.histories[0]?.state as { data?: Data } | undefined)?.data
       const json = JSON.stringify(first ?? puck.appState.data)
       setBaseline(json)
-      if (first) noteChange(puck.appState.data)
       const copy = readLocalCopy(localKey)
       if (copy && JSON.stringify(copy.data) !== json) setRestore(copy)
       else if (copy) clearLocalCopy(localKey)
+      if (JSON.stringify(puck.appState.data) !== json) noteChange(puck.appState.data)
     }, 400)
     return () => clearTimeout(t)
   }, [getPuck, setBaseline, localKey, setRestore, noteChange])

@@ -1,22 +1,25 @@
 # Single-droplet production stack (docs/PLAN.md §3): Postgres, migrations, web, worker and Caddy (HTTPS).
 # Images are built on the droplet from the checked-out branch; /usr/local/bin/spa-update keeps it current.
-# Secrets live in /opt/spa/.env (written at first boot by cloud-init.sh). Run from this directory with
+# Env: /opt/spa/.env, rebuilt by update.sh on every deploy: first-boot env (cloud-init.sh) < secrets.env.enc < site.env
+# (public settings). Run from this directory with
 #   docker compose --env-file /opt/spa/.env <command>
 name: spa
 
 x-app-env: &app-env
   NODE_ENV: production
   ROOT_DOMAIN: ${SITE_HOST}
-  # Host routing (ROUTING=host): set APP_URL=https://app.<domain> and ADMIN_URL=https://admin.<domain> in the overlay.
+  # Host routing (ROUTING=host): APP_URL=https://app.<domain> and ADMIN_URL=https://admin.<domain> (site.env).
   APP_URL: ${APP_URL:-https://${SITE_HOST}}
   ADMIN_URL: ${ADMIN_URL:-https://${SITE_HOST}/admin}
+  # Run-time copy of web's build arg (below): code that reads it at run time (services freeSiteUrl, also in the worker).
+  NEXT_PUBLIC_ROUTING: ${ROUTING:-path}
   # More platform domains (comma or space separated) — each serves the whole platform with its own links + TLS.
   EXTRA_ROOT_DOMAINS: ${EXTRA_ROOT_DOMAINS:-}
   # Owner, 2026-10-09: the droplet's base value (ahmed@arks.ae) + two more super-admins, appended here because the base
   # env can't be edited without SSH. listedAdminEmails() drops empty segments and duplicates. Keep in sync with migrate.
   PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-},ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com
   # Studio Ask AI + Claude MCP connector (/api/mcp): only these super-admins (verified email + 2FA). Owner, 2026-10-09:
-  # exactly the two added admins by default; a value in /opt/spa/.env or the secrets overlay replaces it.
+  # exactly the two added admins by default; a value in /opt/spa/.env.base or the secrets overlay replaces it.
   SITE_AI_EDITOR_EMAILS: ${SITE_AI_EDITOR_EMAILS:-ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
@@ -50,13 +53,15 @@ x-app-env: &app-env
   R2_BUCKET: ${R2_BUCKET:-}
   R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
   R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+  # Signing region: unset = auto (Cloudflare R2); DigitalOcean Spaces: the endpoint's region, e.g. fra1.
+  R2_REGION: ${R2_REGION:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
   # F9 bot check (Cloudflare Turnstile) on online booking, the widget, Apply and Contact; unset = off (console flags it).
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
   TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
   TURNSTILE_CUSTOM_DOMAINS: ${TURNSTILE_CUSTOM_DOMAINS:-}
   RESEND_API_KEY: ${RESEND_API_KEY:-}
-  EMAIL_FROM: ${EMAIL_FROM:-spamanagement.ae <no-reply@spamanagement.ae>} # B1: .ae until .co is verified in Resend
+  EMAIL_FROM: ${EMAIL_FROM:-} # unset = @spa/core DEFAULT_EMAIL_FROM (spamanagement.co <ask@spamanagement.co>)
   APP_RELEASE: ${APP_RELEASE:-}
 
 # G8: rotate container logs (applies on the next `up`, independent of /etc/docker/daemon.json).
@@ -197,7 +202,7 @@ services:
     ports: ["80:80", "443:443", "443:443/udp"]
     environment:
       SITE_HOST: ${SITE_HOST}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_EMAIL: ${ACME_EMAIL:-ask@spamanagement.co} # never empty: Caddy refuses `email` without an argument
       STATUS_USER: ${STATUS_USER:-ops}
       STATUS_HASH: ${STATUS_HASH}
     volumes:

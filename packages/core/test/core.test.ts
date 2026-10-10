@@ -66,7 +66,7 @@ describe('platform roots', () => {
       expect(resolveSurface(`pilot.${root}`, roots)).toEqual({ kind: 'site', slug: 'pilot' })
     }
     expect(matchRoot('spamanagement.com', roots)).toBeNull()
-    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.ae <no-reply@spamanagement.ae>') // B1: .ae until .co is verified
+    expect(DEFAULT_EMAIL_FROM).toBe('spamanagement.co <ask@spamanagement.co>') // the only address (owner)
   })
 
   it('resolves surfaces on every platform domain', () => {

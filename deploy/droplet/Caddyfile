@@ -4,8 +4,8 @@
 	on_demand_tls {
 		ask http://web:3000/api/domains/allowed
 	}
-	# Client IP (F26): port 443 is open to everyone (custom domains, grey-cloud hosts), so Cf-Connecting-Ip is trusted
-	# only from Cloudflare's edge (ranges below; refresh: deploy/droplet/cloudflare-ips.sh --write). From any other
+	# Client IP (F26): port 443 is open to everyone (our own domains are not proxied; a spa's custom domain may sit behind
+	# its own Cloudflare), so Cf-Connecting-Ip is trusted only from Cloudflare's edge (ranges below; refresh: deploy/droplet/cloudflare-ips.sh --write). From any other
 	# peer {client_ip} is the TCP peer itself. Every proxied request overwrites Cf-Connecting-Ip with that resolved IP
 	# (proxy_to_web), the one header the app reads (@spa/core clientIpFrom), so per-IP rate limits and audit IPs can't
 	# be forged by a client that reaches the droplet directly. X-Forwarded-For is not a source: behind Cloudflare its
@@ -28,6 +28,15 @@
 	}
 }
 
+# Deploy status + recent logs for the operator (basic auth; no secrets are written there).
+(status_page) {
+	basic_auth {
+		{$STATUS_USER:ops} {$STATUS_HASH}
+	}
+	root * /srv
+	file_server
+}
+
 {$SITE_HOST} {
 	encode zstd gzip
 	# Largest legitimate body is a 20 MB image upload; the app enforces exact limits per route.
@@ -35,13 +44,8 @@
 		max_size 25MB
 	}
 
-	# Deploy status + recent logs for the operator (basic auth; no secrets are written there).
 	handle /_status/* {
-		basic_auth {
-			{$STATUS_USER:ops} {$STATUS_HASH}
-		}
-		root * /srv
-		file_server
+		import status_page
 	}
 
 	handle {
@@ -59,5 +63,17 @@ https:// {
 	request_body {
 		max_size 25MB
 	}
-	import proxy_to_web
+	# The droplet's own <ip>.sslip.io (an EXTRA_ROOT_DOMAINS fallback once SITE_HOST is a real domain) keeps the status
+	# page too: a way to read deploy.json if the main domain is broken. `*.sslip.io` matches one label only, so
+	# app./admin./{slug}.<ip>.sslip.io still reach the app.
+	@status_fallback {
+		host *.sslip.io
+		path /_status/*
+	}
+	handle @status_fallback {
+		import status_page
+	}
+	handle {
+		import proxy_to_web
+	}
 }

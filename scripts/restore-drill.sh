@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Manual restore drill (PLAN §3.5) — same steps as the worker's monthly `restore-drill` job:
 # latest pg_dump from R2 (or a local file) → scratch database → sanity counts → drop.
-#   R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY  (same config as db-backup)
+#   R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY [R2_REGION, default auto]  (same config as db-backup;
+#   DigitalOcean Spaces: R2_ENDPOINT=https://<region>.digitaloceanspaces.com, R2_REGION=<region>)
 #   DATABASE_URL_DRILL  URL of the least-privilege spa_drill role (CREATEDB only, F11), database `postgres`,
 #                       e.g. postgres://spa_drill:spa_drill_dev@localhost:5432/postgres (dev); never the superuser
 # Usage: scripts/restore-drill.sh [path/to/backup.dump]
@@ -26,7 +27,7 @@ if [ "${1:-}" ]; then
 else
   : "${R2_ENDPOINT:?R2 is not configured (or pass a dump file)}" "${R2_BUCKET:?}" "${R2_ACCESS_KEY_ID:?}" "${R2_SECRET_ACCESS_KEY:?}"
   BASE="${R2_ENDPOINT%/}/$R2_BUCKET"
-  SIG=(--fail --silent --show-error --aws-sigv4 "aws:amz:auto:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY")
+  SIG=(--fail --silent --show-error --aws-sigv4 "aws:amz:${R2_REGION:-auto}:s3" --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY")
   KEY=$(curl "${SIG[@]}" "$BASE?list-type=2&prefix=backups/daily/" | grep -o '<Key>[^<]*\.dump</Key>' |
     sed -E 's#</?Key>##g' | sort | tail -n 1)
   [ -n "$KEY" ] || { echo "no backup found in R2 (backups/daily/)" >&2; exit 1; }

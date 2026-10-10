@@ -71,7 +71,7 @@ export const platformSettings = pgTable(
   'platform_settings',
   {
     id: smallint('id').primaryKey().default(1),
-    companyName: text('company_name').notNull().default('spamanagement.ae'),
+    companyName: text('company_name').notNull().default('spamanagement.co'),
     legalName: text('legal_name'),
     trn: text('trn'),
     tradeLicence: text('trade_licence'),

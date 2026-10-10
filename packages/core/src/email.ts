@@ -1,14 +1,13 @@
-/** Platform brand + domain (docs/PLAN.md §14.7 B1); the old spamanagement.ae keeps working via EXTRA_ROOT_DOMAINS. */
+/** Platform brand + domain (docs/PLAN.md §14.7 B1). */
 export const PLATFORM_NAME = 'spamanagement.co'
-/**
- * B1 decision (PLAN §14.8): staff emails keep sending from spamanagement.ae until spamanagement.co is verified in
- * Resend; then set EMAIL_FROM to `spamanagement.co <ask@spamanagement.co>` (owner 2026-10-09: the only
- * spamanagement.co address anywhere is ask@) and change this default.
- */
-export const EMAIL_DOMAIN = 'spamanagement.ae'
-export const DEFAULT_EMAIL_FROM = `${EMAIL_DOMAIN} <no-reply@${EMAIL_DOMAIN}>`
 /** Public contact address (marketing Contact page, PLAN §18.4); the console's company email wins when set. */
 export const PLATFORM_CONTACT_EMAIL = 'ask@spamanagement.co'
+/**
+ * Default staff-email sender (owner 2026-10-09: the only spamanagement.co address anywhere is ask@). Resend delivers
+ * only once spamanagement.co is verified there; EMAIL_FROM or the console's From address replace it.
+ */
+export const EMAIL_DOMAIN = 'spamanagement.co'
+export const DEFAULT_EMAIL_FROM = `${PLATFORM_NAME} <${PLATFORM_CONTACT_EMAIL}>`
 
 /** Email settings saved in the super-admin console (platform_settings); either field may be unset. */
 export type EmailSettings = { apiKey?: string | null; from?: string | null }
