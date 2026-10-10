@@ -1,3 +1,4 @@
+import { monthlyAed } from '@spa/core'
 import { ArrowRight, Check } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -28,7 +29,7 @@ const SHOWCASE_BENEFITS = [
 ]
 
 export default async function MarketingPage() {
-  const [plan] = await activePlans()
+  const plans = (await activePlans()).filter((p) => p.billingInterval === 'month')
   const signupUrl = await appUrl('/signup')
   return (
     <MarketingShell active="home">
@@ -175,19 +176,28 @@ export default async function MarketingPage() {
       {/* Price */}
       <section className="mkt-sec">
         <div data-rise className="mkt-wrap text-center">
-          <p className="mkt-eyebrow">One simple price</p>
-          <p className="mkt-head mt-5 text-[44px] leading-none font-bold tabular-nums sm:text-[66px]">
-            {plan ? formatAed(plan.priceAed) : 'AED 24,000'}
-            <span className="text-lg font-medium tracking-normal text-[var(--mute)]"> / year</span>
-          </p>
-          <p className="mkt-lead mx-auto">
-            Every automation and feature, unlimited staff and bookings, your website and domain.
-          </p>
+          <p className="mkt-eyebrow">Two plans</p>
+          <h2 className="mkt-h2 mx-auto max-w-2xl">Pick your plan. We handle the rest.</h2>
+          <div className="mx-auto mt-8 grid max-w-3xl gap-4 text-start sm:grid-cols-2">
+            {plans.map((p) => (
+              <div key={p.id} className="mkt-card">
+                <p className="mkt-head text-[20px] font-bold">{p.name}</p>
+                <p className="mkt-head mt-3 text-[34px] leading-none font-bold tabular-nums sm:text-[40px]">
+                  {formatAed(monthlyAed(p.priceAed))}
+                  <span className="text-base font-medium tracking-normal text-[var(--mute)]"> / month</span>
+                </p>
+                <p className="mt-2 text-[14px] text-[var(--mute)]">
+                  + {formatAed(p.setupFeeAed)} one-time setup · excl. VAT
+                </p>
+                {p.description && <p className="mt-4 text-[15px]">{p.description}</p>}
+              </div>
+            ))}
+          </div>
           <Link
             href="/pricing"
             className="mkt-link mt-6 inline-flex items-center gap-1.5 text-[15px] font-semibold text-[var(--accent-ink)]"
           >
-            See what’s included <ArrowRight className="size-4" />
+            Compare the plans <ArrowRight className="size-4" />
           </Link>
         </div>
       </section>

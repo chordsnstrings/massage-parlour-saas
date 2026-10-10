@@ -32,6 +32,7 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
   await test.step('marketing shows the live prices', async () => {
     await page.goto(base)
     await expect(page.getByRole('heading', { name: 'More bookings. Less work.', exact: true })).toBeVisible()
+    await expect(page.getByText(/AED\s?3,000(\.00)? \/ month/)).toBeVisible() // home: both plans, monthly + setup
     // PLAN §18.8: setup + monthly per plan, on the pricing page.
     await page.goto(`${base}/pricing`)
     await expect(page.getByTestId('plan-card-premium')).toContainText(/AED\s?14,000/)
