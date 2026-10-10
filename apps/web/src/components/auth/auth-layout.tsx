@@ -23,7 +23,7 @@ export function AuthLayout({
   return (
     // Marketing look (.mkt-app, components/brand-app.css; R13 §14.8): dark band beside a white form column.
     <div className="mkt-app grid min-h-dvh bg-surface lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <aside className="mkt-app-dark relative hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
+      <aside className="mkt-app-dark mkt-app-glow relative hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
         <Logo className="relative h-14 self-start" />
         <div className="relative max-w-md space-y-7">
           <span className="mkt-app-chip">Automation for UAE spas</span>

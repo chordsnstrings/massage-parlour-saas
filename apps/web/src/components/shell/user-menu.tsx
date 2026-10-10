@@ -32,7 +32,7 @@ export function UserMenu({
           {initials(user.name)}
         </span>
         {!compact && (
-          <span className="min-w-0 md:hidden lg:block">
+          <span className="min-w-0 md:hidden xl:block">
             <span className="block truncate text-sm font-medium">{user.name}</span>
             <span className="block truncate text-xs text-muted">{user.email}</span>
           </span>

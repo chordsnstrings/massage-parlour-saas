@@ -77,10 +77,14 @@
   background: var(--mkt-dark);
   color: #fff;
   color-scheme: dark;
+}
+/* Clipped panel with the slow green glow: the auth side panel, and the console's sticky sidebar panel (on the
+   panel, not the full-height aside: an overflow:hidden aside would become the scroll box and stop the sticking). */
+.mkt-app-glow {
   isolation: isolate;
   overflow: hidden;
 }
-.mkt-app-dark::before {
+.mkt-app-glow::before {
   content: "";
   position: absolute;
   z-index: -1;

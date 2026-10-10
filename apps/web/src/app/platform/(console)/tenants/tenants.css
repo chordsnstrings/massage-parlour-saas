@@ -1,31 +1,43 @@
-/* F21 console spa list (owner 2026-10-10: every column on one page, no sideways scroll).
-   Container query on the list card, not the viewport:
-     ≥ 880 px  6 columns: Spa | Activity | Usage | AI this month | Plan | open
-     660–879   compact: the Plan column folds into the Spa cell (AI keeps its own column)
-     < 660 px  cards: the <ul> below the table (the table is display:none, so it keeps its semantics)
-   table-layout: fixed + percentage widths + wrapping text, no min-widths and no overflow-x wrapper: the table can't
-   be wider than the card. Tokens come from brand-app.css (.mkt-app). */
+/* F21 console spa list (owner 2026-10-10: no sideways scroll, "remove the big box"). A flat table straight on the
+   page background: one value per cell, one header line per column, hairline rows. The block bleeds 12 px into the
+   page gutter (hover band room) and pads its content back, so text lines up with the page title.
+   Container query on the list block itself (its width = list width + 24 px), not the viewport:
+     ≥ 1224 px  wide       (1920 screens)
+     1084–1223  default    (1440)
+     884–1083   tight      (1280 with the 272 px sidebar, 1024 with the icon rail): 6 px cell padding
+     < 884 px   cards      (900, tablets, phones); the table is display:none, so it keeps its semantics
+   table-layout: fixed: the data columns have set widths and the spa column takes the rest, so the table is never
+   wider than the page. Tokens come from brand-app.css (.mkt-app). */
 
-.tl-toolbar {
-  padding-block: 0.25rem;
+.sl {
+  --sl-hair: #e9e9ee;
+  --sl-rule: #dcdce3;
+  /* AA-safe quiet grey for zeros / never / $0.00: 4.87:1 on --bg, 5.26:1 on white */
+  --sl-quiet: #6b6b77;
+  --sl-pad: 8px;
+  container: sl / inline-size;
+  margin-inline: -12px;
 }
-@media (min-width: 768px) {
-  .tl-toolbar {
-    padding-block: 0.5rem;
-    background: color-mix(in oklab, var(--bg) 88%, transparent);
-    backdrop-filter: blur(8px);
-  }
-  /* WCAG 2.4.11: the sticky toolbar (two lines below 1280 px) must not hide a focused link or paged-past rows. */
-  html:has(.tl-toolbar) {
-    scroll-padding-top: 7rem;
-  }
+
+/* ── toolbar: search left, count right; the sort select + direction only with the cards ── */
+.sl-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding-inline: 12px;
+  margin-block-end: 0.75rem;
 }
-@media (min-width: 1280px) {
-  html:has(.tl-toolbar) {
-    scroll-padding-top: 5rem;
-  }
+.sl-search {
+  position: relative;
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 22rem;
 }
-.tl-dir {
+.sl-sortctl {
+  display: none;
+}
+.sl-dir {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -39,427 +51,413 @@
   white-space: nowrap;
   transition: background-color 0.15s;
 }
-.tl-dir:hover {
+.sl-dir:hover {
   background: var(--subtle);
 }
-
-.tl-card {
-  container: tl / inline-size;
+.sl-count {
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
-.tl-table {
+
+/* ── table ── */
+.sl-table {
   width: 100%;
   table-layout: fixed;
-  border-collapse: collapse;
-  font-size: 13.5px;
-  line-height: 1.4;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  line-height: 20px;
 }
-.tl-table th,
-.tl-table td {
-  padding: 0.625rem 0.75rem;
+.sl-table col.c-status {
+  width: 132px;
+}
+.sl-table col.c-plan {
+  width: 160px;
+}
+.sl-table col.c-when {
+  width: 88px;
+}
+.sl-table col.c-b30 {
+  width: 100px;
+}
+.sl-table col.c-team {
+  width: 56px;
+}
+.sl-table col.c-storage {
+  width: 80px;
+}
+.sl-table col.c-ai {
+  width: 104px;
+}
+@container sl (width >= 1224px) {
+  .sl-table col.c-status {
+    width: 148px;
+  }
+  .sl-table col.c-plan {
+    width: 220px;
+  }
+  .sl-table col.c-when {
+    width: 104px;
+  }
+  .sl-table col.c-b30 {
+    width: 116px;
+  }
+  .sl-table col.c-team {
+    width: 72px;
+  }
+  .sl-table col.c-storage {
+    width: 96px;
+  }
+  .sl-table col.c-ai {
+    width: 120px;
+  }
+}
+/* 1280 / 1024: every px the data columns don't need goes to the spa name. Rare long values wrap (a legacy plan
+   name, the override tag line, "Read-only until paid"); the common ones fit on one line. */
+@container sl (width < 1084px) {
+  .sl-table {
+    --sl-pad: 6px;
+  }
+  .sl-table col.c-status {
+    width: 106px;
+  }
+  .sl-table col.c-plan {
+    width: 118px;
+  }
+  .sl-table col.c-when {
+    width: 82px;
+  }
+  .sl-table col.c-b30 {
+    width: 92px;
+  }
+  .sl-table col.c-team {
+    width: 44px;
+  }
+  .sl-table col.c-storage {
+    width: 70px;
+  }
+  .sl-table col.c-ai {
+    width: 102px;
+  }
+}
+
+.sl-table th,
+.sl-table td {
+  padding: 10px var(--sl-pad);
   text-align: start;
   vertical-align: top;
-  overflow-wrap: anywhere;
 }
-.tl-table th:first-child,
-.tl-table td:first-child {
-  padding-inline-start: 1.25rem;
+.sl-table :is(th, td):first-child {
+  padding-inline-start: 12px;
 }
-.tl-table th:last-child,
-.tl-table td:last-child {
-  padding-inline-end: 0.75rem;
+.sl-table :is(th, td):last-child {
+  padding-inline-end: 12px;
 }
-.tl-table thead th {
-  padding-block: 0.75rem 0.5rem;
-  border-bottom: 1px solid var(--border);
-  font-weight: 500;
+.sl-table .sl-num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
 }
-.tl-table tbody tr {
-  border-bottom: 1px solid var(--border);
-  transition: background-color 0.15s;
-}
-.tl-table tbody tr:last-child {
-  border-bottom: 0;
-}
-.tl-table tbody tr:hover {
-  background: color-mix(in oklab, var(--subtle) 60%, transparent);
-}
-/* Column widths (fixed layout reads the header row); Spa takes the rest. */
-.tl-c-act {
-  width: 18.5%;
-}
-.tl-c-use {
-  width: 20%;
-}
-.tl-c-ai {
-  width: 12.5%;
-}
-.tl-c-plan {
-  width: 15%;
-}
-.tl-c-open {
-  width: 2.25rem;
-}
-@container tl (width >= 1200px) {
-  .tl-c-act {
-    width: 16%;
-  }
-  .tl-c-use {
-    width: 16%;
-  }
-  .tl-c-ai {
-    width: 11%;
-  }
-  .tl-c-plan {
-    width: 16%;
-  }
+.sl-table .sl-when {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-/* Headers: a small title; merged columns list one sort link per server key (≥ 24 px targets). */
-.tl-th-title {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 24px;
-  text-transform: uppercase;
-}
-.tl-th-keys {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.125rem;
-  margin-inline-start: -0.3125rem;
-}
-.tl-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  min-height: 24px;
-  padding-inline: 0.3125rem;
-  border-radius: 999px;
+/* header: one short line per column, sticky on the page background */
+.sl-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: 12px 9px;
+  border-bottom: 1px solid var(--sl-rule);
+  background: var(--bg);
   color: var(--muted);
   font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
   white-space: nowrap;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
 }
-.tl-sort.tl-th-title {
+.sl-pair {
   display: inline-flex;
-  margin-inline-start: -0.3125rem;
-  font-size: 11px;
+  align-items: center;
 }
-/* A single-key column's title is its sort link: dotted underline so it reads as one (no room for an icon). */
-.tl-sort.tl-th-title:not([data-on]) {
-  text-decoration: underline dotted color-mix(in oklab, var(--muted) 70%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
+.sl-pair .sl-sep {
+  margin-inline: 5px;
+  color: var(--sl-quiet);
 }
-.tl-sort:hover {
-  background: var(--subtle);
+/* The arrow lives in reserved space (end side; start side for numbers), so labels never shift. */
+.sl-sort {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-block: -4px;
+  padding-inline-end: 15px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+/* numbers: the arrow hangs into the cell's start padding / column gap, so the header is no wider than its label */
+.sl-num .sl-sort {
+  padding-inline: 15px 0;
+  margin-inline-start: -15px;
+}
+.sl-sort:hover,
+.sl-sort[data-on] {
   color: var(--fg);
 }
-.tl-sort[data-on] {
-  background: var(--accent-soft);
-  color: var(--accent);
+.sl-sort[data-on] {
   font-weight: 600;
 }
-.tl-sort:focus-visible,
-.tl-dir:focus-visible,
-.tl-name:focus-visible {
+.sl-sort:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 6px;
+}
+.sl-arrow {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  translate: 0 -50%;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sl-num .sl-arrow {
+  inset-inline: 0 auto;
+}
+.sl-sort:hover .sl-arrow {
+  opacity: 0.55;
+}
+.sl-sort[data-on] .sl-arrow {
+  color: var(--accent);
+  opacity: 1;
+}
+/* Spa · Joined: no reserved space (the pair would gape); the arrow shows inline on the sorted one only. */
+.sl-pair .sl-sort {
+  gap: 3px;
+  padding-inline-end: 0;
+}
+.sl-pair .sl-sort .sl-arrow {
+  position: static;
+  display: none;
+  translate: none;
+}
+.sl-pair .sl-sort[data-on] .sl-arrow {
+  display: block;
 }
 
-/* Spa cell: name → status badges (fixed second line) → slug. */
-.tl-name {
+/* rows: hairlines on the page background; hover / keyboard focus lifts the row to white */
+.sl-table tbody td {
+  border-bottom: 1px solid var(--sl-hair);
+  transition: background-color 0.15s;
+}
+.sl-table tbody tr:is(:hover, :focus-within) td {
+  background: var(--surface);
+}
+.sl-table tbody tr:is(:hover, :focus-within) td:first-child {
+  border-start-start-radius: 8px;
+  border-end-start-radius: 8px;
+}
+.sl-table tbody tr:is(:hover, :focus-within) td:last-child {
+  border-start-end-radius: 8px;
+  border-end-end-radius: 8px;
+}
+
+/* ── cell content ── */
+.sl-name {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
   color: var(--fg);
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 20px;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
   transition: color 0.15s;
 }
-.tl-name:hover {
+.sl-name:hover {
   color: var(--accent);
 }
-.tl-badges {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.375rem;
-  margin-top: 0.3125rem;
+.sl-name:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
-.tl-badges > span {
-  max-width: 100%;
-}
-.tl-badges[data-on] > span:not(.tl-note) {
-  box-shadow: inset 0 0 0 1px currentColor;
-}
-.tl-note {
-  font-size: 11.5px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-.tl-note[data-tone="danger"] {
-  color: var(--danger);
-}
-.tl-note[data-tone="warning"] {
-  color: var(--warning);
-}
-.tl-slug {
-  margin-top: 0.1875rem;
+.sl-sub {
+  display: block;
+  margin-block-start: 2px;
   color: var(--muted);
   font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-/* Label/value stacks. Activity: label first; Usage: number first (right-aligned in a shared min width). */
-.tl-kv {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
-  gap: 0.0625rem 0.5rem;
-}
-.tl-kv > div {
-  display: contents;
-}
-.tl-lbl {
-  color: var(--muted);
-  font-size: 11.5px;
-}
-.tl-val {
-  color: var(--fg);
-}
-.tl-nums {
-  grid-template-columns: minmax(4.9em, max-content) minmax(0, 1fr);
-}
-.tl-nums .tl-val {
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-.tl-stale {
-  color: var(--warning);
-}
-.tl-kv [data-on] > .tl-lbl {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-/* AI this month: spend / budget, a thin budget meter (green; amber ≥ 70 %; red ≥ 100 %), % of budget. */
-.tl-ai {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.tl-ai .tl-val {
-  font-variant-numeric: tabular-nums;
-}
-.tl-spend {
-  font-weight: 600;
-}
-.tl-dim {
-  color: var(--muted);
-  font-size: 12px;
-}
-.tl-meter {
-  display: block;
-  width: 100%;
-  max-width: 8rem;
-  height: 4px;
-  margin-block: 0.375rem 0.25rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--border);
-}
-.tl-meter > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-}
-.tl-ai[data-level="warn"] .tl-meter > span {
-  background: #c98a12;
-}
-.tl-ai[data-level="over"] .tl-meter > span {
-  background: var(--danger);
-}
-.tl-pct {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 0.375rem;
-  color: var(--muted);
-  font-size: 11.5px;
-  line-height: 1.3;
-}
-.tl-ai[data-level="warn"] .tl-pct {
-  color: var(--warning);
-}
-.tl-ai[data-level="over"] .tl-pct {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-/* Plan: name, tier (+ override tag), current period end. */
-.tl-plan {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.0625rem;
-}
-.tl-plan-name {
-  font-weight: 500;
-}
-.tl-tag {
-  display: inline-block;
-  margin-inline-start: 0.375rem;
-  padding-inline: 0.375rem;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 600;
   line-height: 16px;
 }
-
-/* The sorted value is bold in every row. */
-[data-on] > .tl-val,
-.tl-name[data-on],
-[data-on] > .tl-plan-name,
-.tl-ai[data-on] .tl-spend {
-  font-weight: 700;
+.sl-sub[data-tone="warning"] {
+  color: var(--warning);
 }
-
-.tl-table td.tl-open,
-.tl-table th.tl-c-open {
-  padding-inline: 0.25rem;
-  vertical-align: middle;
+.sl-sub[data-tone="danger"] {
+  color: var(--danger);
 }
-.tl-open-link {
-  display: grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 8px;
-  color: var(--muted);
-  transition:
-    background-color 0.15s,
-    color 0.15s;
+.sl-spa-sub {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
 }
-.tl-item:hover .tl-open-link,
-.tl-table tr:hover .tl-open-link {
-  background: var(--subtle);
-  color: var(--fg);
+.sl-slug {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-/* Compact table: Plan folds into the Spa cell; tighter type and padding. */
-.tl-compact-only {
-  display: none;
+.sl-spa-sub .sl-sep {
+  flex: none;
+  padding-inline: 5px;
 }
-@container tl (width < 880px) {
-  .tl-table {
-    font-size: 13px;
-  }
-  .tl-table th,
-  .tl-table td {
-    padding-inline: 0.625rem;
-  }
-  .tl-table th:first-child,
-  .tl-table td:first-child {
-    padding-inline-start: 1rem;
-  }
-  .tl-table th:last-child,
-  .tl-table td:last-child {
-    padding-inline-end: 0.5rem;
-  }
-  .tl-c-act {
-    width: 24%;
-  }
-  .tl-c-use {
-    width: 24%;
-  }
-  .tl-c-ai {
-    width: 16%;
-  }
-  .tl-nums {
-    grid-template-columns: minmax(4.4em, max-content) minmax(0, 1fr);
-    column-gap: 0.375rem;
-  }
-  .tl-table .tl-c-plan {
-    display: none;
-  }
-  .tl-th-keys > .tl-compact-only {
-    display: inline-flex;
-  }
-  .tl-card .tl-plan-inline {
-    display: block;
-    margin-top: 0.375rem;
-  }
-  .tl-plan-inline .tl-plan {
-    display: block;
-    font-size: 12px;
-  }
-  .tl-plan-inline .tl-plan > * {
-    display: inline;
-  }
-  .tl-plan-inline .tl-plan > .tl-dim {
-    white-space: nowrap;
-  }
-  /* "a · b · c" as one wrapping line: each dot sticks to the end of its item, lines break at the spaces. */
-  .tl-plan-inline .tl-plan > :not(:last-child)::after {
-    content: "\a0·";
-    color: var(--muted);
-  }
+.sl-spa-sub [data-key="joined"] {
+  flex: none;
 }
-
-/* Cards (< 660 px): spa header, then a 2 × 2 grid Activity | Usage, AI | Plan. */
-.tl-list {
-  display: none;
-}
-@container tl (width < 660px) {
-  .tl-table {
-    display: none;
-  }
-  .tl-list {
-    display: block;
-  }
-}
-.tl-item {
-  padding: 0.875rem 1rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-.tl-item:last-child {
-  border-bottom: 0;
-}
-.tl-item-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.5rem;
-}
-.tl-item-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem 1rem;
-  margin-top: 0.75rem;
-  font-size: 13px;
-  line-height: 1.4;
+.sl-plan {
+  display: block;
+  font-weight: 500;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
-.tl-item-grid dt {
-  margin-bottom: 0.1875rem;
+.sl-billing {
+  text-wrap: balance;
+}
+.sl-until {
+  white-space: nowrap;
+}
+.sl-tag {
+  display: inline-block;
+  margin-inline-end: 5px;
+  padding-inline: 5px;
+  border-radius: 4px;
+  background: var(--subtle);
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  line-height: 16px;
+  white-space: nowrap;
 }
-.tl-item-grid dt[data-on] {
+.sl-tag[data-tone="override"] {
+  background: var(--accent-soft);
   color: var(--accent);
 }
-@container tl (width < 320px) {
-  .tl-item-grid {
-    grid-template-columns: minmax(0, 1fr);
+.sl-muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+.sl-quiet {
+  color: var(--sl-quiet);
+}
+.sl-stale {
+  color: var(--warning);
+}
+.sl-ai .sl-budget {
+  color: var(--muted);
+}
+.sl-ai.sl-quiet .sl-budget {
+  color: inherit;
+}
+.sl-ai[data-level="warn"] .sl-spend {
+  color: var(--warning);
+}
+.sl-ai[data-level="over"] .sl-spend {
+  color: var(--danger);
+  font-weight: 600;
+}
+.sl-share {
+  white-space: nowrap;
+}
+
+.sl-legend {
+  margin-block-start: 0.875rem;
+  padding-inline: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sl-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  vertical-align: 1px;
+}
+
+/* ── cards: same hairlines, no boxes ── */
+.sl-cards {
+  display: none;
+  border-top: 1px solid var(--sl-rule);
+}
+.sl-card {
+  padding: 14px 12px 16px;
+  border-bottom: 1px solid var(--sl-hair);
+}
+.sl-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sl-card-head > :last-child {
+  flex: none;
+  margin-block-start: 1px;
+}
+.sl-card > .sl-billing {
+  margin-block-start: 4px;
+}
+.sl-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-block-start: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+.sl-card-grid > div {
+  min-width: 0;
+}
+.sl-card-grid .sl-card-plan {
+  grid-column: span 2;
+}
+.sl-card-grid dt {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.sl-card-grid dd {
+  margin-block-start: 2px;
+  overflow-wrap: anywhere;
+}
+
+@container sl (width < 884px) {
+  .sl-table {
+    display: none;
+  }
+  .sl-cards {
+    display: block;
+  }
+  .sl-sortctl {
+    display: contents;
+  }
+}
+@container sl (width < 374px) {
+  .sl-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .sl-card-grid .sl-card-plan {
+    grid-column: 1 / -1;
+  }
+}
+
+/* WCAG 2.4.11: a focused row link must not hide under the sticky header row (~38 px + focus ring). */
+@media (min-width: 768px) {
+  html:has(.sl-table) {
+    scroll-padding-top: 3.5rem;
   }
 }

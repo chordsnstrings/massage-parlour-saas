@@ -7,7 +7,7 @@ import { BottomNav, type NavItem, SidebarNav } from './nav'
 import { UserMenu } from './user-menu'
 
 /**
- * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 272px on lg, icon rail 72px on md, top bar + bottom tabs on phones.
+ * Responsive shell (docs/PLAN.md §12.4) in the marketing look (.mkt-app, components/brand-app.css; R13 §14.8): sidebar 272px from xl (1280 px; icon rail 72px on md–xl, so wide tables fit at 1024), full page height with a sticky inner panel, top bar + bottom tabs on phones.
  */
 export function AppShell({
   title,
@@ -33,21 +33,24 @@ export function AppShell({
   const primary = nav.slice(0, 4)
   const more = nav.slice(4)
   return (
-    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] lg:grid-cols-[272px_minmax(0,1fr)]">
-      <aside className="mkt-app-dark sticky top-0 hidden h-dvh flex-col md:flex">
-        <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
-          <LogoMark className="size-9 lg:hidden" />
-          <span className="min-w-0 md:hidden lg:flex lg:flex-col lg:items-center lg:text-center">
-            <Logo className="mb-3.5 hidden h-12 lg:block" />
-            <span className="mkt-app-chip">{title}</span>
-            {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
-          </span>
-        </Link>
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <SidebarNav items={nav} />
-        </div>
-        <div className="border-t border-border p-3">
-          <UserMenu user={user} switchHref={switchHref} accountHref={accountHref} />
+    <div className="mkt-app min-h-dvh md:grid md:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[272px_minmax(0,1fr)]">
+      {/* The dark column is a plain grid cell (full page height); only its inner panel is sticky, so the nav stays in view. */}
+      <aside className="mkt-app-dark hidden md:block">
+        <div className="mkt-app-glow sticky top-0 flex h-dvh flex-col">
+          <Link href={homeHref} className="flex min-h-16 items-center gap-3 px-4 py-5 md:justify-center">
+            <LogoMark className="size-9 xl:hidden" />
+            <span className="min-w-0 md:hidden xl:flex xl:flex-col xl:items-center xl:text-center">
+              <Logo className="mb-3.5 hidden h-12 xl:block" />
+              <span className="mkt-app-chip">{title}</span>
+              {subtitle && <span className="mt-1.5 block truncate text-xs text-muted">{subtitle}</span>}
+            </span>
+          </Link>
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            <SidebarNav items={nav} />
+          </div>
+          <div className="border-t border-border p-3">
+            <UserMenu user={user} switchHref={switchHref} accountHref={accountHref} />
+          </div>
         </div>
       </aside>
       <div className="min-w-0">
