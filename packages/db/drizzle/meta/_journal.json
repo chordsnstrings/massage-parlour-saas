@@ -295,6 +295,13 @@
       "when": 1791593551631,
       "tag": "0041_csp_turnstile_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791594447291,
+      "tag": "0042_vouchers_partners",
+      "breakpoints": true
     }
   ]
 }

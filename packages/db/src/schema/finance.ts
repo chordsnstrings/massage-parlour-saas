@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { createdAt, id, updatedAt } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
@@ -216,9 +217,22 @@ export const giftCards = pgTable(
     saleLineId: uuid('sale_line_id').references(() => saleLines.id, { onDelete: 'set null' }),
     expiresAt: ts('expires_at'),
     status: giftCardStatus('status').notNull().default('active'),
+    /**
+     * F15: random key in the voucher's QR (public check page `/voucher/{token}` on the spa's site: validity +
+     * balance only). Not the code, so the link alone can't be spent; staff can scan it at checkout.
+     */
+    checkToken: text('check_token')
+      .notNull()
+      .default(sql`replace(gen_random_uuid()::text, '-', '')`),
+    /** F15 treatment voucher: shows this service instead of the amount (the value stays the AED balance). */
+    voucherServiceId: uuid('voucher_service_id').references(() => services.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
-  (t) => [unique('gift_cards_code').on(t.tenantId, t.code), ...tenantPolicies()],
+  (t) => [
+    unique('gift_cards_code').on(t.tenantId, t.code),
+    unique('gift_cards_check_token').on(t.checkToken),
+    ...tenantPolicies(),
+  ],
 )
 
 export const giftCardTxnKind = pgEnum('gift_card_txn_kind', ['issue', 'redeem', 'refund', 'expire', 'adjust'])

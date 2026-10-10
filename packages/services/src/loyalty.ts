@@ -1,5 +1,5 @@
 // Packages (prepaid session bundles), gift cards and memberships. Sold for cash/card/transfer, tracked as liabilities.
-import { addDays, businessDateOf, dubaiParts } from '@spa/core'
+import { addDays, businessDateOf, dubaiParts, giftCardInput } from '@spa/core'
 import {
   branches,
   clientMemberships,
@@ -226,6 +226,26 @@ export async function issueGiftCard(
   return card!
 }
 
+/** Where a typed gift card code or a scanned voucher QR (its check-page URL, F15) points. */
+const giftCardWhere = (tenantId: string, input: string) => {
+  const key = giftCardInput(input)
+  return and(
+    eq(giftCards.tenantId, tenantId),
+    'token' in key ? eq(giftCards.checkToken, key.token) : eq(giftCards.code, key.code),
+  )
+}
+
+/** The card's code for a typed code or a scanned voucher QR; unknown input comes back normalised (upper case). */
+export async function giftCardCode(tx: Tx, tenantId: string, input: string) {
+  const key = giftCardInput(input)
+  if ('code' in key) return key.code
+  const [card] = await tx
+    .select({ code: giftCards.code })
+    .from(giftCards)
+    .where(giftCardWhere(tenantId, input))
+  return card?.code ?? input.trim()
+}
+
 /** Checks a gift card can pay `amountAed` (used before recording a gift_card payment). */
 export async function giftCardForPayment(
   tx: Tx,
@@ -234,11 +254,7 @@ export async function giftCardForPayment(
   amountAed: number,
   now = new Date(),
 ) {
-  const [card] = await tx
-    .select()
-    .from(giftCards)
-    .where(and(eq(giftCards.tenantId, tenantId), eq(giftCards.code, code.trim().toUpperCase())))
-    .for('update')
+  const [card] = await tx.select().from(giftCards).where(giftCardWhere(tenantId, code)).for('update')
   if (!card) throw new DomainError('Gift card not found', 'not_found')
   if (card.status !== 'active' || (card.expiresAt && card.expiresAt < now))
     throw new DomainError('This gift card is no longer valid')
