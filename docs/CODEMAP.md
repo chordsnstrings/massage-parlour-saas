@@ -492,8 +492,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `pageLocked`, not "changed elsewhere — keep mine") in `storeDraft`, `publishPageAction`,
   `restoreVersionAction`, `runSiteEdit` (changed + renamed pages, dry runs too) and `restoreSiteEdit`; MCP `get_site`
   shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
-  Unsaved baseline: taken 400 ms after load; when the undo history already has an entry (an edit that fast), the
-  baseline is Puck's first recorded state so that edit still autosaves. Take over reloads the page
+  Unsaved baseline: taken 400 ms after load, always from Puck's first history entry (the loaded page as normalised),
+  never the canvas: an edit made before the timer still autosaves, even one Puck's 250 ms history debounce hasn't
+  recorded yet (the CI take-over race, 2026-10-10). Take over reloads the page
   (`reloadEditor` → `window.location.reload`).
 - **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
   (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
