@@ -1288,7 +1288,8 @@ others till end — finish everything"), built after the Premium/Standard plans 
   Plan (name, Premium/Standard tier + "override" tag, period end); each header lists its sort keys, plus a Sort by
   select + Sort button and a labelled direction link (old `?sort=&dir=&q=` links unchanged). Container-query modes:
   6 columns ≥ 880 px card, compact 660–879 (Plan folds into the Spa cell), cards < 660. Amber dates = no staff
-  sign-in 14+ d / no booking 30+ d.
+  sign-in 14+ d / no booking 30+ d, counted from joining when there has been none ("never"; a new trial stays neutral);
+  the sticky toolbar sets scroll padding (WCAG 2.4.11).
 - ✅ **F22. Billing auto-transitions** (core `billing-stages.ts`, services `billing-transitions.ts`, worker
   `billing-transitions` 09:05). An unpaid platform invoice is late *N* days after its due date (console Company →
   Billing rules, default 1); first late day → **overdue** (`past_due`, grace clock starts), next day **grace**, *grace
