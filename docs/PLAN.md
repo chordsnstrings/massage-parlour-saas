@@ -1063,10 +1063,6 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Accept sheet preselects no plan ("The plan this applicant chose … Choose one."); audit `platform.plan.deleted` {code, name} /
   `platform.plan.archived` {code, name, spas} / `platform.plan.restored` {code, name}; tests: services
   `plan-delete.test.ts`, e2e plans.spec "console: delete an unused plan …".
-- **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** a spa's website lives on its own domain (e.g.
-  berelaxspa.com; connect it in spa Settings → Domains or Console → Domains, or buy one, R14); spamanagement.co hosts only
-  the CRM (app.) and console (admin.). Until a spa connects its domain it uses the temporary address {slug}.spamanagement.co;
-  once its own domain is active + primary, the temporary address 301s there for good. Planned.
 - **R21 Console sidebar on one screen (owner, 2026-10-10):** all console items visible without scrolling on laptop
   heights. ✅ Items share the sidebar height (24–40 px each, `flex-[1_1_0]`), logo block shrinks below 820 px tall; fits
   down to ~590 px (e2e `console-sidebar.spec.ts`). Overview health/config rows aligned with the card padding.
