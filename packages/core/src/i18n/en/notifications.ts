@@ -24,6 +24,9 @@ export const notifications = {
         body: '{name} · {service} · {at} — confirm it on WhatsApp',
       },
     },
+    enquiry: {
+      site: { title: 'New website enquiry', body: '{name}: {message}' },
+    },
     stock: {
       low: {
         title: {

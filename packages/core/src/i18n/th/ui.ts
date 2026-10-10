@@ -8,6 +8,10 @@ export const ui: Messages['ui'] = {
   copied: 'คัดลอกแล้ว',
   more: 'เพิ่มเติม',
   media: {
+    uploadVideo: 'อัปโหลดวิดีโอ',
+    videoFormats: 'MP4 หรือ WebM ไม่เกิน {size} MB เล่นจากเว็บไซต์ของคุณเอง',
+    uploadingVideo: 'กำลังอัปโหลดวิดีโอ…',
+    removeVideo: 'ลบวิดีโอ',
     dropZone: 'พื้นที่วางไฟล์',
     dropToUpload: 'วางเพื่ออัปโหลด',
     dropHere: 'วางรูปภาพที่นี่',

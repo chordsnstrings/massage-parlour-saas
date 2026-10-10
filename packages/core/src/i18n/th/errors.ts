@@ -22,6 +22,8 @@ export const errors: Omit<Messages['errors'], 'domain'> = {
     unreadable: 'ไม่สามารถอ่านรูปภาพนี้ได้ ไฟล์อาจเสียหาย',
     svg: 'ไม่รองรับไฟล์ SVG โปรดอัปโหลดไฟล์ JPG, PNG หรือ WebP',
     notImage: 'ไฟล์นี้ไม่ใช่รูปภาพที่ใช้ได้ (JPG, PNG, WebP, AVIF หรือ GIF)',
+    notVideo: 'ไฟล์นี้ไม่ใช่วิดีโอที่เล่นได้ (MP4 หรือ WebM)',
+    videoTooLarge: 'วิดีโอมีขนาดได้ไม่เกิน {size}',
     uploadFailed: 'อัปโหลดไม่สำเร็จ โปรดลองอีกครั้ง',
     choose: 'โปรดเลือกรูปภาพที่จะอัปโหลด',
   },

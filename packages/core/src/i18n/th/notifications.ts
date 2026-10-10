@@ -22,6 +22,9 @@ export const notifications: Messages['notifications'] = {
       online: { title: 'มีการจองออนไลน์ใหม่', body: '{name} · {service} · {at} — รอการยืนยัน' },
       pending: { title: 'การจองรอการยืนยัน', body: '{name} · {service} · {at} — ยืนยันทาง WhatsApp' },
     },
+    enquiry: {
+      site: { title: 'มีข้อความใหม่จากเว็บไซต์', body: '{name}: {message}' },
+    },
     stock: {
       low: { title: { other: 'สต็อกใกล้หมดที่ {location}: {count} รายการ' }, body: '{products}' },
     },
