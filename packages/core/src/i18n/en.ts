@@ -8,6 +8,7 @@ import { account } from './en/account'
 import { accounts } from './en/accounts'
 import { ai } from './en/ai'
 import { analytics } from './en/analytics'
+import { assistant } from './en/assistant'
 import { audit } from './en/audit'
 import { auth } from './en/auth'
 import { automations } from './en/automations'
@@ -110,5 +111,6 @@ export const en = {
   plan,
   notifications,
   search,
+  assistant,
   audit,
 } as const

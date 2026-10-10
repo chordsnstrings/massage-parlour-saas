@@ -7,6 +7,7 @@ import { account } from './th/account'
 import { accounts } from './th/accounts'
 import { ai } from './th/ai'
 import { analytics } from './th/analytics'
+import { assistant } from './th/assistant'
 import { audit } from './th/audit'
 import { auth } from './th/auth'
 import { automations } from './th/automations'
@@ -110,5 +111,6 @@ export const th: Messages = {
   plan,
   notifications,
   search,
+  assistant,
   audit,
 }

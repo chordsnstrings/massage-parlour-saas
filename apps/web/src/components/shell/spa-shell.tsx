@@ -120,6 +120,7 @@ export function SpaShell({
   alert,
   bell,
   search,
+  assistant,
   accountHref,
   switchHref,
   platformHref,
@@ -137,6 +138,8 @@ export function SpaShell({
   bell?: React.ReactNode
   /** Top-bar global search (⌘K palette), between the title and the language switch. */
   search?: React.ReactNode
+  /** Top-bar "Ask AI" drawer (F30, components/assistant), before the bell. */
+  assistant?: React.ReactNode
   accountHref: string
   switchHref: string
   /** The platform's marketing site (canonical) for the "Spa Management" badge at the foot of the sidebar. */
@@ -346,6 +349,7 @@ export function SpaShell({
               <small>{active?.group.label ?? ''}</small>
               <b suppressHydrationWarning>{title}</b>
             </div>
+            {assistant}
             {bell}
             {search}
             <fieldset className="crm-seg" aria-label={t('shell.language')} aria-busy={switching}>

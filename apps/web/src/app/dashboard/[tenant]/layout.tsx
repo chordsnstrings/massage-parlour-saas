@@ -9,6 +9,7 @@ import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
 import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata, Viewport } from 'next'
+import { AskAi } from '@/components/assistant/ask-ai'
 import { InstallMenuItem, PwaSetup } from '@/components/pwa/install-app'
 import { SearchPalette } from '@/components/search/search-palette'
 import { NotificationBell } from '@/components/shell/notification-bell'
@@ -310,6 +311,19 @@ export default async function TenantLayout({
           alert={alert}
           bell={<NotificationBell slug={ctx.tenant.slug} initial={bell} pageHref={`${base}/notifications`} />}
           search={<SearchPalette slug={ctx.tenant.slug} phoneSearch={can(ctx, 'clients.phone')} />}
+          assistant={
+            // F30: staff with the dashboard; Standard spas get the Premium upsell in the drawer.
+            can(ctx, 'dashboard.view') ? (
+              <AskAi
+                slug={ctx.tenant.slug}
+                enabled={ent.features.includes('ai')}
+                upsell={{
+                  compareHref: `${canonicalUrls().marketing()}/pricing`,
+                  billingHref: can(ctx, 'billing.view') ? `${base}/billing` : null,
+                }}
+              />
+            ) : null
+          }
           accountHref={appPath('/account')}
           switchHref={appPath()}
           platformHref={canonicalUrls().marketing()}
