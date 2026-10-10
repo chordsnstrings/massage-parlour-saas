@@ -4,9 +4,10 @@ import { canonicalScheme, hostRoutedUrl, parseRoots, pathRoutedAddress } from '.
 // The move from path routing (sslip.io, ROUTING=path) to host routing on spamanagement.co: old addresses on any platform
 // root (or its www.) → their host-routed home on the canonical root (proxy.ts).
 describe('path-routed → host-routed addresses', () => {
+  const HOST = { pathRouting: false }
   const roots = parseRoots('spamanagement.co', '134-209-145-162.sslip.io spamanagement.ae')
   const target = (host: string, path: string, current?: string | null) => {
-    const old = pathRoutedAddress(host, path, roots)
+    const old = pathRoutedAddress(host, path, roots, HOST)
     return old && hostRoutedUrl(old, roots[0]!, 'https', current)
   }
 
@@ -41,12 +42,12 @@ describe('path-routed → host-routed addresses', () => {
     expect(target('134-209-145-162.sslip.io', '/app/old-spa/clients', 'new-spa')).toBe(
       'https://app.spamanagement.co/new-spa/clients',
     )
-    expect(pathRoutedAddress('spamanagement.co', '/app/old-spa/x', roots)).toEqual({
+    expect(pathRoutedAddress('spamanagement.co', '/app/old-spa/x', roots, HOST)).toEqual({
       surface: 'app',
       slug: 'old-spa',
       rest: '/x',
     })
-    expect(pathRoutedAddress('spamanagement.co', '/admin/old-spa', roots)?.slug).toBeNull()
+    expect(pathRoutedAddress('spamanagement.co', '/admin/old-spa', roots, HOST)?.slug).toBeNull()
   })
 
   it.each([
@@ -69,7 +70,21 @@ describe('path-routed → host-routed addresses', () => {
     ['www.serenityspa.ae', '/app/pilot'],
     ['evil.example.com', '/s/pilot'],
     ['134.209.145.162', '/app'],
-  ])('%s%s is not an old address', (host, path) => expect(pathRoutedAddress(host, path, roots)).toBeNull())
+  ])('%s%s is not an old address', (host, path) =>
+    expect(pathRoutedAddress(host, path, roots, HOST)).toBeNull(),
+  )
+
+  // Production runs path routing until the switch: there every /app, /admin, /s/{slug} link must be served, never
+  // redirected (app./admin./{slug}. of a path-routed root are custom-domain lookups → 404).
+  it.each([
+    ['134-209-145-162.sslip.io', '/app/pilot'],
+    ['134-209-145-162.sslip.io', '/admin/tenants'],
+    ['134-209-145-162.sslip.io', '/s/pilot/book'],
+    ['spamanagement.co', '/app'],
+    ['www.spamanagement.co', '/s/pilot'],
+  ])('path routing: %s%s is served, not redirected', (host, path) =>
+    expect(pathRoutedAddress(host, path, roots, { pathRouting: true })).toBeNull(),
+  )
 
   it('keeps the host fixed whatever the path holds (no open redirect)', () => {
     for (const path of [
@@ -86,7 +101,7 @@ describe('path-routed → host-routed addresses', () => {
 
   it('uses the canonical scheme and keeps a dev port', () => {
     const dev = parseRoots('localhost:3100', 'alt.localhost:3100')
-    const old = pathRoutedAddress('alt.localhost:3100', '/s/pilot/book', dev)!
+    const old = pathRoutedAddress('alt.localhost:3100', '/s/pilot/book', dev, HOST)!
     expect(hostRoutedUrl(old, dev[0]!, canonicalScheme(dev[0]!, 'http://app.localhost:3100'))).toBe(
       'http://pilot.localhost:3100/book',
     )

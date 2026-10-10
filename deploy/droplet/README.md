@@ -318,8 +318,9 @@ keeps working for as long as it is listed in `EXTRA_ROOT_DOMAINS`. Owner checkli
 Production started on `SITE_HOST=auto` (`134-209-145-162.sslip.io`, `ROUTING=path`: `/app`, `/admin`, `/s/{slug}`).
 Same checklist as above, in this order — the website first, Cloudflare second, the switch last:
 
-1. **Website first** (safe before any DNS exists): overlay `EXTRA_ROOT_DOMAINS=spamanagement.co`, nothing else.
-   `SITE_HOST` and `ROUTING=path` stay, so every current link works as before; the platform answers on
+1. **Website first** (safe before any DNS exists): add `EXTRA_ROOT_DOMAINS=spamanagement.co` to the current overlay
+   and change nothing else (keep every key it already holds; re-encrypt and push as in step 5). `SITE_HOST` and
+   `ROUTING=path` stay, so every current link works as before; the platform answers on
    `https://spamanagement.co/…` (path routing) as soon as its DNS points at the droplet.
 2. **Cloudflare DNS** (step 1 above, grey cloud). Check `https://spamanagement.co` loads, and that `app.`, `admin.` and
    a `{slug}.` name resolve to the droplet (`dig +short app.spamanagement.co`).
@@ -332,7 +333,10 @@ Same checklist as above, in this order — the website first, Cloudflare second,
    ADMIN_URL=https://admin.spamanagement.co
    ```
    Every old path address then redirects to the new one on spamanagement.co, so only switch once step 2 works.
-   Undo = `ROUTING=path` again (the redirects are cached by browsers for 5 minutes only).
+   Undo = `ROUTING=path` and remove `APP_URL` / `ADMIN_URL` from the overlay (they then default to
+   `https://$SITE_HOST` and `…/admin`; left in, every link built from them — invites, sign-in fallback, worker jobs —
+   would point at `app.`/`admin.` names that path routing treats as spa custom domains, so 404). `ROUTING` is a build
+   arg, so the undo applies once the web image has rebuilt (the redirects are cached by browsers for 5 minutes only).
 
 **Old links keep working** (shared links, invites, QR posters, widget snippets, bookmarks): on any platform domain
 (the sslip.io one, spamanagement.co itself, and their `www.`) the proxy redirects, keeping the rest of the path and the
@@ -350,7 +354,9 @@ the old one included while it stays in `EXTRA_ROOT_DOMAINS`:
   `/api/integrations/meta/facebook/callback`), Meta webhook / deauthorize / data-deletion, the Claude connector
   `/api/mcp`, `/api/health`, Caddy's `/api/domains/allowed`.
 - `/files/*` (images in sent links and emails), `/.well-known/*`, `/widget.js` (an old snippet still loads it from the
-  old host; its `/s/{slug}/book/embed` frame redirects to `{slug}.spamanagement.co/book/embed`).
+  old host; its `/s/{slug}/book/embed` frame redirects to `{slug}.spamanagement.co/book/embed`, and the widget takes
+  the messages of the frame it opened from whatever origin that frame lands on, so resize, Escape-to-close and the
+  `spa-widget:booked` event keep working; re-copying the snippet from Settings → Booking widget is optional).
 - `/_status/*` is Caddy's and lives on `SITE_HOST` only: after the switch `https://spamanagement.co/_status/deploy.json`.
 
 Not carried over: sign-in (cookies are per domain: everyone signs in once more on spamanagement.co; 2FA stays as it

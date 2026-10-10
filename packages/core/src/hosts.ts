@@ -82,13 +82,17 @@ export type PathRoutedAddress = { surface: 'app' | 'admin' | 'site'; slug: strin
 
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i
 
-/** The old path-routed address a request is for, or null (not a platform root/www. host, another path, `/s/{not a slug}`). */
+/**
+ * The old path-routed address a request is for, or null: path routing on (it still serves these paths), not a platform
+ * root/www. host, another path, `/s/{not a slug}`. `pathRouting` = the build's routing (proxy.ts `PATH_ROUTING`).
+ */
 export function pathRoutedAddress(
   hostHeader: string,
   pathname: string,
   roots: readonly string[],
+  { pathRouting }: { pathRouting: boolean },
 ): PathRoutedAddress | null {
-  if (resolveSurface(hostHeader, roots).kind !== 'marketing') return null
+  if (pathRouting || resolveSurface(hostHeader, roots).kind !== 'marketing') return null
   const m = /^\/(app|admin|s)(?=\/|$)/.exec(pathname)
   if (!m) return null
   const tail = pathname.slice(m[0].length)

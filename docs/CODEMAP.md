@@ -105,7 +105,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      path's first segment too). GET/HEAD 301 (as F23), other methods 308 (keeps method + body);
      `cache-control: private, max-age=300` (a rename or a switch back to path routing applies within minutes). Runs
      before the rewrite/F23/CSP, which stay unchanged. Pure parse/build in core `hosts.ts` (`pathRoutedAddress`:
-     marketing-surface host + `/s/{checkSlug-valid slug}` only; `hostRoutedUrl`: target host = fixed label or that
+     null under path routing (`{ pathRouting }`, so the production guard is unit-tested), marketing-surface host +
+     `/s/{checkSlug-valid slug}` only; `hostRoutedUrl`: target host = fixed label or that
      validated slug on the canonical root, never other request input; `canonicalScheme` = APP_URL's) →
      `packages/core/test/hosts.test.ts`; e2e `path-redirects.spec` + a host-mode step in `slug-rename.spec`. Never
      redirected (not proxied, served on every host incl. the old one): `/api/*` (OAuth callbacks, Meta webhook /
@@ -612,7 +613,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   modal; data attributes `data-spa`, `data-url` (spa site + `/book/embed`), `data-lang` en|ar, `data-color`, `data-text`.
   Iframe route `site/[slug]/book/embed` + `domain/[hostname]/book/embed` = `BookingPage embed` (chrome-less
   `BookingFlow`, noindex). postMessage to the parent: `spa-widget:resize` {height}, `spa-widget:booked` {ref,start,service}
-  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape). `next.config.ts` headers: only `/book/embed` and
+  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape); widget.js takes them only from the frame's
+  own window (`e.source`), origin pinned by that frame's first message (an old path-routed `data-url` 301s to the
+  spa's host-routed address; `widget.spec` host-mode step). `next.config.ts` headers: only `/book/embed` and
   `/s/:slug/book/embed` get `frame-ancestors *` and no X-Frame-Options; everything else stays SAMEORIGIN. Same
   `bookOnline` (limits + honeypot) with `via: 'widget'` (audit data only; booking source stays `online`). Analytics
   source `widget` comes from `?src=widget` (t.js: a tagged URL now starts a new session entry). Snippet:

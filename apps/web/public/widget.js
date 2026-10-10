@@ -13,7 +13,9 @@
   var src = new URL(base, location.href)
   src.searchParams.set('src', 'widget')
   src.searchParams.set('lang', lang)
-  var origin = src.origin
+  // The frame's origin, from its first message (only the frame's own window counts): data-url's origin, or, for a
+  // snippet from the path-routing days, the spa's host-routed address its /s/{slug}/book/embed frame redirects to.
+  var origin
 
   var btn = document.createElement('button')
   btn.type = 'button'
@@ -28,7 +30,7 @@
   function close() {
     if (!overlay) return
     overlay.remove()
-    overlay = frame = null
+    overlay = frame = origin = null
     document.removeEventListener('keydown', onKey)
     if (last) last.focus()
   }
@@ -72,7 +74,9 @@
   }
 
   window.addEventListener('message', (e) => {
-    if (e.origin !== origin || !frame || e.source !== frame.contentWindow || !e.data) return
+    if (!frame || e.source !== frame.contentWindow || !e.data) return
+    if (!origin) origin = e.origin
+    if (e.origin !== origin) return
     if (e.data.type === 'spa-widget:resize' && typeof e.data.height === 'number') {
       frame.parentNode.style.height = 'min(' + Math.max(320, Math.ceil(e.data.height)) + 'px,90vh)'
     } else if (e.data.type === 'spa-widget:close') {
