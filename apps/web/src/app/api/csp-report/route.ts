@@ -1,4 +1,4 @@
-import { parseCspReports } from '@spa/core'
+import { clientIpFrom, ipRateLimitKey, parseCspReports } from '@spa/core'
 import { platformDb } from '@spa/db'
 import { cspSurfaceOf, recordCspViolations } from '@spa/services'
 
@@ -21,8 +21,7 @@ const limited = (ip: string) => {
 }
 
 export async function POST(req: Request) {
-  const ip =
-    req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? '0'
+  const ip = ipRateLimitKey(clientIpFrom(req.headers))
   if (limited(ip)) return new Response(null, { status: 429 })
   const raw = await req.text()
   if (raw.length > MAX_BODY) return new Response(null, { status: 413 })
