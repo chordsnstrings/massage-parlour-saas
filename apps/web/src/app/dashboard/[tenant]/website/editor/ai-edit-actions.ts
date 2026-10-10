@@ -143,7 +143,11 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
     return fail(plan.note || 'The AI found nothing to change. Try a more specific instruction.')
   const ops = pageOps(pageId, plan.ops)
   const result = await withTenant(ctx.tenant.id, (tx) =>
-    runSiteEdit(tx, { tenantId: ctx.tenant.id, ops, dryRun: true, base: { [pageId]: data } }, deps(ctx)),
+    runSiteEdit(
+      tx,
+      { tenantId: ctx.tenant.id, userId: ctx.user.id, ops, dryRun: true, base: { [pageId]: data } },
+      deps(ctx),
+    ),
   )
   if (!result.ok) return fail(`The AI suggested changes that don't fit this page: ${errorText(result)}`)
   const { page } = loaded.page

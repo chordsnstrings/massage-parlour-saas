@@ -334,6 +334,37 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   caller policy), `restoreSiteEdit`, `getSiteForEdit`, `blockCatalogue`, `siteEditAuditData`. Edit ops accept `index`.
   Drafts only: `sites.theme_draft` (`editingTheme()`; editor, previews and preflight use it; `loadSite({published:
   false})` swaps it in) and `site_pages.pending` (rename of a live page); `publishPage` applies both.
+- **Editor session (F29)**: autosave + local copy + editing lock. Client: `components/site/editor/session.tsx`
+  (`useEditorLock`: take on open, heartbeat 30 s + on tab visible, view-only polling, `pagehide` release; local copy
+  `spa-editor-draft:{slug}:{pageId}` in localStorage; status text + Lock / Conflict / Restore banners as
+  `region`s) wired in `editor/[pageId]/editor.tsx` (`persist('auto'|'manual'|'overwrite')`: debounce `AUTOSAVE_MS`
+  2 s, flush on window blur (not into the canvas iframe) / tab hidden, offline → local copy + retry on `online` /
+  15 s; paused while an Ask AI plan is previewed — `AiEditPanel onPreview`). Conflict = reply key
+  `errors.domain.editedElsewhere` (Keep mine = `saveDraftAction(…, { overwrite: true })`, audited
+  `overwroteChangesElsewhere`); lock refusal = key `errors.domain.pageLocked` (→ view only). Server: `editor/lock-
+  actions.ts` (`editorLockAction` take/heartbeat/take over → audit `site.page.lock_taken_over`,
+  `editorLockStatusAction`, `releaseEditorLockAction`); the editor page reads the holder (read only, so a prefetch
+  never locks) and opens view-only. Services `site-locks.ts`: `site_page_locks` (unique page, RLS), `acquirePageLock`
+  (atomic upsert with `setWhere`: ours / expired / take over), `getPageLock`, `pageLocksHeldByOthers`,
+  `assertPagesUnlocked` (`PageLockedError`), TTL 2 min. Checked in `storeDraft`, `publishPageAction`,
+  `restoreVersionAction`, `runSiteEdit` (changed + renamed pages, dry runs too) and `restoreSiteEdit`; MCP `get_site`
+  shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
+- **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
+  (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
+  preset / update root on that page, used photos downloaded outside the tx, then `saveImportImages` + `runSiteEdit`
+  in one tx). Services `site-import/`: `safe-fetch.ts` (SSRF guard: http(s), ports 80/443, no credentials, every
+  resolved address public via `isPrivateAddress`, socket pinned to the checked address through a custom `lookup`,
+  redirects re-checked, decompressed size cap, deadline; `allow` / `isBlocked` / `ports` = test seams),
+  `robots.ts` (RFC 9309 groups, longest match, `$`/`*`), `extract.ts` (quote-aware tokenizer; skips script/style/
+  nav/form/svg/hidden; JSON-LD business + offers; services/prices/durations incl. table rows and Arabic digits; hours;
+  contact; photos incl. og:image, lazy/srcset, inline backgrounds; `linksToFollow`), `ops.ts` (`mergeImportPages`,
+  `buildImportOps` with `/files/import-image-N` placeholders, `resolveImportImages`), `index.ts`
+  (`crawlSiteForImport`, `fetchImportImage`, `saveImportImages`). AI mapping: `@spa/ai` `planSiteImport` (agent
+  `site_editor`, imported content marked as untrusted data; only add / preset / update root kept; invalid AI ops →
+  standard layout). Playwright only: `SITE_IMPORT_E2E_ALLOW=127.0.0.1:<E2E_PORT+1>` exempts the fixture server (never
+  set in deploy env). Tests: `packages/services/test/site-import.test.ts` (SSRF incl. DNS rebinding + redirects,
+  robots, extractor fixture `test/fixtures/spa-site.html`, ops → draft page), `packages/ai/test/site-edit.test.ts`,
+  e2e `site-import.spec.ts`.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
   Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed verified email + super-admin +
   2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
@@ -767,6 +798,8 @@ i18n namespace `automations`.
 - **Server** `packages/ai/src/mcp/site-server.ts` `handleSiteMcpRequest` (stateless, JSON): bearer → verify →
   `siteAiEditorStatus` → consent row for (user, client) → 60/min per token (in memory) → tools (`SITE_MCP_TOOLS`) over
   the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
+  Writes to a page open in someone else's Studio editor are refused with the holder's name (F29 lock); `get_site`
+  lists `editing` per page.
   Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
 - **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
   deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,

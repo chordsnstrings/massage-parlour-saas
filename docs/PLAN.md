@@ -589,9 +589,9 @@ no-show & cancellation rate, peak-hours heatmap, therapist leaderboard (revenue,
   Right: properties in tabs **Content | Style | Advanced** with the responsive toggle. Focus mode collapses panels.
 - Drag from library or within canvas/layers; inline text editing; drop image to replace; context menu; keyboard shortcuts
   (copy, paste, duplicate, delete, undo/redo, move up/down).
-- Autosave; version history with named versions and restore; scheduled publish; shareable preview link + QR to check on a phone.
+- Autosave; version history with named versions and restore; scheduled publish; shareable preview link + QR to check on a phone. *(Autosave built: F29, PLAN §17.)*
 - EN/AR toggle: per-locale content, automatic RTL mirroring, "copy from English" + AI translate.
-- Editing lock: one editor per page at a time (shows who's editing).
+- Editing lock: one editor per page at a time (shows who's editing). *(Built: F29 — view only / take over.)*
 - P2: block-analytics overlay. P3: AI assists (write/rewrite copy, section from prompt, Seedream images, layout suggestions from analytics).
 
 ### 11.7 Storage
@@ -1244,6 +1244,31 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
 - ✅ **F28. Outbox assignment.** Shipped 2026-10-09: "Assigned to" per message (active members with marketing.send),
   Mine / Unassigned / All filter, bulk assign, assignee's own sidebar badge, audit per change, optional round-robin
   auto-assign among receptionists on shift (Automations, off by default; worker every minute). Click-to-send only.
+
+### Remaining backlog (Website Studio items)
+- ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after
+  the last change and on blur / tab hidden, with the edit stamp (never overwrites silently: "Changed elsewhere
+  (Claude or another editor)" → Reload / Keep mine, an audited overwrite); status line "Saved · just now / Saving… /
+  Offline – changes kept locally"; an unsaved local copy per spa + page (localStorage) is offered back after a crash.
+  Soft lock per page (`site_page_locks`, migration 0037): taken on open, 30 s heartbeat, frees itself 2 min after the
+  last beat; others open view-only ("Ahmed is editing this page — view only / Take over"; take-over audited
+  `site.page.lock_taken_over`, the previous holder turns view-only on its next save/heartbeat). Editor saves, publish,
+  version restore, Ask AI and the Claude MCP ops refuse a page locked by someone else with the holder's name.
+  **Decisions:** the lock is per user (two tabs of the same super-admin share it; stamps guard those); theme ops and
+  new pages aren't page-locked; autosaves audit once per page + editor per 10 min (manual saves / overwrites always).
+- ✅ **F32. Studio import of a spa's existing website.** Shipped 2026-10-09: Website Studio → Pages → "Import from
+  website" (URL, new page address, name; optional "Arrange the content with AI"). Server crawl: robots.txt per origin
+  (RFC 9309; 5xx/unreachable = don't crawl), start page + ≤ 4 same-site pages that look like treatments / prices /
+  contact / about, 2 MB per page, 30 s budget; SSRF guard on every hop (http/https, ports 80/443, no credentials,
+  every resolved address public, connection pinned to the checked IP, ≤ 4 redirects, size cap after decompression).
+  Extracts title/description/headline, sections, services + prices + durations (tables, lists, JSON-LD offers,
+  Arabic digits/currency), hours, phone/WhatsApp/email/address/Instagram, photos. Preview = dry run of site-edit ops
+  (new hidden draft page: Hero, Section+Heading+RichText per section, "Treatments & prices", "Visit us", Gallery);
+  Apply downloads the used photos (≤ 8 MB, magic-byte image types, re-encoded) into the media library (tags
+  `import` + host) and adds the page in one transaction; never publishes; audited `site.import.previewed` /
+  `site.page.imported`. AI mapping = `site_editor` agent (`planSiteImport`, budget + kill switch; falls back to the
+  standard layout), limited to `SITE_AI_EDITOR_EMAILS` accounts. **TODO(plans):** gate AI mapping on the Premium
+  'ai' entitlement once the plans branch exposes a check (`aiEntitled` hook in `website/import-actions.ts`).
 
 ## 18. Gap audit (2026-10-09) — owner decides order; Claude owns all of it
 Verified by a full plan-vs-code + production-readiness audit. Owner-only setup is in §16 / deploy/droplet/README.md.

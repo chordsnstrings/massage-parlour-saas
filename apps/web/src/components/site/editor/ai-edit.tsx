@@ -41,6 +41,7 @@ export function AiEditPanel({
   theme,
   show,
   saved,
+  onPreview,
 }: {
   api: AiEditApi
   enabled: boolean
@@ -48,6 +49,8 @@ export function AiEditPanel({
   theme: SiteTheme
   show: (data: PageJson, theme: SiteTheme) => void
   saved: () => void
+  /** True while an unapplied plan is on the canvas (the editor pauses autosave and the local copy meanwhile). */
+  onPreview?: (previewing: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
   const [instruction, setInstruction] = useState('')
@@ -67,12 +70,14 @@ export function AiEditPanel({
       }
       const next = r.data as Plan
       setPlan({ ...next, instruction, before })
+      onPreview?.(true)
       show(next.data, next.theme ?? theme)
     })
   const discard = () => {
     if (!plan) return
     show(plan.before.data, plan.before.theme)
     setPlan(null)
+    onPreview?.(false)
   }
   const apply = () =>
     start(async () => {
@@ -83,6 +88,7 @@ export function AiEditPanel({
         return
       }
       saved()
+      onPreview?.(false)
       const previous = r.data?.previous as Snapshot
       setHistory((h) =>
         [{ at: Date.now(), instruction: plan.instruction, summary: plan.summary, previous }, ...h].slice(
