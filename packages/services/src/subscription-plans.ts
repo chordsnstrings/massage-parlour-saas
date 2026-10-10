@@ -8,11 +8,12 @@ import {
   plans,
   platformInvoices,
   platformPayments,
+  spaApplications,
   subscriptions,
   type Tx,
   tenants,
 } from '@spa/db'
-import { and, eq, gte, inArray, ne, or } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import { isLegacyPlan } from './entitlements'
 import { DomainError } from './errors'
 import { addMonths, createPlatformInvoice, discounted, generateBillingScheduleTx } from './platform-billing'
@@ -212,6 +213,76 @@ export async function offeredPlans(db: DbOrTx) {
   const rows = await db
     .select()
     .from(plans)
-    .where(and(eq(plans.active, true), ne(plans.code, PLAN_CODES.legacyYearly)))
+    .where(and(eq(plans.active, true), isNull(plans.archivedAt), ne(plans.code, PLAN_CODES.legacyYearly)))
   return rows.sort((a, b) => a.sort - b.sort)
+}
+
+/** R19: a plan new spas can get (pricing page, sign-up, approval): active, not archived, not the legacy yearly plan. */
+export const offeredToNewSpas = (p: { code: string; active: boolean; archivedAt: Date | null }) =>
+  p.active && !p.archivedAt && !isLegacyPlan(p)
+
+export type PlanUse = { spas: number; applications: number }
+
+/**
+ * Who points at each plan (R19). `spas` = distinct spas whose `tenants.plan_id` or `subscriptions.plan_id` is the
+ * plan (deleted spas too: restoring one brings its plan back); `applications` = `spa_applications` rows (any status).
+ */
+export async function planUsage(db: DbOrTx, planIds?: string[]): Promise<Map<string, PlanUse>> {
+  if (planIds && !planIds.length) return new Map()
+  const only = planIds
+    ? sql`where p.id in (${sql.join(
+        planIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`
+    : sql``
+  const { rows } = await db.execute<{ id: string; spas: number; applications: number }>(sql`
+    select p.id,
+      (select count(*) from (
+        select t.id from ${tenants} t where t.plan_id = p.id
+        union select s.tenant_id from ${subscriptions} s where s.plan_id = p.id
+      ) u)::int as spas,
+      (select count(*) from ${spaApplications} a where a.plan_id = p.id)::int as applications
+    from ${plans} p ${only}`)
+  return new Map(rows.map((r) => [r.id, { spas: r.spas, applications: r.applications }]))
+}
+
+export type PlanRemoval = { code: string; name: string } & (
+  | { outcome: 'deleted' }
+  | ({ outcome: 'archived' } & PlanUse)
+)
+
+/**
+ * R19 "Delete" on Console → Plans & prices (super-admin; the caller checks rights and audits). Every plan row is
+ * locked (id order) for the transaction, so the counts and the last-plan check hold until commit: a spa,
+ * subscription or application written for the plan meanwhile waits on the lock (its FK check) and is counted, or
+ * fails on the deleted row. Nothing points at the plan → the row is deleted; otherwise it is archived (inactive,
+ * `archived_at`) and those spas keep their plan and agreed price. Refused for the last plan new spas can get, so
+ * the pricing page and sign-up never end up empty.
+ */
+export async function removePlan(tx: Tx, planId: string): Promise<PlanRemoval> {
+  const all = await tx.select().from(plans).orderBy(asc(plans.id)).for('update')
+  const plan = all.find((p) => p.id === planId)
+  if (!plan) throw new DomainError('Plan not found', 'not_found')
+  if (plan.archivedAt) throw new DomainError(`${plan.name} is already archived`)
+  if (offeredToNewSpas(plan) && !all.some((p) => p.id !== plan.id && offeredToNewSpas(p)))
+    throw new DomainError(
+      `${plan.name} is the only plan new spas can get. Add another plan or make one available first.`,
+    )
+  const use = (await planUsage(tx, [plan.id])).get(plan.id) ?? { spas: 0, applications: 0 }
+  const named = { code: plan.code, name: plan.name }
+  if (!use.spas && !use.applications) {
+    await tx.delete(plans).where(eq(plans.id, plan.id))
+    return { outcome: 'deleted', ...named }
+  }
+  await tx.update(plans).set({ active: false, archivedAt: new Date() }).where(eq(plans.id, plan.id))
+  return { outcome: 'archived', ...named, ...use }
+}
+
+/** R19 "Restore" (super-admin; the caller audits): back on Plans & prices, still hidden until edited to active. */
+export async function restorePlan(tx: Tx, planId: string) {
+  const [plan] = await tx.select().from(plans).where(eq(plans.id, planId)).for('update')
+  if (!plan) throw new DomainError('Plan not found', 'not_found')
+  if (!plan.archivedAt) throw new DomainError(`${plan.name} is not archived`)
+  await tx.update(plans).set({ archivedAt: null }).where(eq(plans.id, plan.id))
+  return { code: plan.code, name: plan.name }
 }

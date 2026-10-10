@@ -301,8 +301,10 @@ export async function acceptApplication(
     if (app.status !== 'pending') throw new DomainError('This application was already reviewed')
     const [plan] = await tx.select().from(plans).where(eq(plans.id, r.planId))
     if (!plan) throw new DomainError('Plan not found', 'not_found')
-    // PLAN §18.8: the legacy yearly plan is for existing spas only (until their renewal), never a new spa.
-    if (isLegacyPlan(plan)) throw new DomainError('Choose a plan that is offered to spas', 'not_found')
+    // PLAN §18.8: the legacy yearly plan is for existing spas only (until their renewal), never a new spa; an
+    // archived plan (R19) is never given to a new spa either.
+    if (isLegacyPlan(plan) || plan.archivedAt)
+      throw new DomainError('Choose a plan that is offered to spas', 'not_found')
     const [account] = await tx
       .select({ id: user.id, disabledAt: user.disabledAt })
       .from(user)

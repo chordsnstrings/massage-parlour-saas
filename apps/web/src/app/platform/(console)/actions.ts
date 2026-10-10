@@ -12,10 +12,13 @@ import {
   isLegacyPlan,
   MIN_AUTO_PURGE_DAYS,
   markListedAdminVerified,
+  type PlanRemoval,
   pauseTenant,
   purgeTenant,
   recordPlatformPayment,
+  removePlan,
   renameTenantSlug,
+  restorePlan,
   resumeTenant,
   saveEmailSettings,
   saveTurnstileSettings,
@@ -93,6 +96,7 @@ export async function updateSubscriptionAction(
     })
   if (!current && isLegacyPlan(target))
     return fail('The legacy yearly plan is kept for existing spas only.', { planId: 'Choose another plan' })
+  if (!current && target?.archivedAt) return fail('This plan is archived.', { planId: 'Choose another plan' })
   await platformDb()
     .insert(subscriptions)
     .values({ tenantId, ...d })
@@ -308,6 +312,7 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
   if (!parsed.success) return fromZod(parsed.error)
   const { id, tier, ...rest } = parsed.data
   const existing = id ? await platformDb().query.plans.findFirst({ where: eq(plans.id, id) }) : undefined
+  if (existing?.archivedAt) return fail(`Restore ${existing.name} before editing it.`)
   // PLAN §18.8: plans are found by code (premium / standard / legacy-yearly) — those codes never change; the tier
   // sets the feature switches in `limits` (other limits, e.g. a branch cap, are kept).
   const fixed = existing && (Object.values(PLAN_CODES) as string[]).includes(existing.code)
@@ -331,6 +336,51 @@ export async function savePlanAction(_p: ActionResult, fd: FormData): Promise<Ac
   })
   revalidatePath('/platform/plans')
   return ok('Plan saved')
+}
+
+const planIdForm = z.object({ id: z.uuid('Choose a plan') })
+
+/**
+ * R19: Delete on Plans & prices. Nothing points at the plan → deleted; spas or applications on it → archived (they
+ * keep their plan and price). The service re-checks use inside the transaction (`removePlan` locks the plans).
+ */
+export async function removePlanAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = planIdForm.safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  let res: PlanRemoval
+  try {
+    res = await platformDb().transaction((tx) => removePlan(tx, parsed.data.id))
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  const { code, name } = res
+  const archived = res.outcome === 'archived'
+  await audit({
+    actorUserId: user.id,
+    action: archived ? 'platform.plan.archived' : 'platform.plan.deleted',
+    data: res.outcome === 'archived' ? { code, name, spas: res.spas } : { code, name },
+  })
+  revalidatePath('/platform/plans')
+  return ok(archived ? `${name} archived. Restore it from Archived plans.` : `${name} deleted`)
+}
+
+/** R19: Restore an archived plan; it stays hidden from new spas until it is edited to available. */
+export async function restorePlanAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = planIdForm.safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  let res: Awaited<ReturnType<typeof restorePlan>>
+  try {
+    res = await platformDb().transaction((tx) => restorePlan(tx, parsed.data.id))
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
+    throw e
+  }
+  await audit({ actorUserId: user.id, action: 'platform.plan.restored', data: res })
+  revalidatePath('/platform/plans')
+  return ok(`${res.name} restored. Edit it to offer it to new spas again.`)
 }
 
 export async function saveCompanyAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {

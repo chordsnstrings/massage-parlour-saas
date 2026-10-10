@@ -108,7 +108,12 @@ export default async function AnnouncementsPage() {
   const db = platformDb()
   const [rows, planRows, spas] = await Promise.all([
     listAnnouncements(db),
-    db.select({ code: plans.code, name: plans.name }).from(plans).orderBy(asc(plans.sort)),
+    // R19: archived plans stay targetable (their spas are still on them), marked as such.
+    db
+      .select({ code: plans.code, name: plans.name, archivedAt: plans.archivedAt })
+      .from(plans)
+      .orderBy(asc(plans.sort))
+      .then((r) => r.map((p) => ({ code: p.code, name: p.archivedAt ? `${p.name} (archived)` : p.name }))),
     db
       .select({ id: tenants.id, name: tenants.name, slug: tenants.slug })
       .from(tenants)
