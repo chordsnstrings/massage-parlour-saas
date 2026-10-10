@@ -16,6 +16,7 @@ describe('job schedule', () => {
       'notifications-prune': '50 4 * * *',
       'oauth-clients-prune': '35 * * * *',
       'outbox-auto-assign': '* * * * *',
+      'client-drafts': '25 * * * *',
     })
     expect(new Set(jobs.map((j) => j.name)).size).toBe(jobs.length)
   })

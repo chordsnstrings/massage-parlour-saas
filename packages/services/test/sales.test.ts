@@ -218,9 +218,13 @@ describe('sales', () => {
     const bookingId = thanks!.bookingId!
     await tx((db) => setAutomation(db, ids.tenant!, 'thankYou', false))
     expect(await tx((db) => isAutomationOn(db, ids.tenant!, 'thankYou'))).toBe(false)
-    expect(await tx((db) => enqueueBookingMessage(db, bookingId, 'review_request'))).toBeNull()
+    expect(await tx((db) => enqueueBookingMessage(db, bookingId, 'thank_you'))).toBeNull()
     await tx((db) => setAutomation(db, ids.tenant!, 'thankYou', true))
     expect((await tx((db) => getAutomations(db, ids.tenant!))).thankYou).toBe(true)
+    // F15: review requests have their own switch, off until the spa turns it on.
+    expect((await tx((db) => getAutomations(db, ids.tenant!))).reviewRequests).toBe(false)
+    expect(await tx((db) => enqueueBookingMessage(db, bookingId, 'review_request'))).toBeNull()
+    await tx((db) => setAutomation(db, ids.tenant!, 'reviewRequests', true))
     expect((await tx((db) => enqueueBookingMessage(db, bookingId, 'review_request')))?.kind).toBe(
       'review_request',
     )

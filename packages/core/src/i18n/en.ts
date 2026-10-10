@@ -24,6 +24,7 @@ import { domain } from './en/domain'
 import { enums } from './en/enums'
 import { equipment } from './en/equipment'
 import { errors } from './en/errors'
+import { growth } from './en/growth'
 import { inbox } from './en/inbox'
 import { inventory } from './en/inventory'
 import { logo } from './en/logo'
@@ -77,6 +78,7 @@ export const en = {
   services,
   equipment,
   packages,
+  growth,
   inventory,
   purchases,
   warehouse,

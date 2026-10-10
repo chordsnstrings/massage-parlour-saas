@@ -1221,7 +1221,8 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   password reset left other sessions signed in (now `revokeSessionsOnPasswordReset` + `getSession` checks the session
   row past the cookie cache); `/files` let members of a deleted spa, and owners/managers held by "Require 2FA", read
   private files (now the same rules as `requireMember`).
-- **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
+- ✅ **F15. Growth extras** (nice-to-have): gift-card vouchers with QR, extra site blocks (map, video, reviews, IG feed, blog, enquiry form), automatic review/birthday/win-back message drafts (click-to-send).
+  Vouchers + client drafts shipped 2026-10-10 (see "Shipped (F15–F30 batch)"); **F15 site blocks: other branch.**
 - ✅ **F31. Extra KPIs** (backlog F16–F32, batch C) — shipped 2026-10-09: Reports page (`/{slug}/reports`, Finance menu;
   owner/manager/accountant via `reports.view`, RevPATH needs `dashboard.revenue`, liability `accounting.view`) with
   rebooking rate (30/60/90 days, by therapist), retention cohorts (12 months × +1…+6), RevPATH (net treatment revenue
@@ -1319,6 +1320,37 @@ Order as listed. Same reminder rule as F1–F8 (CLAUDE.md).
   (`debug_token`). A Page-linked IG account is used for publishing / private replies / replies when there's no
   Instagram Login connection (graph.facebook.com) and its comment webhooks reach the spa. Owner steps (app review
   permissions, redirect URI): deploy/droplet/README.md "Meta".
+
+### Shipped (F15–F30 batch)
+- ✅ **F15 — gift vouchers with QR.** Shipped 2026-10-10 (Premium `marketing`): Packages → Gift cards → "Voucher"
+  (`/{slug}/vouchers/{id}`, pos.use or services.manage): HTML print view A6 / A5 (spa logo + name, amount or a chosen
+  treatment, recipient + message as typed, code, expiry, EN + AR labels), server-side SVG QR (`qrcode` pinned 1.5.4,
+  no external service) → public check page `/voucher/{token}` on the spa's site (free address or custom domain;
+  status, balance, expiry, treatment, code's last 4 only; no buyer/recipient; noindex, no-referrer; 30 checks / 10 min
+  + 200 / day per IP; token kept out of analytics). Token = `gift_cards.check_token` (random, not the code), so the
+  link alone can't be spent. WhatsApp share = click-to-send link (recipient's mobile, else the buyer's; numbers only
+  for phone roles). Redemption stays in POS: type the code or scan the QR (scanner types the URL → resolved to the
+  card). Standard: "Premium" label in the list, upsell page on the route; the public check keeps working after a
+  downgrade (vouchers already handed out). Migration 0042.
+- ✅ **F15 — automatic review / birthday / win-back drafts.** Shipped 2026-10-10: three automation switches
+  (`reviewRequests`, `birthdayMessages`, `winbackMessages`; **off by default**, Premium `marketing` via
+  `AUTOMATION_FEATURE` → `automationOnSql`, so Standard spas never run them); hourly worker `client-drafts` queues
+  WhatsApp drafts into the outbox (click-to-send; F28 assignment / auto-assign apply). Rules: marketing consent
+  (mobile, not opted out / blocklisted / `no-marketing`, re-checked at send time like campaigns), quiet hours (Dubai,
+  default 21:00–10:00: due time moves to their end), caps (review: once per booking, 1 per client / 90 days, visits
+  checked out ≤ 48 h ago, needs the spa's review link; birthday: 1 per 300 days; win-back: lapsed N–365 days (N
+  default 60), no booking ahead, once per absence, ≤ 25 per spa per day; birthday + win-back skip a client another
+  marketing message reached within 7 days, and campaigns now count these drafts for their 7-day cap). Timing card on
+  Automations (quiet hours, review link, review delay, win-back days); texts EN + AR per spa in WhatsApp → Templates
+  (birthday / win-back defaults now end with the booking link). "Thank-you & review requests" switch renamed
+  "Thank-you messages" (review requests have their own switch).
+- ✅ **F16. QR posters for reception + hotel partners.** Shipped 2026-10-10 (Premium `marketing`, menu Marketing →
+  QR posters, `marketing.campaigns`): printable A4 / A5 poster (spa logo + name, EN + AR, booking QR) for the
+  reception (`/book?src=qr`, F13 attribution `qr`) or a partner (`booking_partners`: name as typed + 6-char code →
+  `&partner={code}`); t.js + the booking page carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or
+  paused codes ignored). Partner table: bookings all-time / 30 days / completed / latest (cancelled excluded) +
+  "Reception poster" row (QR without partner); pause / resume (audited). Booking detail shows "Online · QR code ·
+  {partner}". Migration 0042.
 
 ### Remaining backlog (Website Studio items)
 - ✅ **F29. Studio editor autosave + editing lock.** Shipped 2026-10-09: the editor autosaves the draft ~2 s after

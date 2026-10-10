@@ -21,7 +21,13 @@ import {
 } from './notifications'
 import { autoPurgeTenants, pruneOAuthClients } from './purge'
 import { restoreDrill } from './restore-drill'
-import { autoAssignOutbox, expireAllPackages, renewAllMemberships, runSlotFiller } from './tenant-jobs'
+import {
+  autoAssignOutbox,
+  expireAllPackages,
+  queueClientDrafts,
+  renewAllMemberships,
+  runSlotFiller,
+} from './tenant-jobs'
 
 export type JobDef = {
   name: string
@@ -51,6 +57,8 @@ export const jobs: JobDef[] = [
   { name: 'gbp-site-sync', cron: '*/10 * * * *', handler: () => syncGbpSite() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
   { name: 'outbox-auto-assign', cron: '* * * * *', handler: () => autoAssignOutbox() },
+  // F15: review-request / birthday / win-back drafts (each switch off by default; Premium marketing).
+  { name: 'client-drafts', cron: '25 * * * *', handler: () => queueClientDrafts() },
   { name: 'document-reminders', cron: '0 9 * * *', handler: () => documentExpiryReminders() },
   { name: 'weekly-insights', cron: '0 8 * * 1', handler: () => weeklyInsights() },
   { name: 'daily-digest', cron: '30 9 * * *', handler: () => dailyDigest() },

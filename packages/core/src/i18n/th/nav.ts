@@ -37,6 +37,7 @@ export const nav: Messages['nav'] = {
   access: 'ทีม',
   documents: 'เอกสาร',
   socialPosts: 'โพสต์โซเชียล',
+  posters: 'โปสเตอร์คิวอาร์',
   analytics: 'การวิเคราะห์',
   site: 'เว็บไซต์',
   media: 'คลังสื่อ',

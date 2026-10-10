@@ -141,10 +141,11 @@ export const messages = {
     reminder: 'Queued the day before the appointment.',
     reminder_2h: 'Queued two hours before the appointment.',
     thank_you: 'After a completed visit.',
-    review_request: 'After a completed visit, with your review link.',
+    review_request: 'A few hours after checkout (Automations → Review requests); {link} = your review link.',
     rebook: 'When a regular is due for their next treatment.',
-    birthday: 'In the client’s birthday week.',
-    winback: 'For clients who have not visited in a while.',
+    birthday: 'On the client’s birthday (Automations → Birthday messages); {link} = your booking page.',
+    winback:
+      'For clients who have not visited in a while (Automations → Win-back messages); {link} = your booking page.',
     slot_offer: 'To fill a gap that just opened in the day.',
     waitlist_slot: 'When a slot frees up for a client on the waitlist.',
     custom: 'Free text.',
@@ -157,5 +158,6 @@ export const messages = {
     time: 'Time',
     spa: 'Spa name',
     ref: 'Booking ref',
+    link: 'Link (review / booking)',
   },
 } as const

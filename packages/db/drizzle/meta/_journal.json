@@ -309,6 +309,13 @@
       "when": 1791598042576,
       "tag": "0043_social_formats_private_replies",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791598375354,
+      "tag": "0044_vouchers_partners",
+      "breakpoints": true
     }
   ]
 }

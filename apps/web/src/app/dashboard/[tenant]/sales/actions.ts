@@ -109,7 +109,8 @@ const saleSchema = z.object({
     .min(1, 'sales.v.addItem'),
   discountAed: money.default(0),
   payments: z
-    .array(z.object({ method: payMethod, amountAed: money, reference: z.string().trim().max(60).nullish() }))
+    // F15: up to 300 so a scanned voucher QR (its check-page URL) fits; services resolve it to the card's code.
+    .array(z.object({ method: payMethod, amountAed: money, reference: z.string().trim().max(300).nullish() }))
     .max(8),
   tips: z.array(z.object({ staffId: z.uuid('sales.v.therapist'), amountAed: money, method })).max(12),
 })

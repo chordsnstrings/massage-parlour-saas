@@ -67,8 +67,11 @@ export async function POST(req: Request) {
       tenantId: tenant.id,
       sessionHash,
       type: parsed.type,
+      // F15: a voucher check page's token stays out of analytics (`/voucher/{token}` → `/voucher`).
       path:
-        parsed.path.replace(new RegExp(`^/s/${parsed.site.replace(/[^a-z0-9-]/g, '')}(?=/|$)`), '') || '/',
+        parsed.path
+          .replace(new RegExp(`^/s/${parsed.site.replace(/[^a-z0-9-]/g, '')}(?=/|$)`), '')
+          .replace(/\/voucher\/[^/?#]+/, '/voucher') || '/',
       blockId: parsed.blockId ?? null,
       blockType: parsed.blockType ?? null,
       element: parsed.element ?? null,

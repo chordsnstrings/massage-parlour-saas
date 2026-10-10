@@ -7,6 +7,7 @@ import {
   DomainError,
   findOrCreateClient,
   notify,
+  partnerByCode,
   publicPrice,
   selfBookingStatus,
   spaHidesPrices,
@@ -155,6 +156,8 @@ const bookingInput = z.object({
           utm_source: z.string().max(60).optional(),
           utm_medium: z.string().max(60).optional(),
           utm_campaign: z.string().max(60).optional(),
+          /** F16: a partner poster's link code (booking_partners.code). */
+          partner: z.string().max(60).optional(),
         })
         .nullish(),
     })
@@ -223,6 +226,8 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         language: lang,
       })
       if (client.blocklisted) return { kind: 'blocked' as const }
+      // F16: a partner poster's code (unknown or paused codes are ignored).
+      const partner = await partnerByCode(tx, v.entry?.utm?.partner)
 
       const notes = [
         v.notes,
@@ -238,6 +243,7 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         clientId: client.id,
         source: 'online',
         attribution,
+        partnerId: partner?.id ?? null,
         status,
         notes: notes || null,
         items: [{ serviceVariantId: v.variantId, start, staffIds: v.staffId ? [v.staffId] : undefined }],
@@ -273,7 +279,14 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
         address: branch.address,
         confirmed: status === 'confirmed',
       }
-      return { kind: 'ok' as const, bookingId: booking.id, done, date, serviceEn: row.service.name.en }
+      return {
+        kind: 'ok' as const,
+        bookingId: booking.id,
+        done,
+        date,
+        serviceEn: row.service.name.en,
+        partnerId: partner?.id ?? null,
+      }
     })
 
     if (result.kind === 'unavailable') return fail(t('unavailable', lang))
@@ -291,7 +304,13 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       action: 'booking.created',
       entity: 'booking',
       entityId: result.bookingId,
-      data: { ref: result.done.ref, source: 'online', attribution, ...(v.via ? { via: v.via } : {}) },
+      data: {
+        ref: result.done.ref,
+        source: 'online',
+        attribution,
+        ...(v.via ? { via: v.via } : {}),
+        ...(result.partnerId ? { partnerId: result.partnerId } : {}),
+      },
     })
     revalidatePath(`/dashboard/${tenant.slug}/calendar`)
     revalidatePath(`/dashboard/${tenant.slug}`)

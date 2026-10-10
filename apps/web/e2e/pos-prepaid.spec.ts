@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { clientPackages, giftCards, packageDefinitions, services, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
-import { app, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
+import { app, seedBooking, seedCatalog, signUpOwner, site, testDb } from './helpers'
 
 test('POS: sell a gift card and a package, then pay with the card and use a package session', async ({
   page,
@@ -46,7 +46,8 @@ test('POS: sell a gift card and a package, then pay with the card and use a pack
     await expect(page.getByTestId('sale-total')).toHaveText(/350/)
     await page.getByLabel('Payment 1 method').selectOption('gift_card')
     await page.getByLabel('Payment 1 amount').fill('350')
-    await page.getByLabel('Payment 1 reference').fill(card!.code)
+    // F15: a QR scanner types the voucher's check-page URL; the sale resolves it to the card (receipt shows the code).
+    await page.getByLabel('Payment 1 reference').fill(`${site(slug)}/voucher/${card!.checkToken}`)
     await page.getByRole('button', { name: /Complete sale/ }).click()
     await page.waitForURL(/\/sales\/[0-9a-f-]{36}$/)
     const receipt = page.locator('#receipt')

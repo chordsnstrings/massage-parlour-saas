@@ -23,6 +23,7 @@ import { domain } from './th/domain'
 import { enums } from './th/enums'
 import { equipment } from './th/equipment'
 import { errors } from './th/errors'
+import { growth } from './th/growth'
 import { inbox } from './th/inbox'
 import { inventory } from './th/inventory'
 import { logo } from './th/logo'
@@ -77,6 +78,7 @@ export const th: Messages = {
   services,
   equipment,
   packages,
+  growth,
   inventory,
   purchases,
   warehouse,

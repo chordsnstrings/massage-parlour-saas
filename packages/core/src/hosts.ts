@@ -52,3 +52,21 @@ export function siteUrl(slug: string, rootDomain: string): string {
   const protocol = rootDomain.startsWith('localhost') ? 'http' : 'https'
   return `${protocol}://${slug}.${rootDomain}`
 }
+
+/**
+ * A spa's free site address without a request (worker jobs), matching web `canonicalUrls().site()`: `/s/{slug}` on
+ * the platform domain when the dashboard lives on the root host itself (path routing: APP_URL = https://{root}),
+ * else `{slug}.{root}` (host routing: APP_URL = https://app.{root}).
+ */
+export function freeSiteUrl(slug: string, env: { ROOT_DOMAIN?: string; APP_URL?: string }): string {
+  const root = parseRoots(env.ROOT_DOMAIN ?? 'localhost:3000')[0]!
+  let app: URL | null = null
+  try {
+    app = env.APP_URL ? new URL(env.APP_URL) : null
+  } catch {
+    app = null
+  }
+  const scheme = app?.protocol === 'http:' || (!app && root.startsWith('localhost')) ? 'http' : 'https'
+  const pathRouting = app ? app.host.toLowerCase() === root : false
+  return pathRouting ? `${scheme}://${root}/s/${slug}` : `${scheme}://${slug}.${root}`
+}

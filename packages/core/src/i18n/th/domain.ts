@@ -293,4 +293,7 @@ export const domain: Messages['errors']['domain'] = {
   privateReplyAlreadySent: 'ส่งข้อความตอบกลับแบบส่วนตัวสำหรับความคิดเห็นนี้แล้ว',
   privateReplyExpired: 'Instagram อนุญาตให้ตอบกลับแบบส่วนตัวได้ภายใน 7 วันหลังความคิดเห็นเท่านั้น',
   facebookSignInAgain: 'ลงชื่อเข้าใช้ด้วย Facebook อีกครั้งเพื่อเลือกเพจ',
+  partnerNameRequired: 'กรอกชื่อพาร์ทเนอร์',
+  partnerNotFound: 'ไม่พบพาร์ทเนอร์',
+  partnerCodeClash: 'สร้างรหัสลิงก์ไม่สำเร็จ กรุณาลองอีกครั้ง',
 }

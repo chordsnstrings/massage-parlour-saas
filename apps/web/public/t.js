@@ -11,7 +11,8 @@
   } catch (_) {}
   var q = new URLSearchParams(location.search)
   var utm = {}
-  ;['utm_source', 'utm_medium', 'utm_campaign', 'src'].forEach((k) => {
+  // partner = F16 poster link of a hotel / concierge partner (bookings.partner_id).
+  ;['utm_source', 'utm_medium', 'utm_campaign', 'src', 'partner'].forEach((k) => {
     var v = q.get(k)
     if (v) utm[k] = v.slice(0, 60)
   })

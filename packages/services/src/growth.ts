@@ -78,7 +78,7 @@ function ruleCondition(r: SegmentRule, now: Date): SQL {
 export const NO_MARKETING_TAG = 'no-marketing'
 
 /** Conditions on the `clients` row for receiving marketing: a mobile number, not blocklisted, not opted out. */
-const marketingConsent = () => [
+export const marketingConsent = () => [
   isNotNull(clients.phoneE164),
   isNull(clients.marketingOptOutAt),
   eq(clients.blocklisted, false),
@@ -86,11 +86,12 @@ const marketingConsent = () => [
 ]
 
 /**
- * True for an outbox row that belongs to a campaign whose client has since opted out, been blocklisted or
- * tagged `no-marketing` — such messages must not be sent (consent is re-checked at send time, not only at queueing).
+ * True for a marketing outbox row — a campaign message, or an automatic review / birthday / win-back draft (F15) —
+ * whose client has since opted out, been blocklisted or tagged `no-marketing`: such messages must not be sent
+ * (consent is re-checked at send time, not only at queueing).
  */
 export const campaignConsentWithdrawn = () =>
-  sql`(${outbox.campaignId} is not null and not exists (
+  sql`((${outbox.campaignId} is not null or ${outbox.kind} in ('birthday', 'winback', 'review_request')) and not exists (
     select 1 from ${clients} where ${clients.id} = ${outbox.clientId} and ${and(...marketingConsent())}))`
 
 /**
@@ -167,8 +168,11 @@ export async function planAudience(
     .where(
       and(
         eq(outbox.tenantId, tenantId),
-        isNotNull(outbox.campaignId),
-        opts.excludeCampaignId ? ne(outbox.campaignId, opts.excludeCampaignId) : undefined,
+        // F15: automatic birthday / win-back drafts count for the cap too (one marketing message per 7 days).
+        or(isNotNull(outbox.campaignId), inArray(outbox.kind, ['birthday', 'winback'])),
+        opts.excludeCampaignId
+          ? or(isNull(outbox.campaignId), ne(outbox.campaignId, opts.excludeCampaignId))
+          : undefined,
         ne(outbox.status, 'skipped'),
         or(
           sql`${at} > ${from}::timestamptz and ${at} < ${until}::timestamptz`,

@@ -327,4 +327,8 @@ export const domain = {
   privateReplyAlreadySent: 'A private reply was already sent for this comment.',
   privateReplyExpired: 'Instagram only allows a private reply within 7 days of the comment.',
   facebookSignInAgain: 'Sign in with Facebook again to choose a Page.',
+  // F16 QR poster partners.
+  partnerNameRequired: 'Enter the partner name',
+  partnerNotFound: 'Partner not found',
+  partnerCodeClash: 'Could not create a link code, please try again',
 } as const

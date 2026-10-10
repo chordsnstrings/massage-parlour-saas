@@ -6,6 +6,9 @@
 export const AUTOMATIONS = [
   'bookingMessages',
   'thankYou',
+  'reviewRequests',
+  'birthdayMessages',
+  'winbackMessages',
   'slotFiller',
   'packageExpiry',
   'membershipRenewals',
@@ -28,6 +31,10 @@ export type AutomationSettings = Partial<Record<AutomationKey, boolean>>
 export const AUTOMATION_JOBS: Record<AutomationKey, readonly string[]> = {
   bookingMessages: [],
   thankYou: [],
+  // F15: one hourly worker job (`client-drafts`) logs each kind under its own name.
+  reviewRequests: ['review-requests'],
+  birthdayMessages: ['birthday-messages'],
+  winbackMessages: ['winback-messages'],
   slotFiller: ['slot-filler'],
   packageExpiry: ['packages-expire'],
   membershipRenewals: ['memberships-renew'],
@@ -40,7 +47,13 @@ export const AUTOMATION_JOBS: Record<AutomationKey, readonly string[]> = {
 }
 
 /** Switches that are off until the spa turns them on (every other switch: missing = on). */
-export const DEFAULT_OFF_AUTOMATIONS: readonly AutomationKey[] = ['outboxAutoAssign']
+export const DEFAULT_OFF_AUTOMATIONS: readonly AutomationKey[] = [
+  'outboxAutoAssign',
+  // F15: they write to clients unprompted, so each spa opts in (no surprise win-back wave on deploy).
+  'reviewRequests',
+  'birthdayMessages',
+  'winbackMessages',
+]
 
 export const isAutomationKey = (v: unknown): v is AutomationKey =>
   typeof v === 'string' && (AUTOMATIONS as readonly string[]).includes(v)

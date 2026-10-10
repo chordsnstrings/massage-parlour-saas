@@ -164,6 +164,18 @@ export type TenantSettings = {
   onlineBooking?: { autoConfirmReturning?: boolean; autoConfirmAfterVisits?: number }
   /** R7 "AI tools via Meta MCP": tool groups switched on/off (missing = default) and autopilot for public replies. */
   metaMcp?: { groups?: Partial<Record<string, boolean>>; autopilot?: boolean }
+  /**
+   * F15 automatic client message drafts (review requests, birthdays, win-back; switches in `automations`):
+   * quiet hours (Dubai HH:MM — drafts never fall due inside them), the review link and the timing. Read with core
+   * `clientDraftSettings()` (defaults for missing values).
+   */
+  clientDrafts?: {
+    quietStart?: string
+    quietEnd?: string
+    reviewLink?: string
+    reviewDelayHours?: number
+    winbackDays?: number
+  }
 }
 
 export const tenants = pgTable(

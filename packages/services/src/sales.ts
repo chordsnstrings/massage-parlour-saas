@@ -31,6 +31,7 @@ import { DomainError, pgCode, pgConstraint } from './errors'
 import { returnSoldStock, sellStock } from './inventory'
 import { post, postRefund, postSale, reverseSource } from './ledger'
 import {
+  giftCardCode,
   giftCardForPayment,
   issueGiftCard,
   issueMembership,
@@ -133,7 +134,18 @@ export async function branchBusinessDate(tx: Tx, branchId: string, now = new Dat
  * Records a paid sale. Amounts are VAT-inclusive; the payments must cover the total exactly (split allowed).
  * Tips are on top of the total. Checking out a booking completes it and queues the WhatsApp thank-you.
  */
-export async function createSale(tx: Tx, input: NewSale) {
+export async function createSale(tx: Tx, given: NewSale) {
+  // F15: a scanned voucher QR (its check-page URL) pays with that card; the payment keeps the card's code.
+  const input: NewSale = {
+    ...given,
+    payments: await Promise.all(
+      given.payments.map(async (p) =>
+        p.method === 'gift_card' && p.reference
+          ? { ...p, reference: await giftCardCode(tx, given.tenantId, p.reference) }
+          : p,
+      ),
+    ),
+  }
   if (!input.lines.length) throw new DomainError('Add at least one item')
   const branch = await branchRow(tx, input.branchId)
   const businessDate = businessDateOf(input.now ?? new Date(), branch.businessDayCutoff.slice(0, 5))

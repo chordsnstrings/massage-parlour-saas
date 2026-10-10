@@ -114,7 +114,7 @@ export const sales: Messages['sales'] = {
     paymentAmount: 'จำนวนเงินที่ {n}',
     paymentReference: 'เลขอ้างอิงการชำระที่ {n}',
     removePayment: 'ลบการชำระที่ {n}',
-    refGiftCard: 'รหัสบัตรของขวัญ เช่น ABCD-EFGH',
+    refGiftCard: 'รหัสบัตรของขวัญ (ABCD-EFGH) หรือสแกนคิวอาร์บนบัตรกำนัล',
     refTerminal: 'เลขสลิปเครื่องรูดบัตร (ไม่บังคับ)',
     refTransfer: 'เลขอ้างอิงการโอน (ไม่บังคับ)',
     splitPayment: 'แบ่งจ่าย',

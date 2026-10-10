@@ -1,4 +1,6 @@
 // Phase 1 — spa operations: services, rooms, staff, shifts, clients, intake, bookings, reservations, rotation.
+
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   customType,
@@ -309,6 +311,26 @@ export const bookingAttribution = pgEnum('booking_attribution', [
   'direct',
 ])
 
+/**
+ * F16: a hotel concierge / partner that hands out the spa's booking QR. Its poster links carry `?partner={code}`;
+ * online bookings made through one keep `bookings.partner_id`.
+ */
+export const bookingPartners = pgTable(
+  'booking_partners',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    /** As typed (never translated), e.g. "Atlantis concierge". */
+    name: text('name').notNull(),
+    /** Short public code in the link (lowercase letters + digits). */
+    code: text('code').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [unique('booking_partners_code').on(t.tenantId, t.code), ...tenantPolicies()],
+)
+
 export const bookings = pgTable(
   'bookings',
   {
@@ -322,6 +344,8 @@ export const bookings = pgTable(
     source: bookingSource('source').notNull(),
     /** Where an online booker came from (?src=ig|gbp|qr, utm, referrer, direct); null for staff-made bookings. */
     attribution: bookingAttribution('attribution'),
+    /** F16: the partner whose poster / link the online booker came through (null = none). */
+    partnerId: uuid('partner_id').references(() => bookingPartners.id, { onDelete: 'set null' }),
     status: bookingStatus('status').notNull().default('pending'),
     businessDate: date('business_date').notNull(),
     startsAt: ts('starts_at').notNull(),
@@ -338,6 +362,7 @@ export const bookings = pgTable(
     index('bookings_client').on(t.clientId),
     // F21: console tenant list (last booking created, bookings in the last 30 days).
     index('bookings_tenant_created').on(t.tenantId, t.createdAt),
+    index('bookings_partner').on(t.tenantId, t.partnerId).where(sql`${t.partnerId} is not null`),
     ...tenantPolicies(),
   ],
 )

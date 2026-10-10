@@ -59,7 +59,7 @@ function visitorEntry() {
   } catch {}
   const q = new URLSearchParams(location.search)
   const utm: Record<string, string> = {}
-  for (const k of ['src', 'utm_source', 'utm_medium', 'utm_campaign']) {
+  for (const k of ['src', 'utm_source', 'utm_medium', 'utm_campaign', 'partner']) {
     const v = q.get(k)
     if (v) utm[k] = v.slice(0, 60)
   }

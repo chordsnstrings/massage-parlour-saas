@@ -56,6 +56,10 @@ export const AUTOMATION_FEATURE: Partial<Record<AutomationKey, Feature>> = {
   instagram: 'marketing',
   googleReviews: 'marketing',
   weeklyInsights: 'ai',
+  // F15 automatic client message drafts.
+  reviewRequests: 'marketing',
+  birthdayMessages: 'marketing',
+  winbackMessages: 'marketing',
 }
 
 /** Active branches a spa without `multiBranch` may have. */
