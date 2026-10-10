@@ -971,7 +971,9 @@ i18n namespace `automations`.
     written atomically, mode 600. No overlay + no site.env = `.env` untouched; overlay that won't decrypt = untouched
     + status error (as before). Main body guarded (`BASH_SOURCE`) so `test-update.sh` can source the functions.
   - A changed `update.sh` takes effect from the deploy after the one that ships it (`updater-sync` installs it during
-    `up`), so a change that relies on it (e.g. a site.env value) must land in a later push.
+    `up`), so a change that relies on it (e.g. a site.env value) must land in a later push, once a commit with the
+    new updater and without that value shows `"state":"ok"` (it is the rollback target; README "Move to
+    spamanagement.co" step 3). `.env` is generated: hand edits go to `.env.base` (SSH) or the overlay.
 - **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
   `BRANCH` in the droplet secrets and is also the GitHub default branch; a push reaches production once its CI run
   is green (job `promote` → `deploy/green`), ~2 min after that.

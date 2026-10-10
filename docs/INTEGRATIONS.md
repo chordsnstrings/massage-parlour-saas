@@ -1,7 +1,9 @@
 # Integrations setup (operator guide)
 
 Every integration is optional. Each feature switches itself on once its environment variables are set
-(droplet: `/opt/spa/.env`, or without SSH via the encrypted overlay `deploy/droplet/secrets.env.enc` — see deploy/droplet/README.md).
+(droplet: `/opt/spa/.env.base` (first-boot env, needs SSH), or without SSH via the encrypted overlay
+`deploy/droplet/secrets.env.enc` — see deploy/droplet/README.md; `/opt/spa/.env` itself is generated on every deploy as
+`.env.base` < overlay < `site.env`, so a hand edit there is lost).
 Until then, the UI shows a "not configured yet" state.
 
 `APP_URL` below is the app origin, without a path. Today that is `https://spamanagement-6g3mi.ondigitalocean.app`;
