@@ -1,6 +1,7 @@
 'use client'
 import {
   BadgeDollarSign,
+  BellRing,
   Boxes,
   Building2,
   Calculator,
@@ -28,6 +29,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  ToggleRight,
   UserCog,
   UserRound,
   Users,
@@ -74,6 +76,8 @@ const icons = {
   studio: PanelsTopLeft,
   applications: Inbox,
   enquiries: Mail,
+  flags: ToggleRight,
+  announcements: BellRing,
 } as const
 
 export type NavItem = {

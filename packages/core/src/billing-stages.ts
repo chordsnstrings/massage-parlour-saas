@@ -22,9 +22,11 @@ export const billingStageRank = (s: BillingStage | null | undefined) => (s ? RAN
 
 /** First Dubai date on which an unpaid invoice counts as late. */
 export const lateFrom = (dueDate: string, rules: BillingRules) => addDays(dueDate, rules.overdueAfterDays)
-export const isLate = (dueDate: string, today: string, rules: BillingRules) => today >= lateFrom(dueDate, rules)
+export const isLate = (dueDate: string, today: string, rules: BillingRules) =>
+  today >= lateFrom(dueDate, rules)
 /** First read-only day for a spa first found late on `overdueSince`. */
-export const readOnlyFrom = (overdueSince: string, rules: BillingRules) => addDays(overdueSince, rules.graceDays)
+export const readOnlyFrom = (overdueSince: string, rules: BillingRules) =>
+  addDays(overdueSince, rules.graceDays)
 
 /** Where a late spa should be, given the day it was first found late. */
 export function stageFor(overdueSince: string, today: string, rules: BillingRules): BillingStage {

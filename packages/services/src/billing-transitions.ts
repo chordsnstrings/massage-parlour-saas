@@ -5,11 +5,11 @@
 // the public site and online booking keep working). A manual pause (status read_only without the stage) is left
 // to the super-admin. Legacy yearly spas are included (their invoices are ordinary platform invoices).
 import {
+  addDays,
   type BillingRules,
   type BillingState,
   billingStageRank,
   DEFAULT_BILLING_RULES,
-  addDays,
   nextBillingState,
   readOnlyFrom,
   resolveEmailConfig,

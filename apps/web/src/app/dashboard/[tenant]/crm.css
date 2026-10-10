@@ -745,6 +745,41 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* F20 platform announcements: title + body, dismiss button at the end */
+.crm-announce {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+}
+.crm-announce-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  justify-content: center;
+  min-width: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.crm-announce-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-block: -2px;
+  border-radius: 6px;
+  color: inherit;
+  opacity: 0.75;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s;
+}
+.crm-announce-close:hover,
+.crm-announce-close:focus-visible {
+  opacity: 1;
+  background: color-mix(in oklab, currentColor 12%, transparent);
+}
 .crm-top {
   position: sticky;
   top: 0;

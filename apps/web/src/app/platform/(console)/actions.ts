@@ -2,6 +2,7 @@
 import { FEATURE_TIERS, PLAN_CODES, sendStaffEmail, tierLimits } from '@spa/core'
 import { aiModelConfig, plans, platformDb, platformSettings, subscriptions, tenants } from '@spa/db'
 import {
+  billingTransitionEffects,
   createPaymentReminder,
   createPlatformInvoice,
   DomainError,
@@ -69,7 +70,6 @@ export async function updateSubscriptionAction(
       billingInterval: z.enum(['year', 'month']),
       currentPeriodStart: date,
       currentPeriodEnd: date,
-      graceDays: z.coerce.number().int().min(0).max(120),
       notes: text(1000),
     })
     .safeParse(formObject(fd))
@@ -265,6 +265,8 @@ export async function recordPaymentAction(
     if (e instanceof DomainError) return fail(e.message)
     throw e
   }
+  // F22: a payment that clears the last late invoice lifts the automatic overdue / read-only stage.
+  if (res.billing) await billingTransitionEffects(platformDb(), res.billing, { actorUserId: user.id })
   await audit({
     tenantId,
     actorUserId: user.id,

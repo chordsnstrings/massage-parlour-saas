@@ -378,7 +378,13 @@ export async function recordPlatformPayment(
   }
   // F22: lift an automatic stage once nothing is late; the caller runs `billingTransitionEffects` after commit.
   const billing = inv?.status === 'paid' ? await liftBillingHold(tx, p.tenantId, p.today) : null
-  return { payment: payment!, invoice: inv!, paidAed: paid.toFixed(2), balanceAed: balance.toFixed(2), billing }
+  return {
+    payment: payment!,
+    invoice: inv!,
+    paidAed: paid.toFixed(2),
+    balanceAed: balance.toFixed(2),
+    billing,
+  }
 }
 
 /** Money received per invoice (invoice id → AED), for "paid / balance due" columns. Tenant tx or platform role. */

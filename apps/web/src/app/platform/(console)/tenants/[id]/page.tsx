@@ -12,7 +12,14 @@ import {
   tenants,
   user,
 } from '@spa/db'
-import { billingAlert, offeredPlans, tenantEntitlements } from '@spa/services'
+import {
+  billingAlert,
+  billingRules,
+  billingStageSummary,
+  flagOn,
+  offeredPlans,
+  tenantEntitlements,
+} from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { ArrowLeft, ArrowUpRight, Download } from 'lucide-react'
 import Link from 'next/link'
@@ -40,6 +47,7 @@ import {
   setTenantStatusAction,
   updateSubscriptionAction,
 } from '../../actions'
+import { checkBillingNowAction, setBillingPauseAction } from '../../billing-actions'
 import { PlanCard } from './plan-card'
 import { PaymentReminder } from './reminder'
 
@@ -52,37 +60,41 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) })
   if (!tenant) notFound()
   const today = todayDubai()
-  const [sub, planRows, invoices, payments, team, events, branch, alert, ent, offered] = await Promise.all([
-    db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
-    db.select().from(plans).orderBy(asc(plans.sort)),
-    db
-      .select()
-      .from(platformInvoices)
-      .where(eq(platformInvoices.tenantId, id))
-      .orderBy(desc(platformInvoices.issueDate)),
-    db
-      .select()
-      .from(platformPayments)
-      .where(eq(platformPayments.tenantId, id))
-      .orderBy(desc(platformPayments.receivedAt)),
-    db
-      .select({
-        id: members.id,
-        name: user.name,
-        email: user.email,
-        role: roles.name,
-        status: members.status,
-      })
-      .from(members)
-      .innerJoin(user, eq(user.id, members.userId))
-      .innerJoin(roles, eq(roles.id, members.roleId))
-      .where(eq(members.tenantId, id)),
-    db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
-    db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
-    billingAlert(db, id, today),
-    tenantEntitlements(db, id),
-    offeredPlans(db),
-  ])
+  const [sub, planRows, invoices, payments, team, events, branch, alert, ent, offered, rules, autoBilling] =
+    await Promise.all([
+      db.query.subscriptions.findFirst({ where: eq(subscriptions.tenantId, id) }),
+      db.select().from(plans).orderBy(asc(plans.sort)),
+      db
+        .select()
+        .from(platformInvoices)
+        .where(eq(platformInvoices.tenantId, id))
+        .orderBy(desc(platformInvoices.issueDate)),
+      db
+        .select()
+        .from(platformPayments)
+        .where(eq(platformPayments.tenantId, id))
+        .orderBy(desc(platformPayments.receivedAt)),
+      db
+        .select({
+          id: members.id,
+          name: user.name,
+          email: user.email,
+          role: roles.name,
+          status: members.status,
+        })
+        .from(members)
+        .innerJoin(user, eq(user.id, members.userId))
+        .innerJoin(roles, eq(roles.id, members.roleId))
+        .where(eq(members.tenantId, id)),
+      db.select().from(auditLog).where(eq(auditLog.tenantId, id)).orderBy(desc(auditLog.createdAt)).limit(15),
+      db.query.branches.findFirst({ where: and(eq(branches.tenantId, id), eq(branches.isDefault, true)) }),
+      billingAlert(db, id, today),
+      tenantEntitlements(db, id),
+      offeredPlans(db),
+      billingRules(db),
+      flagOn(db, 'billing.autoTransitions', id),
+    ])
+  const stage = billingStageSummary(tenant, rules)
   const currentPlan = planRows.find((p) => p.id === (sub?.planId ?? tenant.planId))
   const ownerPhone =
     (branch?.whatsappE164 && toUaeE164(branch.whatsappE164)) ||
@@ -207,15 +219,6 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     <option value="month">12 monthly invoices</option>
                   </Select>
                 </Field>
-                <Field label="Grace days" name="graceDays">
-                  <Input
-                    id="graceDays"
-                    name="graceDays"
-                    type="number"
-                    min={0}
-                    defaultValue={sub?.graceDays ?? 14}
-                  />
-                </Field>
                 <Field label="Period start" name="currentPeriodStart">
                   <Input
                     id="currentPeriodStart"
@@ -267,6 +270,38 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   Paused: the dashboard is read-only with a notice; the website and online booking keep
                   working.
                 </p>
+                <div className="space-y-2 border-t pt-4" data-testid="billing-auto">
+                  <p className="text-sm">
+                    <span className="font-medium">Automatic billing: </span>
+                    {!stage
+                      ? 'nothing late.'
+                      : stage.stage === 'read_only'
+                        ? `read-only since ${formatDate(stage.readOnlyFrom)} until the late invoice is paid.`
+                        : `${stage.stage === 'overdue' ? 'overdue' : 'grace period'} — read-only from ${formatDate(stage.readOnlyFrom)}.`}
+                    {!autoBilling && (
+                      <Badge tone="warning" className="ms-2">
+                        transitions paused
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted">
+                    Late {rules.overdueAfterDays} day{rules.overdueAfterDays === 1 ? '' : 's'} after the due
+                    date → overdue, then {rules.graceDays} days&apos; grace → read-only (Company → Billing
+                    rules). Paying lifts it automatically.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <ActionForm action={setBillingPauseAction.bind(null, id, autoBilling)}>
+                      <SubmitButton variant="secondary" size="sm">
+                        {autoBilling ? 'Pause automatic transitions' : 'Resume automatic transitions'}
+                      </SubmitButton>
+                    </ActionForm>
+                    <ActionForm action={checkBillingNowAction.bind(null, id)}>
+                      <SubmitButton variant="ghost" size="sm">
+                        Check now
+                      </SubmitButton>
+                    </ActionForm>
+                  </div>
+                </div>
                 <PaymentReminder action={paymentReminderAction.bind(null, id)} phone={ownerPhone} />
                 {alert.reminder && (
                   <p className="text-xs text-muted">
