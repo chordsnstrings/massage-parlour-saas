@@ -232,7 +232,7 @@ describe('auto-assign (round-robin among receptionists on shift)', () => {
     // Next run continues the turn after the last pick; already assigned rows are left alone.
     const last = rows
       .filter((r) => r.assignedTo)
-      .sort((a, b) => +a.assignedAt! - +b.assignedAt!)
+      .sort((a, b) => +a.assignedAt! - +b.assignedAt! || +a.dueAt - +b.dueAt || (a.id < b.id ? -1 : 1))
       .at(-1)!
     const [next] = await queue(1)
     expect(await tx((db) => autoAssignDueOutbox(db, ids.tenant!, new Date(now.getTime() + 1000)))).toBe(1)

@@ -165,7 +165,8 @@ export async function autoAssignDueOutbox(tx: Tx, tenantId: string, now = new Da
     .select({ memberId: outbox.assignedTo })
     .from(outbox)
     .where(and(isNotNull(outbox.assignedTo), isNull(outbox.assignedBy)))
-    .orderBy(desc(outbox.assignedAt), desc(outbox.id))
+    // One run stamps every pick with the same `now` and walks rows by (due_at, id): the latest of those is its last pick.
+    .orderBy(desc(outbox.assignedAt), desc(outbox.dueAt), desc(outbox.id))
     .limit(1)
   let last = lastRow?.memberId ?? null
   let n = 0

@@ -56,16 +56,11 @@ const e2eAllow = () =>
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 
-/**
- * TODO(plans): gate on the Premium 'ai' entitlement once the plans branch exposes a check (Standard has no AI). Until
- * then AI mapping is limited by the SITE_AI_EDITOR_EMAILS allow-list, the AI kill switch and the spa's AI budget.
- */
-const aiEntitled = async (_ctx: MemberContext) => true
-
 async function aiMappingAllowed(ctx: MemberContext) {
   if (!process.env.ARK_API_KEY && !aiFixturesOn()) return false
-  if ((await siteAiEditorStatus(platformDb(), ctx.user.id)) !== 'ok') return false
-  return aiEntitled(ctx)
+  // No plan gate: Website Studio AI runs on every plan (PLAN §18.8) — the SITE_AI_EDITOR_EMAILS allow-list, the AI
+  // kill switch and the spa's AI budget limit it.
+  return (await siteAiEditorStatus(platformDb(), ctx.user.id)) === 'ok'
 }
 
 const auditAs = (ctx: MemberContext, action: string, entityId: string | undefined, data: unknown) =>
