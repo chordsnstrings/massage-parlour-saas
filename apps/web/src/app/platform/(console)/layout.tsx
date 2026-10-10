@@ -23,6 +23,8 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
         { href: adminPath('/performance'), label: 'Performance', icon: 'analytics' },
         { href: adminPath('/websites'), label: 'Websites', icon: 'studio' },
         { href: adminPath('/plans'), label: 'Plans & prices', icon: 'plans' },
+        { href: adminPath('/announcements'), label: 'Announcements', icon: 'announcements' },
+        { href: adminPath('/flags'), label: 'Feature flags', icon: 'flags' },
         { href: adminPath('/settings'), label: 'Company', icon: 'company' },
         { href: adminPath('/ai'), label: 'AI models', icon: 'ai', exact: true },
         { href: adminPath('/ai/usage'), label: 'AI usage', icon: 'analytics' },

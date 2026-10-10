@@ -1,5 +1,6 @@
 import { pruneAnalytics, rollupAnalytics } from './analytics'
 import { backupDatabase } from './backup'
+import { billingTransitions } from './billing'
 import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
@@ -55,6 +56,8 @@ export const jobs: JobDef[] = [
   { name: 'notify-pending-bookings', cron: '*/15 * * * *', handler: () => notifyPendingBookings() },
   { name: 'notify-low-stock', cron: '15 9 * * *', handler: () => notifyLowStock() },
   { name: 'notify-ai-drafts', cron: '0 10 * * *', handler: () => notifyAiDrafts() },
+  // F22: overdue → grace → read-only for unpaid platform invoices (before the billing notifications).
+  { name: 'billing-transitions', cron: '5 9 * * *', handler: () => billingTransitions() },
   { name: 'notify-billing', cron: '20 9 * * *', handler: () => notifyBilling() },
   { name: 'notifications-prune', cron: '50 4 * * *', handler: () => pruneAllNotifications() },
   // G12: off until the owner sets the days in console Settings → Data retention.

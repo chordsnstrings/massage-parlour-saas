@@ -14,6 +14,7 @@ import {
   tenants,
 } from '@spa/db'
 import { and, asc, eq, isNotNull, isNull, lt, ne, sql, sum } from 'drizzle-orm'
+import { billingTransitionEffects, liftBillingHold } from './billing-transitions'
 import { DomainError } from './errors'
 
 /** The annual price may be paid as this many monthly invoices (AED 24,000 → 12 × AED 2,000). */
@@ -254,7 +255,8 @@ export async function setInvoicePaid(
     reference?: string | null
   },
 ) {
-  return db.transaction(async (tx) => {
+  // F22: paying lifts an automatic overdue / read-only stage once nothing is late (effects after commit).
+  const out = await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
       .from(platformInvoices)
@@ -268,7 +270,7 @@ export async function setInvoicePaid(
       .where(eq(platformPayments.invoiceId, inv.id))
     const received = Number(got?.total ?? 0)
     if (r.paid) {
-      if (inv.status === 'paid') return inv
+      if (inv.status === 'paid') return { row: inv, billing: null }
       const open = Number(inv.totalAed) - received
       if (open > 0.004)
         await tx.insert(platformPayments).values({
@@ -288,9 +290,9 @@ export async function setInvoicePaid(
         .returning()
       if ((await overdueInvoices(tx, r.tenantId, r.today)).length === 0)
         await resolveReminders(tx, r.tenantId)
-      return row!
+      return { row: row!, billing: await liftBillingHold(tx, r.tenantId, r.today) }
     }
-    if (inv.status !== 'paid') return inv
+    if (inv.status !== 'paid') return { row: inv, billing: null }
     if (received > 0.004)
       await tx.insert(platformPayments).values({
         tenantId: r.tenantId,
@@ -306,8 +308,10 @@ export async function setInvoicePaid(
       .set({ status: 'issued', paidAt: null })
       .where(eq(platformInvoices.id, inv.id))
       .returning()
-    return row!
+    return { row: row!, billing: null }
   })
+  if (out.billing) await billingTransitionEffects(db, out.billing, { actorUserId: r.userId })
+  return out.row
 }
 
 export type PlatformPaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other'
@@ -315,7 +319,8 @@ export type PlatformPaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other'
 /**
  * Records money received (console "Record a payment", the setup fee on accepting an application). Against an
  * invoice: the invoice becomes paid once its payments cover the total (else it stays issued with a balance due),
- * and paying the last overdue invoice resolves reminders. Run inside the caller's platform transaction.
+ * and paying the last overdue invoice resolves reminders. Run inside the caller's platform transaction; `billing`
+ * (F22) = the lifted automatic stage, for `billingTransitionEffects` after commit.
  */
 export async function recordPlatformPayment(
   tx: DbOrTx,
@@ -355,7 +360,8 @@ export async function recordPlatformPayment(
       notes: p.notes ?? null,
     })
     .returning()
-  if (!inv) return { payment: payment!, invoice: null, paidAed: p.amountAed, balanceAed: '0.00' }
+  if (!inv)
+    return { payment: payment!, invoice: null, paidAed: p.amountAed, balanceAed: '0.00', billing: null }
   const [got] = await tx
     .select({ total: sum(platformPayments.amountAed) })
     .from(platformPayments)
@@ -370,7 +376,15 @@ export async function recordPlatformPayment(
       .returning()
     if ((await overdueInvoices(tx, p.tenantId, p.today)).length === 0) await resolveReminders(tx, p.tenantId)
   }
-  return { payment: payment!, invoice: inv!, paidAed: paid.toFixed(2), balanceAed: balance.toFixed(2) }
+  // F22: lift an automatic stage once nothing is late; the caller runs `billingTransitionEffects` after commit.
+  const billing = inv?.status === 'paid' ? await liftBillingHold(tx, p.tenantId, p.today) : null
+  return {
+    payment: payment!,
+    invoice: inv!,
+    paidAed: paid.toFixed(2),
+    balanceAed: balance.toFixed(2),
+    billing,
+  }
 }
 
 /** Money received per invoice (invoice id → AED), for "paid / balance due" columns. Tenant tx or platform role. */
@@ -488,12 +502,22 @@ export async function pauseTenant(db: DbOrTx, tenantId: string) {
   return row
 }
 
-/** Resume a paused, suspended or deleted spa: back to trial while the subscription is trialing, else active. */
+/**
+ * Resume a paused, suspended or deleted spa: back to trial while the subscription is trialing, else active. Also
+ * clears an automatic billing stage (F22): a spa still late starts a fresh grace period on the next daily run
+ * (pause the transitions for the spa to stop that).
+ */
 export async function resumeTenant(db: DbOrTx, tenantId: string) {
   const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId))
   const [row] = await db
     .update(tenants)
-    .set({ status: sub?.status === 'trialing' ? 'trial' : 'active', deletedAt: null })
+    .set({
+      status: sub?.status === 'trialing' ? 'trial' : 'active',
+      deletedAt: null,
+      billingStage: null,
+      billingOverdueSince: null,
+      billingStageAt: new Date(),
+    })
     .where(eq(tenants.id, tenantId))
     .returning()
   if (!row) throw new DomainError('Spa not found', 'not_found')

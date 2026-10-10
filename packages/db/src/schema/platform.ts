@@ -48,6 +48,11 @@ export const invoiceStatus = pgEnum('invoice_status', ['draft', 'issued', 'paid'
 export const platformInvoiceKind = pgEnum('platform_invoice_kind', ['plan', 'setup', 'other'])
 export const paymentMethod = pgEnum('platform_payment_method', ['cash', 'bank_transfer', 'other', 'card'])
 export const domainKind = pgEnum('domain_kind', ['subdomain', 'custom'])
+/**
+ * F22 automatic billing stage of a spa (PLAN §17, rules in @spa/core billing-stages.ts): NULL = nothing late;
+ * overdue (first day) → grace (until the read-only date) → read_only (tenant status read_only, set by the job).
+ */
+export const billingStage = pgEnum('billing_stage', ['overdue', 'grace', 'read_only'])
 export const domainStatus = pgEnum('domain_status', ['pending', 'verifying', 'active', 'failed'])
 
 export const platformAdmins = pgTable(
@@ -110,6 +115,12 @@ export const platformSettings = pgTable(
     autoPurgeDays: integer('auto_purge_days'),
     /** G18 global AI kill switch: false = no AI call runs for any spa. */
     aiEnabled: boolean('ai_enabled').notNull().default(true),
+    /**
+     * F22 billing transitions: an unpaid invoice is late this many days after its due date (1 = the day after);
+     * the dashboard becomes read-only `billing_grace_days` after the spa was first found late.
+     */
+    billingOverdueAfterDays: integer('billing_overdue_after_days').notNull().default(1),
+    billingGraceDays: integer('billing_grace_days').notNull().default(7),
     updatedAt: updatedAt(),
     updatedBy: text('updated_by'),
   },
@@ -181,6 +192,13 @@ export const tenants = pgTable(
     logoFileId: uuid('logo_file_id').references((): AnyPgColumn => storedFiles.id, { onDelete: 'set null' }),
     /** Soft delete by a super-admin (status is also 'cancelled'): data is kept, members and the site are shut out. */
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    /**
+     * F22: automatic billing stage (worker `billing-transitions`, services billing-transitions.ts). `billing_overdue_since`
+     * = Dubai date the spa was first found late (the grace clock); cleared when nothing is late any more.
+     */
+    billingStage: billingStage('billing_stage'),
+    billingOverdueSince: date('billing_overdue_since'),
+    billingStageAt: timestamp('billing_stage_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

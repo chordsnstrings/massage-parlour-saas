@@ -3,6 +3,8 @@
 // retrieving it from Stripe before anything is recorded.
 import { type Db, type DbOrTx, platformInvoices, platformPayments } from '@spa/db'
 import { and, eq, sum } from 'drizzle-orm'
+import { billingTransitionEffects, liftBillingHold } from '../billing-transitions'
+import { dubaiToday } from '../documents'
 
 export type StripeConfig = { secretKey: string; test: boolean }
 
@@ -126,13 +128,14 @@ export async function settleCheckoutSession(
   if (session.currency !== 'aed' || session.amount_total !== toFils(invoice.totalAed))
     throw new StripeError('The paid amount does not match the invoice')
   const reference = `stripe:${session.payment_intent ?? session.id}`
-  return db.transaction(async (tx) => {
+  // F22: a paid invoice lifts an automatic overdue / read-only stage (effects after commit).
+  const out = await db.transaction(async (tx) => {
     const [inv] = await tx
       .select()
       .from(platformInvoices)
       .where(eq(platformInvoices.id, invoice.id))
       .for('update')
-    if (!inv) return false
+    if (!inv) return { ok: false, billing: null }
     const [seen] = await tx
       .select({ id: platformPayments.id })
       .from(platformPayments)
@@ -160,7 +163,10 @@ export async function settleCheckoutSession(
         .update(platformInvoices)
         .set({ status: 'paid', paidAt: new Date() })
         .where(eq(platformInvoices.id, inv.id))
+      return { ok: true, billing: await liftBillingHold(tx, inv.tenantId, dubaiToday()) }
     }
-    return true
+    return { ok: true, billing: null }
   })
+  if (out.billing) await billingTransitionEffects(db, out.billing)
+  return out.ok
 }

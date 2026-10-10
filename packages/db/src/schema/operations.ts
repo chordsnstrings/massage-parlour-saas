@@ -336,6 +336,8 @@ export const bookings = pgTable(
     unique('bookings_tenant_ref').on(t.tenantId, t.refCode),
     index('bookings_branch_day').on(t.branchId, t.businessDate),
     index('bookings_client').on(t.clientId),
+    // F21: console tenant list (last booking created, bookings in the last 30 days).
+    index('bookings_tenant_created').on(t.tenantId, t.createdAt),
     ...tenantPolicies(),
   ],
 )

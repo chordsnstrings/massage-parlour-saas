@@ -220,7 +220,19 @@ function createAuth() {
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER], ipv6Subnet: 64 },
     },
     databaseHooks: {
-      session: { create: { before: async (s) => refuseDisabled(s.userId) } },
+      session: {
+        create: {
+          before: async (s) => refuseDisabled(s.userId),
+          // F21: "last staff sign-in" in the console's spa list (sessions are deleted on sign-out, so stamp it).
+          after: async (s) => {
+            try {
+              await platformDb().update(user).set({ lastSignInAt: new Date() }).where(eq(user.id, s.userId))
+            } catch (error) {
+              console.error('last sign-in stamp failed', error)
+            }
+          },
+        },
+      },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 30,

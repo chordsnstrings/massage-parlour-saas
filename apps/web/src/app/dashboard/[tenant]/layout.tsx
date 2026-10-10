@@ -4,14 +4,22 @@ import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
-import { type Feature, isSystemRole, monthlyAed, type Permission } from '@spa/core'
+import {
+  type Feature,
+  isSystemRole,
+  monthlyAed,
+  type Permission,
+  PLATFORM_NAME,
+  readOnlyFrom,
+} from '@spa/core'
 import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, logoUrl } from '@spa/services'
+import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, billingRules, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata, Viewport } from 'next'
 import { AskAi } from '@/components/assistant/ask-ai'
 import { InstallMenuItem, PwaSetup } from '@/components/pwa/install-app'
 import { SearchPalette } from '@/components/search/search-palette'
+import { Announcements } from '@/components/shell/announcements'
 import { NotificationBell } from '@/components/shell/notification-bell'
 import {
   type ShellGroup,
@@ -26,6 +34,7 @@ import { appPath } from '@/lib/paths'
 import { EARLY_PROMPT_SCRIPT } from '@/lib/sw'
 import { todayDubai } from '@/lib/utils'
 import { can, isWritable, type MemberContext, requireMember } from '@/server/access'
+import { announcementsFor } from '@/server/announcements'
 import { getEntitlements } from '@/server/entitlements'
 import { navBadgeCounts } from '@/server/nav-counts'
 import { getNonce } from '@/server/nonce'
@@ -102,12 +111,19 @@ export default async function TenantLayout({
   const ctx = await requireMember(slug)
   const i18n = await getI18n()
   const { locale, t, fmt, messages } = i18n
-  const [data, bell, counts, ent] = await Promise.all([
+  const [data, bell, counts, ent, news] = await Promise.all([
     shellData(ctx),
     bellData(ctx, t, fmt),
     navBadgeCounts(ctx),
     getEntitlements(ctx.tenant.id),
+    announcementsFor(ctx, locale),
   ])
+  // F22 automatic billing stage: the read-only date for the overdue / grace banner (rules are platform settings).
+  const stage = ctx.tenant.billingStage
+  const lateUntil =
+    (stage === 'overdue' || stage === 'grace') && ctx.tenant.billingOverdueSince
+      ? readOnlyFrom(ctx.tenant.billingOverdueSince, await billingRules(platformDb()))
+      : null
   const base = appPath(`/${ctx.tenant.slug}`)
   const app = pwaFor(ctx.tenant)
 
@@ -255,13 +271,31 @@ export default async function TenantLayout({
       ? t(`role.${roleKey}`)
       : ctx.member.roleName // custom roles stay as typed
 
-  const notice = ctx.impersonating ? (
+  const payLink = can(ctx, 'billing.view') && (
+    <>
+      {' '}
+      <a href={`${base}/billing`}>{t('shell.banner.payNow')}</a>
+    </>
+  )
+  const status = ctx.impersonating ? (
     <SpaBanner tone="accent">{t('shell.banner.impersonating')}</SpaBanner>
+  ) : ctx.tenant.status === 'read_only' && stage === 'read_only' ? (
+    <SpaBanner tone="danger">
+      {t('shell.banner.billingReadOnly')}
+      {payLink}
+    </SpaBanner>
   ) : ctx.tenant.status === 'read_only' ? (
     <SpaBanner tone="warning">{t('shell.banner.paused')}</SpaBanner>
   ) : !isWritable(ctx.tenant) ? (
     <SpaBanner tone="warning">{t('shell.banner.readOnly')}</SpaBanner>
   ) : null
+  const notice =
+    status || news.length ? (
+      <>
+        {status}
+        <Announcements slug={ctx.tenant.slug} items={news} platform={PLATFORM_NAME} />
+      </>
+    ) : null
   // G18: one AI banner for whoever sees the AI meter — switched off, paused at 100 %, or warned at 80 %.
   const aiLevel = showAi ? aiBudgetLevel(data.aiSpendUsd, budget) : 'ok'
   const aiBanner = !showAi ? null : !ctx.tenant.aiEnabled ? (
@@ -273,15 +307,15 @@ export default async function TenantLayout({
       {t('shell.banner.aiWarning', { percent: fmt.percent(aiPercent / 100) })}
     </SpaBanner>
   ) : null
-  const alert = data.pastDue ? (
+  const alert = lateUntil ? (
+    <SpaBanner tone="danger">
+      {t('shell.banner.billingLate', { date: fmt.date(lateUntil) })}
+      {payLink}
+    </SpaBanner>
+  ) : data.pastDue && stage !== 'read_only' ? (
     <SpaBanner tone="danger">
       {t('shell.banner.overdue')}
-      {can(ctx, 'billing.view') && (
-        <>
-          {' '}
-          <a href={`${base}/billing`}>{t('shell.banner.payNow')}</a>
-        </>
-      )}
+      {payLink}
     </SpaBanner>
   ) : (
     aiBanner
