@@ -459,11 +459,14 @@ function HealthRow(p: {
     <li
       data-testid={p.testId}
       data-ok={p.ok}
-      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 py-2.5"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-[var(--ui-card-pad,1.25rem)] py-2.5 sm:px-[var(--ui-card-pad-sm,1.5rem)] md:grid-cols-[16rem_minmax(0,1fr)_auto] lg:grid-cols-[18.5rem_minmax(0,1fr)_auto]"
     >
-      <span className={p.strong ? 'min-w-56 font-semibold' : 'min-w-56 font-medium'}>{p.label}</span>
-      <span className="flex-1 text-muted">{p.text}</span>
-      <Badge tone={tone}>{p.ok ? 'ok' : p.warnOnly ? 'off' : 'problem'}</Badge>
+      {/* Phones: label + status on one line, the text below; md+: one row with an aligned text column. */}
+      <span className={p.strong ? 'font-semibold' : 'font-medium'}>{p.label}</span>
+      <span className="col-span-2 row-start-2 text-muted md:col-span-1 md:row-start-auto">{p.text}</span>
+      <Badge tone={tone} className="justify-self-end">
+        {p.ok ? 'ok' : p.warnOnly ? 'off' : 'problem'}
+      </Badge>
     </li>
   )
 }

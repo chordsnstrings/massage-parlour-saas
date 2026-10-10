@@ -1028,6 +1028,15 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R18 Resend sending-domain setup (owner, 2026-10-10):** Console → Company → Email: a "Set up sending domain" button
   that uses the Resend API (with the console key) to add spamanagement.co, shows the DNS records to copy into Namecheap,
   and runs Resend's verification ("Check"). Never writes to Namecheap (its API replaces the whole zone). In progress.
+- **R20 Spa sites only on the spa's own domain (owner, 2026-10-10):** a spa's website lives on its own domain (e.g.
+  berelaxspa.com; connect it in spa Settings → Domains or Console → Domains, or buy one, R14); spamanagement.co hosts only
+  the CRM (app.) and console (admin.). Until a spa connects its domain it uses the temporary address {slug}.spamanagement.co;
+  once its own domain is active + primary, the temporary address 301s there for good. Planned.
+- **R21 Console sidebar on one screen (owner, 2026-10-10):** all console items visible without scrolling on laptop
+  heights. ✅ Items share the sidebar height (24–40 px each, `flex-[1_1_0]`), logo block shrinks below 820 px tall; fits
+  down to ~590 px (e2e `console-sidebar.spec.ts`). Overview health/config rows aligned with the card padding.
+- **R22 Console in English + Arabic (owner, 2026-10-10):** the super-admin console only (spa CRM stays EN + TH), RTL for
+  Arabic, a language switch in the user menu; new Arabic copy reviewed by the owner's team. Planned.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
