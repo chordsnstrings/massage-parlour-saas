@@ -1,9 +1,12 @@
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import {
   applyHtmlImageAdjustments,
   fixHtmlDesign,
   HTML_DESIGN_BASE_CSS,
+  HTML_DESIGN_COMPAT_SHIM,
   htmlDesignDocument,
+  htmlDesignPhoneFixes,
   listHtmlDesignImages,
   withBaseHref,
 } from '../src/html-design'
@@ -52,11 +55,107 @@ describe('fixHtmlDesign', () => {
   })
 })
 
-describe('htmlDesignDocument', () => {
-  it('puts viewport + zero-specificity base CSS first in <head>, before the design styles', () => {
+const shim = `<script>${HTML_DESIGN_COMPAT_SHIM}</script>`
+/** The document minus the shim and the frame link script: what the design itself looks like after rendering. */
+const designOf = (out: string) =>
+  out.replace(shim, '').replace(/<script>\(\(\)=>\{const inert=[\s\S]*?<\/script>/, '')
+
+describe('htmlDesignDocument: exact by default (R24 owner rule)', () => {
+  it('adds only the compat shim + link script: no base sheet, no viewport, widths untouched', () => {
     const out = htmlDesignDocument(doc, {}, false)
+    expect(out).not.toContain('data-spa-base')
+    expect(out).not.toContain('name="viewport"')
+    expect(out).toContain('style="width:1600px"')
+    expect(designOf(out)).toBe(doc)
     const head = out.indexOf('<head>') + '<head>'.length
+    expect(out.slice(head).startsWith(shim)).toBe(true)
+  })
+  it('top mode (the live page itself): only the shim', () => {
+    const out = htmlDesignDocument(doc, {}, false, [], {}, { top: true })
+    expect(out.replace(shim, '')).toBe(doc)
+  })
+  it('puts the shim before a script that comes before <head>', () => {
+    const early = '<!doctype html><script>localStorage.x=1</script><html><head></head><body></body></html>'
+    const out = htmlDesignDocument(early, {}, false)
+    expect(out.indexOf(shim)).toBeLessThan(out.indexOf('<script>localStorage'))
+  })
+  it('adds the map style only when an {{address}} link was spliced in', () => {
+    const links = { address: { href: 'https://maps.app.goo.gl/x', label: 'Maps' } }
+    expect(htmlDesignDocument('<p>{{address}}</p>', { address: 'A' }, false, [], links)).toContain(
+      'data-spa-map>',
+    )
+    expect(htmlDesignDocument('<p>{{address}}</p>', { address: 'A' }, false, [], links)).toContain(
+      '<style data-spa-map-style>',
+    )
+    expect(
+      htmlDesignDocument('<p title="{{address}}">x</p>', { address: 'A' }, false, [], links),
+    ).not.toContain('<style data-spa-map-style>')
+  })
+  it('exact frames open links in the top window and fix #anchors; legacy keeps new tabs for outside sites', () => {
+    expect(htmlDesignDocument(doc, {}, false)).toContain('exact=true')
+    expect(htmlDesignDocument(doc, {}, false, [], {}, { phoneFixes: true })).toContain('exact=false')
+    expect(htmlDesignDocument(doc, {}, false)).toContain("location.assign(location.href.split('#')[0]+h)")
+  })
+  it('the flag: absent (stored before R24) = on, explicit false = exact', () => {
+    expect(htmlDesignPhoneFixes({})).toBe(true)
+    expect(htmlDesignPhoneFixes({ phoneFixes: true })).toBe(true)
+    expect(htmlDesignPhoneFixes({ phoneFixes: false })).toBe(false)
+  })
+})
+
+describe('compat shim (R24)', () => {
+  const run = (throwing: boolean) => {
+    const denied = () => {
+      throw new Error('SecurityError: sandboxed')
+    }
+    const document: Record<string, unknown> = {}
+    const window: Record<string, unknown> = {}
+    if (throwing) {
+      for (const n of ['localStorage', 'sessionStorage'])
+        Object.defineProperty(window, n, { get: denied, configurable: true })
+      Object.defineProperty(document, 'cookie', { get: denied, set: denied, configurable: true })
+    } else {
+      window.localStorage = { length: 0, real: true }
+      window.sessionStorage = { length: 0, real: true }
+      Object.defineProperty(document, 'cookie', { get: () => 'real=1', set: () => {}, configurable: true })
+    }
+    runInNewContext(HTML_DESIGN_COMPAT_SHIM, { window, document, Proxy, Map, Object, String, Number, Date })
+    return { window, document }
+  }
+  it('gives in-memory storage and cookies only where access throws', () => {
+    const { window, document } = run(true)
+    const ls = window.localStorage as Storage & Record<string, string>
+    ls.setItem('a', '1')
+    ls.b = '2'
+    expect(ls.getItem('a')).toBe('1')
+    expect(ls.length).toBe(2)
+    expect(Object.keys(ls)).toEqual(['a', 'b'])
+    expect('a' in ls).toBe(true)
+    expect(ls.key(1)).toBe('b')
+    ls.removeItem('a')
+    expect(ls.getItem('a')).toBeNull()
+    ls.clear()
+    expect(ls.length).toBe(0)
+    expect((window.sessionStorage as Storage).getItem('x')).toBeNull()
+    document.cookie = 'seen=yes; path=/; max-age=3600'
+    document.cookie = 'n=2'
+    expect(document.cookie).toBe('seen=yes; n=2')
+    document.cookie = 'seen=; max-age=0'
+    expect(document.cookie).toBe('n=2')
+  })
+  it('touches nothing when storage and cookies work', () => {
+    const { window, document } = run(false)
+    expect((window.localStorage as { real?: boolean }).real).toBe(true)
+    expect(document.cookie).toBe('real=1')
+  })
+})
+
+describe('htmlDesignDocument: phone fixes (legacy designs, explicit opt-in)', () => {
+  it('puts viewport + zero-specificity base CSS first in <head>, before the design styles', () => {
+    const out = htmlDesignDocument(doc, {}, false, [], {}, { phoneFixes: true })
+    const head = out.indexOf('<head>') + '<head>'.length + shim.length
     expect(out.slice(head)).toMatch(/^<meta name="viewport"[^>]*><style data-spa-base>/)
+    expect(out).toContain('style="width:100%;max-width:1600px"')
     expect(out.indexOf('data-spa-base')).toBeLessThan(out.indexOf('.hero{'))
     expect(HTML_DESIGN_BASE_CSS).toContain(':where(img,picture,video,canvas,svg,iframe){max-width:100%}')
     expect(HTML_DESIGN_BASE_CSS).toContain(':where(html,body){max-width:100%;overflow-x:clip}')
@@ -68,15 +167,25 @@ describe('htmlDesignDocument', () => {
       '<html><head><meta name="viewport" content="width=1200"></head></html>',
       {},
       true,
+      [],
+      {},
+      { phoneFixes: true },
     )
     expect(out.match(/name="viewport"/g)).toHaveLength(1)
   })
-  it('adds exactly one script (the link handler) and no event-handler attributes', () => {
-    const out = htmlDesignDocument(doc, {}, true, [
-      { id: 'img-0', src: 'https://cdn.test/a.jpg', x: 10, y: 90, replace: 'https://cdn.test/new.jpg' },
-      { id: 'bg-0', src: 'https://cdn.test/hero.jpg', x: 0, y: 0, fit: 'contain' },
-    ])
-    expect(out.match(/<script\b/gi)!.length).toBe(doc.match(/<script\b/gi)!.length + 1)
+  it('adds exactly two scripts (shim + link handler) and no event-handler attributes', () => {
+    const out = htmlDesignDocument(
+      doc,
+      {},
+      true,
+      [
+        { id: 'img-0', src: 'https://cdn.test/a.jpg', x: 10, y: 90, replace: 'https://cdn.test/new.jpg' },
+        { id: 'bg-0', src: 'https://cdn.test/hero.jpg', x: 0, y: 0, fit: 'contain' },
+      ],
+      {},
+      { phoneFixes: true },
+    )
+    expect(out.match(/<script\b/gi)!.length).toBe(doc.match(/<script\b/gi)!.length + 2)
     expect(out).not.toMatch(/\son[a-z]+\s*=/i)
   })
   it('fills placeholders HTML-escaped', () => {

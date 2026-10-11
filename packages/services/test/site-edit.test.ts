@@ -13,6 +13,7 @@ import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  acquirePageLock,
   addPage,
   assertEditStamp,
   blockCatalogue,
@@ -21,10 +22,13 @@ import {
   editStamp,
   ensureSite,
   getEditablePage,
+  getHtmlDesign,
   getPublishedPage,
   getSite,
   getSiteForEdit,
   listPages,
+  listVersions,
+  prepareHtmlDesign,
   publishAll,
   publishPage,
   restoreSiteEdit,
@@ -32,6 +36,7 @@ import {
   type SiteEditSchema,
   saveDraft,
   siteEditAuditData,
+  tenantHtmlAssetSink,
   updateDraftTheme,
   updateTheme,
 } from '../src'
@@ -257,7 +262,130 @@ describe('site edit ops layer', () => {
     expect(r.ok).toBe(true)
     const draft = await draftOf(ids.design!)
     expect(draft).toContain('new</body>')
-    expect(draft).toContain('viewport') // fixHtmlDesign ran (same transform as the upload)
+    // R24: stored exactly as sent (no fixHtmlDesign), "Phone fixes" off unless asked.
+    expect(draft).not.toContain('viewport')
+    expect(draft).toContain('"phoneFixes":false')
+  })
+
+  describe('R24 HTML designs: convert, embedded files, patches', () => {
+    const fileUrl = (id: string, name: string) => `https://app.test/files/${id}/${name}`
+    const png = `data:image/png;base64,${Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]), Buffer.alloc(2000, 7)]).toString('base64')}`
+    const run = (ops: unknown[], o: { dryRun?: boolean; userId?: string } = {}) =>
+      tx((db) =>
+        runSiteEdit(
+          db,
+          { tenantId: ids.tenant!, userId: o.userId, dryRun: Boolean(o.dryRun), ops },
+          {
+            ...deps,
+            prepareHtml: (h, p) =>
+              prepareHtmlDesign({
+                html: h,
+                images: p.images,
+                sink: tenantHtmlAssetSink(db, ids.tenant!),
+                fileUrl,
+                dryRun: p.dryRun,
+              }),
+          },
+        ),
+      )
+    const doc = (body: string) => `<!doctype html><html><head></head><body>${body}</body></html>`
+
+    it('turns a block page into an HTML design page only with convert; the old draft stays in history', async () => {
+      const page = await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'convert-me', title: { en: 'Convert' }, data: home }),
+      )
+      const refused = await run([{ op: 'html_design', page: 'convert-me', html: doc('<h1>New</h1>') }])
+      expect(refused.ok ? '' : refused.errors[0]).toMatch(/has 1 block; pass convert: true/)
+      const dry = await run(
+        [{ op: 'html_design', page: 'convert-me', html: doc('<h1>New</h1>'), convert: true }],
+        {
+          dryRun: true,
+        },
+      )
+      expect(dry.ok).toBe(true)
+      expect(await draftOf(page.id)).toContain('Slow down')
+      const r = await run([
+        { op: 'html_design', page: 'convert-me', html: doc(`<h1>New</h1><img src="${png}">`), convert: true },
+      ])
+      expect(r.ok && r.html[0]).toMatchObject({ page: 'convert-me', moved: 1, phoneFixes: false })
+      const data = JSON.parse(await draftOf(page.id))
+      expect(data.root.props).toEqual({ title: { en: 'Home' }, htmlDesign: true })
+      expect(data.content).toHaveLength(1)
+      expect(data.content[0]).toMatchObject({
+        type: 'HtmlDesign',
+        props: { id: 'convert-me-html-design', phoneFixes: false },
+      })
+      expect(data.content[0].props.html).toMatch(
+        /<img crossorigin="anonymous" src="https:\/\/app\.test\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.png">/,
+      )
+      const versions = await tx((db) => listVersions(db, ids.tenant!, page.id))
+      expect(versions.map((v) => v.label).find(Boolean)).toMatch(/^Before Claude HTML design /)
+      const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'convert-me'))
+      expect(view).toMatchObject({ phoneFixes: false, images: 0, editing: null })
+      expect(view!.html).not.toContain('data:image/png')
+      await expect(tx((db) => getHtmlDesign(db, ids.tenant!, 'home'))).rejects.toThrow(
+        /not an HTML design page/,
+      )
+    })
+
+    it('patches with exact, unique finds; all-or-nothing; dry runs save nothing; phone_fixes kept unless given', async () => {
+      const before = await draftOf(ids.design!)
+      const zero = await run([
+        { op: 'html_patch', page: 'design-a', edits: [{ find: 'nowhere', replace: 'x' }] },
+      ])
+      expect(zero.ok ? '' : zero.errors[0]).toMatch(/Edit 1: `find` matches 0 times/)
+      const twice = await run([
+        { op: 'html_patch', page: 'design-a', edits: [{ find: 'new</body>', replace: 'a b a</body>' }] },
+        { op: 'html_patch', page: 'design-a', edits: [{ find: 'a', replace: 'z' }] },
+      ])
+      expect(twice.ok ? '' : twice.errors[0]).toMatch(
+        /Change 2: Edit 1: `find` matches \d+ times — include more/,
+      )
+      expect(await draftOf(ids.design!)).toBe(before)
+      const dry = await run(
+        [{ op: 'html_patch', page: 'design-a', edits: [{ find: 'new</body>', replace: 'patched</body>' }] }],
+        {
+          dryRun: true,
+        },
+      )
+      expect(dry.ok).toBe(true)
+      expect(await draftOf(ids.design!)).toBe(before)
+      const ok = await run([
+        {
+          op: 'html_patch',
+          page: 'design-a',
+          edits: [{ find: 'new</body>', replace: 'patched</body>' }],
+          phone_fixes: true,
+        },
+      ])
+      expect(ok.ok && ok.html[0]?.at).toEqual([expect.any(Number)])
+      expect(await draftOf(ids.design!)).toContain('patched</body>')
+      expect(await draftOf(ids.design!)).toContain('"phoneFixes":true')
+      await run([{ op: 'html_patch', page: 'design-a', edits: [{ find: 'patched', replace: 'again' }] }])
+      expect(await draftOf(ids.design!)).toContain('"phoneFixes":true')
+    })
+
+    it('respects editor locks held by someone else', async () => {
+      await platform.insert(user).values({ id: 'u-lock-holder', name: 'Lina', email: 'lina@lock.test' })
+      await tx((db) =>
+        acquirePageLock(db, {
+          tenantId: ids.tenant!,
+          pageId: ids.design!,
+          userId: 'u-lock-holder',
+          holderName: 'Lina',
+        }),
+      )
+      const r = await run([{ op: 'html_patch', page: 'design-a', edits: [{ find: 'again', replace: 'x' }] }])
+      expect(r.ok ? '' : r.errors[0]).toMatch(/Lina/)
+      expect(await draftOf(ids.design!)).toContain('again')
+    })
+
+    it('refuses a design that stays too big after moving its files out', async () => {
+      const r = await run([
+        { op: 'html_design', page: 'convert-me', html: doc(`<script>${'x'.repeat(520 * 1024)}</script>`) },
+      ])
+      expect(r.ok ? '' : r.errors[0]).toMatch(/still|The design is \d+ KB \(scripts/)
+    })
   })
 
   it('stays inside the tenant: another spa’s page id is not found', async () => {

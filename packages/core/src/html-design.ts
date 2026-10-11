@@ -1,9 +1,10 @@
 /**
- * Uploaded HTML designs (R17): pure string transforms run before a design goes into its sandboxed frame.
- * Nothing here executes the design; it only lists its images and adds CSS / attributes inside the document.
- *  - `fixHtmlDesign` (upload time): adds a missing viewport meta, makes fixed-pixel-width images fluid.
- *  - `htmlDesignDocument` (render time): a zero-specificity responsive base sheet first in <head> (so the design's
- *    own rules win), the super-admin's per-image adjustments (focal point, fill/fit, replacement) last.
+ * Uploaded HTML designs (R17, R24): pure string transforms run before a design is shown. Nothing here executes the
+ * design. R24 owner rule: a design renders EXACTLY as the file opened in a browser — only invisible additions (compat
+ * shim, link handling in frames, placeholders where written). The old phone fixes are an explicit per-design opt-in:
+ *  - `fixHtmlDesign` + viewport + `HTML_DESIGN_BASE_CSS`: only when the design's "Phone fixes" switch is on
+ *    (`phoneFixes`; designs stored before R24 have no flag and keep them, `htmlDesignPhoneFixes`).
+ *  - the super-admin's per-image adjustments (focal point, fill/fit, replacement): explicit owner action, always applied.
  */
 
 export type HtmlDesignImage = {
@@ -37,14 +38,37 @@ export const MAX_HTML_IMAGES = 200
 export const HTML_IMAGE_SRC_MAX = 300
 const srcKey = (s: string) => s.slice(0, HTML_IMAGE_SRC_MAX)
 
-/** Responsive defaults, zero specificity (`:where`) so any rule the design sets itself wins. */
+/** Phone fixes only: responsive defaults, zero specificity (`:where`) so any rule the design sets itself wins. */
 export const HTML_DESIGN_BASE_CSS =
   ':where(html,body){max-width:100%;overflow-x:clip}' +
   ':where(img,picture,video,canvas,svg,iframe){max-width:100%}' +
   ':where(img,video){height:auto}' +
-  ':where(img){object-fit:cover;object-position:50% 50%}' +
+  ':where(img){object-fit:cover;object-position:50% 50%}'
+/** Only when an `{{address}}` link was spliced in: the link looks like the text it replaces. */
+export const HTML_DESIGN_MAP_CSS =
   ':where(a[data-spa-map]){color:inherit;text-decoration:none}' +
   ':where(a[data-spa-map]:hover){text-decoration:underline}'
+
+/** Largest stored design (after embedded images/fonts are moved out): it travels inside the page JSON (512 KB cap). */
+export const MAX_HTML_DESIGN_BYTES = 500 * 1024
+/** Largest uploaded / connector-sent file; embedded images, fonts and videos are moved out of it (R24). */
+export const MAX_HTML_UPLOAD_BYTES = 5 * 1024 * 1024
+
+/** A design's "Phone fixes" switch: absent (stored before R24) = on, as those designs always had them. */
+export const htmlDesignPhoneFixes = (props: { phoneFixes?: unknown } | null | undefined) =>
+  props?.phoneFixes !== false
+
+/**
+ * Compat shim (R24), first in <head>: designs run in an opaque origin (sandbox without allow-same-origin), where
+ * `localStorage` / `sessionStorage` / `document.cookie` throw. Only when they throw, they become in-memory versions,
+ * so the design's code behaves as when the file is opened directly. Nothing visible is touched.
+ */
+export const HTML_DESIGN_COMPAT_SHIM =
+  '(()=>{const mem=()=>{const m=new Map(),api={getItem:(k)=>{k=String(k);return m.has(k)?m.get(k):null},setItem:(k,v)=>{m.set(String(k),String(v))},removeItem:(k)=>{m.delete(String(k))},clear:()=>{m.clear()},key:(i)=>{const a=[...m.keys()];return a[i]??null}};' +
+  "return new Proxy(api,{get:(t,p)=>p==='length'?m.size:typeof p==='symbol'||p in t?t[p]:m.has(p)?m.get(p):undefined,set:(t,p,v)=>{if(typeof p==='string'&&!(p in t)&&p!=='length')m.set(p,String(v));return true},has:(t,p)=>p in t||m.has(p),deleteProperty:(t,p)=>{m.delete(p);return true},ownKeys:()=>[...m.keys()],getOwnPropertyDescriptor:(t,p)=>m.has(p)?{value:m.get(p),writable:true,enumerable:true,configurable:true}:undefined})};" +
+  "for(const n of ['localStorage','sessionStorage']){try{window[n].length;continue}catch{}try{Object.defineProperty(window,n,{value:mem(),configurable:true,enumerable:true})}catch{}}" +
+  "try{document.cookie}catch{const jar=new Map();try{Object.defineProperty(document,'cookie',{configurable:true,enumerable:true,get:()=>[...jar].map(([k,v])=>k?k+'='+v:v).join('; '),set:(s)=>{const [kv,...attrs]=String(s).split(';');const i=kv.indexOf('=');const k=(i<0?'':kv.slice(0,i)).trim(),v=(i<0?kv:kv.slice(i+1)).trim();" +
+  "const gone=attrs.some((a)=>{const [n,...r]=a.split('=');const x=n.trim().toLowerCase(),y=r.join('=').trim();return x==='max-age'?Number(y)<=0:x==='expires'?Date.parse(y)<Date.now():false});if(gone)jar.delete(k);else jar.set(k,v)}})}catch{}}})()"
 
 const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 /** Narrowest screen the platform supports; a fixed image width above it overflows phones. */
@@ -146,15 +170,21 @@ function applyEdits(html: string, edits: Edit[]) {
   return out + html.slice(pos)
 }
 
-/** Inserts `text` right after the first of <head>, <html>, <!doctype>, or at the start. */
-function insertAtHead(html: string, text: string) {
+/** Index right after the first of <head>, <html>, <!doctype>, or 0. */
+function headIndex(html: string) {
   for (const tag of [/<head\b/i, /<html\b/i, /<!doctype/i]) {
     // The tag's first `>` by indexOf, not `[^>]*>` (rescans to the end from every start when a `>` is missing).
     const at = html.search(tag)
     const end = at < 0 ? -1 : html.indexOf('>', at)
-    if (end >= 0) return html.slice(0, end + 1) + text + html.slice(end + 1)
+    if (end >= 0) return end + 1
   }
-  return text + html
+  return 0
+}
+
+/** Inserts `text` right after the first of <head>, <html>, <!doctype>, or at the start. */
+function insertAtHead(html: string, text: string) {
+  const at = headIndex(html)
+  return html.slice(0, at) + text + html.slice(at)
 }
 
 /**
@@ -171,9 +201,8 @@ const hasViewport = (html: string) => /<meta\b[^>]*\bname\s*=\s*["']?viewport\b/
 
 export type HtmlDesignFix = 'viewport' | 'wide-image'
 
-/** Upload-time fixes for the usual phone breakers; returns the fixed file and what was changed. */
-export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFix[] } {
-  const fixes = new Set<HtmlDesignFix>()
+/** Phone fix: inline img `width:Npx` (and `min-width`) above the phone width become `width:100%;max-width:Npx`. */
+function fluidImages(html: string): { html: string; changed: boolean } {
   const edits: Edit[] = []
   for (const img of scan(html).imgs) {
     const style = /(\sstyle\s*=\s*)(?:"([^"]*)"|'([^']*)')/i.exec(img.tag)
@@ -187,12 +216,19 @@ export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFi
         Number(n) > PHONE_PX ? `${p}${sp}width:100%;max-width:${n}px` : m,
       )
     if (fixed === value) continue
-    fixes.add('wide-image')
     const q = style[2] !== undefined ? '"' : "'"
     const at = img.tagStart + style.index
     edits.push({ at, end: at + style[0].length, text: `${style[1]}${q}${fixed}${q}` })
   }
-  let out = applyEdits(html, edits)
+  return { html: applyEdits(html, edits), changed: edits.length > 0 }
+}
+
+/** The phone fixes ("Phone fixes" switch): a missing viewport meta, fluid wide images; returns what was changed. */
+export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFix[] } {
+  const fixes = new Set<HtmlDesignFix>()
+  const fluid = fluidImages(html)
+  if (fluid.changed) fixes.add('wide-image')
+  let out = fluid.html
   if (!hasViewport(out)) {
     out = insertAtHead(out, VIEWPORT)
     fixes.add('viewport')
@@ -290,7 +326,7 @@ const NO_LINK = new Set(['a', 'select', 'button'])
 const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
 
 /** Index just past the `>` ending a tag whose attributes start at `j`; quoted values may hold `>`. */
-function tagEnd(src: string, j: number) {
+export function tagEnd(src: string, j: number) {
   const n = src.length
   while (j < n) {
     const c = src[j]
@@ -368,11 +404,32 @@ function linkableTextRanges(src: string): Array<[number, number]> {
 const linkHtml = (text: string, link: HtmlDesignLink) =>
   `<a href="${escapeHtml(link.href!)}" target="_blank" rel="noopener" title="${escapeHtml(link.label)}" aria-label="${escapeHtml(`${text} (${link.label})`)}" data-spa-map>${escapeHtml(text)}</a>`
 
+export type HtmlDesignRender = {
+  /** The design's "Phone fixes" switch (`htmlDesignPhoneFixes`): viewport + base sheet + fluid wide images. */
+  phoneFixes?: boolean
+  /** The live page served as the design document itself (no frame): no frame link handling. */
+  top?: boolean
+}
+
+/** Frame mode only: link handling of the design shell (see htmlDesignDocument). */
+const linkScript = (inert: boolean, exact: boolean) =>
+  `<script>(()=>{const inert=${inert},exact=${exact};const link=(e)=>e.target instanceof Element&&e.target.closest('a[href]');` +
+  // `#x` resolves against the <base> (the hosting page), which would load that page in the frame: a fragment
+  // navigation of the frame document itself instead (scroll-behavior, :target, hashchange, repeated clicks).
+  `const hash=(e,h)=>{e.preventDefault();location.assign(location.href.split('#')[0]+h)};` +
+  `if(inert){document.addEventListener('click',(e)=>{const a=link(e);if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return hash(e,h);e.preventDefault()},true);return}` +
+  `addEventListener('click',(e)=>{if(e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;const a=link(e);if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return hash(e,h);if(a.getAttribute('target')||/^javascript:/i.test(h))return;` +
+  `if(exact)return a.setAttribute('target','_top');const t=/^https?:/i.test(h)?'_blank':'_top';a.setAttribute('target',t);if(t==='_blank')a.setAttribute('rel','noopener')});` +
+  `if(exact)addEventListener('submit',(e)=>{const f=e.target;if(!e.defaultPrevented&&f instanceof HTMLFormElement&&!f.getAttribute('target'))f.setAttribute('target','_top')})})()</script>`
+
 /**
- * The uploaded document as the frame's `srcdoc`: placeholders filled, image adjustments applied, a viewport
- * meta (if missing) + the responsive base sheet first in <head>, plus a small click handler — in-page `#anchors`
- * scroll inside the design, other links open in the top window (outside sites in a new tab), and every link is
- * inert in the editor / previews.
+ * The design as shown. Always: the per-image adjustments, `{{placeholders}}` (only where the designer wrote them;
+ * `{{address}}` in page text becomes an escaped maps link) and the compat shim first in <head> (before an earlier
+ * <script>). Phone fixes on: `fixHtmlDesign`, a viewport meta (if missing) and the base sheet. Frame mode (default): a
+ * small click handler on the window (after the design's own handlers; skipped when they prevent the default) —
+ * `#anchors` scroll inside the design, other links open in the top window like the opened file would (legacy designs:
+ * outside sites in a new tab), every link is inert in the editor / previews. `top`: none of that (the live page is the
+ * design document itself).
  */
 export function htmlDesignDocument(
   html: string,
@@ -380,18 +437,32 @@ export function htmlDesignDocument(
   inert: boolean,
   images: HtmlImageAdjust[] = [],
   links: Record<string, HtmlDesignLink> = {},
+  opts: HtmlDesignRender = {},
 ): string {
-  const adjusted = applyHtmlImageAdjustments(html, images)
+  const fixes = Boolean(opts.phoneFixes)
+  const adjusted = applyHtmlImageAdjustments(fixes ? fluidImages(html).html : html, images)
   const text = Object.keys(links).length ? linkableTextRanges(adjusted) : []
   const inText = (at: number) => text.some(([start, end]) => at >= start && at < end)
+  let spliced = false
   const filled = adjusted.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, key: string, at: number) => {
     if (!(key in values)) return m
     const link = links[key]
-    return link?.href && SAFE_HREF.test(link.href) && inText(at)
-      ? linkHtml(values[key]!, link)
-      : escapeHtml(values[key]!)
+    if (link?.href && SAFE_HREF.test(link.href) && inText(at)) {
+      spliced = true
+      return linkHtml(values[key]!, link)
+    }
+    return escapeHtml(values[key]!)
   })
-  const script = `<script>(()=>{const inert=${inert};document.addEventListener('click',(e)=>{const a=e.target instanceof Element&&e.target.closest('a[href]');if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return;if(inert){e.preventDefault();return}if(!a.target){a.target=/^https?:/i.test(h)?'_blank':'_top';if(a.target==='_blank')a.rel='noopener'}},true)})()</script>`
-  const head = `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>${script}`
-  return insertAtHead(filled, head)
+  const shim = `<script>${HTML_DESIGN_COMPAT_SHIM}</script>`
+  const head =
+    (fixes
+      ? `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>`
+      : '') +
+    (spliced ? `<style data-spa-map-style>${HTML_DESIGN_MAP_CSS}</style>` : '') +
+    (opts.top ? '' : linkScript(inert, !fixes))
+  const at = headIndex(filled)
+  const firstScript = filled.search(/<script\b/i)
+  if (firstScript >= 0 && firstScript < at)
+    return filled.slice(0, firstScript) + shim + filled.slice(firstScript, at) + head + filled.slice(at)
+  return filled.slice(0, at) + shim + head + filled.slice(at)
 }

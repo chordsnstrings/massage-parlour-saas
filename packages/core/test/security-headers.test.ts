@@ -5,10 +5,14 @@ import {
   contentSecurityPolicy,
   HTML_DESIGN_SANDBOX,
   htmlDesignFrameCsp,
+  htmlDesignPageCsp,
+  htmlDesignPageHeaders,
   newNonce,
+  PERMISSIONS_POLICY,
   pageKindOf,
   pageSecurityHeaders,
   parseCspReports,
+  permissionsPolicy,
   SITE_EMBED_ORIGINS,
   TURNSTILE_ORIGIN,
 } from '../src'
@@ -166,6 +170,48 @@ describe('API + HTML design policies (F10)', () => {
     expect(d['frame-ancestors']).toEqual(["'self'"])
     expect(d['script-src']).toEqual(expect.arrayContaining(['*', "'unsafe-inline'"]))
     expect(d['object-src']).toEqual(["'none'"])
+  })
+
+  it('R24: sandbox lists, direct design page CSP + headers, permissions variants', () => {
+    expect(HTML_DESIGN_SANDBOX.split(' ')).toEqual([
+      'allow-scripts',
+      'allow-forms',
+      'allow-popups',
+      'allow-popups-to-escape-sandbox',
+      'allow-top-navigation-by-user-activation',
+      'allow-modals',
+      'allow-downloads',
+      'allow-pointer-lock',
+    ])
+    const page = directives(htmlDesignPageCsp())
+    expect(page.sandbox).not.toContain('allow-same-origin')
+    expect(page.sandbox).toEqual(HTML_DESIGN_SANDBOX.split(' '))
+    expect(page['frame-ancestors']).toEqual(["'self'"])
+    expect(page['font-src']).toEqual(['*', 'data:'])
+
+    // Same string next.config.ts sets on the paths the proxy skips.
+    expect(PERMISSIONS_POLICY).toBe(
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), browsing-topics=()',
+    )
+    const design = permissionsPolicy({ design: true })
+    for (const s of ['accelerometer', 'gyroscope', 'magnetometer']) expect(design).not.toContain(s)
+    expect(design).toContain('camera=()')
+    expect(design).toContain('payment=()')
+    expect(
+      pageSecurityHeaders({ nonce: 'n', internalPath: '/site/x', https: false })['permissions-policy'],
+    ).toBe(PERMISSIONS_POLICY)
+
+    const h = htmlDesignPageHeaders({ https: true, surface: 'site' })
+    expect(h['cross-origin-opener-policy']).toBeUndefined()
+    expect(h['x-frame-options']).toBe('SAMEORIGIN')
+    expect(h['permissions-policy']).toBe(design)
+    expect(h['strict-transport-security']).toBe('max-age=31536000; includeSubDomains')
+    expect(htmlDesignPageHeaders({ https: true, surface: 'domain' })['strict-transport-security']).toBe(
+      'max-age=31536000',
+    )
+    expect(
+      htmlDesignPageHeaders({ https: false, surface: 'site' })['strict-transport-security'],
+    ).toBeUndefined()
   })
 })
 

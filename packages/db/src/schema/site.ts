@@ -1,6 +1,7 @@
 // Phase 1 — tenant website (Puck page data, versions, theme).
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -248,6 +249,31 @@ export const siteTemplates = pgTable(
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+  },
+  () => platformPolicies(),
+)
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
+
+/**
+ * R24: images, fonts and videos moved out of an uploaded HTML design template (platform level: templates belong to no
+ * spa). Content-addressed (one row per sha256), always public and immutable, served by /files/{id}/{name} like a spa's
+ * public file. Applying the template copies the ones it uses into the spa's own files (spa sites never depend on it).
+ * Bucket objects live under `templates/{id}`, outside every `{tenantId}/` prefix (the tenant purge never touches them).
+ */
+export const siteTemplateFiles = pgTable(
+  'site_template_files',
+  {
+    id: id(),
+    sha256: text('sha256').notNull().unique(),
+    contentType: text('content_type').notNull(),
+    size: integer('size').notNull(),
+    /** 'db' | 's3' */
+    storage: text('storage').notNull().default('db'),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
   },
   () => platformPolicies(),
 )

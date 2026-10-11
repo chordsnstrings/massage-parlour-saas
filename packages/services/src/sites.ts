@@ -46,6 +46,17 @@ export async function lockSite(tx: Tx, tenantId: string): Promise<void> {
   await tx.select({ id: sites.id }).from(sites).where(eq(sites.tenantId, tenantId)).for('update')
 }
 
+/** R24: turns a template page's data into the spa's own before it is written (web: HTML design files copied in). */
+export type PreparePageData = (data: PageData) => Promise<PageData>
+
+const preparedPages = async (template: SiteTemplate, prepare?: PreparePageData): Promise<SiteTemplate> =>
+  prepare
+    ? {
+        ...template,
+        pages: await Promise.all(template.pages.map(async (p) => ({ ...p, data: await prepare(p.data) }))),
+      }
+    : template
+
 /**
  * Returns the tenant's site, creating it on first use from `template` (site row, its pages and one draft
  * version per page). Idempotent: an existing site is returned unchanged.
@@ -54,9 +65,11 @@ export async function ensureSite(
   tx: Tx,
   tenantId: string,
   template: SiteTemplate,
+  opts: { prepare?: PreparePageData } = {},
 ): Promise<{ site: SiteRow; created: boolean }> {
   const existing = await getSite(tx, tenantId)
   if (existing) return { site: existing, created: false }
+  template = await preparedPages(template, opts.prepare)
   const [site] = await tx
     .insert(sites)
     .values({
@@ -393,8 +406,11 @@ export async function switchTemplate(
   tx: Tx,
   tenantId: string,
   template: SiteTemplate,
-  opts: { replaceContent?: boolean; keepTheme?: boolean; userId?: string } = {},
+  opts: { replaceContent?: boolean; keepTheme?: boolean; userId?: string; prepare?: PreparePageData } = {},
 ): Promise<SiteRow> {
+  // Only pages that will be written are prepared (a switch without replaceContent keeps the spa's pages).
+  if (opts.prepare && (opts.replaceContent || !(await getSite(tx, tenantId))))
+    template = await preparedPages(template, opts.prepare)
   const { site, created } = await ensureSite(tx, tenantId, template)
   const theme = opts.keepTheme ? site.theme : template.theme
   const undo: TemplateUndo | null = created

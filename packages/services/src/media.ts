@@ -111,6 +111,21 @@ export function sniffVideoType(b: Uint8Array): VideoType | null {
   return null
 }
 
+// R24: web fonts moved out of uploaded HTML designs (data: URIs) into stored files, served with their real type.
+export const FONT_TYPES = ['font/woff2', 'font/woff', 'font/ttf', 'font/otf'] as const
+export type FontType = (typeof FONT_TYPES)[number]
+
+/** WOFF2 / WOFF / TrueType / OpenType (CFF) from the magic bytes; null otherwise. */
+export function sniffFontType(b: Uint8Array): FontType | null {
+  if (b.length < 12) return null
+  const four = ascii(b, 0, 4)
+  if (four === 'wOF2') return 'font/woff2'
+  if (four === 'wOFF') return 'font/woff'
+  if (four === 'OTTO') return 'font/otf'
+  if ((b[0] === 0 && b[1] === 1 && b[2] === 0 && b[3] === 0) || four === 'true') return 'font/ttf'
+  return null
+}
+
 /** True for content that is SVG/XML (to give a clearer error than "not an image"). */
 export const looksLikeSvg = (b: Uint8Array) =>
   /^\s*(<\?xml|<svg|<!doctype svg)/i.test(new TextDecoder().decode(b.subarray(0, 256)).replace(/^﻿/, ''))

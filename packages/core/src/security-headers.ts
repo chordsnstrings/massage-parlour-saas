@@ -114,15 +114,46 @@ export type PageHeaderOptions = {
   dev?: boolean
 }
 
+/** Powerful features no platform page uses: off for the page and every frame in it (next.config.ts mirrors it). */
+const POLICY_FEATURES = [
+  'camera',
+  'microphone',
+  'geolocation',
+  'payment',
+  'usb',
+  'serial',
+  'hid',
+  'midi',
+  'magnetometer',
+  'gyroscope',
+  'accelerometer',
+  'display-capture',
+  'browsing-topics',
+] as const
+const SENSORS: readonly string[] = ['magnetometer', 'gyroscope', 'accelerometer']
+
 /**
- * Headers the proxy puts on every page response (next.config.ts adds nosniff, Referrer-Policy and Permissions-Policy
- * to every path). HSTS only over https; includeSubDomains only on platform hosts (a spa's own domain may have other,
- * http-only subdomains).
+ * `Permissions-Policy`. `design` (R24, an uploaded HTML design served as the page itself or its frame shell): the
+ * motion sensors stay undeclared — the browser default, which lets the document use them (3D tilt / parallax effects)
+ * and other frames only through `allow=` — exactly what the file gets when opened directly. Everything else stays off.
+ */
+export function permissionsPolicy(o: { design?: boolean } = {}): string {
+  return POLICY_FEATURES.filter((f) => !(o.design && SENSORS.includes(f)))
+    .map((f) => `${f}=()`)
+    .join(', ')
+}
+export const PERMISSIONS_POLICY = permissionsPolicy()
+
+/**
+ * Headers the proxy puts on every page response (next.config.ts adds nosniff and Referrer-Policy to every path, and
+ * Permissions-Policy to the paths the proxy skips). HSTS only over https; includeSubDomains only on platform hosts (a
+ * spa's own domain may have other, http-only subdomains).
  */
 export function pageSecurityHeaders(o: PageHeaderOptions): Record<string, string> {
   const kind = pageKindOf(o.internalPath)
   const h: Record<string, string> = {
     'content-security-policy': contentSecurityPolicy({ ...kind, nonce: o.nonce, dev: o.dev, https: o.https }),
+    'permissions-policy': PERMISSIONS_POLICY,
   }
   if (!kind.embed) {
     h['x-frame-options'] = 'SAMEORIGIN'
@@ -138,9 +169,13 @@ export function pageSecurityHeaders(o: PageHeaderOptions): Record<string, string
 /** JSON/redirect endpoints (/api, /.well-known): nothing may load, frame or submit. */
 export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
-/** iframe sandbox of an uploaded HTML design on spa sites (R17): no allow-same-origin, ever. */
+/**
+ * Sandbox of an uploaded HTML design (R17; iframe attribute and CSP `sandbox`): no allow-same-origin, ever (the design
+ * would get the platform origin's cookies, storage and APIs). R24: + modals (alert/confirm), downloads and pointer
+ * lock, so a design behaves as when opened directly.
+ */
 export const HTML_DESIGN_SANDBOX =
-  'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
+  'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals allow-downloads allow-pointer-lock'
 
 /**
  * The design shell's own policy: the design runs exactly as built (any CSS, fonts, images, scripts), but always in
@@ -162,6 +197,32 @@ export function htmlDesignFrameCsp(): string {
     "frame-ancestors 'self'",
     `sandbox ${HTML_DESIGN_SANDBOX}`,
   ].join('; ')
+}
+
+/**
+ * R24: a spa site page whose published content is an exact HTML design is served as the design document itself
+ * (app/site-html). Same policy as the frame shell: anything the design needs, always an opaque origin (CSP sandbox
+ * without allow-same-origin — the design never runs with the platform's origin), framed only by platform pages.
+ */
+export const htmlDesignPageCsp = (): string => htmlDesignFrameCsp()
+
+/**
+ * Headers of that direct design page. No COOP (with a CSP sandbox it can turn the navigation into a network error),
+ * no nonce, Permissions-Policy without the motion sensors (see permissionsPolicy).
+ */
+export function htmlDesignPageHeaders(o: {
+  https: boolean
+  surface: 'site' | 'domain'
+}): Record<string, string> {
+  const h: Record<string, string> = {
+    'content-security-policy': htmlDesignPageCsp(),
+    'x-frame-options': 'SAMEORIGIN',
+    'permissions-policy': permissionsPolicy({ design: true }),
+  }
+  if (o.https)
+    h['strict-transport-security'] =
+      o.surface === 'domain' ? 'max-age=31536000' : 'max-age=31536000; includeSubDomains'
+  return h
 }
 
 /** One reported violation, normalised (CSP2 `application/csp-report` or Reporting API `csp-violation`). */
