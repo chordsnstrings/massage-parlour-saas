@@ -192,6 +192,7 @@ describe('platform billing (db)', () => {
     })
     expect(reminder.amountAed).toBe('2100.00')
     expect(message).toContain('Hello Serenity')
+    expect(message).toContain('the following invoice is overdue.')
     expect(message).toContain('AED 2,100.00')
     expect(message).toContain('avoid your account being paused')
     expect(message).toContain('https://app.example/bill-a/billing')
@@ -296,12 +297,13 @@ describe('platform billing (db)', () => {
       })
     const later = await invoice('A', '2026-10-01')
     const earlier = await invoice('B', '2026-09-01')
-    const { reminder } = await createPaymentReminder(platform, {
+    const { reminder, message } = await createPaymentReminder(platform, {
       tenantId: c!.id,
       userId: 'u-admin',
       today,
       billingUrl: 'x',
     })
+    expect(message).toContain('the following invoices are overdue.')
     const pay = (inv: typeof later, receivedAt: string) =>
       platform.transaction((tx) =>
         recordPlatformPayment(tx, {

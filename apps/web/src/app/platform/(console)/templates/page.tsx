@@ -143,7 +143,7 @@ export default async function TemplatesStudioPage() {
     <>
       <PageHeader
         title="Site templates"
-        description="Templates spas can pick next to the 8 built-ins. A studio template with a built-in key replaces it."
+        description={`Templates spas can pick next to the ${TEMPLATE_KEYS.length} built-ins. A studio template with a built-in key replaces it.`}
         actions={
           <>
             <FormSheet
