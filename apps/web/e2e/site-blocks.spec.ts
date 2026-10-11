@@ -5,7 +5,19 @@ import { ensureSite, putFile } from '@spa/services'
 import { applySiteEditOps } from '@spa/services/site-kit'
 import { eq } from 'drizzle-orm'
 import { siteEditSchema } from '../src/components/site/ai-schema'
-import { app, makeStudio, PNG, PORT, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import {
+  app,
+  editorUrl,
+  makeStudio,
+  PNG,
+  PORT,
+  seedCatalog,
+  signInStudioOnAdmin,
+  signUpOwner,
+  site,
+  studioUrl,
+  testDb,
+} from './helpers'
 
 const ADDRESS = 'Shop 4, Marina Walk, Dubai'
 const YT = 'dQw4w9WgXcQ'
@@ -113,7 +125,7 @@ test('Website Studio: F15 blocks publish to the live site (EN/AR, 360 px), blog 
   page,
 }) => {
   test.setTimeout(240_000)
-  const { slug } = await signUpOwner(page, { spa: 'Cedar Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Cedar Spa' })
   await makeStudio(slug)
   const seed = await seedCatalog(slug)
   const db = testDb()
@@ -162,7 +174,8 @@ test('Website Studio: F15 blocks publish to the live site (EN/AR, 360 px), blog 
   const canvas = page.frameLocator('#preview-frame').first()
 
   await test.step('studio adds the Enquiry form from the library and publishes', async () => {
-    await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+    await signInStudioOnAdmin(page, email)
+    await page.goto(editorUrl(slug, home!.id))
     await expect(canvas.getByRole('heading', { name: 'Cedar Spa' })).toBeVisible({ timeout: 30_000 })
     // Data blocks render in the editor; the Map embed is a placeholder there (no Google iframe in the canvas).
     await expect(canvas.getByText('Calm and spotless.')).toBeVisible()
@@ -176,9 +189,9 @@ test('Website Studio: F15 blocks publish to the live site (EN/AR, 360 px), blog 
   })
 
   await test.step('studio writes and publishes a blog post (EN + AR)', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(studioUrl(slug))
     await page.getByRole('link', { name: 'New post' }).click()
-    await page.waitForURL(/\/website\/blog\/new$/)
+    await page.waitForURL(/\/websites\/[^/]+\/blog\/new$/)
     await page.locator('[name="title.en"]').fill('Why hot stones work')
     await page.locator('[name="title.ar"]').fill('لماذا تنجح الأحجار الساخنة')
     await page.getByLabel('Web address').fill('Bad Address')
@@ -191,7 +204,7 @@ test('Website Studio: F15 blocks publish to the live site (EN/AR, 360 px), blog 
       .fill('Basalt stones hold heat.\n\n## Benefits\n- Deeper relaxation\n- Easier muscles')
     await page.locator('[name="body.ar"]').fill('تحتفظ أحجار البازلت بالحرارة.')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await page.waitForURL(/\/website\/blog\/[0-9a-f-]{36}$/)
+    await page.waitForURL(/\/websites\/[^/]+\/blog\/[0-9a-f-]{36}$/)
     await expect(page.getByText('Draft', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Publish' }).click()
     await expect(page.getByText('Post published')).toBeVisible()
@@ -332,7 +345,7 @@ test('Website Studio: F15 blocks publish to the live site (EN/AR, 360 px), blog 
   })
 
   await test.step('uploaded video: MP4 by magic bytes, served with byte ranges', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(`${app}/${slug}/media`)
     const result = await page.evaluate(async (tenant) => {
       const head = new Uint8Array([
         0,

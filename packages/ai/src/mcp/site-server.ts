@@ -14,7 +14,6 @@ import {
   platformDb,
   type SiteAiEditorStatus,
   siteAiEditorStatus,
-  sites,
   type ThemeTokens,
   tenants,
   withTenant,
@@ -29,9 +28,10 @@ import {
   signPreviewToken,
   siteEditAuditData,
   trimPageForPrompt,
+  websiteOverview,
 } from '@spa/services'
 import type { SiteEditSchema } from '@spa/services/site-kit'
-import { and, asc, eq, isNull, or } from 'drizzle-orm'
+import { and, eq, isNull, or } from 'drizzle-orm'
 import { z } from 'zod'
 
 export type SiteMcpActor = { userId: string; clientId: string; tokenId: string; clientName: string | null }
@@ -243,22 +243,11 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
     title: 'List spas',
     readOnly: true,
     description:
-      'Lists the spas on the platform with their slug (use it as "spa" in the other tools), name, status and whether they have a website yet. Start here.',
+      'Lists the spas on the platform with their slug (use it as "spa" in the other tools), name, status, whether they have a website yet, its stage (website: none / template / draft / live), unpublished_changes and the console page where the owner publishes. Start here.',
     input: { query: z.string().max(80).optional().describe('Filter by name or slug (optional)') },
     run: async (a, ctx) => {
-      const rows = await ctx.platform
-        .select({
-          id: tenants.id,
-          slug: tenants.slug,
-          name: tenants.name,
-          status: tenants.status,
-          site: sites.id,
-          studio: sites.studioStatus,
-        })
-        .from(tenants)
-        .leftJoin(sites, eq(sites.tenantId, tenants.id))
-        .where(isNull(tenants.deletedAt))
-        .orderBy(asc(tenants.name))
+      // R23: the same computed status as the console Websites list (Not started → Template chosen → Draft → Live).
+      const rows = await websiteOverview(ctx.platform)
       const q = typeof a.query === 'string' ? a.query.toLowerCase() : ''
       await audit(ctx, 'list_spas', null, { args: clip(a) })
       return rows
@@ -266,9 +255,10 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
         .map((r) => ({
           slug: r.slug,
           name: r.name,
-          status: r.status,
-          has_site: Boolean(r.site),
-          studio_status: r.studio,
+          status: r.tenantStatus,
+          has_site: r.hasSite,
+          website: r.status,
+          unpublished_changes: r.unpublished,
           console_url: ctx.o.adminUrl(`/websites/${r.slug}`),
         }))
     },

@@ -3,7 +3,16 @@ import { savedSections, sitePages, webEvents } from '@spa/db'
 import { ensureSite, saveDraft } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import QRCode from 'qrcode'
-import { app, makeStudio, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import {
+  editorUrl,
+  makeStudio,
+  screenshotAt,
+  seedCatalog,
+  signInStudioOnAdmin,
+  signUpOwner,
+  site,
+  testDb,
+} from './helpers'
 
 const HERO = 'Unwind in the heart of the city'
 
@@ -57,8 +66,9 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
   page,
   browser,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Juniper Spa' })
-  await makeStudio(slug) // the website is built by the studio (super-admin)
+  const { slug, email } = await signUpOwner(page, { spa: 'Juniper Spa' })
+  await makeStudio(slug) // the website is built by the studio (super-admin, console)
+  await signInStudioOnAdmin(page, email)
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db.transaction((tx) =>
@@ -70,7 +80,7 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
     }),
   )
   const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
-  const editorUrl = `${app}/${slug}/website/editor/${home!.id}`
+  const editor = editorUrl(slug, home!.id)
   const canvas = page.frameLocator('#preview-frame').first()
   const libraryNav = page.locator('[class*="NavItem-link"]', { hasText: 'Library' })
   const openLibrary = async () => {
@@ -79,7 +89,7 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
   }
 
   await test.step('open the editor and insert a section preset from the library', async () => {
-    await page.goto(editorUrl)
+    await page.goto(editor)
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
     const blocks = canvas.locator('[data-puck-component]')
     const before = await blocks.count()
@@ -302,7 +312,7 @@ test('site editor: library, saved sections, preflight, scoped CSS, analytics, ve
       ],
     }
     await db.transaction((tx) => saveDraft(tx, { tenantId: seed.tenantId, pageId: home!.id, data }))
-    await page.goto(editorUrl)
+    await page.goto(editor)
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     // The dialog only checks the page itself; the server also checks the global sections it shows.

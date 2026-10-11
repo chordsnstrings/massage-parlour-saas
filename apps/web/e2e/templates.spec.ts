@@ -5,14 +5,13 @@ import { PAGE_TEMPLATES, SECTION_PRESETS } from '../src/components/site/presets'
 import { TEMPLATES } from '../src/components/site/templates'
 import {
   admin,
-  app,
   makeStudio,
-  PATH,
-  passTwoFactor,
   screenshotAt,
   seedCatalog,
+  signInStudioOnAdmin,
   signUpOwner,
   site,
+  studioUrl,
 } from './helpers'
 
 const NAMES = [
@@ -111,11 +110,12 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
 }) => {
   const owner = await signUpOwner(page, { spa: 'Dune Spa' })
   const { slug } = owner
-  await makeStudio(slug) // the website is built by the studio (super-admin)
+  await makeStudio(slug) // the website is built by the studio (super-admin, console)
   await seedCatalog(slug)
+  await signInStudioOnAdmin(page, owner.email)
 
   await test.step('the gallery shows every built-in template with its thumbnail', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(studioUrl(slug))
     for (const name of NAMES) await expect(page.getByRole('article', { name })).toBeVisible()
     const thumb = page.getByRole('img', { name: 'Desert Sand preview' })
     await thumb.scrollIntoViewIfNeeded()
@@ -178,7 +178,7 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
   })
 
   await test.step('add the Ramadan offers page from a page template', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(studioUrl(slug))
     await page.getByRole('button', { name: 'Add page' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByRole('radio', { name: /Ramadan offers/ }).check()
@@ -188,31 +188,14 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
     await expect(page.getByText('/ramadan-offers').first()).toBeVisible()
   })
 
-  await test.step('the AI writer is reachable (and says so when AI is not set up)', async () => {
-    await page.getByRole('button', { name: 'Write with AI' }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('heading', { name: 'Write my site with AI' })).toBeVisible()
-    await expect(dialog.getByText(/AI writing isn.t set up yet|Anything to highlight/).first()).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(dialog).toBeHidden()
-  })
-
   await screenshotAt(page, 'templates')
 
   await test.step('preview renders the new page with live data', async () => {
-    await page.goto(`${app}/${slug}/website/preview?page=ramadan-offers`)
+    await page.goto(studioUrl(slug, '/preview?page=ramadan-offers'))
     await expect(page.getByRole('heading', { name: 'Ramadan evenings of calm' })).toBeVisible()
   })
 
-  await test.step('super-admin saves the spa site as a studio template; spas see it in the gallery', async () => {
-    await page.goto(`${admin}/login`)
-    if (!PATH) {
-      await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)
-      await page.getByLabel('Password').fill('correct-horse-battery')
-      await page.getByRole('button', { name: 'Sign in' }).click()
-      await passTwoFactor(page, `owner-${slug}@e2e.test`) // studio owners are super-admins with 2FA (G3)
-      await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
-    }
+  await test.step('super-admin saves the spa site as a studio template; it shows in the gallery', async () => {
     await page.goto(`${admin}/templates`)
     await expect(page.getByRole('heading', { name: 'Site templates' })).toBeVisible()
     await page.getByRole('button', { name: "Save a spa's site" }).click()
@@ -229,7 +212,7 @@ test('templates: gallery of all built-ins, side-by-side switch with undo, Desert
     await page.goto(`${admin}/templates/desert/preview?lang=ar`)
     await expect(page.getByRole('heading', { name: 'طقوس الصحراء وسكينة الواحة' })).toBeVisible()
 
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(studioUrl(slug))
     const card = page.getByRole('article', { name: 'Dune Signature' })
     await expect(card).toBeVisible()
     await expect(card.getByText('Studio')).toBeVisible()
@@ -248,14 +231,7 @@ test('HTML design upload: shown exactly as built on the spa site, with live plac
 <script>document.getElementById('t').dataset.ran = 'yes'</script></body></html>`
 
   await test.step('upload in the templates library', async () => {
-    await page.goto(`${admin}/login`)
-    if (!PATH) {
-      await page.getByLabel('Email').fill(`owner-${slug}@e2e.test`)
-      await page.getByLabel('Password').fill('correct-horse-battery')
-      await page.getByRole('button', { name: 'Sign in' }).click()
-      await passTwoFactor(page, `owner-${slug}@e2e.test`) // studio owners are super-admins with 2FA (G3)
-      await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
-    }
+    await signInStudioOnAdmin(page, owner.email)
     await page.goto(`${admin}/templates`)
     await page.getByRole('button', { name: 'Upload HTML' }).click()
     const dialog = page.getByRole('dialog')
@@ -270,7 +246,7 @@ test('HTML design upload: shown exactly as built on the spa site, with live plac
   })
 
   await test.step('apply and publish: the public page is the design itself, sandboxed', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await page.goto(studioUrl(slug))
     await page.getByRole('button', { name: 'Use Mint Cloud' }).click()
     await expect(page.getByTestId('current-template')).toHaveText('Mint Cloud', { timeout: 30_000 })
     await page.getByRole('button', { name: 'Publish site' }).click()
@@ -330,14 +306,7 @@ body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;
   })
 
   await test.step('upload: images listed, focal point dragged, preview fits', async () => {
-    await page.goto(`${admin}/login`)
-    if (!PATH) {
-      await page.getByLabel('Email').fill(`owner-${owner.slug}@e2e.test`)
-      await page.getByLabel('Password').fill('correct-horse-battery')
-      await page.getByRole('button', { name: 'Sign in' }).click()
-      await passTwoFactor(page, `owner-${owner.slug}@e2e.test`)
-      await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 60_000 })
-    }
+    await signInStudioOnAdmin(page, owner.email)
     await page.goto(`${admin}/templates`)
     await page.getByRole('button', { name: 'Upload HTML' }).click()
     const dialog = page.getByRole('dialog')

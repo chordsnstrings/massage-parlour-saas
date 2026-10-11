@@ -12,7 +12,6 @@ import {
   resolveChangeRequest,
   type SiteTemplate,
   saveDraft,
-  setStudioStatus,
   websiteOverview,
   websiteProgress,
 } from '../src'
@@ -20,8 +19,8 @@ import {
 const { platform, app } = testDbs()
 const ids = {} as Record<string, string>
 const tx = <T>(fn: Parameters<typeof withTenant<T>>[1], tenant = ids.tenant!) => withTenant(tenant, fn, app)
-const status = async () =>
-  (await platform.select().from(sites).where(eq(sites.tenantId, ids.tenant!)))[0]?.studioStatus
+const updatedAt = async () =>
+  (await platform.select().from(sites).where(eq(sites.tenantId, ids.tenant!)))[0]?.updatedAt
 
 const template: SiteTemplate = {
   key: 'zen',
@@ -89,8 +88,8 @@ describe('website studio', () => {
     })
   })
 
-  it('records change requests; one made during review sends the site back to the studio', async () => {
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'review'))
+  it('records change requests without touching the site (R23: no review step)', async () => {
+    const before = await updatedAt()
     const [home] = await tx((db) => listPages(db, ids.tenant!))
     const id = await tx((db) =>
       createChangeRequest(db, ids.tenant!, {
@@ -99,7 +98,7 @@ describe('website studio', () => {
         userId: 'u-spa',
       }),
     )
-    expect(await status()).toBe('building')
+    expect(await updatedAt()).toEqual(before)
     await expect(
       tx((db) => createChangeRequest(db, ids.tenant!, { body: 'x', userId: 'u-spa' })),
     ).rejects.toThrow('Tell us')

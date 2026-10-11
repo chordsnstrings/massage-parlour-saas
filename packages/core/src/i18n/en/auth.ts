@@ -25,7 +25,7 @@ export const auth = {
   oauth: {
     title: 'Connect Claude',
     subtitle: '{client} wants to edit spa websites for you.',
-    can: 'It can read spa websites and save changes as drafts. It can’t publish: you still preview and publish in the Website Studio.',
+    can: 'It can read spa websites and save changes as drafts. It can’t publish: you still preview and publish in the platform console (Websites).',
     sendsTo: 'Approving sends access to {host}.',
     account: 'Signed in as {email}',
     allow: 'Allow',

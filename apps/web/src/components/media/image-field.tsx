@@ -31,8 +31,9 @@ const usable = (v: string) => v === '' || /^\/(?!\/)/.test(v) || /^https?:\/\/[^
  */
 export function ImageFieldControl({ field, id, value: raw, onChange, readOnly }: Props) {
   const value = imageSrc(raw)
-  const params = useParams<{ tenant?: string }>()
-  const slug = typeof params?.tenant === 'string' ? params.tenant : null
+  // Spa dashboard routes name the spa `tenant`; the console Website Studio editor (R23) names it `slug`.
+  const params = useParams<{ tenant?: string; slug?: string }>()
+  const slug = (typeof params?.tenant === 'string' ? params.tenant : params?.slug) || null
   const t = useT()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)

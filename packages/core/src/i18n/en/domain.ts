@@ -172,7 +172,6 @@ export const domain = {
   studioNoWebsite: 'There is no website yet.',
   studioPageGone: 'That page no longer exists.',
   studioRequestClosed: 'That request is already closed.',
-  studioStepUnavailable: 'That step is not available right now.',
   studioDescribeChange: 'Tell us what you would like changed.',
   studioRequestTooLong: 'Keep each request under 2,000 characters.',
   studioTooManyRequests: 'You have many open requests — the studio will work through those first.',

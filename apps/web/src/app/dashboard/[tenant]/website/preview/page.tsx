@@ -13,9 +13,13 @@ type Props = {
   searchParams: Promise<DraftPreviewQuery>
 }
 
-/** Draft preview on the spa dashboard (body: components/site/draft-preview.tsx). */
+/**
+ * Site preview on the spa dashboard (body: components/site/draft-preview.tsx): the spa's Website page frames it
+ * (`live=1` once published) for everyone who opens that page.
+ */
 export default async function SitePreviewPage({ params, searchParams }: Props) {
   const ctx = await requireMember((await params).tenant)
-  if (!can(ctx, 'site.content') && !can(ctx, 'site.design') && !can(ctx, 'site.publish')) notFound()
+  const allowed = ['site.content', 'site.design', 'site.publish', 'services.manage'] as const
+  if (!allowed.some((p) => can(ctx, p))) notFound()
   return <DraftPreview tenant={ctx.tenant} query={await searchParams} />
 }

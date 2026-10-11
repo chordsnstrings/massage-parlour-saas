@@ -1,5 +1,5 @@
-// Website Studio (PLAN §14.4): the platform builds each spa's site as a bespoke service. The spa reviews it,
-// approves it and sends change requests; only a super-admin acting on the tenant edits the site itself.
+// Website Studio (PLAN §14.4, R23): the platform builds each spa's site as a bespoke service in the console and
+// publishes it directly (no spa review step). The spa sends change requests; only a super-admin edits the site.
 import {
   type DbOrTx,
   domains,
@@ -14,7 +14,6 @@ import {
 import { and, asc, type Column, count, countDistinct, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 
-export type StudioStatus = (typeof sites.$inferSelect)['studioStatus']
 export type ChangeRequestRow = Awaited<ReturnType<typeof listChangeRequests>>[number]
 
 /** Open requests a spa may have at once — enough for real feedback, not a flood. */
@@ -39,7 +38,7 @@ export async function listChangeRequests(tx: Tx, tenantId: string, limit = 50) {
     .limit(limit)
 }
 
-/** Spa asks the studio for a change. Asking while a review is pending sends the site back to the studio. */
+/** Spa asks the studio for a change (open → done | declined by the studio; no effect on publishing). */
 export async function createChangeRequest(
   tx: Tx,
   tenantId: string,
@@ -65,10 +64,6 @@ export async function createChangeRequest(
     .insert(siteChangeRequests)
     .values({ tenantId, body, pageId: input.pageId ?? null, createdBy: input.userId })
     .returning({ id: siteChangeRequests.id })
-  await tx
-    .update(sites)
-    .set({ studioStatus: 'building', updatedAt: new Date() })
-    .where(and(eq(sites.tenantId, tenantId), eq(sites.studioStatus, 'review')))
   return row!.id
 }
 
@@ -92,20 +87,6 @@ export async function resolveChangeRequest(
     )
     .returning({ id: siteChangeRequests.id })
   if (!row) throw new DomainError('That request is already closed.', 'not_found')
-}
-
-/**
- * Moves the site through building → review → approved. Only the studio (super-admin) changes the status —
- * it sends for review, pulls it back, approves or reopens; the spa only reviews and requests changes (R1).
- */
-export async function setStudioStatus(tx: Tx, tenantId: string, to: StudioStatus) {
-  const [site] = await tx
-    .select({ status: sites.studioStatus })
-    .from(sites)
-    .where(eq(sites.tenantId, tenantId))
-  if (!site) throw new DomainError('There is no website yet.', 'not_found')
-  if (site.status === to) throw new DomainError('That step is not available right now.')
-  await tx.update(sites).set({ studioStatus: to, updatedAt: new Date() }).where(eq(sites.tenantId, tenantId))
 }
 
 export type WebsiteStatus = 'none' | 'template' | 'draft' | 'live'

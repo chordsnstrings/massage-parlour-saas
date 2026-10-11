@@ -170,7 +170,6 @@ export const enums: Messages['enums'] = {
     rejected: 'ถูกปฏิเสธ',
     cancelled: 'ยกเลิกแล้ว',
   },
-  siteStudioStatus: { building: 'กำลังสร้าง', review: 'พร้อมให้ตรวจ', approved: 'อนุมัติแล้ว' },
   pageVersionStatus: { draft: 'ฉบับร่าง', published: 'เผยแพร่แล้ว' },
   sitePostStatus: { draft: 'ฉบับร่าง', published: 'เผยแพร่แล้ว' },
   siteEnquiryStatus: { new: 'ใหม่', replied: 'ตอบแล้ว', closed: 'ปิดแล้ว' },

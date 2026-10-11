@@ -2,7 +2,18 @@ import { expect, test } from '@playwright/test'
 import { services, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { app, makeStudio, PORT, screenshotAt, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import {
+  app,
+  makeStudio,
+  PORT,
+  screenshotAt,
+  seedCatalog,
+  signInStudioOnAdmin,
+  signUpOwner,
+  site,
+  studioUrl,
+  testDb,
+} from './helpers'
 
 const HERO = 'Calm, clear and restorative.'
 const png = async (name: string, background: string, width: number, height: number) => ({
@@ -22,7 +33,7 @@ test('media library: upload, describe, pick in the editor, publish and serve fro
   page,
   playwright,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Cedar Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Cedar Spa' })
   await makeStudio(slug) // the website is built by the studio (super-admin)
   await seedCatalog(slug)
   const siteOrigin = new URL(site(slug)).origin
@@ -143,10 +154,11 @@ test('media library: upload, describe, pick in the editor, publish and serve fro
   })
 
   await test.step('website editor: choose the image from the library and publish', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await signInStudioOnAdmin(page, email)
+    await page.goto(studioUrl(slug))
     await page.getByRole('button', { name: 'Use Nordic Clean' }).click()
     await page.getByRole('link', { name: 'Edit Home' }).click()
-    await page.waitForURL(/\/website\/editor\//)
+    await page.waitForURL(/\/websites\/[^/]+\/editor\//)
     const canvas = page.frameLocator('#preview-frame')
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
     const choose = page.getByRole('button', { name: 'Choose from library' })

@@ -155,7 +155,6 @@ export const domain: Messages['errors']['domain'] = {
   studioNoWebsite: 'ยังไม่มีเว็บไซต์',
   studioPageGone: 'หน้านั้นไม่มีอยู่แล้ว',
   studioRequestClosed: 'คำขอนั้นปิดไปแล้ว',
-  studioStepUnavailable: 'ขั้นตอนนี้ยังไม่พร้อมใช้งานในตอนนี้',
   studioDescribeChange: 'บอกเราว่าต้องการเปลี่ยนอะไร',
   studioRequestTooLong: 'แต่ละคำขอต้องไม่เกิน 2,000 ตัวอักษร',
   studioTooManyRequests: 'คุณมีคำขอที่เปิดอยู่หลายรายการ — ทีมสตูดิโอจะดำเนินการรายการเหล่านั้นก่อน',

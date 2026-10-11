@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { auditLog, mediaAssets, pageVersions, sitePages, tenants } from '@spa/db'
 import { ensureSite } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
-import { app, makeStudio, PNG, PORT, signUpOwner, site, testDb } from './helpers'
+import { makeStudio, PNG, PORT, signInStudioOnAdmin, signUpOwner, site, studioUrl, testDb } from './helpers'
 
 // The spa's "existing website": a local fixture server on E2E_PORT + 1 (playwright.config.ts exempts exactly this
 // host:port from the SSRF rules via SITE_IMPORT_E2E_ALLOW).
@@ -54,8 +54,9 @@ test('website studio: import an existing website as a draft page (preview → ap
   page,
 }) => {
   test.setTimeout(180_000)
-  const { slug } = await signUpOwner(page, { spa: 'Lotus Import Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Lotus Import Spa' })
   await makeStudio(slug)
+  await signInStudioOnAdmin(page, email)
   const db = testDb()
   const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
   await db.transaction((tx) =>
@@ -66,7 +67,7 @@ test('website studio: import an existing website as a draft page (preview → ap
       pages: [{ slug: '', title: { en: 'Home' }, data: { root: { props: {} }, content: [] } }],
     }),
   )
-  await page.goto(`${app}/${slug}/website`)
+  await page.goto(studioUrl(slug))
   await page.getByRole('button', { name: 'Import from website' }).click()
   const sheet = page.getByRole('dialog')
   const address = sheet.getByLabel('Current website address')
@@ -101,7 +102,7 @@ test('website studio: import an existing website as a draft page (preview → ap
 
   await test.step('apply: draft page created with the photos in the media library, opened in the editor', async () => {
     await sheet.getByRole('button', { name: 'Create draft page' }).click()
-    await page.waitForURL(/\/website\/editor\//, { timeout: 30_000 })
+    await page.waitForURL(/\/websites\/[^/]+\/editor\//, { timeout: 30_000 })
     const canvas = page.frameLocator('#preview-frame').first()
     await expect(canvas.getByRole('heading', { name: 'Unwind at Lotus Garden' })).toBeVisible({
       timeout: 30_000,

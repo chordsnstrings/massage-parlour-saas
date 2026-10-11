@@ -9,8 +9,10 @@ import {
   PORT,
   screenshotAt,
   seedCatalog,
+  signInStudioOnAdmin,
   signUpOwner,
   site,
+  studioUrl,
   testDb,
 } from './helpers'
 
@@ -19,8 +21,8 @@ const HERO = 'Calm, clear and restorative.'
 test('owner picks a template, publishes from the editor and the public site renders it in EN and AR', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Birch Spa' })
-  await makeStudio(slug) // the website is built by the studio (super-admin)
+  const { slug, email } = await signUpOwner(page, { spa: 'Birch Spa' })
+  await makeStudio(slug) // the website is built by the studio (super-admin, console)
   await seedCatalog(slug)
 
   await test.step('nothing published yet → placeholder site', async () => {
@@ -30,7 +32,8 @@ test('owner picks a template, publishes from the editor and the public site rend
   })
 
   await test.step('website overview: choose Nordic Clean', async () => {
-    await page.goto(`${app}/${slug}/website`)
+    await signInStudioOnAdmin(page, email)
+    await page.goto(studioUrl(slug))
     await expect(page.getByRole('heading', { name: 'Choose a template' })).toBeVisible()
     await expect(page.getByRole('img', { name: 'Nordic Clean preview' })).toBeAttached()
     await page.getByRole('button', { name: 'Use Nordic Clean' }).click()
@@ -41,7 +44,7 @@ test('owner picks a template, publishes from the editor and the public site rend
 
   await test.step('editor shows the page with live data, toggles AR and publishes', async () => {
     await page.getByRole('link', { name: 'Edit Home' }).click()
-    await page.waitForURL(/\/website\/editor\//)
+    await page.waitForURL(/\/websites\/[^/]+\/editor\//)
     const canvas = page.frameLocator('#preview-frame')
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
     await expect(canvas.getByText('AED 350').first()).toBeVisible()

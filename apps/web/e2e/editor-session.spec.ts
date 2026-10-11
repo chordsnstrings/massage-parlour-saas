@@ -3,12 +3,11 @@ import { auditLog, pageVersions, sitePages } from '@spa/db'
 import { ensureSite } from '@spa/services'
 import { and, desc, eq } from 'drizzle-orm'
 import {
-  ADMIN,
-  app,
+  editorUrl,
   makeStudio,
-  passTwoFactor,
   seedCatalog,
   signInPlatformAdmin,
+  signInStudioOnAdmin,
   signUpOwner,
   testDb,
 } from './helpers'
@@ -55,21 +54,6 @@ async function editHeading(page: Page, from: string, to: string) {
   await expect(canvas.getByRole('heading', { name: to })).toBeVisible()
 }
 
-/** The platform super-admin signs in on the app host and lands on `path`. */
-async function adminOnApp(page: Page, path: string) {
-  await signInPlatformAdmin(page)
-  const target = `${app}${path}`
-  await page.goto(`${app}/login?next=${encodeURIComponent(new URL(target).pathname)}`)
-  if (await page.getByLabel('Email').isVisible()) {
-    await page.getByLabel('Email').fill(ADMIN.email)
-    await page.getByLabel('Password').fill(ADMIN.password)
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await page.waitForURL(/\/two-factor/)
-    await passTwoFactor(page)
-  }
-  await page.waitForURL(target)
-}
-
 // F29: the Studio editor autosaves the draft (never silently over newer work), keeps an unsaved local copy and holds
 // a per-page editing lock other super-admins see (view only / take over).
 test('studio editor: autosave, local copy after a crash, editing lock + take over', async ({
@@ -78,8 +62,9 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
 }) => {
   test.setTimeout(240_000)
   let page = first
-  const { slug } = await signUpOwner(page, { spa: 'Aspen Spa', name: 'Ahmed Saleh' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Aspen Spa', name: 'Ahmed Saleh' })
   await makeStudio(slug)
+  await signInStudioOnAdmin(page, email)
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db.transaction((tx) =>
@@ -91,7 +76,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
     }),
   )
   const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
-  const editorUrl = `${app}/${slug}/website/editor/${home!.id}`
+  const editor = editorUrl(slug, home!.id)
   const draft = async () =>
     JSON.stringify(
       (
@@ -107,7 +92,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
   const canvasOf = (p: Page) => p.frameLocator('#preview-frame').first()
 
   await test.step('autosave: an edit is saved about 2 s later and is there after a reload', async () => {
-    await page.goto(editorUrl)
+    await page.goto(editor)
     await expect(canvasOf(page).getByRole('heading', { name: 'About our spa' })).toBeVisible({
       timeout: 30_000,
     })
@@ -124,7 +109,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
   // The second super-admin signs in up front: the first editor's lock heartbeat (30 s) must not learn about the
   // take-over before its own save is refused (last step), and a first-time admin sign-in alone can take ~20 s.
   const other = await (await browser.newContext()).newPage()
-  await adminOnApp(other, `/${slug}/website`)
+  await signInPlatformAdmin(other)
 
   await test.step('offline: changes are kept on the device and offered back after a crash', async () => {
     await page.context().setOffline(true)
@@ -138,7 +123,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
     await page.close()
     page = await page.context().newPage()
     await page.context().setOffline(false)
-    await page.goto(editorUrl)
+    await page.goto(editor)
     const banner = page.getByRole('region', { name: 'Unsaved changes found' })
     await expect(banner).toContainText('were kept on this device', { timeout: 30_000 })
     await banner.getByRole('button', { name: 'Restore' }).click()
@@ -148,7 +133,7 @@ test('studio editor: autosave, local copy after a crash, editing lock + take ove
   })
 
   await test.step('a second super-admin sees who is editing (view only) and takes over', async () => {
-    await other.goto(editorUrl)
+    await other.goto(editor)
     const lock = other.getByRole('region', { name: 'Editing lock' })
     await expect(lock).toContainText('Ahmed Saleh is editing this page — view only', { timeout: 30_000 })
     await expect(status(other)).toHaveText('View only')

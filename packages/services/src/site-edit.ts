@@ -210,7 +210,7 @@ export async function runSiteEdit(
   if (!site)
     return {
       ok: false,
-      errors: ['This spa has no website yet — choose a template in the Website Studio first'],
+      errors: ['This spa has no website yet — choose a template in the console (Websites) first'],
     }
   const startTheme = editingTheme(site) as Record<string, unknown>
   let theme: Record<string, unknown> | null = null
@@ -503,7 +503,6 @@ async function dropAddedDraft(
 
 export type SiteEditView = {
   templateKey: string
-  studioStatus: string
   /** The theme the drafts are edited with (draft theme when one is pending). */
   theme: ThemeTokens
   themeIsDraft: boolean
@@ -562,7 +561,6 @@ export async function getSiteForEdit(
   }
   return {
     templateKey: site.templateKey,
-    studioStatus: site.studioStatus,
     theme: editingTheme(site),
     themeIsDraft: site.themeDraft !== null,
     pages,
