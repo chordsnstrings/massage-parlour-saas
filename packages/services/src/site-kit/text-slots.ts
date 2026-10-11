@@ -73,13 +73,29 @@ export function textSlots(data: unknown, schema: SiteEditSchema, opts: { maxPerP
 }
 
 /**
- * Plain text for a slot: no tags, angle brackets or control characters, single spaces (paragraph breaks kept when
- * multiline). Tags go first (linear: `[^<>]`), then any `<` / `>` left over, so nothing tag-like survives.
+ * Drops `<…>` tags and every stray `<` / `>` in one linear pass, so nothing tag-like survives (an unclosed `<` loses
+ * only itself). No regex: a tag-stripping pattern can be fooled by nesting (`<scr<script>ipt>`).
  */
+function stripTags(s: string) {
+  let out = ''
+  let i = 0
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '<') {
+      let j = i + 1
+      while (j < s.length && s[j] !== '<' && s[j] !== '>') j++
+      i = s[j] === '>' ? j + 1 : i + 1
+    } else {
+      if (c !== '>') out += c
+      i++
+    }
+  }
+  return out
+}
+
+/** Plain text for a slot: no tags, angle brackets or control characters, single spaces (paragraph breaks kept when multiline). */
 export function plainText(s: string, multiline: boolean) {
-  let t = s
-    .replace(/<[^<>]*>/g, '')
-    .replace(/[<>]/g, '')
+  let t = stripTags(s)
     // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
     .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
   t = multiline
