@@ -26,7 +26,7 @@ import { tr, ui } from './i18n'
 import { pageHref } from './links'
 import { loadPublished, siteJsonLd, type Tenant } from './published'
 import type { AdvancedProps } from './style'
-import type { Bi, Locale, SiteMeta, SitePostView } from './types'
+import type { Bi, SiteMeta, SitePostView } from './types'
 
 /** Which public site is rendering (the enquiry form posts it back; custom domains follow the Turnstile switch). */
 export type SiteKey = { slug: string } | { hostname: string }

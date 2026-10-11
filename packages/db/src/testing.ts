@@ -29,4 +29,11 @@ export async function resetTestDatabase() {
     const list = rows.map((r) => `"${r.tablename}"`).join(', ')
     await owner.execute(sql.raw(`truncate ${list} restart identity cascade`))
   }
+  // `restart identity` only resets sequences owned by a column; standalone ones (platform_invoice_seq) would otherwise
+  // keep counting across runs (tests read invoice numbers as SM-YYYY-NNNN).
+  const seqs = await owner.execute<{ sequencename: string }>(
+    sql`select sequencename from pg_sequences where schemaname = 'public'`,
+  )
+  for (const { sequencename } of seqs.rows)
+    await owner.execute(sql.raw(`alter sequence "${sequencename}" restart`))
 }
