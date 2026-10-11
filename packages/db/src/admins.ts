@@ -52,11 +52,13 @@ export async function grantListedPlatformAdmins(db: DbOrTx, emails: string[], on
  */
 export const siteAiEditorEmails = (raw = process.env.SITE_AI_EDITOR_EMAILS ?? '') => listedAdminEmails(raw)
 
-export type SiteAiEditorStatus = 'ok' | 'not_listed' | 'not_admin' | 'needs2fa'
+export type SiteAiEditorStatus = 'ok' | 'not_listed' | 'unverified' | 'not_admin' | 'needs2fa'
 
 /**
- * Read fresh on every use (no cache) so removing an email, the super-admin row or 2FA cuts access at once:
- * allowed only for a listed (or `*`), VERIFIED email that is also a super-admin with TOTP 2FA on (isPlatformAdmin).
+ * Read fresh on every use (no cache) so removing an email, the super-admin row or 2FA cuts access at once.
+ * `*` (every super-admin, the production default): a super-admin with TOTP 2FA on — the console's own rule
+ * (isPlatformAdmin). A named list: the email must be on it AND verified (an unverified sign-up can't borrow a listed
+ * address), plus super-admin + 2FA.
  */
 export async function siteAiEditorStatus(
   db: DbOrTx,
@@ -73,8 +75,11 @@ export async function siteAiEditorStatus(
     .from(user)
     .leftJoin(platformAdmins, eq(platformAdmins.userId, user.id))
     .where(eq(user.id, userId))
-  if (!row?.verified || !(emails.includes('*') || emails.includes(row.email.toLowerCase())))
-    return 'not_listed'
+  if (!row) return 'not_listed'
+  if (!emails.includes('*')) {
+    if (!emails.includes(row.email.toLowerCase())) return 'not_listed'
+    if (!row.verified) return 'unverified'
+  }
   if (!row.admin) return 'not_admin'
   return row.twoFactor ? 'ok' : 'needs2fa'
 }

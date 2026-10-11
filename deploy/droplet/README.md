@@ -139,8 +139,9 @@ host later means adding it to `packages/core/src/security-headers.ts`.
 
 1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to `*`: every super-admin (owner, 2026-10-11); a comma-separated
    list in `/opt/spa/.env.base` (first-boot env, needs SSH) or the secrets overlay narrows it (`/opt/spa/.env` itself
-   is regenerated on every deploy, so an edit there is lost). Each account must be a super-admin with a verified email
-   and two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
+   is regenerated on every deploy, so an edit there is lost). Each account must be a super-admin with two-step
+   verification on (a named list also needs a verified email). Empty = nobody (Studio "Ask AI" is off too). The
+   consent page names the exact reason when an account can't connect.
 2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
    "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
    with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.

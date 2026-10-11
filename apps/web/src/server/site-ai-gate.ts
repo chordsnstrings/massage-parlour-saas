@@ -5,11 +5,13 @@ import { aiFixturesOn } from '@/server/ai-fixture'
 
 /*
  * Prompt site editing (Studio Ask AI, R23 Write texts; Claude MCP has the same rule in /api/mcp): only
- * SITE_AI_EDITOR_EMAILS super-admins with a verified email and 2FA, re-checked on every action.
+ * SITE_AI_EDITOR_EMAILS super-admins with 2FA (`*` = every super-admin; a named list also needs a verified email),
+ * re-checked on every action.
  */
 
 export const NOT_ENABLED: Record<Exclude<SiteAiEditorStatus, 'ok'>, string> = {
   not_listed: 'AI site editing isn’t enabled for your account.',
+  unverified: 'AI site editing needs a verified email address on your account.',
   not_admin: 'AI site editing needs a super-admin account.',
   needs2fa: 'Turn on two-factor authentication to use AI site editing.',
 }
