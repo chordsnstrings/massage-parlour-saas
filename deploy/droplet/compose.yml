@@ -18,9 +18,9 @@ x-app-env: &app-env
   # Owner, 2026-10-09: the droplet's base value (ahmed@arks.ae) + two more super-admins, appended here because the base
   # env can't be edited without SSH. listedAdminEmails() drops empty segments and duplicates. Keep in sync with migrate.
   PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-},ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com
-  # Studio Ask AI + Claude MCP connector (/api/mcp): only these super-admins (verified email + 2FA). Owner, 2026-10-09:
-  # exactly the two added admins by default; a value in /opt/spa/.env.base or the secrets overlay replaces it.
-  SITE_AI_EDITOR_EMAILS: ${SITE_AI_EDITOR_EMAILS:-ahmedabouseif1997@gmail.com,sefohh.aa45@gmail.com}
+  # Studio Ask AI + Claude MCP connector (/api/mcp): `*` = every super-admin (verified email + 2FA; owner, 2026-10-11);
+  # a comma-separated list in /opt/spa/.env.base or the secrets overlay narrows it to those super-admins.
+  SITE_AI_EDITOR_EMAILS: ${SITE_AI_EDITOR_EMAILS:-*}
   BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
   APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
   ARK_API_KEY: ${ARK_API_KEY:-}

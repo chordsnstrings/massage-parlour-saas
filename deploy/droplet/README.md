@@ -137,10 +137,10 @@ host later means adding it to `packages/core/src/security-headers.ts`.
 
 ## Connect Claude (edit spa sites from Claude)
 
-1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to the two owner-chosen super-admins `ahmedabouseif1997@gmail.com`
-   and `sefohh.aa45@gmail.com`; a value in `/opt/spa/.env.base` (first-boot env, needs SSH) or the secrets overlay
-   replaces it (comma-separated; `/opt/spa/.env` itself is regenerated on every deploy, so an edit there is lost).
-   Those accounts must be super-admins with two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
+1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to `*`: every super-admin (owner, 2026-10-11); a comma-separated
+   list in `/opt/spa/.env.base` (first-boot env, needs SSH) or the secrets overlay narrows it (`/opt/spa/.env` itself
+   is regenerated on every deploy, so an edit there is lost). Each account must be a super-admin with a verified email
+   and two-step verification on. Empty = nobody (Studio "Ask AI" is off too).
 2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
    "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
    with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
@@ -390,9 +390,8 @@ python3 deploy/droplet/render-user-data.py /path/to/secrets.env > /tmp/user_data
 The secrets file needs these keys:
 - `BRANCH`, `REPO_URL`, `SITE_HOST=auto`
 - `PLATFORM_ADMIN_EMAILS`, `ACME_EMAIL`, `STATUS_PASSWORD`
-- optional `SITE_AI_EDITOR_EMAILS` (Studio "Ask AI" + the Claude connector): unset = compose's default, the two
-  owner-chosen super-admins (see "Super-admins"); each must be a super-admin with 2FA; set it to replace the list;
-  removing an address cuts access on the next request
+- optional `SITE_AI_EDITOR_EMAILS` (Studio "Ask AI" + the Claude connector): unset = compose's default `*`, every
+  super-admin (with 2FA); set a comma-separated list to narrow it; removing an address cuts access on the next request
 - `POSTGRES_SUPERUSER_PASSWORD`, `SPA_OWNER_PASSWORD`, `SPA_PLATFORM_PASSWORD`, `SPA_APP_PASSWORD`
 - optional `SPA_DRILL_PASSWORD` (restore-drill role `spa_drill`; unset = derived from `SPA_OWNER_PASSWORD`)
 - `BETTER_AUTH_SECRET`, `APP_ENCRYPTION_KEY`, `ARK_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`

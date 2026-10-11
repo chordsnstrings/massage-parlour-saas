@@ -527,5 +527,11 @@ describe('SITE_AI_EDITOR_EMAILS allow-list', () => {
     expect(await siteAiEditorStatus(platform, owner)).toBe('ok')
     process.env.SITE_AI_EDITOR_EMAILS = ''
     expect(await siteAiEditorStatus(platform, owner)).toBe('not_listed')
+    // `*` = every super-admin; verified email, the super-admin row and 2FA still required.
+    process.env.SITE_AI_EDITOR_EMAILS = '*'
+    expect(await siteAiEditorStatus(platform, other)).toBe('ok')
+    expect(await siteAiEditorStatus(platform, no2fa)).toBe('needs2fa')
+    expect(await siteAiEditorStatus(platform, plain)).toBe('not_admin')
+    expect(await siteAiEditorStatus(platform, unverified)).toBe('not_listed')
   })
 })

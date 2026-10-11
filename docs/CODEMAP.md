@@ -538,7 +538,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   robots, extractor fixture `test/fixtures/spa-site.html`, ops → draft page), `packages/ai/test/site-edit.test.ts`,
   e2e `site-import.spec.ts`.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
-  Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed verified email + super-admin +
+  Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed (or `*`) verified email + super-admin +
   2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
   (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
   reverts the newest.
