@@ -13,7 +13,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # R24: the e2e suite (129 tests on one worker, incl. the HTML design fidelity / 4.6 MB upload proofs) needs
+    # ~23 min on the 2-vCPU runner after ~6 min of install, unit tests and build.
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16-alpine

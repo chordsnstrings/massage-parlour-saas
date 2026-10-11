@@ -1,7 +1,7 @@
 'use client'
-// R24: "Upload HTML" (≤ 5 MB) and "Import JSON" (≤ 2 MB) post to the /files/templates route handler instead of a
-// server action (whose request bodies are capped at 1 MB). The size is checked here first, so a file that is too large
-// never leaves the browser and never ends on the generic error page.
+// R24: "Upload HTML" (≤ 5 MB) and "Import JSON" (≤ 11 MB: an export inlines its designs) post to the /files/templates
+// route handler instead of a server action (whose request bodies are capped at 1 MB). The size is checked here first,
+// so a file that is too large never leaves the browser and never ends on the generic error page.
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { FormSheet } from '@/components/ui/form-sheet'

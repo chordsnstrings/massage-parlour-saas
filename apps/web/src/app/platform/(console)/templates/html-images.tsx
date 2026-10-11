@@ -134,7 +134,7 @@ export function HtmlImageAdjuster({
   const [adjust, setAdjust] = useState<Adjusts>(() => toMap(initial))
   const [spa, setSpa] = useState(spas[0]?.slug ?? '')
   const [width, setWidth] = useState<360 | 1280>(360)
-  const list = images.flatMap((i) => (adjust[i.id] ? [adjust[i.id]!] : []))
+  const list = useMemo(() => images.flatMap((i) => (adjust[i.id] ? [adjust[i.id]!] : [])), [images, adjust])
 
   const update = (img: HtmlDesignImage, patch: Partial<HtmlImageAdjust> | null) =>
     setAdjust((all) => {
@@ -230,7 +230,10 @@ function ImageCard({
       <p className="flex items-center gap-2 text-[13px]">
         <span className="font-medium">{label}</span>
         <span className="text-muted">{image.kind === 'bg' ? 'background' : 'image'}</span>
-        <span className="min-w-0 flex-1 truncate text-muted" title={image.src}>
+        <span
+          className="min-w-0 flex-1 truncate text-muted"
+          title={image.src.startsWith('data:') ? undefined : image.src}
+        >
           {image.src.startsWith('data:') ? 'embedded' : image.src}
         </span>
       </p>
@@ -386,6 +389,11 @@ function Preview({
   }, [])
   const scale = Math.min(1, room / width)
   const height = 520
+  // A design can be 5 MB: built once per change, not on every resize.
+  const doc = useMemo(
+    () => htmlDesignDocument(html, {}, true, adjust, {}, { phoneFixes }),
+    [html, adjust, phoneFixes],
+  )
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
@@ -407,7 +415,7 @@ function Preview({
         <HtmlDesignFrame
           title="Design preview"
           data-testid="html-images-preview"
-          html={htmlDesignDocument(html, {}, true, adjust, {}, { phoneFixes })}
+          html={doc}
           sandbox="allow-scripts"
           style={{ width, height, border: 0, transform: `scale(${scale})`, transformOrigin: '0 0' }}
         />

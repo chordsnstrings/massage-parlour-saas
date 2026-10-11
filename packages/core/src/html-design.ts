@@ -61,11 +61,16 @@ export const MAX_HTML_UPLOAD_BYTES = 5 * 1024 * 1024
  */
 export type HtmlDesignDoc = { file: string; sha256: string; bytes: number; chars: number }
 
-/** The block's design file reference, or null (inline / legacy design). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** A design document's file id: a stored / template file UUID (anything else reads as no document, never a query). */
+export const isHtmlDesignDocFile = (file: unknown): file is string =>
+  typeof file === 'string' && UUID.test(file)
+
+/** The block's design file reference, or null (inline / legacy design, or a malformed reference). */
 export function htmlDesignDocOf(props: Record<string, unknown> | null | undefined): HtmlDesignDoc | null {
   const d = props?.doc as Partial<HtmlDesignDoc> | null | undefined
   return d &&
-    typeof d.file === 'string' &&
+    isHtmlDesignDocFile(d.file) &&
     typeof d.sha256 === 'string' &&
     /^[0-9a-f]{64}$/.test(d.sha256) &&
     typeof d.bytes === 'number' &&
@@ -481,6 +486,12 @@ export type HtmlAttr = { name: string; start: number; end: number }
  * `start` = -1 for an attribute without a value. The parser keeps the first of duplicate attributes, so do we.
  */
 export function attributesOf(src: string, j: number): HtmlAttr[] {
+  const seen = new Set<string>()
+  return allAttributes(src, j).filter((a) => !seen.has(a.name) && seen.add(a.name))
+}
+
+/** Every attribute of a tag in source order, duplicates included (each is tokenized, even if the parser drops it). */
+function allAttributes(src: string, j: number): HtmlAttr[] {
   const out: HtmlAttr[] = []
   const n = src.length
   while (j < n) {
@@ -515,22 +526,26 @@ export function attributesOf(src: string, j: number): HtmlAttr[] {
       j = k
     }
   }
-  const seen = new Set<string>()
-  return out.filter((a) => !seen.has(a.name) && seen.add(a.name))
+  return out
 }
 
 /**
  * How a `{{placeholder}}` at a position is filled (R24 review): `link` = plain page text (`{{address}}` may become a
- * maps link), `js` = a JavaScript / JSON script body (the value as JS-string text), `jsattr` = an `on…` handler
- * attribute (JS-string text, then HTML-escaped), `css` = a <style> body (CSS-string text), `skip` = never filled
- * (comments, doctypes, client-side templates in `<script type="text/x-…">` and other non-JS script types). Anything
- * else (attribute values, title/textarea, text inside <a>/<select>/<button>) = the HTML-escaped value.
+ * maps link), `js` = a JavaScript / JSON script body, `jsattr` = an `on…` handler attribute, `jsurl` = a URL attribute
+ * (script only when it is a `javascript:` URL), `css` = a <style> body, `cssattr` = a style attribute, `attr` = inside
+ * a tag outside quoted values (names, unquoted values), `skip` = never filled (comments, doctypes, client-side
+ * templates in `<script type="text/x-…">` and other non-JS script types). Anything else (quoted attribute values,
+ * title/textarea, text inside <a>/<select>/<button>) = the HTML-escaped value.
  */
-type FillCtx = 'link' | 'js' | 'jsattr' | 'css' | 'skip'
+type FillCtx = 'link' | 'js' | 'jsattr' | 'jsurl' | 'css' | 'cssattr' | 'attr' | 'skip'
+/** `[start, end, ctx, quoted]` — `quoted` only for attribute values (false = unquoted). */
+type FillSpan = [number, number, FillCtx, boolean?]
 
 /** Script types whose body is JavaScript or JSON (JSX / TypeScript for in-browser transpilers too). */
 const JS_SCRIPT =
   /^(?:|module|importmap|speculationrules|text\/(?:javascript|ecmascript|jscript|livescript|babel|jsx|typescript)|application\/(?:javascript|ecmascript|x-javascript|x-ecmascript|json|[\w.-]+\+json))$/
+/** Attributes whose value is a URL that may be `javascript:`. */
+const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href'])
 
 const attrValue = (src: string, a: HtmlAttr | undefined) =>
   a && a.start >= 0 ? decode(src.slice(a.start, a.end)) : ''
@@ -539,8 +554,8 @@ const attrValue = (src: string, a: HtmlAttr | undefined) =>
  * `[start, end, ctx]` spans of the document in order (tokenized quote-aware like the HTML parser: `>` inside an
  * attribute value doesn't end a tag); positions outside every span are the default (HTML-escaped value).
  */
-function fillSpans(src: string): Array<[number, number, FillCtx]> {
-  const spans: Array<[number, number, FillCtx]> = []
+function fillSpans(src: string): FillSpan[] {
+  const spans: FillSpan[] = []
   const open = new Map<string, number>()
   const n = src.length
   let text = 0
@@ -577,9 +592,28 @@ function fillSpans(src: string): Array<[number, number, FillCtx]> {
     endText(lt)
     const name = tag[2]!.toLowerCase()
     const nameEnd = lt + tag[0].length
-    const attrs = tag[1] ? [] : attributesOf(src, nameEnd)
-    for (const a of attrs) if (a.start >= 0 && a.name.startsWith('on')) spans.push([a.start, a.end, 'jsattr'])
+    const attrs = tag[1] ? [] : allAttributes(src, nameEnd)
     i = text = tagEnd(src, nameEnd)
+    // The tag itself: names / `=` / unquoted values can't take a value with spaces or quotes (`attr`); handler,
+    // URL and style values have their own context; quoted plain values are the default.
+    let from = lt
+    for (const a of attrs) {
+      if (a.start < 0) continue
+      const quoted = src[a.start - 1] === '"' || src[a.start - 1] === "'"
+      const ctx: FillCtx | null = a.name.startsWith('on')
+        ? 'jsattr'
+        : URL_ATTRS.has(a.name)
+          ? 'jsurl'
+          : a.name === 'style'
+            ? 'cssattr'
+            : quoted
+              ? null
+              : 'attr'
+      if (a.start > from) spans.push([from, a.start, 'attr'])
+      if (ctx) spans.push([a.start, a.end, ctx, quoted])
+      from = a.end
+    }
+    if (i > from) spans.push([from, i, 'attr'])
     if (NO_LINK.has(name)) open.set(name, Math.max(0, (open.get(name) ?? 0) + (tag[1] ? -1 : 1)))
     if (tag[1] || !RAW_TEXT.has(name)) continue
     if (name === 'plaintext') return spans // the rest of the document is raw text
@@ -602,6 +636,215 @@ function fillSpans(src: string): Array<[number, number, FillCtx]> {
   return spans
 }
 
+/** Reads whether the end of the text fed so far (in order, in pieces) is inside a string. */
+type StringScan = { feed: (s: string) => void; inString: () => boolean }
+
+/** Words after which a `/` starts a regular expression (after any other word or value it divides). */
+const JS_REGEX_AFTER = new Set([
+  'return',
+  'typeof',
+  'instanceof',
+  'in',
+  'of',
+  'new',
+  'delete',
+  'void',
+  'throw',
+  'case',
+  'do',
+  'else',
+  'yield',
+  'await',
+])
+const JS_WORD = /[\p{L}\p{N}_$]/u
+
+/**
+ * JavaScript / JSON: inside a string literal or a template literal's text? The usual tokenizer heuristics (a `/` after
+ * a value divides, else starts a regular expression; `<!--` / line-start `-->` comments as in classic scripts).
+ */
+function jsScan(): StringScan {
+  // 0 code, 1 '…', 2 "…", 3 `…` text, 4 line comment, 5 block comment, 6 regex, 7 regex [class]
+  let mode = 0
+  let regexOk = true
+  let lineStart = true
+  let depth = 0
+  const subs: number[] = [] // brace depth of each open `${`
+  const feed = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i]!
+      const nl = c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029'
+      if (nl) lineStart = true
+      if (mode === 1 || mode === 2) {
+        if (c === '\\') i++
+        else if (c === (mode === 1 ? "'" : '"')) {
+          mode = 0
+          regexOk = false
+        } else if (nl) mode = 0
+        continue
+      }
+      if (mode === 3) {
+        if (c === '\\') i++
+        else if (c === '`') {
+          mode = 0
+          regexOk = false
+        } else if (c === '$' && s[i + 1] === '{') {
+          subs.push(depth++)
+          i++
+          mode = 0
+          regexOk = true
+        }
+        continue
+      }
+      if (mode === 4) {
+        if (nl) mode = 0
+        continue
+      }
+      if (mode === 5) {
+        if (c === '*' && s[i + 1] === '/') {
+          mode = 0
+          i++
+        }
+        continue
+      }
+      if (mode >= 6) {
+        if (c === '\\') i++
+        else if (nl) mode = 0
+        else if (mode === 6 && c === '/') {
+          mode = 0
+          regexOk = false
+        } else if (c === '[') mode = 7
+        else if (c === ']') mode = 6
+        continue
+      }
+      if (nl || isWs(c) || c === '\v' || c === '\u00a0' || c === '\ufeff') continue
+      const atLineStart = lineStart
+      lineStart = false
+      if (c === "'") mode = 1
+      else if (c === '"') mode = 2
+      else if (c === '`') mode = 3
+      else if (c === '/' && (s[i + 1] === '/' || s[i + 1] === '*')) {
+        mode = s[i + 1] === '/' ? 4 : 5
+        lineStart = atLineStart
+        i++
+      } else if (c === '<' && s.startsWith('!--', i + 1)) {
+        mode = 4
+        i += 3
+      } else if (c === '-' && atLineStart && s.startsWith('->', i + 1)) {
+        mode = 4
+        i += 2
+      } else if (c === '/') {
+        if (regexOk) mode = 6
+        else regexOk = true
+      } else if (JS_WORD.test(c)) {
+        let j = i + 1
+        while (j < s.length && JS_WORD.test(s[j]!)) j++
+        regexOk = JS_REGEX_AFTER.has(s.slice(i, j))
+        i = j - 1
+      } else if (c === '}') {
+        depth = Math.max(0, depth - 1)
+        if (subs.length && subs[subs.length - 1] === depth) {
+          subs.pop()
+          mode = 3
+        } else regexOk = true
+      } else {
+        if (c === '{') depth++
+        regexOk = c !== ')' && c !== ']'
+      }
+    }
+  }
+  return { feed, inString: () => mode >= 1 && mode <= 3 }
+}
+
+/** CSS: inside a string? (comments and unquoted `url(…)` hold no strings.) */
+function cssScan(): StringScan {
+  // 0 normal, 1 string, 2 comment, 3 unquoted url(…), 4 right after `url(`
+  let mode = 0
+  let quote = ''
+  let ident = ''
+  const feed = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i]!
+      if (mode === 1) {
+        if (c === '\\') i++
+        else if (c === quote || c === '\n' || c === '\r' || c === '\f') mode = 0
+        continue
+      }
+      if (mode === 2) {
+        if (c === '*' && s[i + 1] === '/') {
+          mode = 0
+          i++
+        }
+        continue
+      }
+      if (mode === 4) {
+        if (isWs(c)) continue
+        mode = c === '"' || c === "'" ? 0 : 3
+      }
+      if (mode === 3) {
+        if (c === '\\') i++
+        else if (c === ')') mode = 0
+        continue
+      }
+      if (c === '"' || c === "'") {
+        quote = c
+        mode = 1
+      } else if (c === '/' && s[i + 1] === '*') {
+        mode = 2
+        i++
+      } else if (c === '(') mode = ident.toLowerCase() === 'url' ? 4 : 0
+      if (c === '\\') {
+        ident += c
+        i++
+      } else ident = /[\w-]/.test(c) || c.charCodeAt(0) > 0x7f ? ident + c : ''
+    }
+  }
+  return { feed, inString: () => mode === 1 }
+}
+
+/** Character references that can change how script / CSS / URL text in an attribute tokenizes (others stay). */
+const REFS: Record<string, string> = {
+  amp: '&',
+  quot: '"',
+  apos: "'",
+  lt: '<',
+  gt: '>',
+  bsol: '\\',
+  sol: '/',
+  ast: '*',
+  midast: '*',
+  grave: '`',
+  dollar: '$',
+  lcub: '{',
+  lbrace: '{',
+  rcub: '}',
+  rbrace: '}',
+  lpar: '(',
+  rpar: ')',
+  lsqb: '[',
+  lbrack: '[',
+  rsqb: ']',
+  rbrack: ']',
+  colon: ':',
+  semi: ';',
+  percnt: '%',
+  newline: '\n',
+  tab: '\t',
+}
+/** An attribute value's text as the parser hands it on (character references decoded). */
+const decodeRefs = (s: string) =>
+  s.includes('&')
+    ? s.replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z]{2,8}));?/g, (m, dec, hex, name: string) => {
+        if (!dec && !hex) return REFS[name.toLowerCase()] ?? m
+        const cp = Number.parseInt(dec ?? hex, dec ? 10 : 16)
+        return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m
+      })
+    : s
+/** A `javascript:` URL runs its percent-decoded text, after the URL parser dropped tabs and newlines. */
+const urlScript = (s: string) =>
+  s
+    .replace(/[\t\n\r]/g, '')
+    .replace(/%([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(Number.parseInt(h, 16)))
+
 /** Escapes every character `special` accepts (and every control character) as `esc(code)`. */
 function escapeChars(s: string, special: string, esc: (code: number) => string) {
   let out = ''
@@ -611,13 +854,24 @@ function escapeChars(s: string, special: string, esc: (code: number) => string) 
   }
   return out
 }
-/** The value as the text of a JS (or JSON) string literal of any quote style; never ends a <script>. */
-const jsText = (s: string) =>
-  escapeChars(s, '\\"\'`$<>&\u2028\u2029', (n) =>
-    n === 92 ? '\\\\' : `\\u${n.toString(16).padStart(4, '0')}`,
-  )
+const jsEscape = (n: number) => (n === 92 ? '\\\\' : `\\u${n.toString(16).padStart(4, '0')}`)
+/** The value as the text of a JS (or JSON) string literal of any quote style; never ends a <script> or opens `${`. */
+const jsText = (s: string, extra = '') => escapeChars(s, `\\"'\`$<>&{\u2028\u2029${extra}`, jsEscape)
+/**
+ * Outside a string (code, or a comment / regular expression a scan can't always tell from code): a double-quoted
+ * JS / JSON string literal — no quote, `*`, `/` or line break of it can end a comment or a regex.
+ */
+const jsLiteral = (s: string, extra = '') => `"${jsText(s, `/*${extra}`)}"`
 /** The value as the text of a CSS string (hex escapes); never ends a <style>. */
 const cssText = (s: string) => escapeChars(s, '\\"\'<>&', (n) => `\\${n.toString(16)} `)
+/** Outside a CSS string: every character but ASCII letters and digits hex-escaped (no `;`, `:`, `}` or comment end). */
+const cssEscapeAll = (s: string) => {
+  let out = ''
+  for (const c of s) out += /[A-Za-z0-9]/.test(c) ? c : `\\${c.codePointAt(0)!.toString(16)} `
+  return out
+}
+/** An unquoted attribute value (or a tag outside values): no space, `=`, quote, backtick, `<` or `>` left as is. */
+const attrText = (s: string) => escapeChars(escapeHtml(s), ' =', (n) => `&#${n};`)
 
 /** Hosts of embeds the design's sandbox inherits (they run in an opaque origin too): see htmlDesignEmbedHosts. */
 const EMBED_SCRIPT_HOST =
@@ -631,7 +885,7 @@ const EMBED_SCRIPT_HOST =
  */
 export function htmlDesignEmbedHosts(html: string): string[] {
   const hosts = new Set<string>()
-  const spans = fillSpans(html).filter((sp) => sp[2] !== 'link' && sp[2] !== 'jsattr')
+  const spans = fillSpans(html).filter((sp) => sp[2] === 'js' || sp[2] === 'css' || sp[2] === 'skip')
   let k = 0
   for (const m of html.matchAll(/<(iframe|embed|object|script)\b/gi)) {
     while (k < spans.length && spans[k]![1] <= m.index) k++
@@ -706,26 +960,65 @@ export function htmlDesignDocument(
   const adjusted = applyHtmlImageAdjustments(fixes ? fluidImages(html).html : html, images)
   const spans = adjusted.includes('{{') ? fillSpans(adjusted) : []
   let k = 0
-  const ctxAt = (at: number): FillCtx | 'html' => {
+  const spanAt = (at: number) => {
     while (k < spans.length && spans[k]![1] <= at) k++
-    return k < spans.length && spans[k]![0] <= at ? spans[k]![2] : 'html'
+    return k < spans.length && spans[k]![0] <= at ? spans[k]! : null
+  }
+  // Script / CSS text of the span being filled, scanned up to the last placeholder (each filled one fed as `0`: a
+  // value token in code, a plain character in a string). `scan` null = a URL value that isn't `javascript:`.
+  let lexed: { span: FillSpan; pos: number; scan: StringScan | null } | null = null
+  const inString = (span: FillSpan, at: number, len: number): boolean | null => {
+    const [start, , ctx] = span
+    const raw = ctx === 'js' || ctx === 'css'
+    const text = (piece: string) =>
+      raw ? piece : ctx === 'jsurl' ? urlScript(decodeRefs(piece)) : decodeRefs(piece)
+    if (lexed?.span !== span) {
+      lexed = { span, pos: start, scan: ctx === 'css' || ctx === 'cssattr' ? cssScan() : jsScan() }
+      if (ctx === 'jsurl') {
+        const head = text(adjusted.slice(start, at))
+        let lead = 0
+        while (lead < head.length && head.charCodeAt(lead) <= 0x20) lead++
+        if (head.slice(lead, lead + 11).toLowerCase() !== 'javascript:') lexed.scan = null
+        else lexed.scan!.feed(head.slice(lead + 11))
+        lexed.pos = at
+      }
+    }
+    const scan = lexed.scan
+    if (!scan) return null
+    if (at > lexed.pos) scan.feed(text(adjusted.slice(lexed.pos, at)))
+    const r = scan.inString()
+    scan.feed('0')
+    lexed.pos = at + len
+    return r
   }
   let spliced = false
-  // Matches come in document order, so `ctxAt` walks the spans once.
+  // Matches come in document order, so `spanAt` walks the spans once.
   const filled = adjusted.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, key: string, at: number) => {
     if (!(key in values)) return m
     const value = values[key]!
-    const ctx = ctxAt(at)
+    const span = spanAt(at)
+    const ctx = span?.[2] ?? 'html'
     if (ctx === 'skip') return m
-    if (ctx === 'js') return jsText(value)
-    if (ctx === 'jsattr') return escapeHtml(jsText(value))
-    if (ctx === 'css') return cssText(value)
+    // HTML-escaping of an attribute value (unquoted: no space, `=` or quote either).
+    const attr = (s: string) => (span?.[3] === false ? attrText(s) : escapeHtml(s))
+    if (ctx === 'attr') return attrText(value)
+    if (ctx === 'js') return inString(span!, at, m.length) ? jsText(value) : jsLiteral(value)
+    if (ctx === 'jsattr') return attr(inString(span!, at, m.length) ? jsText(value) : jsLiteral(value))
+    if (ctx === 'jsurl') {
+      // Percent signs too: the URL is percent-decoded before it runs.
+      const str = inString(span!, at, m.length)
+      return attr(str === null ? value : str ? jsText(value, '%') : jsLiteral(value, '%'))
+    }
+    if (ctx === 'css') return inString(span!, at, m.length) ? cssText(value) : cssEscapeAll(value)
+    if (ctx === 'cssattr') return attr(inString(span!, at, m.length) ? cssText(value) : cssEscapeAll(value))
     const link = links[key]
     if (ctx === 'link' && link?.href && SAFE_HREF.test(link.href)) {
       spliced = true
       return linkHtml(value, link)
     }
-    return escapeHtml(value)
+    // Right after a `<`, the value must not start a tag.
+    const text = escapeHtml(value)
+    return adjusted[at - 1] === '<' ? text.replace(/^[a-z/!?]/i, (c) => `&#${c.charCodeAt(0)};`) : text
   })
   const shim = `<script>${HTML_DESIGN_COMPAT_SHIM}</script>`
   const head =

@@ -11,7 +11,7 @@ import {
   refreshInstagramAccessTokens,
   replyToInstagramMessages,
 } from './instagram'
-import { pruneExpiredAiImages } from './media'
+import { pruneExpiredAiImages, pruneUnusedHtmlDesigns } from './media'
 import {
   notifyAiDrafts,
   notifyBilling,
@@ -48,6 +48,7 @@ export const jobs: JobDef[] = [
   { name: 'packages-expire', cron: '10 4 * * *', handler: () => expireAllPackages() },
   { name: 'memberships-renew', cron: '25 4 * * *', handler: () => renewAllMemberships() },
   { name: 'media-prune-ai', cron: '40 4 * * *', handler: () => pruneExpiredAiImages() },
+  { name: 'html-design-docs-prune', cron: '45 4 * * *', handler: () => pruneUnusedHtmlDesigns() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
   { name: 'verify-custom-domains', cron: '*/10 * * * *', handler: () => verifyCustomDomains() },
   { name: 'instagram-publish', cron: '*/5 * * * *', handler: () => publishScheduledInstagramPosts() },

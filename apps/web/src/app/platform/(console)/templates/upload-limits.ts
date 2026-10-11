@@ -3,8 +3,8 @@
 import { MAX_HTML_UPLOAD_BYTES } from '@spa/core'
 
 export { MAX_HTML_UPLOAD_BYTES }
-/** Same as @spa/services MAX_TEMPLATE_BYTES (client code doesn't import the services). */
-export const MAX_TEMPLATE_JSON_BYTES = 2 * 1024 * 1024
+/** Same as @spa/services MAX_TEMPLATE_FILE_BYTES (client code doesn't import the services): an export inlines its designs. */
+export const MAX_TEMPLATE_JSON_BYTES = 2 * MAX_HTML_UPLOAD_BYTES + 1024 * 1024
 
 const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`
 

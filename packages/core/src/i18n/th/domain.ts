@@ -308,4 +308,7 @@ export const domain: Messages['errors']['domain'] = {
   htmlDesignTooLarge: 'ดีไซน์มีขนาด {size} MB (ข้อความ UTF-8) เกินขีดจำกัด {limit} MB',
   templateDesignMissing: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้',
   templateDesignMissingUpload: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้ — อัปโหลดใหม่อีกครั้ง',
+  htmlDesignDailyLimit: 'สปานี้ใช้โควตาดีไซน์ HTML ใหม่ครบ {limit} MB ของวันนี้แล้ว — ลองใหม่พรุ่งนี้',
+  templateImportNoDesign: 'ดีไซน์ HTML ในไฟล์นี้ไม่มีเนื้อหา — ส่งออกเทมเพลตใหม่อีกครั้ง',
+  templateTooLargeAsFiles: 'เทมเพลตมีขนาดใหญ่เกินไปเมื่อเก็บดีไซน์ HTML เป็นไฟล์แล้ว (สูงสุด {limit} MB)',
 }

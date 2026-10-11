@@ -451,7 +451,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
 - **HTML designs (R17, R24)**: `/platform/templates` "Upload HTML" (client `TemplateUploadSheet` → `POST
   /files/templates?kind=html`, route handler: server actions cap bodies at 1 MB; ≤ 5 MB `MAX_HTML_UPLOAD_BYTES`, client
-  check first + streamed byte counter, super-admin + 2FA; "Import JSON" = `kind=json`, ≤ 2 MB) saves a studio template
+  check first + streamed byte counter, super-admin + 2FA; "Import JSON" = `kind=json`, ≤ 11 MB `MAX_TEMPLATE_FILE_BYTES`:
+  an export inlines its designs; pages ≤ 2 MB once designs are files) saves a studio template
   whose home page is one hidden `HtmlDesign` block (`components/site/blocks/html-design.tsx`, category `design`,
   `visible: false` ⇒ out of the AI schema; values/pages helpers in `html-design-values.ts`); root prop
   `htmlDesign: true` makes the root render skip `SiteFrame`.
@@ -464,15 +465,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     block holds `props.doc` (`HtmlDesignDoc` {file, sha256, bytes, chars}) and `props.html = ''`; designs stored before
     keep `html` inline (read as is). Readers (services `site-html-assets.ts`): `spaHtmlDocReader` (tenant + purpose
     checked) / `templateHtmlDocReader`; `resolveHtmlDesignDocs` fills `html` right before rendering (web
-    `server/html-design-files.ts` `spaDesignData` / `templateDesignData`, LRU ≤ 64 MB by file id + sha): published.ts
+    `server/html-design-files.ts` `spaDesignData` / `templateDesignData`, LRU ≤ 64 MB of UTF-8 bytes by file id + sha): published.ts
     (live page + site-html), draft-preview (draft / starter / live), template preview, shared preview link. The Studio
     editor keeps the references in its data (it saves it back; a design wouldn't fit a 1 MB action body) and gets
     the designs in `meta.htmlDocs` (`editorHtmlDocs`); the block renders `html || meta.htmlDocs[doc.file]`. Console
     Images sheet loads the design on open (`loadHtmlDesignAction`). Template apply (`materializeTemplatePageData`,
     console + connector, always) copies the document into the spa (+ localises /files URLs of templates / other spas,
     incl. image replacements → `html_design` public copies); "Save site as template" copies spa documents into
-    template files (`spaDesignsIntoTemplate`); JSON export inlines them (`inlineHtmlDesignDocs`; imports keep inline
-    html). Only limit: 5 MB upload / 5 MB UTF-8 connector (8 MB stored-file cap). Embedded `data:` images, fonts,
+    template files (`spaDesignsIntoTemplate`); JSON export inlines them (`inlineHtmlDesignDocs`; a missing file → 409
+    text, not a 500); import stores them as template files again (`templateDesignsIntoFiles`, ≤ 5 MB each like an
+    upload; a pre-R24 design keeps `bakedFixes`). Only limit: 5 MB upload / 5 MB UTF-8 connector (8 MB stored-file cap).
+    - **Budget + clean-up (R24 review):** new `html_design_doc` files ≤ `HTML_DESIGN_DOC_BYTES_PER_DAY` (200 MB) per
+      spa and Dubai business day (05:00 cutoff; dedup hits free; `htmlDesignDailyLimit`, TH flagged for review).
+      Worker `html-design-docs-prune` (daily 04:45) → `pruneUnusedHtmlDesignDocs`: deletes docs older than 7 days
+      (`HTML_DESIGN_DOC_KEEP_MS`: editor local copies / Ask AI undo live in the browser) that no page version,
+      `sites.template_undo` or saved section mentions (text match on the id, site lock held). References must be
+      UUIDs (`isHtmlDesignDocFile`; a bad one renders as an empty design); `/files` never serves `html_design_doc`
+      (nothing fetches it; drafts stay private). The Studio editor fetches designs a restored version / local copy
+      references but it didn't load (`editorHtmlDocsAction`, `site.content` studio guard). Embedded `data:` images, fonts,
     scripts and styles stay exactly where they are (no script-visible change: an image read while parsing is loaded).
     Upload / connector results list embedded third-party frames / players (`htmlDesignEmbedHosts`, warning
     `htmlDesignEmbedWarning`; see Residual).
@@ -559,6 +569,13 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `<a data-spa-map>` — text positions come from a quote-aware tokenizer (`linkableTextRanges`; `>` inside attribute
   values doesn't end a tag), never inside comments, `<a>`/`<select>`/`<button>` or raw-text elements (script, style,
   title, textarea, xmp, plaintext, iframe, noembed, noframes, noscript); `escapeHtml` also escapes `\` and `` ` ``.
+  - **Placeholder escaping by context (R24 review, `fillSpans` + `jsScan`/`cssScan` in html-design.ts):** quoted
+    attribute / RCDATA / text = `escapeHtml` (after a bare `<` the first letter as a reference); unquoted value or tag
+    outside values = also space, `=` → `&#n;`; JS (script body, `on…`, `javascript:` href/src/action/formaction/
+    xlink:href) inside a string = JS-string text (`{` too, never `${`; URLs also `%`), outside a string = a quoted
+    JSON string literal (`/`, `*` escaped: safe in comments / regexes), then HTML escaping for attributes; CSS (style
+    body / attribute) inside a string = CSS-string escapes, outside = every non-alphanumeric hex-escaped. Lexers are
+    heuristics (regex after a value = division); comments / non-JS script types never filled.
   Tests `packages/core/test/maps.test.ts`; E2E: `site.spec.ts`.
   - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
     `htmlDesignDocument(html, values, inert, images, links, { phoneFixes, top })` (see above; with phone fixes: viewport

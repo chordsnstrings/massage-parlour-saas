@@ -212,7 +212,7 @@ export default async function TemplatesStudioPage() {
             <TemplateUploadSheet
               kind="json"
               title="Import a template"
-              description="Upload a template exported from this or another environment (up to 2 MB)."
+              description="Upload a template exported from this or another environment (up to 11 MB: an export includes its HTML designs)."
               trigger={
                 <Button variant="secondary">
                   <Upload /> Import JSON

@@ -1,5 +1,6 @@
 // Site templates beyond the built-ins (docs/PLAN.md §11.2): template studio rows (platform table), sanitising a
 // spa's site into a template, JSON export/import, copy slots and a structural check for preset trees.
+import { MAX_HTML_UPLOAD_BYTES } from '@spa/core'
 import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
@@ -290,7 +291,13 @@ export async function deleteStudioTemplate(db: Db, id: string) {
 /* ------------------------------------------------------------------ Export / import */
 
 export const TEMPLATE_FORMAT = 'spamanagement.site-template'
+/** A template's pages once its HTML designs are files (what a template file held before R24). */
 export const MAX_TEMPLATE_BYTES = 2 * 1024 * 1024
+/**
+ * An import file (R24 review): an export inlines its HTML designs (≤ 5 MB each, up to twice that as JSON text), so a
+ * file may be larger than the template it holds.
+ */
+export const MAX_TEMPLATE_FILE_BYTES = 2 * MAX_HTML_UPLOAD_BYTES + 1024 * 1024
 
 export type TemplateExport = {
   format: typeof TEMPLATE_FORMAT
@@ -319,7 +326,8 @@ const isText = (v: unknown): v is SiteText =>
 export function parseTemplateJson(
   raw: string,
 ): { ok: true; template: TemplateExport } | { ok: false; error: string } {
-  if (raw.length > MAX_TEMPLATE_BYTES) return { ok: false, error: 'This file is too large (2 MB max).' }
+  if (raw.length > MAX_TEMPLATE_FILE_BYTES)
+    return { ok: false, error: `This file is too large (${MAX_TEMPLATE_FILE_BYTES / (1024 * 1024)} MB max).` }
   let v: unknown
   try {
     v = JSON.parse(raw)

@@ -26,7 +26,8 @@ const VIEWS = [
   { name: 'desktop', viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false },
   { name: 'phone', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
 ] as const
-const POSITIONS = [0, 600, 1500, 'bottom', 'anchor'] as const
+// Top, mid-page (sticky header, scroll reveals), the end and an #anchor jump (CI time: no second mid-page stop).
+const POSITIONS = [0, 1500, 'bottom', 'anchor'] as const
 type Position = (typeof POSITIONS)[number]
 
 /** Computed styles and geometry of the key elements (the design's own behaviour, not just its pixels). */

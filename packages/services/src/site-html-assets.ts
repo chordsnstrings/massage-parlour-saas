@@ -11,18 +11,32 @@
 // never depends on a template row or on another spa. Like every service: takes the caller's tx; no permission checks.
 import { createHash } from 'node:crypto'
 import {
+  businessDateOf,
+  businessDayWindow,
   type HtmlDesignDoc,
   type HtmlImageAdjust,
   htmlDesignAssetRefs,
+  htmlDesignBakedFixes,
   htmlDesignDocOf,
+  isHtmlDesignDocFile,
+  MAX_HTML_UPLOAD_BYTES,
   remapHtmlImageAdjustments,
   rewriteHtmlDesignAssets,
 } from '@spa/core'
-import { type Db, platformDb, storedFiles, type Tx } from '@spa/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { type Db, pageVersions, platformDb, savedSections, sites, storedFiles, type Tx } from '@spa/db'
+import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { FONT_TYPES, fileIdFromUrl, VIDEO_TYPES } from './media'
-import { getFile, getTemplateFile, IMAGE_TYPES, MAX_FILE_BYTES, putFile, putTemplateFile } from './storage'
+import { lockSite } from './sites'
+import {
+  deleteFile,
+  getFile,
+  getTemplateFile,
+  IMAGE_TYPES,
+  MAX_FILE_BYTES,
+  putFile,
+  putTemplateFile,
+} from './storage'
 
 /** stored_files.purpose of a spa's design documents (private: the platform renders them, /files never serves them). */
 export const HTML_DESIGN_DOC_PURPOSE = 'html_design_doc'
@@ -30,6 +44,16 @@ export const HTML_DESIGN_DOC_PURPOSE = 'html_design_doc'
 export const HTML_DESIGN_FILE_PURPOSE = 'html_design'
 /** Content type of stored design documents (always UTF-8: uploads are decoded with the file's own encoding first). */
 export const HTML_DESIGN_DOC_TYPE = 'text/html; charset=utf-8'
+/**
+ * Per spa and Dubai business day (05:00 cutoff): bytes of NEW design documents (deduplicated ones are free). Every
+ * changed design is a new file, so a looping assistant (`patch_html_design`) could otherwise fill the disk.
+ */
+export const HTML_DESIGN_DOC_BYTES_PER_DAY = 200 * 1024 * 1024
+/**
+ * Unreferenced design documents are kept this long (the Studio editor's local copy and an Ask AI undo live in the
+ * browser and may still point at one), then `pruneUnusedHtmlDesignDocs` deletes them.
+ */
+export const HTML_DESIGN_DOC_KEEP_MS = 7 * 86_400_000
 /** Block type of an uploaded HTML design (web: components/site/blocks/html-design.tsx). */
 const HTML_DESIGN = 'HtmlDesign'
 
@@ -71,10 +95,13 @@ const docBytes = (html: string) => {
   return bytes
 }
 
-/** Stores a spa's design document (its own private file, deduplicated by content) and returns the reference. */
+/**
+ * Stores a spa's design document (its own private file, deduplicated by content) and returns the reference. A new
+ * file counts against the spa's daily budget (`HTML_DESIGN_DOC_BYTES_PER_DAY`; `dailyLimit` overrides it in tests).
+ */
 export async function storeSpaHtmlDoc(
   tx: Tx,
-  input: { tenantId: string; html: string; userId?: string | null },
+  input: { tenantId: string; html: string; userId?: string | null; dailyLimit?: number; now?: Date },
 ): Promise<HtmlDesignDoc> {
   const bytes = docBytes(input.html)
   const doc = htmlDesignDocFor(input.html)
@@ -91,6 +118,26 @@ export async function storeSpaHtmlDoc(
     )
     .limit(1)
   if (found) return { ...doc, file: found.id }
+  const limit = input.dailyLimit ?? HTML_DESIGN_DOC_BYTES_PER_DAY
+  const day = businessDayWindow(businessDateOf(input.now ?? new Date()))
+  const [today] = await tx
+    .select({ bytes: sql<number>`coalesce(sum(${storedFiles.size}), 0)::float8` })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.tenantId, input.tenantId),
+        eq(storedFiles.purpose, HTML_DESIGN_DOC_PURPOSE),
+        gte(storedFiles.createdAt, day.start),
+      ),
+    )
+  if ((today?.bytes ?? 0) + bytes.length > limit) {
+    const mb = String(Math.round(limit / (1024 * 1024)))
+    throw new DomainError(
+      `This spa reached its daily limit of ${mb} MB for new HTML designs — try again tomorrow`,
+      'invalid',
+      { key: 'errors.domain.htmlDesignDailyLimit', params: { limit: mb } },
+    )
+  }
   const row = await putFile(tx, {
     tenantId: input.tenantId,
     bytes,
@@ -126,7 +173,7 @@ export type HtmlDocReader = (doc: HtmlDesignDoc) => Promise<string | null>
 export const spaHtmlDocReader =
   (tx: Pick<Tx, 'select'>, tenantId: string): HtmlDocReader =>
   async (doc) => {
-    if (!doc.file) return null
+    if (!isHtmlDesignDocFile(doc.file)) return null
     const row = await getFile(tx, doc.file)
     if (!row || row.tenantId !== tenantId || row.purpose !== HTML_DESIGN_DOC_PURPOSE) return null
     return row.bytes.toString('utf8')
@@ -136,11 +183,37 @@ export const spaHtmlDocReader =
 export const templateHtmlDocReader =
   (db: Pick<Db, 'select'> = platformDb()): HtmlDocReader =>
   async (doc) => {
-    if (!doc.file) return null
+    if (!isHtmlDesignDocFile(doc.file)) return null
     const row = await getTemplateFile(db, doc.file)
     if (!row?.contentType.startsWith('text/html')) return null
     return row.bytes.toString('utf8')
   }
+
+/**
+ * Deletes the spa's design documents that nothing references any more: no page version (draft, published or
+ * history), no template-switch undo (`sites.template_undo`) and no saved section names the file, and it is older than
+ * `HTML_DESIGN_DOC_KEEP_MS`. Holds the site lock, so a write that reuses a document (same content) can't race it.
+ * Inside the spa's tenant transaction; returns how many were deleted (worker: daily `html-design-docs-prune`).
+ */
+export async function pruneUnusedHtmlDesignDocs(tx: Tx, tenantId: string, now = new Date()): Promise<number> {
+  await lockSite(tx, tenantId)
+  const mentions = (json: unknown) => sql`strpos(${json}::text, ${storedFiles.id}::text) > 0`
+  const unused = await tx
+    .select({ id: storedFiles.id })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.tenantId, tenantId),
+        eq(storedFiles.purpose, HTML_DESIGN_DOC_PURPOSE),
+        lt(storedFiles.createdAt, new Date(now.getTime() - HTML_DESIGN_DOC_KEEP_MS)),
+        sql`not exists (select 1 from ${pageVersions} where ${pageVersions.tenantId} = ${tenantId} and ${mentions(pageVersions.data)})`,
+        sql`not exists (select 1 from ${sites} where ${sites.tenantId} = ${tenantId} and ${sites.templateUndo} is not null and ${mentions(sites.templateUndo)})`,
+        sql`not exists (select 1 from ${savedSections} where ${savedSections.tenantId} = ${tenantId} and ${mentions(savedSections.data)})`,
+      ),
+    )
+  for (const f of unused) await deleteFile(tx, f.id)
+  return unused.length
+}
 
 type Node = { type?: unknown; props?: Record<string, unknown> }
 type WithContent = { content?: unknown }
@@ -176,6 +249,28 @@ export const resolveHtmlDesignDocs = <T>(data: T, read: HtmlDocReader): Promise<
   mapHtmlDesignNodes(data, async (props) => {
     const doc = htmlDesignDocOf(props)
     return doc ? { ...props, html: (await read(doc)) ?? '' } : props
+  })
+
+/**
+ * Template import (JSON file): each inline design (an export inlines them) stored as a template document, checked like
+ * an upload (≤ MAX_HTML_UPLOAD_BYTES as UTF-8); a reference without its html (not from an export) is refused. A design
+ * stored before R24 (no Phone fixes switch: fixes baked into its html) keeps reading as one (`bakedFixes`).
+ */
+export const templateDesignsIntoFiles = <T>(
+  data: T,
+  input: { db: Db | Tx; userId?: string | null },
+): Promise<T> =>
+  mapHtmlDesignNodes(data, async (props) => {
+    const html = typeof props.html === 'string' ? props.html : ''
+    if (!html)
+      throw new DomainError('An HTML design in this file has no design text — export the template again')
+    const size = Buffer.byteLength(html, 'utf8')
+    if (size > MAX_HTML_UPLOAD_BYTES)
+      throw new DomainError(
+        `The design is ${(size / (1024 * 1024)).toFixed(1)} MB as UTF-8 text; the limit is ${MAX_HTML_UPLOAD_BYTES / (1024 * 1024)} MB.`,
+      )
+    const doc = await storeTemplateHtmlDoc(input.db, { html, userId: input.userId })
+    return { ...props, html: '', doc, ...(htmlDesignBakedFixes(props) ? { bakedFixes: true } : {}) }
   })
 
 /** Template export (JSON file): every design inline again (`doc` dropped), so the file works on any install. */

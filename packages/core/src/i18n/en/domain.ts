@@ -343,4 +343,8 @@ export const domain = {
   htmlDesignTooLarge: 'The design is {size} MB as UTF-8 text; the limit is {limit} MB.',
   templateDesignMissing: 'An HTML design file of this template is missing',
   templateDesignMissingUpload: 'An HTML design file of this template is missing — upload it again',
+  htmlDesignDailyLimit:
+    'This spa reached its daily limit of {limit} MB for new HTML designs — try again tomorrow',
+  templateImportNoDesign: 'An HTML design in this file has no design text — export the template again',
+  templateTooLargeAsFiles: 'The template is too large once its HTML designs are files ({limit} MB max).',
 } as const

@@ -127,7 +127,8 @@ describe('htmlDesignDocument links', () => {
       ['single quotes', `<p title='x > {{address}}'>y</p>`, `title='x > ${plain}'`],
       ['an Alpine expression', `<div x-show="n > 0" data-a="{{address}}"></div>`, `data-a="${plain}"`],
       ['an inline handler', `<b onclick="if(a>b)go()" title="{{address}}">b</b>`, `title="${plain}"`],
-      ['an unquoted attribute', `<p title={{address}}>x</p>`, `title=${plain}>`],
+      // R24 review: an unquoted value can't take a space (or `=`, quotes) that would start another attribute.
+      ['an unquoted attribute', `<p title={{address}}>x</p>`, `title=${plain.replace(/ /g, '&#32;')}>`],
       ['xmp', '<xmp>{{address}}</xmp>', `<xmp>${plain}</xmp>`],
       ['plaintext', '<plaintext>{{address}} <p>{{address}}</p>', `<p>${plain}</p>`],
       ['iframe', '<iframe>{{address}}</iframe>', `<iframe>${plain}</iframe>`],

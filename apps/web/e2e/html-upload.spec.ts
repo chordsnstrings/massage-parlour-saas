@@ -2,10 +2,21 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { expect, test } from '@playwright/test'
-import { siteTemplateFiles, siteTemplates, storedFiles, tenants } from '@spa/db'
-import { eq } from 'drizzle-orm'
+import { sitePages, siteTemplateFiles, siteTemplates, storedFiles, tenants } from '@spa/db'
+import { storeSpaHtmlDoc } from '@spa/services'
+import { and, eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { admin, base, makeStudio, signInStudioOnAdmin, signUpOwner, site, studioUrl, testDb } from './helpers'
+import {
+  admin,
+  base,
+  editorUrl,
+  makeStudio,
+  signInStudioOnAdmin,
+  signUpOwner,
+  site,
+  studioUrl,
+  testDb,
+} from './helpers'
 
 /** Random noise PNG (doesn't compress): ~300 KB each. */
 async function noisePng(size = 320) {
@@ -34,8 +45,9 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
 </style></head><body><h1 id="t">Big design</h1>
 <img id="a" src="${uri('image/png', imgs[0]!)}" width="320" height="320" alt="a">
 <img id="b" src="${uri('image/png', imgs[1]!)}" width="320" height="320" alt="b"><div class="bg"></div>
-<p id="ar" dir="rtl">${'سبا هادئ في دبي '.repeat(80_000)}</p>
+<div id="ar" dir="rtl">${`<p>${'سبا هادئ في دبي '.repeat(40)}</p>`.repeat(2000)}</div>
 <script>window.__big = [${'"a \\"quoted\\" line",\n'.repeat(60_000)}].length</script></body></html>`
+  // (2 MB of Arabic in 2000 paragraphs: Chromium lays out ONE paragraph that long in ~30 s, which no real design has.)
   const bytes = Buffer.from(html)
   // Over the old ~500 KB stored-design cap and the 1 MB server-action body, under the 5 MB upload limit.
   expect(bytes.length).toBeGreaterThan(4.5 * 1024 * 1024)
@@ -82,16 +94,16 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     expect(await res.json()).toMatchObject({ ok: false, error: expect.stringMatching(/the limit is 5 MB/) })
   })
 
-  await test.step('a template JSON over 2 MB: the client message', async () => {
+  await test.step('a template JSON over 11 MB (an export inlines its designs): the client message', async () => {
     await page.getByRole('button', { name: 'Import JSON' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Template file').setInputFiles({
       name: 't.json',
       mimeType: 'application/json',
-      buffer: Buffer.alloc(2.2 * 1024 * 1024, 32),
+      buffer: Buffer.alloc(11.2 * 1024 * 1024, 32),
     })
     await dialog.getByRole('button', { name: 'Import' }).click()
-    await expect(dialog.getByText(/^The file is 2\.2 MB; the limit is 2 MB\.$/)).toBeVisible()
+    await expect(dialog.getByText(/^The file is 11\.2 MB; the limit is 11 MB\.$/)).toBeVisible()
     expect(posts).toEqual([])
     await page.keyboard.press('Escape')
   })
@@ -118,8 +130,30 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     expect(Buffer.compare(file!.bytes!, bytes)).toBe(0)
   })
 
+  await test.step('export → import: the JSON file holds the design (over the old 2 MB cap); imported, it is a file again', async () => {
+    const href = await page.getByRole('link', { name: 'Export Big Upload', exact: true }).getAttribute('href')
+    const text = await page.evaluate(async (u) => (await fetch(u)).text(), href!)
+    const file = JSON.parse(text)
+    expect(file.pages[0].data.content[0].props.html).toBe(html)
+    const buffer = Buffer.from(JSON.stringify({ ...file, key: 'big-upload-copy', name: 'Big Upload Copy' }))
+    expect(buffer.length).toBeGreaterThan(2 * 1024 * 1024)
+    await page.getByRole('button', { name: 'Import JSON' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog
+      .getByLabel('Template file')
+      .setInputFiles({ name: 'big.template.json', mimeType: 'application/json', buffer })
+    await dialog.getByRole('button', { name: 'Import' }).click()
+    await expect(page.getByText(/Big Upload Copy imported/)).toBeVisible({ timeout: 60_000 })
+    const [row] = await testDb().select().from(siteTemplates).where(eq(siteTemplates.key, 'big-upload-copy'))
+    const json = JSON.stringify(row!.pages)
+    expect(json.length).toBeLessThan(4 * 1024)
+    expect(json).toContain(`"sha256":"${sha}"`)
+  })
+
   await test.step('the template preview renders it: embedded images (still data:), font, script, Arabic', async () => {
-    const href = await page.getByRole('link', { name: 'Preview Big Upload' }).getAttribute('href')
+    const href = await page
+      .getByRole('link', { name: 'Preview Big Upload', exact: true })
+      .getAttribute('href')
     await page.goto(new URL(href!, page.url()).href)
     const frame = page.frameLocator('iframe.site-html-design')
     await expect(frame.locator('#t')).toHaveText('Big design', { timeout: 30_000 })
@@ -144,7 +178,7 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
 
   await test.step('applied to a spa and published: its own private copy, the live page is the file', async () => {
     await page.goto(studioUrl(slug))
-    await page.getByRole('button', { name: 'Use Big Upload' }).click()
+    await page.getByRole('button', { name: 'Use Big Upload', exact: true }).click()
     await expect(page.getByTestId('current-template')).toHaveText('Big Upload', { timeout: 30_000 })
     const db = testDb()
     const [spa] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
@@ -164,6 +198,33 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     const body = await live.text()
     // Only invisible additions in <head>: everything from <body> on is the file, byte for byte.
     expect(body.slice(body.indexOf('<body>'))).toBe(html.slice(html.indexOf('<body>')))
+  })
+
+  await test.step('Studio editor: a local copy with another design shows that design once restored', async () => {
+    const db = testDb()
+    const [spa] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
+    const [home] = await db
+      .select({ id: sitePages.id })
+      .from(sitePages)
+      .where(and(eq(sitePages.tenantId, spa!.id), eq(sitePages.slug, '')))
+    // A design the editor didn't load with the page (e.g. from a version since replaced).
+    const doc = await db.transaction((tx) =>
+      storeSpaHtmlDoc(tx, { tenantId: spa!.id, html: '<!doctype html><h1 id="t">Restored design</h1>' }),
+    )
+    const data = {
+      root: { props: { htmlDesign: true } },
+      content: [{ type: 'HtmlDesign', props: { id: 'x', html: '', doc, phoneFixes: false, images: [] } }],
+    }
+    await page.goto(`${admin}/templates`)
+    await page.evaluate(
+      ([key, copy]) => localStorage.setItem(key!, copy!),
+      [`spa-editor-draft:${slug}:${home!.id}`, JSON.stringify({ stamp: 'x', at: Date.now(), data })],
+    )
+    await page.goto(editorUrl(slug, home!.id))
+    const banner = page.getByRole('region', { name: 'Unsaved changes found' })
+    await banner.getByRole('button', { name: 'Restore' }).click({ timeout: 60_000 })
+    const design = page.frameLocator('#preview-frame').first().frameLocator('iframe.site-html-design')
+    await expect(design.locator('#t')).toHaveText('Restored design', { timeout: 30_000 })
   })
 
   await test.step('a windows-1252 file reads as the browser reads it (no replacement characters)', async () => {

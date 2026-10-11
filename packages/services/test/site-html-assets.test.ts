@@ -1,15 +1,19 @@
-import { closeAllDbs, siteTemplateFiles, storedFiles, tenants, withTenant } from '@spa/db'
+import { closeAllDbs, savedSections, siteTemplateFiles, storedFiles, tenants, withTenant } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  DomainError,
   getEditablePage,
+  HTML_DESIGN_DOC_KEEP_MS,
   HTML_DESIGN_DOC_PURPOSE,
   htmlDesignDocFor,
+  htmlDesignSource,
   inlineHtmlDesignDocs,
   listPages,
   localiseHtmlDesignAssets,
   materializeTemplatePageData,
+  pruneUnusedHtmlDesignDocs,
   putFile,
   putTemplateFile,
   resolveHtmlDesignDocs,
@@ -18,6 +22,7 @@ import {
   storeSpaHtmlDoc,
   storeTemplateHtmlDoc,
   switchTemplate,
+  templateDesignsIntoFiles,
   templateHtmlDocReader,
 } from '../src'
 
@@ -110,6 +115,101 @@ describe('design documents (R24 review: stored byte for byte)', () => {
       read,
     )
     expect(gone.content[0]!.props.html).toBe('')
+  })
+})
+
+describe('design document limits and clean-up (R24 review)', () => {
+  const newSpa = async (slug: string) =>
+    (await platform.insert(tenants).values({ slug, name: slug }).returning())[0]!.id
+  it('new documents of a spa count against a daily byte budget (deduplicated ones are free)', async () => {
+    const spa = await newSpa('assets-budget')
+    const html = (n: number) => `<!doctype html><p>${String(n).repeat(1000)}</p>`
+    const store = (n: number, now = new Date()) =>
+      withTenant(
+        spa,
+        (db) => storeSpaHtmlDoc(db, { tenantId: spa, html: html(n), dailyLimit: 2500, now }),
+        app,
+      )
+    const first = await store(1)
+    await store(2)
+    const over = await store(3).catch((e: unknown) => e)
+    expect(over).toBeInstanceOf(DomainError)
+    expect((over as DomainError).i18n).toEqual({
+      key: 'errors.domain.htmlDesignDailyLimit',
+      params: { limit: '0' },
+    })
+    expect((over as Error).message).toMatch(/daily limit of 0 MB for new HTML designs — try again tomorrow$/)
+    // The same design again is no new file.
+    expect((await store(1)).file).toBe(first.file)
+    // The next Dubai business day starts at 05:00.
+    expect((await store(3, new Date(Date.now() + 86_400_000))).file).toBeTruthy()
+  })
+  it('a malformed reference reads as an empty design, never a query error', async () => {
+    const bad = { file: "nope' or 1=1", sha256: 'a'.repeat(64), bytes: 1, chars: 1 }
+    expect(await tx((db) => spaHtmlDocReader(db, ids.tenant!)(bad))).toBeNull()
+    expect(await templateHtmlDocReader(platform)(bad)).toBeNull()
+    const shown = await tx((db) =>
+      resolveHtmlDesignDocs(page({ html: '', doc: bad }), spaHtmlDocReader(db, ids.tenant!)),
+    )
+    expect(shown.content[0]!.props.html).toBe('')
+    expect(
+      await tx((db) => htmlDesignSource({ html: '', doc: bad }, spaHtmlDocReader(db, ids.tenant!))),
+    ).toBe('')
+  })
+  it('deletes documents nothing references once they are older than the keep period', async () => {
+    const spa = await newSpa('assets-prune')
+    const docs = await withTenant(
+      spa,
+      async (db) => {
+        const [used, gone, recent, saved] = await Promise.all(
+          ['used', 'gone', 'recent', 'saved'].map((k) =>
+            storeSpaHtmlDoc(db, { tenantId: spa, html: `<!doctype html><p>${k}</p>` }),
+          ),
+        )
+        const template = {
+          key: 'prune-x',
+          name: 'Prune X',
+          theme: {},
+          pages: [
+            { slug: '', title: { en: 'Home' }, data: page({ html: '', doc: used, phoneFixes: false }) },
+          ],
+        }
+        await switchTemplate(db, spa, template, { replaceContent: true })
+        await db
+          .insert(savedSections)
+          .values({ tenantId: spa, name: 'S', data: page({ html: '', doc: saved }) })
+        return { used: used!, gone: gone!, recent: recent!, saved: saved! }
+      },
+      app,
+    )
+    const old = new Date(Date.now() - HTML_DESIGN_DOC_KEEP_MS - 60_000)
+    await platform
+      .update(storedFiles)
+      .set({ createdAt: old })
+      .where(inArray(storedFiles.id, [docs.used.file, docs.gone.file, docs.saved.file]))
+    expect(await withTenant(spa, (db) => pruneUnusedHtmlDesignDocs(db, spa), app)).toBe(1)
+    const left = await platform
+      .select({ id: storedFiles.id })
+      .from(storedFiles)
+      .where(eq(storedFiles.tenantId, spa))
+    expect(left.map((r) => r.id).sort()).toEqual([docs.used.file, docs.recent.file, docs.saved.file].sort())
+  })
+  it('an imported template file stores its inline designs as template files (checked like an upload)', async () => {
+    const html = '<!doctype html><p>Imported</p>'
+    const data = await templateDesignsIntoFiles(page({ html, phoneFixes: false }), { db: platform })
+    const props = data.content[0]!.props as { html: string; doc: { file: string }; bakedFixes?: boolean }
+    expect(props.html).toBe('')
+    expect(props.bakedFixes).toBeUndefined()
+    expect(await templateHtmlDocReader(platform)(props.doc as never)).toBe(html)
+    // A design from before R24 (no switch: fixes baked in) still reads as one.
+    const legacy = await templateDesignsIntoFiles(page({ html }), { db: platform })
+    expect(legacy.content[0]!.props).toMatchObject({ html: '', bakedFixes: true })
+    await expect(
+      templateDesignsIntoFiles(page({ html: 'x'.repeat(5 * 1024 * 1024 + 1) }), { db: platform }),
+    ).rejects.toThrow(/the limit is 5 MB/)
+    await expect(templateDesignsIntoFiles(page({ html: '' }), { db: platform })).rejects.toThrow(
+      /no design text/,
+    )
   })
 })
 

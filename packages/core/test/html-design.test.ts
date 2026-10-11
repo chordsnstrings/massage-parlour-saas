@@ -2,6 +2,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import {
   applyHtmlImageAdjustments,
+  attributesOf,
   decodeHtmlBytes,
   fixHtmlDesign,
   HTML_DESIGN_BASE_CSS,
@@ -221,12 +222,115 @@ describe('htmlDesignDocument: phone fixes (legacy designs, explicit opt-in)', ()
   })
 })
 
+describe('placeholders cannot break out of their context (R24 review)', () => {
+  /** What the HTML parser hands on as an attribute value. */
+  const attrDecoded = (s: string) =>
+    s
+      .replace(/&#(\d+);/g, (_, d: string) => String.fromCharCode(Number(d)))
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+  const fill = (html: string, spa_name: string, address = '') =>
+    htmlDesignDocument(html, { spa_name, address }, false).slice(-html.length - 400)
+  const trap = () => {
+    throw new Error('injected code ran')
+  }
+
+  it('an unquoted attribute value takes no space, = or quote (no new attribute)', () => {
+    const out = fill('<img alt={{spa_name}}>', 'x onmouseover=alert(1) "q\'`<>')
+    const tag = out.slice(out.lastIndexOf('<img'))
+    expect(attributesOf(tag, 4).map((a) => a.name)).toEqual(['alt'])
+    expect(tag).toBe('<img alt=x&#32;onmouseover&#61;alert(1)&#32;&quot;q&#39;&#96;&lt;&gt;>')
+    // Outside any value (a name position) too.
+    expect(fill('<div {{spa_name}}>', 'x onclick=go()')).toContain('<div x&#32;onclick&#61;go()>')
+  })
+  it('a javascript: URL gets JS-string text, then attribute escaping (percent signs too)', () => {
+    for (const name of ["');alert(1);//", '%27);alert(1);//', 'a\\b"c'])
+      for (const html of [
+        `<a href="javascript:f('{{spa_name}}')">x</a>`,
+        `<form action="JavaScript:f(&quot;{{spa_name}}&quot;)"></form>`,
+        `<a href=javascript:f(\`{{spa_name}}\`)>x</a>`,
+        `<a href="javascript:f({{spa_name}})">x</a>`,
+      ]) {
+        const out = fill(html, name)
+        const tag = out.slice(out.lastIndexOf('</script>') + 9)
+        const value = /(?:href|action)=("[^"]*"|[^\s>]*)/.exec(tag)![1]!.replace(/^"|"$/g, '')
+        const code = decodeURIComponent(attrDecoded(value).replace(/^javascript:/i, ''))
+        let got: unknown
+        runInNewContext(code, { f: (v: unknown) => (got = v), alert: trap })
+        expect(got).toBe(name)
+      }
+    // Other URLs: the plain attribute value as before.
+    expect(fill('<a href="tel:{{spa_name}}">x</a>', "1 '2'")).toContain('href="tel:1 &#39;2&#39;"')
+  })
+  it('a script outside a string literal gets a quoted string literal, never raw text', () => {
+    const address = '1;alert(1)//"\'`</script>\n*/'
+    const scripts = [
+      'var p = {{address}};',
+      'var r = /"/; var p = {{address}};',
+      'var p = 4 / 2 && {{address}};',
+      '/* {{address}} */ var p = 1; // {{address}}',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a script body, not a template
+      'var t = `${ {{address}} }`; var p = t',
+    ]
+    for (const js of scripts) {
+      const out = fill(`<script>${js}</script>`, '', address)
+      const body = out.slice(out.lastIndexOf('<script>') + 8, out.lastIndexOf('</script>'))
+      const p = runInNewContext(`${body}\n;p`, { alert: trap })
+      expect(js.startsWith('/*') ? p : String(p)).toBe(js.startsWith('/*') ? 1 : address)
+    }
+    const json = fill('<script type="application/ld+json">{"name": {{spa_name}}}</script>', address)
+    expect(JSON.parse(json.slice(json.lastIndexOf('json">') + 6, json.lastIndexOf('</script>'))).name).toBe(
+      address,
+    )
+    // Handler attributes too; `$` + `{` never opens a template substitution.
+    const handler = fill('<b onclick="f({{spa_name}})">b</b>', address)
+    let got: unknown
+    runInNewContext(attrDecoded(/onclick="([^"]*)"/.exec(handler)![1]!), {
+      f: (v: unknown) => (got = v),
+      alert: trap,
+    })
+    expect(got).toBe(address)
+    const tpl = fill('<script>t=`$${{spa_name}}`</script>', '{alert(1)}')
+    expect(runInNewContext(/t=(`[^`]*`)/.exec(tpl)![1]!, { alert: trap })).toBe('$${alert(1)}')
+  })
+  it('CSS outside a string escapes every non-alphanumeric character (no declaration or rule injection)', () => {
+    const name = 'red;background:url(https://evil.test/x)}body{display:none'
+    for (const html of [
+      '<style>.a{color:{{spa_name}}}</style>',
+      '<style>/* {{spa_name}} */ .a{color:red}</style>',
+      '<style>.a{background:url({{spa_name}})}</style>',
+      '<p style="color:{{spa_name}}">x</p>',
+      '<p style=color:{{spa_name}}>x</p>',
+    ]) {
+      const out = fill(html, `${name}*/`)
+      const css = attrDecoded(out.slice(out.lastIndexOf(html.slice(0, 3))))
+      expect(css).not.toMatch(/;background|\}body/)
+      expect(css.split('*/').length).toBe(html.split('*/').length)
+      expect(css).toContain('red\\3b background\\3a url\\28 https\\3a \\2f \\2f evil\\2e test')
+    }
+    // Inside a CSS string: unchanged (hex escapes of quotes and markup only).
+    expect(fill('<style>.a::after{content:"{{spa_name}}"}</style>', "a;b'")).toContain('content:"a;b\\27 "')
+    expect(fill(`<p style="font-family:'{{spa_name}}'">x</p>`, "a;b'")).toContain("font-family:'a;b&#92;27 '")
+  })
+  it('text right after a < never starts a tag; safe contexts stay as they were', () => {
+    expect(fill('<p><{{spa_name}}</p>', 'img src=x onerror=alert(1)')).toContain(
+      '<p><&#105;mg src=x onerror=alert(1)</p>',
+    )
+    expect(fill('<p title="{{spa_name}}">{{spa_name}}</p>', 'a b=c')).toContain('<p title="a b=c">a b=c</p>')
+  })
+})
+
 describe('design files and embeds (R24 review)', () => {
   it('reads a stored-file reference, else null', () => {
-    const doc = { file: 'f', sha256: 'a'.repeat(64), bytes: 3, chars: 3 }
+    const doc = { file: '0b6f8a52-3c1d-4e2f-9a7b-5c4d3e2f1a0b', sha256: 'a'.repeat(64), bytes: 3, chars: 3 }
     expect(htmlDesignDocOf({ doc })).toEqual(doc)
     expect(htmlDesignDocOf({ doc: { ...doc, sha256: 'x' } })).toBeNull()
     expect(htmlDesignDocOf({ html: '<p>' })).toBeNull()
+    // A malformed file id is no reference (renders as an empty design; never reaches a uuid query).
+    for (const file of ['f', '', "x' or 1=1", `${doc.file}x`])
+      expect(htmlDesignDocOf({ doc: { ...doc, file } })).toBeNull()
   })
   it('decodes an .html file the way a browser opening it does', () => {
     const latin = Uint8Array.from([

@@ -9,10 +9,12 @@ import { platformDb } from '@spa/db'
 import {
   DomainError,
   MAX_TEMPLATE_BYTES,
+  MAX_TEMPLATE_FILE_BYTES,
   parseTemplateJson,
   SITE_EDIT_MAX_PAGE_BYTES,
   saveStudioTemplate,
   storeTemplateHtmlDoc,
+  templateDesignsIntoFiles,
   templateKeyFrom,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -30,7 +32,7 @@ import { getSession } from '@/server/session'
 
 /**
  * POST /files/templates?kind=html|json (multipart) — the console's "Upload HTML" (R17/R24, files up to 5 MB) and
- * "Import JSON" (≤ 2 MB). A route handler instead of server actions: those cap request bodies at 1 MB (Next's
+ * "Import JSON" (≤ 11 MB: an export inlines its designs). A route handler instead of server actions: those cap request bodies at 1 MB (Next's
  * serverActions.bodySizeLimit, global — raising it would raise it for every action, anonymous spa-site ones too).
  * Not proxied (/files). Origin, Content-Length, session and super-admin + 2FA are checked before the body is read,
  * then the body is streamed through a byte counter. Replies in the ActionResult shape the console forms use.
@@ -41,7 +43,7 @@ const reply = (status: number, result: ActionResult) =>
 /** Rolls the upload transaction back when the page JSON (image adjustments) is over the draft cap. */
 class PageTooLarge extends Error {}
 const MULTIPART = 256 * 1024
-const LIMITS = { html: MAX_HTML_UPLOAD_BYTES + MULTIPART, json: MAX_TEMPLATE_BYTES + 64 * 1024 }
+const LIMITS = { html: MAX_HTML_UPLOAD_BYTES + MULTIPART, json: MAX_TEMPLATE_FILE_BYTES + 64 * 1024 }
 
 const optionalText = (max: number) =>
   z
@@ -161,21 +163,31 @@ async function importJson(form: FormData, userId: string): Promise<[number, Acti
   }
   const active = form.get('active') === 'on'
   try {
-    await saveStudioTemplate(
-      platformDb(),
-      {
-        key: t.key,
-        name: t.name,
-        description: t.description,
-        theme: t.theme,
-        pages: t.pages,
-        active,
-        createdBy: userId,
-      },
-      { replace },
-    )
+    await platformDb().transaction(async (db) => {
+      // R24 review: inline designs (an export inlines them) become template files again, checked like an upload.
+      const pages = []
+      for (const p of t.pages)
+        pages.push({ ...p, data: await templateDesignsIntoFiles(p.data, { db, userId }) })
+      if (JSON.stringify(pages).length > MAX_TEMPLATE_BYTES)
+        throw new DomainError(
+          `The template is too large once its HTML designs are files (${MAX_TEMPLATE_BYTES / (1024 * 1024)} MB max).`,
+        )
+      await saveStudioTemplate(
+        db,
+        {
+          key: t.key,
+          name: t.name,
+          description: t.description,
+          theme: t.theme,
+          pages,
+          active,
+          createdBy: userId,
+        },
+        { replace },
+      )
+    })
   } catch (e) {
-    if (e instanceof DomainError) return [422, fail(e.message)]
+    if (e instanceof DomainError) return [422, fail(e.message, { file: e.message })]
     throw e
   }
   await audit({

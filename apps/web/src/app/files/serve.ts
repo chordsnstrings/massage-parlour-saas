@@ -1,9 +1,19 @@
 import { type Permission, requires2fa, resolvePermissions, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
-import { members, platformDb, roles, storedFiles, tenants, user as users, withTenant } from '@spa/db'
+import {
+  members,
+  platformDb,
+  roles,
+  siteTemplateFiles,
+  storedFiles,
+  tenants,
+  user as users,
+  withTenant,
+} from '@spa/db'
 import {
   FONT_TYPES,
   getFile,
   getTemplateFile,
+  HTML_DESIGN_DOC_PURPOSE,
   IMAGE_TYPES,
   INTAKE_PDF_PURPOSE,
   jpegVariant,
@@ -28,6 +38,8 @@ import { getSession } from '@/server/session'
  * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
  * R24: no stored file with that id → a template file (site_template_files: public, immutable; never a template's design
  * document — the platform renders those, /files doesn't serve them). Public responses carry
+ * A spa's design documents (purpose `html_design_doc`, R24 review) are never served either: nothing fetches them
+ * (pages render them server-side, the Studio editor gets them with the page), and drafts stay private to the studio.
  * `Access-Control-Allow-Origin: *` (incl. 304s): HTML designs run in an opaque origin, and fonts (and crossorigin
  * images) are CORS requests from there. Private files never get it. Videos (stored and template files) are served
  * with byte ranges.
@@ -137,9 +149,18 @@ function bodyResponse(req: Request, headers: Record<string, string>, body: Buffe
   return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
 }
 
-/** R24: a public, immutable file of a platform template. */
+/**
+ * R24: a public, immutable file of a platform template. Its existence is checked before a 304 (an id with no file at
+ * all — e.g. a deleted private file the browser still has cached — must stay a 404), and its ETag differs from a
+ * stored file's, so a cached stored file never revalidates against this path.
+ */
 async function serveTemplateFile(req: Request, id: string) {
-  const etag = `"${id}"`
+  const [meta] = await platformDb()
+    .select({ contentType: siteTemplateFiles.contentType })
+    .from(siteTemplateFiles)
+    .where(eq(siteTemplateFiles.id, id))
+  if (!meta || meta.contentType.startsWith('text/html')) return notFound()
+  const etag = `"t-${id}"`
   const headers: Record<string, string> = {
     etag,
     'cache-control': 'public, max-age=31536000, immutable',
@@ -173,6 +194,7 @@ export async function serveFile(req: Request, id: string) {
     .where(eq(storedFiles.id, id))
     .limit(1)
   if (!meta) return serveTemplateFile(req, id)
+  if (meta.purpose === HTML_DESIGN_DOC_PURPOSE) return notFound()
   if (!meta.isPublic && !(await canRead({ ...meta, deleted: Boolean(meta.tenantDeletedAt) })))
     return notFound()
 

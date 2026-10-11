@@ -25,11 +25,12 @@ export const templateIntoSpa =
   async (data: PageData): Promise<PageData> =>
     (await materializeTemplatePageData(tx, { tenantId, data, fileUrl: designFileUrl, userId })).data
 
-// One process serves every route: a bounded cache of design texts (≤ 64 MB of characters).
+// One process serves every route: a bounded cache of design texts (≤ 64 MB, counted in UTF-8 bytes — a string of
+// non-Latin-1 text takes two bytes a character in the heap, so characters would undercount it).
 const g = globalThis as unknown as { __spaHtmlDocs?: LRUCache<string, string> }
 g.__spaHtmlDocs ??= new LRUCache<string, string>({
   maxSize: 64 * 1024 * 1024,
-  sizeCalculation: (v) => Math.max(1, v.length),
+  sizeCalculation: (v) => Math.max(1, Buffer.byteLength(v, 'utf8')),
 })
 const docs = g.__spaHtmlDocs
 

@@ -1,4 +1,4 @@
-import { inlineHtmlDesignDocs } from '@spa/services'
+import { DomainError, inlineHtmlDesignDocs } from '@spa/services'
 import { isPlatformAdmin } from '@/server/access'
 import { templateDocReader } from '@/server/html-design-files'
 import { getSession } from '@/server/session'
@@ -12,9 +12,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!template) return new Response('Not found', { status: 404 })
   // R24: an HTML design goes into the file itself (its stored file exists only on this install).
   const read = templateDocReader()
-  const pages = await Promise.all(
-    template.pages.map(async (p) => ({ ...p, data: await inlineHtmlDesignDocs(p.data, read) })),
-  )
+  let pages: typeof template.pages
+  try {
+    pages = await Promise.all(
+      template.pages.map(async (p) => ({ ...p, data: await inlineHtmlDesignDocs(p.data, read) })),
+    )
+  } catch (e) {
+    // A missing design file: a clear message instead of the error page.
+    if (!(e instanceof DomainError)) throw e
+    return new Response(`${e.message} — upload it again, then export.`, {
+      status: 409,
+      headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+    })
+  }
   return new Response(JSON.stringify({ ...template, pages }, null, 2), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
