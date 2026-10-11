@@ -52,6 +52,10 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
+  **HTML designs render exactly as built (owner hard rule 2026-10-11, R24)**: no platform CSS/viewport/fixes unless the
+  design's "Phone fixes" switch is on; only invisible changes (embedded files moved to /files, `<base>` in frames,
+  placeholders, compat shim, JSON-LD/canonical/t.js); the live page is the design document itself (CSP sandbox, never
+  allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
   **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).

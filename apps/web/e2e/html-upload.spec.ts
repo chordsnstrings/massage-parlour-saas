@@ -1,20 +1,15 @@
+import { randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { expect, test } from '@playwright/test'
 import { siteTemplates, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { admin, makeStudio, signInStudioOnAdmin, signUpOwner, studioUrl, testDb } from './helpers'
+import { admin, base, makeStudio, signInStudioOnAdmin, signUpOwner, studioUrl, testDb } from './helpers'
 
-/** Seeded noise PNG (doesn't compress): ~300 KB each. */
-async function noisePng(seed: number, size = 320) {
-  let s = seed
-  const px = Buffer.alloc(size * size * 3)
-  for (let i = 0; i < px.length; i++) {
-    s = (s * 1103515245 + 12345) & 0x7fffffff
-    px[i] = s & 0xff
-  }
-  return sharp(px, { raw: { width: size, height: size, channels: 3 } })
+/** Random noise PNG (doesn't compress): ~300 KB each. */
+async function noisePng(size = 320) {
+  return sharp(randomBytes(size * size * 3), { raw: { width: size, height: size, channels: 3 } })
     .png()
     .toBuffer()
 }
@@ -31,7 +26,7 @@ test('R24 HTML upload: a > 1 MB design with embedded images and a font uploads, 
   const owner = await signUpOwner(page, { spa: 'Upload Spa' })
   const { slug } = owner
   await makeStudio(slug)
-  const imgs = await Promise.all([1, 2, 3].map((n) => noisePng(n)))
+  const imgs = await Promise.all([1, 2, 3].map(() => noisePng()))
   const uri = (type: string, b: Buffer) => `data:${type};base64,${b.toString('base64')}`
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Big</title><style>
 @font-face{font-family:Big;src:url(${uri('font/woff2', await font())}) format("woff2")}
@@ -61,15 +56,16 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     )
     await dialog.getByRole('button', { name: 'Upload' }).click()
     await expect(page.getByText(/The file is 5\.2 MB; the limit is 5 MB/).first()).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Site templates' })).toBeVisible()
     expect(posts).toEqual([])
     await page.keyboard.press('Escape')
+    // Still the console page (never the generic error page).
+    await expect(page.getByRole('heading', { name: 'Site templates' })).toBeVisible()
   })
 
   await test.step('a direct POST over the limit gets 413 JSON, never the error page', async () => {
-    const origin = new URL(admin).origin
-    const res = await page.request.post(`${origin}/files/templates?kind=html`, {
-      headers: { origin },
+    // (Node's request context can't resolve *.localhost: the plain host; the size check comes before the session.)
+    const res = await page.request.post(`${base}/files/templates?kind=html`, {
+      headers: { origin: base },
       multipart: {
         name: 'Too Big',
         file: { name: 'huge.html', mimeType: 'text/html', buffer: Buffer.alloc(5.4 * 1024 * 1024, 120) },

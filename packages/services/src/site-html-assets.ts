@@ -107,7 +107,7 @@ export type HtmlAsset = {
 export type HtmlAssetPlan = {
   refs: HtmlAssetRef[]
   assets: HtmlAsset[]
-  /** data: payloads that stay inline (SVG, icons, CSS, tiny, malformed, unknown, type mismatch). */
+  /** data: payloads that stay inline (SVG, icons, CSS, tiny, malformed, unknown, type mismatch, srcset candidates). */
   leftover: { count: number; bytes: number; types: string[] }
 }
 
@@ -123,12 +123,19 @@ export function planHtmlDesignAssets(html: string): HtmlAssetPlan {
   const refs = htmlDesignAssetRefs(html)
   const bySha = new Map<string, HtmlAsset>()
   const leftover = { count: 0, bytes: 0, types: new Set<string>() }
+  // An <img>/<source> whose srcset holds a data: candidate keeps all its URLs inline: browsers choose a data:
+  // candidate differently from a URL one (Chromium shows a data: 2x even at 1x density), so moving it would change
+  // which picture the design shows.
+  const srcsetData = new Set(
+    refs.filter((r) => r.attr === 'srcset' && /^data:/i.test(r.url)).map((r) => r.tagStart),
+  )
   for (const ref of refs) {
     const uri = parseDataUri(ref.url)
     if (!uri) continue
     const bytes = dataUriBytes(uri)
+    const keep = ref.where === 'attr' && srcsetData.has(ref.tagStart)
     const type =
-      bytes && bytes.length >= HTML_ASSET_MIN_BYTES && bytes.length <= MAX_FILE_BYTES
+      !keep && bytes && bytes.length >= HTML_ASSET_MIN_BYTES && bytes.length <= MAX_FILE_BYTES
         ? movableType(uri.mime, ref.where, bytes)
         : null
     if (!type) {

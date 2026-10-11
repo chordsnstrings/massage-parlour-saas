@@ -74,13 +74,14 @@ describe('planHtmlDesignAssets', () => {
 <img src="${uri('application/octet-stream', png(5))}"><img src="data:image/png;base64,@@@@">`
     const plan = planHtmlDesignAssets(html)
     expect(plan.assets.map((a) => [a.contentType, a.refs.length])).toEqual([
-      ['image/png', 2],
+      ['image/png', 1],
       ['font/woff2', 1],
       ['font/woff2', 1],
     ])
     expect(plan.assets[0]!.name).toMatch(/^[0-9a-f]{16}\.png$/)
-    // png declared but font bytes, tiny, svg, octet-stream outside CSS, malformed
-    expect(plan.leftover.count).toBe(5)
+    // the srcset candidate (browsers pick data: candidates differently), png declared but font bytes, tiny, svg,
+    // octet-stream outside CSS, malformed
+    expect(plan.leftover.count).toBe(6)
     expect(plan.leftover.types.sort()).toEqual(['application/octet-stream', 'image/png', 'image/svg+xml'])
   })
 })

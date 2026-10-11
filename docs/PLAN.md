@@ -1089,6 +1089,22 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   sheet. e2e `console-website.spec.ts`. Details: CODEMAP "Site builder → Website Studio (R23, console)".
   ✅ Live 2026-10-11 (PR #34, a3029fe). The spa CRM menu item keeps its label "Website studio" (`nav.website`) — owner
   2026-10-11: "no rename for now".
+- **R24 Whole-site design by talking to Claude + 5 MB HTML uploads (owner, 2026-10-11, approved "all three, but can't
+  we make the 500kB to be 5mb?"; hard rule, verbatim: "it must also keep eacha nd every detail in the HTML including
+  the scrolling and if i have html for this website it should apllies as it is without missing anything at all this
+  must be stricted and can't be miss ever").** **Part A built (2026-10-11):** designs render **exactly** as the file
+  opened in a browser — no base sheet, viewport or width fixes; those are an explicit per-design **"Phone fixes"**
+  switch (off for new uploads and connector edits; designs stored before R24 have no flag and keep them, so no live
+  site changes). The live page of an exact design **is the design document itself** (proxy → `/site-html`, CSP
+  sandbox without allow-same-origin): one scrollbar, toolbar collapse, 100vh/dvh, its own viewport/title/favicon,
+  anchors, history. Frames (editor, previews, legacy) get `allow=` sensors/fullscreen/autoplay…, fixed `#anchors`, a
+  compat shim (in-memory storage/cookies only where the sandbox blocks them). Upload up to **5 MB** through the
+  `/files/templates` route (server actions cap bodies at 1 MB; client check first, so no error page); embedded
+  images/fonts/videos (`data:`) move to `site_template_files`, the stored design stays ≤ ~500 KB (the error says what is
+  still too big); applying a template copies them into the spa's own public files. Proof: e2e `html-fidelity.spec.ts`
+  (pixels + computed styles vs the raw file, 1440×900 + 390×844, several scroll positions; Phone-fixes negative
+  control). What a sandbox still can't give (storage per page view, no IndexedDB/service workers, `Origin: null`
+  fetches) and details: CODEMAP "Site builder → HTML designs". Part B (connector tools) follows.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
@@ -1103,6 +1119,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   button list every image (`<img>` + CSS backgrounds) with focal point (drag/arrow keys), Fill/Fit, realign
   (left/centre/right, undoes floats/offsets) and replace (a spa's media library via MediaPicker, or an https URL);
   stored as `images` next to `html` and applied as CSS/attributes inside the sandbox only.
+  **R24 (2026-10-11):** the base sheet / viewport / width fixes only with the design's "Phone fixes" switch (§14.8 R24).
 - **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 

@@ -449,17 +449,66 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   in `lib/scenes.ts`, all ending at rest). Scroll scenes are off in the editor; ambient hero loops stop in the editor
   and under OS reduced motion. Gallery thumbnails: `public/site-templates/{key}.webp`, regenerated with
   `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
-- **HTML designs (R17)**: `/platform/templates` "Upload HTML" (`uploadHtmlTemplateAction`) saves a studio template
+- **HTML designs (R17, R24)**: `/platform/templates` "Upload HTML" (client `TemplateUploadSheet` → `POST
+  /files/templates?kind=html`, route handler: server actions cap bodies at 1 MB; ≤ 5 MB `MAX_HTML_UPLOAD_BYTES`, client
+  check first + streamed byte counter, super-admin + 2FA; "Import JSON" = `kind=json`, ≤ 2 MB) saves a studio template
   whose home page is one hidden `HtmlDesign` block (`components/site/blocks/html-design.tsx`, category `design`,
-  `visible: false` ⇒ out of the AI schema) with the raw file in `props.html`; root prop `htmlDesign: true` makes the root
-  render skip `SiteFrame`. Render = `HtmlDesignFrame` (`components/site/html-design-frame.tsx`): `<iframe
-  src=/api/html-design/frame sandbox="allow-scripts allow-forms allow-popups…">` (no `allow-same-origin`: design scripts
-  can't touch platform cookies/APIs). F10: not `srcdoc` (it would inherit the page's strict CSP): the shell route answers
-  with the design's own CSP (anything, but CSP `sandbox` + `frame-ancestors 'self'`), asks the hosting page for the
-  design by postMessage and `document.write`s it once (with a `<base>` = hosting page URL); a new design/adjustment
-  reloads the shell. The design shows after hydration. `{{placeholders}}` filled + HTML-escaped from
-  `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
-  when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
+  `visible: false` ⇒ out of the AI schema; values/pages helpers in `html-design-values.ts`) with the file in `props.html`;
+  root prop `htmlDesign: true` makes the root render skip `SiteFrame`.
+  - **Exact by default (R24 owner rule):** `props.phoneFixes` (NO default in Puck props: absent = stored before R24 = on,
+    `@spa/core htmlDesignPhoneFixes`; every writer stores a boolean). Off = only invisible additions: compat shim first in
+    <head> (`HTML_DESIGN_COMPAT_SHIM`: in-memory localStorage/sessionStorage + cookie jar, only where access throws),
+    `{{placeholders}}` where written, `<style data-spa-map-style>` only when an `{{address}}` link was spliced, `<base>`
+    + link script in frames. On = `fluidImages` + viewport + `HTML_DESIGN_BASE_CSS` at render (stored HTML never fixed).
+    Console: "Phone fixes" checkbox in the upload sheet (drives the adjuster preview) + per-row switch
+    (`setHtmlPhoneFixesAction`, audit `platform.site_template.html_phone_fixes`; spas keep their copy until re-applied).
+  - **Live page of an exact design = the design document** (`server/html-design-route.ts` `exactHtmlDesignAt`: one
+    platformDb query, published visible page with an HtmlDesign `phoneFixes:false`, LRU 30 s, cleared by
+    `revalidateStudio` / host + slug invalidation): proxy rewrites GET/HEAD to `app/site-html/route.ts` (per-process key
+    header; unreachable from outside), headers `htmlDesignPageHeaders` (CSP = frame policy incl. `sandbox`, never
+    allow-same-origin; no COOP; Permissions-Policy without the motion sensors). Body = `htmlDesignDocument(…, { top:
+    true })` + JSON-LD, canonical / `<title>` only if the design has none, `t.js` (`text/plain` beacons from the opaque
+    origin); `x-robots-tag` when not indexable. Not an exact design any more → 307 to `?__page=1` (normal page, no lookup).
+  - **Frames** (editor, Studio/CRM/template previews, legacy designs, fallback): `HtmlDesignFrame` (`<iframe
+    src=/api/html-design/frame sandbox=HTML_DESIGN_SANDBOX allow="autoplay; fullscreen; clipboard-write; web-share;
+    picture-in-picture; encrypted-media; screen-wake-lock; xr-spatial-tracking; accelerometer; gyroscope; magnetometer
+    (all *)" allowFullScreen>`; the hosting page's Permissions-Policy still decides). F10: not `srcdoc` (it would inherit
+    the page's strict CSP): the shell answers with the design's own CSP (+ design Permissions-Policy), asks the hosting
+    page for the design by postMessage, `document.write`s it once (with `<base>` = hosting page URL) and posts
+    `spa:html-design-shown` (the host focuses the frame only on a full-page, non-editor view). Link script (window,
+    bubble phase, skipped when the design prevented the default): `#x` → fragment navigation of the frame itself (the
+    `<base>` would load the hosting page into the frame); exact designs: links/forms without target → `_top`; legacy:
+    http(s) → new tab; inert when `meta.editing`. site.css: `html:has(.site-html-root)` overflow hidden (one scroller).
+  - **Embedded files (R24):** core `html-design-assets.ts` (`htmlDesignAssetRefs`: img/source src+srcset, video
+    src+poster, input[type=image], link icon/apple-touch-icon/preload, SVG image/feImage href, style attrs, `<style>`
+    url() + image-set() strings; scripts/comments/raw text skipped; unclear CSS left alone), `rewriteHtmlDesignAssets`
+    (only URL ranges; `crossorigin="anonymous"` on an img/video whose every URL moved), `patchHtml`, size report.
+    Services `site-html-assets.ts`: a `data:` payload moves when it decodes cleanly, ≥ 1 KB and its sniffed type
+    (images IMAGE_TYPES, fonts `sniffFontType`, MP4/WebM) matches the declared family (fonts may be octet-stream in CSS);
+    SVG/icons/other stay inline, and so does every URL of an img/source whose `srcset` has a `data:` candidate (Chromium
+    picks a data: candidate differently from a URL one — a data: 2x even at 1x density — so moving it would change the
+    picture); ≤ 300 files; `prepareHtmlDesign` checks the stored size (≤ `MAX_HTML_DESIGN_BYTES`
+    500 KB, JSON-escaped) with placeholder ids first, so nothing is stored for a design that doesn't fit; the error lists
+    scripts/styles/markup/SVG/leftovers. Template uploads → `site_template_files` (platform, sha256-unique, S3 key
+    `templates/{id}`); spa designs → its public `stored_files` (purpose `html_design`, deduped by `{sha16}.{ext}`). URLs
+    absolute canonical `/files/{id}/{sha16}.{ext}` (`server/html-design-files.ts designFileUrl`). The console template
+    switch passes `prepare: templateIntoSpa(…)` (`localiseHtmlDesignAssets`: template files and other spas' public files
+    → copied into the spa; its own and outside URLs kept). `/files` serves template files when no stored file matches and
+    sends `Access-Control-Allow-Origin: *` on public responses (fonts from the opaque origin are CORS requests).
+  - Ops layer (`site-edit.ts`): `html_design` (≤ 5 MB in, `phone_fixes` default false, `convert` turns a block page into
+    a design page and labels the old draft "Before Claude HTML design …"), `html_patch` (exact find/replace, each find
+    exactly once, all-or-nothing), `getHtmlDesign`; `SiteEditDeps.prepareHtml` (web `spaPrepareHtml`) runs dry while
+    checking and for real only when the batch is written. Result `html: [{ page, chars, moved, at }]`.
+  - Residual (a sandbox must forbid): storage lasts per page view, cookies never reach a server, no IndexedDB / Cache
+    API / service workers, outside fetches send `Origin: null`, camera/mic/geolocation/payment stay off, `self.origin`
+    is `'null'`; moved files can paint a moment later (the design's `font-display` applies). Frames additionally: phone
+    toolbar never collapses, a phone never zooms out a design wider than the screen (the platform page around it isn't),
+    `location` = the shell, prints one viewport, sensors off on preview pages.
+  - E2E: `html-fidelity.spec.ts` (fixture `e2e/fixtures/fidelity.html`, rebuilt by `make-fidelity.mjs`: raw file at
+    `http://design.test/` vs live page / Studio preview / template preview, pixels ≤ 0.1 % off by > 24 + computed styles,
+    1440×900 + 390×844 (phone frames vs a non-zooming 390 window, see Frames above), scroll 0/600/1500/bottom/anchor;
+    Phone-fixes negative control), `html-upload.spec.ts` (1.3 MB
+    upload, 5 MB client message, 413 JSON, JSON 2 MB), `templates.spec.ts` "HTML design upload" / "HTML design images".
 - **Map links (owner, 2026-10-09)**: every rendered branch address links to Google Maps (new tab, label "Open in Google
   Maps" EN/AR via `ui('openInMaps')`, `data-maps-link`): contact/hours block, footer, placeholder site, booking page.
   Target = `branchMapsHref` (`@spa/core/maps.ts`): `branches.maps_url` (exact pin; `normalizeGoogleMapsUrl` =
@@ -472,16 +521,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   title, textarea, xmp, plaintext, iframe, noembed, noframes, noscript); `escapeHtml` also escapes `\` and `` ` ``.
   Tests `packages/core/test/maps.test.ts`; E2E: `site.spec.ts`.
   - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
-    `htmlDesignDocument` adds a viewport meta if missing + `HTML_DESIGN_BASE_CSS` (all `:where()`, first in <head> so
-    the design's rules win) + the link script; `fixHtmlDesign` (upload) adds the viewport and turns inline img
-    `width:Npx` > 360 into `width:100%;max-width:Npx`; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
+    `htmlDesignDocument(html, values, inert, images, links, { phoneFixes, top })` (see above; with phone fixes: viewport
+    if missing + `HTML_DESIGN_BASE_CSS`, all `:where()`, first in <head> so the design's rules win); `fixHtmlDesign` = the
+    same fixes (viewport, inline img `width:Npx` > 360 → `width:100%;max-width:Npx`), only reported in the upload message
+    now; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
     `bg-<n>` (n-th `background(-image)` url in `<style>` + inline styles; scripts/comments/fonts skipped).
   - Adjustments = block prop `images: HtmlImageAdjust[]` ({id, src (first 300 chars, must still match), fit, x, y,
     align, replace}); applied by `applyHtmlImageAdjustments`: `data-spa-img` attr + `!important` rules at the end,
     background position/size appended after the declaration, replace URL must match `HTML_IMAGE_URL` (https or
     site path; srcset dropped). UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
-    client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview); saved via `uploadHtmlTemplateAction` (hidden
-    `images` JSON) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate` now takes `pages`).
+    client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview, honours Phone fixes); saved with the upload (hidden
+    `images` JSON, remapped to the moved URLs) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate`
+    takes `pages`).
     Replacement uploads go into the chosen spa's media library (`/files/upload`, normal size cap; public files, so
     they break if that spa is deleted). E2E: "HTML design images".
 - **Website Studio (R23, console)** (PLAN §14.8 R23): `platform/(console)/websites/page.tsx` lists every spa
@@ -664,12 +715,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `--_puck-styles-loaded` flag set before Puck renders; otherwise Puck injects its own copy, which `@import`s rsms.me's
   Inter — the editor uses local Inter Variable). Zod in the browser is jitless (`lib/zod-jitless.ts`, imported first by
   `components/campaigns/rules.ts`): its JIT probes `new Function`, which the CSP blocks and reports.
-- **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`,
-  `Permissions-Policy` (camera, mic, geolocation, payment, usb, serial, hid, midi, sensors, display-capture,
-  browsing-topics off); `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
+- **Permissions-Policy** (`PERMISSIONS_POLICY`: camera, mic, geolocation, payment, usb, serial, hid, midi, sensors,
+  display-capture, browsing-topics off): pages get it from the proxy (`pageSecurityHeaders`), `/api`, `/.well-known`,
+  `/files` from next.config — never both (R24: a second policy would undo a delegation). The direct HTML design page
+  and the design shell (`permissionsPolicy({ design: true })`) leave the motion sensors undeclared (browser default =
+  the design may use them, as when opened directly); preview pages keep them off for their frames.
+- **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`;
+  `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
   `X-Frame-Options: DENY`; `/files/*` keeps its own sandbox CSP (`app/files/serve.ts`) + XFO SAMEORIGIN; HSTS (no
   includeSubDomains) on those when `x-forwarded-proto: https`. Never set CSP/XFO/HSTS there for a proxied path (a
   second CSP is enforced too; only the first HSTS counts). `/api/html-design/frame` sends its own CSP (excluded).
+  Public `/files` responses carry `Access-Control-Allow-Origin: *` (R24; private ones never).
 - **Reports:** `app/api/csp-report` (public; 30/min per IP in memory, ≤ 16 KB, CSP2 + Reporting API bodies, extension
   noise dropped) logs `[csp] {surface} {directive} blocked {origin|inline|eval} on {path}` and counts into
   `csp_violations` (day × surface × directive × blocked, path without query; > 300 rows/day fold into `other`;

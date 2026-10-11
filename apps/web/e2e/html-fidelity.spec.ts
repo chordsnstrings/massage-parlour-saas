@@ -36,6 +36,8 @@ const PROBE = `(() => {
   return {
     font: [getComputedStyle($('title')).fontFamily, document.fonts.check('56px Fx')],
     img: [r($('square')), cs($('square'), ['width', 'height', 'maxWidth', 'objectFit', 'objectPosition'])],
+    // Which srcset candidate the browser picked (data: candidates are chosen differently from URLs).
+    imgCandidate: [...$('square').srcset.matchAll(/(S+)s+(d)x/g)].find((m) => m[1] === $('square').currentSrc)?.[2] ?? 'src',
     svg: [r($('svg')), cs($('svg'), ['width', 'height', 'maxWidth'])],
     strip: r($('strip')),
     html: cs(document.documentElement, ['overflowX', 'overflowY', 'maxWidth']),
@@ -150,7 +152,7 @@ async function upload(page: Page, name: string, html: string, phoneFixes: boolea
   if (phoneFixes) await dialog.getByRole('checkbox', { name: /^Phone fixes/ }).check()
   await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
   await dialog.getByRole('button', { name: 'Upload' }).click()
-  await expect(page.getByText(new RegExp(`${name} uploaded\\. Moved 5 embedded`))).toBeVisible({
+  await expect(page.getByText(new RegExp(`${name} uploaded\\. Moved 3 embedded`))).toBeVisible({
     timeout: 60_000,
   })
   const href = await page.getByRole('link', { name: `Preview ${name}` }).getAttribute('href')
@@ -213,23 +215,36 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
         await template.addStyleTag({ content: 'nav[aria-label="Template pages"]{display:none!important}' })
         const templateTarget = await frameTarget(template, 'template-preview')
 
-        const rawTarget: Target = {
-          name: 'raw',
-          page: raw,
-          doc: async () => raw,
-          shot: () => raw.screenshot(),
-        }
+        // Frames (previews) are compared with the file in a window of the frame's size that doesn't zoom: on a phone the
+        // browser zooms out a page wider than the screen (this fixture is), which the live page — the design document
+        // itself — does exactly like the file, but a frame inside a platform page never can (CODEMAP "HTML designs").
+        const frameCtx = view.isMobile
+          ? await browser.newContext({ viewport: view.viewport, hasTouch: true, deviceScaleFactor: 1 })
+          : null
+        const rawFramed = frameCtx ? await rawPage(frameCtx, html) : raw
+        const asTarget = (p: Page, name: string): Target => ({
+          name,
+          page: p,
+          doc: async () => p,
+          shot: () => p.screenshot(),
+        })
         for (const at of POSITIONS) {
-          await moveTo(rawTarget, at)
-          const want = await raw.evaluate(PROBE)
-          const wantShot = await raw.screenshot()
-          for (const t of [liveTarget, studioTarget, templateTarget]) {
+          const want = new Map<Page, { probe: unknown; shot: Buffer }>()
+          for (const p of new Set([raw, rawFramed])) {
+            await moveTo(asTarget(p, 'raw'), at)
+            want.set(p, { probe: await p.evaluate(PROBE), shot: await p.screenshot() })
+          }
+          for (const [t, base] of [
+            [liveTarget, raw],
+            [studioTarget, rawFramed],
+            [templateTarget, rawFramed],
+          ] as const) {
             await moveTo(t, at)
             expect(
               await (await t.doc()).evaluate(PROBE),
               `${view.name} ${t.name} @${at}: computed styles`,
-            ).toEqual(want)
-            const share = await compare(wantShot, await t.shot(), `${view.name}-${t.name}-${at}`)
+            ).toEqual(want.get(base)!.probe)
+            const share = await compare(want.get(base)!.shot, await t.shot(), `${view.name}-${t.name}-${at}`)
             expect(share, `${view.name} ${t.name} @${at}: differing pixels`).toBeLessThanOrEqual(MAX_BAD)
           }
         }
@@ -240,12 +255,18 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
         // The wide elements still overflow, exactly as in the file.
         expect(probe.sizes[0]).toBeGreaterThan(view.viewport.width)
         await Promise.all([raw.close(), live.close(), studio.close(), template.close()])
+        await frameCtx?.close()
       })
     }
 
     await test.step('negative control: the same file with Phone fixes on is visibly changed on a phone', async () => {
       const phone = contexts.find((c) => c.view.name === 'phone')!.ctx
-      const raw = await rawPage(phone, html)
+      const plain = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        deviceScaleFactor: 1,
+      })
+      const raw = await rawPage(plain, html)
       const fixed = await phone.newPage()
       await fixed.goto(fixedPreview)
       await fixed.addStyleTag({ content: 'nav[aria-label="Template pages"]{display:none!important}' })
@@ -259,6 +280,7 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
       const shown = (await (await t.doc()).evaluate(PROBE)) as { hasBaseSheet: boolean; img: unknown }
       expect(shown.hasBaseSheet).toBe(true)
       expect(shown.img).not.toEqual(((await raw.evaluate(PROBE)) as { img: unknown }).img)
+      await plain.close()
     })
   } finally {
     await Promise.all(contexts.map((c) => c.ctx.close()))

@@ -37,7 +37,7 @@ section { padding: 24px 16px; }
 <section id="contact" class="tall"><h2>Contact</h2><p>Reached through an in-page anchor.</p></section>
 <button class="fixed-btn" type="button">Book</button>
 <script>
-(function () {
+(() => {
   var out
   try {
     localStorage.setItem('fx', '1')
@@ -47,8 +47,8 @@ section { padding: 24px 16px; }
     out = 'error ' + e.name
   }
   document.getElementById('store').textContent = out
-  new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { if (e.isIntersecting) e.target.classList.add('in') })
+  new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add('in') })
   }, { threshold: 0.1 }).observe(document.getElementById('reveal'))
   var cv = document.getElementById('cv'), ctx = cv.getContext('2d'), f = 0
   function draw() {

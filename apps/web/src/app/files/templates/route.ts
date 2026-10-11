@@ -34,6 +34,9 @@ import { getSession } from '@/server/session'
 const reply = (status: number, result: ActionResult) =>
   Response.json(result, { status, headers: { 'cache-control': 'no-store' } })
 
+/** Rolls the upload transaction back (moved files included) when the page JSON is over the draft cap. */
+class PageTooLarge extends Error {}
+
 const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`
 const MULTIPART = 256 * 1024
 const LIMITS = { html: MAX_HTML_UPLOAD_BYTES + MULTIPART, json: MAX_TEMPLATE_BYTES + 64 * 1024 }
@@ -84,8 +87,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
         fileUrl: designFileUrl,
       })
       const pages = htmlDesignPages(key, p.html, p.images, phoneFixes)
-      if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES)
-        throw new DomainError('Too many image adjustments for this design (page size limit)')
+      if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES) throw new PageTooLarge()
       await saveStudioTemplate(
         db,
         {
@@ -102,6 +104,10 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
       return p
     })
   } catch (e) {
+    if (e instanceof PageTooLarge) {
+      const error = 'Too many image adjustments for this design (page size limit)'
+      return [422, fail(error, { file: error })]
+    }
     if (e instanceof DomainError) return [422, fail(e.message, { file: e.message })]
     throw e
   }
