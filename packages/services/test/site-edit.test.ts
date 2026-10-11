@@ -516,12 +516,15 @@ describe('SITE_AI_EDITOR_EMAILS allow-list', () => {
     const no2fa = await mk('no2fa@ai.test', { admin: true, twoFactor: false })
     const plain = await mk('plain@ai.test', { admin: false, twoFactor: true })
     const unverified = await mk('unverified@ai.test', { admin: true, twoFactor: true, verified: false })
-    const list = ['owner@ai.test', 'no2fa@ai.test', 'plain@ai.test', 'unverified@ai.test']
+    const squatter = await mk('squatter@ai.test', { admin: false, twoFactor: false, verified: false })
+    const list = ['owner@ai.test', 'no2fa@ai.test', 'plain@ai.test', 'unverified@ai.test', 'squatter@ai.test']
     expect(await siteAiEditorStatus(platform, owner, list)).toBe('ok')
     expect(await siteAiEditorStatus(platform, other, list)).toBe('not_listed')
     expect(await siteAiEditorStatus(platform, no2fa, list)).toBe('needs2fa')
     expect(await siteAiEditorStatus(platform, plain, list)).toBe('not_admin')
     expect(await siteAiEditorStatus(platform, unverified, list)).toBe('unverified')
+    // A listed address signed up by someone else (unverified, not a super-admin) learns nothing about the list.
+    expect(await siteAiEditorStatus(platform, squatter, list)).toBe('not_listed')
     // Case-insensitive via the env parser; empty list = nobody.
     process.env.SITE_AI_EDITOR_EMAILS = ' OWNER@ai.test '
     expect(await siteAiEditorStatus(platform, owner)).toBe('ok')
@@ -533,6 +536,11 @@ describe('SITE_AI_EDITOR_EMAILS allow-list', () => {
     expect(await siteAiEditorStatus(platform, no2fa)).toBe('needs2fa')
     expect(await siteAiEditorStatus(platform, plain)).toBe('not_admin')
     expect(await siteAiEditorStatus(platform, unverified)).toBe('ok')
+    expect(await siteAiEditorStatus(platform, squatter)).toBe('not_admin')
     expect(await siteAiEditorStatus(platform, 'no-such-user')).toBe('not_listed')
+    // `*` next to addresses still means everyone.
+    process.env.SITE_AI_EDITOR_EMAILS = 'owner@ai.test, *'
+    expect(await siteAiEditorStatus(platform, other)).toBe('ok')
+    process.env.SITE_AI_EDITOR_EMAILS = ''
   })
 })

@@ -78,7 +78,9 @@ export async function siteAiEditorStatus(
   if (!row) return 'not_listed'
   if (!emails.includes('*')) {
     if (!emails.includes(row.email.toLowerCase())) return 'not_listed'
-    if (!row.verified) return 'unverified'
+    // Only a real super-admin learns "verify your email": anyone else gets not_listed, so a fresh sign-up can't probe
+    // which addresses are on the list.
+    if (!row.verified) return row.admin ? 'unverified' : 'not_listed'
   }
   if (!row.admin) return 'not_admin'
   return row.twoFactor ? 'ok' : 'needs2fa'
