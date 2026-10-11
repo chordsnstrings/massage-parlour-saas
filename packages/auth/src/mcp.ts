@@ -1,7 +1,7 @@
-// Claude MCP connector (site editing over MCP, /api/mcp): OAuth resource + page locations shared by the auth
-// config, the MCP route and the console card.
+// AI assistant MCP connector (Claude or ChatGPT; site editing over MCP, /api/mcp): OAuth resource, page locations and
+// allowed callbacks shared by the auth config, the consent page, the MCP route and the console card.
 
-/** The custom scope Claude is granted (MCP site editing; drafts only). */
+/** The custom scope the assistant is granted (MCP site editing; drafts only). */
 export const MCP_SCOPE = 'sites:edit'
 
 const canonical = () => new URL(process.env.APP_URL ?? 'http://app.localhost:3000')
@@ -29,32 +29,47 @@ export function mcpOAuthPages() {
 }
 
 /**
- * Where an authorization code may be sent: Claude's connector callbacks. MCP_REDIRECT_URIS (comma-separated, exact
- * URLs) replaces the list. Registration (/oauth2/register) and every authorize request are held to it, so a client
- * registered by anyone can only ever send codes (and authorize errors) back to Claude.
+ * Where an authorization code may be sent: the AI assistants' connector callbacks (Claude + ChatGPT). Registration
+ * (/oauth2/register) and every authorize request are held to them, so a client registered by anyone can only ever
+ * send codes (and authorize errors) back to Claude or ChatGPT. MCP_REDIRECT_URIS (comma-separated, exact URLs)
+ * replaces all built-in callbacks, the ChatGPT per-connector pattern included.
  */
 export const CLAUDE_MCP_CALLBACKS = [
   'https://claude.ai/api/mcp/auth_callback',
   'https://claude.com/api/mcp/auth_callback',
 ] as const
 
-export function mcpRedirectUris(): string[] {
-  const listed = (process.env.MCP_REDIRECT_URIS ?? '')
+/** ChatGPT's stable connector callback (used because every authorize response carries `iss`, RFC 9207). */
+export const CHATGPT_MCP_CALLBACK = 'https://chatgpt.com/connector_platform_oauth_redirect'
+
+/**
+ * ChatGPT's per-connector fallback callback `https://chatgpt.com/connector/oauth/{callback_id}`, matched on the raw
+ * string: https, host exactly chatgpt.com, no userinfo / port / query / fragment, no percent-encoding or dot segments.
+ */
+const CHATGPT_CONNECTOR_CALLBACK = /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]{1,128}$/
+
+const listedRedirectUris = () =>
+  (process.env.MCP_REDIRECT_URIS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  return listed.length ? listed : [...CLAUDE_MCP_CALLBACKS]
+
+/** The exact callbacks: MCP_REDIRECT_URIS when set, else Claude's + ChatGPT's stable one. */
+export function mcpRedirectUris(): string[] {
+  const listed = listedRedirectUris()
+  return listed.length ? listed : [...CLAUDE_MCP_CALLBACKS, CHATGPT_MCP_CALLBACK]
 }
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /**
- * True for an exact mcpRedirectUris() entry — and, only while APP_URL is plain http (dev / e2e), for loopback http
- * callbacks (e.g. the MCP Inspector).
+ * True for an exact mcpRedirectUris() entry, a ChatGPT per-connector callback (unless MCP_REDIRECT_URIS is set) — and,
+ * only while APP_URL is plain http (dev / e2e), for loopback http callbacks (e.g. the MCP Inspector).
  */
 export function isAllowedMcpRedirectUri(uri: unknown): boolean {
-  if (typeof uri !== 'string') return false
+  if (typeof uri !== 'string' || uri.length > 512) return false
   if (mcpRedirectUris().includes(uri)) return true
+  if (!listedRedirectUris().length && CHATGPT_CONNECTOR_CALLBACK.test(uri)) return true
   if (canonical().protocol !== 'http:') return false
   try {
     const u = new URL(uri)

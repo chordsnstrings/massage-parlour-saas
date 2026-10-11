@@ -560,7 +560,7 @@ export async function runSiteEdit(
         .from(pageVersions)
         .where(and(eq(pageVersions.tenantId, input.tenantId), eq(pageVersions.id, w.beforeVersionId)))
       if (v?.status === 'draft' && !v.label)
-        await labelVersion(tx, input.tenantId, w.beforeVersionId, `Before Claude HTML design ${dubaiStamp()}`)
+        await labelVersion(tx, input.tenantId, w.beforeVersionId, `Before AI assistant HTML design ${dubaiStamp()}`)
     }
     if (w.isNew) {
       const row = await addPage(tx, {
@@ -807,7 +807,7 @@ export function siteEditAuditData(input: {
   extra?: Record<string, unknown>
 }) {
   return {
-    via: input.via === 'mcp' ? 'via Claude (MCP)' : 'via Studio Ask AI',
+    via: input.via === 'mcp' ? 'via AI assistant (MCP)' : 'via Studio Ask AI',
     ops: input.ops.map((o) => String(o.op ?? '?')),
     summary: input.summary.slice(0, 20).map((s) => s.slice(0, 200)),
     ...(input.dryRun ? { dryRun: true } : {}),

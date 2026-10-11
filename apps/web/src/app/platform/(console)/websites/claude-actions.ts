@@ -8,7 +8,7 @@ import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
 
 /**
- * "Connect Claude" card: revokes one of the signed-in super-admin's connected MCP clients. Deletes the consent (the
+ * "Connect Claude or ChatGPT" card: revokes one of the signed-in super-admin's connected MCP clients. Deletes the consent (the
  * MCP route requires it on every call, so access stops at once) and that client's refresh/access tokens.
  */
 export async function revokeClaudeClientAction(clientId: unknown): Promise<ActionResult> {
@@ -36,5 +36,5 @@ export async function revokeClaudeClientAction(clientId: unknown): Promise<Actio
     data: { clientId: parsed.data },
   })
   revalidatePath('/platform/websites')
-  return ok('Disconnected — that Claude can no longer edit sites')
+  return ok('Disconnected — that assistant can no longer edit sites')
 }

@@ -29,7 +29,13 @@ import {
 import type { SiteEditSchema } from '@spa/services/site-kit'
 import { and, eq, like } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { handleSiteMcpRequest, type McpTemplate, SITE_MCP_TOOL_NAMES, type SiteMcpOpts } from '../src'
+import {
+  handleSiteMcpRequest,
+  type McpTemplate,
+  SITE_MCP_TOOL_HINTS,
+  SITE_MCP_TOOL_NAMES,
+  type SiteMcpOpts,
+} from '../src'
 
 const { platform, app } = testDbs()
 const ids = {} as Record<string, string>
@@ -164,7 +170,7 @@ describe('site MCP server (/api/mcp)', () => {
       'spamanagement-sites',
     )
     const list = (await (await rpc('owner', 'tools/list')).json()) as {
-      result: { tools: { name: string }[] }
+      result: { tools: { name: string; annotations?: Record<string, unknown> }[] }
     }
     const names = list.result.tools.map((t) => t.name)
     expect(names.sort()).toEqual([...SITE_MCP_TOOL_NAMES].sort())
@@ -172,9 +178,32 @@ describe('site MCP server (/api/mcp)', () => {
       expect.arrayContaining(['list_spas', 'get_site', 'update_block', 'set_theme', 'preview_link']),
     )
     expect(names.some((n) => n.includes('publish'))).toBe(false)
+    // R25: every tool is annotated from the one hints map (ChatGPT + Claude use them for confirmations).
+    expect(Object.keys(SITE_MCP_TOOL_HINTS).sort()).toEqual([...SITE_MCP_TOOL_NAMES].sort())
+    const hints = Object.fromEntries(list.result.tools.map((t) => [t.name, t.annotations]))
+    for (const name of names)
+      expect(hints[name]).toMatchObject({ ...SITE_MCP_TOOL_HINTS[name], openWorldHint: false })
+    for (const name of ['list_spas', 'get_site', 'list_block_types', 'preview_link'])
+      expect(hints[name]?.readOnlyHint, name).toBe(true)
+    const writes = names.filter((n) => !hints[n]?.readOnlyHint)
+    expect(writes.length).toBeGreaterThan(0)
+    for (const name of writes) expect(hints[name], name).toMatchObject({ readOnlyHint: false })
+    // Overwrites of existing drafts count as destructive (OpenAI: "may delete or overwrite user data").
+    expect(writes.filter((n) => hints[n]?.destructiveHint).sort()).toEqual([
+      'remove_block',
+      'rename_page',
+      'replace_html_design',
+      'set_theme',
+      'update_block',
+    ])
+    expect(writes.filter((n) => !hints[n]?.destructiveHint).sort()).toEqual([
+      'add_block',
+      'add_page',
+      'move_block',
+    ])
   })
 
-  it('get_site and update_block edit the draft only, audited via Claude (MCP)', async () => {
+  it('get_site and update_block edit the draft only, audited via AI assistant (MCP)', async () => {
     // R23: list_spas carries the console's computed website stage (no review status).
     const spas = await call('owner', 'list_spas', { query: 'mcp' })
     expect(spas.data).toEqual([
@@ -233,7 +262,7 @@ describe('site MCP server (/api/mcp)', () => {
     const rows = await platform.select().from(auditLog).where(like(auditLog.action, 'site.mcp.%'))
     const update = rows.find((x) => x.action === 'site.mcp.update_block' && (x.data as { ok?: boolean }).ok)
     expect(update).toMatchObject({ tenantId: ids.tenant, actorUserId: ids.owner })
-    expect(update!.data).toMatchObject({ via: 'via Claude (MCP)', client: 'Claude', ops: ['update'] })
+    expect(update!.data).toMatchObject({ via: 'via AI assistant (MCP)', client: 'Claude', ops: ['update'] })
     expect(rows.some((x) => x.action === 'site.mcp.get_site')).toBe(true)
   })
 
@@ -612,18 +641,18 @@ describe('site MCP server (/api/mcp)', () => {
       expect(r.data).toMatchObject({ width: 1, height: 1, alt: { en: 'Hot stones' } })
       expect(r.data.path).toBe(`/files/${r.data.file_id}`)
       expect(r.data.url).toMatch(
-        new RegExp(`^http://app\\.localhost/files/${r.data.file_id}/claude-127\\.0\\.0\\.1\\.webp$`),
+        new RegExp(`^http://app\\.localhost/files/${r.data.file_id}/ai-127\\.0\\.0\\.1\\.webp$`),
       )
       expect(r.data.use.html).toBe(`<img src="${r.data.url}" alt="Hot stones" width="1" height="1">`)
       const [asset] = await inD((tx) => tx.select().from(mediaAssets))
-      expect(asset).toMatchObject({ id: r.data.id, url: r.data.path, tags: ['claude', '127.0.0.1'] })
+      expect(asset).toMatchObject({ id: r.data.id, url: r.data.path, tags: ['ai-assistant', '127.0.0.1'] })
       const [file] = await inD((tx) =>
         tx.select().from(storedFiles).where(eq(storedFiles.id, r.data.file_id)),
       )
       expect(file).toMatchObject({ isPublic: true, purpose: 'media', contentType: 'image/webp' })
       // Per spa per day, and per token per minute.
       const day = await dcall('add_image', { url: at('/ok.png') }, { imageLimits: { perDay: 1 } })
-      expect(day.data.error).toMatch(/already got 1 images from Claude today/)
+      expect(day.data.error).toMatch(/already got 1 images from the AI assistant today/)
       TOKENS.img = { ...TOKENS.owner!, tokenId: 't-img' }
       const o = dopts({ imageLimits: { perMinute: 1 } })
       expect((await call('img', 'add_image', { spa: 'mcp-design', url: at('/ok.png') }, o)).isError).toBe(
@@ -633,7 +662,7 @@ describe('site MCP server (/api/mcp)', () => {
       expect(burst.data.error).toMatch(/at most 1 a minute/)
       const rows = await platform.select().from(auditLog).where(eq(auditLog.action, 'site.mcp.add_image'))
       expect(rows.find((x) => (x.data as { ok?: boolean }).ok)?.data).toMatchObject({
-        via: 'via Claude (MCP)',
+        via: 'via AI assistant (MCP)',
         host: '127.0.0.1',
         width: 1,
       })

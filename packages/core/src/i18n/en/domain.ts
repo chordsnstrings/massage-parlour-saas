@@ -150,7 +150,7 @@ export const domain = {
   postSlugTaken: 'Another post already uses that address',
   pendingSlugTaken: 'Another page now uses /{slug} — rename this page to a free address before publishing',
   editedElsewhere:
-    'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',
+    'This page changed elsewhere (an AI assistant or another editor) — reload the editor to get the latest version',
   pageLocked:
     '{name} is editing this page in the Studio editor — changes are refused until they close it (the lock frees itself 2 minutes after they leave) or someone takes over in the editor',
   pageLockRace: 'Another editor opened this page at the same moment — please try again',

@@ -37,9 +37,9 @@ const CLIENT_WRITE_PATHS = new Set(['/oauth2/register', '/oauth2/create-client',
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined || v === null ? [] : [v])
 
 /**
- * The connector is only for Claude: a client may only register Claude's callbacks (see mcpRedirectUris), else
- * anyone could register "Claude" with their own redirect and phish an owner's consent (or use authorize as an open
- * redirector).
+ * The connector is only for Claude and ChatGPT: a client may only register their callbacks (see
+ * isAllowedMcpRedirectUri), else anyone could register "Claude" with their own redirect and phish an owner's consent
+ * (or use authorize as an open redirector).
  */
 function assertClientRedirects(path: string, body: unknown) {
   const b = (body ?? {}) as Record<string, unknown>
@@ -49,11 +49,12 @@ function assertClientRedirects(path: string, body: unknown) {
   if ((path !== '/oauth2/update-client' && !redirects.length) || !all.every(isAllowedMcpRedirectUri))
     throw new APIError('BAD_REQUEST', {
       error: 'invalid_redirect_uri',
-      error_description: 'This server only accepts the Claude connector callback as a redirect URI.',
+      error_description:
+        'This server only accepts the Claude or ChatGPT connector callback as a redirect URI.',
     })
 }
 
-/** Audit row for a granted Claude connector consent (the console card lists the client; revoke is audited there). */
+/** Audit row for a granted Claude / ChatGPT connector consent (the console card lists the client; revoke is audited). */
 async function auditConsentGranted(ctx: Parameters<Parameters<typeof createAuthMiddleware>[0]>[0]) {
   const returned = ctx.context.returned as { url?: unknown } | undefined
   if ((ctx.body as { accept?: unknown } | undefined)?.accept !== true || returned instanceof APIError) return
@@ -140,7 +141,7 @@ function createAuth() {
         account,
         verification,
         twoFactor,
-        // OAuth 2.1 provider for the Claude MCP connector (/api/mcp) + the jwt plugin's signing keys.
+        // OAuth 2.1 provider for the AI assistant MCP connector (/api/mcp) + the jwt plugin's signing keys.
         jwks,
         oauthClient,
         oauthResource,
@@ -152,7 +153,7 @@ function createAuth() {
       },
     }),
     // The jwt plugin's session-JWT endpoint isn't used (it only signs the MCP access tokens). Nor is the OAuth
-    // provider's client admin API: Claude registers itself (/oauth2/register) and the console revokes consents.
+    // provider's client admin API: the assistant registers itself (/oauth2/register) and the console revokes consents.
     disabledPaths: [
       '/token',
       '/oauth2/create-client',
@@ -252,12 +253,12 @@ function createAuth() {
         '/forget-password': { window: 600, max: 5 },
         '/two-factor/verify-totp': { window: 60, max: 8 },
         '/two-factor/verify-backup-code': { window: 60, max: 5 },
-        // Claude connector: open dynamic client registration + token endpoint.
+        // AI assistant connector: open dynamic client registration + token endpoint.
         '/oauth2/register': { window: 600, max: 10 },
         '/oauth2/token': { window: 60, max: 30 },
       },
     },
-    // Claude MCP connector: only SITE_AI_EDITOR_EMAILS super-admins with 2FA may grant a client access. Checked on
+    // AI assistant MCP connector: only SITE_AI_EDITOR_EMAILS super-admins with 2FA may grant a client access. Checked on
     // authorize + consent here, and again by /api/mcp on every call (consent row + allow-list, read fresh).
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
@@ -271,7 +272,7 @@ function createAuth() {
           throw ctx.redirect(`${mcpOAuthPages().consentPage}?not_enabled=1`)
         throw new APIError('FORBIDDEN', {
           error: 'access_denied',
-          message: 'Connecting Claude is not enabled for this account.',
+          message: 'Connecting an AI assistant is not enabled for this account.',
         })
       }),
       after: createAuthMiddleware(async (ctx) => {
@@ -289,12 +290,12 @@ function createAuth() {
         ...mcpOAuthPages(),
         resource: mcpResourceUrl(),
         scopes: ['openid', 'profile', 'email', 'offline_access', MCP_SCOPE],
-        // Claude registers itself (RFC 7591, public client + PKCE); registering grants nothing — a listed
-        // super-admin still has to sign in with 2FA and approve it on the consent page.
+        // Claude / ChatGPT register themselves (RFC 7591, public client + PKCE); registering grants nothing — a
+        // listed super-admin still has to sign in with 2FA and approve it on the consent page.
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
-        // Only Claude's callbacks (registration is held to the same list in hooks.before): a client registered with
-        // anything else can't get a code — nor an authorize error redirect — sent anywhere.
+        // Only Claude's / ChatGPT's callbacks (registration is held to the same rule in hooks.before): a client
+        // registered with anything else can't get a code — nor an authorize error redirect — sent anywhere.
         validateRedirectUri: (uri, _registered, matched) => matched && isAllowedMcpRedirectUri(uri),
         // A signed-in caller of the client endpoints (DCR with a session) must be a listed super-admin with 2FA.
         clientPrivileges: async ({ user: u }) =>
@@ -333,7 +334,7 @@ async function signingKeys(force = false) {
 }
 
 /**
- * Verifies a Claude connector access token locally (our own JWKS, no HTTP): signature, expiry and audience = the MCP
+ * Verifies an AI assistant connector access token locally (our own JWKS, no HTTP): signature, expiry and audience = the MCP
  * resource. Returns the user + OAuth client, or null. The caller still checks the allow-list and the consent row.
  */
 export async function verifyMcpAccessToken(token: string | null | undefined): Promise<McpTokenClaims | null> {

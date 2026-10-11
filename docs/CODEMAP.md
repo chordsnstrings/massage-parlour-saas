@@ -496,7 +496,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     → copied into the spa; its own and outside URLs kept). `/files` serves template files when no stored file matches and
     sends `Access-Control-Allow-Origin: *` on public responses (fonts from the opaque origin are CORS requests).
   - Ops layer (`site-edit.ts`): `html_design` (≤ 5 MB in, `phone_fixes` default false, `convert` turns a block page into
-    a design page and labels the old draft "Before Claude HTML design …"), `html_patch` (exact find/replace, each find
+    a design page and labels the old draft "Before AI assistant HTML design …"), `html_patch` (exact find/replace, each find
     exactly once, all-or-nothing), `getHtmlDesign`; `SiteEditDeps.prepareHtml` (web `spaPrepareHtml`) runs dry while
     checking and for real only when the batch is written. Result `html: [{ page, chars, moved, at }]`.
   - Residual (a sandbox must forbid): storage lasts per page view, cookies never reach a server, no IndexedDB / Cache
@@ -1195,7 +1195,7 @@ i18n namespace `automations`.
   autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
   `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
 
-## Claude MCP connector (site editing, `/api/mcp`)
+## AI assistant MCP connector (Claude + ChatGPT, site editing, `/api/mcp`)
 
 - **OAuth** (packages/auth): Better Auth `jwt()` + `@better-auth/mcp` `mcp()` (oauth-provider 1.7.7; tables in
   `@spa/db` `schema/oauth.ts`: jwks, oauth_client/resource/client_resource/refresh_token/access_token/consent/
@@ -1205,9 +1205,15 @@ i18n namespace `automations`.
   `/oauth2/consent` (403). `oauthProviderClient()` in the browser client sends the signed query, so sign-in / 2FA
   resume the flow (`forms.tsx` follows the returned `url`). Discovery: `app/.well-known/[...path]` → auth handler
   (proxy no longer rewrites `/.well-known/*`). `verifyMcpAccessToken`: local JWKS (cached 5 min), audience-bound.
+  ChatGPT (R25) needs nothing extra from Better Auth: issuer = resource metadata's, `iss` on every authorize redirect
+  (so its stable callback), S256, public DCR (`none`); no CIMD (`@better-auth/cimd` needs an app-owned fetch).
 - **Server** `packages/ai/src/mcp/site-server.ts` `handleSiteMcpRequest` (stateless, JSON): bearer → verify →
   `siteAiEditorStatus` → consent row for (user, client) → 60/min per token (in memory) → tools (`SITE_MCP_TOOLS`) over
-  the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
+  the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via AI assistant (MCP)'` + client
+  name. Annotations: `SITE_MCP_TOOL_HINTS` next to the table (one entry per tool, test-checked; read tools
+  readOnlyHint; destructiveHint = deletes or overwrites draft content: remove_block, replace_html_design,
+  update_block, set_theme, rename_page (only add_block / add_page / move_block false); openWorldHint false; no entry =
+  destructive write).
   Writes to a page open in someone else's Studio editor are refused with the holder's name (F29 lock); `get_site`
   lists `editing` per page.
   Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL, and (R24)
@@ -1225,23 +1231,28 @@ i18n namespace `automations`.
   the flag unless given); `get_site` pages carry `html: {chars, phone_fixes}`. `add_image`: services `fetchMediaImage`
   (F32 `safeFetch`: public addresses only, redirects re-checked, 10 s, ≤ 8 MB; https only except allow-listed test
   hosts; declared Content-Type AND magic bytes ∈ IMAGE_TYPES, never SVG) → `createAsset` (public, purpose media, tags
-  `claude` + host); 10/min per token (also refused attempts) + 100/day per spa (`imageLimits`); returns `path`
-  (`/files/{id}`, for block props) + absolute `url` + an `<img>` tag. Merging with R25: add the six tools to
+  `ai-assistant` + host, filename `ai-{host}`); 10/min per token (also refused attempts) + 100/day per spa (`imageLimits`); returns `path`
+  (`/files/{id}`, for block props) + absolute `url` + an `<img>` tag. R25 merged in: the six tools are in
   `SITE_MCP_TOOL_HINTS` (list_templates / get_html_design read-only; apply_template, set/patch_html_design
-  destructive; add_image additive).
+  destructive — they overwrite drafts; add_image additive) and every R24 text is assistant-neutral ("from the AI
+  assistant", version label "Before AI assistant HTML design …").
 - **Links** (R23): server option `adminUrl` (route passes `canonicalUrls().admin`): `list_spas` + `get_site` return
   `console_url`; `list_spas` reports `website` (none / template / draft / live, from `websiteOverview`) +
   `unpublished_changes`; texts say the owner previews and publishes in the console (Websites → spa).
-- **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
-  deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
-  `packages/services/test/site-edit.test.ts` + `sites.test.ts` (draft-theme switch), e2e `site-mcp.spec.ts` (real DCR →
-  authorize → 2FA → consent → token → tools incl. R24 templates / HTML design / add_image, live site unchanged → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`,
-  `texts-editor`).
+- **Console** → Websites: `ConnectClaudeCard` ("Connect Claude or ChatGPT": URL + copy, both setups, own connected
+  clients (no client_name → redirect host), Revoke = `revokeClaudeClientAction`: deletes consent + tokens, keeps the
+  client, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
+  `packages/services/test/site-edit.test.ts` + `sites.test.ts` (draft-theme switch), `packages/auth/test/mcp.test.ts` (callbacks + OAuth metadata with real
+  requests), e2e `site-mcp.spec.ts` (Claude: real DCR → authorize → 2FA → consent → token → tools → revoke; ChatGPT:
+  both callbacks, all scopes, `iss`, refresh, annotations, lookalikes refused; `SITE_AI_EDITOR_EMAILS` in
+  playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`, `gpt-editor`, `texts-editor`).
 - **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
-  `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
+  `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks + ChatGPT's stable one + `chatgpt.com/connector/oauth/{id}`
+  raw-string pattern; `MCP_REDIRECT_URIS` = exact list replacing all); `validateRedirectUri` same rule on
   authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on
-  `/oauth2/consent` audits grants. Prune: services `oauth-clients.ts` `pruneUnusedOAuthClients` (worker
-  `oauth-clients-prune`, hourly). Real client IP: see "Client IP" below (Better Auth `ipAddressHeaders` =
+  `/oauth2/consent` audits grants (`entity` oauth_client, `entityId` client id). Prune: services `oauth-clients.ts`
+  `pruneUnusedOAuthClients` (worker `oauth-clients-prune`, hourly): > 24 h old, no consent and no grant audit row
+  (ChatGPT/Claude reuse their client_id after Revoke; a pruned one answers invalid_client → re-add the connector). Real client IP: see "Client IP" below (Better Auth `ipAddressHeaders` =
   `[CLIENT_IP_HEADER]`, `ipv6Subnet: 64`).
 - **Draft concurrency + publish** (services sites.ts): `lockSite` (FOR UPDATE on `sites`, re-entrant) at the start of
   saveDraft / publishPage / publishAll / addPage / renamePage / restoreVersion / runSiteEdit (non-dry) /

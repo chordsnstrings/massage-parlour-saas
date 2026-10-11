@@ -23,19 +23,21 @@ export const auth = {
     create: 'Apply for your spa',
   },
   oauth: {
-    title: 'Connect Claude',
+    title: 'Connect your AI assistant',
     subtitle: '{client} wants to edit spa websites for you.',
     can: 'It can read spa websites and save changes as drafts. It can’t publish: you still preview and publish in the platform console (Websites).',
     sendsTo: 'Approving sends access to {host}.',
     account: 'Signed in as {email}',
     allow: 'Allow',
     deny: 'Deny',
-    notEnabled: 'Connecting Claude is not enabled for your account.',
-    notAdmin: 'Only super-admin accounts can connect Claude.',
-    unverified: 'Verify the email address of this account first, then start again from Claude.',
+    notEnabled: 'Connecting an AI assistant is not enabled for your account.',
+    notAdmin: 'Only super-admin accounts can connect an AI assistant.',
+    unverified:
+      'Verify the email address of this account first, then start again from your AI assistant (Claude or ChatGPT).',
     needs2fa: 'Turn on two-step verification for this super-admin account first.',
-    ready: 'Your account can connect Claude now. Go back to Claude and connect again.',
-    expired: 'This connection request has expired. Start again from Claude.',
+    ready:
+      'Your account can connect now. Go back to your AI assistant (Claude or ChatGPT) and connect again.',
+    expired: 'This connection request has expired. Start again from your AI assistant (Claude or ChatGPT).',
   },
   twoFactor: {
     title: 'Two-step verification',

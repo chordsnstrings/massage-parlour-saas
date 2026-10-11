@@ -319,7 +319,7 @@ describe('site edit ops layer', () => {
         /<img crossorigin="anonymous" src="https:\/\/app\.test\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.png">/,
       )
       const versions = await tx((db) => listVersions(db, ids.tenant!, page.id))
-      expect(versions.map((v) => v.label).find(Boolean)).toMatch(/^Before Claude HTML design /)
+      expect(versions.map((v) => v.label).find(Boolean)).toMatch(/^Before AI assistant HTML design /)
       const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'convert-me'))
       expect(view).toMatchObject({ phoneFixes: false, images: 0, editing: null })
       expect(view!.html).not.toContain('data:image/png')
@@ -414,7 +414,7 @@ describe('site edit ops layer', () => {
     expect(
       siteEditAuditData({ via: 'mcp', ops: [{ op: 'update' }], summary: ['Home: Updated Heading'] }),
     ).toEqual({
-      via: 'via Claude (MCP)',
+      via: 'via AI assistant (MCP)',
       ops: ['update'],
       summary: ['Home: Updated Heading'],
     })
