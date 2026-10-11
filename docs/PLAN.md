@@ -1508,7 +1508,8 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   are super-admins and the **only** AI site editors; the existing production super-admin (`ahmed@arks.ae`, droplet
   base env) stays. deploy/droplet/compose.yml appends both to `${PLATFORM_ADMIN_EMAILS:-}` for web, worker and
   migrate/seed (the base env can't be edited without SSH) and defaults `SITE_AI_EDITOR_EMAILS` to exactly the two (an
-  env / secrets-overlay value replaces that default). They get a login through the new admin join page and the
+  env / secrets-overlay value replaces that default). **Owner 2026-10-11 ("add all the super admins"): the default is
+  now `*` = every super-admin (verified email + 2FA still required); a list narrows it.** They get a login through the new admin join page and the
   console "Super-admins" card (§18.3 "Super-admin join").
 - **Map links (owner request 2026-10-09):** every spa-website address (all templates, footer, placeholder site,
   booking page, uploaded HTML designs via `{{address}}`) opens Google Maps in a new tab. Optional per-branch
@@ -1684,7 +1685,8 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   holding the slug / notifying only after email verification, expiring unverified pending applications.
 - **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT
   only (never publish), both limited to `SITE_AI_EDITOR_EMAILS` (comma-separated, verified email, must also be a
-  super-admin with 2FA; empty = nobody; re-checked on every action/request, never hard-coded).
+  super-admin with 2FA; `*` = every super-admin, the production default since 2026-10-11; empty = nobody; re-checked
+  on every action/request, never hard-coded).
   - **A — ops layer** `@spa/services` `site-edit.ts`: `runSiteEdit` (update / add (index, after/before, into slot) /
     preset / move / remove block, theme, add_page, rename_page, html_design; zod shapes + `applySiteEditOps` against
     the Puck block schema; all-or-nothing; `dryRun` returns the resulting drafts; saves via `saveDraft` / `addPage` /
