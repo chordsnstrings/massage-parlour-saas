@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: 'Websites' }
 const ORDER = (r: WebsiteOverviewRow) =>
   r.status === 'none' ? 0 : r.status === 'template' ? 1 : r.status === 'draft' ? 2 : r.unpublished ? 3 : 4
 
-/** The signed-in super-admin's connected Claude (MCP) clients: consent + newest refresh-token sign-in. */
+/** The signed-in super-admin's connected MCP clients (Claude / ChatGPT): consent + newest refresh-token sign-in. */
 async function claudeClients(userId: string): Promise<ClaudeClient[]> {
   const rows = await platformDb()
     .select({

@@ -7,7 +7,7 @@ import { getT } from '@/i18n/server'
 import { getSession } from '@/server/session'
 import { ConsentForm } from './consent-form'
 
-/** Why this account can (`ready`: a stale "not enabled" link) or can't connect Claude — the exact reason, not a catch-all. */
+/** Why this account can (`ready`: a stale "not enabled" link) or can't connect an assistant — the exact reason. */
 const OAUTH_REASON = {
   ok: 'auth.oauth.ready',
   not_listed: 'auth.oauth.notEnabled',
@@ -21,7 +21,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * OAuth consent for the Claude MCP connector (Better Auth MCP provider sends the browser here with a signed query).
+ * OAuth consent for the AI assistant MCP connector (Claude or ChatGPT; Better Auth's MCP provider sends the browser
+ * here with a signed query).
  * Only SITE_AI_EDITOR_EMAILS super-admins with 2FA see Allow; the /oauth2/consent endpoint re-checks it (auth hook).
  */
 export default async function ConsentPage({
@@ -38,10 +39,10 @@ export default async function ConsentPage({
     Boolean(process.env.BETTER_AUTH_SECRET) &&
     (await verifyOAuthQueryParams(params.toString(), process.env.BETTER_AUTH_SECRET ?? '').catch(() => false))
   const clientId = params.get('client_id')
-  // Where the code goes (signed query; the authorize endpoint already held it to Claude's callbacks): shown, so the
-  // owner sees who they are approving — never just a name the client picked itself.
+  // Where the code goes (signed query; the authorize endpoint already held it to Claude's / ChatGPT's callbacks):
+  // shown, so the owner sees who they are approving — never just a name the client picked itself.
   const redirect = params.get('redirect_uri')
-  // Sent here by the authorize hook (packages/auth) when the signed-in account may not connect Claude.
+  // Sent here by the authorize hook (packages/auth) when the signed-in account may not connect an assistant.
   if (session && params.get('not_enabled') === '1') {
     const status = await siteAiEditorStatus(platformDb(), session.user.id)
     return (

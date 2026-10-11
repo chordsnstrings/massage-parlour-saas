@@ -25,19 +25,19 @@ export const auth: Messages['auth'] = {
     create: 'สมัครใช้งานสำหรับสปาของคุณ',
   },
   oauth: {
-    title: 'เชื่อมต่อ Claude',
+    title: 'เชื่อมต่อผู้ช่วย AI ของคุณ', // R25 (2026-10-11): pending native Thai review.
     subtitle: '{client} ต้องการแก้ไขเว็บไซต์สปาแทนคุณ',
     can: 'สามารถอ่านเว็บไซต์สปาและบันทึกการเปลี่ยนแปลงเป็นฉบับร่าง แต่เผยแพร่ไม่ได้ คุณยังคงดูตัวอย่างและเผยแพร่ในคอนโซลแพลตฟอร์ม (Websites)', // R23 (2026-10-10): pending native Thai review.
     sendsTo: 'เมื่ออนุญาต สิทธิ์การเข้าถึงจะถูกส่งไปยัง {host}',
     account: 'เข้าสู่ระบบในชื่อ {email}',
     allow: 'อนุญาต',
     deny: 'ปฏิเสธ',
-    notEnabled: 'บัญชีของคุณยังไม่ได้เปิดการเชื่อมต่อ Claude',
-    notAdmin: 'เฉพาะบัญชีผู้ดูแลระบบเท่านั้นที่เชื่อมต่อ Claude ได้', // 2026-10-11: pending native Thai review.
-    unverified: 'โปรดยืนยันอีเมลของบัญชีนี้ก่อน แล้วเริ่มใหม่จาก Claude', // 2026-10-11: pending native Thai review.
+    notEnabled: 'บัญชีของคุณยังไม่ได้เปิดการเชื่อมต่อผู้ช่วย AI', // R25 (2026-10-11): pending native Thai review.
+    notAdmin: 'เฉพาะบัญชีผู้ดูแลระบบเท่านั้นที่เชื่อมต่อผู้ช่วย AI ได้', // R25 (2026-10-11): pending native Thai review.
+    unverified: 'โปรดยืนยันอีเมลของบัญชีนี้ก่อน แล้วเริ่มใหม่จากผู้ช่วย AI ของคุณ (Claude หรือ ChatGPT)', // R25 (2026-10-11): pending native Thai review.
     needs2fa: 'โปรดเปิดการยืนยันตัวตนสองขั้นตอนสำหรับบัญชีผู้ดูแลระบบนี้ก่อน',
-    ready: 'บัญชีของคุณเชื่อมต่อ Claude ได้แล้ว โปรดกลับไปที่ Claude แล้วเชื่อมต่ออีกครั้ง', // 2026-10-11: pending native Thai review.
-    expired: 'คำขอเชื่อมต่อนี้หมดอายุแล้ว โปรดเริ่มใหม่จาก Claude',
+    ready: 'บัญชีของคุณเชื่อมต่อได้แล้ว โปรดกลับไปที่ผู้ช่วย AI ของคุณ (Claude หรือ ChatGPT) แล้วเชื่อมต่ออีกครั้ง', // R25 (2026-10-11): pending native Thai review.
+    expired: 'คำขอเชื่อมต่อนี้หมดอายุแล้ว โปรดเริ่มใหม่จากผู้ช่วย AI ของคุณ (Claude หรือ ChatGPT)', // R25 (2026-10-11): pending native Thai review.
   },
   twoFactor: {
     title: 'ยืนยันตัวตนสองขั้นตอน',

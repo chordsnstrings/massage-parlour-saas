@@ -15,8 +15,9 @@ export type ClaudeClient = {
 }
 
 /**
- * Console card for the Claude MCP connector: the URL to paste in Claude (Settings → Connectors → Add custom
- * connector), and this account's connected clients with Revoke. Usable only by SITE_AI_EDITOR_EMAILS accounts.
+ * Console card for the AI assistant MCP connector (R25: Claude or ChatGPT): the URL to add in either assistant, the
+ * setup steps for both, and this account's connected clients with Revoke. Usable only by SITE_AI_EDITOR_EMAILS
+ * accounts.
  */
 export function ConnectClaudeCard({
   url,
@@ -35,21 +36,30 @@ export function ConnectClaudeCard({
       else if (r) toast.error(r.error)
     })
   return (
-    <Card aria-label="Connect Claude">
+    <Card aria-label="Connect Claude or ChatGPT">
       <CardHeader
-        title="Connect Claude"
-        description="Edit spa websites from Claude. Changes are saved as drafts; you preview and publish here as usual."
+        title="Connect Claude or ChatGPT"
+        description="Edit spa websites from Claude or ChatGPT. Changes are saved as drafts; you preview and publish here as usual."
       />
       <CardBody className="space-y-4">
         {!enabled && (
           <p role="note" className="rounded-xl border bg-subtle/50 p-3 text-sm text-muted">
-            Connecting Claude isn’t enabled for your account (SITE_AI_EDITOR_EMAILS).
+            Connecting Claude or ChatGPT isn’t enabled for your account (SITE_AI_EDITOR_EMAILS).
           </p>
         )}
         <div className="space-y-1.5">
+          <ul aria-label="Setup" className="list-disc space-y-1 ps-5 text-xs text-muted">
+            <li>
+              <span className="font-medium text-fg">Claude:</span> Settings → Connectors → Add custom
+              connector, paste this URL.
+            </li>
+            <li>
+              <span className="font-medium text-fg">ChatGPT:</span> Settings → Apps &amp; Connectors →
+              Advanced settings → turn on Developer mode → Create, paste this URL and choose OAuth.
+            </li>
+          </ul>
           <p className="text-xs text-muted">
-            In Claude: Settings → Connectors → Add custom connector, paste this URL, then sign in here with
-            your super-admin account and two-step code and choose Allow.
+            Then sign in here with your super-admin account and two-step code and choose Allow.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg border bg-subtle/50 px-3 py-2 text-sm">
@@ -78,7 +88,7 @@ export function ConnectClaudeCard({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">No Claude connected yet.</p>
+            <p className="text-sm text-muted">No assistant connected yet.</p>
           )}
         </div>
       </CardBody>

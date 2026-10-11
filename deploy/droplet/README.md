@@ -135,23 +135,28 @@ host later means adding it to `packages/core/src/security-headers.ts`.
   to the new login; it becomes a super-admin at once. Every action is in the audit log (`platform.admin.*`).
 - **First visit:** the console asks for two-step verification (authenticator app) before it opens.
 
-## Connect Claude (edit spa sites from Claude)
+## Connect Claude or ChatGPT (edit spa sites from your AI assistant)
 
 1. `SITE_AI_EDITOR_EMAILS` defaults (compose.yml) to `*`: every super-admin (owner, 2026-10-11); a comma-separated
    list in `/opt/spa/.env.base` (first-boot env, needs SSH) or the secrets overlay narrows it (`/opt/spa/.env` itself
    is regenerated on every deploy, so an edit there is lost). Each account must be a super-admin with two-step
    verification on (a named list also needs a verified email). Empty = nobody (Studio "Ask AI" is off too). The
    consent page names the exact reason when an account can't connect.
-2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
-   "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
-   with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
-3. Ask Claude e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ". Every change is a **draft**:
-   preview and publish in the Website Studio as usual (Claude can also give a preview link).
-4. Disconnect any time: console → Websites → Connect Claude → **Revoke** (takes effect on Claude's next call).
+2. The URL is **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude or ChatGPT" card shows
+   it with a copy button).
+   - **Claude** (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
+     "spamanagement", paste the URL.
+   - **ChatGPT**: **Settings → Apps & Connectors → Advanced settings → Developer mode** on, then **Create**: name e.g.
+     "spamanagement", paste the URL, authentication **OAuth**.
+   The assistant opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
+3. Ask e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ". Every change is a **draft**: preview
+   and publish in the Website Studio as usual (the assistant can also give a preview link). ChatGPT may ask you to
+   confirm changes (each tool says whether it only reads, edits or removes).
+4. Disconnect any time: console → Websites → Connect Claude or ChatGPT → **Revoke** (takes effect on the next call).
    Removing your email from `SITE_AI_EDITOR_EMAILS` also stops it at once.
-5. Only Claude's own callback (claude.ai / claude.com) can be registered and receive sign-in codes; the consent page
-   shows where access goes ("Approving sends access to claude.ai"). Registrations nobody approves are deleted after a
-   day. Every approval is in the audit log (`platform.mcp.client_authorized`).
+5. Only Claude's (claude.ai / claude.com) and ChatGPT's (chatgpt.com) own callbacks can be registered and receive
+   sign-in codes; the consent page shows where access goes ("Approving sends access to chatgpt.com"). Registrations
+   nobody approves are deleted after a day. Every approval is in the audit log (`platform.mcp.client_authorized`).
 
 ## Google: Business Profile, Book button, Search Console (F17)
 
@@ -325,7 +330,7 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    - Google OAuth consent screen: privacy policy `https://spamanagement.co/privacy`, terms
      `https://spamanagement.co/terms`.
    - Stripe: nothing (no webhook; the Checkout return address follows the domain the payer is on).
-   - Claude connector: reconnect with `https://app.spamanagement.co/api/mcp` (console → Websites shows it).
+   - Claude / ChatGPT connector: reconnect with `https://app.spamanagement.co/api/mcp` (console → Websites shows it).
    - Later, for staff email: add the Resend key (console → Company → Email (Resend)), then **Set up sending domain**
      in the same card: it adds `spamanagement.co` to Resend (or finds it) and lists the records to add in Namecheap
      → Advanced DNS, with the Host as Namecheap wants it (`send`, `resend._domainkey`), Value (Copy), Priority, TTL
