@@ -134,9 +134,14 @@ describe('htmlDesignDocument links', () => {
       ['noembed', '<noembed>{{address}}</noembed>', `<noembed>${plain}</noembed>`],
       ['noframes', '<noframes>{{address}}</noframes>', `<noframes>${plain}</noframes>`],
       ['noscript', '<noscript>{{address}}</noscript>', `<noscript>${plain}</noscript>`],
-      ['a comment', '<!-- {{address}} -->', `<!-- ${plain} -->`],
+      // R24 review: comments are never filled; script bodies get JS-string text.
+      ['a comment', '<!-- {{address}} -->', '<!-- {{address}} -->'],
       ['a button', '<button>Go to {{address}}</button>', `<button>Go to ${plain}</button>`],
-      ['a raw-text element closing at EOF', '<script>a="{{address}}"</script', `a="${plain}"`],
+      [
+        'a raw-text element closing at EOF',
+        '<script>a="{{address}}"</script',
+        'a="Shop \\u003c4\\u003e \\u0022Marina\\u0022"',
+      ],
     ])('%s', (_, html, expected) => {
       const out = run(html)
       expect(out).not.toContain('data-spa-map>')
@@ -167,7 +172,7 @@ describe('htmlDesignDocument links', () => {
         },
         false,
       )
-      expect(out).toContain('var u="x&#92;";var a=";alert(1)//";')
+      expect(out).toContain('var u="x\\\\";var a=";alert(1)//";')
     })
   })
 })

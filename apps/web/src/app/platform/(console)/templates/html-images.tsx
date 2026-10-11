@@ -1,5 +1,6 @@
 'use client'
 import {
+  decodeHtmlBytes,
   HTML_IMAGE_SRC_MAX,
   HTML_IMAGE_URL,
   type HtmlDesignImage,
@@ -15,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/form'
 import { Checkbox, Input, Select } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { loadHtmlDesignAction } from './actions'
 import { uploadTooLarge } from './upload-sheet'
 
 type Spa = { slug: string; name: string }
@@ -47,7 +49,11 @@ export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
             const big = uploadTooLarge('html', f)
             setTooLarge(big)
             if (!f || big) return setHtml(null)
-            f.text().then(setHtml, () => setHtml(null))
+            // Read like the browser and the upload route do (the file's own encoding), never blindly as UTF-8.
+            f.arrayBuffer().then(
+              (b) => setHtml(decodeHtmlBytes(new Uint8Array(b)).html),
+              () => setHtml(null),
+            )
           }}
         />
         {tooLarge && (
@@ -76,6 +82,39 @@ export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
       )}
     </>
   )
+}
+
+/** The adjuster of a stored HTML template: its design (up to 5 MB) is loaded when the sheet opens. */
+export function TemplateImageAdjuster({
+  id,
+  ...rest
+}: { id: string } & Omit<React.ComponentProps<typeof HtmlImageAdjuster>, 'html'>) {
+  const [state, setState] = useState<{ html: string } | { error: string } | null>(null)
+  useEffect(() => {
+    let live = true
+    loadHtmlDesignAction(id).then(
+      (r) => {
+        if (live) setState(r)
+      },
+      () => {
+        if (live) setState({ error: 'Could not load the design. Try again.' })
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [id])
+  // Until it is shown, saving keeps the adjustments as they are.
+  const keep = <input type="hidden" name="images" value={JSON.stringify(rest.initial)} />
+  if (!state) return <p className="text-[13px] text-muted">{keep}Loading the design…</p>
+  if ('error' in state)
+    return (
+      <p role="alert" className="text-[13px] text-danger">
+        {keep}
+        {state.error}
+      </p>
+    )
+  return <HtmlImageAdjuster html={state.html} {...rest} />
 }
 
 /** Lists every image of a design with focal point, Fill / Fit and replace; previews the result at 360 / 1280. */

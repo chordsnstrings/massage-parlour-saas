@@ -336,8 +336,6 @@ export const domain = {
   planAlreadyArchived: '{name} is already archived',
   planOnlyOffered: '{name} is the only plan new spas can get. Add another plan or make one available first.',
   planNotArchived: '{name} is not archived',
-  // R24 HTML designs (console / Claude connector).
+  // R24 HTML designs (console / AI assistant connector).
   notHtmlDesignPage: '{page} is not an HTML design page',
-  tooManyDesignFiles:
-    'The design embeds {count} images, fonts and videos; at most {max} can be moved out. Link some of them by URL instead.',
 } as const

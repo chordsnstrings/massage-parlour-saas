@@ -1,12 +1,15 @@
 'use server'
+import { htmlDesignBakedFixes } from '@spa/core'
 import { platformDb, tenants, withTenant } from '@spa/db'
 import {
   DomainError,
   getStudioTemplate,
+  htmlDesignSource,
   SITE_EDIT_MAX_PAGE_BYTES,
   sanitizeTemplatePages,
   saveStudioTemplate,
   snapshotSite,
+  spaDesignsIntoTemplate,
   TEMPLATE_KEY,
   type TemplatePage,
   templateKeyFrom,
@@ -20,6 +23,7 @@ import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { spaDocReader, templateDocReader } from '@/server/html-design-files'
 import { templateProblem, templateSamples } from './data'
 import { parseImages } from './parse-images'
 
@@ -66,8 +70,19 @@ export async function saveSiteAsTemplateAction(_p: ActionResult, fd: FormData): 
       key: 'Choose another key',
     })
   try {
-    // The spa's pages are tenant data: read them inside its own tenant transaction.
-    const snap = await withTenant(tenant.id, (tx) => snapshotSite(tx, tenant.id))
+    // The spa's pages are tenant data: read them inside its own tenant transaction. R24: its HTML designs are copied
+    // into template files (a template never depends on a spa's files).
+    const snap = await withTenant(tenant.id, async (tx) => {
+      const s = await snapshotSite(tx, tenant.id)
+      const read = spaDocReader(tx, tenant.id)
+      const pages = []
+      for (const p of s.pages)
+        pages.push({
+          ...p,
+          data: await spaDesignsIntoTemplate(p.data, { read, db: platformDb(), userId: user.id }),
+        })
+      return { ...s, pages }
+    })
     const pages = sanitizeTemplatePages(snap.pages, {
       key,
       tenantName: tenant.name,
@@ -179,8 +194,17 @@ export async function setHtmlPhoneFixesAction(id: string, on: boolean): Promise<
   const page = (row?.pages as TemplatePage[] | undefined)?.[0]
   const node = (page?.data.content as { type: string; props: Record<string, unknown> }[] | undefined)?.[0]
   if (!row || !page || node?.type !== HTML_DESIGN) return fail('This is not an uploaded HTML design')
+  const legacy = htmlDesignBakedFixes(node.props)
   const pages: TemplatePage[] = [
-    { ...page, data: { ...page.data, content: [{ ...node, props: { ...node.props, phoneFixes: on } }] } },
+    {
+      ...page,
+      data: {
+        ...page.data,
+        content: [
+          { ...node, props: { ...node.props, phoneFixes: on, ...(legacy ? { bakedFixes: true } : {}) } },
+        ],
+      },
+    },
     ...(row.pages as TemplatePage[]).slice(1),
   ]
   try {
@@ -197,6 +221,28 @@ export async function setHtmlPhoneFixesAction(id: string, on: boolean): Promise<
   })
   revalidate()
   return ok(
-    `Phone fixes ${on ? 'on' : 'off'} for ${row.name}. Spas already using it keep their copy — re-apply the template to update them.`,
+    `Phone fixes ${on ? 'on' : 'off'} for ${row.name}. Spas already using it keep their copy — re-apply the template to update them.${
+      !on && legacy
+        ? ' This design was uploaded before 11 Oct 2026 with the old phone fixes saved into it: upload the original file again (tick “Replace”) to show it exactly.'
+        : ''
+    }`,
   )
+}
+
+/**
+ * R24: the design of an uploaded HTML template, for the console's image adjuster (loaded when its sheet opens: a
+ * design may be 5 MB, too much to ship with the templates list). Super-admins only.
+ */
+export async function loadHtmlDesignAction(id: string): Promise<{ html: string } | { error: string }> {
+  await requirePlatformAdmin()
+  if (!z.uuid().safeParse(id).success) return { error: 'Template not found' }
+  const row = await getStudioTemplate(platformDb(), { id })
+  const node = (
+    (row?.pages as TemplatePage[] | undefined)?.[0]?.data.content as
+      | { type: string; props: Record<string, unknown> }[]
+      | undefined
+  )?.[0]
+  if (!row || node?.type !== HTML_DESIGN) return { error: 'This is not an uploaded HTML design' }
+  const html = await htmlDesignSource(node.props, templateDocReader())
+  return html === null ? { error: 'The design file is missing — upload it again' } : { html }
 }

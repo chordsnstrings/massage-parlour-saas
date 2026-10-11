@@ -169,7 +169,15 @@ describe('API + HTML design policies (F10)', () => {
     expect(d.sandbox).not.toContain('allow-same-origin')
     expect(d['frame-ancestors']).toEqual(["'self'"])
     expect(d['script-src']).toEqual(expect.arrayContaining(['*', "'unsafe-inline'"]))
-    expect(d['object-src']).toEqual(["'none'"])
+    // R24 review: nothing narrower than default-src (data:/blob: fetches, <object>, mailto: forms work as opened).
+    expect(Object.keys(d).sort()).toEqual([
+      'default-src',
+      'frame-ancestors',
+      'sandbox',
+      'script-src',
+      'style-src',
+    ])
+    expect(d['default-src']).toEqual(['*', 'data:', 'blob:', "'unsafe-inline'", "'unsafe-eval'"])
   })
 
   it('R24: sandbox lists, direct design page CSP + headers, permissions variants', () => {
@@ -187,7 +195,7 @@ describe('API + HTML design policies (F10)', () => {
     expect(page.sandbox).not.toContain('allow-same-origin')
     expect(page.sandbox).toEqual(HTML_DESIGN_SANDBOX.split(' '))
     expect(page['frame-ancestors']).toEqual(["'self'"])
-    expect(page['font-src']).toEqual(['*', 'data:'])
+    expect(page['font-src']).toBeUndefined()
 
     // Same string next.config.ts sets on the paths the proxy skips.
     expect(PERMISSIONS_POLICY).toBe(

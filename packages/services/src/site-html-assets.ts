@@ -1,42 +1,37 @@
-// R24: embedded files of uploaded HTML designs. A design file may be up to 5 MB, but it is stored inside page JSON
-// (≤ ~500 KB): its embedded images, fonts and videos (`data:` URIs) are moved out to stored files — the same bytes,
-// served with their real type (+ CORS, so fonts load from the sandboxed design) — and the URLs rewritten to absolute
-// /files URLs. Nothing else in the design changes. Where the files live:
-//  - template uploads (platform level): `site_template_files` (content-addressed, public, immutable);
-//  - a spa's design (template applied, connector edits): the spa's own public stored files (purpose `html_design`).
-// Applying a template copies the files its design uses into the spa (`localiseHtmlDesignAssets`): a spa's site never
-// depends on a template row or on another spa. Like every service: takes the caller's tx; no permission checks here.
+// R24: uploaded HTML designs are stored BYTE FOR BYTE as files (R24 review: the owner's rule "it should apply as it
+// is without missing anything" — nothing in a design is rewritten, moved out or size-capped below the 5 MB upload
+// limit). Where the document lives:
+//  - a template's design: `site_template_files` (platform level, content-addressed, text/html);
+//  - a spa's design (template applied, connector edits): one of its own PRIVATE stored files (purpose
+//    `html_design_doc`, deduplicated by content; never served by /files to visitors — the platform renders it).
+// The HtmlDesign block holds the reference (`props.doc`, @spa/core HtmlDesignDoc) with `props.html` = ''; renderers
+// fill the html right before rendering (`resolveHtmlDesignDocs`), writers never store it inline again. Designs stored
+// before keep their inline html (read as is). Applying a template copies its document into the spa, and any /files URL
+// it or an image replacement uses that belongs to a template or another spa (`localiseHtmlDesignAssets`): a spa's site
+// never depends on a template row or on another spa. Like every service: takes the caller's tx; no permission checks.
 import { createHash } from 'node:crypto'
 import {
-  type DataUri,
-  type HtmlAssetRef,
+  type HtmlDesignDoc,
   type HtmlImageAdjust,
   htmlDesignAssetRefs,
-  htmlDesignSizeReport,
-  htmlDesignStoredSize,
-  MAX_HTML_DESIGN_BYTES,
-  parseDataUri,
+  htmlDesignDocOf,
   remapHtmlImageAdjustments,
   rewriteHtmlDesignAssets,
 } from '@spa/core'
 import { type Db, platformDb, storedFiles, type Tx } from '@spa/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
-import {
-  FONT_TYPES,
-  fileIdFromUrl,
-  sniffFontType,
-  sniffImageType,
-  sniffVideoType,
-  VIDEO_TYPES,
-} from './media'
+import { FONT_TYPES, fileIdFromUrl, VIDEO_TYPES } from './media'
 import { getFile, getTemplateFile, IMAGE_TYPES, MAX_FILE_BYTES, putFile, putTemplateFile } from './storage'
 
-/** Smaller payloads stay inline (not worth a request). */
-export const HTML_ASSET_MIN_BYTES = 1024
-export const MAX_HTML_ASSETS = 300
-/** stored_files.purpose of a spa's moved-out design files (public). */
+/** stored_files.purpose of a spa's design documents (private: the platform renders them, /files never serves them). */
+export const HTML_DESIGN_DOC_PURPOSE = 'html_design_doc'
+/** stored_files.purpose of images / fonts / videos copied into a spa for its design (public, like media). */
 export const HTML_DESIGN_FILE_PURPOSE = 'html_design'
+/** Content type of stored design documents (always UTF-8: uploads are decoded with the file's own encoding first). */
+export const HTML_DESIGN_DOC_TYPE = 'text/html; charset=utf-8'
+/** Block type of an uploaded HTML design (web: components/site/blocks/html-design.tsx). */
+const HTML_DESIGN = 'HtmlDesign'
 
 /** Absolute public URL of a stored / template file (web: canonicalUrls().api(`/files/${id}/${name}`)). */
 export type FileUrl = (id: string, name: string) => string
@@ -56,137 +51,186 @@ const EXT: Record<string, string> = {
 }
 const MOVABLE = new Set<string>([...IMAGE_TYPES, ...FONT_TYPES, ...VIDEO_TYPES])
 
-const IMAGE_DECL = /^image\/(?:jpeg|jpg|pjpeg|png|webp|avif|gif)$/
-const FONT_DECL = /^(?:font\/[a-z0-9.+-]+|application\/(?:x-)?font-[a-z0-9.+-]+)$/
-const VIDEO_DECL = /^video\/(?:mp4|webm)$/
-
-/** Percent-decoded bytes of a data: payload (byte-wise, like the browser; never throws). */
-function percentBytes(s: string): Buffer {
-  if (!s.includes('%')) return Buffer.from(s, 'latin1')
-  const out = Buffer.alloc(s.length)
-  let n = 0
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    if (c === 37 && /^[0-9a-fA-F]{2}$/.test(s.slice(i + 1, i + 3))) {
-      out[n++] = Number.parseInt(s.slice(i + 1, i + 3), 16)
-      i += 2
-    } else out[n++] = c & 0xff
-  }
-  return out.subarray(0, n)
-}
-
-/** The payload's bytes (forgiving base64 as browsers decode it); null when it doesn't decode cleanly. */
-export function dataUriBytes(uri: DataUri): Buffer | null {
-  const raw = percentBytes(uri.payload)
-  if (!uri.base64) return raw
-  let d = raw.toString('latin1').replace(/[\t\n\f\r ]+/g, '')
-  if (d.length % 4 === 0) d = d.replace(/==?$/, '')
-  if (d.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(d)) return null
-  return Buffer.from(d, 'base64')
-}
-
-/** The stored type of an embedded payload: sniffed, allowed and of the declared family; else null (stays inline). */
-function movableType(decl: string, where: HtmlAssetRef['where'], bytes: Buffer): string | null {
-  if (IMAGE_DECL.test(decl)) return sniffImageType(bytes)
-  if (FONT_DECL.test(decl) || (decl === 'application/octet-stream' && where === 'css'))
-    return sniffFontType(bytes)
-  if (VIDEO_DECL.test(decl)) return sniffVideoType(bytes)
-  return null
-}
-
-export type HtmlAsset = {
-  sha256: string
-  bytes: Buffer
-  contentType: string
-  ext: string
-  /** File name in the URL: `{sha256[0..16]}.{ext}` (the extension keeps font URLs recognisable). */
-  name: string
-  refs: HtmlAssetRef[]
-}
-
-export type HtmlAssetPlan = {
-  refs: HtmlAssetRef[]
-  assets: HtmlAsset[]
-  /** data: payloads that stay inline (SVG, icons, CSS, tiny, malformed, unknown, type mismatch, srcset candidates). */
-  leftover: { count: number; bytes: number; types: string[] }
-}
-
 const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex')
-const assetOf = (bytes: Buffer, contentType: string): Omit<HtmlAsset, 'refs'> => {
-  const sha = sha256(bytes)
-  const ext = EXT[contentType] ?? 'bin'
-  return { sha256: sha, bytes, contentType, ext, name: `${sha.slice(0, 16)}.${ext}` }
+
+/* ------------------------------------------------------------------ Design documents */
+
+/** The reference a design gets once stored (`file` = '' for a dry run: nothing stored yet). */
+export function htmlDesignDocFor(html: string, file = ''): HtmlDesignDoc {
+  const bytes = Buffer.from(html, 'utf8')
+  return { file, sha256: sha256(bytes), bytes: bytes.length, chars: html.length }
 }
 
-/** Which embedded payloads move out (identical payloads once), and what stays inline. */
-export function planHtmlDesignAssets(html: string): HtmlAssetPlan {
-  const refs = htmlDesignAssetRefs(html)
-  const bySha = new Map<string, HtmlAsset>()
-  const leftover = { count: 0, bytes: 0, types: new Set<string>() }
-  // An <img>/<source> whose srcset holds a data: candidate keeps all its URLs inline: browsers choose a data:
-  // candidate differently from a URL one (Chromium shows a data: 2x even at 1x density), so moving it would change
-  // which picture the design shows.
-  const srcsetData = new Set(
-    refs.filter((r) => r.attr === 'srcset' && /^data:/i.test(r.url)).map((r) => r.tagStart),
-  )
-  for (const ref of refs) {
-    const uri = parseDataUri(ref.url)
-    if (!uri) continue
-    const bytes = dataUriBytes(uri)
-    const keep = ref.where === 'attr' && srcsetData.has(ref.tagStart)
-    const type =
-      !keep && bytes && bytes.length >= HTML_ASSET_MIN_BYTES && bytes.length <= MAX_FILE_BYTES
-        ? movableType(uri.mime, ref.where, bytes)
-        : null
-    if (!type) {
-      leftover.count++
-      leftover.bytes += ref.end - ref.start
-      leftover.types.add(uri.mime)
-      continue
-    }
-    const a = assetOf(bytes!, type)
-    const hit = bySha.get(a.sha256) ?? { ...a, refs: [] }
-    hit.refs.push(ref)
-    bySha.set(a.sha256, hit)
+const docBytes = (html: string) => {
+  const bytes = Buffer.from(html, 'utf8')
+  if (!bytes.length) throw new DomainError('The HTML design is empty')
+  if (bytes.length > MAX_FILE_BYTES)
+    throw new DomainError(
+      `The design is ${(bytes.length / (1024 * 1024)).toFixed(1)} MB as UTF-8 text; the limit is ${MAX_FILE_BYTES / (1024 * 1024)} MB.`,
+    )
+  return bytes
+}
+
+/** Stores a spa's design document (its own private file, deduplicated by content) and returns the reference. */
+export async function storeSpaHtmlDoc(
+  tx: Tx,
+  input: { tenantId: string; html: string; userId?: string | null },
+): Promise<HtmlDesignDoc> {
+  const bytes = docBytes(input.html)
+  const doc = htmlDesignDocFor(input.html)
+  const filename = `${doc.sha256}.html`
+  const [found] = await tx
+    .select({ id: storedFiles.id })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.tenantId, input.tenantId),
+        eq(storedFiles.purpose, HTML_DESIGN_DOC_PURPOSE),
+        eq(storedFiles.filename, filename),
+      ),
+    )
+    .limit(1)
+  if (found) return { ...doc, file: found.id }
+  const row = await putFile(tx, {
+    tenantId: input.tenantId,
+    bytes,
+    contentType: HTML_DESIGN_DOC_TYPE,
+    filename,
+    isPublic: false,
+    purpose: HTML_DESIGN_DOC_PURPOSE,
+    createdBy: input.userId ?? null,
+  })
+  return { ...doc, file: row.id }
+}
+
+/** Stores a template's design document (`site_template_files`, platform role, content-addressed). */
+export async function storeTemplateHtmlDoc(
+  db: Db | Tx,
+  input: { html: string; userId?: string | null },
+): Promise<HtmlDesignDoc> {
+  const bytes = docBytes(input.html)
+  const doc = htmlDesignDocFor(input.html)
+  const row = await putTemplateFile(db, {
+    bytes,
+    contentType: HTML_DESIGN_DOC_TYPE,
+    sha256: doc.sha256,
+    createdBy: input.userId,
+  })
+  return { ...doc, file: row.id }
+}
+
+/** Reads one design document; null when it is missing (or not a design document). */
+export type HtmlDocReader = (doc: HtmlDesignDoc) => Promise<string | null>
+
+/** A spa's own design documents (inside its tenant transaction; another spa's file id reads nothing). */
+export const spaHtmlDocReader =
+  (tx: Pick<Tx, 'select'>, tenantId: string): HtmlDocReader =>
+  async (doc) => {
+    if (!doc.file) return null
+    const row = await getFile(tx, doc.file)
+    if (!row || row.tenantId !== tenantId || row.purpose !== HTML_DESIGN_DOC_PURPOSE) return null
+    return row.bytes.toString('utf8')
   }
-  return { refs, assets: [...bySha.values()], leftover: { ...leftover, types: [...leftover.types] } }
+
+/** Template design documents (platform role). */
+export const templateHtmlDocReader =
+  (db: Pick<Db, 'select'> = platformDb()): HtmlDocReader =>
+  async (doc) => {
+    if (!doc.file) return null
+    const row = await getTemplateFile(db, doc.file)
+    if (!row?.contentType.startsWith('text/html')) return null
+    return row.bytes.toString('utf8')
+  }
+
+type Node = { type?: unknown; props?: Record<string, unknown> }
+type WithContent = { content?: unknown }
+
+/** The design source of an HtmlDesign block: its document file, else its inline (legacy) html; null if missing. */
+export async function htmlDesignSource(
+  props: Record<string, unknown> | undefined,
+  read: HtmlDocReader,
+): Promise<string | null> {
+  const doc = htmlDesignDocOf(props)
+  if (doc) return read(doc)
+  return typeof props?.html === 'string' ? props.html : null
 }
 
-const kb = (n: number) => `${Math.max(1, Math.ceil(n / 1024))} KB`
-const sizeText = (n: number) => (n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : kb(n))
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
-/** null when the design fits; else what it is still made of and what to do. */
-export function htmlDesignSizeProblem(html: string, moved?: { count: number; bytes: number }): string | null {
-  const total = htmlDesignStoredSize(html)
-  if (total <= MAX_HTML_DESIGN_BYTES) return null
-  const r = htmlDesignSizeReport(html)
-  const parts = (
-    [
-      ['scripts', r.scripts],
-      ['styles', r.styles],
-      ['markup', r.markup],
-      ['inline SVG', r.svg],
-      [
-        `${plural(r.embedded.count, 'other embedded file')} (SVG, icons… can't be moved out)`,
-        r.embedded.bytes,
-      ],
-    ] as [string, number][]
-  )
-    .filter(([, n]) => n > 0)
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, n]) => `${label} ${kb(n)}`)
-  const lead = moved?.count
-    ? `After moving ${plural(moved.count, 'embedded image, font or video file')} (${sizeText(moved.bytes)}) out, the design is still`
-    : 'The design is'
-  return `${lead} ${kb(total)} (${parts.join(', ')}); the limit is about ${MAX_HTML_DESIGN_BYTES / 1024} KB. Load big scripts or styles from a URL, or shrink them.`
+/** The page's HtmlDesign blocks, each changed by `fn` (other blocks untouched; same object when there are none). */
+export async function mapHtmlDesignNodes<T>(
+  data: T,
+  fn: (props: Record<string, unknown>) => Promise<Record<string, unknown>>,
+): Promise<T> {
+  const content = (data as WithContent | null)?.content
+  if (!Array.isArray(content) || !content.some((n: Node) => n?.type === HTML_DESIGN)) return data
+  const next: Node[] = []
+  for (const n of content as Node[])
+    next.push(n?.type === HTML_DESIGN ? { ...n, props: await fn({ ...(n.props ?? {}) }) } : n)
+  return { ...data, content: next } as T
 }
 
-/** Stores one moved-out file and returns its id. */
-export type HtmlAssetSink = (asset: HtmlAsset) => Promise<string>
+/**
+ * Right before rendering: fills `props.html` of every HtmlDesign block that references a document (left '' when the
+ * file is missing). The result is for rendering only — never save it (writers keep the reference).
+ */
+export const resolveHtmlDesignDocs = <T>(data: T, read: HtmlDocReader): Promise<T> =>
+  mapHtmlDesignNodes(data, async (props) => {
+    const doc = htmlDesignDocOf(props)
+    return doc ? { ...props, html: (await read(doc)) ?? '' } : props
+  })
 
-/** A spa's design files: its own public stored files (purpose html_design), deduplicated by content. */
-export function tenantHtmlAssetSink(tx: Tx, tenantId: string, userId?: string | null): HtmlAssetSink {
+/** Template export (JSON file): every design inline again (`doc` dropped), so the file works on any install. */
+export const inlineHtmlDesignDocs = <T>(data: T, read: HtmlDocReader): Promise<T> =>
+  mapHtmlDesignNodes(data, async (props) => {
+    const doc = htmlDesignDocOf(props)
+    if (!doc) return props
+    const html = await read(doc)
+    if (html === null) throw new DomainError('An HTML design file of this template is missing')
+    const { doc: _drop, ...rest } = props
+    return { ...rest, html }
+  })
+
+/**
+ * Re-homes every design of a page: its source (document or inline html) through `change`, stored with `store`.
+ * Used for template → spa (apply) and spa → template (save a site as a template).
+ */
+async function rehomeHtmlDesigns<T>(
+  data: T,
+  read: HtmlDocReader,
+  store: (html: string) => Promise<HtmlDesignDoc>,
+  change?: (
+    html: string,
+    images: HtmlImageAdjust[],
+  ) => Promise<{ html: string; images: HtmlImageAdjust[]; copied: number }>,
+): Promise<{ data: T; copied: number }> {
+  let copied = 0
+  const out = await mapHtmlDesignNodes(data, async (props) => {
+    const source = await htmlDesignSource(props, read)
+    if (source === null)
+      throw new DomainError('An HTML design file of this template is missing — upload it again')
+    const images = Array.isArray(props.images) ? (props.images as HtmlImageAdjust[]) : []
+    const r = change ? await change(source, images) : { html: source, images, copied: 0 }
+    copied += r.copied
+    return { ...props, html: '', doc: await store(r.html), images: r.images }
+  })
+  return { data: out, copied }
+}
+
+/** A spa page about to be saved as a template page: its designs copied into template files (platform role). */
+export const spaDesignsIntoTemplate = <T>(
+  data: T,
+  input: { read: HtmlDocReader; db: Db | Tx; userId?: string | null },
+): Promise<T> =>
+  rehomeHtmlDesigns(data, input.read, (html) =>
+    storeTemplateHtmlDoc(input.db, { html, userId: input.userId }),
+  ).then((r) => r.data)
+
+/* ------------------------------------------------------------------ Files a design uses */
+
+/** Stores one copied file and returns its id. */
+type AssetSink = (a: { sha256: string; bytes: Buffer; contentType: string; name: string }) => Promise<string>
+
+/** A spa's copies of the files its design uses: its own public stored files (purpose html_design), deduplicated. */
+export function tenantHtmlAssetSink(tx: Tx, tenantId: string, userId?: string | null): AssetSink {
   return async (a) => {
     const [found] = await tx
       .select({ id: storedFiles.id })
@@ -213,69 +257,9 @@ export function tenantHtmlAssetSink(tx: Tx, tenantId: string, userId?: string | 
   }
 }
 
-/** A template upload's files: `site_template_files` (platform role), deduplicated by content. */
-export function templateHtmlAssetSink(db: Db | Tx, userId?: string | null): HtmlAssetSink {
-  return async (a) =>
-    (
-      await putTemplateFile(db, {
-        bytes: a.bytes,
-        contentType: a.contentType,
-        sha256: a.sha256,
-        createdBy: userId,
-      })
-    ).id
-}
-
-/** Same length as a real id, so a dry run's sizes are exact. */
-const DRY_ID = '00000000-0000-4000-8000-000000000000'
-
-export type PreparedHtmlDesign = {
-  html: string
-  images: HtmlImageAdjust[]
-  moved: { count: number; bytes: number }
-  leftover: HtmlAssetPlan['leftover']
-}
-
-/**
- * Moves a design's embedded files out (`sink`) and rewrites their URLs; adjustments keep matching their images.
- * The size is checked first (with placeholder ids of the same length), so nothing is stored for a design that
- * doesn't fit: DomainError with what is still too big. `dryRun`: nothing stored, placeholder URLs.
- */
-export async function prepareHtmlDesign(input: {
-  html: string
-  images?: HtmlImageAdjust[]
-  sink: HtmlAssetSink
-  fileUrl: FileUrl
-  dryRun?: boolean
-}): Promise<PreparedHtmlDesign> {
-  const plan = planHtmlDesignAssets(input.html)
-  if (plan.assets.length > MAX_HTML_ASSETS)
-    throw new DomainError(
-      `The design embeds ${plan.assets.length} images, fonts and videos; at most ${MAX_HTML_ASSETS} can be moved out. Link some of them by URL instead.`,
-    )
-  const moved = { count: plan.assets.length, bytes: plan.assets.reduce((n, a) => n + a.bytes.length, 0) }
-  const rewrite = (ids: Map<string, string>) => {
-    if (!plan.assets.length) return input.html
-    const urls = new Map<HtmlAssetRef, string>()
-    for (const a of plan.assets)
-      for (const r of a.refs) urls.set(r, input.fileUrl(ids.get(a.sha256)!, a.name))
-    return rewriteHtmlDesignAssets(input.html, plan.refs, (r) => urls.get(r) ?? null)
-  }
-  const dry = rewrite(new Map(plan.assets.map((a) => [a.sha256, DRY_ID])))
-  const problem = htmlDesignSizeProblem(dry, moved)
-  if (problem) throw new DomainError(problem)
-  let html = dry
-  if (!input.dryRun && plan.assets.length) {
-    const ids = new Map<string, string>()
-    for (const a of plan.assets) ids.set(a.sha256, await input.sink(a))
-    html = rewrite(ids)
-  }
-  return {
-    html,
-    images: remapHtmlImageAdjustments(input.html, html, input.images ?? []),
-    moved,
-    leftover: plan.leftover,
-  }
+const assetOf = (bytes: Buffer, contentType: string) => {
+  const sha = sha256(bytes)
+  return { sha256: sha, bytes, contentType, name: `${sha.slice(0, 16)}.${EXT[contentType] ?? 'bin'}` }
 }
 
 /** Keeps a URL's query (e.g. `?w=480`) when the file it points at moves. */
@@ -332,7 +316,7 @@ export async function localiseHtmlDesignAssets(
       file = await getFile(db, id)
     }
     if (!file || !MOVABLE.has(file.contentType) || !file.bytes.length) continue
-    const asset = { ...assetOf(file.bytes, file.contentType), refs: [] }
+    const asset = assetOf(file.bytes, file.contentType)
     moved.set(id, input.fileUrl(await sink(asset), asset.name))
   }
   if (!moved.size) return { html: input.html, images, copied: 0 }
@@ -341,7 +325,7 @@ export async function localiseHtmlDesignAssets(
     const to = id ? moved.get(id) : undefined
     return to && url ? withQuery(to, url) : null
   }
-  const html = rewriteHtmlDesignAssets(input.html, refs, (r) => target(r.url), { crossorigin: false })
+  const html = rewriteHtmlDesignAssets(input.html, refs, (r) => target(r.url))
   const remapped = remapHtmlImageAdjustments(input.html, html, images).map((a) => {
     const to = target(a.replace)
     return to ? { ...a, replace: to } : a
@@ -349,33 +333,31 @@ export async function localiseHtmlDesignAssets(
   return { html, images: remapped, copied: moved.size }
 }
 
-type Node = { type?: unknown; props?: Record<string, unknown> }
-
-/** A template page about to be written into a spa: its HTML designs localised (see localiseHtmlDesignAssets). */
+/**
+ * A template page about to be written into a spa: each HTML design copied into the spa's own design document, with
+ * the files it uses localised when `fileUrl` is given (see localiseHtmlDesignAssets). Always run it before a
+ * template's pages are written into a spa: a spa page never references a template's file.
+ */
 export async function materializeTemplatePageData<T extends Record<string, unknown>>(
   tx: Tx,
-  input: { tenantId: string; data: T; fileUrl: FileUrl; userId?: string | null; platform?: Db },
+  input: { tenantId: string; data: T; fileUrl?: FileUrl; userId?: string | null; platform?: Db },
 ): Promise<{ data: T; copied: number }> {
-  const content = (input.data as { content?: Node[] }).content
-  if (!Array.isArray(content) || !content.some((n) => n?.type === 'HtmlDesign'))
-    return { data: input.data, copied: 0 }
-  let copied = 0
-  const next: Node[] = []
-  for (const n of content) {
-    if (n?.type !== 'HtmlDesign' || typeof n.props?.html !== 'string') {
-      next.push(n)
-      continue
-    }
-    const r = await localiseHtmlDesignAssets(tx, {
-      tenantId: input.tenantId,
-      html: n.props.html,
-      images: Array.isArray(n.props.images) ? (n.props.images as HtmlImageAdjust[]) : [],
-      fileUrl: input.fileUrl,
-      userId: input.userId,
-      platform: input.platform,
-    })
-    copied += r.copied
-    next.push({ ...n, props: { ...n.props, html: r.html, images: r.images } })
-  }
-  return { data: { ...input.data, content: next }, copied }
+  const platform = input.platform ?? platformDb()
+  const fileUrl = input.fileUrl
+  return rehomeHtmlDesigns(
+    input.data,
+    templateHtmlDocReader(platform),
+    (html) => storeSpaHtmlDoc(tx, { tenantId: input.tenantId, html, userId: input.userId }),
+    fileUrl
+      ? (html, images) =>
+          localiseHtmlDesignAssets(tx, {
+            tenantId: input.tenantId,
+            html,
+            images,
+            fileUrl,
+            userId: input.userId,
+            platform,
+          })
+      : undefined,
+  )
 }

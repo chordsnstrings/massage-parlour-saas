@@ -53,15 +53,32 @@ export function TemplateUploadSheet({
   return <FormSheet {...sheet} action={action} />
 }
 
-/** "Phone fixes" switch on an HTML template row (off = shown exactly like the file). */
-export function PhoneFixesSwitch({ id, name, on }: { id: string; name: string; on: boolean }) {
+/**
+ * "Phone fixes" switch on an HTML template row (off = shown exactly like the file). `baked`: uploaded before R24 with
+ * the old fixes saved into the file itself — off can't undo those, so the row says to upload the original again.
+ */
+export function PhoneFixesSwitch({
+  id,
+  name,
+  on,
+  baked = false,
+}: {
+  id: string
+  name: string
+  on: boolean
+  baked?: boolean
+}) {
   const router = useRouter()
   const [checked, setChecked] = useState(on)
   const [pending, start] = useTransition()
   return (
     <label
       className="inline-flex min-h-11 items-center gap-2 px-2 text-[13px]"
-      title="Off = shown exactly like the file (recommended). On = the platform adds a phone viewport and keeps images and wide elements inside phone screens — this changes how the design looks."
+      title={
+        baked
+          ? 'Uploaded before 11 Oct 2026: the old phone fixes were saved into this file, so Off can’t show it exactly — upload the original file again (tick “Replace”).'
+          : 'Off = shown exactly like the file (recommended). On = the platform adds a phone viewport and keeps images and wide elements inside phone screens — this changes how the design looks.'
+      }
     >
       <Checkbox
         aria-label={`Phone fixes for ${name}`}
@@ -83,6 +100,11 @@ export function PhoneFixesSwitch({ id, name, on }: { id: string; name: string; o
         }}
       />
       <span className="max-lg:sr-only">Phone fixes</span>
+      {baked && (
+        <span className="text-[12px] text-muted" data-testid="phone-fixes-baked">
+          · old upload: re-upload to show exactly
+        </span>
+      )}
     </label>
   )
 }

@@ -26,9 +26,11 @@ import { getSession } from '@/server/session'
  *    reuse re-checks access (cheap 304s via ETag).
  * `?f=jpg` renders a JPEG copy of an image (Instagram's publishing API only accepts JPEG).
  * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
- * R24: no stored file with that id → a template file (site_template_files: images/fonts moved out of an uploaded HTML
- * design, always public). Public responses carry `Access-Control-Allow-Origin: *` (incl. 304s): HTML designs run in an
- * opaque origin, and fonts (and crossorigin images) are CORS requests from there. Private files never get it.
+ * R24: no stored file with that id → a template file (site_template_files: public, immutable; never a template's design
+ * document — the platform renders those, /files doesn't serve them). Public responses carry
+ * `Access-Control-Allow-Origin: *` (incl. 304s): HTML designs run in an opaque origin, and fonts (and crossorigin
+ * images) are CORS requests from there. Private files never get it. Videos (stored and template files) are served
+ * with byte ranges.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IMAGES = new Set<string>(IMAGE_TYPES)
@@ -112,6 +114,29 @@ async function canRead(f: FileTenant) {
 
 const asciiName = (name: string) => name.replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'file'
 
+/** The body as a response: videos honour one byte range (206 / 416, Accept-Ranges), everything else is a 200. */
+function bodyResponse(req: Request, headers: Record<string, string>, body: Buffer, type: string) {
+  if (VIDEOS.has(type)) {
+    headers['accept-ranges'] = 'bytes'
+    const range = byteRange(req.headers.get('range'), body.length)
+    if (range === 'invalid') {
+      headers['content-range'] = `bytes */${body.length}`
+      return new Response(null, { status: 416, headers })
+    }
+    if (range) {
+      const [start, end] = range
+      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
+      headers['content-length'] = String(end - start + 1)
+      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
+        status: 206,
+        headers,
+      })
+    }
+  }
+  headers['content-length'] = String(body.length)
+  return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
+}
+
 /** R24: a public, immutable file of a platform template. */
 async function serveTemplateFile(req: Request, id: string) {
   const etag = `"${id}"`
@@ -125,11 +150,10 @@ async function serveTemplateFile(req: Request, id: string) {
   }
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers })
   const file = await getTemplateFile(platformDb(), id)
-  if (!file) return notFound()
+  if (!file || file.contentType.startsWith('text/html')) return notFound()
   headers['content-type'] = file.contentType
   headers['content-disposition'] = INLINE.has(file.contentType) ? 'inline' : 'attachment'
-  headers['content-length'] = String(file.bytes.length)
-  return new Response(req.method === 'HEAD' ? null : new Uint8Array(file.bytes), { status: 200, headers })
+  return bodyResponse(req, headers, file.bytes, file.contentType)
 }
 
 export async function serveFile(req: Request, id: string) {
@@ -197,23 +221,5 @@ export async function serveFile(req: Request, id: string) {
   headers['content-type'] = type
   headers['content-disposition'] =
     `${INLINE.has(type) ? 'inline' : 'attachment'}${name ? `; filename="${name}"` : ''}`
-  if (VIDEOS.has(type)) {
-    headers['accept-ranges'] = 'bytes'
-    const range = byteRange(req.headers.get('range'), body.length)
-    if (range === 'invalid') {
-      headers['content-range'] = `bytes */${body.length}`
-      return new Response(null, { status: 416, headers })
-    }
-    if (range) {
-      const [start, end] = range
-      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
-      headers['content-length'] = String(end - start + 1)
-      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
-        status: 206,
-        headers,
-      })
-    }
-  }
-  headers['content-length'] = String(body.length)
-  return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
+  return bodyResponse(req, headers, body, type)
 }

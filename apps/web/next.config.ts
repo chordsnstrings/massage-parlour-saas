@@ -10,6 +10,12 @@ const config: NextConfig = {
   poweredByHeader: false,
   allowedDevOrigins: ['*.localhost'],
   devIndicators: false,
+  experimental: {
+    // R24: the proxy buffers request bodies up to this size (beyond it the route gets a cut-off body). /api/mcp takes
+    // a whole 5 MB HTML design JSON-escaped (@spa/ai SITE_MCP_MAX_REQUEST_BYTES ≈ 10.25 MB); server actions keep
+    // their own 1 MB cap and /files/templates isn't proxied.
+    proxyClientMaxBodySize: '11mb',
+  },
   // F10 security headers. Pages (everything src/proxy.ts matches) get CSP with a per-request nonce, X-Frame-Options,
   // COOP, HSTS and Permissions-Policy from the proxy (@spa/core pageSecurityHeaders); this only adds what is the same
   // everywhere, plus the headers of the paths the proxy skips. Never set CSP/XFO/HSTS/Permissions-Policy here for a

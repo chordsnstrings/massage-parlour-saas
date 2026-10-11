@@ -7,6 +7,7 @@ import { siteConfig } from '@/components/site/config'
 import { buildMeta, loadSite, localeOf, type TenantLite } from '@/components/site/data'
 import { TEMPLATES } from '@/components/site/templates'
 import { PATH_ROUTING } from '@/lib/paths'
+import { spaDesignData, templateDesignData } from '@/server/html-design-files'
 import { resolveTemplate } from '@/server/site-templates'
 
 export type DraftPreviewQuery = {
@@ -37,11 +38,18 @@ export async function DraftPreview({ tenant, query }: { tenant: TenantLite; quer
     ? null
     : await withTenant(tenant.id, async (tx) => {
         const d = await getDraftBySlug(tx, tenant.id, page)
-        return d ? { ...d, globals: await globalSectionsFor(tx, tenant.id, d.data) } : null
+        return d
+          ? {
+              ...d,
+              data: await spaDesignData(tenant.id, d.data, tx),
+              globals: await globalSectionsFor(tx, tenant.id, d.data),
+            }
+          : null
       })
   const source = template ?? TEMPLATES.zen
   const starterPage = source.pages.find((p) => p.slug === page)
-  const pageData = draft?.data ?? starterPage?.data
+  // R24: HTML designs render from their stored files (the spa's own, or the template's for a starter page).
+  const pageData = draft?.data ?? (starterPage && (await templateDesignData(starterPage.data)))
   if (!pageData) notFound()
   const meta = {
     ...buildMeta({
@@ -69,7 +77,13 @@ async function renderLive(tenant: TenantLite, page: string, lang?: string) {
   const { site, data } = await loadSite(tenant, { published: true })
   const published = await withTenant(tenant.id, async (tx) => {
     const p = await getPublishedPage(tx, tenant.id, page)
-    return p ? { ...p, globals: await globalSectionsFor(tx, tenant.id, p.data) } : null
+    return p
+      ? {
+          ...p,
+          data: await spaDesignData(tenant.id, p.data, tx),
+          globals: await globalSectionsFor(tx, tenant.id, p.data),
+        }
+      : null
   })
   if (!published) return null
   const meta = {

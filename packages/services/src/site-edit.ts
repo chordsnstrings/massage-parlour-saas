@@ -6,9 +6,9 @@
 // callers audit with `siteEditAuditData`.
 import {
   dubaiParts,
-  type HtmlImageAdjust,
+  htmlDesignDocOf,
+  htmlDesignEmbedHosts,
   htmlDesignPhoneFixes,
-  MAX_HTML_DESIGN_BYTES,
   MAX_HTML_UPLOAD_BYTES,
   patchHtml,
 } from '@spa/core'
@@ -16,7 +16,7 @@ import { pageVersions, sites, type ThemeTokens, type Tx } from '@spa/db'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
-import { htmlDesignSizeProblem } from './site-html-assets'
+import { htmlDesignDocFor, htmlDesignSource, spaHtmlDocReader, storeSpaHtmlDoc } from './site-html-assets'
 import {
   applySiteEditOps,
   type EditPageData,
@@ -48,8 +48,8 @@ import {
 
 /** Same cap as the editor's draft save. */
 export const SITE_EDIT_MAX_PAGE_BYTES = 512 * 1024
-/** Same cap as an uploaded HTML design after its embedded files moved out (it travels inside the page JSON). */
-export const SITE_EDIT_MAX_HTML_BYTES = MAX_HTML_DESIGN_BYTES
+/** Largest HTML design (UTF-8 bytes) an op may write: the upload limit (stored byte for byte as a file). */
+export const SITE_EDIT_MAX_HTML_BYTES = MAX_HTML_UPLOAD_BYTES
 /** Block type of an uploaded HTML design (components/site/blocks/html-design.tsx). */
 export const HTML_DESIGN_BLOCK = 'HtmlDesign'
 
@@ -90,8 +90,8 @@ export const SiteOpSchema = z.discriminatedUnion('op', [
     title: text.nullish(),
     slug: z.string().max(60).nullish(),
   }),
-  // R24: the whole document (≤ 5 MB in; embedded images/fonts/videos move to the spa's files, ≤ ~500 KB stored).
-  // Rendered exactly as written unless phone_fixes (default false). convert: a block page becomes an HTML design page.
+  // R24: the whole document (≤ 5 MB as UTF-8), stored byte for byte as one of the spa's own files and rendered exactly
+  // as written unless phone_fixes (default false). convert: a block page becomes an HTML design page.
   z.object({
     op: z.literal('html_design'),
     page: pageRef,
@@ -120,16 +120,6 @@ export type SiteEditDeps = {
   normalizeTheme?: (theme: Record<string, unknown>) => ThemeTokens
   /** Extra policy before anything is written (web: the design-permission check). Return an error to refuse. */
   check?: (change: { before: EditPageData; after: EditPageData }[], themeChanged: boolean) => string | null
-  /**
-   * R24: moves a design's embedded files out to the spa's files and rewrites their URLs (web/MCP: services
-   * `prepareHtmlDesign` with the spa's sink; it throws a DomainError when the design is still too big). Called with
-   * `dryRun: true` while the batch is checked and once more, for real, when it is written. Without it embedded files
-   * stay inline and only the size is checked.
-   */
-  prepareHtml?: (
-    html: string,
-    opts: { dryRun: boolean; images: HtmlImageAdjust[] },
-  ) => Promise<{ html: string; images: HtmlImageAdjust[]; moved: { count: number; bytes: number } }>
 }
 
 export type SiteEditPage = {
@@ -152,13 +142,16 @@ export type SiteEditResult =
       renamed: { id: string; title?: SiteText; slug?: string; pending: boolean }[]
       /** What was there before, for an exact undo (restoreSiteEdit). */
       previous: SiteEditPrevious
-      /** R24: HTML-design pages changed by html_design / html_patch (stored size, moved files, patch positions). */
+      /**
+       * R24: HTML-design pages changed by html_design / html_patch (size, patch positions, and the hosts of embedded
+       * frames / players that run inside the design's sandbox on spa sites — @spa/core htmlDesignEmbedHosts).
+       */
       html: {
         page: string
         chars: number
-        moved: number
-        movedBytes: number
+        bytes: number
         phoneFixes: boolean
+        embeds: string[]
         at?: number[]
       }[]
     }
@@ -184,13 +177,8 @@ type Working = {
   before: EditPageData
   data: EditPageData
   changed: boolean
-  /** R24: the design as sent (embedded files still inline) — its files are stored only when the batch is written. */
-  pendingHtml?: {
-    raw: string
-    images: HtmlImageAdjust[]
-    moved: { count: number; bytes: number }
-    at?: number[]
-  }
+  /** R24: the design as it will be stored — its file is written only when the batch is (never on a dry run). */
+  pendingHtml?: { raw: string; at?: number[] }
   /** R24 convert: the working draft before (unnamed) gets a label so it stays in version history. */
   labelBefore?: boolean
 }
@@ -309,19 +297,15 @@ export async function runSiteEdit(
     return w
   }
 
-  /** The design as it will be stored (placeholder file ids while checking), or the size problem as this op's error. */
-  const prepareDry = async (html: string, images: HtmlImageAdjust[], at: string) => {
-    if (!deps.prepareHtml) {
-      const problem = htmlDesignSizeProblem(html)
-      if (problem) throw new OpFail(`${at}: ${problem}`)
-      return { html, images, moved: { count: 0, bytes: 0 } }
-    }
-    try {
-      return await deps.prepareHtml(html, { dryRun: true, images })
-    } catch (e) {
-      if (e instanceof DomainError) throw new OpFail(`${at}: ${e.message}`)
-      throw e
-    }
+  const readDoc = spaHtmlDocReader(tx, input.tenantId)
+  /** The design's reference as it will be stored (no file yet), or the size problem as this op's error. */
+  const draftDoc = (html: string, at: string) => {
+    const bytes = Buffer.byteLength(html, 'utf8')
+    if (bytes > SITE_EDIT_MAX_HTML_BYTES)
+      throw new OpFail(
+        `${at}: the design is ${(bytes / (1024 * 1024)).toFixed(1)} MB; the limit is ${SITE_EDIT_MAX_HTML_BYTES / (1024 * 1024)} MB (UTF-8)`,
+      )
+    return htmlDesignDocFor(html)
   }
 
   for (const [i, op] of ops.entries()) {
@@ -418,36 +402,34 @@ export async function runSiteEdit(
             }
             w.labelBefore = !w.isNew
           }
-          const images = Array.isArray(block.props.images) ? (block.props.images as HtmlImageAdjust[]) : []
-          const dry = await prepareDry(op.html, images, at)
-          block.props.html = dry.html
-          block.props.images = dry.images
+          block.props.html = ''
+          block.props.doc = draftDoc(op.html, at)
           block.props.phoneFixes = phoneFixes
-          w.pendingHtml = { raw: op.html, images, moved: dry.moved }
+          w.pendingHtml = { raw: op.html }
           w.changed = true
           summary.push(
-            `${w.labelBefore ? 'Turned' : 'Replaced the HTML design of'} ${pageLabel(w)}${w.labelBefore ? ' into an HTML design page' : ''}${dry.moved.count ? ` (${dry.moved.count} embedded file${dry.moved.count === 1 ? '' : 's'} moved to the spa's files)` : ''}`,
+            `${w.labelBefore ? 'Turned' : 'Replaced the HTML design of'} ${pageLabel(w)}${w.labelBefore ? ' into an HTML design page' : ''} (stored exactly as sent)`,
           )
           break
         }
         case 'html_patch': {
           const w = await load(op.page, at)
           const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
-          if (!block || typeof block.props.html !== 'string')
+          if (!block || (typeof block.props.html !== 'string' && !htmlDesignDocOf(block.props)))
             throw new OpFail(`${at}: ${pageLabel(w)} is not an uploaded HTML design page`)
-          const source = w.pendingHtml?.raw ?? block.props.html
+          const source = w.pendingHtml?.raw ?? (await htmlDesignSource(block.props, readDoc))
+          if (source === null)
+            throw new OpFail(
+              `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
+            )
           const patched = patchHtml(source, op.edits)
           if (!patched.ok) throw new OpFail(`${at}: ${patched.error}`)
           if (!looksLikeHtml(patched.html))
             throw new OpFail(`${at}: the result does not look like an HTML page`)
-          const images =
-            w.pendingHtml?.images ??
-            (Array.isArray(block.props.images) ? (block.props.images as HtmlImageAdjust[]) : [])
-          const dry = await prepareDry(patched.html, images, at)
-          block.props.html = dry.html
-          block.props.images = dry.images
+          block.props.html = ''
+          block.props.doc = draftDoc(patched.html, at)
           if (op.phone_fixes !== undefined) block.props.phoneFixes = op.phone_fixes
-          w.pendingHtml = { raw: patched.html, images, moved: dry.moved, at: patched.at }
+          w.pendingHtml = { raw: patched.html, at: patched.at }
           w.changed = true
           summary.push(
             `Edited the HTML design of ${pageLabel(w)} (${op.edits.length} edit${op.edits.length === 1 ? '' : 's'})`,
@@ -513,10 +495,10 @@ export async function runSiteEdit(
       return [
         {
           page: w.slug,
-          chars: String(block?.props.html ?? '').length,
-          moved: w.pendingHtml.moved.count,
-          movedBytes: w.pendingHtml.moved.bytes,
+          chars: w.pendingHtml.raw.length,
+          bytes: Buffer.byteLength(w.pendingHtml.raw, 'utf8'),
           phoneFixes: htmlDesignPhoneFixes(block?.props),
+          embeds: htmlDesignEmbedHosts(w.pendingHtml.raw),
           ...(w.pendingHtml.at ? { at: w.pendingHtml.at } : {}),
         },
       ]
@@ -543,14 +525,21 @@ export async function runSiteEdit(
       html: htmlInfo(),
     }
 
-  // R24: now the batch is accepted, store the designs' embedded files for real (same sizes as checked).
+  // R24: now the batch is accepted, store each design for real (the spa's own private file, byte for byte).
   for (const w of changed) {
-    if (!w.pendingHtml || !deps.prepareHtml) continue
+    if (!w.pendingHtml) continue
     const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
     if (!block) continue
-    const real = await deps.prepareHtml(w.pendingHtml.raw, { dryRun: false, images: w.pendingHtml.images })
-    block.props.html = real.html
-    block.props.images = real.images
+    try {
+      block.props.doc = await storeSpaHtmlDoc(tx, {
+        tenantId: input.tenantId,
+        html: w.pendingHtml.raw,
+        userId: input.userId,
+      })
+    } catch (e) {
+      if (e instanceof DomainError) return { ok: false, errors: [`${pageLabel(w)}: ${e.message}`] }
+      throw e
+    }
   }
   const pages: SiteEditPage[] = []
   for (const w of changed) {
@@ -560,7 +549,12 @@ export async function runSiteEdit(
         .from(pageVersions)
         .where(and(eq(pageVersions.tenantId, input.tenantId), eq(pageVersions.id, w.beforeVersionId)))
       if (v?.status === 'draft' && !v.label)
-        await labelVersion(tx, input.tenantId, w.beforeVersionId, `Before AI assistant HTML design ${dubaiStamp()}`)
+        await labelVersion(
+          tx,
+          input.tenantId,
+          w.beforeVersionId,
+          `Before AI assistant HTML design ${dubaiStamp()}`,
+        )
     }
     if (w.isNew) {
       const row = await addPage(tx, {
@@ -724,10 +718,14 @@ export async function getSiteForEdit(
       hasDraft: p.hasDraft,
       pendingRename: p.pending ?? null,
       htmlDesign: isHtmlDesign(data),
-      html:
-        htmlBlock && typeof htmlBlock.props.html === 'string'
-          ? { chars: htmlBlock.props.html.length, phoneFixes: htmlDesignPhoneFixes(htmlBlock.props) }
-          : null,
+      html: htmlBlock
+        ? (() => {
+            const doc = htmlDesignDocOf(htmlBlock.props)
+            const chars =
+              doc?.chars ?? (typeof htmlBlock.props.html === 'string' ? htmlBlock.props.html.length : null)
+            return chars === null ? null : { chars, phoneFixes: htmlDesignPhoneFixes(htmlBlock.props) }
+          })()
+        : null,
       editing: lock
         ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() }
         : null,
@@ -744,7 +742,7 @@ export async function getSiteForEdit(
 
 export type HtmlDesignView = {
   page: { id: string; slug: string; title: SiteText }
-  /** The stored design (embedded files already moved out, as absolute /files URLs). */
+  /** The stored design, exactly as uploaded / sent. */
   html: string
   /** Its "Phone fixes" switch (resolved: absent = on, see @spa/core htmlDesignPhoneFixes). */
   phoneFixes: boolean
@@ -766,12 +764,17 @@ export async function getHtmlDesign(
   if (!p) return null
   const data = asPageData((await getEditablePage(tx, tenantId, p.id))?.data)
   const block = data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
-  if (!block || typeof block.props.html !== 'string')
-    throw new DomainError(`${pageLabel(p)} is not an HTML design page`)
+  if (!block || (typeof block.props.html !== 'string' && !htmlDesignDocOf(block.props)))
+    throw new DomainError(`${pageLabel(p)} is not an HTML design page`, 'invalid', {
+      key: 'errors.domain.notHtmlDesignPage',
+      params: { page: pageLabel(p) },
+    })
+  const html = await htmlDesignSource(block.props, spaHtmlDocReader(tx, tenantId))
+  if (html === null) throw new DomainError(`The design file of ${pageLabel(p)} is missing`)
   const lock = (await pageLocksHeldByOthers(tx, tenantId, userId, [p.id])).get(p.id)
   return {
     page: { id: p.id, slug: p.slug, title: p.title },
-    html: block.props.html,
+    html,
     phoneFixes: htmlDesignPhoneFixes(block.props),
     images: Array.isArray(block.props.images) ? block.props.images.length : 0,
     editing: lock ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() } : null,

@@ -1,6 +1,6 @@
 // Live spa values of an uploaded HTML design (R17), shared by the HtmlDesign block (frames) and the direct design
 // page (R24, app/site-html). No JSX: server routes import it.
-import type { HtmlDesignLink, HtmlImageAdjust } from '@spa/core'
+import type { HtmlDesignDoc, HtmlDesignLink, HtmlImageAdjust } from '@spa/core'
 import { ui } from './i18n'
 import { bookHref, mapHref, pageHref, phoneHref, whatsappHref } from './links'
 import type { SiteMeta } from './types'
@@ -43,10 +43,10 @@ export const htmlDesignLinks = (meta: SiteMeta): Record<string, HtmlDesignLink> 
   address: { href: mapHref(meta), label: ui('openInMaps', meta.locale) },
 })
 
-/** A one-page template whose home page is the uploaded design (spas copy it like any template). */
+/** A one-page template whose home page is the uploaded design (its stored file; spas copy it like any template). */
 export const htmlDesignPages = (
   key: string,
-  html: string,
+  doc: HtmlDesignDoc,
   images: HtmlImageAdjust[] = [],
   phoneFixes = false,
 ) => [
@@ -55,7 +55,9 @@ export const htmlDesignPages = (
     title: { en: 'Home', ar: 'الرئيسية' },
     data: {
       root: { props: { htmlDesign: true, title: { en: '{name}' }, description: { en: '' } } },
-      content: [{ type: HTML_DESIGN, props: { id: `${key}-html-design`, html, images, phoneFixes } }],
+      content: [
+        { type: HTML_DESIGN, props: { id: `${key}-html-design`, html: '', doc, images, phoneFixes } },
+      ],
     },
   },
 ]

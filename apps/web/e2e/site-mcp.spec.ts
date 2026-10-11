@@ -1,7 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto'
 import http from 'node:http'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
-import { auditLog, mediaAssets, oauthClient, oauthConsent, pageVersions, sitePages, sites, storedFiles, user } from '@spa/db'
+import {
+  auditLog,
+  mediaAssets,
+  oauthClient,
+  oauthConsent,
+  pageVersions,
+  sitePages,
+  sites,
+  storedFiles,
+  user,
+} from '@spa/db'
 import { ensureSite, publishPage, saveStudioTemplate } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -406,7 +416,7 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
       ).toBe(true)
   })
 
-    await test.step('console: Connect Claude or ChatGPT card lists the client; Revoke cuts access', async () => {
+  await test.step('console: Connect Claude or ChatGPT card lists the client; Revoke cuts access', async () => {
     await p.goto(`${admin}/login`)
     await p.waitForLoadState('networkidle')
     await p.getByLabel('Email').fill(email)

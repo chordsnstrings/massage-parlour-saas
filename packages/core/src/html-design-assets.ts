@@ -1,13 +1,21 @@
 /**
- * R24: where an uploaded HTML design references files (images, fonts, videos), as exact string ranges, so embedded
- * `data:` payloads can be moved out to stored files (same bytes, served with their type) and the URLs rewritten —
- * nothing else in the document changes. Pure; the services decode, store and decide (site-html-assets.ts).
+ * R24: where an uploaded HTML design references files (images, fonts, videos), as exact string ranges, so a /files URL
+ * of a template or of another spa can be swapped for the spa's own copy when a template is applied — nothing else in
+ * the document changes (designs are stored byte for byte; embedded `data:` files stay where they are). Pure; the
+ * services copy and decide (site-html-assets.ts localiseHtmlDesignAssets).
  * Scanned: img/source src+srcset, video src+poster, input[type=image] src, link[rel~=icon|apple-touch-icon|preload]
  * href, SVG image/feImage href + xlink:href, every style="" and every <style> body (CSS url() and the strings of
  * image-set(), which covers @font-face src lists). Skipped: comments, <script> and other raw-text bodies. Anything
  * unclear (stray backslash, unterminated url(, unknown entity in a srcset) is left alone.
  */
-import { HTML_IMAGE_SRC_MAX, type HtmlImageAdjust, listHtmlDesignImages, tagEnd } from './html-design'
+import {
+  attributesOf,
+  HTML_IMAGE_SRC_MAX,
+  type HtmlAttr,
+  type HtmlImageAdjust,
+  listHtmlDesignImages,
+  tagEnd,
+} from './html-design'
 
 export type HtmlAssetRef = {
   /** The URL's exact range in the document (inside the quotes). */
@@ -19,58 +27,13 @@ export type HtmlAssetRef = {
   /** The element (lowercase) and attribute holding it; for CSS, the style attribute's element or 'style'. */
   tag: string
   attr?: string
-  /** Index of the element's `<` and just past its name (where an attribute can be added). */
+  /** Index of the element's `<` and just past its name. */
   tagStart: number
   nameEnd: number
-  /** The element already has a `crossorigin` attribute. */
-  crossorigin?: boolean
 }
 
 const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
 const identChar = (c: string | undefined) => c !== undefined && /[\w-]/.test(c)
-
-type Attr = { name: string; start: number; end: number }
-
-/** Attributes of a tag whose attributes start at `j` (same tokenizing as `tagEnd`); value ranges exclude quotes. */
-function attributesOf(src: string, j: number): Attr[] {
-  const out: Attr[] = []
-  const n = src.length
-  while (j < n) {
-    const c = src[j]
-    if (c === '>') break
-    if (isWs(c) || c === '/') {
-      j++
-      continue
-    }
-    const ns = j
-    j++
-    while (j < n && !isWs(src[j]) && src[j] !== '/' && src[j] !== '>' && src[j] !== '=') j++
-    const name = src.slice(ns, j).toLowerCase()
-    let k = j
-    while (isWs(src[k])) k++
-    if (src[k] !== '=') {
-      out.push({ name, start: -1, end: -1 })
-      continue
-    }
-    k++
-    while (isWs(src[k])) k++
-    const q = src[k]
-    if (q === '"' || q === "'") {
-      const close = src.indexOf(q, k + 1)
-      if (close === -1) break
-      out.push({ name, start: k + 1, end: close })
-      j = close + 1
-    } else {
-      const vs = k
-      while (k < n && !isWs(src[k]) && src[k] !== '>') k++
-      out.push({ name, start: vs, end: k })
-      j = k
-    }
-  }
-  // The parser keeps the first of duplicate attributes.
-  const seen = new Set<string>()
-  return out.filter((a) => !seen.has(a.name) && seen.add(a.name))
-}
 
 const NAMED: Record<string, string> = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' }
 /** Character references in an attribute value (unknown named ones stay as written). */
@@ -209,7 +172,7 @@ function cssRefs(
 /** srcset candidates (WHATWG parsing: a URL runs until whitespace, so a data: URI's comma is fine). */
 function srcsetRefs(
   html: string,
-  a: Attr,
+  a: HtmlAttr,
   base: Omit<HtmlAssetRef, 'start' | 'end' | 'url'>,
   out: HtmlAssetRef[],
 ) {
@@ -289,9 +252,9 @@ export function htmlDesignAssetRefs(html: string): HtmlAssetRef[] {
     const end = tagEnd(html, nameEnd)
     const attrs = attributesOf(html, nameEnd)
     const get = (a: string) => attrs.find((x) => x.name === a)
-    const value = (a: Attr | undefined) =>
+    const value = (a: HtmlAttr | undefined) =>
       a && a.start >= 0 ? decodeEntities(html.slice(a.start, a.end)) : ''
-    const base = { tag: name, tagStart: lt, nameEnd, ...(get('crossorigin') ? { crossorigin: true } : {}) }
+    const base = { tag: name, tagStart: lt, nameEnd }
     const wanted =
       name === 'input' && value(get('type')).trim().toLowerCase() !== 'image'
         ? []
@@ -325,61 +288,21 @@ export function htmlDesignAssetRefs(html: string): HtmlAssetRef[] {
   return out.sort((a, b) => a.start - b.start)
 }
 
-/**
- * Rewrites refs: `replace(ref)` returns the new URL, or null to keep it. An <img>/<video> whose every URL is
- * rewritten (and has no crossorigin attribute) gets `crossorigin="anonymous"`: its data: original never tainted a
- * canvas / WebGL texture, and the moved file (served with `Access-Control-Allow-Origin: *`) then doesn't either.
- */
+/** Rewrites refs: `replace(ref)` returns the new URL, or null to keep it. Only the URL ranges change. */
 export function rewriteHtmlDesignAssets(
   html: string,
   refs: HtmlAssetRef[],
   replace: (ref: HtmlAssetRef) => string | null,
-  opts: { crossorigin?: boolean } = {},
 ): string {
-  const edits: { at: number; end: number; text: string }[] = []
-  const tags = new Map<number, { ref: HtmlAssetRef; all: number; moved: number }>()
-  for (const ref of refs) {
-    const url = replace(ref)
-    if (url !== null) edits.push({ at: ref.start, end: ref.end, text: url })
-    if (
-      opts.crossorigin === false ||
-      ref.where !== 'attr' ||
-      (ref.tag !== 'img' && ref.tag !== 'video') ||
-      ref.crossorigin
-    )
-      continue
-    const t = tags.get(ref.tagStart) ?? { ref, all: 0, moved: 0 }
-    t.all++
-    if (url !== null) t.moved++
-    tags.set(ref.tagStart, t)
-  }
-  for (const t of tags.values())
-    if (t.moved && t.moved === t.all)
-      edits.push({ at: t.ref.nameEnd, end: t.ref.nameEnd, text: ' crossorigin="anonymous"' })
   let out = ''
   let pos = 0
-  for (const e of edits.sort((a, b) => a.at - b.at || a.end - b.end)) {
-    if (e.at < pos) continue
-    out += html.slice(pos, e.at) + e.text
-    pos = e.end
+  for (const ref of [...refs].sort((a, b) => a.start - b.start)) {
+    const url = replace(ref)
+    if (url === null || ref.start < pos) continue
+    out += html.slice(pos, ref.start) + url
+    pos = ref.end
   }
   return out + html.slice(pos)
-}
-
-export type DataUri = { mime: string; base64: boolean; payload: string }
-
-/** `data:[type][;params][;base64],payload` → its parts (type lowercased, default text/plain); null if not a data: URI. */
-export function parseDataUri(url: string): DataUri | null {
-  if (!/^data:/i.test(url)) return null
-  const comma = url.indexOf(',')
-  if (comma < 0) return null
-  const head = url
-    .slice(5, comma)
-    .split(';')
-    .map((p) => p.trim())
-  const base64 = head.length > 1 && head[head.length - 1]!.toLowerCase() === 'base64'
-  const mime = (head[0] || 'text/plain').toLowerCase()
-  return { mime, base64, payload: url.slice(comma + 1) }
 }
 
 /** Same ids, new `src` keys: adjustments that matched an image before its URL changed still match it after. */
@@ -392,52 +315,6 @@ export function remapHtmlImageAdjustments(
   const was = new Map(listHtmlDesignImages(before).map((i) => [i.id, i.src.slice(0, HTML_IMAGE_SRC_MAX)]))
   const now = new Map(listHtmlDesignImages(after).map((i) => [i.id, i.src.slice(0, HTML_IMAGE_SRC_MAX)]))
   return images.map((a) => (was.get(a.id) === a.src && now.has(a.id) ? { ...a, src: now.get(a.id)! } : a))
-}
-
-/** Stored size of a design (it is saved inside page JSON: quotes, backslashes and newlines escaped). */
-export const htmlDesignStoredSize = (s: string) => JSON.stringify(s).length - 2
-
-export type HtmlDesignSizeReport = {
-  total: number
-  markup: number
-  styles: number
-  scripts: number
-  svg: number
-  /** data: payloads still inside the document. */
-  embedded: { count: number; bytes: number }
-}
-
-/** What a design's size is made of (stored sizes), for "still too big" messages. */
-export function htmlDesignSizeReport(html: string): HtmlDesignSizeReport {
-  const size = htmlDesignStoredSize
-  const r: HtmlDesignSizeReport = {
-    total: size(html),
-    markup: 0,
-    styles: 0,
-    scripts: 0,
-    svg: 0,
-    embedded: { count: 0, bytes: 0 },
-  }
-  const blocks: { start: number; end: number; kind: 'scripts' | 'styles' | 'svg' }[] = []
-  for (const m of html.matchAll(/<(script|style|svg)\b[\s\S]*?(?:<\/\1\s*>|$)/gi)) {
-    const t = m[1]!.toLowerCase()
-    blocks.push({
-      start: m.index,
-      end: m.index + m[0].length,
-      kind: t === 'script' ? 'scripts' : t === 'style' ? 'styles' : 'svg',
-    })
-    r[blocks[blocks.length - 1]!.kind] += size(m[0])
-  }
-  for (const ref of htmlDesignAssetRefs(html)) {
-    if (!/^data:/i.test(ref.url)) continue
-    const bytes = size(html.slice(ref.start, ref.end))
-    r.embedded.count++
-    r.embedded.bytes += bytes
-    const inBlock = blocks.find((b) => ref.start >= b.start && ref.start < b.end)
-    if (inBlock) r[inBlock.kind] -= bytes
-  }
-  r.markup = Math.max(0, r.total - r.styles - r.scripts - r.svg - r.embedded.bytes)
-  return r
 }
 
 export type HtmlPatch = { find: string; replace: string }

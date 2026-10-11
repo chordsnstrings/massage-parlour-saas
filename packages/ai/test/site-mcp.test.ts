@@ -22,8 +22,10 @@ import {
   acquirePageLock,
   ensureSite,
   getEditablePage,
+  getHtmlDesign,
   publishPage,
   putTemplateFile,
+  storeTemplateHtmlDoc,
   undoTemplateSwitch,
 } from '@spa/services'
 import type { SiteEditSchema } from '@spa/services/site-kit'
@@ -32,6 +34,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   handleSiteMcpRequest,
   type McpTemplate,
+  SITE_MCP_MAX_REQUEST_BYTES,
   SITE_MCP_TOOL_HINTS,
   SITE_MCP_TOOL_NAMES,
   type SiteMcpOpts,
@@ -190,17 +193,23 @@ describe('site MCP server (/api/mcp)', () => {
     for (const name of writes) expect(hints[name], name).toMatchObject({ readOnlyHint: false })
     // Overwrites of existing drafts count as destructive (OpenAI: "may delete or overwrite user data").
     expect(writes.filter((n) => hints[n]?.destructiveHint).sort()).toEqual([
+      'apply_template',
+      'patch_html_design',
       'remove_block',
       'rename_page',
       'replace_html_design',
+      'set_html_design',
       'set_theme',
       'update_block',
     ])
     expect(writes.filter((n) => !hints[n]?.destructiveHint).sort()).toEqual([
       'add_block',
+      'add_image',
       'add_page',
       'move_block',
     ])
+    for (const name of ['list_templates', 'get_html_design'])
+      expect(hints[name]?.readOnlyHint, name).toBe(true)
   })
 
   it('get_site and update_block edit the draft only, audited via AI assistant (MCP)', async () => {
@@ -305,6 +314,8 @@ describe('site MCP server (/api/mcp)', () => {
       )
     const draftOf = async (pageId: string) =>
       JSON.stringify((await inD((tx) => getEditablePage(tx, d.tenant!, pageId)))!.data)
+    /** The stored design of an HTML design page (the spa's own file). */
+    const designOf = async (page: string) => (await inD((tx) => getHtmlDesign(tx, d.tenant!, page)))!.html
     const site = async () => (await inD((tx) => tx.select().from(sites)))[0]!
 
     beforeAll(async () => {
@@ -399,7 +410,11 @@ describe('site MCP server (/api/mcp)', () => {
                   type: 'HtmlDesign',
                   props: {
                     id: 'sand-html-design',
-                    html: `<!doctype html><html><body><h1>Sand silk</h1><img src="${fileUrl(tf.id, 'x.png')}"></body></html>`,
+                    // R24: the design itself is a template file; the page only references it.
+                    html: '',
+                    doc: await storeTemplateHtmlDoc(platform, {
+                      html: `<!doctype html><html><body><h1>Sand silk</h1><img src="${fileUrl(tf.id, 'x.png')}"></body></html>`,
+                    }),
                     images: [],
                     phoneFixes: false,
                   },
@@ -502,10 +517,12 @@ describe('site MCP server (/api/mcp)', () => {
       await inD((tx) => tx.delete(sitePageLocks).where(eq(sitePageLocks.tenantId, d.tenant!)))
     })
 
-    it('apply_template of an HTML template copies its files into the spa', async () => {
+    it('apply_template of an HTML template copies its design and the files it uses into the spa', async () => {
       const r = await dcall('apply_template', { template: 'sand-silk' })
       expect(r.data).toMatchObject({ saved: true, html_design_pages: 1, html_files_copied: 1 })
-      const html = await draftOf(d.home!)
+      const draft = await draftOf(d.home!)
+      expect(draft).not.toContain('Sand silk')
+      const html = await designOf('home')
       expect(html).toContain('Sand silk')
       expect(html).not.toContain(d.templateFile!)
       const files = await inD((tx) =>
@@ -514,10 +531,14 @@ describe('site MCP server (/api/mcp)', () => {
       expect(files).toHaveLength(1)
       expect(files[0]!.isPublic).toBe(true)
       expect(html).toContain(`http://app.localhost/files/${files[0]!.id}/`)
+      const [doc] = await inD((tx) =>
+        tx.select().from(storedFiles).where(eq(storedFiles.purpose, 'html_design_doc')),
+      )
+      expect(doc).toMatchObject({ isPublic: false, contentType: 'text/html; charset=utf-8' })
       await inD((tx) => undoTemplateSwitch(tx, d.tenant!, ids.owner))
     })
 
-    it('set_html_design: convert needed on a block page; data: files move out; exact (no phone fixes) by default', async () => {
+    it('set_html_design: convert needed on a block page; stored byte for byte; exact (no phone fixes) by default', async () => {
       const img = `data:image/png;base64,${fakePng('about').toString('base64')}`
       const html = `<!doctype html><html><head><title>About</title></head><body><h1>Our story</h1><p>Calm hands.</p><p>Calm hands.</p><img src="${img}" width="10" height="10"></body></html>`
       const refused = await dcall('set_html_design', { page: 'about', html })
@@ -526,7 +547,12 @@ describe('site MCP server (/api/mcp)', () => {
       expect(await draftOf(d.about!)).toContain('About us')
       const dry = await dcall('set_html_design', { page: 'about', html, convert: true, dry_run: true })
       expect(dry.data.saved).toBe(false)
-      expect(dry.data.html_designs[0]).toMatchObject({ page: 'about', moved_assets: 1, phone_fixes: false })
+      expect(dry.data.html_designs[0]).toMatchObject({
+        page: 'about',
+        html_chars: html.length,
+        stored: 'exactly as sent',
+        phone_fixes: false,
+      })
       expect(await draftOf(d.about!)).toContain('About us')
 
       const r = await dcall('set_html_design', { page: 'about', html, convert: true })
@@ -534,19 +560,20 @@ describe('site MCP server (/api/mcp)', () => {
       const draft = JSON.parse(await draftOf(d.about!))
       expect(draft.root.props.htmlDesign).toBe(true)
       expect(draft.content[0].props.phoneFixes).toBe(false)
-      expect(draft.content[0].props.html).not.toContain('data:image/png')
+      expect(draft.content[0].props.html).toBe('')
+      expect(await designOf('about')).toBe(html)
       const g = await dcall('get_site', { page: 'about' })
       expect(g.data.pages[0]).toMatchObject({ htmlDesign: true, html: { phone_fixes: false } })
       // The published About page is still the block page.
       expect(JSON.stringify((await published()).map((v) => v.data)).includes('About us')).toBe(true)
     })
 
-    it('get_html_design pages and searches the stored HTML (files already as URLs)', async () => {
+    it('get_html_design pages and searches the stored HTML (exactly as sent)', async () => {
       const notHtml = await dcall('get_html_design', { page: 'home' })
       expect(notHtml.data.error).toMatch(/is not an HTML design page/)
       const all = await dcall('get_html_design', { page: 'about' })
       expect(all.data).toMatchObject({ phone_fixes: false, start: 0, more: false })
-      expect(all.data.html).toMatch(/src="http:\/\/app\.localhost\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.png"/)
+      expect(all.data.html).toContain('<img src="data:image/png;base64,')
       const part = await dcall('get_html_design', { page: 'about', start: 10, length: 20 })
       expect(part.data).toMatchObject({ start: 10, end: 30, more: true })
       expect(part.data.html).toBe(all.data.html.slice(10, 30))
@@ -588,8 +615,9 @@ describe('site MCP server (/api/mcp)', () => {
       expect(r.data.saved).toBe(true)
       expect(r.data.html_designs[0].edits_at).toHaveLength(2)
       const after = JSON.parse(await draftOf(d.about!)).content[0].props
-      expect(after.html).toContain('Our journey')
-      expect(after.html.match(/Calm hands/g)).toHaveLength(1)
+      const patched = await designOf('about')
+      expect(patched).toContain('Our journey')
+      expect(patched.match(/Calm hands/g)).toHaveLength(1)
       expect(after.phoneFixes).toBe(false)
       // Locks apply as for every draft writer.
       await inD((tx) =>
@@ -606,6 +634,33 @@ describe('site MCP server (/api/mcp)', () => {
       })
       expect(locked.data.error).toMatch(/Sara is editing/)
       await inD((tx) => tx.delete(sitePageLocks).where(eq(sitePageLocks.tenantId, d.tenant!)))
+    })
+
+    it('a whole 4.6 MB design (JSON body over the SDK’s 4 MiB default: quotes, newlines, Arabic) is saved exactly', async () => {
+      const big = `<!doctype html><html lang="ar"><head><meta charset="utf-8"><style>${'.a::after{content:"x"}\n'.repeat(40_000)}</style></head><body><p>${'سبا "هادئ"\n'.repeat(190_000)}</p><script>${'var q="\\"";\n'.repeat(50_000)}</script></body></html>`
+      expect(Buffer.byteLength(big)).toBeGreaterThan(4.5 * 1024 * 1024)
+      expect(Buffer.byteLength(big)).toBeLessThan(5 * 1024 * 1024)
+      const body = JSON.stringify({
+        name: 'set_html_design',
+        arguments: { spa: 'mcp-design', page: 'about', html: big },
+      })
+      expect(Buffer.byteLength(body)).toBeGreaterThan(5 * 1024 * 1024)
+      const r = await dcall('set_html_design', { page: 'about', html: big })
+      expect(r.isError, JSON.stringify(r.data).slice(0, 300)).toBe(false)
+      expect(r.data.html_designs[0]).toMatchObject({
+        html_chars: big.length,
+        html_bytes: Buffer.byteLength(big),
+      })
+      expect(await designOf('about')).toBe(big)
+      // Over the documented cap: refused by the transport before any tool code runs.
+      expect(SITE_MCP_MAX_REQUEST_BYTES).toBeGreaterThanOrEqual(2 * 5 * 1024 * 1024)
+      const huge = await rpc(
+        'design',
+        'tools/call',
+        { name: 'get_site', arguments: { spa: 'mcp-design', pad: 'x'.repeat(SITE_MCP_MAX_REQUEST_BYTES) } },
+        dopts(),
+      )
+      expect(huge.status).toBe(413)
     })
 
     it('add_image refuses http, private addresses, redirects to metadata, non-images, SVG, fakes and > 8 MB', async () => {

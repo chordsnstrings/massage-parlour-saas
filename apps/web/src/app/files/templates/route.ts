@@ -1,13 +1,18 @@
-import { fixHtmlDesign, htmlDesignStoredSize, MAX_HTML_UPLOAD_BYTES } from '@spa/core'
+import {
+  decodeHtmlBytes,
+  fixHtmlDesign,
+  htmlDesignEmbedHosts,
+  htmlDesignEmbedWarning,
+  MAX_HTML_UPLOAD_BYTES,
+} from '@spa/core'
 import { platformDb } from '@spa/db'
 import {
   DomainError,
   MAX_TEMPLATE_BYTES,
   parseTemplateJson,
-  prepareHtmlDesign,
   SITE_EDIT_MAX_PAGE_BYTES,
   saveStudioTemplate,
-  templateHtmlAssetSink,
+  storeTemplateHtmlDoc,
   templateKeyFrom,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -20,7 +25,6 @@ import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { isPlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
-import { designFileUrl } from '@/server/html-design-files'
 import { readForm, sameOrigin, TooLarge } from '@/server/read-form'
 import { getSession } from '@/server/session'
 
@@ -34,10 +38,8 @@ import { getSession } from '@/server/session'
 const reply = (status: number, result: ActionResult) =>
   Response.json(result, { status, headers: { 'cache-control': 'no-store' } })
 
-/** Rolls the upload transaction back (moved files included) when the page JSON is over the draft cap. */
+/** Rolls the upload transaction back when the page JSON (image adjustments) is over the draft cap. */
 class PageTooLarge extends Error {}
-
-const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`
 const MULTIPART = 256 * 1024
 const LIMITS = { html: MAX_HTML_UPLOAD_BYTES + MULTIPART, json: MAX_TEMPLATE_BYTES + 64 * 1024 }
 
@@ -64,7 +66,9 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
     return [413, fail(error, { file: error })]
   }
   const key = templateKeyFrom(parsed.data.name)
-  const raw = await file.text()
+  // R24 review: read the bytes the way a browser opening the file would (BOM, <meta charset>, else UTF-8 / windows-1252),
+  // never blindly as UTF-8 — a windows-1252 file would otherwise lose every accented letter for good.
+  const { html: raw, encoding } = decodeHtmlBytes(new Uint8Array(await file.arrayBuffer()))
   if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(raw))
     return [422, fail('This file does not look like an HTML page', { file: 'Choose an .html file' })]
   const images = parseImages(form.get('images'))
@@ -77,16 +81,12 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
   const active = form.get('active') === 'on'
   // R24: exact unless the uploader asks for the phone fixes.
   const phoneFixes = form.get('phoneFixes') === 'on'
-  let prepared: Awaited<ReturnType<typeof prepareHtmlDesign>>
+  let bytes = 0
   try {
-    prepared = await platformDb().transaction(async (db) => {
-      const p = await prepareHtmlDesign({
-        html: raw,
-        images,
-        sink: templateHtmlAssetSink(db, userId),
-        fileUrl: designFileUrl,
-      })
-      const pages = htmlDesignPages(key, p.html, p.images, phoneFixes)
+    // R24 review: the design is stored byte for byte as one template file; the page JSON only references it.
+    bytes = await platformDb().transaction(async (db) => {
+      const doc = await storeTemplateHtmlDoc(db, { html: raw, userId })
+      const pages = htmlDesignPages(key, doc, images, phoneFixes)
       if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES) throw new PageTooLarge()
       await saveStudioTemplate(
         db,
@@ -101,7 +101,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
         },
         { replace },
       )
-      return p
+      return doc.bytes
     })
   } catch (e) {
     if (e instanceof PageTooLarge) {
@@ -111,7 +111,8 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
     if (e instanceof DomainError) return [422, fail(e.message, { file: e.message })]
     throw e
   }
-  const fixes = phoneFixes ? fixHtmlDesign(prepared.html).fixes : []
+  const fixes = phoneFixes ? fixHtmlDesign(raw).fixes : []
+  const embeds = htmlDesignEmbedHosts(raw)
   await audit({
     actorUserId: userId,
     action: 'platform.site_template.html_uploaded',
@@ -119,27 +120,25 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
     entityId: key,
     data: {
       bytes: file.size,
-      storedBytes: htmlDesignStoredSize(prepared.html),
-      movedAssets: prepared.moved.count,
-      movedBytes: prepared.moved.bytes,
+      storedBytes: bytes,
+      encoding,
       phoneFixes,
-      placeholders: HTML_DESIGN_PLACEHOLDERS.filter((p) => prepared.html.includes(`{{${p}}}`)),
+      placeholders: HTML_DESIGN_PLACEHOLDERS.filter((p) => raw.includes(`{{${p}}}`)),
       fixes,
+      embeds,
       adjustedImages: images.length,
     },
   })
   revalidatePath('/platform/templates', 'layout')
-  const moved = prepared.moved.count
-    ? ` Moved ${prepared.moved.count} embedded image/font file${prepared.moved.count === 1 ? '' : 's'} (${mb(prepared.moved.bytes)}) to the platform's files.`
-    : ''
   const fixed = fixes.length
     ? ` Fixed for phones: ${fixes.map((f) => (f === 'viewport' ? 'added the mobile viewport' : 'fluid image widths')).join(', ')}.`
     : ''
+  const warning = htmlDesignEmbedWarning(embeds)
   return [
     200,
     ok(
-      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}.${moved}${fixed}`,
-      { movedAssets: prepared.moved.count },
+      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}. Stored exactly as the file${encoding === 'utf-8' ? '' : ` (read as ${encoding})`}.${fixed}${warning ? ` ${warning}` : ''}`,
+      { embeds },
     ),
   ]
 }

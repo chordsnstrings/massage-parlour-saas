@@ -2,10 +2,14 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import {
   applyHtmlImageAdjustments,
+  decodeHtmlBytes,
   fixHtmlDesign,
   HTML_DESIGN_BASE_CSS,
   HTML_DESIGN_COMPAT_SHIM,
+  htmlDesignDocOf,
   htmlDesignDocument,
+  htmlDesignEmbedHosts,
+  htmlDesignEmbedWarning,
   htmlDesignPhoneFixes,
   listHtmlDesignImages,
   withBaseHref,
@@ -190,6 +194,84 @@ describe('htmlDesignDocument: phone fixes (legacy designs, explicit opt-in)', ()
   })
   it('fills placeholders HTML-escaped', () => {
     expect(htmlDesignDocument('<p>{{spa_name}}</p>', { spa_name: '<b>' }, true)).toContain('<p>&lt;b&gt;</p>')
+  })
+  it('fills placeholders by context: JS / JSON as string text, CSS hex escapes, never in comments or templates', () => {
+    const name = `Mary's "Rose & Oud" </script>`
+    const html =
+      '<p>{{ spa_name }}</p><a href="{{book_url}}" onclick="alert(\'{{spa_name}}\')">x</a>' +
+      '<script>el.textContent="{{spa_name}}"</script><script type="module">t=`{{spa_name}}`</script>' +
+      '<script type="application/ld+json">{"name":"{{spa_name}}"}</script>' +
+      '<script type="text/x-template"><b>{{ phone }}</b></script><!-- {{spa_name}} -->' +
+      '<style>.x::after{content:"{{spa_name}}"}</style>'
+    const out = htmlDesignDocument(html, { spa_name: name, book_url: '/book?a=1&b=2', phone: '+971' }, false)
+    expect(out).toContain('<p>Mary&#39;s &quot;Rose &amp; Oud&quot; &lt;/script&gt;</p>')
+    expect(out).toContain('href="/book?a=1&amp;b=2"')
+    // Each JS body evaluates to the exact name; JSON stays valid JSON.
+    const js = /el\.textContent=("[^<]*")<\/script>/.exec(out)![1]!
+    expect(runInNewContext(js)).toBe(name)
+    expect(runInNewContext(/t=(`[^`]*`)/.exec(out)![1]!)).toBe(name)
+    expect(JSON.parse(/ld\+json">([^<]*)<\/script>/.exec(out)![1]!).name).toBe(name)
+    // The handler attribute is JS inside HTML: decoding the entities gives a valid JS string again.
+    const attr = /onclick="alert\('([^"]*)'\)"/.exec(out)![1]!
+    expect(runInNewContext(`'${attr.replace(/&#92;/g, '\\').replace(/&amp;/g, '&')}'`)).toBe(name)
+    expect(out).toContain('<script type="text/x-template"><b>{{ phone }}</b></script><!-- {{spa_name}} -->')
+    expect(out).toContain('content:"Mary\\27 s \\22 Rose \\26  Oud\\22  \\3c /script\\3e "')
+    // + the compat shim and the frame link script only
+    expect(out.match(/<\/script/gi)!.length).toBe(html.match(/<\/script/gi)!.length + 2)
+  })
+})
+
+describe('design files and embeds (R24 review)', () => {
+  it('reads a stored-file reference, else null', () => {
+    const doc = { file: 'f', sha256: 'a'.repeat(64), bytes: 3, chars: 3 }
+    expect(htmlDesignDocOf({ doc })).toEqual(doc)
+    expect(htmlDesignDocOf({ doc: { ...doc, sha256: 'x' } })).toBeNull()
+    expect(htmlDesignDocOf({ html: '<p>' })).toBeNull()
+  })
+  it('decodes an .html file the way a browser opening it does', () => {
+    const latin = Uint8Array.from([
+      ...Buffer.from('<meta charset="windows-1252"><p>Caf'),
+      0xe9,
+      0x20,
+      0x93,
+      ...Buffer.from('Relax'),
+      0x94,
+    ])
+    expect(decodeHtmlBytes(latin)).toEqual({
+      html: '<meta charset="windows-1252"><p>Café “Relax”',
+      encoding: 'windows-1252',
+    })
+    const iso = Buffer.from(
+      '<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1"><p>\xe9',
+      'latin1',
+    )
+    expect(decodeHtmlBytes(iso).html.endsWith('é')).toBe(true)
+    expect(decodeHtmlBytes(Buffer.from('<p>مرحبا</p>')).html).toBe('<p>مرحبا</p>')
+    expect(decodeHtmlBytes(Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from('<p>é')]))).toEqual({
+      html: '<p>é',
+      encoding: 'utf-8',
+    })
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('<p>Ω</p>', 'utf16le')])
+    expect(decodeHtmlBytes(utf16).html).toBe('<p>Ω</p>')
+    // No declaration, not valid UTF-8 → windows-1252 (the browser fallback).
+    expect(decodeHtmlBytes(Buffer.from([0x3c, 0x70, 0x3e, 0xe9])).html).toBe('<p>é')
+    // A meta inside a comment doesn't count.
+    expect(decodeHtmlBytes(Buffer.from('<!-- <meta charset="windows-1252"> --><p>é')).encoding).toBe('utf-8')
+  })
+  it('lists embedded frames, objects and widget scripts (not data:/srcdoc, not inside scripts or comments)', () => {
+    const html =
+      '<iframe src="https://www.youtube-nocookie.com/embed/x"></iframe><iframe srcdoc="<p>hi</p>"></iframe>' +
+      '<iframe src="data:text/html,hi"></iframe><embed src="/menu.pdf"><object data="https://cdn.test/a.svg"></object>' +
+      '<script src="https://assets.calendly.com/assets/external/widget.js"></script><script src="https://cdn.test/app.js"></script>' +
+      '<!-- <iframe src="https://hidden.test/"></iframe> --><script>"<iframe src=https://js.test/>"</script>'
+    expect(htmlDesignEmbedHosts(html)).toEqual([
+      'www.youtube-nocookie.com',
+      'this site',
+      'cdn.test',
+      'assets.calendly.com',
+    ])
+    expect(htmlDesignEmbedWarning([])).toBeNull()
+    expect(htmlDesignEmbedWarning(['www.youtube.com'])).toMatch(/www\.youtube\.com.*sandbox/)
   })
 })
 

@@ -178,8 +178,12 @@ export const HTML_DESIGN_SANDBOX =
   'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals allow-downloads allow-pointer-lock'
 
 /**
- * The design shell's own policy: the design runs exactly as built (any CSS, fonts, images, scripts), but always in
- * an opaque origin (CSP sandbox, even when opened directly) and only inside the platform's own pages.
+ * The design shell's own policy: the design runs exactly as built (any CSS, fonts, images, scripts, media, frames,
+ * objects, data: / blob: fetches, mailto: forms), but always in an opaque origin (CSP sandbox, even when opened
+ * directly) and only inside the platform's own pages. R24 review: no per-type directives — every fetch directive
+ * falls back to default-src, so nothing a design does when opened directly is refused (a narrower connect-src /
+ * frame-src / object-src / font-src adds no safety to a sandboxed document that may run any inline script anyway).
+ * form-action doesn't fall back to default-src: absent = any target, as in a browser.
  */
 export function htmlDesignFrameCsp(): string {
   const any = "* data: blob: 'unsafe-inline' 'unsafe-eval'"
@@ -187,13 +191,6 @@ export function htmlDesignFrameCsp(): string {
     `default-src ${any}`,
     `script-src ${any}`,
     `style-src ${any}`,
-    'img-src * data: blob:',
-    'font-src * data:',
-    'media-src * data: blob:',
-    'connect-src *',
-    'frame-src *',
-    'form-action *',
-    "object-src 'none'",
     "frame-ancestors 'self'",
     `sandbox ${HTML_DESIGN_SANDBOX}`,
   ].join('; ')

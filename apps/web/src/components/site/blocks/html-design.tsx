@@ -1,30 +1,24 @@
 import type { ComponentConfig } from '@puckeditor/core'
 import {
   HTML_DESIGN_SANDBOX,
+  type HtmlDesignDoc,
   type HtmlImageAdjust,
+  htmlDesignDocOf,
   htmlDesignDocument,
   htmlDesignPhoneFixes,
-  MAX_HTML_DESIGN_BYTES,
 } from '@spa/core'
 import { HtmlDesignFrame } from '../html-design-frame'
 import { htmlDesignLinks, htmlDesignValues } from '../html-design-values'
 import type { SiteMeta } from '../types'
 
-export {
-  HTML_DESIGN,
-  HTML_DESIGN_PLACEHOLDERS,
-  htmlDesignLinks,
-  htmlDesignPages,
-  htmlDesignValues,
-} from '../html-design-values'
-export { htmlDesignDocument }
-
 /**
+ * `doc` (R24): the design's stored file; `html` is then '' in the stored data and filled right before rendering
+ * (server/html-design-files.ts; the editor gets it in `meta.htmlDocs`). Designs stored before keep `html` inline.
  * `images`: the super-admin's per-image adjustments (focal point, fill/fit, replacement), applied in the frame.
  * `phoneFixes` (R24): the design's "Phone fixes" switch. It has NO default on purpose (Puck merges defaults into loaded
  * props): absent = stored before R24 = on (`htmlDesignPhoneFixes`); every writer since stores an explicit boolean.
  */
-type Props = { html: string; images?: HtmlImageAdjust[]; phoneFixes?: boolean }
+type Props = { html: string; doc?: HtmlDesignDoc; images?: HtmlImageAdjust[]; phoneFixes?: boolean }
 
 /**
  * An uploaded HTML design shown exactly as built (its CSS, fonts, motion and scripts), full screen. It runs in a
@@ -38,17 +32,20 @@ export const HtmlDesign: ComponentConfig<Props> = {
   // Replaced by uploading a new file, never edited here.
   fields: {
     html: { type: 'textarea', visible: false },
+    doc: { type: 'custom', render: () => <></>, visible: false },
     images: { type: 'custom', render: () => <></>, visible: false },
     phoneFixes: { type: 'custom', render: () => <></>, visible: false },
   },
   defaultProps: { html: '', images: [] },
-  render: ({ html, images, phoneFixes, puck }) => {
+  render: ({ html, doc, images, phoneFixes, puck }) => {
     const meta = puck.metadata as SiteMeta
+    const ref = htmlDesignDocOf({ doc })
+    const source = html || (ref && meta.htmlDocs?.[ref.file]) || ''
     return (
       <HtmlDesignFrame
         title={meta.data.tenant.name}
         html={htmlDesignDocument(
-          html,
+          source,
           htmlDesignValues(meta),
           Boolean(meta.editing),
           images ?? [],
@@ -63,6 +60,3 @@ export const HtmlDesign: ComponentConfig<Props> = {
     )
   },
 }
-
-/** Largest stored design (after its embedded files moved out): it travels inside the page JSON (512 KB cap). */
-export { MAX_HTML_DESIGN_BYTES }

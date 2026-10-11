@@ -3,6 +3,7 @@ import { jsonLdString, normalizeGoogleMapsUrl, spaJsonLd } from '@spa/core'
 import { withTenant } from '@spa/db'
 import { getPublishedPage, globalSectionsFor } from '@spa/services'
 import { cache } from 'react'
+import { spaDesignData } from '@/server/html-design-files'
 import { heroImageOf, sitePageUrl, siteSeo } from '@/server/seo'
 import { loadSite } from './data'
 import { tr } from './i18n'
@@ -14,7 +15,14 @@ export type Tenant = { id: string; slug: string; name: string; status: string }
 export const loadPublished = cache(async (tenant: Tenant, slug: string) => {
   const published = await withTenant(tenant.id, async (tx) => {
     const page = await getPublishedPage(tx, tenant.id, slug)
-    return page ? { ...page, globals: await globalSectionsFor(tx, tenant.id, page.data) } : null
+    // R24: an HTML design's html comes from the spa's own file (the page JSON keeps only the reference).
+    return page
+      ? {
+          ...page,
+          data: await spaDesignData(tenant.id, page.data, tx),
+          globals: await globalSectionsFor(tx, tenant.id, page.data),
+        }
+      : null
   })
   if (!published) return null
   const { data } = await loadSite(tenant, { published: true })

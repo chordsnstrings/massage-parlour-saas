@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   decodeEntities,
   htmlDesignAssetRefs,
-  htmlDesignSizeReport,
-  parseDataUri,
   patchHtml,
   remapHtmlImageAdjustments,
   rewriteHtmlDesignAssets,
@@ -84,29 +82,18 @@ describe('htmlDesignAssetRefs (R24)', () => {
 })
 
 describe('rewriteHtmlDesignAssets', () => {
-  it('replaces only the URL, keeps quoting, adds crossorigin to an img whose every URL moved', () => {
+  it('replaces only the URL ranges and keeps everything else byte for byte (no attribute added)', () => {
     const html = `<img src="${D}" alt="a"><img src="${D}" srcset="keep.png 2x"><div style="background:url(&quot;${D}&quot;)"></div><img crossorigin="use-credentials" src="${D}">`
     const out = rewriteHtmlDesignAssets(html, htmlDesignAssetRefs(html), (r) =>
       r.url.startsWith('data:') ? 'https://app.test/files/x/1.png' : null,
     )
     expect(out).toBe(
-      '<img crossorigin="anonymous" src="https://app.test/files/x/1.png" alt="a"><img src="https://app.test/files/x/1.png" srcset="keep.png 2x"><div style="background:url(&quot;https://app.test/files/x/1.png&quot;)"></div><img crossorigin="use-credentials" src="https://app.test/files/x/1.png">',
+      '<img src="https://app.test/files/x/1.png" alt="a"><img src="https://app.test/files/x/1.png" srcset="keep.png 2x"><div style="background:url(&quot;https://app.test/files/x/1.png&quot;)"></div><img crossorigin="use-credentials" src="https://app.test/files/x/1.png">',
     )
   })
 })
 
-describe('data URIs, entities', () => {
-  it('parses data: URIs', () => {
-    expect(parseDataUri('data:image/PNG;base64,AAAA')).toEqual({
-      mime: 'image/png',
-      base64: true,
-      payload: 'AAAA',
-    })
-    expect(parseDataUri('data:,hi')).toEqual({ mime: 'text/plain', base64: false, payload: 'hi' })
-    expect(parseDataUri('data:image/svg+xml;charset=utf-8,%3Csvg%3E')?.base64).toBe(false)
-    expect(parseDataUri('https://x/data:')).toBeNull()
-    expect(parseDataUri('data:image/png;base64')).toBeNull()
-  })
+describe('entities', () => {
   it('decodes numeric and common named references, keeps unknown ones', () => {
     expect(decodeEntities('&#x2F;&#47;&amp;&quot;&bogus;')).toBe('//&"&bogus;')
   })
@@ -128,19 +115,6 @@ describe('remapHtmlImageAdjustments', () => {
       { id: 'bg-0', src: 'https://f/1.png', fit: 'contain' },
       { id: 'img-1', src: 'other.png' },
     ])
-  })
-})
-
-describe('htmlDesignSizeReport', () => {
-  it('splits a design into markup, styles, scripts, inline SVG and leftover embedded data', () => {
-    const svg = `<svg width="10">${'<path d="M0 0"/>'.repeat(10)}</svg>`
-    const html = `<style>.a{color:red}</style><script>var a=1</script>${svg}<p>${'x'.repeat(100)}</p><img src="data:image/x-icon;base64,${'A'.repeat(50)}">`
-    const r = htmlDesignSizeReport(html)
-    expect(r.scripts).toBe('<script>var a=1</script>'.length)
-    expect(r.styles).toBe('<style>.a{color:red}</style>'.length)
-    expect(r.svg).toBe(JSON.stringify(svg).length - 2)
-    expect(r.embedded).toEqual({ count: 1, bytes: 'data:image/x-icon;base64,'.length + 50 })
-    expect(r.markup + r.scripts + r.styles + r.svg + r.embedded.bytes).toBe(r.total)
   })
 })
 

@@ -28,7 +28,6 @@ import {
   getSiteForEdit,
   listPages,
   listVersions,
-  prepareHtmlDesign,
   publishAll,
   publishPage,
   restoreSiteEdit,
@@ -36,7 +35,6 @@ import {
   type SiteEditSchema,
   saveDraft,
   siteEditAuditData,
-  tenantHtmlAssetSink,
   updateDraftTheme,
   updateTheme,
 } from '../src'
@@ -108,6 +106,8 @@ afterAll(() => closeAllDbs())
 
 const draftOf = async (pageId: string) =>
   JSON.stringify((await tx((db) => getEditablePage(db, ids.tenant!, pageId)))!.data)
+/** R24: the stored design of an HTML design page (its own file since the review fix). */
+const designOf = async (pageRef: string) => (await tx((db) => getHtmlDesign(db, ids.tenant!, pageRef)))!.html
 
 describe('site edit ops layer', () => {
   it('rejects ops that do not fit the block schema, all-or-nothing', async () => {
@@ -261,32 +261,18 @@ describe('site edit ops layer', () => {
     )
     expect(r.ok).toBe(true)
     const draft = await draftOf(ids.design!)
-    expect(draft).toContain('new</body>')
-    // R24: stored exactly as sent (no fixHtmlDesign), "Phone fixes" off unless asked.
-    expect(draft).not.toContain('viewport')
+    // R24: stored exactly as sent (no fixHtmlDesign) in the spa's own file; "Phone fixes" off unless asked.
+    expect(await designOf('design-a')).toBe('<html><head></head><body>new</body></html>')
+    expect(draft).not.toContain('new</body>')
+    expect(draft).toContain('"html":""')
     expect(draft).toContain('"phoneFixes":false')
   })
 
-  describe('R24 HTML designs: convert, embedded files, patches', () => {
-    const fileUrl = (id: string, name: string) => `https://app.test/files/${id}/${name}`
+  describe('R24 HTML designs: convert, exact files, patches', () => {
     const png = `data:image/png;base64,${Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]), Buffer.alloc(2000, 7)]).toString('base64')}`
     const run = (ops: unknown[], o: { dryRun?: boolean; userId?: string } = {}) =>
       tx((db) =>
-        runSiteEdit(
-          db,
-          { tenantId: ids.tenant!, userId: o.userId, dryRun: Boolean(o.dryRun), ops },
-          {
-            ...deps,
-            prepareHtml: (h, p) =>
-              prepareHtmlDesign({
-                html: h,
-                images: p.images,
-                sink: tenantHtmlAssetSink(db, ids.tenant!),
-                fileUrl,
-                dryRun: p.dryRun,
-              }),
-          },
-        ),
+        runSiteEdit(db, { tenantId: ids.tenant!, userId: o.userId, dryRun: Boolean(o.dryRun), ops }, deps),
       )
     const doc = (body: string) => `<!doctype html><html><head></head><body>${body}</body></html>`
 
@@ -304,10 +290,16 @@ describe('site edit ops layer', () => {
       )
       expect(dry.ok).toBe(true)
       expect(await draftOf(page.id)).toContain('Slow down')
-      const r = await run([
-        { op: 'html_design', page: 'convert-me', html: doc(`<h1>New</h1><img src="${png}">`), convert: true },
-      ])
-      expect(r.ok && r.html[0]).toMatchObject({ page: 'convert-me', moved: 1, phoneFixes: false })
+      const sent = doc(
+        `<h1>New</h1><img src="${png}"><iframe src="https://www.youtube.com/embed/x"></iframe>`,
+      )
+      const r = await run([{ op: 'html_design', page: 'convert-me', html: sent, convert: true }])
+      expect(r.ok && r.html[0]).toMatchObject({
+        page: 'convert-me',
+        chars: sent.length,
+        phoneFixes: false,
+        embeds: ['www.youtube.com'],
+      })
       const data = JSON.parse(await draftOf(page.id))
       expect(data.root.props).toEqual({ title: { en: 'Home' }, htmlDesign: true })
       expect(data.content).toHaveLength(1)
@@ -315,14 +307,14 @@ describe('site edit ops layer', () => {
         type: 'HtmlDesign',
         props: { id: 'convert-me-html-design', phoneFixes: false },
       })
-      expect(data.content[0].props.html).toMatch(
-        /<img crossorigin="anonymous" src="https:\/\/app\.test\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.png">/,
-      )
+      // Byte for byte: nothing moved out or rewritten, the page JSON only references the spa's file.
+      expect(data.content[0].props.html).toBe('')
+      expect(data.content[0].props.doc).toMatchObject({ chars: sent.length, bytes: sent.length })
+      expect(await designOf('convert-me')).toBe(sent)
       const versions = await tx((db) => listVersions(db, ids.tenant!, page.id))
       expect(versions.map((v) => v.label).find(Boolean)).toMatch(/^Before AI assistant HTML design /)
       const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'convert-me'))
-      expect(view).toMatchObject({ phoneFixes: false, images: 0, editing: null })
-      expect(view!.html).not.toContain('data:image/png')
+      expect(view).toMatchObject({ phoneFixes: false, images: 0, editing: null, html: sent })
       await expect(tx((db) => getHtmlDesign(db, ids.tenant!, 'home'))).rejects.toThrow(
         /not an HTML design page/,
       )
@@ -359,10 +351,11 @@ describe('site edit ops layer', () => {
         },
       ])
       expect(ok.ok && ok.html[0]?.at).toEqual([expect.any(Number)])
-      expect(await draftOf(ids.design!)).toContain('patched</body>')
+      expect(await designOf('design-a')).toContain('patched</body>')
       expect(await draftOf(ids.design!)).toContain('"phoneFixes":true')
       await run([{ op: 'html_patch', page: 'design-a', edits: [{ find: 'patched', replace: 'again' }] }])
       expect(await draftOf(ids.design!)).toContain('"phoneFixes":true')
+      expect(await designOf('design-a')).toContain('again</body>')
     })
 
     it('respects editor locks held by someone else', async () => {
@@ -377,14 +370,22 @@ describe('site edit ops layer', () => {
       )
       const r = await run([{ op: 'html_patch', page: 'design-a', edits: [{ find: 'again', replace: 'x' }] }])
       expect(r.ok ? '' : r.errors[0]).toMatch(/Lina/)
-      expect(await draftOf(ids.design!)).toContain('again')
+      expect(await designOf('design-a')).toContain('again')
     })
 
-    it('refuses a design that stays too big after moving its files out', async () => {
-      const r = await run([
-        { op: 'html_design', page: 'convert-me', html: doc(`<script>${'x'.repeat(520 * 1024)}</script>`) },
-      ])
-      expect(r.ok ? '' : r.errors[0]).toMatch(/still|The design is \d+ KB \(scripts/)
+    it('keeps a 4.5 MB design (big inline script + styles, Arabic) exactly; refuses one over 5 MB', async () => {
+      const big = doc(
+        `<style>${'.a{content:"x"}\n'.repeat(60_000)}</style><p>${'سبا '.repeat(300_000)}</p><script>${'var a="\\n";'.repeat(150_000)}</script>`,
+      )
+      expect(Buffer.byteLength(big)).toBeGreaterThan(4.4 * 1024 * 1024)
+      const r = await run([{ op: 'html_design', page: 'convert-me', html: big }])
+      expect(r.ok).toBe(true)
+      expect(await designOf('convert-me')).toBe(big)
+      // Characters ≠ bytes: Arabic letters are 2 bytes each in UTF-8.
+      const over = doc('س'.repeat(2.7 * 1024 * 1024))
+      expect(over.length).toBeLessThan(5 * 1024 * 1024)
+      const refused = await run([{ op: 'html_design', page: 'convert-me', html: over }])
+      expect(refused.ok ? '' : refused.errors[0]).toMatch(/the limit is 5 MB/)
     })
   })
 

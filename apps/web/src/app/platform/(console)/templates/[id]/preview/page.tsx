@@ -10,6 +10,7 @@ import { buildMeta, localeOf } from '@/components/site/data'
 import { adminPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
+import { templateDesignData } from '@/server/html-design-files'
 import { loadAdminTemplate } from '../../data'
 import { DEMO_SITE } from '../../demo'
 
@@ -46,7 +47,11 @@ export default async function TemplatePreviewPage({ params, searchParams }: Prop
     'inline-flex min-h-10 items-center rounded-full px-3.5 text-sm whitespace-nowrap transition-colors'
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg pb-24">
-      <Render config={siteConfig} data={current.data as Partial<Data>} metadata={meta} />
+      <Render
+        config={siteConfig}
+        data={(await templateDesignData(current.data)) as Partial<Data>}
+        metadata={meta}
+      />
       <nav
         aria-label="Template pages"
         className="anim-pop-in fixed inset-x-3 bottom-3 z-[70] mx-auto flex max-w-3xl items-center gap-1 overflow-x-auto rounded-full border bg-surface/95 p-1.5 shadow-pop backdrop-blur [scrollbar-width:none]"

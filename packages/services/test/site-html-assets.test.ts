@@ -3,23 +3,22 @@ import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  DomainError,
-  dataUriBytes,
   getEditablePage,
-  HTML_DESIGN_FILE_PURPOSE,
-  htmlDesignSizeProblem,
+  HTML_DESIGN_DOC_PURPOSE,
+  htmlDesignDocFor,
+  inlineHtmlDesignDocs,
   listPages,
   localiseHtmlDesignAssets,
-  MAX_HTML_ASSETS,
   materializeTemplatePageData,
-  planHtmlDesignAssets,
-  prepareHtmlDesign,
   putFile,
   putTemplateFile,
-  sniffFontType,
+  resolveHtmlDesignDocs,
+  spaDesignsIntoTemplate,
+  spaHtmlDocReader,
+  storeSpaHtmlDoc,
+  storeTemplateHtmlDoc,
   switchTemplate,
-  templateHtmlAssetSink,
-  tenantHtmlAssetSink,
+  templateHtmlDocReader,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -29,8 +28,13 @@ const fileUrl = (id: string, name: string) => `https://app.test/files/${id}/${na
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
 const png = (fill: number, size = 2000) => Buffer.concat([PNG, Buffer.alloc(size, fill)])
-const woff2 = (fill = 1) => Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(3000, fill)])
 const uri = (type: string, b: Buffer) => `data:${type};base64,${b.toString('base64')}`
+
+/** A ~4.6 MB design: embedded images, quotes, newlines, Arabic, a big inline script and styles (all kept as is). */
+const bigDesign = () => {
+  const img = uri('image/png', png(9, 900 * 1024))
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>${'.a{color:"red"}\n'.repeat(20_000)}</style></head><body><h1>مرحبا "بكم"</h1>${`<img src="${img}">`.repeat(3)}<p>${'سبا هادئ '.repeat(40_000)}</p><script>${'var q="x\\n";\n'.repeat(20_000)}</script></body></html>`
+}
 
 beforeAll(async () => {
   await resetTestDatabase()
@@ -46,125 +50,66 @@ beforeAll(async () => {
 })
 afterAll(() => closeAllDbs())
 
-describe('sniffers + decoding', () => {
-  it('sniffs web fonts by magic bytes', () => {
-    expect(sniffFontType(woff2())).toBe('font/woff2')
-    expect(sniffFontType(Buffer.concat([Buffer.from('wOFF'), Buffer.alloc(20)]))).toBe('font/woff')
-    expect(sniffFontType(Buffer.concat([Buffer.from([0, 1, 0, 0]), Buffer.alloc(20)]))).toBe('font/ttf')
-    expect(sniffFontType(Buffer.concat([Buffer.from('OTTO'), Buffer.alloc(20)]))).toBe('font/otf')
-    expect(sniffFontType(Buffer.from('<svg xmlns="x"></svg>'))).toBeNull()
-  })
-  it('decodes forgiving base64 (whitespace) and percent-encoded payloads; refuses broken base64', () => {
-    expect(dataUriBytes({ mime: 'x', base64: true, payload: 'aGVs\n bG8=' })?.toString()).toBe('hello')
-    expect(dataUriBytes({ mime: 'x', base64: true, payload: 'aGVsbG8%3D' })?.toString()).toBe('hello')
-    expect(dataUriBytes({ mime: 'x', base64: false, payload: 'a%20b%FF' })).toEqual(
-      Buffer.from([97, 32, 98, 255]),
-    )
-    expect(dataUriBytes({ mime: 'x', base64: true, payload: 'aGVsbG8*' })).toBeNull()
-    expect(dataUriBytes({ mime: 'x', base64: true, payload: 'a' })).toBeNull()
-  })
+const page = (props: Record<string, unknown>) => ({
+  root: { props: { htmlDesign: true } },
+  content: [{ type: 'HtmlDesign', props: { id: 'x', images: [], ...props } }],
 })
 
-describe('planHtmlDesignAssets', () => {
-  it('moves allowed images/fonts/videos of the declared family, once per payload; the rest stays inline', () => {
-    const img = uri('image/png', png(1))
-    const html = `<img src="${img}"><img srcset="${img} 2x"><style>@font-face{src:url(${uri('font/woff2', woff2())})}
-.a{background:url("${uri('application/octet-stream', woff2(2))}")}</style>
-<img src="${uri('image/png', woff2(3))}"><img src="${uri('image/png', png(4, 100))}"><img src="data:image/svg+xml;base64,${Buffer.alloc(2000, 60).toString('base64')}">
-<img src="${uri('application/octet-stream', png(5))}"><img src="data:image/png;base64,@@@@">`
-    const plan = planHtmlDesignAssets(html)
-    expect(plan.assets.map((a) => [a.contentType, a.refs.length])).toEqual([
-      ['image/png', 1],
-      ['font/woff2', 1],
-      ['font/woff2', 1],
+describe('design documents (R24 review: stored byte for byte)', () => {
+  it('a spa design is its own private file, deduplicated by content, read back exactly', async () => {
+    const html = bigDesign()
+    expect(Buffer.byteLength(html)).toBeGreaterThan(4 * 1024 * 1024)
+    const [a, b] = await tx(async (db) => [
+      await storeSpaHtmlDoc(db, { tenantId: ids.tenant!, html }),
+      await storeSpaHtmlDoc(db, { tenantId: ids.tenant!, html }),
     ])
-    expect(plan.assets[0]!.name).toMatch(/^[0-9a-f]{16}\.png$/)
-    // the srcset candidate (browsers pick data: candidates differently), png declared but font bytes, tiny, svg,
-    // octet-stream outside CSS, malformed
-    expect(plan.leftover.count).toBe(6)
-    expect(plan.leftover.types.sort()).toEqual(['application/octet-stream', 'image/png', 'image/svg+xml'])
-  })
-})
-
-describe('prepareHtmlDesign', () => {
-  it('rewrites to absolute file URLs, adds crossorigin, remaps adjustments; a dry run stores nothing', async () => {
-    const img = uri('image/png', png(9))
-    const html = `<html><body><img src="${img}" alt="x"></body></html>`
-    let stored = 0
-    const sink = async () => {
-      stored++
-      return '11111111-2222-4333-8444-555555555555'
-    }
-    const dry = await prepareHtmlDesign({
-      html,
-      images: [{ id: 'img-0', src: img.slice(0, 300), x: 10 }],
-      sink,
-      fileUrl,
-      dryRun: true,
+    expect(a).toEqual(b)
+    expect(a).toEqual({ ...htmlDesignDocFor(html), file: a!.file })
+    const [row] = await platform.select().from(storedFiles).where(eq(storedFiles.id, a!.file))
+    expect(row).toMatchObject({
+      tenantId: ids.tenant,
+      isPublic: false,
+      purpose: HTML_DESIGN_DOC_PURPOSE,
+      size: Buffer.byteLength(html),
     })
-    expect(stored).toBe(0)
-    expect(dry.moved.count).toBe(1)
-    const real = await prepareHtmlDesign({
-      html,
-      images: [{ id: 'img-0', src: img.slice(0, 300), x: 10 }],
-      sink,
-      fileUrl,
+    expect(await tx((db) => spaHtmlDocReader(db, ids.tenant!)(a!))).toBe(html)
+    // Another spa can't read it (RLS + tenant check), not even with the id.
+    expect(await tx((db) => spaHtmlDocReader(db, ids.other!)(a!), ids.other!)).toBeNull()
+  })
+  it('a template design is a content-addressed template file', async () => {
+    const html = '<!doctype html><p>Template "one"</p>'
+    const a = await storeTemplateHtmlDoc(platform, { html })
+    const b = await storeTemplateHtmlDoc(platform, { html })
+    expect(a.file).toBe(b.file)
+    const [row] = await platform.select().from(siteTemplateFiles).where(eq(siteTemplateFiles.id, a.file))
+    expect(row?.contentType).toMatch(/^text\/html/)
+    expect(await templateHtmlDocReader(platform)(a)).toBe(html)
+    // An image template file is not a design.
+    const img = await putTemplateFile(platform, {
+      bytes: png(5),
+      contentType: 'image/png',
+      sha256: 'c'.repeat(64),
     })
-    expect(stored).toBe(1)
-    expect(real.html.length).toBe(dry.html.length)
-    expect(real.html).toMatch(
-      /<img crossorigin="anonymous" src="https:\/\/app\.test\/files\/11111111-2222-4333-8444-555555555555\/[0-9a-f]{16}\.png" alt="x">/,
+    expect(await templateHtmlDocReader(platform)({ ...a, file: img.id })).toBeNull()
+  })
+  it('resolves references for rendering, inlines them for an export; legacy inline html stays', async () => {
+    const html = '<!doctype html><p>Resolved</p>'
+    const doc = await storeTemplateHtmlDoc(platform, { html })
+    const data = page({ html: '', doc })
+    const read = templateHtmlDocReader(platform)
+    const shown = await resolveHtmlDesignDocs(data, read)
+    expect(shown.content[0]!.props).toMatchObject({ html, doc })
+    expect(data.content[0]!.props.html).toBe('')
+    const exported = await inlineHtmlDesignDocs(data, read)
+    expect(exported.content[0]!.props).toEqual({ id: 'x', images: [], html })
+    const legacy = page({ html: '<p>old</p>' })
+    expect(await resolveHtmlDesignDocs(legacy, read)).toEqual(legacy)
+    // Missing file: nothing shown (never someone else's design).
+    const gone = await resolveHtmlDesignDocs(
+      page({ html: '', doc: { ...doc, file: crypto.randomUUID() } }),
+      read,
     )
-    expect(real.images[0]!.src).toMatch(/^https:\/\/app\.test\/files\/11111111/)
-  })
-  it('says what is still too big and stores nothing', async () => {
-    const html = `<html><head><script>${'x'.repeat(600 * 1024)}</script></head><body><img src="${uri('image/png', png(3))}"></body></html>`
-    let stored = 0
-    const err = await prepareHtmlDesign({
-      html,
-      sink: async () => {
-        stored++
-        return 'x'
-      },
-      fileUrl,
-    }).catch((e) => e)
-    expect(err).toBeInstanceOf(DomainError)
-    expect(err.message).toMatch(
-      /^After moving 1 embedded image, font or video file \(\d+ KB\) out, the design is still 6\d\d KB \(scripts 60\d KB, markup 1 KB\); the limit is about 500 KB\./,
-    )
-    expect(stored).toBe(0)
-    expect(htmlDesignSizeProblem('<p>small</p>')).toBeNull()
-  })
-  it(`refuses more than ${MAX_HTML_ASSETS} files`, async () => {
-    const html = Array.from(
-      { length: MAX_HTML_ASSETS + 1 },
-      (_, i) => `<img src="${uri('image/png', png(i % 250, 1100 + i))}">`,
-    ).join('')
-    await expect(prepareHtmlDesign({ html, sink: async () => 'x', fileUrl, dryRun: true })).rejects.toThrow(
-      /at most 300 can be moved out/,
-    )
-  })
-})
-
-describe('stores', () => {
-  it('template files are deduplicated by content', async () => {
-    const plan = planHtmlDesignAssets(`<img src="${uri('image/png', png(21))}">`)
-    const sink = templateHtmlAssetSink(platform)
-    const a = await sink(plan.assets[0]!)
-    const b = await sink(plan.assets[0]!)
-    expect(a).toBe(b)
-    const rows = await platform.select().from(siteTemplateFiles).where(eq(siteTemplateFiles.id, a))
-    expect(rows[0]).toMatchObject({ contentType: 'image/png', size: png(21).length, storage: 'db' })
-  })
-  it('spa files are public, purpose html_design, deduplicated', async () => {
-    const plan = planHtmlDesignAssets(`<img src="${uri('image/png', png(22))}">`)
-    const [a, b] = await tx(async (db) => {
-      const sink = tenantHtmlAssetSink(db, ids.tenant!)
-      return [await sink(plan.assets[0]!), await sink(plan.assets[0]!)]
-    })
-    expect(a).toBe(b)
-    const [row] = await platform.select().from(storedFiles).where(eq(storedFiles.id, a!))
-    expect(row).toMatchObject({ isPublic: true, purpose: HTML_DESIGN_FILE_PURPOSE, tenantId: ids.tenant })
+    expect(gone.content[0]!.props.html).toBe('')
   })
 })
 
@@ -215,31 +160,19 @@ describe('localiseHtmlDesignAssets', () => {
       if (id !== priv!.id) expect(mine.map((m) => m.id)).toContain(id)
   })
 
-  it('switchTemplate({ prepare }) writes the spa’s own file URLs', async () => {
-    const tpl = await putTemplateFile(platform, {
+  it('applying a template copies its design into the spa byte for byte (+ the files it uses); saving it back too', async () => {
+    const tplImg = await putTemplateFile(platform, {
       bytes: png(41),
       contentType: 'image/png',
       sha256: 'b'.repeat(64),
     })
+    const html = `${bigDesign()}<img src="${fileUrl(tplImg.id, 'b.png')}">`
+    const doc = await storeTemplateHtmlDoc(platform, { html })
     const template = {
       key: 'html-x',
       name: 'HTML X',
       theme: {},
-      pages: [
-        {
-          slug: '',
-          title: { en: 'Home' },
-          data: {
-            root: { props: { htmlDesign: true } },
-            content: [
-              {
-                type: 'HtmlDesign',
-                props: { id: 'x', html: `<img src="${fileUrl(tpl.id, 'b.png')}">`, images: [] },
-              },
-            ],
-          },
-        },
-      ],
+      pages: [{ slug: '', title: { en: 'Home' }, data: page({ html: '', doc, phoneFixes: false }) }],
     }
     const draft = await tx(async (db) => {
       await switchTemplate(db, ids.tenant!, template, {
@@ -248,11 +181,24 @@ describe('localiseHtmlDesignAssets', () => {
           (await materializeTemplatePageData(db, { tenantId: ids.tenant!, data, fileUrl, platform })).data,
       })
       const home = (await listPages(db, ids.tenant!)).find((p) => p.slug === '')!
-      return JSON.stringify((await getEditablePage(db, ids.tenant!, home.id))!.data)
+      return (await getEditablePage(db, ids.tenant!, home.id))!.data as ReturnType<typeof page>
     })
-    expect(draft).not.toContain(tpl.id)
-    const id = draft.match(/files\/([0-9a-f-]{36})\//)![1]!
-    const [row] = await platform.select().from(storedFiles).where(eq(storedFiles.id, id))
+    const props = draft.content[0]!.props as { html: string; doc: { file: string }; phoneFixes: boolean }
+    expect(props.html).toBe('')
+    expect(props.phoneFixes).toBe(false)
+    expect(props.doc.file).not.toBe(doc.file)
+    const spaHtml = await tx((db) => spaHtmlDocReader(db, ids.tenant!)(props.doc as typeof doc))
+    // Only the template file's URL changed (now the spa's own copy); every other byte is the template's.
+    const m = /https:\/\/app\.test\/files\/([0-9a-f-]{36})\/[0-9a-f]{16}\.png/.exec(spaHtml!)!
+    expect(spaHtml).toBe(html.replace(fileUrl(tplImg.id, 'b.png'), m[0]))
+    const copied = m[1]!
+    const [row] = await platform.select().from(storedFiles).where(eq(storedFiles.id, copied))
     expect(row?.tenantId).toBe(ids.tenant)
+    // Save the spa's page as a template page again: a template file, not a reference to the spa.
+    const back = await tx((db) =>
+      spaDesignsIntoTemplate(draft, { read: spaHtmlDocReader(db, ids.tenant!), db: platform }),
+    )
+    const backDoc = back.content[0]!.props.doc as typeof doc
+    expect(await templateHtmlDocReader(platform)(backDoc)).toBe(spaHtml)
   })
 })

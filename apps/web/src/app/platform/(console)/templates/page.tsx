@@ -1,4 +1,4 @@
-import { type HtmlImageAdjust, htmlDesignPhoneFixes } from '@spa/core'
+import { type HtmlImageAdjust, htmlDesignBakedFixes, htmlDesignDocOf, htmlDesignPhoneFixes } from '@spa/core'
 import { platformDb, sites, tenants } from '@spa/db'
 import { listStudioTemplates, type StudioTemplateRow } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
@@ -19,7 +19,7 @@ import { adminPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { saveHtmlImagesAction, saveSiteAsTemplateAction, updateTemplateAction } from './actions'
-import { HtmlFileField, HtmlImageAdjuster } from './html-images'
+import { HtmlFileField, TemplateImageAdjuster } from './html-images'
 import { PhoneFixesSwitch, TemplateUploadSheet } from './upload-sheet'
 
 export const metadata: Metadata = { title: 'Site templates' }
@@ -81,17 +81,25 @@ function EditSheet({ row }: { row: StudioTemplateRow }) {
 
 type Spa = { slug: string; name: string }
 
-/** The uploaded file, image adjustments and Phone fixes switch of an HTML-design template, or null for a block one. */
+/**
+ * Image adjustments and Phone fixes switch of an HTML-design template, or null for a block one. The design itself
+ * (up to 5 MB) is loaded only when its Images sheet opens.
+ */
 function htmlDesignOf(
   row: StudioTemplateRow,
-): { html: string; images: HtmlImageAdjust[]; phoneFixes: boolean } | null {
+): { images: HtmlImageAdjust[]; phoneFixes: boolean; baked: boolean } | null {
   const first = row.pages[0] as { data?: { content?: { type: string; props: Record<string, unknown> }[] } }
   const node = first?.data?.content?.[0]
-  if (row.pages.length !== 1 || node?.type !== HTML_DESIGN || typeof node.props.html !== 'string') return null
+  if (
+    row.pages.length !== 1 ||
+    node?.type !== HTML_DESIGN ||
+    (typeof node.props.html !== 'string' && !htmlDesignDocOf(node.props))
+  )
+    return null
   return {
-    html: node.props.html,
     images: (node.props.images as HtmlImageAdjust[] | undefined) ?? [],
     phoneFixes: htmlDesignPhoneFixes(node.props),
+    baked: htmlDesignBakedFixes(node.props),
   }
 }
 
@@ -122,12 +130,7 @@ function ImagesSheet({
       action={saveHtmlImagesAction.bind(null, row.id)}
       submitLabel="Save images"
     >
-      <HtmlImageAdjuster
-        html={design.html}
-        initial={design.images}
-        spas={spas}
-        phoneFixes={design.phoneFixes}
-      />
+      <TemplateImageAdjuster id={row.id} initial={design.images} spas={spas} phoneFixes={design.phoneFixes} />
     </FormSheet>
   )
 }
@@ -347,7 +350,12 @@ export default async function TemplatesStudioPage() {
                         return (
                           design && (
                             <>
-                              <PhoneFixesSwitch id={r.id} name={r.name} on={design.phoneFixes} />
+                              <PhoneFixesSwitch
+                                id={r.id}
+                                name={r.name}
+                                on={design.phoneFixes}
+                                baked={design.baked}
+                              />
                               <ImagesSheet row={r} design={design} spas={libraries} />
                             </>
                           )
