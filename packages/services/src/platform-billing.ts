@@ -476,8 +476,8 @@ export async function createPaymentReminder(
   const message = [
     `Hello ${tenant.name},`,
     `This is a friendly reminder from ${settings?.companyName ?? 'spamanagement.co'}: ${
-      overdue ? 'the following invoice is overdue' : 'the following invoice is due'
-    }${due.length > 1 ? 's' : ''}.`,
+      due.length > 1 ? 'the following invoices are' : 'the following invoice is'
+    } ${overdue ? 'overdue' : 'due'}.`,
     ...lines,
     `Total: ${aed(total)}.`,
     'Please pay to avoid your account being paused. You can pay by bank transfer, cash or card from your Billing page:',

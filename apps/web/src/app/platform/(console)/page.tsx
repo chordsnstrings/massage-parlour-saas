@@ -361,7 +361,7 @@ export default async function PlatformOverview() {
           <Card>
             <CardHeader
               title="Payments overdue"
-              description="Remind the spa from its page, or pause it until it pays."
+              description="Remind the spa from its page, or pause it. A pause stays until you click Resume spa on its page."
             />
             <div className="mt-4 border-t">
               <DataTable

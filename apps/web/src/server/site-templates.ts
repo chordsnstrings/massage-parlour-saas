@@ -6,7 +6,8 @@ import { isTemplateKey, TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templ
 export type CatalogTemplate = SiteTemplate & { feel: string; source: 'builtin' | 'studio' }
 
 /**
- * The template catalogue spas choose from: the 8 built-ins plus active template-studio rows (PLAN §11.2).
+ * The template catalogue spas choose from: the built-ins (`TEMPLATES`: 8 classic + 15 designs) plus active
+ * template-studio rows (PLAN §11.2).
  * Studio rows override a built-in with the same key. `site_templates` is a platform table (invisible to the
  * tenant role), so the catalogue is read with the platform connection — it holds no tenant data.
  */
