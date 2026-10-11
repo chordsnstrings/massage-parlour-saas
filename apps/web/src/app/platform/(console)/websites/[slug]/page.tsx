@@ -193,8 +193,16 @@ export default async function SpaWebsitePage({
                 pages={undo.pages.length}
               />
             )}
+            <PagesCard
+              slug={slug}
+              pages={pages}
+              themePending={themePending}
+              canEdit={canEdit}
+              canDesign={canDesign}
+              importAi={importAi}
+            />
             <div className="grid items-start gap-[var(--ui-stack,1.5rem)] lg:grid-cols-2">
-              <div className="grid gap-[var(--ui-stack,1.5rem)]">
+              <div className="grid min-w-0 gap-[var(--ui-stack,1.5rem)]">
                 <Card>
                   <CardHeader title="Website" description={`${host} · English · Arabic`} />
                   <CardBody className="space-y-4">
@@ -228,15 +236,7 @@ export default async function SpaWebsitePage({
                 </Card>
                 {requestsCard}
               </div>
-              <div className="grid gap-[var(--ui-stack,1.5rem)]">
-                <PagesCard
-                  slug={slug}
-                  pages={pages}
-                  themePending={themePending}
-                  canEdit={canEdit}
-                  canDesign={canDesign}
-                  importAi={importAi}
-                />
+              <div className="grid min-w-0 gap-[var(--ui-stack,1.5rem)]">
                 <BlogCard slug={slug} posts={posts} canEdit={canEdit} />
                 {glance && (
                   <Card>
