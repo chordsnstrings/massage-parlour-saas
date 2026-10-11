@@ -1,7 +1,19 @@
 import { type Permission, requires2fa, resolvePermissions, TWO_FACTOR_POLICY_ROLES } from '@spa/core'
-import { members, platformDb, roles, storedFiles, tenants, user as users, withTenant } from '@spa/db'
 import {
+  members,
+  platformDb,
+  roles,
+  siteTemplateFiles,
+  storedFiles,
+  tenants,
+  user as users,
+  withTenant,
+} from '@spa/db'
+import {
+  FONT_TYPES,
   getFile,
+  getTemplateFile,
+  HTML_DESIGN_DOC_PURPOSE,
   IMAGE_TYPES,
   INTAKE_PDF_PURPOSE,
   jpegVariant,
@@ -24,11 +36,18 @@ import { getSession } from '@/server/session'
  *    reuse re-checks access (cheap 304s via ETag).
  * `?f=jpg` renders a JPEG copy of an image (Instagram's publishing API only accepts JPEG).
  * The platform lookup only decides access; the bytes are then read inside the file's tenant RLS scope.
+ * R24: no stored file with that id → a template file (site_template_files: public, immutable; never a template's design
+ * document — the platform renders those, /files doesn't serve them). Public responses carry
+ * A spa's design documents (purpose `html_design_doc`, R24 review) are never served either: nothing fetches them
+ * (pages render them server-side, the Studio editor gets them with the page), and drafts stay private to the studio.
+ * `Access-Control-Allow-Origin: *` (incl. 304s): HTML designs run in an opaque origin, and fonts (and crossorigin
+ * images) are CORS requests from there. Private files never get it. Videos (stored and template files) are served
+ * with byte ranges.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IMAGES = new Set<string>(IMAGE_TYPES)
 const VIDEOS = new Set<string>(VIDEO_TYPES)
-const INLINE = new Set<string>([...IMAGE_TYPES, ...VIDEO_TYPES, 'application/pdf'])
+const INLINE = new Set<string>([...IMAGE_TYPES, ...VIDEO_TYPES, ...FONT_TYPES, 'application/pdf'])
 
 /** F15: one `bytes=a-b` / `bytes=a-` / `bytes=-n` range of a video (Safari only plays video served with ranges). */
 function byteRange(header: string | null, size: number): [number, number] | 'invalid' | null {
@@ -107,6 +126,57 @@ async function canRead(f: FileTenant) {
 
 const asciiName = (name: string) => name.replace(/[^\w.\- ]+/g, '_').slice(0, 120) || 'file'
 
+/** The body as a response: videos honour one byte range (206 / 416, Accept-Ranges), everything else is a 200. */
+function bodyResponse(req: Request, headers: Record<string, string>, body: Buffer, type: string) {
+  if (VIDEOS.has(type)) {
+    headers['accept-ranges'] = 'bytes'
+    const range = byteRange(req.headers.get('range'), body.length)
+    if (range === 'invalid') {
+      headers['content-range'] = `bytes */${body.length}`
+      return new Response(null, { status: 416, headers })
+    }
+    if (range) {
+      const [start, end] = range
+      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
+      headers['content-length'] = String(end - start + 1)
+      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
+        status: 206,
+        headers,
+      })
+    }
+  }
+  headers['content-length'] = String(body.length)
+  return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
+}
+
+/**
+ * R24: a public, immutable file of a platform template. Its existence is checked before a 304 (an id with no file at
+ * all — e.g. a deleted private file the browser still has cached — must stay a 404), and its ETag differs from a
+ * stored file's, so a cached stored file never revalidates against this path.
+ */
+async function serveTemplateFile(req: Request, id: string) {
+  const [meta] = await platformDb()
+    .select({ contentType: siteTemplateFiles.contentType })
+    .from(siteTemplateFiles)
+    .where(eq(siteTemplateFiles.id, id))
+  if (!meta || meta.contentType.startsWith('text/html')) return notFound()
+  const etag = `"t-${id}"`
+  const headers: Record<string, string> = {
+    etag,
+    'cache-control': 'public, max-age=31536000, immutable',
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+    'cross-origin-resource-policy': 'cross-origin',
+    'access-control-allow-origin': '*',
+  }
+  if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers })
+  const file = await getTemplateFile(platformDb(), id)
+  if (!file || file.contentType.startsWith('text/html')) return notFound()
+  headers['content-type'] = file.contentType
+  headers['content-disposition'] = INLINE.has(file.contentType) ? 'inline' : 'attachment'
+  return bodyResponse(req, headers, file.bytes, file.contentType)
+}
+
 export async function serveFile(req: Request, id: string) {
   if (!UUID.test(id)) return notFound()
   const [meta] = await platformDb()
@@ -123,7 +193,8 @@ export async function serveFile(req: Request, id: string) {
     .innerJoin(tenants, eq(tenants.id, storedFiles.tenantId))
     .where(eq(storedFiles.id, id))
     .limit(1)
-  if (!meta) return notFound()
+  if (!meta) return serveTemplateFile(req, id)
+  if (meta.purpose === HTML_DESIGN_DOC_PURPOSE) return notFound()
   if (!meta.isPublic && !(await canRead({ ...meta, deleted: Boolean(meta.tenantDeletedAt) })))
     return notFound()
 
@@ -143,6 +214,7 @@ export async function serveFile(req: Request, id: string) {
     'cross-origin-resource-policy': 'cross-origin',
   }
   if (!meta.isPublic) headers.vary = 'Cookie'
+  else headers['access-control-allow-origin'] = '*'
   if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers })
 
   const file = await withTenant(meta.tenantId, (tx) => getFile(tx, id))
@@ -171,23 +243,5 @@ export async function serveFile(req: Request, id: string) {
   headers['content-type'] = type
   headers['content-disposition'] =
     `${INLINE.has(type) ? 'inline' : 'attachment'}${name ? `; filename="${name}"` : ''}`
-  if (VIDEOS.has(type)) {
-    headers['accept-ranges'] = 'bytes'
-    const range = byteRange(req.headers.get('range'), body.length)
-    if (range === 'invalid') {
-      headers['content-range'] = `bytes */${body.length}`
-      return new Response(null, { status: 416, headers })
-    }
-    if (range) {
-      const [start, end] = range
-      headers['content-range'] = `bytes ${start}-${end}/${body.length}`
-      headers['content-length'] = String(end - start + 1)
-      return new Response(req.method === 'HEAD' ? null : new Uint8Array(body.subarray(start, end + 1)), {
-        status: 206,
-        headers,
-      })
-    }
-  }
-  headers['content-length'] = String(body.length)
-  return new Response(req.method === 'HEAD' ? null : new Uint8Array(body), { status: 200, headers })
+  return bodyResponse(req, headers, body, type)
 }

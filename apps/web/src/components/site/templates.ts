@@ -2046,6 +2046,9 @@ const kit = {
 }
 export type TemplateKit = typeof kit
 export type BuiltIn = SiteTemplate & { feel: string }
+const designs = designTemplates(kit)
+/** R24: the 15 built-ins rebuilt from the owner's designs (R5); the other built-ins are the 8 classic ones. */
+export const DESIGN_TEMPLATE_KEYS: ReadonlySet<string> = new Set(Object.keys(designs))
 export const TEMPLATES = {
   zen: { ...zen(), feel: 'Stone and off-white, serif headings, slow fades.' },
   luxury: { ...luxury(), feel: 'Black and gold, editorial, expressive motion.' },
@@ -2056,7 +2059,7 @@ export const TEMPLATES = {
   express: { ...express(), feel: 'Bold, price-forward, made for walk-ins.' },
   hotel: { ...hotel(), feel: 'Premium long-form with rich galleries.' },
   // R5: rebuilt from the owner's designs, each with its own 3D scroll motion.
-  ...designTemplates(kit),
+  ...designs,
 } satisfies Record<string, BuiltIn>
 export type TemplateKey = keyof typeof TEMPLATES
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[]

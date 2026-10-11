@@ -77,6 +77,8 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
     expect(h['x-content-type-options']).toBe('nosniff')
     expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin')
     expect(h['permissions-policy']).toContain('camera=()')
+    // R24: set once (by the proxy), never also by next.config.
+    expect(res.headersArray().filter((x) => x.name.toLowerCase() === 'permissions-policy')).toHaveLength(1)
     expect(h['cross-origin-opener-policy']).toBe(
       surface === 'app' ? 'same-origin-allow-popups' : 'same-origin',
     )
@@ -137,12 +139,22 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
     expect(h['x-frame-options'], path).toBe('DENY')
     expect(h['x-content-type-options']).toBe('nosniff')
   }
+  // R24: Permissions-Policy on the paths the proxy skips too (next.config), once each.
+  for (const path of ['/api/health', '/files/00000000-0000-4000-8000-000000000000']) {
+    const res = await page.request.get(`${base}${path}`, { failOnStatusCode: false })
+    const pp = res.headersArray().filter((x) => x.name.toLowerCase() === 'permissions-policy')
+    expect(pp, path).toHaveLength(1)
+    expect(pp[0]!.value).toContain('accelerometer=()')
+  }
   const httpsApi = await page.request.get(`${base}/api/health`, { headers: { 'x-forwarded-proto': 'https' } })
   expect(httpsApi.headers()['strict-transport-security']).toBe('max-age=31536000')
   // The HTML design shell keeps its own sandbox policy (one CSP header only).
   const shell = (await page.request.get(`${base}/api/html-design/frame`)).headers()
   expect(shell['content-security-policy']).toContain('sandbox allow-scripts')
   expect(shell['content-security-policy']).not.toContain("default-src 'none'")
+  // R24: the shell leaves the motion sensors to the hosting page's delegation; the rest stays off.
+  expect(shell['permissions-policy']).not.toContain('accelerometer')
+  expect(shell['permissions-policy']).toContain('camera=()')
 })
 
 test('F10: an injected script without the nonce never runs; the page itself still works', async ({

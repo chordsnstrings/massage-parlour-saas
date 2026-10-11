@@ -1,10 +1,10 @@
-import type { HtmlImageAdjust } from '@spa/core'
+import { type HtmlImageAdjust, htmlDesignBakedFixes, htmlDesignDocOf, htmlDesignPhoneFixes } from '@spa/core'
 import { platformDb, sites, tenants } from '@spa/db'
 import { listStudioTemplates, type StudioTemplateRow } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
 import { Download, Eye, FileCode, Images, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
-import { HTML_DESIGN, HTML_DESIGN_PLACEHOLDERS } from '@/components/site/blocks/html-design'
+import { HTML_DESIGN, HTML_DESIGN_PLACEHOLDERS } from '@/components/site/html-design-values'
 import { TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,14 +18,9 @@ import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
-import {
-  importTemplateAction,
-  saveHtmlImagesAction,
-  saveSiteAsTemplateAction,
-  updateTemplateAction,
-  uploadHtmlTemplateAction,
-} from './actions'
-import { HtmlFileField, HtmlImageAdjuster } from './html-images'
+import { saveHtmlImagesAction, saveSiteAsTemplateAction, updateTemplateAction } from './actions'
+import { HtmlFileField, TemplateImageAdjuster } from './html-images'
+import { PhoneFixesSwitch, TemplateUploadSheet } from './upload-sheet'
 
 export const metadata: Metadata = { title: 'Site templates' }
 
@@ -86,12 +81,26 @@ function EditSheet({ row }: { row: StudioTemplateRow }) {
 
 type Spa = { slug: string; name: string }
 
-/** The uploaded file + image adjustments of an HTML-design template, or null for a block template. */
-function htmlDesignOf(row: StudioTemplateRow): { html: string; images: HtmlImageAdjust[] } | null {
+/**
+ * Image adjustments and Phone fixes switch of an HTML-design template, or null for a block one. The design itself
+ * (up to 5 MB) is loaded only when its Images sheet opens.
+ */
+function htmlDesignOf(
+  row: StudioTemplateRow,
+): { images: HtmlImageAdjust[]; phoneFixes: boolean; baked: boolean } | null {
   const first = row.pages[0] as { data?: { content?: { type: string; props: Record<string, unknown> }[] } }
   const node = first?.data?.content?.[0]
-  if (row.pages.length !== 1 || node?.type !== HTML_DESIGN || typeof node.props.html !== 'string') return null
-  return { html: node.props.html, images: (node.props.images as HtmlImageAdjust[] | undefined) ?? [] }
+  if (
+    row.pages.length !== 1 ||
+    node?.type !== HTML_DESIGN ||
+    (typeof node.props.html !== 'string' && !htmlDesignDocOf(node.props))
+  )
+    return null
+  return {
+    images: (node.props.images as HtmlImageAdjust[] | undefined) ?? [],
+    phoneFixes: htmlDesignPhoneFixes(node.props),
+    baked: htmlDesignBakedFixes(node.props),
+  }
 }
 
 function ImagesSheet({
@@ -121,7 +130,7 @@ function ImagesSheet({
       action={saveHtmlImagesAction.bind(null, row.id)}
       submitLabel="Save images"
     >
-      <HtmlImageAdjuster html={design.html} initial={design.images} spas={spas} />
+      <TemplateImageAdjuster id={row.id} initial={design.images} spas={spas} phoneFixes={design.phoneFixes} />
     </FormSheet>
   )
 }
@@ -146,16 +155,16 @@ export default async function TemplatesStudioPage() {
         description={`Templates spas can pick next to the ${TEMPLATE_KEYS.length} built-ins. A studio template with a built-in key replaces it.`}
         actions={
           <>
-            <FormSheet
+            <TemplateUploadSheet
+              kind="html"
               title="Upload an HTML design"
               className="md:max-w-4xl"
-              description="A one-page design shown on the spa's site exactly as built: its styles, fonts, motion and scripts, full screen and isolated from the platform. It can't be changed in the drag-and-drop editor; upload a new file to update it."
+              description="A one-page design shown on the spa's site exactly as built: its styles, fonts, images, motion, scrolling and scripts, full screen and isolated from the platform. It can't be changed in the drag-and-drop editor; upload a new file to update it."
               trigger={
                 <Button variant="secondary">
                   <FileCode /> Upload HTML
                 </Button>
               }
-              action={uploadHtmlTemplateAction}
               submitLabel="Upload"
             >
               <Field label="Template name" name="name">
@@ -166,7 +175,7 @@ export default async function TemplatesStudioPage() {
               </Field>
               <HtmlFileField
                 spas={libraries}
-                hint="One .html file up to about 500 KB. Fonts and images load from their URLs (links to files on your computer won't work). Images are kept inside the screen automatically; adjust them below."
+                hint="One .html file up to 5 MB. Images and fonts embedded in it are moved to the platform's files; the page itself (markup, styles, scripts) can be up to about 500 KB. Links to files on your computer won't work."
               />
               <div className="space-y-2 rounded-xl border p-4 text-sm">
                 <p className="font-medium">Each spa's details (optional)</p>
@@ -199,16 +208,16 @@ export default async function TemplatesStudioPage() {
               <label className="flex min-h-11 items-center gap-2.5 text-sm">
                 <Checkbox name="active" /> Spas can pick it right away (otherwise check the preview first)
               </label>
-            </FormSheet>
-            <FormSheet
+            </TemplateUploadSheet>
+            <TemplateUploadSheet
+              kind="json"
               title="Import a template"
-              description="Upload a template exported from this or another environment."
+              description="Upload a template exported from this or another environment (up to 11 MB: an export includes its HTML designs)."
               trigger={
                 <Button variant="secondary">
                   <Upload /> Import JSON
                 </Button>
               }
-              action={importTemplateAction}
               submitLabel="Import"
             >
               <Field label="Template file" name="file">
@@ -232,7 +241,7 @@ export default async function TemplatesStudioPage() {
               <label className="flex min-h-11 items-center gap-2.5 text-sm">
                 <Checkbox name="active" /> Spas can pick it right away (otherwise check the preview first)
               </label>
-            </FormSheet>
+            </TemplateUploadSheet>
             <FormSheet
               title="Save a spa's site as a template"
               description="Copies the spa's theme and live pages. Its name, photos, links, phone numbers and emails are removed and client reviews become sample quotes; prices, team and hours stay live for each spa. Check the preview for anything else spa-specific before switching it on."
@@ -338,7 +347,19 @@ export default async function TemplatesStudioPage() {
                       />
                       {(() => {
                         const design = htmlDesignOf(r)
-                        return design && <ImagesSheet row={r} design={design} spas={libraries} />
+                        return (
+                          design && (
+                            <>
+                              <PhoneFixesSwitch
+                                id={r.id}
+                                name={r.name}
+                                on={design.phoneFixes}
+                                baked={design.baked}
+                              />
+                              <ImagesSheet row={r} design={design} spas={libraries} />
+                            </>
+                          )
+                        )
                       })()}
                       <EditSheet row={r} />
                     </span>

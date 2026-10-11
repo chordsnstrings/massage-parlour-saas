@@ -1,6 +1,7 @@
 // Phase 1 — tenant website (Puck page data, versions, theme).
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -33,6 +34,12 @@ export type TemplateUndo = {
   theme: ThemeTokens
   appliedTheme: ThemeTokens
   at: string
+  /**
+   * R24 (Claude connector): the switch wrote the template's theme as the DRAFT theme (live `theme` untouched);
+   * `themeDraft` = the draft theme before it (null = none). `appliedTheme` is then the editing theme after the switch.
+   */
+  draftTheme?: true
+  themeDraft?: ThemeTokens | null
   /** `draft` = the page's previous draft data (null when it had none); `created` = page added by the switch. */
   pages: {
     pageId: string
@@ -248,6 +255,32 @@ export const siteTemplates = pgTable(
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+  },
+  () => platformPolicies(),
+)
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
+
+/**
+ * R24: files of platform templates (templates belong to no spa) — chiefly the design documents of uploaded HTML
+ * templates (text/html, stored byte for byte; never served by /files), plus any image / font / video file one uses
+ * (public, immutable, /files/{id}/{name}). Content-addressed (one row per sha256). Applying the template copies what it
+ * uses into the spa's own files (spa sites never depend on it). Bucket objects live under `templates/{id}`, outside
+ * every `{tenantId}/` prefix (the tenant purge never touches them).
+ */
+export const siteTemplateFiles = pgTable(
+  'site_template_files',
+  {
+    id: id(),
+    sha256: text('sha256').notNull().unique(),
+    contentType: text('content_type').notNull(),
+    size: integer('size').notNull(),
+    /** 'db' | 's3' */
+    storage: text('storage').notNull().default('db'),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
   },
   () => platformPolicies(),
 )

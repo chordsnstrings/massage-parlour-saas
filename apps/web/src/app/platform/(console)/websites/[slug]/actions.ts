@@ -26,6 +26,7 @@ import { BACKDROPS, EMBLEMS, normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { templateIntoSpa } from '@/server/html-design-files'
 import { editStampSchema, publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
 import { revalidateStudio } from '@/server/studio'
@@ -74,7 +75,12 @@ export async function applyTemplateAction(
   const replaceContent = parsed.data.replaceContent === 'on'
   try {
     await withTenant(ctx.tenant.id, (tx) =>
-      switchTemplate(tx, ctx.tenant.id, template, { replaceContent, userId: ctx.user.id }),
+      switchTemplate(tx, ctx.tenant.id, template, {
+        replaceContent,
+        userId: ctx.user.id,
+        // R24: an HTML design template's files are copied into the spa (its site never depends on the template).
+        prepare: templateIntoSpa(tx, ctx.tenant.id, ctx.user.id),
+      }),
     )
   } catch (e) {
     return domainFail(e)

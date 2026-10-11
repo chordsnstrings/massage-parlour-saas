@@ -301,4 +301,14 @@ export const domain: Messages['errors']['domain'] = {
   planAlreadyArchived: '{name} ถูกเก็บถาวรแล้ว',
   planOnlyOffered: '{name} เป็นแพ็กเกจเดียวที่สปาใหม่เลือกได้ เพิ่มแพ็กเกจอื่นหรือเปิดให้เลือกก่อน',
   planNotArchived: '{name} ยังไม่ได้ถูกเก็บถาวร',
+  // R24 (new strings, flagged for native TH review)
+  notHtmlDesignPage: '{page} ไม่ใช่หน้าดีไซน์ HTML',
+  htmlDesignFileMissing: 'ไม่พบไฟล์ดีไซน์ของ {page}',
+  htmlDesignEmpty: 'ดีไซน์ HTML ว่างเปล่า',
+  htmlDesignTooLarge: 'ดีไซน์มีขนาด {size} MB (ข้อความ UTF-8) เกินขีดจำกัด {limit} MB',
+  templateDesignMissing: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้',
+  templateDesignMissingUpload: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้ — อัปโหลดใหม่อีกครั้ง',
+  htmlDesignDailyLimit: 'สปานี้ใช้โควตาดีไซน์ HTML ใหม่ครบ {limit} MB ของวันนี้แล้ว — ลองใหม่พรุ่งนี้',
+  templateImportNoDesign: 'ดีไซน์ HTML ในไฟล์นี้ไม่มีเนื้อหา — ส่งออกเทมเพลตใหม่อีกครั้ง',
+  templateTooLargeAsFiles: 'เทมเพลตมีขนาดใหญ่เกินไปเมื่อเก็บดีไซน์ HTML เป็นไฟล์แล้ว (สูงสุด {limit} MB)',
 }

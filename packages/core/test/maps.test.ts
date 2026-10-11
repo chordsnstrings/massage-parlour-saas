@@ -127,16 +127,22 @@ describe('htmlDesignDocument links', () => {
       ['single quotes', `<p title='x > {{address}}'>y</p>`, `title='x > ${plain}'`],
       ['an Alpine expression', `<div x-show="n > 0" data-a="{{address}}"></div>`, `data-a="${plain}"`],
       ['an inline handler', `<b onclick="if(a>b)go()" title="{{address}}">b</b>`, `title="${plain}"`],
-      ['an unquoted attribute', `<p title={{address}}>x</p>`, `title=${plain}>`],
+      // R24 review: an unquoted value can't take a space (or `=`, quotes) that would start another attribute.
+      ['an unquoted attribute', `<p title={{address}}>x</p>`, `title=${plain.replace(/ /g, '&#32;')}>`],
       ['xmp', '<xmp>{{address}}</xmp>', `<xmp>${plain}</xmp>`],
       ['plaintext', '<plaintext>{{address}} <p>{{address}}</p>', `<p>${plain}</p>`],
       ['iframe', '<iframe>{{address}}</iframe>', `<iframe>${plain}</iframe>`],
       ['noembed', '<noembed>{{address}}</noembed>', `<noembed>${plain}</noembed>`],
       ['noframes', '<noframes>{{address}}</noframes>', `<noframes>${plain}</noframes>`],
       ['noscript', '<noscript>{{address}}</noscript>', `<noscript>${plain}</noscript>`],
-      ['a comment', '<!-- {{address}} -->', `<!-- ${plain} -->`],
+      // R24 review: comments are never filled; script bodies get JS-string text.
+      ['a comment', '<!-- {{address}} -->', '<!-- {{address}} -->'],
       ['a button', '<button>Go to {{address}}</button>', `<button>Go to ${plain}</button>`],
-      ['a raw-text element closing at EOF', '<script>a="{{address}}"</script', `a="${plain}"`],
+      [
+        'a raw-text element closing at EOF',
+        '<script>a="{{address}}"</script',
+        'a="Shop \\u003c4\\u003e \\u0022Marina\\u0022"',
+      ],
     ])('%s', (_, html, expected) => {
       const out = run(html)
       expect(out).not.toContain('data-spa-map>')
@@ -167,7 +173,7 @@ describe('htmlDesignDocument links', () => {
         },
         false,
       )
-      expect(out).toContain('var u="x&#92;";var a=";alert(1)//";')
+      expect(out).toContain('var u="x\\\\";var a=";alert(1)//";')
     })
   })
 })

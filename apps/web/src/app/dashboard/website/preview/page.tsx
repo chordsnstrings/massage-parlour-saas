@@ -9,6 +9,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { siteConfig } from '@/components/site/config'
 import { buildMeta, loadSite, localeOf } from '@/components/site/data'
+import { spaDesignData } from '@/server/html-design-files'
 import { publicSiteUrl } from '@/server/sites'
 
 export const metadata: Metadata = { title: 'Draft preview', robots: { index: false, follow: false } }
@@ -43,7 +44,13 @@ export default async function SharedDraftPreview({ searchParams }: Props) {
   if (!tenant || tenant.status === 'cancelled') notFound()
   const draft = await withTenant(tenant.id, async (tx) => {
     const editable = await getEditablePage(tx, tenant.id, claims.pageId)
-    return editable ? { ...editable, globals: await globalSectionsFor(tx, tenant.id, editable.data) } : null
+    return editable
+      ? {
+          ...editable,
+          data: await spaDesignData(tenant.id, editable.data, tx),
+          globals: await globalSectionsFor(tx, tenant.id, editable.data),
+        }
+      : null
   })
   if (!draft) notFound()
   const { site, data } = await loadSite(tenant, { published: false })

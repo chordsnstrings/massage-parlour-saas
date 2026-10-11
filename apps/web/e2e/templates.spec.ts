@@ -253,16 +253,32 @@ test('HTML design upload: shown exactly as built on the spa site, with live plac
     await page.getByRole('button', { name: 'Publish now' }).click()
     await expect(page.getByText('Published 1 page')).toBeVisible({ timeout: 30_000 })
 
-    await page.goto(site(slug))
-    const frame = page.locator('iframe.site-html-design')
-    await expect(frame).toHaveAttribute('sandbox', /allow-scripts/)
-    await expect(frame).not.toHaveAttribute('sandbox', /allow-same-origin/)
-    // No site header around it: the design is the whole page.
+    // R24: the live page IS the design document (no platform page, no frame), in an opaque-origin sandbox.
+    const res = await page.goto(site(slug))
+    const csp = res!.headers()['content-security-policy']!
+    expect(csp).toContain('sandbox allow-scripts')
+    expect(csp).not.toContain('allow-same-origin')
+    expect(await page.evaluate('self.origin')).toBe('null')
+    await expect(page.locator('iframe')).toHaveCount(0)
     await expect(page.locator('.site-root')).toHaveCount(0)
-    const doc = page.frameLocator('iframe.site-html-design')
-    await expect(doc.getByRole('heading', { name: 'Welcome to Mint Spa' })).toHaveCSS('color', 'rgb(1, 2, 3)')
-    await expect(doc.locator('#t')).toHaveAttribute('data-ran', 'yes')
-    await expect(doc.getByRole('link', { name: 'Book' })).toHaveAttribute('href', /\/book$/)
+    await expect(page).toHaveTitle('Mint')
+    await expect(page.getByRole('heading', { name: 'Welcome to Mint Spa' })).toHaveCSS(
+      'color',
+      'rgb(1, 2, 3)',
+    )
+    await expect(page.locator('#t')).toHaveAttribute('data-ran', 'yes')
+    await expect(page.getByRole('link', { name: 'Book' })).toHaveAttribute('href', /\/book$/)
+    // Invisible additions only: the spa's JSON-LD, a canonical link, the cookieless tracker.
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1)
+    await expect(page.locator('link[rel=canonical]')).toHaveCount(1)
+    await expect(page.locator('script[src="/t.js"]')).toHaveCount(1)
+    await expect(page.locator('style[data-spa-base], meta[name=viewport]')).toHaveCount(0)
+    // `?__page=1` is the normal page with the design in its frame (the fallback).
+    await page.goto(`${site(slug)}/?__page=1`)
+    await expect(page.locator('iframe.site-html-design')).not.toHaveAttribute('sandbox', /allow-same-origin/)
+    await expect(
+      page.frameLocator('iframe.site-html-design').getByRole('heading', { name: 'Welcome to Mint Spa' }),
+    ).toBeVisible()
   })
 })
 
@@ -314,6 +330,8 @@ body{margin:0;font-family:sans-serif}.hero{float:right;width:900px;height:320px;
     await dialog
       .getByLabel('HTML file')
       .setInputFiles({ name: 'frame.html', mimeType: 'text/html', buffer: Buffer.from(html) })
+    // R24: designs are shown exactly as built unless "Phone fixes" is on — this test is about those fixes.
+    await dialog.getByRole('checkbox', { name: /^Phone fixes/ }).check()
     await expect(dialog.getByText('Adjust images (2)')).toBeVisible()
     const dot = dialog.getByTestId('html-image-img-0').getByTestId('focal-dot')
     const thumb = dot.locator('..')

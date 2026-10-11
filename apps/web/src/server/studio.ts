@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache'
+import { forgetHtmlDesignRoutes } from '@/server/html-design-route'
 import { adminUrl } from '@/server/origin'
 
 // R23 Website Studio in the console (admin host): every spa's website is built and published at
@@ -10,8 +11,12 @@ import { adminUrl } from '@/server/origin'
  */
 export const studioUrl = (slug: string, rest = '') => adminUrl(`/websites/${slug}${rest}`)
 
-/** After a studio write: the console Websites list + spa page and the spa's own Website page. */
+/**
+ * After a studio write: the console Websites list + spa page and the spa's own Website page. R24: also the proxy's
+ * "is this page an exact HTML design" answers (a publish, unpublish, restore or rename may change them).
+ */
 export function revalidateStudio(slug: string) {
+  forgetHtmlDesignRoutes()
   revalidatePath(`/platform/websites/${slug}`, 'layout')
   revalidatePath('/platform/websites')
   revalidatePath(`/dashboard/${slug}/website`, 'layout')

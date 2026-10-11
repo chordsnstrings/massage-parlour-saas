@@ -6,6 +6,7 @@
 import type { Tx } from '@spa/db'
 import { DomainError } from '../errors'
 import { createAsset, type ProcessedImage, processImage, sniffImageType } from '../media'
+import { IMAGE_TYPES } from '../storage'
 import { extractPage, linksToFollow, type PageExtract } from './extract'
 import { type ImportedSite, mergeImportPages } from './ops'
 import { parseRobots, type RobotsGroup, robotsAllows } from './robots'
@@ -165,6 +166,43 @@ export async function fetchImportImage(url: string, opts: CrawlOpts = {}): Promi
   if (r.status !== 200) throw new ImportFetchError(`The image host answered ${r.status}`)
   if (r.contentType.includes('svg') || !sniffImageType(r.body))
     throw new ImportFetchError('That file isn’t an image we can use')
+  return processImage(r.body)
+}
+
+/**
+ * R24 (connector add_image): one image by URL under the same F32 rules as fetchImportImage (public addresses only,
+ * redirects re-checked, 10 s, ≤ 8 MB), stricter: https only (plain http only for an `allow`-listed test host), and both
+ * the declared Content-Type and the magic bytes must be a raster image type (JPEG, PNG, WebP, AVIF, GIF — never SVG).
+ * Re-encoded for the media library. Do this outside the DB transaction.
+ */
+export async function fetchMediaImage(raw: string, opts: CrawlOpts = {}): Promise<ProcessedImage> {
+  let u: URL
+  try {
+    u = new URL(raw.trim())
+  } catch {
+    throw new ImportBlockedError('That isn’t a valid image address')
+  }
+  const testHost = u.protocol === 'http:' && (opts.allow ?? []).includes(u.host.toLowerCase())
+  if (u.protocol !== 'https:' && !testHost)
+    throw new ImportBlockedError('Only https:// image addresses can be added')
+  const r = await safeFetch(u.toString(), {
+    resolve: opts.resolve,
+    allow: opts.allow,
+    isBlocked: opts.isBlocked,
+    ports: opts.ports,
+    maxBytes: IMPORT_IMAGE_BYTES,
+    timeoutMs: 10_000,
+    accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9',
+  })
+  if (r.status !== 200) throw new ImportFetchError(`The image host answered ${r.status}`)
+  const declared =
+    r.contentType === 'image/jpg' || r.contentType === 'image/pjpeg' ? 'image/jpeg' : r.contentType
+  if (!(IMAGE_TYPES as readonly string[]).includes(declared))
+    throw new ImportFetchError(
+      `That address isn’t a picture we can use (${r.contentType || 'no content type'}) — JPEG, PNG, WebP, AVIF or GIF only, never SVG`,
+    )
+  if (!sniffImageType(r.body))
+    throw new ImportFetchError('That file isn’t really an image (its bytes don’t match)')
   return processImage(r.body)
 }
 

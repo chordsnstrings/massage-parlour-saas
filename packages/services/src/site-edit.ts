@@ -4,11 +4,19 @@
 // Block ops are validated by `applySiteEditOps` against the real block schema (built from the Puck config by the
 // web app and passed in). Like every service: takes the caller's tx, no permission checks or audit rows inside —
 // callers audit with `siteEditAuditData`.
-import { fixHtmlDesign } from '@spa/core'
+import {
+  dubaiParts,
+  htmlDesignDocOf,
+  htmlDesignEmbedHosts,
+  htmlDesignPhoneFixes,
+  MAX_HTML_UPLOAD_BYTES,
+  patchHtml,
+} from '@spa/core'
 import { pageVersions, sites, type ThemeTokens, type Tx } from '@spa/db'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
+import { htmlDesignDocFor, htmlDesignSource, spaHtmlDocReader, storeSpaHtmlDoc } from './site-html-assets'
 import {
   applySiteEditOps,
   type EditPageData,
@@ -25,6 +33,7 @@ import {
   editingTheme,
   getEditablePage,
   getSite,
+  labelVersion,
   listPages,
   lockSite,
   PAGE_SLUG,
@@ -39,8 +48,8 @@ import {
 
 /** Same cap as the editor's draft save. */
 export const SITE_EDIT_MAX_PAGE_BYTES = 512 * 1024
-/** Same cap as an uploaded HTML design (it travels inside the page JSON). */
-export const SITE_EDIT_MAX_HTML_BYTES = 500 * 1024
+/** Largest HTML design (UTF-8 bytes) an op may write: the upload limit (stored byte for byte as a file). */
+export const SITE_EDIT_MAX_HTML_BYTES = MAX_HTML_UPLOAD_BYTES
 /** Block type of an uploaded HTML design (components/site/blocks/html-design.tsx). */
 export const HTML_DESIGN_BLOCK = 'HtmlDesign'
 
@@ -81,10 +90,24 @@ export const SiteOpSchema = z.discriminatedUnion('op', [
     title: text.nullish(),
     slug: z.string().max(60).nullish(),
   }),
+  // R24: the whole document (≤ 5 MB as UTF-8), stored byte for byte as one of the spa's own files and rendered exactly
+  // as written unless phone_fixes (default false). convert: a block page becomes an HTML design page.
   z.object({
     op: z.literal('html_design'),
     page: pageRef,
-    html: z.string().min(1).max(SITE_EDIT_MAX_HTML_BYTES),
+    html: z.string().min(1).max(MAX_HTML_UPLOAD_BYTES),
+    phone_fixes: z.boolean().nullish(),
+    convert: z.boolean().nullish(),
+  }),
+  // R24: exact find/replace edits of the stored design (each `find` must occur exactly once), applied in order.
+  z.object({
+    op: z.literal('html_patch'),
+    page: pageRef,
+    edits: z
+      .array(z.object({ find: z.string().min(1).max(100_000), replace: z.string().max(1024 * 1024) }))
+      .min(1)
+      .max(50),
+    phone_fixes: z.boolean().nullish(),
   }),
 ])
 type NoNull<T> = { [K in keyof T]: Exclude<T[K], null> }
@@ -119,6 +142,18 @@ export type SiteEditResult =
       renamed: { id: string; title?: SiteText; slug?: string; pending: boolean }[]
       /** What was there before, for an exact undo (restoreSiteEdit). */
       previous: SiteEditPrevious
+      /**
+       * R24: HTML-design pages changed by html_design / html_patch (size, patch positions, and the hosts of embedded
+       * frames / players that run inside the design's sandbox on spa sites — @spa/core htmlDesignEmbedHosts).
+       */
+      html: {
+        page: string
+        chars: number
+        bytes: number
+        phoneFixes: boolean
+        embeds: string[]
+        at?: number[]
+      }[]
     }
   | { ok: false; errors: string[] }
 
@@ -142,6 +177,10 @@ type Working = {
   before: EditPageData
   data: EditPageData
   changed: boolean
+  /** R24: the design as it will be stored — its file is written only when the batch is (never on a dry run). */
+  pendingHtml?: { raw: string; at?: number[] }
+  /** R24 convert: the working draft before (unnamed) gets a label so it stays in version history. */
+  labelBefore?: boolean
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -159,6 +198,11 @@ const pageLabel = (w: { slug: string; title: SiteText }) =>
   w.slug === '' ? 'Home' : w.title.en || `/${w.slug}`
 const isHtmlDesign = (data: EditPageData) =>
   data.root.props?.htmlDesign === true || data.content.some((n) => n.type === HTML_DESIGN_BLOCK)
+const looksLikeHtml = (html: string) => /<(?:!doctype|html|head|body|div|section|main)\b/i.test(html)
+const dubaiStamp = (now = new Date()) => {
+  const p = dubaiParts(now)
+  return `${p.date} ${String(Math.floor(p.minutes / 60)).padStart(2, '0')}:${String(p.minutes % 60).padStart(2, '0')}`
+}
 
 /** One op that doesn't fit (collected into the batch's error list; never thrown out of runSiteEdit). */
 class OpFail extends Error {}
@@ -253,6 +297,17 @@ export async function runSiteEdit(
     return w
   }
 
+  const readDoc = spaHtmlDocReader(tx, input.tenantId)
+  /** The design's reference as it will be stored (no file yet), or the size problem as this op's error. */
+  const draftDoc = (html: string, at: string) => {
+    const bytes = Buffer.byteLength(html, 'utf8')
+    if (bytes > SITE_EDIT_MAX_HTML_BYTES)
+      throw new OpFail(
+        `${at}: the design is ${(bytes / (1024 * 1024)).toFixed(1)} MB; the limit is ${SITE_EDIT_MAX_HTML_BYTES / (1024 * 1024)} MB (UTF-8)`,
+      )
+    return htmlDesignDocFor(html)
+  }
+
   for (const [i, op] of ops.entries()) {
     const at = `Change ${i + 1}`
     try {
@@ -321,13 +376,64 @@ export async function runSiteEdit(
         }
         case 'html_design': {
           const w = await load(op.page, at)
-          const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
-          if (!block) throw new OpFail(`${at}: ${pageLabel(w)} is not an uploaded HTML design page`)
-          if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(op.html))
-            throw new OpFail(`${at}: this does not look like an HTML page`)
-          block.props.html = fixHtmlDesign(op.html).html
+          if (!looksLikeHtml(op.html)) throw new OpFail(`${at}: this does not look like an HTML page`)
+          const phoneFixes = op.phone_fixes ?? false
+          let block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+          if (!block) {
+            const blocks = w.data.content.length
+            if (blocks && !op.convert)
+              throw new OpFail(
+                `${at}: ${pageLabel(w)} is not an uploaded HTML design page — it has ${blocks} block${blocks === 1 ? '' : 's'}; pass convert: true to replace them with the HTML design (the current draft is kept in version history)`,
+              )
+            const keep = w.data.root.props ?? {}
+            block = {
+              type: HTML_DESIGN_BLOCK,
+              props: { id: `${w.slug || 'home'}-html-design`, html: '', images: [], phoneFixes },
+            }
+            w.data = {
+              root: {
+                props: {
+                  ...('title' in keep ? { title: keep.title } : {}),
+                  ...('description' in keep ? { description: keep.description } : {}),
+                  htmlDesign: true,
+                },
+              },
+              content: [block],
+            }
+            w.labelBefore = !w.isNew
+          }
+          block.props.html = ''
+          block.props.doc = draftDoc(op.html, at)
+          block.props.phoneFixes = phoneFixes
+          w.pendingHtml = { raw: op.html }
           w.changed = true
-          summary.push(`Replaced the HTML design of ${pageLabel(w)}`)
+          summary.push(
+            `${w.labelBefore ? 'Turned' : 'Replaced the HTML design of'} ${pageLabel(w)}${w.labelBefore ? ' into an HTML design page' : ''} (stored exactly as sent)`,
+          )
+          break
+        }
+        case 'html_patch': {
+          const w = await load(op.page, at)
+          const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+          if (!block || (typeof block.props.html !== 'string' && !htmlDesignDocOf(block.props)))
+            throw new OpFail(`${at}: ${pageLabel(w)} is not an uploaded HTML design page`)
+          const source = w.pendingHtml?.raw ?? (await htmlDesignSource(block.props, readDoc))
+          if (source === null)
+            throw new OpFail(
+              `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
+            )
+          const patched = patchHtml(source, op.edits)
+          if (!patched.ok) throw new OpFail(`${at}: ${patched.error}`)
+          if (!looksLikeHtml(patched.html))
+            throw new OpFail(`${at}: the result does not look like an HTML page`)
+          block.props.html = ''
+          block.props.doc = draftDoc(patched.html, at)
+          if (op.phone_fixes !== undefined) block.props.phoneFixes = op.phone_fixes
+          w.pendingHtml = { raw: patched.html, at: patched.at }
+          w.changed = true
+          summary.push(
+            `Edited the HTML design of ${pageLabel(w)} (${op.edits.length} edit${op.edits.length === 1 ? '' : 's'})`,
+          )
           break
         }
         default: {
@@ -335,7 +441,9 @@ export async function runSiteEdit(
           const { page, ...edit } = op
           const w = await load(page, at)
           if (isHtmlDesign(w.data) && edit.op !== 'update')
-            throw new OpFail(`${at}: ${pageLabel(w)} is an HTML design — use html_design to change it`)
+            throw new OpFail(
+              `${at}: ${pageLabel(w)} is an HTML design — use html_design or html_patch to change it`,
+            )
           const r = applySiteEditOps(
             { data: w.data, theme: theme ?? startTheme, ops: [edit as SiteEditOp] },
             deps.schema,
@@ -380,6 +488,21 @@ export async function runSiteEdit(
     theme: nextTheme ? { draft: site.themeDraft, shown: startTheme as ThemeTokens } : null,
   }
   const renamed = [...renames].map(([id, r]) => ({ id, ...r }))
+  const htmlInfo = () =>
+    changed.flatMap((w) => {
+      if (!w.pendingHtml) return []
+      const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+      return [
+        {
+          page: w.slug,
+          chars: w.pendingHtml.raw.length,
+          bytes: Buffer.byteLength(w.pendingHtml.raw, 'utf8'),
+          phoneFixes: htmlDesignPhoneFixes(block?.props),
+          embeds: htmlDesignEmbedHosts(w.pendingHtml.raw),
+          ...(w.pendingHtml.at ? { at: w.pendingHtml.at } : {}),
+        },
+      ]
+    })
   const view = (w: Working, idOverride?: string): SiteEditPage => ({
     id: idOverride ?? w.id,
     slug: w.slug,
@@ -399,10 +522,40 @@ export async function runSiteEdit(
         pending: Boolean(summaries.find((p) => p.id === r.id)?.publishedAt),
       })),
       previous,
+      html: htmlInfo(),
     }
 
+  // R24: now the batch is accepted, store each design for real (the spa's own private file, byte for byte).
+  for (const w of changed) {
+    if (!w.pendingHtml) continue
+    const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+    if (!block) continue
+    try {
+      block.props.doc = await storeSpaHtmlDoc(tx, {
+        tenantId: input.tenantId,
+        html: w.pendingHtml.raw,
+        userId: input.userId,
+      })
+    } catch (e) {
+      if (e instanceof DomainError) return { ok: false, errors: [`${pageLabel(w)}: ${e.message}`] }
+      throw e
+    }
+  }
   const pages: SiteEditPage[] = []
   for (const w of changed) {
+    if (w.labelBefore && w.beforeVersionId) {
+      const [v] = await tx
+        .select({ status: pageVersions.status, label: pageVersions.label })
+        .from(pageVersions)
+        .where(and(eq(pageVersions.tenantId, input.tenantId), eq(pageVersions.id, w.beforeVersionId)))
+      if (v?.status === 'draft' && !v.label)
+        await labelVersion(
+          tx,
+          input.tenantId,
+          w.beforeVersionId,
+          `Before AI assistant HTML design ${dubaiStamp()}`,
+        )
+    }
     if (w.isNew) {
       const row = await addPage(tx, {
         tenantId: input.tenantId,
@@ -435,7 +588,16 @@ export async function runSiteEdit(
     renameResults.push({ ...r, pending })
   }
   if (nextTheme) await updateDraftTheme(tx, input.tenantId, nextTheme)
-  return { ok: true, dryRun: false, summary, pages, theme: nextTheme, renamed: renameResults, previous }
+  return {
+    ok: true,
+    dryRun: false,
+    summary,
+    pages,
+    theme: nextTheme,
+    renamed: renameResults,
+    previous,
+    html: htmlInfo(),
+  }
 }
 
 /**
@@ -515,6 +677,8 @@ export type SiteEditView = {
     hasDraft: boolean
     pendingRename: { title?: SiteText; slug?: string } | null
     htmlDesign: boolean
+    /** R24: an HTML design page's stored size and "Phone fixes" switch (resolved), else null. */
+    html: { chars: number; phoneFixes: boolean } | null
     /** Open in a Studio editor (F29 lock): edits to this page are refused for anyone else until it frees. */
     editing: { by: string; userId: string; until: string } | null
     /** Draft content: block ids, types and props (long text clipped unless `full`). */
@@ -544,6 +708,7 @@ export async function getSiteForEdit(
     const lock = locks.get(p.id)
     const editable = await getEditablePage(tx, tenantId, p.id)
     const data = asPageData(editable?.data)
+    const htmlBlock = data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
     pages.push({
       id: p.id,
       slug: p.slug,
@@ -553,6 +718,14 @@ export async function getSiteForEdit(
       hasDraft: p.hasDraft,
       pendingRename: p.pending ?? null,
       htmlDesign: isHtmlDesign(data),
+      html: htmlBlock
+        ? (() => {
+            const doc = htmlDesignDocOf(htmlBlock.props)
+            const chars =
+              doc?.chars ?? (typeof htmlBlock.props.html === 'string' ? htmlBlock.props.html.length : null)
+            return chars === null ? null : { chars, phoneFixes: htmlDesignPhoneFixes(htmlBlock.props) }
+          })()
+        : null,
       editing: lock
         ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() }
         : null,
@@ -564,6 +737,47 @@ export async function getSiteForEdit(
     theme: editingTheme(site),
     themeIsDraft: site.themeDraft !== null,
     pages,
+  }
+}
+
+export type HtmlDesignView = {
+  page: { id: string; slug: string; title: SiteText }
+  /** The stored design, exactly as uploaded / sent. */
+  html: string
+  /** Its "Phone fixes" switch (resolved: absent = on, see @spa/core htmlDesignPhoneFixes). */
+  phoneFixes: boolean
+  /** Image adjustments saved with it. */
+  images: number
+  editing: { by: string; userId: string; until: string } | null
+}
+
+/** R24: the draft HTML design of one page (for reading / patching it), or null without such a page. */
+export async function getHtmlDesign(
+  tx: Tx,
+  tenantId: string,
+  pageRef: string,
+  userId?: string,
+): Promise<HtmlDesignView | null> {
+  const all = await listPages(tx, tenantId)
+  const slug = pageRef === 'home' || pageRef === '/' ? '' : pageRef.replace(/^\//, '')
+  const p = all.find((x) => x.id === pageRef) ?? all.find((x) => x.slug === slug)
+  if (!p) return null
+  const data = asPageData((await getEditablePage(tx, tenantId, p.id))?.data)
+  const block = data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+  if (!block || (typeof block.props.html !== 'string' && !htmlDesignDocOf(block.props)))
+    throw new DomainError(`${pageLabel(p)} is not an HTML design page`, 'invalid', {
+      key: 'errors.domain.notHtmlDesignPage',
+      params: { page: pageLabel(p) },
+    })
+  const html = await htmlDesignSource(block.props, spaHtmlDocReader(tx, tenantId))
+  if (html === null) throw new DomainError(`The design file of ${pageLabel(p)} is missing`)
+  const lock = (await pageLocksHeldByOthers(tx, tenantId, userId, [p.id])).get(p.id)
+  return {
+    page: { id: p.id, slug: p.slug, title: p.title },
+    html,
+    phoneFixes: htmlDesignPhoneFixes(block.props),
+    images: Array.isArray(block.props.images) ? block.props.images.length : 0,
+    editing: lock ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() } : null,
   }
 }
 

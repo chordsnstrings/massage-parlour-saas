@@ -1,6 +1,7 @@
 import {
   canonicalScheme,
   hostRoutedUrl,
+  htmlDesignPageHeaders,
   newNonce,
   pageSecurityHeaders,
   parseRoots,
@@ -9,6 +10,12 @@ import {
   resolveSurface,
 } from '@spa/core'
 import { type NextRequest, NextResponse } from 'next/server'
+import {
+  exactHtmlDesignAt,
+  HTML_ROUTE_FALLBACK,
+  HTML_ROUTE_HEADER,
+  htmlRouteKey,
+} from '@/server/html-design-route'
 import { ownDomainTarget } from '@/server/own-domain'
 import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
 
@@ -129,6 +136,31 @@ export async function proxy(req: NextRequest) {
     }
   }
   const https = proto === 'https'
+  // R24: a page whose live content is an exact HTML design is the design document itself (app/site-html: CSP sandbox,
+  // never allow-same-origin), so it scrolls and behaves exactly like the file opened directly. `__page` = its
+  // fallback to the normal page (no lookup, no loop). /site-html itself is never reachable from outside: every
+  // external path gets a surface prefix above.
+  const surface = url.pathname.startsWith('/site/')
+    ? 'site'
+    : url.pathname.startsWith('/domain/')
+      ? 'domain'
+      : null
+  if (
+    safe &&
+    surface &&
+    !url.searchParams.has(HTML_ROUTE_FALLBACK) &&
+    (await exactHtmlDesignAt(url.pathname))
+  ) {
+    const headers = new Headers(req.headers)
+    headers.set('x-original-path', `${originalPath}${url.search}`)
+    headers.set('x-internal-path', url.pathname)
+    headers.set(HTML_ROUTE_HEADER, htmlRouteKey())
+    const target = url.clone()
+    target.pathname = '/site-html'
+    const res = NextResponse.rewrite(target, { request: { headers } })
+    for (const [k, v] of Object.entries(htmlDesignPageHeaders({ https, surface }))) res.headers.set(k, v)
+    return res
+  }
   const nonce = newNonce()
   const security = pageSecurityHeaders({ nonce, internalPath: url.pathname, https, dev: DEV })
   const headers = new Headers(req.headers)

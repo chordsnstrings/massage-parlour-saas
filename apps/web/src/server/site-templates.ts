@@ -3,7 +3,12 @@ import { listStudioTemplates, type SiteTemplate, studioToSiteTemplate } from '@s
 import { cache } from 'react'
 import { isTemplateKey, TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 
-export type CatalogTemplate = SiteTemplate & { feel: string; source: 'builtin' | 'studio' }
+export type CatalogTemplate = SiteTemplate & {
+  feel: string
+  source: 'builtin' | 'studio'
+  /** The template-studio row (console preview `/templates/{id}/preview`); built-ins preview by key. */
+  id?: string
+}
 
 /**
  * The template catalogue spas choose from: the built-ins (`TEMPLATES`: 8 classic + 15 designs) plus active
@@ -17,12 +22,17 @@ export const templateCatalog = cache(async (): Promise<CatalogTemplate[]> => {
   const out: CatalogTemplate[] = TEMPLATE_KEYS.map((key) => {
     const row = studio.get(key)
     return row
-      ? { ...studioToSiteTemplate(row), feel: row.description ?? TEMPLATES[key].feel, source: 'studio' }
+      ? {
+          ...studioToSiteTemplate(row),
+          feel: row.description ?? TEMPLATES[key].feel,
+          source: 'studio',
+          id: row.id,
+        }
       : { ...TEMPLATES[key], source: 'builtin' }
   })
   for (const row of rows) {
     if (!isTemplateKey(row.key))
-      out.push({ ...studioToSiteTemplate(row), feel: row.description ?? '', source: 'studio' })
+      out.push({ ...studioToSiteTemplate(row), feel: row.description ?? '', source: 'studio', id: row.id })
   }
   return out
 })

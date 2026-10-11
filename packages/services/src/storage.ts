@@ -1,7 +1,7 @@
 // File storage: bytes in Postgres (`stored_files.bytes`, fine for a small spa's images and receipts) unless an
 // S3-compatible bucket is configured (Cloudflare R2 / DigitalOcean Spaces): S3_ENDPOINT, S3_BUCKET,
 // S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY (+ optional S3_REGION). Callers always go through these helpers.
-import { storedFiles, type Tx } from '@spa/db'
+import { type Db, siteTemplateFiles, storedFiles, type Tx } from '@spa/db'
 import { AwsClient } from 'aws4fetch'
 import { eq } from 'drizzle-orm'
 import { DomainError } from './errors'
@@ -93,6 +93,73 @@ export async function deleteFile(tx: Tx, id: string) {
   if (row?.storage === 's3' && row.objectKey && bucket)
     await bucket.client.fetch(`${bucket.endpoint}/${bucket.bucket}/${row.objectKey}`, { method: 'DELETE' })
   return Boolean(row)
+}
+
+/**
+ * R24: a file of a platform template (an uploaded HTML design's document, or a file it uses), platform role only.
+ * Content-addressed: the same bytes return the existing row. Bucket key `templates/{id}` (no tenant prefix).
+ */
+export async function putTemplateFile(
+  db: Db | Tx,
+  f: { bytes: Buffer; contentType: string; sha256: string; createdBy?: string | null },
+) {
+  if (f.bytes.length === 0 || f.bytes.length > MAX_FILE_BYTES)
+    throw new DomainError('Files can be up to 8 MB', 'invalid', {
+      key: 'errors.file.tooLarge',
+      params: { size: '8 MB' },
+    })
+  const [found] = await db
+    .select({ id: siteTemplateFiles.id })
+    .from(siteTemplateFiles)
+    .where(eq(siteTemplateFiles.sha256, f.sha256))
+  if (found) return { id: found.id, created: false }
+  const bucket = s3()
+  const [row] = await db
+    .insert(siteTemplateFiles)
+    .values({
+      sha256: f.sha256,
+      contentType: f.contentType,
+      size: f.bytes.length,
+      storage: bucket ? 's3' : 'db',
+      bytes: bucket ? null : f.bytes,
+      createdBy: f.createdBy ?? null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: siteTemplateFiles.id })
+  // Lost a race with the same bytes: use the winner.
+  if (!row) {
+    const [winner] = await db
+      .select({ id: siteTemplateFiles.id })
+      .from(siteTemplateFiles)
+      .where(eq(siteTemplateFiles.sha256, f.sha256))
+    return { id: winner!.id, created: false }
+  }
+  if (bucket) {
+    const objectKey = `templates/${row.id}`
+    const res = await bucket.client.fetch(`${bucket.endpoint}/${bucket.bucket}/${objectKey}`, {
+      method: 'PUT',
+      body: new Uint8Array(f.bytes),
+      headers: { 'content-type': f.contentType },
+    })
+    if (!res.ok) throw new Error(`Upload failed (${res.status})`)
+    await db.update(siteTemplateFiles).set({ objectKey }).where(eq(siteTemplateFiles.id, row.id))
+  }
+  return { id: row.id, created: true }
+}
+
+/** A template file with its bytes (platform role), or null. */
+export async function getTemplateFile(db: Pick<Db, 'select'>, id: string) {
+  const [row] = await db.select().from(siteTemplateFiles).where(eq(siteTemplateFiles.id, id))
+  if (!row) return null
+  let bytes = row.bytes
+  if (row.storage === 's3' && row.objectKey) {
+    const bucket = s3()
+    if (!bucket) throw new Error('S3 storage is not configured')
+    const res = await bucket.client.fetch(`${bucket.endpoint}/${bucket.bucket}/${row.objectKey}`)
+    if (!res.ok) throw new Error(`Download failed (${res.status})`)
+    bytes = Buffer.from(await res.arrayBuffer())
+  }
+  return { ...row, bytes: bytes ?? Buffer.alloc(0) }
 }
 
 const xmlText = (s: string) =>

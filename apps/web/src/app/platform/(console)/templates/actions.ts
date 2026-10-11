@@ -1,19 +1,15 @@
 'use server'
-import {
-  fixHtmlDesign,
-  HTML_IMAGE_ID,
-  HTML_IMAGE_URL,
-  type HtmlImageAdjust,
-  MAX_HTML_IMAGES,
-} from '@spa/core'
+import { htmlDesignBakedFixes } from '@spa/core'
 import { platformDb, tenants, withTenant } from '@spa/db'
 import {
   DomainError,
   getStudioTemplate,
-  parseTemplateJson,
+  htmlDesignSource,
+  SITE_EDIT_MAX_PAGE_BYTES,
   sanitizeTemplatePages,
   saveStudioTemplate,
   snapshotSite,
+  spaDesignsIntoTemplate,
   TEMPLATE_KEY,
   type TemplatePage,
   templateKeyFrom,
@@ -22,17 +18,14 @@ import {
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import {
-  HTML_DESIGN,
-  HTML_DESIGN_PLACEHOLDERS,
-  htmlDesignPages,
-  MAX_HTML_DESIGN_BYTES,
-} from '@/components/site/blocks/html-design'
+import { HTML_DESIGN } from '@/components/site/html-design-values'
 import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
+import { spaDocReader, templateDocReader } from '@/server/html-design-files'
 import { templateProblem, templateSamples } from './data'
+import { parseImages } from './parse-images'
 
 const revalidate = () => revalidatePath('/platform/templates', 'layout')
 const optionalText = (max: number) =>
@@ -77,8 +70,19 @@ export async function saveSiteAsTemplateAction(_p: ActionResult, fd: FormData): 
       key: 'Choose another key',
     })
   try {
-    // The spa's pages are tenant data: read them inside its own tenant transaction.
-    const snap = await withTenant(tenant.id, (tx) => snapshotSite(tx, tenant.id))
+    // The spa's pages are tenant data: read them inside its own tenant transaction. R24: its HTML designs are copied
+    // into template files (a template never depends on a spa's files).
+    const snap = await withTenant(tenant.id, async (tx) => {
+      const s = await snapshotSite(tx, tenant.id)
+      const read = spaDocReader(tx, tenant.id)
+      const pages = []
+      for (const p of s.pages)
+        pages.push({
+          ...p,
+          data: await spaDesignsIntoTemplate(p.data, { read, db: platformDb(), userId: user.id }),
+        })
+      return { ...s, pages }
+    })
     const pages = sanitizeTemplatePages(snap.pages, {
       key,
       tenantName: tenant.name,
@@ -141,142 +145,6 @@ export async function updateTemplateAction(
   return ok('Template saved')
 }
 
-/** Imports an exported template file; with "replace" an existing template with the same key is overwritten. */
-export async function importTemplateAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { user } = await requirePlatformAdmin()
-  const file = fd.get('file')
-  if (!(file instanceof File) || !file.size)
-    return fail('Choose a template file', { file: 'Choose a .json file' })
-  const result = parseTemplateJson(await file.text())
-  if (!result.ok) return fail(result.error, { file: result.error })
-  const t = result.template
-  const problem = templateProblem(t.pages, { requireProps: true })
-  if (problem) return fail(problem, { file: problem })
-  const replace = fd.get('replace') === 'on'
-  // A studio row with a built-in key replaces that built-in for every spa: only when explicitly asked.
-  if (isTemplateKey(t.key) && !replace) {
-    const error = `"${t.key}" is the built-in ${TEMPLATES[t.key].name}. Tick "Replace a template with the same key" to override it, or change the key in the file.`
-    return fail(error, { file: error })
-  }
-  const active = fd.get('active') === 'on'
-  try {
-    await saveStudioTemplate(
-      platformDb(),
-      {
-        key: t.key,
-        name: t.name,
-        description: t.description,
-        theme: t.theme,
-        pages: t.pages,
-        active,
-        createdBy: user.id,
-      },
-      { replace },
-    )
-  } catch (e) {
-    return domainFail(e)
-  }
-  await audit({
-    actorUserId: user.id,
-    action: 'platform.site_template.imported',
-    entity: 'site_template',
-    entityId: t.key,
-  })
-  revalidate()
-  return ok(active ? `${t.name} imported` : `${t.name} imported — hidden from spas until you switch it on`)
-}
-
-/**
- * Uploads an HTML design as a one-page template, shown on spa sites exactly as built (sandboxed frame,
- * `{{placeholders}}` filled with each spa's live details). With "replace" a template with the same key is
- * overwritten; spas already using it keep their own copy.
- */
-export async function uploadHtmlTemplateAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
-  const { user } = await requirePlatformAdmin()
-  const parsed = z
-    .object({ name: z.string().trim().min(2).max(60), description: optionalText(300) })
-    .safeParse(formObject(fd))
-  if (!parsed.success) return fromZod(parsed.error)
-  const file = fd.get('file')
-  if (!(file instanceof File) || !file.size)
-    return fail('Choose an HTML file', { file: 'Choose an .html file' })
-  if (!/\.html?$/i.test(file.name) && file.type !== 'text/html')
-    return fail('Only .html files can be uploaded', { file: 'Choose an .html file' })
-  const key = templateKeyFrom(parsed.data.name)
-  const raw = await file.text()
-  if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(raw))
-    return fail('This file does not look like an HTML page', { file: 'Choose an .html file' })
-  const images = parseImages(fd.get('images'))
-  if (!images) return fail('The image adjustments could not be read. Reopen the file and try again.')
-  const { html, fixes } = fixHtmlDesign(raw)
-  const pages = htmlDesignPages(key, html, images)
-  // Checked as page JSON (quotes and newlines escaped), the shape it is saved and edited in.
-  if (file.size > MAX_HTML_DESIGN_BYTES || JSON.stringify(pages[0]!.data).length > MAX_HTML_DESIGN_BYTES) {
-    const error = `The file is ${Math.ceil(file.size / 1024)} KB; the limit is about ${MAX_HTML_DESIGN_BYTES / 1024} KB. Link fonts and images by URL instead of embedding them.`
-    return fail(error, { file: error })
-  }
-  const replace = fd.get('replace') === 'on'
-  if (isTemplateKey(key) && !replace) {
-    const error = `"${key}" is the built-in ${TEMPLATES[key].name}. Pick another name, or tick "Replace a template with the same key" to override it.`
-    return fail(error, { name: error })
-  }
-  const active = fd.get('active') === 'on'
-  const used = HTML_DESIGN_PLACEHOLDERS.filter((p) => html.includes(`{{${p}}}`))
-  try {
-    await saveStudioTemplate(
-      platformDb(),
-      {
-        key,
-        name: parsed.data.name,
-        description: parsed.data.description,
-        theme: {},
-        pages,
-        active,
-        createdBy: user.id,
-      },
-      { replace },
-    )
-  } catch (e) {
-    return domainFail(e)
-  }
-  await audit({
-    actorUserId: user.id,
-    action: 'platform.site_template.html_uploaded',
-    entity: 'site_template',
-    entityId: key,
-    data: { bytes: file.size, placeholders: used, fixes, adjustedImages: images.length },
-  })
-  revalidate()
-  const fixed = fixes.length
-    ? ` Fixed for phones: ${fixes.map((f) => (f === 'viewport' ? 'added the mobile viewport' : 'fluid image widths')).join(', ')}.`
-    : ''
-  return ok(
-    `${active ? `${parsed.data.name} uploaded` : `${parsed.data.name} uploaded — hidden from spas until you switch it on`}${fixed}`,
-  )
-}
-
-const ImageAdjust = z.object({
-  id: z.string().regex(HTML_IMAGE_ID),
-  src: z.string().max(300),
-  fit: z.enum(['cover', 'contain']).optional(),
-  align: z.enum(['left', 'center', 'right']).optional(),
-  x: z.number().min(0).max(100).optional(),
-  y: z.number().min(0).max(100).optional(),
-  replace: z.string().regex(HTML_IMAGE_URL).optional(),
-})
-
-/** The adjuster's hidden `images` field (JSON); null when it isn't valid. Missing = no adjustments. */
-function parseImages(v: FormDataEntryValue | null): HtmlImageAdjust[] | null {
-  if (v == null || v === '') return []
-  if (typeof v !== 'string' || v.length > 200_000) return null
-  try {
-    const r = z.array(ImageAdjust).max(MAX_HTML_IMAGES).safeParse(JSON.parse(v))
-    return r.success ? r.data : null
-  } catch {
-    return null
-  }
-}
-
 /** "Adjust images" on an uploaded HTML template: saves focal points / fill-fit / replacements next to the file. */
 export async function saveHtmlImagesAction(
   id: string,
@@ -295,7 +163,7 @@ export async function saveHtmlImagesAction(
     { ...page, data: { ...page.data, content: [{ ...node, props: { ...node.props, images } }] } },
     ...(row.pages as TemplatePage[]).slice(1),
   ]
-  if (JSON.stringify(pages[0]!.data).length > MAX_HTML_DESIGN_BYTES)
+  if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES)
     return fail('Too many adjustments for this design (page size limit)')
   try {
     await updateStudioTemplate(db, row.id, { pages })
@@ -311,4 +179,70 @@ export async function saveHtmlImagesAction(
   })
   revalidate()
   return ok(`Images saved for ${row.name}`)
+}
+
+/**
+ * R24 "Phone fixes" switch of an uploaded HTML design: off = shown exactly like the file (the default for new
+ * uploads); on = the platform adds a phone viewport and keeps images and wide elements inside phone screens. Spas
+ * already using the template keep their copy until it is applied again.
+ */
+export async function setHtmlPhoneFixesAction(id: string, on: boolean): Promise<ActionResult> {
+  const { user } = await requirePlatformAdmin()
+  if (!z.uuid().safeParse(id).success) return fail('Template not found')
+  const db = platformDb()
+  const row = await getStudioTemplate(db, { id })
+  const page = (row?.pages as TemplatePage[] | undefined)?.[0]
+  const node = (page?.data.content as { type: string; props: Record<string, unknown> }[] | undefined)?.[0]
+  if (!row || !page || node?.type !== HTML_DESIGN) return fail('This is not an uploaded HTML design')
+  const legacy = htmlDesignBakedFixes(node.props)
+  const pages: TemplatePage[] = [
+    {
+      ...page,
+      data: {
+        ...page.data,
+        content: [
+          { ...node, props: { ...node.props, phoneFixes: on, ...(legacy ? { bakedFixes: true } : {}) } },
+        ],
+      },
+    },
+    ...(row.pages as TemplatePage[]).slice(1),
+  ]
+  try {
+    await updateStudioTemplate(db, row.id, { pages })
+  } catch (e) {
+    return domainFail(e)
+  }
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.site_template.html_phone_fixes',
+    entity: 'site_template',
+    entityId: row.key,
+    data: { phoneFixes: on },
+  })
+  revalidate()
+  return ok(
+    `Phone fixes ${on ? 'on' : 'off'} for ${row.name}. Spas already using it keep their copy — re-apply the template to update them.${
+      !on && legacy
+        ? ' This design was uploaded before 11 Oct 2026 with the old phone fixes saved into it: upload the original file again (tick “Replace”) to show it exactly.'
+        : ''
+    }`,
+  )
+}
+
+/**
+ * R24: the design of an uploaded HTML template, for the console's image adjuster (loaded when its sheet opens: a
+ * design may be 5 MB, too much to ship with the templates list). Super-admins only.
+ */
+export async function loadHtmlDesignAction(id: string): Promise<{ html: string } | { error: string }> {
+  await requirePlatformAdmin()
+  if (!z.uuid().safeParse(id).success) return { error: 'Template not found' }
+  const row = await getStudioTemplate(platformDb(), { id })
+  const node = (
+    (row?.pages as TemplatePage[] | undefined)?.[0]?.data.content as
+      | { type: string; props: Record<string, unknown> }[]
+      | undefined
+  )?.[0]
+  if (!row || node?.type !== HTML_DESIGN) return { error: 'This is not an uploaded HTML design' }
+  const html = await htmlDesignSource(node.props, templateDocReader())
+  return html === null ? { error: 'The design file is missing — upload it again' } : { html }
 }

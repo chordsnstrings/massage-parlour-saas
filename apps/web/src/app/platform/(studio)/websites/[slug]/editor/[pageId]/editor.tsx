@@ -11,6 +11,7 @@ import {
   useGetPuck,
   type Viewports,
 } from '@puckeditor/core'
+import { htmlDesignDocOf } from '@spa/core'
 import { GLOBAL_SECTION, type PreflightContext, type PuckNode } from '@spa/services/site-kit'
 import {
   ArrowLeft,
@@ -41,6 +42,7 @@ import {
   aiTextAction,
   blockStatsAction,
   deleteSectionAction,
+  editorHtmlDocsAction,
   labelVersionAction,
   listVersionsAction,
   previewLinkAction,
@@ -165,9 +167,20 @@ type Chrome = {
   setRestore: (c: LocalCopy | null) => void
   /** Re-checks the canvas against the saved baseline (dirty flag, autosave tick, local copy). */
   noteChange: (data: Data) => void
+  /** R24 review: fetches the designs data put on the canvas references that the editor didn't load with the page. */
+  loadDesigns: (data: unknown) => void
 }
 const ChromeContext = createContext<Chrome | null>(null)
 const useChrome = () => useContext(ChromeContext)!
+
+/** File ids of the HTML design documents a page's data references. */
+const designFiles = (data: unknown) =>
+  (
+    (data as { content?: { type?: unknown; props?: Record<string, unknown> }[] } | null)?.content ?? []
+  ).flatMap((n) => {
+    const doc = n?.type === 'HtmlDesign' ? htmlDesignDocOf(n.props) : null
+    return doc ? [doc.file] : []
+  })
 
 type EditorProps = {
   slug: string
@@ -214,6 +227,25 @@ export function SiteEditor(props: EditorProps) {
   const [editingGlobal, setEditingGlobal] = useState<string | null>(null)
   const [insights, setInsights] = useState<Insights | null>(null)
   const [theme, setTheme] = useState<SiteTheme>(props.meta.theme)
+  // R24 review: the designs on the canvas by file id (the page's come with it; a restored version or a local copy may
+  // reference others, fetched when they are put on the canvas).
+  const [htmlDocs, setHtmlDocs] = useState<Record<string, string>>(props.meta.htmlDocs ?? {})
+  const htmlDocsRef = useRef(htmlDocs)
+  htmlDocsRef.current = htmlDocs
+  const loadDesigns = useCallback(
+    (data: unknown) => {
+      const missing = designFiles(data).filter((f) => !(f in htmlDocsRef.current))
+      if (!missing.length) return
+      editorHtmlDocsAction(props.slug, missing).then(
+        (r) => {
+          if (r?.ok) setHtmlDocs((all) => ({ ...all, ...(r.data?.docs as Record<string, string>) }))
+          else if (r) toast.error(r.error)
+        },
+        () => toast.error('Could not load the design. Reload the editor.'),
+      )
+    },
+    [props.slug],
+  )
   const baseline = useRef<string | null>(null)
   const stampRef = useRef<EditStamp>(props.stamp)
   const [stamp, setStamp] = useState<EditStamp>(props.stamp)
@@ -268,8 +300,8 @@ export function SiteEditor(props: EditorProps) {
     [sections],
   )
   const metadata = useMemo(
-    () => ({ ...props.meta, theme, locale, editing: true, globals, insights }),
-    [props.meta, theme, locale, globals, insights],
+    () => ({ ...props.meta, htmlDocs, theme, locale, editing: true, globals, insights }),
+    [props.meta, htmlDocs, theme, locale, globals, insights],
   )
   const onChange = useCallback(
     (data: Data) => {
@@ -344,6 +376,7 @@ export function SiteEditor(props: EditorProps) {
     restore,
     setRestore,
     noteChange: onChange,
+    loadDesigns,
   }
 
   const setSections = useCallback(
@@ -688,6 +721,7 @@ function EditorHeader() {
   const save = () => void persist('manual')
   const saving = saveState === 'saving'
   const onRestored = (data: Record<string, unknown>) => {
+    chrome.loadDesigns(data)
     getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
     setTimeout(() => {
       markSaved(JSON.stringify(getPuck().appState.data), 'draft')
@@ -819,6 +853,7 @@ function EditorHeader() {
               getData={() => current() as unknown as Record<string, unknown>}
               theme={chrome.theme}
               show={(data, theme) => {
+                chrome.loadDesigns(data)
                 getPuck().dispatch({ type: 'setData', data: data as Partial<Data> })
                 chrome.setTheme(theme)
               }}
@@ -885,6 +920,7 @@ function EditorHeader() {
           stale={restore.stamp !== stampRef.current.page}
           onRestore={() => {
             setRestore(null)
+            chrome.loadDesigns(restore.data)
             getPuck().dispatch({ type: 'setData', data: restore.data as Partial<Data> })
           }}
           onDiscard={() => {

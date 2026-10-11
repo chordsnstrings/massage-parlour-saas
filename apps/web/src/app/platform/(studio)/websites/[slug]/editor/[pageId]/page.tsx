@@ -8,6 +8,7 @@ import type { SavedSection } from '@/components/site/editor/context'
 import { PATH_ROUTING, studioPath } from '@/lib/paths'
 import { can, isStudio, requireMember } from '@/server/access'
 import { aiFixturesOn } from '@/server/ai-fixture'
+import { editorHtmlDocs } from '@/server/html-design-files'
 import { publicSiteUrl } from '@/server/sites'
 import { SiteEditor } from './editor'
 
@@ -48,14 +49,18 @@ export default async function EditorPage({ params }: { params: Promise<{ slug: s
   if (!site) notFound()
   const slug = ctx.tenant.slug
   const { page, version } = loaded.editable
-  const meta = buildMeta({
-    data,
-    theme: site.theme,
-    locale: 'en',
-    base: PATH_ROUTING ? `/s/${slug}` : '',
-    slug: page.slug,
-    editing: true,
-  })
+  const meta = {
+    ...buildMeta({
+      data,
+      theme: site.theme,
+      locale: 'en',
+      base: PATH_ROUTING ? `/s/${slug}` : '',
+      slug: page.slug,
+      editing: true,
+    }),
+    // R24: an HTML design page's design (its data keeps only the file reference).
+    htmlDocs: await editorHtmlDocs(ctx.tenant.id, loaded.editable.data),
+  }
   const sections: SavedSection[] = loaded.sections.map((s) => ({
     id: s.id,
     name: s.name,

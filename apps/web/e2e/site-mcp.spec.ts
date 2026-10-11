@@ -1,16 +1,31 @@
 import { createHash, randomBytes } from 'node:crypto'
+import http from 'node:http'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
-import { auditLog, oauthClient, oauthConsent, pageVersions, sitePages, user } from '@spa/db'
-import { ensureSite } from '@spa/services'
+import {
+  auditLog,
+  mediaAssets,
+  oauthClient,
+  oauthConsent,
+  pageVersions,
+  sitePages,
+  sites,
+  storedFiles,
+  user,
+} from '@spa/db'
+import { ensureSite, publishPage, saveStudioTemplate } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
+import sharp from 'sharp'
 import {
   admin,
   base,
   makeSiteAiEditor,
   makeStudio,
+  PNG,
+  PORT,
   passTwoFactor,
   seedCatalog,
   signUpOwner,
+  site,
   testDb,
 } from './helpers'
 
@@ -28,7 +43,12 @@ const PASSWORD = 'correct-horse-battery'
 
 const homePage = {
   root: { props: { title: { en: 'Home' } } },
-  content: [{ type: 'Heading', props: { id: 'h1', text: { en: 'Slow down' } } }],
+  content: [
+    {
+      type: 'Heading',
+      props: { id: 'h1', eyebrow: { en: '' }, text: { en: 'Slow down' }, level: 'h2', size: 'lg' },
+    },
+  ],
 }
 
 /** Node's resolver doesn't know `*.localhost` (Chromium does): API calls from the test go to the same server. */
@@ -43,6 +63,14 @@ const rpc = (request: APIRequestContext, token: string | null, method: string, p
     },
     data: { jsonrpc: '2.0', id: ++rpcId, method, params },
   })
+
+/** One tools/call: the parsed JSON result and whether it is an error. */
+async function tool(request: APIRequestContext, token: string, name: string, args: Record<string, unknown>) {
+  const res = await rpc(request, token, 'tools/call', { name, arguments: args })
+  expect(res.status()).toBe(200)
+  const body = (await res.json()) as { result: { isError?: boolean; content: { text: string }[] } }
+  return { isError: Boolean(body.result.isError), data: JSON.parse(body.result.content[0]!.text) }
+}
 
 type AsMeta = {
   issuer: string
@@ -233,6 +261,162 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
       .from(auditLog)
       .where(and(eq(auditLog.tenantId, seed.tenantId), eq(auditLog.action, 'site.mcp.update_block')))
     expect(audited[0]!.data).toMatchObject({ via: 'via AI assistant (MCP)' })
+  })
+
+  await test.step('R24: templates, HTML designs and add_image change drafts only', async () => {
+    test.setTimeout(240_000)
+    const ok = async (name: string, args: Record<string, unknown>) => {
+      const r = await tool(request, token, name, { spa: slug, ...args })
+      expect(r.isError, JSON.stringify(r.data)).toBe(false)
+      return r.data
+    }
+    // The live site: the home page as published now.
+    await db.transaction((tx) => publishPage(tx, { tenantId: seed.tenantId, pageId: home!.id }))
+    const liveHome = async () => {
+      await page.goto(`${site(slug)}/`)
+      await expect(page.getByRole('heading', { name: 'Golden calm' })).toBeVisible()
+    }
+    await liveHome()
+    const publishedCount = async () =>
+      (
+        await db
+          .select({ id: pageVersions.id })
+          .from(pageVersions)
+          .where(and(eq(pageVersions.tenantId, seed.tenantId), eq(pageVersions.status, 'published')))
+      ).length
+    expect(await publishedCount()).toBe(1)
+
+    // list_templates: the built-ins and an uploaded HTML design template.
+    await saveStudioTemplate(db, {
+      key: 'mcp-sand-silk',
+      name: 'Sand Silk',
+      description: 'Uploaded HTML design',
+      theme: { accent: '#d4b483' },
+      active: true,
+      pages: [
+        {
+          slug: '',
+          title: { en: 'Home' },
+          data: {
+            root: { props: { htmlDesign: true } },
+            content: [
+              {
+                type: 'HtmlDesign',
+                props: { id: 'sand-html-design', html: '<!doctype html><h1>Sand</h1>', phoneFixes: false },
+              },
+            ],
+          },
+        },
+      ],
+    })
+    const list = await ok('list_templates', {})
+    expect(list.current).toBe('nordic')
+    const byKey = new Map(list.templates.map((t: { key: string }) => [t.key, t]))
+    expect(byKey.get('zen')).toMatchObject({ kind: 'classic', source: 'builtin' })
+    expect(byKey.get('mcp-sand-silk')).toMatchObject({ kind: 'html', source: 'studio' })
+    expect(list.templates.length).toBeGreaterThanOrEqual(24)
+
+    // apply_template: dry run, then the switch as drafts; the live site keeps its page and theme.
+    const themeBefore = (await db.select().from(sites).where(eq(sites.tenantId, seed.tenantId)))[0]!.theme
+    const dry = await ok('apply_template', { template: 'zen', dry_run: true })
+    expect(dry.saved).toBe(false)
+    expect((await db.select().from(sites).where(eq(sites.tenantId, seed.tenantId)))[0]!.templateKey).toBe(
+      'nordic',
+    )
+    const applied = await ok('apply_template', { template: 'zen' })
+    expect(applied).toMatchObject({ saved: true, theme: 'draft' })
+    const [after] = await db.select().from(sites).where(eq(sites.tenantId, seed.tenantId))
+    expect(after).toMatchObject({ templateKey: 'zen', theme: themeBefore })
+    expect(after!.themeDraft).not.toBeNull()
+    expect(await publishedCount()).toBe(1)
+    await liveHome()
+    const homePreview = await ok('preview_link', { page: 'home', days: 1 })
+    expect((await page.goto(homePreview.url))?.status()).toBe(200)
+    await expect(page.locator('body')).not.toContainText('Golden calm')
+
+    // set_html_design → get_html_design (exactly as sent, embedded image still data:) → patch_html_design → preview.
+    await ok('add_page', { slug: 'story', title_en: 'Story' })
+    const img = await sharp(randomBytes(64 * 64 * 3), { raw: { width: 64, height: 64, channels: 3 } })
+      .png()
+      .toBuffer()
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Story</title></head><body><h1 id="t">Our story</h1><p>Calm hands.</p><p>Calm hands.</p><img id="i" src="data:image/png;base64,${img.toString('base64')}" width="64" height="64" alt=""></body></html>`
+    const set = await ok('set_html_design', { page: 'story', html })
+    expect(set.html_designs[0]).toMatchObject({
+      page: 'story',
+      stored: 'exactly as sent',
+      phone_fixes: false,
+    })
+    const got = await ok('get_html_design', { page: 'story', search: 'Calm hands.' })
+    expect(got.html).toBe(html)
+    expect(got.match_count).toBe(2)
+    const ambiguous = await tool(request, token, 'patch_html_design', {
+      spa: slug,
+      page: 'story',
+      edits: [{ find: 'Calm hands.', replace: 'Warm hands.' }],
+    })
+    expect(ambiguous.isError).toBe(true)
+    expect(ambiguous.data.error).toMatch(/matches 2 times/)
+    await ok('patch_html_design', { page: 'story', edits: [{ find: 'Our story', replace: 'Our journey' }] })
+    const storyPreview = await ok('preview_link', { page: 'story', days: 1 })
+    await page.goto(storyPreview.url)
+    const frame = page.frameLocator('iframe.site-html-design')
+    await expect(frame.getByRole('heading', { name: 'Our journey' })).toBeVisible()
+    await expect
+      .poll(() => frame.locator('#i').evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBe(64)
+    const [designFile] = await db
+      .select()
+      .from(storedFiles)
+      .where(and(eq(storedFiles.tenantId, seed.tenantId), eq(storedFiles.purpose, 'html_design_doc')))
+    expect(designFile).toMatchObject({ isPublic: false, contentType: 'text/html; charset=utf-8' })
+
+    // add_image: from the fixture host (SITE_IMPORT_E2E_ALLOW) into the media library; private addresses refused.
+    const fixture = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'image/png' })
+      res.end(PNG)
+    })
+    await new Promise<void>((r) => fixture.listen(PORT + 1, '127.0.0.1', r))
+    try {
+      const added = await ok('add_image', {
+        url: `http://127.0.0.1:${PORT + 1}/stones.png`,
+        alt_en: 'Stones',
+      })
+      expect(added.path).toBe(`/files/${added.file_id}`)
+      const [asset] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, added.id))
+      expect(asset).toMatchObject({ tenantId: seed.tenantId, url: added.path })
+      expect(asset!.tags).toContain('ai-assistant')
+    } finally {
+      await new Promise<void>((r) => fixture.close(() => r()))
+    }
+    const blocked = await tool(request, token, 'add_image', {
+      spa: slug,
+      url: 'https://169.254.169.254/x.png',
+    })
+    expect(blocked.isError).toBe(true)
+    expect(blocked.data.error).toMatch(/private network/)
+    const plain = await tool(request, token, 'add_image', { spa: slug, url: 'http://example.com/x.png' })
+    expect(plain.data.error).toMatch(/Only https:\/\//)
+
+    // Throughout: nothing was published; the live site is the old one and the new page isn't public.
+    expect(await publishedCount()).toBe(1)
+    await liveHome()
+    const story = await page.goto(`${site(slug)}/story`)
+    expect(story?.status()).toBe(404)
+    const audited = await db
+      .select({ action: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.tenantId, seed.tenantId))
+    for (const t of [
+      'apply_template',
+      'set_html_design',
+      'patch_html_design',
+      'get_html_design',
+      'add_image',
+    ])
+      expect(
+        audited.some((a) => a.action === `site.mcp.${t}`),
+        t,
+      ).toBe(true)
   })
 
   await test.step('console: Connect Claude or ChatGPT card lists the client; Revoke cuts access', async () => {

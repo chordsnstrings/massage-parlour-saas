@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getT } from '@/i18n/server'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { readForm, sameOrigin, TooLarge } from '@/server/read-form'
 import { getSession } from '@/server/session'
 
 /**
@@ -23,33 +24,9 @@ const Tags = z.string().max(200).optional()
 /** Multipart overhead allowed on top of the image itself. */
 const BODY_LIMIT = MAX_UPLOAD_BYTES + 64 * 1024
 
-class TooLarge extends Error {}
-
-/** Parses the multipart body, aborting as soon as more than `limit` bytes have arrived. */
-function readForm(req: Request, limit: number) {
-  if (!req.body) return req.formData()
-  let total = 0
-  const counted = req.body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, ctrl) {
-        total += chunk.byteLength
-        if (total > limit) ctrl.error(new TooLarge())
-        else ctrl.enqueue(chunk)
-      },
-    }),
-  )
-  return new Response(counted, { headers: { 'content-type': req.headers.get('content-type') ?? '' } })
-    .formData()
-    .catch((e) => {
-      throw total > limit ? new TooLarge() : e
-    })
-}
-
 export async function POST(req: Request) {
   // Same-origin only (the dashboard calls this with fetch/XHR, which always sends Origin on POST).
-  const origin = req.headers.get('origin')
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
-  if (!origin || !host || new URL(origin).host !== host) return json(403, { ok: false, error: 'Forbidden' })
+  if (!sameOrigin(req)) return json(403, { ok: false, error: 'Forbidden' })
   const t = await getT()
   const tooLarge = t('errors.file.imageTooLarge', { size: '20 MB' })
   if (Number(req.headers.get('content-length') ?? 0) > BODY_LIMIT)

@@ -1090,6 +1090,37 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   sheet. e2e `console-website.spec.ts`. Details: CODEMAP "Site builder → Website Studio (R23, console)".
   ✅ Live 2026-10-11 (PR #34, a3029fe). The spa CRM menu item keeps its label "Website studio" (`nav.website`) — owner
   2026-10-11: "no rename for now".
+- **R24 Whole-site design by talking to Claude + 5 MB HTML uploads (owner, 2026-10-11, approved "all three, but can't
+  we make the 500kB to be 5mb?"; hard rule, verbatim: "it must also keep eacha nd every detail in the HTML including
+  the scrolling and if i have html for this website it should apllies as it is without missing anything at all this
+  must be stricted and can't be miss ever").** **Part A built (2026-10-11):** designs render **exactly** as the file
+  opened in a browser — no base sheet, viewport or width fixes; those are an explicit per-design **"Phone fixes"**
+  switch (off for new uploads and connector edits; designs stored before R24 have no flag and keep them, so no live
+  site changes). The live page of an exact design **is the design document itself** (proxy → `/site-html`, CSP
+  sandbox without allow-same-origin): one scrollbar, toolbar collapse, 100vh/dvh, its own viewport/title/favicon,
+  anchors, history. Frames (editor, previews, legacy) get `allow=` sensors/fullscreen/autoplay…, fixed `#anchors`, a
+  compat shim (in-memory storage/cookies only where the sandbox blocks them). Upload up to **5 MB** through the
+  `/files/templates` route (server actions cap bodies at 1 MB; client check first, so no error page). **Review fix
+  (2026-10-11): every design is stored byte for byte as one file** (template: `site_template_files`; spa: its own
+  private stored file; the page JSON keeps only a reference) — nothing is moved out, rewritten or capped below 5 MB, and
+  the file is read in its own encoding (windows-1252 etc.). Applying a template copies the design into the spa.
+  Placeholders are filled by context (JS/JSON-safe in scripts, never in comments or client-side templates); the
+  design's CSP has no narrower directives (data:/blob: fetches, `<object>`, mailto: forms work); on design pages the
+  tracker leaves no trace and carries utm/partner tags to /book. Proof: e2e `html-fidelity.spec.ts` (0 differing pixels +
+  computed styles vs the raw windows-1252 file, 1440×900 + 390×844, several scroll positions; Phone-fixes negative
+  control), `html-upload.spec.ts` (4.6 MB design byte for byte), `growth.spec.ts` (partner credited through a design
+  page). What a sandbox still can't give (storage per page view, no IndexedDB/service workers, `Origin: null` fetches,
+  **third-party players/widgets inside a design inherit the sandbox and may stay blank** — the upload and connector
+  warn; the root fix, a separate design domain without the sandbox, needs an owner decision and a domain) and details:
+  CODEMAP "Site builder → HTML designs". **Part B built (2026-10-11), connector tools** (same
+  gate/consent/audit, drafts only, no publish tool): `list_templates` (23 built-ins + active studio/HTML templates) and
+  `apply_template` (the console's template switch, but the theme goes to the DRAFT theme — live site unchanged — with
+  the console's one-click Undo; refused while a page it writes is open in someone else's editor; HTML templates' files
+  copied into the spa); `set_html_design` / `get_html_design` (paged + search) / `patch_html_design` (exact find/replace,
+  each find must match once; all or nothing); `replace_html_design` kept (≤ 5 MB UTF-8, stored byte for byte,
+  `phone_fixes` default false; requests up to 2 × 5 MiB + 256 KiB);
+  `add_image` (F32 SSRF-safe fetch, https only, raster types only, ≤ 8 MB, 10/min + 100/day per spa → media library).
+  Details: CODEMAP "Claude MCP connector".
 - **R25 ChatGPT too (owner, 2026-10-11: "it can be claude or chat GPT so add also the MCP server to connect to chat gpt
   as well"):** the same `/api/mcp` connector works from ChatGPT (developer-mode connectors / apps) — same gate
   (`SITE_AI_EDITOR_EMAILS` super-admins with 2FA), drafts only, no publish tool. **Built (2026-10-11), PR waiting for
@@ -1115,7 +1146,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   **Built (2026-10-08):** hidden Puck block `HtmlDesign` (sandboxed iframe — `srcdoc`, since F10 a shell document with its own CSP — opaque origin, full screen; root
   prop `htmlDesign` drops the site header/footer); placeholders `{{spa_name}}`, `{{book_url}}`, `{{whatsapp_url}}`,
   `{{phone}}`, `{{phone_url}}`, `{{address}}`, `{{map_url}}`, `{{site_url}}` filled live per spa; ≤ ~500 KB (fits the
-  512 KB draft cap); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
+  512 KB draft cap; R24: ≤ 5 MB, stored as a file); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
   "Replace" to update). Details: CODEMAP "Site builder → HTML designs".
   **Images fix (owner bug 2026-10-09, "images cropped or shifted right"):** every design gets a zero-specificity
   responsive base sheet (`:where()`: images ≤ 100% wide, `height:auto`, `object-fit:cover`, no sideways page scroll)
@@ -1123,6 +1154,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   button list every image (`<img>` + CSS backgrounds) with focal point (drag/arrow keys), Fill/Fit, realign
   (left/centre/right, undoes floats/offsets) and replace (a spa's media library via MediaPicker, or an https URL);
   stored as `images` next to `html` and applied as CSS/attributes inside the sandbox only.
+  **R24 (2026-10-11):** the base sheet / viewport / width fixes only with the design's "Phone fixes" switch (§14.8 R24).
 - **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 

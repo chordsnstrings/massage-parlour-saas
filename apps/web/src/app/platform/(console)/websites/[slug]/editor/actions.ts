@@ -22,6 +22,7 @@ import {
   restoreVersion,
   type SavedSectionRow,
   signPreviewToken,
+  spaHtmlDocReader,
   updateSavedSection,
 } from '@spa/services'
 import { inArray } from 'drizzle-orm'
@@ -488,4 +489,25 @@ export async function publishNotesAction(slug: string, pageId: string): Promise<
     themeDraftWarnings(tx, ctx.tenant.id, { skip: (p) => p.id === pageId }),
   )
   return ok(undefined, { themeWarnings: themeWarnings.slice(0, 8) })
+}
+
+/**
+ * R24 review: the designs a restored version or an unsaved local copy shows that the editor didn't get with the page
+ * (SiteMeta.htmlDocs, by file id). Only the spa's own design documents; an id that is none reads as nothing.
+ */
+export async function editorHtmlDocsAction(slug: string, files: unknown): Promise<ActionResult> {
+  const { ctx, error } = await studioGuard(slug, 'site.content')
+  if (error) return fail(error)
+  const parsed = z.array(uuid).max(20).safeParse(files)
+  if (!parsed.success) return fail('Design not found')
+  const docs = await withTenant(ctx.tenant.id, async (tx) => {
+    const read = spaHtmlDocReader(tx, ctx.tenant.id)
+    const out: Record<string, string> = {}
+    for (const file of new Set(parsed.data)) {
+      const html = await read({ file, sha256: '', bytes: 0, chars: 0 })
+      if (html !== null) out[file] = html
+    }
+    return out
+  })
+  return ok(undefined, { docs })
 }

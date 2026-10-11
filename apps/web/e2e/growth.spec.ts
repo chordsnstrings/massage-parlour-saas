@@ -1,8 +1,8 @@
 // F15 gift vouchers (print / share / public check), F16 QR posters + partner attribution, F15 client draft settings,
 // and the Premium gate for all of it (Standard spas).
 import { expect, type Page, test } from '@playwright/test'
-import { bookingPartners, bookings, giftCards, tenants } from '@spa/db'
-import { issueGiftCard } from '@spa/services'
+import { bookingPartners, bookings, giftCards, sitePages, tenants } from '@spa/db'
+import { ensureSite, issueGiftCard, publishPage } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { seedCatalog, signUpOwner, site, testDb } from './helpers'
 
@@ -113,6 +113,70 @@ test('F16 QR posters: reception + partner poster, a booking through the partner 
   await row.getByRole('button', { name: 'Pause' }).click()
   await expect(page.getByText('Partner paused')).toBeVisible()
   await expect(row).toContainText('Paused')
+})
+
+test('R24 + F16: a partner link to an exact HTML design page still credits the partner (and keeps its utm tags)', async ({
+  page,
+}) => {
+  const { slug, dashboard } = await signUpOwner(page, { spa: 'Design Poster Spa' })
+  const seed = await seedCatalog(slug)
+  await page.goto(`${dashboard}/posters`)
+  await page.getByRole('button', { name: 'Add partner' }).click()
+  await page.getByLabel('Partner name').fill('Marina hotel')
+  await page.getByRole('dialog').getByRole('button', { name: 'Add partner' }).click()
+  await expect(page.getByText('Partner added')).toBeVisible()
+  const [partner] = await testDb()
+    .select()
+    .from(bookingPartners)
+    .where(eq(bookingPartners.tenantId, seed.tenantId))
+  // The spa's live home page is an exact HTML design (Phone fixes off): the design document itself, sandboxed.
+  const db = testDb()
+  await db.transaction((tx) =>
+    ensureSite(tx, seed.tenantId, {
+      key: 'zen',
+      name: 'Zen',
+      theme: {},
+      pages: [
+        {
+          slug: '',
+          title: { en: 'Home' },
+          data: {
+            root: { props: { htmlDesign: true } },
+            content: [
+              {
+                type: 'HtmlDesign',
+                props: {
+                  id: 'home-html-design',
+                  html: '<!doctype html><html><head><title>Design</title></head><body><h1>Design home</h1><a href="{{book_url}}">Book now</a> <a href="#top">Top</a></body></html>',
+                  images: [],
+                  phoneFixes: false,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  )
+  const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
+  await db.transaction((tx) => publishPage(tx, { tenantId: seed.tenantId, pageId: home!.id }))
+
+  await page.goto(`${site(slug)}/?utm_source=instagram&partner=${partner!.code}`)
+  expect(await page.evaluate('self.origin')).toBe('null')
+  // The tracker leaves no trace in the design's own document.
+  expect(await page.evaluate('typeof window.spaTrack')).toBe('undefined')
+  const link = page.getByRole('link', { name: 'Book now' })
+  await expect(link).toHaveAttribute('href', /\/book$/)
+  await link.click()
+  await page.waitForURL(/\/book\?/)
+  expect(new URL(page.url()).searchParams.get('partner')).toBe(partner!.code)
+  expect(new URL(page.url()).searchParams.get('utm_source')).toBe('instagram')
+  const ref = await bookTomorrow(page, 'Design Guest', '050 333 4466')
+  const [booking] = await testDb()
+    .select()
+    .from(bookings)
+    .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
+  expect(booking).toMatchObject({ partnerId: partner!.id })
 })
 
 test('F15 client drafts: switches start off, timing is validated and saved', async ({ page }) => {

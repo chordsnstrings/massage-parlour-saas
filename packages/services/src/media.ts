@@ -111,6 +111,9 @@ export function sniffVideoType(b: Uint8Array): VideoType | null {
   return null
 }
 
+// R24: web fonts an HTML design uses that are copied into a spa (template apply), served inline with their type.
+export const FONT_TYPES = ['font/woff2', 'font/woff', 'font/ttf', 'font/otf'] as const
+
 /** True for content that is SVG/XML (to give a clearer error than "not an image"). */
 export const looksLikeSvg = (b: Uint8Array) =>
   /^\s*(<\?xml|<svg|<!doctype svg)/i.test(new TextDecoder().decode(b.subarray(0, 256)).replace(/^﻿/, ''))

@@ -1,5 +1,6 @@
 'use client'
 import {
+  decodeHtmlBytes,
   HTML_IMAGE_SRC_MAX,
   HTML_IMAGE_URL,
   type HtmlDesignImage,
@@ -13,8 +14,10 @@ import { MediaPicker } from '@/components/media/media-picker'
 import { HtmlDesignFrame } from '@/components/site/html-design-frame'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/form'
-import { Input, Select } from '@/components/ui/input'
+import { Checkbox, Input, Select } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { loadHtmlDesignAction } from './actions'
+import { uploadTooLarge } from './upload-sheet'
 
 type Spa = { slug: string; name: string }
 type Adjusts = Record<string, HtmlImageAdjust>
@@ -24,10 +27,13 @@ const clamp = (n: number) => Math.round(Math.min(100, Math.max(0, n)))
 
 /**
  * "Upload HTML" file field: once a file is chosen it is read in the browser (never run here) and its images are
- * listed in the adjuster, whose choices travel with the upload in the hidden `images` field.
+ * listed in the adjuster, whose choices travel with the upload in the hidden `images` field. R24: a file over 5 MB is
+ * refused here at once (and again on submit), and the "Phone fixes" switch (off = exact) drives the preview too.
  */
 export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
   const [html, setHtml] = useState<string | null>(null)
+  const [tooLarge, setTooLarge] = useState<string | null>(null)
+  const [phoneFixes, setPhoneFixes] = useState(false)
   return (
     <>
       <Field label="HTML file" name="file" hint={hint}>
@@ -37,16 +43,78 @@ export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
           type="file"
           accept="text/html,.html,.htm"
           className="h-auto py-2.5"
+          aria-invalid={tooLarge ? true : undefined}
           onChange={(e) => {
             const f = e.currentTarget.files?.[0]
-            if (!f) return setHtml(null)
-            f.text().then(setHtml, () => setHtml(null))
+            const big = uploadTooLarge('html', f)
+            setTooLarge(big)
+            if (!f || big) return setHtml(null)
+            // Read like the browser and the upload route do (the file's own encoding), never blindly as UTF-8.
+            f.arrayBuffer().then(
+              (b) => setHtml(decodeHtmlBytes(new Uint8Array(b)).html),
+              () => setHtml(null),
+            )
           }}
         />
+        {tooLarge && (
+          <p role="alert" className="text-[13px] text-danger" data-testid="html-file-too-large">
+            {tooLarge}
+          </p>
+        )}
       </Field>
-      {html !== null && <HtmlImageAdjuster key={html.length} html={html} initial={[]} spas={spas} />}
+      <label className="flex items-start gap-3 rounded-xl border p-4 text-sm">
+        <Checkbox
+          name="phoneFixes"
+          className="mt-0.5"
+          checked={phoneFixes}
+          onChange={(e) => setPhoneFixes(e.currentTarget.checked)}
+        />
+        <span className="space-y-1">
+          <span className="block font-medium">Phone fixes</span>
+          <span className="block text-muted">
+            Off = shown exactly like the file (recommended). On = the platform adds a phone viewport and keeps
+            images and wide elements inside phone screens — this changes how the design looks.
+          </span>
+        </span>
+      </label>
+      {html !== null && (
+        <HtmlImageAdjuster key={html.length} html={html} initial={[]} spas={spas} phoneFixes={phoneFixes} />
+      )}
     </>
   )
+}
+
+/** The adjuster of a stored HTML template: its design (up to 5 MB) is loaded when the sheet opens. */
+export function TemplateImageAdjuster({
+  id,
+  ...rest
+}: { id: string } & Omit<React.ComponentProps<typeof HtmlImageAdjuster>, 'html'>) {
+  const [state, setState] = useState<{ html: string } | { error: string } | null>(null)
+  useEffect(() => {
+    let live = true
+    loadHtmlDesignAction(id).then(
+      (r) => {
+        if (live) setState(r)
+      },
+      () => {
+        if (live) setState({ error: 'Could not load the design. Try again.' })
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [id])
+  // Until it is shown, saving keeps the adjustments as they are.
+  const keep = <input type="hidden" name="images" value={JSON.stringify(rest.initial)} />
+  if (!state) return <p className="text-[13px] text-muted">{keep}Loading the design…</p>
+  if ('error' in state)
+    return (
+      <p role="alert" className="text-[13px] text-danger">
+        {keep}
+        {state.error}
+      </p>
+    )
+  return <HtmlImageAdjuster html={state.html} {...rest} />
 }
 
 /** Lists every image of a design with focal point, Fill / Fit and replace; previews the result at 360 / 1280. */
@@ -54,16 +122,19 @@ export function HtmlImageAdjuster({
   html,
   initial,
   spas,
+  phoneFixes,
 }: {
   html: string
   initial: HtmlImageAdjust[]
   spas: Spa[]
+  /** The design's "Phone fixes" switch (the preview shows what spa sites will show). */
+  phoneFixes: boolean
 }) {
   const images = useMemo(() => listHtmlDesignImages(html), [html])
   const [adjust, setAdjust] = useState<Adjusts>(() => toMap(initial))
   const [spa, setSpa] = useState(spas[0]?.slug ?? '')
   const [width, setWidth] = useState<360 | 1280>(360)
-  const list = images.flatMap((i) => (adjust[i.id] ? [adjust[i.id]!] : []))
+  const list = useMemo(() => images.flatMap((i) => (adjust[i.id] ? [adjust[i.id]!] : [])), [images, adjust])
 
   const update = (img: HtmlDesignImage, patch: Partial<HtmlImageAdjust> | null) =>
     setAdjust((all) => {
@@ -84,7 +155,8 @@ export function HtmlImageAdjuster({
         <div>
           <p className="text-sm font-medium">Adjust images ({images.length})</p>
           <p className="text-[13px] text-muted">
-            Images always fit the screen. Drag the dot to choose what stays in view when an image is cropped.
+            {phoneFixes ? 'Phone fixes keep images inside the screen. ' : ''}Drag the dot to choose what stays
+            in view when an image is cropped.
           </p>
         </div>
         {spas.length > 0 && images.length > 0 && (
@@ -116,7 +188,7 @@ export function HtmlImageAdjuster({
           ))}
         </ul>
       )}
-      <Preview html={html} adjust={list} width={width} onWidth={setWidth} />
+      <Preview html={html} adjust={list} width={width} onWidth={setWidth} phoneFixes={phoneFixes} />
     </section>
   )
 }
@@ -158,7 +230,10 @@ function ImageCard({
       <p className="flex items-center gap-2 text-[13px]">
         <span className="font-medium">{label}</span>
         <span className="text-muted">{image.kind === 'bg' ? 'background' : 'image'}</span>
-        <span className="min-w-0 flex-1 truncate text-muted" title={image.src}>
+        <span
+          className="min-w-0 flex-1 truncate text-muted"
+          title={image.src.startsWith('data:') ? undefined : image.src}
+        >
           {image.src.startsWith('data:') ? 'embedded' : image.src}
         </span>
       </p>
@@ -291,11 +366,13 @@ function Preview({
   adjust,
   width,
   onWidth,
+  phoneFixes,
 }: {
   html: string
   adjust: HtmlImageAdjust[]
   width: 360 | 1280
   onWidth: (w: 360 | 1280) => void
+  phoneFixes: boolean
 }) {
   const wrap = useRef<HTMLDivElement>(null)
   const [room, setRoom] = useState(640)
@@ -312,6 +389,11 @@ function Preview({
   }, [])
   const scale = Math.min(1, room / width)
   const height = 520
+  // A design can be 5 MB: built once per change, not on every resize.
+  const doc = useMemo(
+    () => htmlDesignDocument(html, {}, true, adjust, {}, { phoneFixes }),
+    [html, adjust, phoneFixes],
+  )
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
@@ -333,7 +415,7 @@ function Preview({
         <HtmlDesignFrame
           title="Design preview"
           data-testid="html-images-preview"
-          html={htmlDesignDocument(html, {}, true, adjust)}
+          html={doc}
           sandbox="allow-scripts"
           style={{ width, height, border: 0, transform: `scale(${scale})`, transformOrigin: '0 0' }}
         />

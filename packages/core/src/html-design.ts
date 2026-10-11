@@ -1,9 +1,10 @@
 /**
- * Uploaded HTML designs (R17): pure string transforms run before a design goes into its sandboxed frame.
- * Nothing here executes the design; it only lists its images and adds CSS / attributes inside the document.
- *  - `fixHtmlDesign` (upload time): adds a missing viewport meta, makes fixed-pixel-width images fluid.
- *  - `htmlDesignDocument` (render time): a zero-specificity responsive base sheet first in <head> (so the design's
- *    own rules win), the super-admin's per-image adjustments (focal point, fill/fit, replacement) last.
+ * Uploaded HTML designs (R17, R24): pure string transforms run before a design is shown. Nothing here executes the
+ * design. R24 owner rule: a design renders EXACTLY as the file opened in a browser — only invisible additions (compat
+ * shim, link handling in frames, placeholders where written). The old phone fixes are an explicit per-design opt-in:
+ *  - `fixHtmlDesign` + viewport + `HTML_DESIGN_BASE_CSS`: only when the design's "Phone fixes" switch is on
+ *    (`phoneFixes`; designs stored before R24 have no flag and keep them, `htmlDesignPhoneFixes`).
+ *  - the super-admin's per-image adjustments (focal point, fill/fit, replacement): explicit owner action, always applied.
  */
 
 export type HtmlDesignImage = {
@@ -37,14 +38,167 @@ export const MAX_HTML_IMAGES = 200
 export const HTML_IMAGE_SRC_MAX = 300
 const srcKey = (s: string) => s.slice(0, HTML_IMAGE_SRC_MAX)
 
-/** Responsive defaults, zero specificity (`:where`) so any rule the design sets itself wins. */
+/** Phone fixes only: responsive defaults, zero specificity (`:where`) so any rule the design sets itself wins. */
 export const HTML_DESIGN_BASE_CSS =
   ':where(html,body){max-width:100%;overflow-x:clip}' +
   ':where(img,picture,video,canvas,svg,iframe){max-width:100%}' +
   ':where(img,video){height:auto}' +
-  ':where(img){object-fit:cover;object-position:50% 50%}' +
+  ':where(img){object-fit:cover;object-position:50% 50%}'
+/** Only when an `{{address}}` link was spliced in: the link looks like the text it replaces. */
+export const HTML_DESIGN_MAP_CSS =
   ':where(a[data-spa-map]){color:inherit;text-decoration:none}' +
   ':where(a[data-spa-map]:hover){text-decoration:underline}'
+
+/** Largest design (UTF-8 bytes) uploaded or sent by the connector; stored byte for byte as a file (R24). */
+export const MAX_HTML_UPLOAD_BYTES = 5 * 1024 * 1024
+
+/**
+ * R24 (review): where a design document lives. Every design written since is a file — a spa's: its own PRIVATE
+ * stored file (purpose `html_design_doc`), a template's: `site_template_files` — and the HtmlDesign block keeps this
+ * reference in `props.doc` with `props.html` = '' (renderers fill `html` from the file right before rendering; designs
+ * stored before keep their html inline). Content-addressed: a changed design is a new file, so page versions, undo
+ * and copies never share bytes that change.
+ */
+export type HtmlDesignDoc = { file: string; sha256: string; bytes: number; chars: number }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** A design document's file id: a stored / template file UUID (anything else reads as no document, never a query). */
+export const isHtmlDesignDocFile = (file: unknown): file is string =>
+  typeof file === 'string' && UUID.test(file)
+
+/** The block's design file reference, or null (inline / legacy design, or a malformed reference). */
+export function htmlDesignDocOf(props: Record<string, unknown> | null | undefined): HtmlDesignDoc | null {
+  const d = props?.doc as Partial<HtmlDesignDoc> | null | undefined
+  return d &&
+    isHtmlDesignDocFile(d.file) &&
+    typeof d.sha256 === 'string' &&
+    /^[0-9a-f]{64}$/.test(d.sha256) &&
+    typeof d.bytes === 'number' &&
+    typeof d.chars === 'number'
+    ? { file: d.file, sha256: d.sha256, bytes: d.bytes, chars: d.chars }
+    : null
+}
+
+/** Drops `<!-- … -->` comments in one linear pass (an unclosed comment runs to the end, as in a browser). */
+function withoutComments(s: string) {
+  let out = ''
+  let i = 0
+  for (;;) {
+    const open = s.indexOf('<!--', i)
+    if (open < 0) return out + s.slice(i)
+    out += s.slice(i, open)
+    const close = s.indexOf('-->', open + 4)
+    if (close < 0) return out
+    i = close + 3
+  }
+}
+
+/**
+ * The charset label of the first `<meta>` that declares one (`charset=…`, also inside an http-equiv `content`), from
+ * lower-cased text — a linear scan (no backtracking regex on uploaded bytes).
+ */
+function metaCharset(head: string): string | null {
+  const space = (ch: string | undefined) =>
+    ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f'
+  for (let at = head.indexOf('<meta'); at >= 0; at = head.indexOf('<meta', at + 5)) {
+    const after = head[at + 5]
+    if (after !== undefined && !space(after) && after !== '/' && after !== '>') continue
+    const end = head.indexOf('>', at)
+    const tag = head.slice(at, end < 0 ? head.length : end)
+    for (let c = tag.indexOf('charset'); c >= 0; c = tag.indexOf('charset', c + 7)) {
+      if (/\w/.test(tag[c - 1] ?? '')) continue
+      let k = c + 7
+      while (space(tag[k])) k++
+      if (tag[k] !== '=') continue
+      k++
+      while (space(tag[k])) k++
+      if (tag[k] === '"' || tag[k] === "'") k++
+      while (space(tag[k])) k++
+      let value = ''
+      while (k < tag.length && !space(tag[k]) && !'"\'>;/'.includes(tag[k]!)) value += tag[k++]
+      if (value) return value
+    }
+  }
+  return null
+}
+
+/** windows-1252 bytes 0x80–0x9F (WHATWG index; the five unassigned ones map to themselves). */
+const CP1252 = '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ'
+
+/**
+ * The text of an uploaded .html file as a browser opening it would read it (WHATWG encoding sniffing, simplified):
+ * a BOM, else a `<meta charset>` / http-equiv charset in the first 1024 bytes (UTF-16 labels mean UTF-8 there), else
+ * UTF-8 when the bytes are valid UTF-8 (browsers detect it for local files), else windows-1252. The result is served
+ * as UTF-8 with an explicit charset header, which outranks the design's own <meta>, so it reads exactly as the file.
+ */
+export function decodeHtmlBytes(bytes: Uint8Array): { html: string; encoding: string } {
+  const decode = (label: string, fatal = false) => {
+    try {
+      const d = new TextDecoder(label, { fatal })
+      const html = d.decode(bytes)
+      // Some runtimes (Node 22) decode windows-1252 as ISO-8859-1: 0x80–0x9F come out as C1 controls.
+      return {
+        html:
+          d.encoding === 'windows-1252'
+            ? html.replace(/[\u0080-\u009f]/g, (c) => CP1252[c.charCodeAt(0) - 0x80]!)
+            : html,
+        encoding: d.encoding,
+      }
+    } catch {
+      return null
+    }
+  }
+  const [a, b, c] = bytes
+  const bom =
+    a === 0xef && b === 0xbb && c === 0xbf
+      ? 'utf-8'
+      : a === 0xfe && b === 0xff
+        ? 'utf-16be'
+        : a === 0xff && b === 0xfe
+          ? 'utf-16le'
+          : null
+  if (bom) return decode(bom)!
+  let head = ''
+  for (const x of bytes.subarray(0, 1024)) head += String.fromCharCode(x)
+  const label = metaCharset(withoutComments(head).toLowerCase())
+  if (label) {
+    const declared =
+      /^(?:utf-16|utf-16be|utf-16le|unicodefffe|unicodefeff|csunicode|iso-10646-ucs-2|ucs-2|unicode)$/.test(
+        label,
+      )
+        ? 'utf-8'
+        : label === 'x-user-defined'
+          ? 'windows-1252'
+          : label
+    const r = decode(declared)
+    if (r) return r
+  }
+  return decode('utf-8', true) ?? decode('windows-1252')!
+}
+
+/**
+ * R24 review: a design uploaded before R24 had the old phone fixes (viewport meta, fluid image widths) saved INTO its
+ * html, so switching Phone fixes off can't show the original file — only uploading it again can. Such a design has no
+ * switch value (or `bakedFixes: true`, kept once the switch was used).
+ */
+export const htmlDesignBakedFixes = (props: Record<string, unknown> | null | undefined) =>
+  props?.bakedFixes === true || (props?.phoneFixes === undefined && !htmlDesignDocOf(props))
+
+/** A design's "Phone fixes" switch: absent (stored before R24) = on, as those designs always had them. */
+export const htmlDesignPhoneFixes = (props: { phoneFixes?: unknown } | null | undefined) =>
+  props?.phoneFixes !== false
+
+/**
+ * Compat shim (R24), first in <head>: designs run in an opaque origin (sandbox without allow-same-origin), where
+ * `localStorage` / `sessionStorage` / `document.cookie` throw. Only when they throw, they become in-memory versions,
+ * so the design's code behaves as when the file is opened directly. Nothing visible is touched.
+ */
+export const HTML_DESIGN_COMPAT_SHIM =
+  '(()=>{const mem=()=>{const m=new Map(),api={getItem:(k)=>{k=String(k);return m.has(k)?m.get(k):null},setItem:(k,v)=>{m.set(String(k),String(v))},removeItem:(k)=>{m.delete(String(k))},clear:()=>{m.clear()},key:(i)=>{const a=[...m.keys()];return a[i]??null}};' +
+  "return new Proxy(api,{get:(t,p)=>p==='length'?m.size:typeof p==='symbol'||p in t?t[p]:m.has(p)?m.get(p):undefined,set:(t,p,v)=>{if(typeof p==='string'&&!(p in t)&&p!=='length')m.set(p,String(v));return true},has:(t,p)=>p in t||m.has(p),deleteProperty:(t,p)=>{m.delete(p);return true},ownKeys:()=>[...m.keys()],getOwnPropertyDescriptor:(t,p)=>m.has(p)?{value:m.get(p),writable:true,enumerable:true,configurable:true}:undefined})};" +
+  "for(const n of ['localStorage','sessionStorage']){try{window[n].length;continue}catch{}try{Object.defineProperty(window,n,{value:mem(),configurable:true,enumerable:true})}catch{}}" +
+  "try{document.cookie}catch{const jar=new Map();try{Object.defineProperty(document,'cookie',{configurable:true,enumerable:true,get:()=>[...jar].map(([k,v])=>k?k+'='+v:v).join('; '),set:(s)=>{const [kv,...attrs]=String(s).split(';');const i=kv.indexOf('=');const k=(i<0?'':kv.slice(0,i)).trim(),v=(i<0?kv:kv.slice(i+1)).trim();" +
+  "const gone=attrs.some((a)=>{const [n,...r]=a.split('=');const x=n.trim().toLowerCase(),y=r.join('=').trim();return x==='max-age'?Number(y)<=0:x==='expires'?Date.parse(y)<Date.now():false});if(gone)jar.delete(k);else jar.set(k,v)}})}catch{}}})()"
 
 const VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">'
 /** Narrowest screen the platform supports; a fixed image width above it overflows phones. */
@@ -146,15 +300,21 @@ function applyEdits(html: string, edits: Edit[]) {
   return out + html.slice(pos)
 }
 
-/** Inserts `text` right after the first of <head>, <html>, <!doctype>, or at the start. */
-function insertAtHead(html: string, text: string) {
+/** Index right after the first of <head>, <html>, <!doctype>, or 0. */
+function headIndex(html: string) {
   for (const tag of [/<head\b/i, /<html\b/i, /<!doctype/i]) {
     // The tag's first `>` by indexOf, not `[^>]*>` (rescans to the end from every start when a `>` is missing).
     const at = html.search(tag)
     const end = at < 0 ? -1 : html.indexOf('>', at)
-    if (end >= 0) return html.slice(0, end + 1) + text + html.slice(end + 1)
+    if (end >= 0) return end + 1
   }
-  return text + html
+  return 0
+}
+
+/** Inserts `text` right after the first of <head>, <html>, <!doctype>, or at the start. */
+function insertAtHead(html: string, text: string) {
+  const at = headIndex(html)
+  return html.slice(0, at) + text + html.slice(at)
 }
 
 /**
@@ -171,9 +331,8 @@ const hasViewport = (html: string) => /<meta\b[^>]*\bname\s*=\s*["']?viewport\b/
 
 export type HtmlDesignFix = 'viewport' | 'wide-image'
 
-/** Upload-time fixes for the usual phone breakers; returns the fixed file and what was changed. */
-export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFix[] } {
-  const fixes = new Set<HtmlDesignFix>()
+/** Phone fix: inline img `width:Npx` (and `min-width`) above the phone width become `width:100%;max-width:Npx`. */
+function fluidImages(html: string): { html: string; changed: boolean } {
   const edits: Edit[] = []
   for (const img of scan(html).imgs) {
     const style = /(\sstyle\s*=\s*)(?:"([^"]*)"|'([^']*)')/i.exec(img.tag)
@@ -187,12 +346,19 @@ export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFi
         Number(n) > PHONE_PX ? `${p}${sp}width:100%;max-width:${n}px` : m,
       )
     if (fixed === value) continue
-    fixes.add('wide-image')
     const q = style[2] !== undefined ? '"' : "'"
     const at = img.tagStart + style.index
     edits.push({ at, end: at + style[0].length, text: `${style[1]}${q}${fixed}${q}` })
   }
-  let out = applyEdits(html, edits)
+  return { html: applyEdits(html, edits), changed: edits.length > 0 }
+}
+
+/** The phone fixes ("Phone fixes" switch): a missing viewport meta, fluid wide images; returns what was changed. */
+export function fixHtmlDesign(html: string): { html: string; fixes: HtmlDesignFix[] } {
+  const fixes = new Set<HtmlDesignFix>()
+  const fluid = fluidImages(html)
+  if (fluid.changed) fixes.add('wide-image')
+  let out = fluid.html
   if (!hasViewport(out)) {
     out = insertAtHead(out, VIEWPORT)
     fixes.add('viewport')
@@ -290,7 +456,7 @@ const NO_LINK = new Set(['a', 'select', 'button'])
 const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
 
 /** Index just past the `>` ending a tag whose attributes start at `j`; quoted values may hold `>`. */
-function tagEnd(src: string, j: number) {
+export function tagEnd(src: string, j: number) {
   const n = src.length
   while (j < n) {
     const c = src[j]
@@ -313,19 +479,89 @@ function tagEnd(src: string, j: number) {
   return n
 }
 
+export type HtmlAttr = { name: string; start: number; end: number }
+
 /**
- * `[start, end)` ranges of plain page text, where a placeholder may become a link: outside tags (tokenized
- * quote-aware like the HTML parser), comments, doctypes, raw-text elements and `<a>`/`<select>`/`<button>`.
- * Anything unclear counts as not text (the value is then just escaped).
+ * Attributes of a tag whose attributes start at `j` (same tokenizing as `tagEnd`); value ranges exclude the quotes,
+ * `start` = -1 for an attribute without a value. The parser keeps the first of duplicate attributes, so do we.
  */
-function linkableTextRanges(src: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = []
+export function attributesOf(src: string, j: number): HtmlAttr[] {
+  const seen = new Set<string>()
+  return allAttributes(src, j).filter((a) => !seen.has(a.name) && seen.add(a.name))
+}
+
+/** Every attribute of a tag in source order, duplicates included (each is tokenized, even if the parser drops it). */
+function allAttributes(src: string, j: number): HtmlAttr[] {
+  const out: HtmlAttr[] = []
+  const n = src.length
+  while (j < n) {
+    const c = src[j]
+    if (c === '>') break
+    if (isWs(c) || c === '/') {
+      j++
+      continue
+    }
+    const ns = j
+    j++
+    while (j < n && !isWs(src[j]) && src[j] !== '/' && src[j] !== '>' && src[j] !== '=') j++
+    const name = src.slice(ns, j).toLowerCase()
+    let k = j
+    while (isWs(src[k])) k++
+    if (src[k] !== '=') {
+      out.push({ name, start: -1, end: -1 })
+      continue
+    }
+    k++
+    while (isWs(src[k])) k++
+    const q = src[k]
+    if (q === '"' || q === "'") {
+      const close = src.indexOf(q, k + 1)
+      if (close === -1) break
+      out.push({ name, start: k + 1, end: close })
+      j = close + 1
+    } else {
+      const vs = k
+      while (k < n && !isWs(src[k]) && src[k] !== '>') k++
+      out.push({ name, start: vs, end: k })
+      j = k
+    }
+  }
+  return out
+}
+
+/**
+ * How a `{{placeholder}}` at a position is filled (R24 review): `link` = plain page text (`{{address}}` may become a
+ * maps link), `js` = a JavaScript / JSON script body, `jsattr` = an `on…` handler attribute, `jsurl` = a URL attribute
+ * (script only when it is a `javascript:` URL), `css` = a <style> body, `cssattr` = a style attribute, `attr` = inside
+ * a tag outside quoted values (names, unquoted values), `skip` = never filled (comments, doctypes, client-side
+ * templates in `<script type="text/x-…">` and other non-JS script types). Anything else (quoted attribute values,
+ * title/textarea, text inside <a>/<select>/<button>) = the HTML-escaped value.
+ */
+type FillCtx = 'link' | 'js' | 'jsattr' | 'jsurl' | 'css' | 'cssattr' | 'attr' | 'skip'
+/** `[start, end, ctx, quoted]` — `quoted` only for attribute values (false = unquoted). */
+type FillSpan = [number, number, FillCtx, boolean?]
+
+/** Script types whose body is JavaScript or JSON (JSX / TypeScript for in-browser transpilers too). */
+const JS_SCRIPT =
+  /^(?:|module|importmap|speculationrules|text\/(?:javascript|ecmascript|jscript|livescript|babel|jsx|typescript)|application\/(?:javascript|ecmascript|x-javascript|x-ecmascript|json|[\w.-]+\+json))$/
+/** Attributes whose value is a URL that may be `javascript:`. */
+const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href'])
+
+const attrValue = (src: string, a: HtmlAttr | undefined) =>
+  a && a.start >= 0 ? decode(src.slice(a.start, a.end)) : ''
+
+/**
+ * `[start, end, ctx]` spans of the document in order (tokenized quote-aware like the HTML parser: `>` inside an
+ * attribute value doesn't end a tag); positions outside every span are the default (HTML-escaped value).
+ */
+function fillSpans(src: string): FillSpan[] {
+  const spans: FillSpan[] = []
   const open = new Map<string, number>()
   const n = src.length
   let text = 0
   let i = 0
   const endText = (at: number) => {
-    if (at > text && ![...open.values()].some(Boolean)) ranges.push([text, at])
+    if (at > text && ![...open.values()].some(Boolean)) spans.push([text, at, 'link'])
   }
   const tagRe = /<(\/?)([a-z][^\t\n\f\r />]*)/iy
   while (i < n) {
@@ -338,6 +574,7 @@ function linkableTextRanges(src: string): Array<[number, number]> {
       close.lastIndex = lt + 2
       const m = close.exec(src)
       i = text = m ? m.index + m[0].length : n
+      spans.push([lt, i, 'skip'])
       continue
     }
     tagRe.lastIndex = lt
@@ -348,31 +585,368 @@ function linkableTextRanges(src: string): Array<[number, number]> {
         endText(lt)
         const gt = src.indexOf('>', lt + 2)
         i = text = gt === -1 ? n : gt + 1
+        spans.push([lt, i, 'skip'])
       } else i = lt + 1 // a literal '<' in text
       continue
     }
     endText(lt)
     const name = tag[2]!.toLowerCase()
-    i = text = tagEnd(src, lt + tag[0].length)
+    const nameEnd = lt + tag[0].length
+    const attrs = tag[1] ? [] : allAttributes(src, nameEnd)
+    i = text = tagEnd(src, nameEnd)
+    // The tag itself: names / `=` / unquoted values can't take a value with spaces or quotes (`attr`); handler,
+    // URL and style values have their own context; quoted plain values are the default.
+    let from = lt
+    for (const a of attrs) {
+      if (a.start < 0) continue
+      const quoted = src[a.start - 1] === '"' || src[a.start - 1] === "'"
+      const ctx: FillCtx | null = a.name.startsWith('on')
+        ? 'jsattr'
+        : URL_ATTRS.has(a.name)
+          ? 'jsurl'
+          : a.name === 'style'
+            ? 'cssattr'
+            : quoted
+              ? null
+              : 'attr'
+      if (a.start > from) spans.push([from, a.start, 'attr'])
+      if (ctx) spans.push([a.start, a.end, ctx, quoted])
+      from = a.end
+    }
+    if (i > from) spans.push([from, i, 'attr'])
     if (NO_LINK.has(name)) open.set(name, Math.max(0, (open.get(name) ?? 0) + (tag[1] ? -1 : 1)))
     if (tag[1] || !RAW_TEXT.has(name)) continue
-    if (name === 'plaintext') return ranges // the rest of the document is raw text
+    if (name === 'plaintext') return spans // the rest of the document is raw text
     const close = new RegExp(`</${name}(?=[\\t\\n\\f\\r />]|$)`, 'gi')
     close.lastIndex = i
-    i = text = close.exec(src)?.index ?? n
+    const stop = close.exec(src)?.index ?? n
+    if (name === 'script') {
+      const type = attrValue(
+        src,
+        attrs.find((a) => a.name === 'type'),
+      )
+        .toLowerCase()
+        .split(';')[0]!
+        .trim()
+      spans.push([i, stop, JS_SCRIPT.test(type) ? 'js' : 'skip'])
+    } else if (name === 'style') spans.push([i, stop, 'css'])
+    i = text = stop
   }
   endText(n)
-  return ranges
+  return spans
+}
+
+/** Reads whether the end of the text fed so far (in order, in pieces) is inside a string. */
+type StringScan = { feed: (s: string) => void; inString: () => boolean }
+
+/** Words after which a `/` starts a regular expression (after any other word or value it divides). */
+const JS_REGEX_AFTER = new Set([
+  'return',
+  'typeof',
+  'instanceof',
+  'in',
+  'of',
+  'new',
+  'delete',
+  'void',
+  'throw',
+  'case',
+  'do',
+  'else',
+  'yield',
+  'await',
+])
+const JS_WORD = /[\p{L}\p{N}_$]/u
+
+/**
+ * JavaScript / JSON: inside a string literal or a template literal's text? The usual tokenizer heuristics (a `/` after
+ * a value divides, else starts a regular expression; `<!--` / line-start `-->` comments as in classic scripts).
+ */
+function jsScan(): StringScan {
+  // 0 code, 1 '…', 2 "…", 3 `…` text, 4 line comment, 5 block comment, 6 regex, 7 regex [class]
+  let mode = 0
+  let regexOk = true
+  let lineStart = true
+  let depth = 0
+  const subs: number[] = [] // brace depth of each open `${`
+  const feed = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i]!
+      const nl = c === '\n' || c === '\r' || c === '\u2028' || c === '\u2029'
+      if (nl) lineStart = true
+      if (mode === 1 || mode === 2) {
+        if (c === '\\') i++
+        else if (c === (mode === 1 ? "'" : '"')) {
+          mode = 0
+          regexOk = false
+        } else if (nl) mode = 0
+        continue
+      }
+      if (mode === 3) {
+        if (c === '\\') i++
+        else if (c === '`') {
+          mode = 0
+          regexOk = false
+        } else if (c === '$' && s[i + 1] === '{') {
+          subs.push(depth++)
+          i++
+          mode = 0
+          regexOk = true
+        }
+        continue
+      }
+      if (mode === 4) {
+        if (nl) mode = 0
+        continue
+      }
+      if (mode === 5) {
+        if (c === '*' && s[i + 1] === '/') {
+          mode = 0
+          i++
+        }
+        continue
+      }
+      if (mode >= 6) {
+        if (c === '\\') i++
+        else if (nl) mode = 0
+        else if (mode === 6 && c === '/') {
+          mode = 0
+          regexOk = false
+        } else if (c === '[') mode = 7
+        else if (c === ']') mode = 6
+        continue
+      }
+      if (nl || isWs(c) || c === '\v' || c === '\u00a0' || c === '\ufeff') continue
+      const atLineStart = lineStart
+      lineStart = false
+      if (c === "'") mode = 1
+      else if (c === '"') mode = 2
+      else if (c === '`') mode = 3
+      else if (c === '/' && (s[i + 1] === '/' || s[i + 1] === '*')) {
+        mode = s[i + 1] === '/' ? 4 : 5
+        lineStart = atLineStart
+        i++
+      } else if (c === '<' && s.startsWith('!--', i + 1)) {
+        mode = 4
+        i += 3
+      } else if (c === '-' && atLineStart && s.startsWith('->', i + 1)) {
+        mode = 4
+        i += 2
+      } else if (c === '/') {
+        if (regexOk) mode = 6
+        else regexOk = true
+      } else if (JS_WORD.test(c)) {
+        let j = i + 1
+        while (j < s.length && JS_WORD.test(s[j]!)) j++
+        regexOk = JS_REGEX_AFTER.has(s.slice(i, j))
+        i = j - 1
+      } else if (c === '}') {
+        depth = Math.max(0, depth - 1)
+        if (subs.length && subs[subs.length - 1] === depth) {
+          subs.pop()
+          mode = 3
+        } else regexOk = true
+      } else {
+        if (c === '{') depth++
+        regexOk = c !== ')' && c !== ']'
+      }
+    }
+  }
+  return { feed, inString: () => mode >= 1 && mode <= 3 }
+}
+
+/** CSS: inside a string? (comments and unquoted `url(…)` hold no strings.) */
+function cssScan(): StringScan {
+  // 0 normal, 1 string, 2 comment, 3 unquoted url(…), 4 right after `url(`
+  let mode = 0
+  let quote = ''
+  let ident = ''
+  const feed = (s: string) => {
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i]!
+      if (mode === 1) {
+        if (c === '\\') i++
+        else if (c === quote || c === '\n' || c === '\r' || c === '\f') mode = 0
+        continue
+      }
+      if (mode === 2) {
+        if (c === '*' && s[i + 1] === '/') {
+          mode = 0
+          i++
+        }
+        continue
+      }
+      if (mode === 4) {
+        if (isWs(c)) continue
+        mode = c === '"' || c === "'" ? 0 : 3
+      }
+      if (mode === 3) {
+        if (c === '\\') i++
+        else if (c === ')') mode = 0
+        continue
+      }
+      if (c === '"' || c === "'") {
+        quote = c
+        mode = 1
+      } else if (c === '/' && s[i + 1] === '*') {
+        mode = 2
+        i++
+      } else if (c === '(') mode = ident.toLowerCase() === 'url' ? 4 : 0
+      if (c === '\\') {
+        ident += c
+        i++
+      } else ident = /[\w-]/.test(c) || c.charCodeAt(0) > 0x7f ? ident + c : ''
+    }
+  }
+  return { feed, inString: () => mode === 1 }
+}
+
+/** Character references that can change how script / CSS / URL text in an attribute tokenizes (others stay). */
+const REFS: Record<string, string> = {
+  amp: '&',
+  quot: '"',
+  apos: "'",
+  lt: '<',
+  gt: '>',
+  bsol: '\\',
+  sol: '/',
+  ast: '*',
+  midast: '*',
+  grave: '`',
+  dollar: '$',
+  lcub: '{',
+  lbrace: '{',
+  rcub: '}',
+  rbrace: '}',
+  lpar: '(',
+  rpar: ')',
+  lsqb: '[',
+  lbrack: '[',
+  rsqb: ']',
+  rbrack: ']',
+  colon: ':',
+  semi: ';',
+  percnt: '%',
+  newline: '\n',
+  tab: '\t',
+}
+/** An attribute value's text as the parser hands it on (character references decoded). */
+const decodeRefs = (s: string) =>
+  s.includes('&')
+    ? s.replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z]{2,8}));?/g, (m, dec, hex, name: string) => {
+        if (!dec && !hex) return REFS[name.toLowerCase()] ?? m
+        const cp = Number.parseInt(dec ?? hex, dec ? 10 : 16)
+        return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m
+      })
+    : s
+/** A `javascript:` URL runs its percent-decoded text, after the URL parser dropped tabs and newlines. */
+const urlScript = (s: string) =>
+  s
+    .replace(/[\t\n\r]/g, '')
+    .replace(/%([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(Number.parseInt(h, 16)))
+
+/** Escapes every character `special` accepts (and every control character) as `esc(code)`. */
+function escapeChars(s: string, special: string, esc: (code: number) => string) {
+  let out = ''
+  for (const c of s) {
+    const n = c.charCodeAt(0)
+    out += n < 0x20 || special.includes(c) ? esc(n) : c
+  }
+  return out
+}
+const jsEscape = (n: number) => (n === 92 ? '\\\\' : `\\u${n.toString(16).padStart(4, '0')}`)
+/** The value as the text of a JS (or JSON) string literal of any quote style; never ends a <script> or opens `${`. */
+const jsText = (s: string, extra = '') => escapeChars(s, `\\"'\`$<>&{\u2028\u2029${extra}`, jsEscape)
+/**
+ * Outside a string (code, or a comment / regular expression a scan can't always tell from code): a double-quoted
+ * JS / JSON string literal — no quote, `*`, `/` or line break of it can end a comment or a regex.
+ */
+const jsLiteral = (s: string, extra = '') => `"${jsText(s, `/*${extra}`)}"`
+/** The value as the text of a CSS string (hex escapes); never ends a <style>. */
+const cssText = (s: string) => escapeChars(s, '\\"\'<>&', (n) => `\\${n.toString(16)} `)
+/** Outside a CSS string: every character but ASCII letters and digits hex-escaped (no `;`, `:`, `}` or comment end). */
+const cssEscapeAll = (s: string) => {
+  let out = ''
+  for (const c of s) out += /[A-Za-z0-9]/.test(c) ? c : `\\${c.codePointAt(0)!.toString(16)} `
+  return out
+}
+/** An unquoted attribute value (or a tag outside values): no space, `=`, quote, backtick, `<` or `>` left as is. */
+const attrText = (s: string) => escapeChars(escapeHtml(s), ' =', (n) => `&#${n};`)
+
+/** Hosts of embeds the design's sandbox inherits (they run in an opaque origin too): see htmlDesignEmbedHosts. */
+const EMBED_SCRIPT_HOST =
+  /(?:^|\.)(?:youtube\.com|youtube-nocookie\.com|vimeo\.com|calendly\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com|facebook\.net|elfsight\.com|typeform\.com|maps\.googleapis\.com)$/i
+
+/**
+ * Where the design embeds another page or player: hosts of `<iframe src>`, `<embed src>`, `<object data>` (`this site`
+ * for relative ones) and of widget scripts that create such frames (YouTube / Vimeo / Calendly / Instagram …). On spa
+ * sites these run inside the design's sandbox (opaque origin: no cookies or storage), where many players and widgets
+ * stay blank — the upload and connector results say so. data: / srcdoc frames work and are not listed.
+ */
+export function htmlDesignEmbedHosts(html: string): string[] {
+  const hosts = new Set<string>()
+  const spans = fillSpans(html).filter((sp) => sp[2] === 'js' || sp[2] === 'css' || sp[2] === 'skip')
+  let k = 0
+  for (const m of html.matchAll(/<(iframe|embed|object|script)\b/gi)) {
+    while (k < spans.length && spans[k]![1] <= m.index) k++
+    if (k < spans.length && spans[k]![0] <= m.index) continue
+    const name = m[1]!.toLowerCase()
+    const attrs = attributesOf(html, m.index + m[0].length)
+    const url = attrValue(
+      html,
+      attrs.find((a) => a.name === (name === 'object' ? 'data' : 'src')),
+    )
+    if (!url || /^(?:data:|about:|blob:|javascript:)/i.test(url)) continue
+    let host: string
+    try {
+      const u = new URL(url, 'https://this.site/')
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') continue
+      host = u.host === 'this.site' ? 'this site' : u.hostname.toLowerCase()
+    } catch {
+      continue
+    }
+    if (name === 'script' && !EMBED_SCRIPT_HOST.test(host)) continue
+    hosts.add(host)
+  }
+  return [...hosts]
+}
+
+/** The warning shown after an upload / connector write that embeds other pages or players (null when none). */
+export function htmlDesignEmbedWarning(hosts: string[]): string | null {
+  if (!hosts.length) return null
+  const list = hosts.slice(0, 5).join(', ') + (hosts.length > 5 ? ` and ${hosts.length - 5} more` : '')
+  return `It embeds pages or players from ${list}. On spa sites they run inside the design's sandbox (no cookies or storage), where many video players, maps and booking widgets stay blank — check the preview; a plain link to them always works.`
 }
 
 const linkHtml = (text: string, link: HtmlDesignLink) =>
   `<a href="${escapeHtml(link.href!)}" target="_blank" rel="noopener" title="${escapeHtml(link.label)}" aria-label="${escapeHtml(`${text} (${link.label})`)}" data-spa-map>${escapeHtml(text)}</a>`
 
+export type HtmlDesignRender = {
+  /** The design's "Phone fixes" switch (`htmlDesignPhoneFixes`): viewport + base sheet + fluid wide images. */
+  phoneFixes?: boolean
+  /** The live page served as the design document itself (no frame): no frame link handling. */
+  top?: boolean
+}
+
+/** Frame mode only: link handling of the design shell (see htmlDesignDocument). */
+const linkScript = (inert: boolean, exact: boolean) =>
+  `<script>(()=>{const inert=${inert},exact=${exact};const link=(e)=>e.target instanceof Element&&e.target.closest('a[href]');` +
+  // `#x` resolves against the <base> (the hosting page), which would load that page in the frame: a fragment
+  // navigation of the frame document itself instead (scroll-behavior, :target, hashchange, repeated clicks).
+  `const hash=(e,h)=>{e.preventDefault();location.assign(location.href.split('#')[0]+h)};` +
+  `if(inert){document.addEventListener('click',(e)=>{const a=link(e);if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return hash(e,h);e.preventDefault()},true);return}` +
+  `addEventListener('click',(e)=>{if(e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;const a=link(e);if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return hash(e,h);if(a.getAttribute('target')||/^javascript:/i.test(h))return;` +
+  `if(exact)return a.setAttribute('target','_top');const t=/^https?:/i.test(h)?'_blank':'_top';a.setAttribute('target',t);if(t==='_blank')a.setAttribute('rel','noopener')});` +
+  `if(exact)addEventListener('submit',(e)=>{const f=e.target;if(!e.defaultPrevented&&f instanceof HTMLFormElement&&!f.getAttribute('target'))f.setAttribute('target','_top')})})()</script>`
+
 /**
- * The uploaded document as the frame's `srcdoc`: placeholders filled, image adjustments applied, a viewport
- * meta (if missing) + the responsive base sheet first in <head>, plus a small click handler — in-page `#anchors`
- * scroll inside the design, other links open in the top window (outside sites in a new tab), and every link is
- * inert in the editor / previews.
+ * The design as shown. Always: the per-image adjustments, `{{placeholders}}` (only where the designer wrote them;
+ * `{{address}}` in page text becomes an escaped maps link) and the compat shim first in <head> (before an earlier
+ * <script>). Phone fixes on: `fixHtmlDesign`, a viewport meta (if missing) and the base sheet. Frame mode (default): a
+ * small click handler on the window (after the design's own handlers; skipped when they prevent the default) —
+ * `#anchors` scroll inside the design, other links open in the top window like the opened file would (legacy designs:
+ * outside sites in a new tab), every link is inert in the editor / previews. `top`: none of that (the live page is the
+ * design document itself).
  */
 export function htmlDesignDocument(
   html: string,
@@ -380,18 +954,82 @@ export function htmlDesignDocument(
   inert: boolean,
   images: HtmlImageAdjust[] = [],
   links: Record<string, HtmlDesignLink> = {},
+  opts: HtmlDesignRender = {},
 ): string {
-  const adjusted = applyHtmlImageAdjustments(html, images)
-  const text = Object.keys(links).length ? linkableTextRanges(adjusted) : []
-  const inText = (at: number) => text.some(([start, end]) => at >= start && at < end)
+  const fixes = Boolean(opts.phoneFixes)
+  const adjusted = applyHtmlImageAdjustments(fixes ? fluidImages(html).html : html, images)
+  const spans = adjusted.includes('{{') ? fillSpans(adjusted) : []
+  let k = 0
+  const spanAt = (at: number) => {
+    while (k < spans.length && spans[k]![1] <= at) k++
+    return k < spans.length && spans[k]![0] <= at ? spans[k]! : null
+  }
+  // Script / CSS text of the span being filled, scanned up to the last placeholder (each filled one fed as `0`: a
+  // value token in code, a plain character in a string). `scan` null = a URL value that isn't `javascript:`.
+  let lexed: { span: FillSpan; pos: number; scan: StringScan | null } | null = null
+  const inString = (span: FillSpan, at: number, len: number): boolean | null => {
+    const [start, , ctx] = span
+    const raw = ctx === 'js' || ctx === 'css'
+    const text = (piece: string) =>
+      raw ? piece : ctx === 'jsurl' ? urlScript(decodeRefs(piece)) : decodeRefs(piece)
+    if (lexed?.span !== span) {
+      lexed = { span, pos: start, scan: ctx === 'css' || ctx === 'cssattr' ? cssScan() : jsScan() }
+      if (ctx === 'jsurl') {
+        const head = text(adjusted.slice(start, at))
+        let lead = 0
+        while (lead < head.length && head.charCodeAt(lead) <= 0x20) lead++
+        if (head.slice(lead, lead + 11).toLowerCase() !== 'javascript:') lexed.scan = null
+        else lexed.scan!.feed(head.slice(lead + 11))
+        lexed.pos = at
+      }
+    }
+    const scan = lexed.scan
+    if (!scan) return null
+    if (at > lexed.pos) scan.feed(text(adjusted.slice(lexed.pos, at)))
+    const r = scan.inString()
+    scan.feed('0')
+    lexed.pos = at + len
+    return r
+  }
+  let spliced = false
+  // Matches come in document order, so `spanAt` walks the spans once.
   const filled = adjusted.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (m, key: string, at: number) => {
     if (!(key in values)) return m
+    const value = values[key]!
+    const span = spanAt(at)
+    const ctx = span?.[2] ?? 'html'
+    if (ctx === 'skip') return m
+    // HTML-escaping of an attribute value (unquoted: no space, `=` or quote either).
+    const attr = (s: string) => (span?.[3] === false ? attrText(s) : escapeHtml(s))
+    if (ctx === 'attr') return attrText(value)
+    if (ctx === 'js') return inString(span!, at, m.length) ? jsText(value) : jsLiteral(value)
+    if (ctx === 'jsattr') return attr(inString(span!, at, m.length) ? jsText(value) : jsLiteral(value))
+    if (ctx === 'jsurl') {
+      // Percent signs too: the URL is percent-decoded before it runs.
+      const str = inString(span!, at, m.length)
+      return attr(str === null ? value : str ? jsText(value, '%') : jsLiteral(value, '%'))
+    }
+    if (ctx === 'css') return inString(span!, at, m.length) ? cssText(value) : cssEscapeAll(value)
+    if (ctx === 'cssattr') return attr(inString(span!, at, m.length) ? cssText(value) : cssEscapeAll(value))
     const link = links[key]
-    return link?.href && SAFE_HREF.test(link.href) && inText(at)
-      ? linkHtml(values[key]!, link)
-      : escapeHtml(values[key]!)
+    if (ctx === 'link' && link?.href && SAFE_HREF.test(link.href)) {
+      spliced = true
+      return linkHtml(value, link)
+    }
+    // Right after a `<`, the value must not start a tag.
+    const text = escapeHtml(value)
+    return adjusted[at - 1] === '<' ? text.replace(/^[a-z/!?]/i, (c) => `&#${c.charCodeAt(0)};`) : text
   })
-  const script = `<script>(()=>{const inert=${inert};document.addEventListener('click',(e)=>{const a=e.target instanceof Element&&e.target.closest('a[href]');if(!a)return;const h=a.getAttribute('href')||'';if(h.startsWith('#'))return;if(inert){e.preventDefault();return}if(!a.target){a.target=/^https?:/i.test(h)?'_blank':'_top';if(a.target==='_blank')a.rel='noopener'}},true)})()</script>`
-  const head = `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>${script}`
-  return insertAtHead(filled, head)
+  const shim = `<script>${HTML_DESIGN_COMPAT_SHIM}</script>`
+  const head =
+    (fixes
+      ? `${hasViewport(filled) ? '' : VIEWPORT}<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>`
+      : '') +
+    (spliced ? `<style data-spa-map-style>${HTML_DESIGN_MAP_CSS}</style>` : '') +
+    (opts.top ? '' : linkScript(inert, !fixes))
+  const at = headIndex(filled)
+  const firstScript = filled.search(/<script\b/i)
+  if (firstScript >= 0 && firstScript < at)
+    return filled.slice(0, firstScript) + shim + filled.slice(firstScript, at) + head + filled.slice(at)
+  return filled.slice(0, at) + shim + head + filled.slice(at)
 }

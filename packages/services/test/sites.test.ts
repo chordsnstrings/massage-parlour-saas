@@ -10,12 +10,16 @@ import {
   listPages,
   listPublishedPages,
   listVersions,
+  planTemplateSwitch,
   publishAll,
   publishPage,
   type SiteTemplate,
   saveDraft,
   setPageVisible,
   switchTemplate,
+  templateUndoChanges,
+  undoTemplateSwitch,
+  updateDraftTheme,
   updateTheme,
 } from '../src'
 
@@ -141,5 +145,32 @@ describe('sites service', () => {
     const counts = await platform.select().from(pageVersions).where(eq(pageVersions.tenantId, ids.other!))
     expect(counts).toHaveLength(0)
     expect(await platform.select().from(sitePages).where(eq(sitePages.tenantId, ids.other!))).toHaveLength(0)
+  })
+
+  it('R24 draft-theme switch (Claude connector): live theme untouched, undo only while nothing changed since', async () => {
+    const plan = await tx((db) => planTemplateSwitch(db, ids.tenant!, zen))
+    expect(plan).toMatchObject({ createsSite: false, locked: [], htmlDesignPages: 0, keptPages: [] })
+    expect(plan.pages.map((p) => [p.slug, p.new])).toEqual([
+      ['', false],
+      ['services', false],
+      ['contact', false],
+    ])
+    const live = await tx((db) => getPublishedPage(db, ids.tenant!, ''))
+    const s = await tx((db) =>
+      switchTemplate(db, ids.tenant!, zen, { replaceContent: true, draftTheme: true }),
+    )
+    expect(s).toMatchObject({ templateKey: 'zen', theme: { accent: '#112233' }, themeDraft: zen.theme })
+    expect((await tx((db) => getPublishedPage(db, ids.tenant!, '')))?.data).toEqual(live?.data)
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual([])
+    // A later draft-theme edit blocks undo (it never discards later work) until it is back.
+    await tx((db) => updateDraftTheme(db, ids.tenant!, { accent: '#000000' }))
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toEqual(['Theme'])
+    await tx((db) => updateDraftTheme(db, ids.tenant!, zen.theme))
+    const undone = await tx((db) => undoTemplateSwitch(db, ids.tenant!))
+    expect(undone).toMatchObject({ templateKey: 'nordic', theme: { accent: '#112233' }, themeDraft: null })
+    // Publishing after the switch makes its theme live: undo is then refused.
+    await tx((db) => switchTemplate(db, ids.tenant!, zen, { replaceContent: true, draftTheme: true }))
+    await tx((db) => publishAll(db, ids.tenant!))
+    expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toContain('Theme')
   })
 })

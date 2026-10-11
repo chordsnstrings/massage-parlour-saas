@@ -85,6 +85,11 @@ export type SiteMeta = {
   form?: { site: { slug: string } | { hostname: string }; turnstileSiteKey: string | null }
   /** Blog post page only (F15): the post the hidden BlogPost block renders. */
   post?: SitePostView
+  /**
+   * Studio editor only (R24): the HTML designs of the page by file id (its data keeps only the references, which the
+   * editor saves back). Everywhere else the html is filled into the page data before rendering.
+   */
+  htmlDocs?: Record<string, string>
 }
 
 /** A published post on its own page (`{site}/blog/{slug}`). */
