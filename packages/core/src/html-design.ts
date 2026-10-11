@@ -74,6 +74,20 @@ export function htmlDesignDocOf(props: Record<string, unknown> | null | undefine
     : null
 }
 
+/** Drops `<!-- … -->` comments in one linear pass (an unclosed comment runs to the end, as in a browser). */
+function withoutComments(s: string) {
+  let out = ''
+  let i = 0
+  for (;;) {
+    const open = s.indexOf('<!--', i)
+    if (open < 0) return out + s.slice(i)
+    out += s.slice(i, open)
+    const close = s.indexOf('-->', open + 4)
+    if (close < 0) return out
+    i = close + 3
+  }
+}
+
 /** windows-1252 bytes 0x80–0x9F (WHATWG index; the five unassigned ones map to themselves). */
 const CP1252 = '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ'
 
@@ -112,9 +126,7 @@ export function decodeHtmlBytes(bytes: Uint8Array): { html: string; encoding: st
   if (bom) return decode(bom)!
   let head = ''
   for (const x of bytes.subarray(0, 1024)) head += String.fromCharCode(x)
-  const meta = /<meta\b[^>]*?\bcharset\s*=\s*["']?\s*([^\s"'>;/]+)/i.exec(
-    head.replace(/<!--[\s\S]*?-->/g, ''),
-  )
+  const meta = /<meta\b[^>]*?\bcharset\s*=\s*["']?\s*([^\s"'>;/]+)/i.exec(withoutComments(head))
   if (meta) {
     const label = meta[1]!.toLowerCase()
     const declared =

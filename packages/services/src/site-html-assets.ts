@@ -265,7 +265,9 @@ const assetOf = (bytes: Buffer, contentType: string) => {
 /** Keeps a URL's query (e.g. `?w=480`) when the file it points at moves. */
 const withQuery = (url: string, from: string) => {
   const q = from.indexOf('?')
-  return q < 0 ? url : url + from.slice(q).replace(/#.*$/, '')
+  if (q < 0) return url
+  const hash = from.indexOf('#', q)
+  return url + from.slice(q, hash < 0 ? undefined : hash)
 }
 
 /**
