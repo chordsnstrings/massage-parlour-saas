@@ -88,6 +88,35 @@ function withoutComments(s: string) {
   }
 }
 
+/**
+ * The charset label of the first `<meta>` that declares one (`charset=…`, also inside an http-equiv `content`), from
+ * lower-cased text — a linear scan (no backtracking regex on uploaded bytes).
+ */
+function metaCharset(head: string): string | null {
+  const space = (ch: string | undefined) =>
+    ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f'
+  for (let at = head.indexOf('<meta'); at >= 0; at = head.indexOf('<meta', at + 5)) {
+    const after = head[at + 5]
+    if (after !== undefined && !space(after) && after !== '/' && after !== '>') continue
+    const end = head.indexOf('>', at)
+    const tag = head.slice(at, end < 0 ? head.length : end)
+    for (let c = tag.indexOf('charset'); c >= 0; c = tag.indexOf('charset', c + 7)) {
+      if (/\w/.test(tag[c - 1] ?? '')) continue
+      let k = c + 7
+      while (space(tag[k])) k++
+      if (tag[k] !== '=') continue
+      k++
+      while (space(tag[k])) k++
+      if (tag[k] === '"' || tag[k] === "'") k++
+      while (space(tag[k])) k++
+      let value = ''
+      while (k < tag.length && !space(tag[k]) && !'"\'>;/'.includes(tag[k]!)) value += tag[k++]
+      if (value) return value
+    }
+  }
+  return null
+}
+
 /** windows-1252 bytes 0x80–0x9F (WHATWG index; the five unassigned ones map to themselves). */
 const CP1252 = '€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ'
 
@@ -126,9 +155,8 @@ export function decodeHtmlBytes(bytes: Uint8Array): { html: string; encoding: st
   if (bom) return decode(bom)!
   let head = ''
   for (const x of bytes.subarray(0, 1024)) head += String.fromCharCode(x)
-  const meta = /<meta\b[^>]*?\bcharset\s*=\s*["']?\s*([^\s"'>;/]+)/i.exec(withoutComments(head))
-  if (meta) {
-    const label = meta[1]!.toLowerCase()
+  const label = metaCharset(withoutComments(head).toLowerCase())
+  if (label) {
     const declared =
       /^(?:utf-16|utf-16be|utf-16le|unicodefffe|unicodefeff|csunicode|iso-10646-ucs-2|ucs-2|unicode)$/.test(
         label,

@@ -246,6 +246,12 @@ describe('design files and embeds (R24 review)', () => {
       'latin1',
     )
     expect(decodeHtmlBytes(iso).html.endsWith('é')).toBe(true)
+    // Case, spaces and quotes as browsers accept them; a commented-out or look-alike tag declares nothing.
+    const loud = Buffer.from("<META  CHARSET = ' Windows-1252 '><p>\xe9", 'latin1')
+    expect(decodeHtmlBytes(loud).encoding).toBe('windows-1252')
+    const hidden = Buffer.from('<!-- <meta charset="windows-1252"> --><metadata charset="windows-1252"><p>é')
+    expect(decodeHtmlBytes(hidden)).toEqual({ html: hidden.toString('utf8'), encoding: 'utf-8' })
+    expect(decodeHtmlBytes(Buffer.from(`<meta${' '.repeat(900)}x>`)).encoding).toBe('utf-8')
     expect(decodeHtmlBytes(Buffer.from('<p>مرحبا</p>')).html).toBe('<p>مرحبا</p>')
     expect(decodeHtmlBytes(Buffer.from([0xef, 0xbb, 0xbf, ...Buffer.from('<p>é')]))).toEqual({
       html: '<p>é',
