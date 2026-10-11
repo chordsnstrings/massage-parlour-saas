@@ -410,3 +410,11 @@ figure > .sb-card {
   --puck-radius-l: 12px;
   --puck-field-radius: 8px;
 }
+
+/* R24: a page that is one full-screen HTML design frame (editor/preview/legacy fallback): the frame is the only
+   scroller — no second scrollbar or rubber-banding of the platform page around it. */
+html:has(.site-html-root),
+html:has(.site-html-root) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}

@@ -33,8 +33,11 @@
     var body = JSON.stringify(
       Object.assign({ site: site, type: type, path: location.pathname, referrer: entry.referrer, utm: entry.utm, w: innerWidth }, extra || {}),
     )
-    if (navigator.sendBeacon && navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))) return
-    fetch(endpoint, { method: 'POST', body: body, keepalive: true, headers: { 'content-type': 'application/json' } }).catch(() => {})
+    // R24: on an HTML design page (sandboxed, opaque origin) the request is cross-origin: a CORS-safelisted type sends
+    // it without a preflight (/api/collect reads any body type).
+    var type = self.origin === 'null' ? 'text/plain;charset=UTF-8' : 'application/json'
+    if (navigator.sendBeacon && navigator.sendBeacon(endpoint, new Blob([body], { type: type }))) return
+    fetch(endpoint, { method: 'POST', body: body, keepalive: true, headers: { 'content-type': type } }).catch(() => {})
   }
 
   // Block views: each section counts once per page view when 40% of it is on screen.

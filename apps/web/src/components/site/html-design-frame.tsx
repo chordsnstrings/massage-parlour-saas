@@ -18,18 +18,29 @@ function withBase(html: string, href: string) {
   return tag + html
 }
 
+/**
+ * R24: what a design may use, as when the file is opened directly (`*`: an opaque origin can't be named). The hosting
+ * page's own Permissions-Policy still decides (preview pages keep the motion sensors off).
+ */
+const ALLOW =
+  'autoplay *; fullscreen *; clipboard-write *; web-share *; picture-in-picture *; encrypted-media *; screen-wake-lock *; xr-spatial-tracking *; accelerometer *; gyroscope *; magnetometer *'
+
 type Props = Omit<React.IframeHTMLAttributes<HTMLIFrameElement>, 'src' | 'srcDoc' | 'sandbox'> & {
   /** The full design document (placeholders already filled). */
   html: string
   /** Never include allow-same-origin. */
   sandbox: string
+  /** In the site editor: never take the keyboard focus. */
+  editing?: boolean
 }
 
-export function HtmlDesignFrame({ html, sandbox, ...rest }: Props) {
+export function HtmlDesignFrame({ html, sandbox, editing, ...rest }: Props) {
   const ref = useRef<HTMLIFrameElement>(null)
   const latest = useRef(html)
   latest.current = html
   const shown = useRef<string | null>(null)
+  const inEditor = useRef(editing)
+  inEditor.current = editing
 
   useEffect(() => {
     const frame = ref.current
@@ -44,7 +55,17 @@ export function HtmlDesignFrame({ html, sandbox, ...rest }: Props) {
       )
     }
     const onMessage = (e: MessageEvent) => {
-      if (e.source === frame.contentWindow && e.data?.type === 'spa:html-design-ready') send()
+      if (e.source !== frame.contentWindow) return
+      if (e.data?.type === 'spa:html-design-ready') send()
+      // A full-page design (spa site fallback): keyboard scrolling works without a click first. Card / editor
+      // previews never take the focus.
+      else if (
+        e.data?.type === 'spa:html-design-shown' &&
+        !inEditor.current &&
+        host.top === host &&
+        host.document.activeElement === host.document.body
+      )
+        frame.contentWindow?.focus()
     }
     host.addEventListener('message', onMessage)
     send()
@@ -59,5 +80,5 @@ export function HtmlDesignFrame({ html, sandbox, ...rest }: Props) {
     ref.current.src = SHELL
   }, [html])
 
-  return <iframe ref={ref} src={SHELL} sandbox={sandbox} {...rest} />
+  return <iframe ref={ref} src={SHELL} sandbox={sandbox} allow={ALLOW} allowFullScreen {...rest} />
 }

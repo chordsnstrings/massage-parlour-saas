@@ -1,4 +1,4 @@
-import { htmlDesignFrameCsp } from '@spa/core'
+import { htmlDesignFrameCsp, permissionsPolicy } from '@spa/core'
 
 // F10: shell document for uploaded HTML designs (R17). A `srcdoc` frame inherits the hosting page's strict CSP (no
 // inline scripts, no outside fonts), so designs run here instead: this response carries the design's own policy
@@ -19,6 +19,7 @@ const SHELL = `<!doctype html><html><head><meta charset="utf-8"><meta name="robo
     document.open()
     document.write(e.data.html)
     document.close()
+    window.parent.postMessage({ type: 'spa:html-design-shown' }, '*')
   }
   window.addEventListener('message', onMessage)
   window.parent.postMessage({ type: 'spa:html-design-ready' }, '*')
@@ -30,6 +31,8 @@ export function GET() {
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'content-security-policy': htmlDesignFrameCsp(),
+      // R24: the motion sensors stay undeclared (usable when the hosting page delegates them, see permissionsPolicy).
+      'permissions-policy': permissionsPolicy({ design: true }),
       'cache-control': 'public, max-age=3600',
       'x-robots-tag': 'noindex',
     },

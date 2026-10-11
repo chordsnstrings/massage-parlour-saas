@@ -227,7 +227,7 @@ export type StudioTemplateInput = {
  * inactive unless `active` is set.
  */
 export async function saveStudioTemplate(
-  db: Db,
+  db: Db | Tx,
   input: StudioTemplateInput,
   opts: { replace?: boolean } = {},
 ) {

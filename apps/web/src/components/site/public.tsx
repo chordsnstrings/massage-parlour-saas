@@ -1,12 +1,11 @@
 import './site.css'
 import { type ComponentConfig, type Config, type Data, Render } from '@puckeditor/core'
-import { blogPostJsonLd, jsonLdString, normalizeGoogleMapsUrl, spaJsonLd } from '@spa/core'
+import { blogPostJsonLd, jsonLdString, normalizeGoogleMapsUrl } from '@spa/core'
 import { withTenant } from '@spa/db'
 import {
   getPublishedPage,
   getPublishedPost,
   getSite,
-  globalSectionsFor,
   isScheduleVisible,
   listPublishedPages,
   PAGE_SLUG,
@@ -25,10 +24,10 @@ import { siteConfig } from './config'
 import { buildMeta, loadSite, localeOf } from './data'
 import { tr, ui } from './i18n'
 import { pageHref } from './links'
+import { loadPublished, siteJsonLd, type Tenant } from './published'
 import type { AdvancedProps } from './style'
 import type { Bi, Locale, SiteMeta, SitePostView } from './types'
 
-type Tenant = { id: string; slug: string; name: string; status: string }
 /** Which public site is rendering (the enquiry form posts it back; custom domains follow the Turnstile switch). */
 export type SiteKey = { slug: string } | { hostname: string }
 
@@ -97,17 +96,6 @@ function trackedConfig(data: Partial<Data>): Config {
   )
   return { ...siteConfig, components }
 }
-
-/** Published page (+ the global sections it shows) and live data, shared by generateMetadata and the page. */
-const loadPublished = cache(async (tenant: Tenant, slug: string) => {
-  const published = await withTenant(tenant.id, async (tx) => {
-    const page = await getPublishedPage(tx, tenant.id, slug)
-    return page ? { ...page, globals: await globalSectionsFor(tx, tenant.id, page.data) } : null
-  })
-  if (!published) return null
-  const { data } = await loadSite(tenant, { published: true })
-  return { published, data }
-})
 
 export async function publicSiteMetadata(
   tenant: Tenant | null,
@@ -188,38 +176,6 @@ async function postMetadata(
     twitter: { card: cover ? 'summary_large_image' : 'summary', title, description, images },
     ...(seo.indexable ? {} : { robots: { index: false, follow: false } }),
   }
-}
-
-/** schema.org JSON-LD for a published page: the spa (branch, hours, profiles, services + public prices). */
-async function siteJsonLd(
-  tenant: Tenant,
-  slug: string,
-  loaded: NonNullable<Awaited<ReturnType<typeof loadPublished>>>,
-  locale: Locale,
-) {
-  const seo = await siteSeo(tenant)
-  const ctx = { locale, data: loaded.data }
-  const root = (loaded.published.data as { root?: { props?: { description?: Bi } } }).root?.props
-  const branch = loaded.data.branch
-  return jsonLdString(
-    spaJsonLd({
-      name: tenant.name,
-      url: seo.home,
-      pageUrl: sitePageUrl(seo.base, slug),
-      pageName: slug ? tr(loaded.published.page.title, ctx) : null,
-      description: slug ? null : tr(root?.description, ctx),
-      logo: seo.logo,
-      image: heroImageOf(loaded.published.data, seo.origin),
-      branch,
-      services: loaded.data.services.map((s) => ({
-        name: tr(s.name, ctx),
-        description: tr(s.description, ctx) || null,
-        category: tr(s.category, ctx) || null,
-        variants: s.variants,
-      })),
-      sameAs: [seo.instagram, normalizeGoogleMapsUrl(branch?.mapsUrl)],
-    }),
-  )
 }
 
 /**

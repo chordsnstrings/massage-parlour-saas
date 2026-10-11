@@ -1,6 +1,7 @@
 import { branches, domains, platformDb, tenants, withTenant } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import { LRUCache } from 'lru-cache'
+import { forgetHtmlDesignRoutes } from '@/server/html-design-route'
 import { canonicalUrls } from '@/server/origin'
 import { forgetOwnDomains } from '@/server/own-domain'
 
@@ -43,12 +44,14 @@ export async function resolveSiteTenant(
 export function invalidateSiteHost(hostname: string) {
   cache.delete(`h:${hostname.toLowerCase()}`)
   forgetOwnDomains()
+  forgetHtmlDesignRoutes()
 }
 
 /** After a slug rename (F23, rare): every cached entry may carry the old slug (custom domains, R20 map too). */
 export function forgetSiteTenants() {
   cache.clear()
   forgetOwnDomains()
+  forgetHtmlDesignRoutes()
 }
 
 /** The spa's public address: its primary active custom domain, else the free subdomain (or /s/{slug}). */
