@@ -72,10 +72,14 @@ export function textSlots(data: unknown, schema: SiteEditSchema, opts: { maxPerP
   return out
 }
 
-/** Plain text for a slot: no tags or control characters, single spaces (paragraph breaks kept when multiline). */
+/**
+ * Plain text for a slot: no tags, angle brackets or control characters, single spaces (paragraph breaks kept when
+ * multiline). Tags go first (linear: `[^<>]`), then any `<` / `>` left over, so nothing tag-like survives.
+ */
 export function plainText(s: string, multiline: boolean) {
   let t = s
-    .replace(/<[^>]*>/g, '')
+    .replace(/<[^<>]*>/g, '')
+    .replace(/[<>]/g, '')
     // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
     .replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ')
   t = multiline

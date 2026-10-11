@@ -129,6 +129,9 @@ describe('fillTextSlots', () => {
 describe('plainText', () => {
   it('strips tags and control characters, keeps {name} and caps the length', () => {
     expect(plainText('Hi <script>x</script>{name}\u0007!', false)).toBe('Hi x{name} !')
+    // Nested / unclosed tags leave nothing tag-like behind; many '<' stay fast (linear).
+    expect(plainText('<scr<script>ipt>alert(1)<img src=x', false)).toBe('scriptalert(1)img src=x')
+    expect(plainText(`${'<'.repeat(50_000)}a`, false)).toBe('a')
     expect(plainText('a\nb', false)).toBe('a b')
     expect(plainText('x'.repeat(500), false)).toHaveLength(200)
     expect(plainText('y'.repeat(2000), true)).toHaveLength(1500)
