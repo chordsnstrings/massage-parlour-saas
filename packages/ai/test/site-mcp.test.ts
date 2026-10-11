@@ -15,7 +15,7 @@ import { ensureSite, getEditablePage, publishPage } from '@spa/services'
 import type { SiteEditSchema } from '@spa/services/site-kit'
 import { and, eq, like } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { handleSiteMcpRequest, SITE_MCP_TOOL_NAMES, type SiteMcpOpts } from '../src'
+import { handleSiteMcpRequest, SITE_MCP_TOOL_HINTS, SITE_MCP_TOOL_NAMES, type SiteMcpOpts } from '../src'
 
 const { platform, app } = testDbs()
 const ids = {} as Record<string, string>
@@ -150,7 +150,7 @@ describe('site MCP server (/api/mcp)', () => {
       'spamanagement-sites',
     )
     const list = (await (await rpc('owner', 'tools/list')).json()) as {
-      result: { tools: { name: string }[] }
+      result: { tools: { name: string; annotations?: Record<string, unknown> }[] }
     }
     const names = list.result.tools.map((t) => t.name)
     expect(names.sort()).toEqual([...SITE_MCP_TOOL_NAMES].sort())
@@ -158,9 +158,32 @@ describe('site MCP server (/api/mcp)', () => {
       expect.arrayContaining(['list_spas', 'get_site', 'update_block', 'set_theme', 'preview_link']),
     )
     expect(names.some((n) => n.includes('publish'))).toBe(false)
+    // R25: every tool is annotated from the one hints map (ChatGPT + Claude use them for confirmations).
+    expect(Object.keys(SITE_MCP_TOOL_HINTS).sort()).toEqual([...SITE_MCP_TOOL_NAMES].sort())
+    const hints = Object.fromEntries(list.result.tools.map((t) => [t.name, t.annotations]))
+    for (const name of names)
+      expect(hints[name]).toMatchObject({ ...SITE_MCP_TOOL_HINTS[name], openWorldHint: false })
+    for (const name of ['list_spas', 'get_site', 'list_block_types', 'preview_link'])
+      expect(hints[name]?.readOnlyHint, name).toBe(true)
+    const writes = names.filter((n) => !hints[n]?.readOnlyHint)
+    expect(writes.length).toBeGreaterThan(0)
+    for (const name of writes) expect(hints[name], name).toMatchObject({ readOnlyHint: false })
+    // Overwrites of existing drafts count as destructive (OpenAI: "may delete or overwrite user data").
+    expect(writes.filter((n) => hints[n]?.destructiveHint).sort()).toEqual([
+      'remove_block',
+      'rename_page',
+      'replace_html_design',
+      'set_theme',
+      'update_block',
+    ])
+    expect(writes.filter((n) => !hints[n]?.destructiveHint).sort()).toEqual([
+      'add_block',
+      'add_page',
+      'move_block',
+    ])
   })
 
-  it('get_site and update_block edit the draft only, audited via Claude (MCP)', async () => {
+  it('get_site and update_block edit the draft only, audited via AI assistant (MCP)', async () => {
     // R23: list_spas carries the console's computed website stage (no review status).
     const spas = await call('owner', 'list_spas', { query: 'mcp' })
     expect(spas.data).toEqual([
@@ -219,7 +242,7 @@ describe('site MCP server (/api/mcp)', () => {
     const rows = await platform.select().from(auditLog).where(like(auditLog.action, 'site.mcp.%'))
     const update = rows.find((x) => x.action === 'site.mcp.update_block' && (x.data as { ok?: boolean }).ok)
     expect(update).toMatchObject({ tenantId: ids.tenant, actorUserId: ids.owner })
-    expect(update!.data).toMatchObject({ via: 'via Claude (MCP)', client: 'Claude', ops: ['update'] })
+    expect(update!.data).toMatchObject({ via: 'via AI assistant (MCP)', client: 'Claude', ops: ['update'] })
     expect(rows.some((x) => x.action === 'site.mcp.get_site')).toBe(true)
   })
 

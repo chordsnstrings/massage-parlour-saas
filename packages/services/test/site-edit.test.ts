@@ -286,7 +286,7 @@ describe('site edit ops layer', () => {
     expect(
       siteEditAuditData({ via: 'mcp', ops: [{ op: 'update' }], summary: ['Home: Updated Heading'] }),
     ).toEqual({
-      via: 'via Claude (MCP)',
+      via: 'via AI assistant (MCP)',
       ops: ['update'],
       summary: ['Home: Updated Heading'],
     })

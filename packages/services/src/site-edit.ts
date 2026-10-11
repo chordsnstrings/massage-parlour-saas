@@ -596,7 +596,7 @@ export function siteEditAuditData(input: {
   extra?: Record<string, unknown>
 }) {
   return {
-    via: input.via === 'mcp' ? 'via Claude (MCP)' : 'via Studio Ask AI',
+    via: input.via === 'mcp' ? 'via AI assistant (MCP)' : 'via Studio Ask AI',
     ops: input.ops.map((o) => String(o.op ?? '?')),
     summary: input.summary.slice(0, 20).map((s) => s.slice(0, 200)),
     ...(input.dryRun ? { dryRun: true } : {}),
