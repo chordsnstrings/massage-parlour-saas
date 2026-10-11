@@ -1100,17 +1100,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   sandbox without allow-same-origin): one scrollbar, toolbar collapse, 100vh/dvh, its own viewport/title/favicon,
   anchors, history. Frames (editor, previews, legacy) get `allow=` sensors/fullscreen/autoplay…, fixed `#anchors`, a
   compat shim (in-memory storage/cookies only where the sandbox blocks them). Upload up to **5 MB** through the
-  `/files/templates` route (server actions cap bodies at 1 MB; client check first, so no error page); embedded
-  images/fonts/videos (`data:`) move to `site_template_files`, the stored design stays ≤ ~500 KB (the error says what is
-  still too big); applying a template copies them into the spa's own public files. Proof: e2e `html-fidelity.spec.ts`
-  (pixels + computed styles vs the raw file, 1440×900 + 390×844, several scroll positions; Phone-fixes negative
-  control). What a sandbox still can't give (storage per page view, no IndexedDB/service workers, `Origin: null`
-  fetches) and details: CODEMAP "Site builder → HTML designs". **Part B built (2026-10-11), connector tools** (same
+  `/files/templates` route (server actions cap bodies at 1 MB; client check first, so no error page). **Review fix
+  (2026-10-11): every design is stored byte for byte as one file** (template: `site_template_files`; spa: its own
+  private stored file; the page JSON keeps only a reference) — nothing is moved out, rewritten or capped below 5 MB, and
+  the file is read in its own encoding (windows-1252 etc.). Applying a template copies the design into the spa.
+  Placeholders are filled by context (JS/JSON-safe in scripts, never in comments or client-side templates); the
+  design's CSP has no narrower directives (data:/blob: fetches, `<object>`, mailto: forms work); on design pages the
+  tracker leaves no trace and carries utm/partner tags to /book. Proof: e2e `html-fidelity.spec.ts` (0 differing pixels +
+  computed styles vs the raw windows-1252 file, 1440×900 + 390×844, several scroll positions; Phone-fixes negative
+  control), `html-upload.spec.ts` (4.6 MB design byte for byte), `growth.spec.ts` (partner credited through a design
+  page). What a sandbox still can't give (storage per page view, no IndexedDB/service workers, `Origin: null` fetches,
+  **third-party players/widgets inside a design inherit the sandbox and may stay blank** — the upload and connector
+  warn; the root fix, a separate design domain without the sandbox, needs an owner decision and a domain) and details:
+  CODEMAP "Site builder → HTML designs". **Part B built (2026-10-11), connector tools** (same
   gate/consent/audit, drafts only, no publish tool): `list_templates` (23 built-ins + active studio/HTML templates) and
   `apply_template` (the console's template switch, but the theme goes to the DRAFT theme — live site unchanged — with
   the console's one-click Undo; refused while a page it writes is open in someone else's editor; HTML templates' files
   copied into the spa); `set_html_design` / `get_html_design` (paged + search) / `patch_html_design` (exact find/replace,
-  each find must match once; all or nothing); `replace_html_design` kept (≤ 5 MB in, `phone_fixes` default false);
+  each find must match once; all or nothing); `replace_html_design` kept (≤ 5 MB UTF-8, stored byte for byte,
+  `phone_fixes` default false; requests up to 2 × 5 MiB + 256 KiB);
   `add_image` (F32 SSRF-safe fetch, https only, raster types only, ≤ 8 MB, 10/min + 100/day per spa → media library).
   Details: CODEMAP "Claude MCP connector".
 - **R25 ChatGPT too (owner, 2026-10-11: "it can be claude or chat GPT so add also the MCP server to connect to chat gpt
@@ -1138,7 +1146,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   **Built (2026-10-08):** hidden Puck block `HtmlDesign` (sandboxed iframe — `srcdoc`, since F10 a shell document with its own CSP — opaque origin, full screen; root
   prop `htmlDesign` drops the site header/footer); placeholders `{{spa_name}}`, `{{book_url}}`, `{{whatsapp_url}}`,
   `{{phone}}`, `{{phone_url}}`, `{{address}}`, `{{map_url}}`, `{{site_url}}` filled live per spa; ≤ ~500 KB (fits the
-  512 KB draft cap); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
+  512 KB draft cap; R24: ≤ 5 MB, stored as a file); applied/published/undone like any template; not editable in the drag & drop editor (re-upload with
   "Replace" to update). Details: CODEMAP "Site builder → HTML designs".
   **Images fix (owner bug 2026-10-09, "images cropped or shifted right"):** every design gets a zero-specificity
   responsive base sheet (`:where()`: images ≤ 100% wide, `height:auto`, `object-fit:cover`, no sideways page scroll)

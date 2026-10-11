@@ -262,10 +262,11 @@ export const siteTemplates = pgTable(
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
 
 /**
- * R24: images, fonts and videos moved out of an uploaded HTML design template (platform level: templates belong to no
- * spa). Content-addressed (one row per sha256), always public and immutable, served by /files/{id}/{name} like a spa's
- * public file. Applying the template copies the ones it uses into the spa's own files (spa sites never depend on it).
- * Bucket objects live under `templates/{id}`, outside every `{tenantId}/` prefix (the tenant purge never touches them).
+ * R24: files of platform templates (templates belong to no spa) — chiefly the design documents of uploaded HTML
+ * templates (text/html, stored byte for byte; never served by /files), plus any image / font / video file one uses
+ * (public, immutable, /files/{id}/{name}). Content-addressed (one row per sha256). Applying the template copies what it
+ * uses into the spa's own files (spa sites never depend on it). Bucket objects live under `templates/{id}`, outside
+ * every `{tenantId}/` prefix (the tenant purge never touches them).
  */
 export const siteTemplateFiles = pgTable(
   'site_template_files',

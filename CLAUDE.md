@@ -51,7 +51,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   (no AI/Instagram automation, no marketing tools, one branch); excl. VAT, VAT optional; existing spas keep AED 24,000/yr
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
-  super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
+  super-admins can also upload an HTML design shown exactly as built (sandboxed, R17; R24: ≤ 5 MB, stored byte for byte
+  as a file, the page JSON only references it — CODEMAP "HTML designs"; PLAN §14.8).
   **HTML designs render exactly as built (owner hard rule 2026-10-11, R24)**: no platform CSS/viewport/fixes unless the
   design's "Phone fixes" switch is on; only invisible changes (embedded files moved to /files, `<base>` in frames,
   placeholders, compat shim, JSON-LD/canonical/t.js); the live page is the design document itself (CSP sandbox, never

@@ -96,7 +96,7 @@ export async function deleteFile(tx: Tx, id: string) {
 }
 
 /**
- * R24: a file of a platform template (images/fonts moved out of an uploaded HTML design), platform role only.
+ * R24: a file of a platform template (an uploaded HTML design's document, or a file it uses), platform role only.
  * Content-addressed: the same bytes return the existing row. Bucket key `templates/{id}` (no tenant prefix).
  */
 export async function putTemplateFile(

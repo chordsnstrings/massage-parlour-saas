@@ -334,17 +334,20 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
     expect((await page.goto(homePreview.url))?.status()).toBe(200)
     await expect(page.locator('body')).not.toContainText('Golden calm')
 
-    // set_html_design → get_html_design (embedded image already a /files URL) → patch_html_design → preview.
+    // set_html_design → get_html_design (exactly as sent, embedded image still data:) → patch_html_design → preview.
     await ok('add_page', { slug: 'story', title_en: 'Story' })
     const img = await sharp(randomBytes(64 * 64 * 3), { raw: { width: 64, height: 64, channels: 3 } })
       .png()
       .toBuffer()
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Story</title></head><body><h1 id="t">Our story</h1><p>Calm hands.</p><p>Calm hands.</p><img id="i" src="data:image/png;base64,${img.toString('base64')}" width="64" height="64" alt=""></body></html>`
     const set = await ok('set_html_design', { page: 'story', html })
-    expect(set.html_designs[0]).toMatchObject({ page: 'story', moved_assets: 1, phone_fixes: false })
+    expect(set.html_designs[0]).toMatchObject({
+      page: 'story',
+      stored: 'exactly as sent',
+      phone_fixes: false,
+    })
     const got = await ok('get_html_design', { page: 'story', search: 'Calm hands.' })
-    expect(got.html).not.toContain('data:image/png')
-    expect(got.html).toMatch(/src="http[^"]+\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.png"/)
+    expect(got.html).toBe(html)
     expect(got.match_count).toBe(2)
     const ambiguous = await tool(request, token, 'patch_html_design', {
       spa: slug,
@@ -364,8 +367,8 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
     const [designFile] = await db
       .select()
       .from(storedFiles)
-      .where(and(eq(storedFiles.tenantId, seed.tenantId), eq(storedFiles.purpose, 'html_design')))
-    expect(designFile).toMatchObject({ isPublic: true, contentType: 'image/png' })
+      .where(and(eq(storedFiles.tenantId, seed.tenantId), eq(storedFiles.purpose, 'html_design_doc')))
+    expect(designFile).toMatchObject({ isPublic: false, contentType: 'text/html; charset=utf-8' })
 
     // add_image: from the fixture host (SITE_IMPORT_E2E_ALLOW) into the media library; private addresses refused.
     const fixture = http.createServer((_req, res) => {

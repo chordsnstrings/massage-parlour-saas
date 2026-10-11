@@ -15,8 +15,12 @@ import { admin, makeStudio, signInStudioOnAdmin, signUpOwner, site, studioUrl } 
 const FIXTURE = new URL('./fixtures/fidelity.html', import.meta.url)
 const RAW = 'http://design.test/'
 const OUT = 'test-results/fidelity'
-/** Anti-alias noise only: at most 0.1 % of the pixels may differ by more than 24 in a channel. */
-const MAX_BAD = 0.001
+/**
+ * R24 review: both sides are the same Chromium drawing the same bytes, so NOTHING may differ (measured: 0 differing
+ * pixels for every view, target and scroll position). A pixel counts as different above 24 in a channel; counts are
+ * printed, so any noise that ever shows up gets looked into instead of tolerated.
+ */
+const MAX_BAD_PX = 0
 
 const VIEWS = [
   { name: 'desktop', viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false },
@@ -26,7 +30,8 @@ const POSITIONS = [0, 600, 1500, 'bottom', 'anchor'] as const
 type Position = (typeof POSITIONS)[number]
 
 /** Computed styles and geometry of the key elements (the design's own behaviour, not just its pixels). */
-const PROBE = `(() => {
+// String.raw: the regexes inside keep their backslashes.
+const PROBE = String.raw`(() => {
   const $ = (id) => document.getElementById(id)
   const r = (el) => { const b = el.getBoundingClientRect(); return [b.x, b.y, b.width, b.height].map((n) => Math.round(n)) }
   const cs = (el, props) => Object.fromEntries(props.map((p) => [p, getComputedStyle(el)[p]]))
@@ -37,13 +42,20 @@ const PROBE = `(() => {
     font: [getComputedStyle($('title')).fontFamily, document.fonts.check('56px Fx')],
     img: [r($('square')), cs($('square'), ['width', 'height', 'maxWidth', 'objectFit', 'objectPosition'])],
     // Which srcset candidate the browser picked (data: candidates are chosen differently from URLs).
-    imgCandidate: [...$('square').srcset.matchAll(/(S+)s+(d)x/g)].find((m) => m[1] === $('square').currentSrc)?.[2] ?? 'src',
+    imgCandidate: [...$('square').srcset.matchAll(/(\S+)\s+(\d)x/g)].find((m) => m[1] === $('square').currentSrc)?.[2] ?? 'src',
     svg: [r($('svg')), cs($('svg'), ['width', 'height', 'maxWidth'])],
     strip: r($('strip')),
     html: cs(document.documentElement, ['overflowX', 'overflowY', 'maxWidth']),
     body: cs(document.body, ['overflowX', 'overflowY', 'margin']),
     header: [r($('header')), getComputedStyle($('header')).position],
-    fixed: r(document.querySelector('.fixed-btn')),
+    headerLink: cs(document.querySelector('header a'), ['color', 'fontSize', 'fontFamily', 'textDecorationLine']),
+    fixed: [r(document.querySelector('.fixed-btn')), cs(document.querySelector('.fixed-btn'), ['fontFamily', 'fontSize', 'color', 'backgroundColor'])],
+    latin: $('latin').textContent,
+    earlyRead: $('early-read').textContent,
+    nested: r($('nested')),
+    object: r($('obj')),
+    fetched: $('fetched').textContent,
+    mailForm: $('mail').getAttribute('action'),
     progress: r($('progress')),
     reveal: [$('reveal').className, getComputedStyle($('reveal')).opacity],
     canvas: hash,
@@ -57,7 +69,7 @@ const PROBE = `(() => {
 
 /** The design is fully there: fonts, images, the canvas animation (30 frames, then it stops). */
 const READY = `(async () => {
-  if (!document.getElementById('cv') || !window.__fxDone) return false
+  if (!document.getElementById('cv') || !window.__fxDone || !window.__fetchDone) return false
   await document.fonts.ready
   return document.fonts.check('56px Fx') && [...document.images].every((i) => i.complete && i.naturalWidth > 0)
 })()`
@@ -79,7 +91,7 @@ async function moveTo(t: Target, at: Position) {
   await doc.evaluate(SETTLE)
 }
 
-/** Share of pixels that differ by more than 24 in any channel; writes both shots + a diff image when over the limit. */
+/** Pixels that differ by more than 24 in any channel; writes both shots + a diff image when over the limit. */
 async function compare(raw: Buffer, other: Buffer, name: string) {
   const [a, b] = await Promise.all(
     [raw, other].map((x) => sharp(x).ensureAlpha().raw().toBuffer({ resolveWithObject: true })),
@@ -98,8 +110,8 @@ async function compare(raw: Buffer, other: Buffer, name: string) {
       diff.set([255, 0, 0, 255], i)
     } else diff.set([a!.data[i]! / 3, a!.data[i + 1]! / 3, a!.data[i + 2]! / 3, 255], i)
   }
-  const share = bad / (a!.info.width * a!.info.height)
-  if (share > MAX_BAD) {
+  if (bad) console.log(`[fidelity] ${name}: ${bad} differing pixels`)
+  if (bad > MAX_BAD_PX) {
     await mkdir(OUT, { recursive: true })
     await writeFile(`${OUT}/${name}-raw.png`, raw)
     await writeFile(`${OUT}/${name}-shown.png`, other)
@@ -107,12 +119,13 @@ async function compare(raw: Buffer, other: Buffer, name: string) {
       .png()
       .toFile(`${OUT}/${name}-diff.png`)
   }
-  return share
+  return bad
 }
 
-async function rawPage(ctx: BrowserContext, html: string) {
+async function rawPage(ctx: BrowserContext, html: Buffer) {
   const page = await ctx.newPage()
-  await page.route(`${RAW}**`, (r) => r.fulfill({ contentType: 'text/html; charset=utf-8', body: html }))
+  // The file's own bytes, no charset in the header: the browser reads its <meta charset> (windows-1252), as when opened.
+  await page.route(`${RAW}**`, (r) => r.fulfill({ contentType: 'text/html', body: html }))
   await page.goto(RAW)
   await ready(page)
   return page
@@ -141,20 +154,20 @@ async function openContexts(browser: Browser, state: Awaited<ReturnType<BrowserC
   )
 }
 
-async function upload(page: Page, name: string, html: string, phoneFixes: boolean) {
+async function upload(page: Page, name: string, html: Buffer, phoneFixes: boolean) {
   await page.goto(`${admin}/templates`)
   await page.getByRole('button', { name: 'Upload HTML' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Template name').fill(name)
   await dialog
     .getByLabel('HTML file')
-    .setInputFiles({ name: 'fidelity.html', mimeType: 'text/html', buffer: Buffer.from(html) })
+    .setInputFiles({ name: 'fidelity.html', mimeType: 'text/html', buffer: html })
   if (phoneFixes) await dialog.getByRole('checkbox', { name: /^Phone fixes/ }).check()
   await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
   await dialog.getByRole('button', { name: 'Upload' }).click()
-  await expect(page.getByText(new RegExp(`${name} uploaded\\. Moved 3 embedded`))).toBeVisible({
-    timeout: 60_000,
-  })
+  await expect(
+    page.getByText(new RegExp(`${name} uploaded\\. Stored exactly as the file \\(read as windows-1252\\)`)),
+  ).toBeVisible({ timeout: 60_000 })
   const href = await page.getByRole('link', { name: `Preview ${name}` }).getAttribute('href')
   return new URL(href!, page.url()).href
 }
@@ -164,7 +177,7 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
   browser,
 }) => {
   test.setTimeout(600_000)
-  const html = await readFile(FIXTURE, 'utf8')
+  const html = await readFile(FIXTURE)
   const owner = await signUpOwner(page, { spa: 'Fidelity Spa' })
   const { slug } = owner
   await makeStudio(slug)
@@ -195,8 +208,13 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
         expect(h['content-security-policy']).not.toContain('allow-same-origin')
         expect(h['cross-origin-opener-policy']).toBeUndefined()
         expect(h['permissions-policy']).not.toContain('accelerometer')
+        // R24 review: nothing narrower than default-src (data:/blob: fetches, <object>, frames, mailto: forms).
+        for (const d of ['connect-src', 'object-src', 'frame-src', 'font-src', 'form-action'])
+          expect(h['content-security-policy']).not.toContain(d)
         expect(await live.evaluate('self.origin')).toBe('null')
-        await expect(live.locator('iframe')).toHaveCount(0)
+        // No platform frame (the one iframe is the design's own nested frame).
+        await expect(live.locator('iframe.site-html-design')).toHaveCount(0)
+        await expect(live.locator('iframe')).toHaveCount(1)
         await ready(live)
         const liveTarget: Target = {
           name: 'live',
@@ -244,13 +262,32 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
               await (await t.doc()).evaluate(PROBE),
               `${view.name} ${t.name} @${at}: computed styles`,
             ).toEqual(want.get(base)!.probe)
-            const share = await compare(want.get(base)!.shot, await t.shot(), `${view.name}-${t.name}-${at}`)
-            expect(share, `${view.name} ${t.name} @${at}: differing pixels`).toBeLessThanOrEqual(MAX_BAD)
+            const bad = await compare(want.get(base)!.shot, await t.shot(), `${view.name}-${t.name}-${at}`)
+            expect(bad, `${view.name} ${t.name} @${at}: differing pixels`).toBeLessThanOrEqual(MAX_BAD_PX)
           }
         }
-        const probe = (await raw.evaluate(PROBE)) as { store: string; hasBaseSheet: boolean; sizes: number[] }
+        const probe = (await raw.evaluate(PROBE)) as {
+          store: string
+          hasBaseSheet: boolean
+          sizes: number[]
+          imgCandidate: string
+          latin: string
+          earlyRead: string
+          fetched: string
+        }
         // The storage shim made the sandboxed copies behave like the real origin.
         expect(probe.store).toBe('ls=1 cookie=fx=1')
+        // The probe itself works (a real srcset density, the file's own text and script-time reads).
+        expect(['1', '2']).toContain(probe.imgCandidate)
+        expect(probe.latin).toBe('Café “Relax” – €5 · déjà vu')
+        expect(probe.earlyRead).toBe('true 160 80')
+        expect(probe.fetched).toBe('fetched-ok')
+        // Known residual (CODEMAP "HTML designs"): frames inside a design inherit its sandbox — an opaque origin, where
+        // third-party players / widgets that need cookies or storage may stay blank. Same pixels for a static frame.
+        // (Playwright names a frame by its id when it has no name.)
+        const nested = (p: Page) => p.frames().find((f) => f.name() === 'nested')!
+        expect(await nested(raw).evaluate('self.origin')).toBe('http://design.test')
+        expect(await nested(live).evaluate('self.origin')).toBe('null')
         expect(probe.hasBaseSheet).toBe(false)
         // The wide elements still overflow, exactly as in the file.
         expect(probe.sizes[0]).toBeGreaterThan(view.viewport.width)
@@ -275,8 +312,8 @@ test('R24 fidelity: an uploaded HTML design looks and behaves exactly like the f
         await p.evaluate('scrollTo(0, 1000)')
         await p.evaluate(SETTLE)
       }
-      const share = await compare(await raw.screenshot(), await t.shot(), 'phone-fixes-control')
-      expect(share).toBeGreaterThan(MAX_BAD)
+      const bad = await compare(await raw.screenshot(), await t.shot(), 'phone-fixes-control')
+      expect(bad).toBeGreaterThan(MAX_BAD_PX)
       const shown = (await (await t.doc()).evaluate(PROBE)) as { hasBaseSheet: boolean; img: unknown }
       expect(shown.hasBaseSheet).toBe(true)
       expect(shown.img).not.toEqual(((await raw.evaluate(PROBE)) as { img: unknown }).img)

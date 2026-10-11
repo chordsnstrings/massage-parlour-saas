@@ -4,7 +4,9 @@
 // web font, <img width height> without CSS height, an <svg> with an explicit size, a wide fixed-px element
 // (horizontal overflow), a sticky header, a position:fixed button, a 100vh hero, a scroll-driven animation, an
 // IntersectionObserver reveal, a requestAnimationFrame canvas animation that stops (window.__fxDone), localStorage +
-// document.cookie, an in-page anchor.
+// document.cookie, an in-page anchor. R24 review: the file is windows-1252 (with a <meta charset>, accented text and
+// curly quotes), and it has a nested frame (srcdoc), an <object> SVG, a fetch() of a data: URL, a mailto: form and a
+// script that reads an image while the page is still parsing.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -84,7 +86,7 @@ const tile = await image(
 const html = `<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="windows-1252">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fidelity fixture</title>
 <style>
@@ -115,7 +117,14 @@ section { padding: 24px 16px; }
 <section><img id="square" src="${square}" srcset="${square} 1x, ${square2x} 2x" width="600" height="200" alt="Square"></section>
 <section><svg id="svg" width="1600" height="200" viewBox="0 0 1600 200"><title>Circle on sand</title><rect width="1600" height="200" fill="#e9d8b4"/><circle cx="800" cy="100" r="90" fill="#1d3b34"/></svg></section>
 <section><div id="strip" class="strip" style="background-image: url('${tile}')"></div></section>
-<section class="tall"><h2>Canvas and storage</h2><canvas id="cv" width="300" height="150"></canvas><p id="store">…</p></section>
+<section class="tall"><h2>Canvas and storage</h2><canvas id="cv" width="300" height="150"></canvas><p id="store">...</p></section>
+<section><p id="latin">Café “Relax” – €5 · déjà vu</p>
+<img id="early" src="${tile}" width="160" height="80" alt=""><span id="early-read"></span>
+<script>(function () { var i = document.getElementById('early'); document.getElementById('early-read').textContent = i.complete + ' ' + i.naturalWidth + ' ' + i.getBoundingClientRect().height })()</script>
+<iframe id="nested" title="Nested" width="320" height="64" style="border:0;display:block" srcdoc="&lt;p style=&quot;margin:0;font:18px Arial;color:#1d3b34&quot;&gt;A nested frame&lt;/p&gt;"></iframe>
+<object id="obj" type="image/svg+xml" width="120" height="60" data="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60'%3E%3Crect width='120' height='60' fill='%230f6b4b'/%3E%3C/svg%3E"></object>
+<p id="fetched">...</p>
+<form id="mail" action="mailto:hello@example.com" method="post"><button type="submit">Mail us</button></form></section>
 <section id="reveal" class="reveal tall"><h2>Revealed on scroll</h2><p>An IntersectionObserver adds a class.</p></section>
 <section id="contact" class="tall"><h2>Contact</h2><p>Reached through an in-page anchor.</p></section>
 <button class="fixed-btn" type="button">Book</button>
@@ -142,10 +151,34 @@ section { padding: 24px 16px; }
     else window.__fxDone = true
   }
   requestAnimationFrame(draw)
+  fetch('data:text/plain,fetched-ok')
+    .then(function (r) { return r.text() })
+    .then(function (t) { document.getElementById('fetched').textContent = t }, function (e) { document.getElementById('fetched').textContent = 'error ' + e.name })
+    .then(function () { window.__fetchDone = true })
 })()
 </script>
 </body>
 </html>
 `
-writeFileSync(path.join(here, 'fidelity.html'), html)
-console.log(`fidelity.html: ${(html.length / 1024).toFixed(0)} KB`)
+// windows-1252 bytes (the meta above says so): Latin-1 as is, plus the few cp1252-only characters used.
+const CP1252 = {
+  '€': 0x80,
+  '‚': 0x82,
+  '„': 0x84,
+  '…': 0x85,
+  '‘': 0x91,
+  '’': 0x92,
+  '“': 0x93,
+  '”': 0x94,
+  '–': 0x96,
+  '—': 0x97,
+}
+const bytes = Buffer.from(
+  [...html].map((c) => {
+    const n = CP1252[c] ?? c.charCodeAt(0)
+    if (n > 0xff) throw new Error(`not windows-1252: ${c}`)
+    return n
+  }),
+)
+writeFileSync(path.join(here, 'fidelity.html'), bytes)
+console.log(`fidelity.html: ${(bytes.length / 1024).toFixed(0)} KB (windows-1252)`)

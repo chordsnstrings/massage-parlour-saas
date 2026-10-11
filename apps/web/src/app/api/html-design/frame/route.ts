@@ -4,6 +4,10 @@ import { htmlDesignFrameCsp, permissionsPolicy } from '@spa/core'
 // inline scripts, no outside fonts), so designs run here instead: this response carries the design's own policy
 // (anything goes, but CSP `sandbox` = opaque origin even when opened directly, framed only by platform pages). The
 // hosting page (components/site/html-design-frame.tsx) posts the design in; it is written once, then the shell is gone.
+// R24 review: before writing, the design's data: images (<img>/<source> src + srcset) are decoded into this document's
+// list of available images — a parsed page has them at once (a script right after an <img src=data:…> sees it
+// complete), but under document.write they would load a moment later. (A blob: document instead would parse like a
+// page load, but Chromium refuses its #fragment navigations, so in-page anchors would break.)
 const SHELL = `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"></head><body><script>
 (function () {
   if (window.parent === window) return
@@ -16,10 +20,35 @@ const SHELL = `<!doctype html><html><head><meta charset="utf-8"><meta name="robo
     if (typeof e.data.html !== 'string') return
     done = true
     window.removeEventListener('message', onMessage)
-    document.open()
-    document.write(e.data.html)
-    document.close()
-    window.parent.postMessage({ type: 'spa:html-design-shown' }, '*')
+    var html = e.data.html
+    var keep = []
+    var urls = new Set()
+    try {
+      // An inert parse (no scripts run, nothing loads) just to find the embedded images.
+      var parsed = new DOMParser().parseFromString(html, 'text/html')
+      parsed.querySelectorAll('img[src], img[srcset], picture source[srcset]').forEach(function (el) {
+        var src = (el.getAttribute('src') || '').trim()
+        if (/^data:image\\//i.test(src)) urls.add(src)
+        ;(el.getAttribute('srcset') || '').split(/[\\t\\n\\f\\r ]+/).forEach(function (t) {
+          t = t.replace(/,+$/, '')
+          if (/^data:image\\//i.test(t)) urls.add(t)
+        })
+      })
+    } catch (_) {}
+    Promise.all(
+      Array.from(urls).map(function (u) {
+        var img = new Image()
+        img.src = u
+        keep.push(img)
+        return img.decode().catch(function () {})
+      }),
+    ).then(function () {
+      document.open()
+      document.write(html)
+      document.close()
+      keep = null
+      window.parent.postMessage({ type: 'spa:html-design-shown' }, '*')
+    })
   }
   window.addEventListener('message', onMessage)
   window.parent.postMessage({ type: 'spa:html-design-ready' }, '*')

@@ -1,11 +1,11 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { expect, test } from '@playwright/test'
-import { siteTemplates, storedFiles, tenants } from '@spa/db'
+import { siteTemplateFiles, siteTemplates, storedFiles, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { admin, base, makeStudio, signInStudioOnAdmin, signUpOwner, studioUrl, testDb } from './helpers'
+import { admin, base, makeStudio, signInStudioOnAdmin, signUpOwner, site, studioUrl, testDb } from './helpers'
 
 /** Random noise PNG (doesn't compress): ~300 KB each. */
 async function noisePng(size = 320) {
@@ -19,10 +19,10 @@ const font = () =>
     createRequire(import.meta.url).resolve('@fontsource/marcellus/files/marcellus-latin-400-normal.woff2'),
   )
 
-test('R24 HTML upload: a > 1 MB design with embedded images and a font uploads, its files move out, it renders', async ({
+test('R24 HTML upload: a 4.6 MB design (embedded images + font, big script, Arabic) is stored and shown byte for byte', async ({
   page,
 }) => {
-  test.setTimeout(240_000)
+  test.setTimeout(300_000)
   const owner = await signUpOwner(page, { spa: 'Upload Spa' })
   const { slug } = owner
   await makeStudio(slug)
@@ -33,8 +33,14 @@ test('R24 HTML upload: a > 1 MB design with embedded images and a font uploads, 
 h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', imgs[2]!)}")}
 </style></head><body><h1 id="t">Big design</h1>
 <img id="a" src="${uri('image/png', imgs[0]!)}" width="320" height="320" alt="a">
-<img id="b" src="${uri('image/png', imgs[1]!)}" width="320" height="320" alt="b"><div class="bg"></div></body></html>`
-  expect(html.length).toBeGreaterThan(1024 * 1024)
+<img id="b" src="${uri('image/png', imgs[1]!)}" width="320" height="320" alt="b"><div class="bg"></div>
+<p id="ar" dir="rtl">${'سبا هادئ في دبي '.repeat(80_000)}</p>
+<script>window.__big = [${'"a \\"quoted\\" line",\n'.repeat(60_000)}].length</script></body></html>`
+  const bytes = Buffer.from(html)
+  // Over the old ~500 KB stored-design cap and the 1 MB server-action body, under the 5 MB upload limit.
+  expect(bytes.length).toBeGreaterThan(4.5 * 1024 * 1024)
+  expect(bytes.length).toBeLessThan(5 * 1024 * 1024)
+  const sha = createHash('sha256').update(bytes).digest('hex')
 
   await signInStudioOnAdmin(page, owner.email)
   const posts: string[] = []
@@ -90,29 +96,29 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     await page.keyboard.press('Escape')
   })
 
-  await test.step('the 1.3 MB design uploads; its 4 files move out; the stored page is small', async () => {
+  await test.step('the 4.6 MB design uploads and is stored exactly as the file; the page JSON only references it', async () => {
     await page.getByRole('button', { name: 'Upload HTML' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Template name').fill('Big Upload')
     await dialog
       .getByLabel('HTML file')
-      .setInputFiles({ name: 'big.html', mimeType: 'text/html', buffer: Buffer.from(html) })
+      .setInputFiles({ name: 'big.html', mimeType: 'text/html', buffer: bytes })
     await dialog.getByRole('checkbox', { name: /Spas can pick it right away/ }).check()
     await dialog.getByRole('button', { name: 'Upload' }).click()
-    await expect(
-      page.getByText(/Big Upload uploaded\. Moved 4 embedded image\/font files \(\d\.\d MB\)/),
-    ).toBeVisible({
+    await expect(page.getByText(/Big Upload uploaded\. Stored exactly as the file\./)).toBeVisible({
       timeout: 60_000,
     })
     const [row] = await testDb().select().from(siteTemplates).where(eq(siteTemplates.key, 'big-upload'))
     const json = JSON.stringify(row!.pages)
-    expect(json.length).toBeLessThan(500 * 1024)
-    expect(json).not.toContain('data:image/png')
-    expect(json.match(/\/files\/[0-9a-f-]{36}\/[0-9a-f]{16}\.(?:png|woff2)/g)).toHaveLength(4)
+    expect(json.length).toBeLessThan(4 * 1024)
+    expect(json).toContain('"html":""')
+    expect(json).toContain(`"sha256":"${sha}"`)
     expect(json).toContain('"phoneFixes":false')
+    const [file] = await testDb().select().from(siteTemplateFiles).where(eq(siteTemplateFiles.sha256, sha))
+    expect(Buffer.compare(file!.bytes!, bytes)).toBe(0)
   })
 
-  await test.step('the template preview renders the moved images and font', async () => {
+  await test.step('the template preview renders it: embedded images (still data:), font, script, Arabic', async () => {
     const href = await page.getByRole('link', { name: 'Preview Big Upload' }).getAttribute('href')
     await page.goto(new URL(href!, page.url()).href)
     const frame = page.frameLocator('iframe.site-html-design')
@@ -121,7 +127,10 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
       .poll(() =>
         frame
           .locator('#a')
-          .evaluate((img: HTMLImageElement) => [img.naturalWidth, img.currentSrc.includes('/files/')]),
+          .evaluate((img: HTMLImageElement) => [
+            img.naturalWidth,
+            img.currentSrc.startsWith('data:image/png'),
+          ]),
       )
       .toEqual([320, true])
     await expect
@@ -129,23 +138,59 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
         frame.locator('#t').evaluate(() => document.fonts.ready.then(() => document.fonts.check('20px Big'))),
       )
       .toBe(true)
+    expect(await frame.locator('#t').evaluate(() => (window as { __big?: number }).__big)).toBe(60_000)
+    await expect(frame.locator('#ar')).toContainText('سبا هادئ في دبي')
   })
 
-  await test.step('applied to a spa: the page uses the spa’s own files', async () => {
+  await test.step('applied to a spa and published: its own private copy, the live page is the file', async () => {
     await page.goto(studioUrl(slug))
     await page.getByRole('button', { name: 'Use Big Upload' }).click()
     await expect(page.getByTestId('current-template')).toHaveText('Big Upload', { timeout: 30_000 })
     const db = testDb()
     const [spa] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
     const files = await db
-      .select({ id: storedFiles.id, purpose: storedFiles.purpose, isPublic: storedFiles.isPublic })
+      .select({ purpose: storedFiles.purpose, isPublic: storedFiles.isPublic, bytes: storedFiles.bytes })
       .from(storedFiles)
       .where(eq(storedFiles.tenantId, spa!.id))
-    const design = files.filter((f) => f.purpose === 'html_design')
-    expect(design).toHaveLength(4)
-    expect(design.every((f) => f.isPublic)).toBe(true)
-    const preview = page.waitForResponse((r) => design.some((f) => r.url().includes(`/files/${f.id}/`)))
-    await page.goto(studioUrl(slug, '/preview'))
-    expect((await preview).headers()['access-control-allow-origin']).toBe('*')
+    const docs = files.filter((f) => f.purpose === 'html_design_doc')
+    expect(docs).toHaveLength(1)
+    expect(docs[0]!.isPublic).toBe(false)
+    expect(Buffer.compare(docs[0]!.bytes!, bytes)).toBe(0)
+    await page.getByRole('button', { name: 'Publish site' }).click()
+    await page.getByRole('button', { name: 'Publish now' }).click()
+    await expect(page.getByText('Published 1 page')).toBeVisible({ timeout: 30_000 })
+    const live = (await page.goto(site(slug)))!
+    expect(live.status()).toBe(200)
+    const body = await live.text()
+    // Only invisible additions in <head>: everything from <body> on is the file, byte for byte.
+    expect(body.slice(body.indexOf('<body>'))).toBe(html.slice(html.indexOf('<body>')))
+  })
+
+  await test.step('a windows-1252 file reads as the browser reads it (no replacement characters)', async () => {
+    const latin = Buffer.concat([
+      Buffer.from(
+        '<!doctype html><html><head><meta charset="windows-1252"><title>L</title></head><body><p id="l">Caf',
+      ),
+      Buffer.from([0xe9, 0x20, 0x93]),
+      Buffer.from('Relax'),
+      Buffer.from([0x94, 0x20, 0x80]),
+      Buffer.from('5</p></body></html>'),
+    ])
+    await page.goto(`${admin}/templates`)
+    await page.getByRole('button', { name: 'Upload HTML' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Template name').fill('Latin Design')
+    await dialog
+      .getByLabel('HTML file')
+      .setInputFiles({ name: 'latin.html', mimeType: 'text/html', buffer: latin })
+    await dialog.getByRole('button', { name: 'Upload' }).click()
+    await expect(page.getByText(/Latin Design uploaded.*\(read as windows-1252\)/)).toBeVisible({
+      timeout: 60_000,
+    })
+    const href = await page.getByRole('link', { name: 'Preview Latin Design' }).getAttribute('href')
+    await page.goto(new URL(href!, page.url()).href)
+    await expect(page.frameLocator('iframe.site-html-design').locator('#l')).toHaveText('Café “Relax” €5', {
+      timeout: 30_000,
+    })
   })
 })
