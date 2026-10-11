@@ -1,7 +1,7 @@
 'use client'
-import type { SiteCopy } from '@spa/services'
 import { ArrowRight, FilePlus2, History, Paintbrush, Rocket, Sparkles, Undo2 } from 'lucide-react'
-import { useOptimistic, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useOptimistic, useState, useTransition } from 'react'
 import { ScaledFrame } from '@/components/site/scaled-frame'
 import { BACKDROPS, EMBLEMS, type SiteTheme } from '@/components/site/theme'
 import { Button } from '@/components/ui/button'
@@ -11,19 +11,18 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
-import { useT } from '@/i18n/client'
+import { studioPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import {
   addPageFromTemplateAction,
-  applySiteCopyAction,
   applyTemplateAction,
-  generateSiteCopyAction,
   publishSiteAction,
-  type SiteCopyPreview,
   saveThemeAction,
   setPageVisibleAction,
   undoTemplateAction,
 } from './actions'
+import { resolveChangeAction } from './studio-actions'
+import { type WriteTextsResult, writeTextsAction } from './write-texts-actions'
 
 /** First template pick: creates the site with the template's starter pages. */
 export function UseTemplateButton({
@@ -215,85 +214,36 @@ export function AddPageSheet({
   )
 }
 
-type Lang = 'en' | 'ar'
-type Bi = { en: string; ar?: string }
-
-function CopyRow({ label, before, after, lang }: { label: string; before?: Bi; after: Bi; lang: Lang }) {
-  const now = (lang === 'ar' ? before?.ar : before?.en)?.trim()
-  const next = lang === 'ar' ? after.ar || after.en : after.en
-  return (
-    <div className="grid gap-2 border-t py-4 first:border-t-0 sm:grid-cols-[9rem_1fr] sm:gap-5">
-      <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted sm:pt-0.5">{label}</p>
-      <div className="min-w-0 space-y-1.5" dir={lang === 'ar' ? 'rtl' : 'ltr'} lang={lang}>
-        {now && now !== next && (
-          <p className="whitespace-pre-line text-sm text-muted line-through decoration-border">{now}</p>
-        )}
-        <p className="whitespace-pre-line text-sm">{next}</p>
-      </div>
-    </div>
-  )
-}
-
-/** What "Apply as drafts" will do, in plain words (see `SiteCopyMode`). */
-const APPLY_NOTE: Record<SiteCopyPreview['mode'], (name: string) => string> = {
-  new: (name) =>
-    `Applying creates your site from ${name} with this copy as drafts. Nothing goes live until you publish.`,
-  'in-place': () =>
-    'Applying writes this copy into your pages as drafts. Your layout, images and colours stay as they are, and nothing goes live until you publish.',
-  starter: (name) =>
-    `Your pages don't have matching text areas yet, so applying replaces each page's draft with the ${name} starter layout filled with this copy — sections, images and order you changed are replaced. Your colours stay; nothing goes live until you publish, and you can undo it.`,
-  switch: (name) =>
-    `Applying switches your site to ${name}: its colours, fonts and shapes change on your live site right away, and each page's draft is replaced with the ${name} starter layout filled with this copy. Pages go live only when you publish, and you can undo the switch.`,
-}
-
 /**
- * "Write my site with AI": spa facts → hero, about, USPs, FAQs and CTA in EN + AR, previewed against what the
- * site says now, then applied to the chosen template's pages as drafts.
+ * R23 "Write texts": the AI drafts the texts of every page in EN + AR from the spa's own data (drafts only; images
+ * and layout stay). Shown to SITE_AI_EDITOR_EMAILS super-admins only; the action re-checks.
  */
-export function AiWriterSheet({
-  slug,
-  ready,
-  templates,
-  current,
-}: {
-  slug: string
-  ready: boolean
-  templates: { key: string; name: string }[]
-  current: string
-}) {
+export function WriteTextsSheet({ slug, ready }: { slug: string; ready: boolean }) {
   const [open, setOpen] = useState(false)
-  const [template, setTemplate] = useState(current)
   const [notes, setNotes] = useState('')
-  const [preview, setPreview] = useState<SiteCopyPreview | null>(null)
-  const [lang, setLang] = useState<Lang>('en')
+  const [done, setDone] = useState<{ message: string; result: WriteTextsResult } | null>(null)
   const [pending, start] = useTransition()
 
-  const generate = () =>
+  const write = () =>
     start(async () => {
-      const r = await generateSiteCopyAction(slug, { template, notes })
-      if (r.ok) setPreview(r.preview)
-      else toast.error(r.error)
-    })
-  const apply = (copy: SiteCopy) =>
-    start(async () => {
-      const r = await applySiteCopyAction(slug, { template: preview?.template ?? template, copy })
-      if (r?.ok) {
-        toast.success(r.message ?? 'Saved as drafts')
-        setOpen(false)
-        setPreview(null)
-      } else if (r) toast.error(r.error)
+      const r = await writeTextsAction(slug, { notes })
+      if (r?.ok) setDone({ message: r.message ?? '', result: r.data as WriteTextsResult })
+      else if (r) toast.error(r.error)
     })
 
   return (
     <Sheet
       open={open}
-      onOpenChange={setOpen}
-      title="Write my site with AI"
-      description="Headline, about text, reasons to visit, FAQs and a booking prompt — in English and Arabic."
-      className="md:max-w-2xl"
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) setDone(null)
+      }}
+      title="Write texts with AI"
+      description="Drafts the texts of every page in English and Arabic from the spa's own details: name, services and prices, branches, opening hours and contact. Images and layout stay as they are."
+      className="md:max-w-xl"
       trigger={
         <Button variant="secondary">
-          <Sparkles /> Write with AI
+          <Sparkles /> Write texts
         </Button>
       }
     >
@@ -302,131 +252,64 @@ export function AiWriterSheet({
           <span className="grid size-11 place-items-center rounded-full bg-surface text-muted">
             <Sparkles className="size-5" strokeWidth={1.75} />
           </span>
-          <p className="text-[15px] font-medium">AI writing isn't set up yet</p>
+          <p className="text-[15px] font-medium">AI isn't set up yet</p>
           <p className="max-w-sm text-sm text-muted">
-            The platform hasn't switched on the AI writer yet. You can still edit every word in the editor.
+            Add the ModelArk key and switch on the site editor model in AI models. You can still edit every
+            word in the editor.
           </p>
         </div>
-      ) : !preview ? (
+      ) : !done ? (
         <div className="anim-fade-in space-y-5">
-          <Field label="Template" name="ai-template">
-            <Select id="ai-template" value={template} onChange={(e) => setTemplate(e.currentTarget.value)}>
-              {templates.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
           <Field
             label="Anything to highlight? (optional)"
-            name="ai-notes"
-            hint="We already use your services, prices, hours, address and brand voice."
+            name="write-notes"
+            hint="We already use the spa's services, prices, branches, hours, contact and brand voice."
           >
             <Textarea
-              id="ai-notes"
+              id="write-notes"
               value={notes}
               maxLength={400}
               onChange={(e) => setNotes(e.currentTarget.value)}
               placeholder="e.g. female therapists, free parking, open until 2 am"
             />
           </Field>
-          <Button onClick={generate} pending={pending} className="h-11 w-full sm:w-auto">
-            <Sparkles /> Write my site
+          <p className="text-[13px] text-muted">
+            Every page's texts are replaced in its draft — nothing is published. A page open in someone else's
+            editor is skipped. It can take a minute or two.
+          </p>
+          <Button onClick={write} pending={pending} className="h-11 w-full sm:w-auto">
+            <Sparkles /> Write texts
           </Button>
         </div>
       ) : (
         <div className="anim-fade-in space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">
-              For <span className="font-medium text-fg">{preview.templateName}</span> ·{' '}
-              {preview.current
-                ? 'crossed-out text is what your pages say now.'
-                : "your pages don't have matching text areas yet, so there is nothing to compare."}
-            </p>
-            <div className="inline-flex rounded-lg border p-0.5" role="radiogroup" aria-label="Language">
-              {(['en', 'ar'] as const).map((l) => (
-                <label
-                  key={l}
-                  className={cn(
-                    'grid min-h-10 min-w-16 cursor-pointer place-items-center rounded-md px-3 text-sm transition-colors',
-                    lang === l ? 'bg-accent-soft text-accent' : 'text-muted hover:text-fg',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="ai-lang"
-                    value={l}
-                    checked={lang === l}
-                    onChange={() => setLang(l)}
-                    className="sr-only"
-                  />
-                  {l === 'en' ? 'English' : 'عربي'}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl border px-4 sm:px-5">
-            <CopyRow
-              label="Headline"
-              before={preview.current?.hero.headline}
-              after={preview.proposed.hero.headline}
-              lang={lang}
-            />
-            <CopyRow
-              label="Subheading"
-              before={preview.current?.hero.sub}
-              after={preview.proposed.hero.sub}
-              lang={lang}
-            />
-            <CopyRow
-              label="About"
-              before={preview.current?.about}
-              after={preview.proposed.about}
-              lang={lang}
-            />
-            {preview.proposed.usps.map((u, i) => (
-              <CopyRow
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed three positions
-                key={i}
-                label={`Reason ${i + 1}`}
-                before={preview.current?.usps[i]?.title}
-                after={{ en: `${u.title.en} — ${u.text.en}`, ar: `${u.title.ar} — ${u.text.ar}` }}
-                lang={lang}
-              />
-            ))}
-            {preview.proposed.faqs.map((f, i) => (
-              <CopyRow
-                // biome-ignore lint/suspicious/noArrayIndexKey: fixed four positions
-                key={i}
-                label={`FAQ ${i + 1}`}
-                before={preview.current?.faqs[i]?.q}
-                after={{ en: `${f.q.en}\n${f.a.en}`, ar: `${f.q.ar}\n${f.a.ar}` }}
-                lang={lang}
-              />
-            ))}
-            <CopyRow
-              label="Booking prompt"
-              before={preview.current?.cta.title}
-              after={{
-                en: `${preview.proposed.cta.title.en} — ${preview.proposed.cta.text.en}`,
-                ar: `${preview.proposed.cta.title.ar} — ${preview.proposed.cta.text.ar}`,
-              }}
-              lang={lang}
-            />
-          </div>
-          <p className="text-[13px] text-muted" data-testid="ai-apply-note">
-            {APPLY_NOTE[preview.mode](preview.templateName)}
+          <p role="status" className="text-sm">
+            {done.message}
           </p>
+          {done.result.pages.length > 0 && (
+            <ul aria-label="Drafted pages" className="divide-y rounded-xl border">
+              {done.result.pages.map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{p.title}</span>{' '}
+                    <span className="text-muted">· {p.filled} texts</span>
+                  </span>
+                  <Button variant="ghost" size="sm" asChild>
+                    <a href={studioPath(slug, `/editor/${p.id}`)}>
+                      Open editor <ArrowRight />
+                    </a>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-[13px] text-muted">Read each page, adjust what you like, then Publish.</p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" onClick={() => setPreview(null)} disabled={pending} className="h-11">
-              Start over
-            </Button>
-            <Button variant="secondary" onClick={generate} pending={pending} className="h-11">
+            <Button variant="ghost" onClick={() => setDone(null)} className="h-11">
               Write again
             </Button>
-            <Button onClick={() => apply(preview.proposed)} pending={pending} className="h-11">
-              Apply as drafts
+            <Button onClick={() => setOpen(false)} className="h-11">
+              Done
             </Button>
           </div>
         </div>
@@ -440,13 +323,21 @@ export function PublishSiteSheet({
   pending,
   theme = false,
   themeWarnings = [],
+  defaultOpen = false,
 }: {
   slug: string
   pending: number
+  /** The console list's "Publish" step lands here with the sheet open. */
+  defaultOpen?: boolean
   /** An unpublished draft theme (Ask AI / Claude) goes live with it, on every page. */
   theme?: boolean
   themeWarnings?: string[]
 }) {
+  const router = useRouter()
+  // Drop `?publish=1` once the sheet is open, so a later remount (new drafts after this publish) stays closed.
+  useEffect(() => {
+    if (defaultOpen) router.replace(studioPath(slug), { scroll: false })
+  }, [defaultOpen, router, slug])
   const what = [
     pending ? `${pending} ${pending === 1 ? 'page has' : 'pages have'} unpublished changes` : null,
     theme ? `${pending ? 'the' : 'The'} site theme has unpublished changes (every page)` : null,
@@ -455,6 +346,7 @@ export function PublishSiteSheet({
     <FormSheet
       title="Publish your site?"
       description={`${what.join('; ')}. Visitors will see them immediately.`}
+      defaultOpen={defaultOpen}
       trigger={
         <Button>
           <Rocket /> Publish site
@@ -491,7 +383,6 @@ export function VisibilityToggle({
   disabled?: boolean
   label: string
 }) {
-  const t = useT()
   const [pending, start] = useTransition()
   const [optimistic, setOptimistic] = useOptimistic(visible)
   return (
@@ -499,7 +390,7 @@ export function VisibilityToggle({
       type="button"
       role="switch"
       aria-checked={optimistic}
-      aria-label={t('website.visibleLabel', { name: label })}
+      aria-label={`${label} visible`}
       disabled={disabled || pending}
       onClick={() =>
         start(async () => {
@@ -523,7 +414,7 @@ export function VisibilityToggle({
           )}
         />
       </span>
-      <span className="text-muted">{optimistic ? t('website.visible') : t('website.hidden')}</span>
+      <span className="text-muted">{optimistic ? 'Visible' : 'Hidden'}</span>
     </button>
   )
 }
@@ -653,6 +544,34 @@ export function ThemeSheet({
           </p>
         </div>
       </div>
+    </FormSheet>
+  )
+}
+
+/** Closes a spa's change request as done or declined, with an optional note the spa sees next to it. */
+export function ResolveRequestSheet({ slug, id }: { slug: string; id: string }) {
+  return (
+    <FormSheet
+      title="Close this request"
+      description="The spa sees the outcome and your note next to their request."
+      trigger={
+        <Button variant="secondary" size="sm" className="h-10">
+          Mark done
+        </Button>
+      }
+      action={resolveChangeAction.bind(null, slug)}
+      submitLabel="Close request"
+    >
+      <input type="hidden" name="id" value={id} />
+      <Field label="Outcome" name="status">
+        <Select id="status" name="status" defaultValue="done">
+          <option value="done">Done</option>
+          <option value="declined">Declined</option>
+        </Select>
+      </Field>
+      <Field label="Note to the spa (optional)" name="response">
+        <Textarea id="response" name="response" maxLength={2000} />
+      </Field>
     </FormSheet>
   )
 }

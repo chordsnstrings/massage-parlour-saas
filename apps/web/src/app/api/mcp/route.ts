@@ -17,6 +17,7 @@ async function handle(req: Request) {
     normalizeTheme: (t) => normalizeTheme(t) as unknown as ThemeTokens,
     resourceMetadataUrl: mcpResourceMetadataUrl(),
     appUrl: (path) => canonicalUrls().app(path),
+    adminUrl: (path) => canonicalUrls().admin(path),
     previewSecret: process.env.BETTER_AUTH_SECRET,
   })
 }

@@ -1,98 +1,17 @@
-import { platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
-import { editStamp, getEditablePage, getPageLock, listPages, listSavedSections } from '@spa/services'
-import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { z } from 'zod'
-import { buildMeta, loadSite } from '@/components/site/data'
-import type { SavedSection } from '@/components/site/editor/context'
-import { appPath, PATH_ROUTING } from '@/lib/paths'
-import { can, isStudio, requireMember } from '@/server/access'
-import { aiFixturesOn } from '@/server/ai-fixture'
-import { publicSiteUrl } from '@/server/sites'
-import { SiteEditor } from './editor'
+import { isStudio, requireMember } from '@/server/access'
+import { studioUrl } from '@/server/studio'
 
-export const metadata: Metadata = { title: 'Edit page' }
-
-export default async function EditorPage({
+/** R23: the page editor moved to the console — old links forward super-admins there; others get a 404. */
+export default async function OldEditorPage({
   params,
 }: {
   params: Promise<{ tenant: string; pageId: string }>
 }) {
   const { tenant, pageId } = await params
-  const ctx = await requireMember(tenant)
-  if (!can(ctx, 'site.content') || !(await isStudio(ctx))) notFound()
   if (!z.string().uuid().safeParse(pageId).success) notFound()
-  const loaded = await withTenant(ctx.tenant.id, async (tx) => {
-    const editable = await getEditablePage(tx, ctx.tenant.id, pageId)
-    if (!editable) return null
-    const [pages, sections] = await Promise.all([
-      listPages(tx, ctx.tenant.id),
-      listSavedSections(tx, ctx.tenant.id),
-    ])
-    // F29: read only — the editor takes the lock itself once it is open (a prefetch must not lock the page).
-    const lock = await getPageLock(tx, ctx.tenant.id, pageId)
-    return {
-      editable,
-      pages,
-      sections,
-      stamp: await editStamp(tx, ctx.tenant.id, pageId),
-      lockHolder:
-        lock && lock.userId !== ctx.user.id
-          ? {
-              name: lock.holderName,
-              since: lock.acquiredAt.toISOString(),
-              until: lock.expiresAt.toISOString(),
-            }
-          : null,
-    }
-  })
-  if (!loaded?.stamp) notFound()
-  const { site, data } = await loadSite(ctx.tenant, { published: false })
-  if (!site) notFound()
-  const slug = ctx.tenant.slug
-  const { page, version } = loaded.editable
-  const meta = buildMeta({
-    data,
-    theme: site.theme,
-    locale: 'en',
-    base: PATH_ROUTING ? `/s/${slug}` : '',
-    slug: page.slug,
-    editing: true,
-  })
-  const sections: SavedSection[] = loaded.sections.map((s) => ({
-    id: s.id,
-    name: s.name,
-    isGlobal: s.isGlobal,
-    data: s.data as SavedSection['data'],
-    updatedAt: s.updatedAt.toISOString(),
-  }))
-  return (
-    <SiteEditor
-      slug={slug}
-      pageId={page.id}
-      pageSlug={page.slug}
-      pageTitle={page.title.en}
-      data={loaded.editable.data}
-      meta={meta}
-      status={version?.status ?? 'draft'}
-      savedAt={version?.createdAt.toISOString() ?? null}
-      stamp={loaded.stamp}
-      canDesign={can(ctx, 'site.design')}
-      canPublish={can(ctx, 'site.publish')}
-      canInsights={can(ctx, 'reports.view')}
-      aiReady={Boolean(process.env.ARK_API_KEY)}
-      aiEditReady={Boolean(process.env.ARK_API_KEY) || aiFixturesOn()}
-      aiEditAllowed={(await siteAiEditorStatus(platformDb(), ctx.user.id)) === 'ok'}
-      sections={sections}
-      pages={loaded.pages.map((p) => ({
-        slug: p.slug,
-        visible: p.visible,
-        published: Boolean(p.publishedAt),
-      }))}
-      lockHolder={loaded.lockHolder}
-      backHref={appPath(`/${slug}/website`)}
-      previewHref={appPath(`/${slug}/website/preview?page=${page.slug}`)}
-      liveHref={`${await publicSiteUrl(ctx.tenant)}${page.slug ? `/${page.slug}` : ''}`}
-    />
-  )
+  const ctx = await requireMember(tenant)
+  if (!(await isStudio(ctx))) notFound()
+  redirect(await studioUrl(ctx.tenant.slug, `/editor/${pageId}`))
 }

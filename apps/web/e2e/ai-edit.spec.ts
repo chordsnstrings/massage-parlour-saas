@@ -6,13 +6,15 @@ import { and, desc, eq } from 'drizzle-orm'
 import { siteEditSchema } from '../src/components/site/ai-schema'
 import { SECTION_PRESETS } from '../src/components/site/presets'
 import {
-  app,
+  editorUrl,
   makeSiteAiEditor,
   makeStudio,
   mockAiReply,
   screenshotAt,
   seedCatalog,
+  signInStudioOnAdmin,
   signUpOwner,
+  studioUrl,
   testDb,
 } from './helpers'
 
@@ -135,7 +137,8 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
   })
 
   const canvas = page.frameLocator('#preview-frame').first()
-  await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+  await signInStudioOnAdmin(page, email)
+  await page.goto(editorUrl(slug, home!.id))
   await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
 
   await test.step('preview: the canvas shows the change, nothing is saved', async () => {
@@ -235,7 +238,8 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
     )
     const [mineHome] = await db.select().from(sitePages).where(eq(sitePages.tenantId, mineSeed.tenantId))
     await mockAiReply(mine.slug, { ops, note: 'Replayed.' })
-    await op.goto(`${app}/${mine.slug}/website/editor/${mineHome!.id}`)
+    await signInStudioOnAdmin(op, mine.email)
+    await op.goto(editorUrl(mine.slug, mineHome!.id))
     await expect(op.frameLocator('#preview-frame').first().getByRole('heading', { name: HERO })).toBeVisible({
       timeout: 30_000,
     })
@@ -267,7 +271,7 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
 test('Website Studio: the Theme panel keeps an AI theme draft unpublished; Publish site takes theme + renames live', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Theme Draft Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Theme Draft Spa' })
   await makeStudio(slug)
   const seed = await seedCatalog(slug)
   const db = testDb()
@@ -298,7 +302,8 @@ test('Website Studio: the Theme panel keeps an AI theme draft unpublished; Publi
     return { live: s!.theme, draft: s!.themeDraft }
   }
 
-  await page.goto(`${app}/${slug}/website`)
+  await signInStudioOnAdmin(page, email)
+  await page.goto(studioUrl(slug))
   await expect(page.getByText('Site theme changes are waiting to be published')).toBeVisible({
     timeout: 30_000,
   })
@@ -341,7 +346,7 @@ test('Website Studio: the Theme panel keeps an AI theme draft unpublished; Publi
 })
 
 test('Website Studio: Ask AI is off for a super-admin outside SITE_AI_EDITOR_EMAILS', async ({ page }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Other Studio Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Other Studio Spa' })
   await makeStudio(slug)
   const seed = await seedCatalog(slug)
   const db = testDb()
@@ -355,7 +360,8 @@ test('Website Studio: Ask AI is off for a super-admin outside SITE_AI_EDITOR_EMA
   )
   const [home] = await db.select().from(sitePages).where(eq(sitePages.tenantId, seed.tenantId))
   await mockAiReply(slug, { ops: [{ op: 'remove', id: 'hero-1' }], note: 'Removed.' })
-  await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+  await signInStudioOnAdmin(page, email)
+  await page.goto(editorUrl(slug, home!.id))
   // The canvas renders once the editor is hydrated; a click before that is lost.
   await expect(page.frameLocator('#preview-frame').first().getByRole('heading', { name: HERO })).toBeVisible({
     timeout: 30_000,

@@ -166,7 +166,6 @@ export const enums = {
     rejected: 'Rejected',
     cancelled: 'Cancelled',
   },
-  siteStudioStatus: { building: 'In progress', review: 'Ready for review', approved: 'Approved' },
   pageVersionStatus: { draft: 'Draft', published: 'Published' },
   sitePostStatus: { draft: 'Draft', published: 'Published' },
   siteEnquiryStatus: { new: 'New', replied: 'Replied', closed: 'Closed' },

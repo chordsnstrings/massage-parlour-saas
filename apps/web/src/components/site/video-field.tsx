@@ -24,8 +24,9 @@ const control =
 
 export function VideoFieldControl({ field, id, value, onChange, readOnly }: Props) {
   const t = useT()
-  const params = useParams<{ tenant?: string }>()
-  const slug = typeof params?.tenant === 'string' ? params.tenant : null
+  // Spa dashboard routes name the spa `tenant`; the console Website Studio editor (R23) names it `slug`.
+  const params = useParams<{ tenant?: string; slug?: string }>()
+  const slug = (typeof params?.tenant === 'string' ? params.tenant : params?.slug) || null
   const input = useRef<HTMLInputElement>(null)
   const hint = useId()
   const [busy, setBusy] = useState(false)

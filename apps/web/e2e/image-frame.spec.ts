@@ -3,7 +3,7 @@ import { sitePages } from '@spa/db'
 import { ensureSite } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { app, makeStudio, seedCatalog, signUpOwner, site, testDb } from './helpers'
+import { editorUrl, makeStudio, seedCatalog, signInStudioOnAdmin, signUpOwner, site, testDb } from './helpers'
 
 const HERO = 'Find your calm'
 const SHOTS = process.env.IMG_SHOTS_DIR
@@ -53,8 +53,9 @@ const frameOf = (root: FrameLocator | Page) =>
 test('site builder photos: focal point, fit and zoom from the editor reach the public page', async ({
   page,
 }) => {
-  const { slug } = await signUpOwner(page, { spa: 'Focal Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Focal Spa' })
   await makeStudio(slug)
+  await signInStudioOnAdmin(page, email)
   const seed = await seedCatalog(slug)
   const db = testDb()
   await db.transaction((tx) =>
@@ -93,7 +94,7 @@ test('site builder photos: focal point, fit and zoom from the editor reach the p
   }
 
   await test.step('pick an uploaded photo into the hero: unframed = centred cover', async () => {
-    await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+    await page.goto(editorUrl(slug, home!.id))
     await expect(canvas.getByRole('heading', { name: HERO })).toBeVisible({ timeout: 30_000 })
     await canvas.getByRole('heading', { name: HERO }).click()
     await page.getByRole('button', { name: 'Choose from library' }).first().click()

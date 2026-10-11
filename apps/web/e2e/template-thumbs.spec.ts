@@ -3,7 +3,16 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import sharp from 'sharp'
 import { TEMPLATE_KEYS, TEMPLATES } from '../src/components/site/templates'
-import { admin, app, makeStudio, seedCatalog, signInPlatformAdmin, signUpOwner, site } from './helpers'
+import {
+  admin,
+  makeStudio,
+  seedCatalog,
+  signInPlatformAdmin,
+  signInStudioOnAdmin,
+  signUpOwner,
+  site,
+  studioUrl,
+} from './helpers'
 
 /**
  * Tooling, not a regression test (skipped unless asked):
@@ -42,10 +51,11 @@ test('design templates on the public site (screens)', async ({ page }) => {
   for (const key of keys) {
     const name = TEMPLATES[key].name
     await page.context().clearCookies()
-    const { slug } = await signUpOwner(page, { spa: 'Lotus Garden Spa' })
+    const { slug, email } = await signUpOwner(page, { spa: 'Lotus Garden Spa' })
     await makeStudio(slug)
     await seedCatalog(slug)
-    await page.goto(`${app}/${slug}/website`)
+    await signInStudioOnAdmin(page, email)
+    await page.goto(studioUrl(slug))
     await page.getByRole('button', { name: `Use ${name}` }).click()
     await expect(page.getByTestId('current-template')).toHaveText(name, { timeout: 30_000 })
     await page.getByRole('button', { name: 'Publish site' }).click()

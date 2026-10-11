@@ -37,6 +37,7 @@ const opts = (over: Partial<SiteMcpOpts> = {}): SiteMcpOpts => ({
   schema,
   resourceMetadataUrl: 'http://localhost/.well-known/oauth-protected-resource/api/mcp',
   appUrl: (p) => `http://app.localhost${p}`,
+  adminUrl: (p) => `http://admin.localhost${p}`,
   previewSecret: 'preview-secret',
   editorEmails: EDITORS,
   platform,
@@ -160,8 +161,23 @@ describe('site MCP server (/api/mcp)', () => {
   })
 
   it('get_site and update_block edit the draft only, audited via Claude (MCP)', async () => {
+    // R23: list_spas carries the console's computed website stage (no review status).
+    const spas = await call('owner', 'list_spas', { query: 'mcp' })
+    expect(spas.data).toEqual([
+      {
+        slug: 'mcp-spa',
+        name: 'MCP Spa',
+        status: 'trial',
+        has_site: true,
+        website: 'live',
+        unpublished_changes: false,
+        console_url: 'http://admin.localhost/websites/mcp-spa',
+      },
+    ])
     const site = await call('owner', 'get_site', { spa: 'mcp-spa' })
     expect(site.data.pages[0].data.content[0]).toMatchObject({ id: 'h1', type: 'Heading' })
+    // R23: the owner previews and publishes in the console.
+    expect(site.data.console_url).toBe('http://admin.localhost/websites/mcp-spa')
     const dry = await call('owner', 'update_block', {
       spa: 'mcp-spa',
       page: 'home',

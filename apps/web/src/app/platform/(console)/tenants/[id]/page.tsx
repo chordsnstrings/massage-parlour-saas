@@ -33,7 +33,7 @@ import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select, Textarea } from '@/components/ui/input'
 import { PageBody, PageHeader } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
-import { adminPath } from '@/lib/paths'
+import { adminPath, studioPath } from '@/lib/paths'
 import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
 import { appUrl, canonicalUrls } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
@@ -152,6 +152,9 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
         description={`${tenant.slug} · joined ${formatDate(tenant.createdAt)}`}
         actions={
           <>
+            <Button variant="secondary" asChild>
+              <Link href={studioPath(tenant.slug)}>Edit website</Link>
+            </Button>
             <Button variant="secondary" asChild>
               <a href={site} target="_blank" rel="noreferrer">
                 Website <ArrowUpRight />

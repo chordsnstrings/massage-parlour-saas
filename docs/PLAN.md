@@ -833,6 +833,9 @@ new hosts. Steps and undo: deploy/droplet/README.md "Move to spamanagement.co" (
   old requests list stays visible to the studio for history; `requestChangeAction` is removed.
 - **Prompt editing (2026-10-09, §18.2):** Studio "Ask AI to edit" and the Claude MCP connector (`/api/mcp`) edit drafts
   through one ops layer (`site-edit.ts`); only `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; theme/renames draftable.
+- **Superseded by R23 (2026-10-10, §14.8):** the Studio lives in the console (Websites → spa page, full-screen editor);
+  super-admins publish directly — no review/approve step (`sites.studio_status` deprecated, unused); spas send
+  **change requests again** (reverses that part of §18.1) next to Services & prices and a preview of their site.
 - Scroll effects per section (`scene` on every band: reveal, rise, assemble, flip, depart; `auto` = theme entrance)
   via the shared scroll-scenes engine on public pages (not editor/preview). Spa sites ignore OS reduced motion.
 - Roadmap: **B** section-type registry (shared content schema per type + `variant`), 10 core types × 30 variants
@@ -1069,6 +1072,21 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R22 Console in English + Arabic (owner, 2026-10-10):** the super-admin console only (spa CRM stays EN + TH), RTL for
   Arabic, a language switch in the user menu. **On hold (owner, 2026-10-10: "console keep english for now")**: the console
   stays English; an unfinished foundation is kept only on Claude's local branch `r22` (not pushed).
+- **R23 Website Studio in the console (owner, 2026-10-10):** the owner builds every spa's site without entering its CRM:
+  fewer clicks, help with the texts, always a clear next step. **Built (2026-10-11), PR waiting for owner approval.**
+  Console → Websites: every spa with a status from data (Not started → Template chosen → Draft → Live, + "unpublished
+  changes"; services `websiteProgress`/`websiteOverview`), open change requests and one next-step button (Choose
+  template / Continue editing / Publish / Open site ↗ via `publicSiteUrl`). `/websites/{slug}`: templates (switch +
+  undo), pages, theme, import, blog, change requests (Mark done/Declined + note), preview/share, Publish (all); Edit opens
+  the editor full screen (`(studio)` route group, "Back to console"). English only. No spa review/approve anywhere
+  (`studio_status` kept in the DB for zero-downtime deploys, never read). Spa CRM Website page: Services & prices, a
+  preview of their site, **Request a change** + past requests (EN + TH; TH pending native review). Old CRM studio links
+  forward super-admins to the console (ids checked, `adminUrl`; no open redirect); members get 404 there.
+  **Write texts** (console spa page, AI): drafts the texts of every page in EN + AR from the spa's own data (name,
+  services + prices, branches, hours, contact, brand voice, optional notes) — text props only, drafts only, never
+  publishes; pages open in another editor are skipped; a hand-written draft is kept as a "Before Write texts" version;
+  only `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; audited `site.ai_texts_written`. Replaces the old "Write with AI"
+  sheet. e2e `console-website.spec.ts`. Details: CODEMAP "Site builder → Website Studio (R23, console)".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
@@ -1482,6 +1500,7 @@ Verified by a full plan-vs-code + production-readiness audit. Owner-only setup i
   (name, description, duration, price → live site); no design approval / change requests — super-admin edits and publishes directly.
   ✅ Done 2026-10-09 (see §14.4 note): editing needs `services.manage` (owner/manager); other roles with `site.content`
   see the list read-only.
+  R23 (2026-10-10): spas send change requests again (still no design approval); see §14.8 R23.
 - Online booking from tenant sites stays.
 
 ### 18.2 Done (2026-10-09)

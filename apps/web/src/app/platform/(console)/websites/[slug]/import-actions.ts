@@ -26,15 +26,15 @@ import {
   usedImportImages,
   visitLines,
 } from '@spa/services'
-import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { siteEditSchema } from '@/components/site/ai-schema'
 import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
-import { appPath } from '@/lib/paths'
+import { studioPath } from '@/lib/paths'
 import { type MemberContext, studioGuard } from '@/server/access'
 import { aiFixturesOn, fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
+import { revalidateStudio } from '@/server/studio'
 
 /*
  * F32 Studio "Import from existing website" (super-admin tooling, EN UI): the server reads the spa's current public
@@ -288,14 +288,14 @@ export async function importSiteApplyAction(slug: string, input: unknown): Promi
     ai: parsed.data.ai,
     summary: result.summary.slice(0, 20).map((s) => s.slice(0, 200)),
   })
-  revalidatePath(`/dashboard/${slug}/website`, 'layout')
+  revalidateStudio(slug)
   return ok(
     failed.length
       ? `Imported as a draft page — ${failed.length} ${failed.length === 1 ? 'image' : 'images'} couldn’t be downloaded`
       : 'Imported as a draft page — not published',
     {
       pageId: created?.id ?? null,
-      editorHref: created ? appPath(`/${slug}/website/editor/${created.id}`) : null,
+      editorHref: created ? studioPath(slug, `/editor/${created.id}`) : null,
     },
   )
 }

@@ -16,7 +16,7 @@ import { hasFeature } from '@/server/entitlements'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
 
-type TenantLite = { id: string; slug: string; name: string }
+export type TenantLite = { id: string; slug: string; name: string }
 
 /**
  * Live data for the smart blocks (services + prices, bookable staff, main branch, blog posts; Google reviews and the

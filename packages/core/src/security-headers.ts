@@ -10,7 +10,8 @@
 //   img-src/font-src/connect-src keep CSS from loading from or reporting to anything but https images.
 // - img-src https:: image fields accept any https URL (AI images, pasted links, Instagram/Google media); stored files
 //   are served by the app itself (/files), never straight from the S3/R2 bucket.
-// - frame-src on spa sites (+ the app, for the Studio preview): the F15 Map and Video blocks' players only —
+// - frame-src on spa sites (+ the app's previews and the console Website Studio, R23): the F15 Map and Video blocks'
+//   players only —
 //   www.google.com (Maps embed), www.youtube-nocookie.com, player.vimeo.com. Videos load nothing from those hosts
 //   until the visitor clicks play; uploaded videos play from /files (media-src = default-src 'self').
 
@@ -36,6 +37,8 @@ export type PageKind = {
   surface: CspSurface
   /** The booking widget's iframe route: the only page any site may frame. */
   embed: boolean
+  /** R23 console Website Studio (/platform/websites/{slug}…: spa page, editor, draft preview) — frames site embeds. */
+  studio?: boolean
 }
 
 /** Surface + page kind of a rewritten (internal) path, see proxy.ts `internalPath`. */
@@ -53,7 +56,8 @@ export function pageKindOf(internalPath: string): PageKind {
             : 'marketing'
   const embed =
     (surface === 'site' || surface === 'domain') && /^\/[^/]+\/[^/]+\/book\/embed\/?$/.test(internalPath)
-  return { surface, embed }
+  const studio = surface === 'admin' && internalPath.startsWith('/platform/websites/')
+  return { surface, embed, studio }
 }
 
 /** 128 random bits, base64 (a valid CSP nonce-source). */
@@ -75,7 +79,7 @@ export type CspOptions = PageKind & {
 /** The page CSP for one response. */
 export function contentSecurityPolicy(o: CspOptions): string {
   const turnstile = TURNSTILE_SURFACES.includes(o.surface) ? [TURNSTILE_ORIGIN] : []
-  const embeds = EMBED_SURFACES.includes(o.surface) ? SITE_EMBED_ORIGINS : []
+  const embeds = EMBED_SURFACES.includes(o.surface) || o.studio ? SITE_EMBED_ORIGINS : []
   const directives: [string, ...string[]][] = [
     ['default-src', "'self'"],
     [

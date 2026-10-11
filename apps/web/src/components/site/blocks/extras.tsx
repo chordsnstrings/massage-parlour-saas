@@ -485,7 +485,7 @@ export const BlogList: ComponentConfig<
     if (!posts.length)
       return (
         <EditorNote meta={meta}>
-          Blog posts: none published yet — write them in Website Studio → Blog.
+          Blog posts: none published yet — write them in the console (Websites → spa → Blog).
         </EditorNote>
       )
     return (

@@ -351,9 +351,35 @@ export async function makeStudio(slug: string) {
   await enableTotp(`owner-${slug}@e2e.test`)
 }
 
+/** R23: a spa's website page in the console (Website Studio), e.g. `studioUrl(slug, '/preview')`. */
+export const studioUrl = (slug: string, rest = '') => `${admin}/websites/${slug}${rest}`
+/** R23: the full-screen page editor in the console. */
+export const editorUrl = (slug: string, pageId: string) => studioUrl(slug, `/editor/${pageId}`)
+
 /**
- * Studio super-admin whose email counts for SITE_AI_EDITOR_EMAILS (prompt site editing: Studio Ask AI, Claude MCP):
- * the allow-list only matches verified emails. Listed in playwright.config.ts: slugs `ai-editor`, `mcp-editor`.
+ * R23: the Website Studio lives in the console (admin host). Signs a studio owner (makeStudio) in there with their
+ * password + 2FA: sessions are host-only, so an app-host session doesn't count (path routing: one host, already in).
+ */
+export async function signInStudioOnAdmin(page: Page, email: string, password = OWNER_PASSWORD) {
+  const overview = page.getByRole('heading', { name: 'Overview' })
+  await page.goto(`${admin}/login`)
+  if (await overview.isVisible()) return
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.waitForURL(/\/two-factor/)
+  await passTwoFactor(page, email)
+  if (PATH) {
+    await page.waitForURL((u) => !u.pathname.includes('two-factor'))
+    await page.goto(`${admin}/`)
+  }
+  await expect(overview).toBeVisible({ timeout: 60_000 })
+}
+
+/**
+ * Studio super-admin whose email counts for SITE_AI_EDITOR_EMAILS (prompt site editing: Studio Ask AI, Write texts,
+ * Claude MCP): the allow-list only matches verified emails. Listed in playwright.config.ts: slugs `ai-editor`,
+ * `mcp-editor`, `texts-editor`.
  */
 export async function makeSiteAiEditor(slug: string) {
   await makeStudio(slug)

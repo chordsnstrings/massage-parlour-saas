@@ -6,12 +6,15 @@ import {
   admin,
   app,
   base,
+  editorUrl,
   makeStudio,
   PORT,
   seedCatalog,
   signInPlatformAdmin,
+  signInStudioOnAdmin,
   signUpOwner,
   site,
+  studioUrl,
   testDb,
 } from './helpers'
 
@@ -189,7 +192,7 @@ test('F10: no CSP violations on the main screens (marketing, Apply, spa site + b
 }) => {
   test.setTimeout(240_000)
   const seen = watchCsp(page)
-  const { slug } = await signUpOwner(page, { spa: 'Clean Spa' })
+  const { slug, email } = await signUpOwner(page, { spa: 'Clean Spa' })
   await makeStudio(slug)
   const seed = await seedCatalog(slug)
   const db = testDb()
@@ -247,11 +250,19 @@ test('F10: no CSP violations on the main screens (marketing, Apply, spa site + b
   await expect(page.getByRole('button', { name: /send/i }).first()).toBeVisible()
   await page.goto(`${app}/${slug}`)
   await expect(page.getByRole('navigation').first()).toBeVisible()
-  await page.goto(`${app}/${slug}/website/editor/${home!.id}`)
+  // R23: the Website Studio is in the console (admin host); its editor + preview may frame the Map / Video players.
+  await signInStudioOnAdmin(page, email)
+  const frameSrc = async (url: string) =>
+    directives((await page.goto(url))!.headers()['content-security-policy'])['frame-src']
+  expect(await frameSrc(studioUrl(slug, '/preview'))).toContain('https://www.youtube-nocookie.com')
+  expect(await frameSrc(`${admin}/websites`)).toEqual(["'self'"])
+  expect(await frameSrc(editorUrl(slug, home!.id))).toEqual(
+    expect.arrayContaining(["'self'", 'https://www.google.com', 'https://player.vimeo.com']),
+  )
   await expect(page.frameLocator('#preview-frame').first().getByText('Clean policy')).toBeVisible({
     timeout: 30_000,
   })
-  await page.goto(`${app}/${slug}/website/editor/${design!.id}`)
+  await page.goto(editorUrl(slug, design!.id))
   const designDoc = page.frameLocator('#preview-frame').first().frameLocator('iframe.site-html-design')
   await expect(designDoc.getByRole('heading', { name: 'Design of Clean Spa' })).toHaveCSS(
     'color',

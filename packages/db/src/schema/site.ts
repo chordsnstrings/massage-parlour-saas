@@ -43,7 +43,10 @@ export type TemplateUndo = {
   }[]
 }
 
-/** Website Studio (PLAN §14.4): the platform builds the site; the spa reviews it. */
+/**
+ * @deprecated R23 (2026-10-10): the review step is gone; never read or written. Kept so a container from before R23
+ * can still read it during a zero-downtime deploy; drop in a later migration.
+ */
 export const siteStudioStatus = pgEnum('site_studio_status', ['building', 'review', 'approved'])
 
 export const sites = pgTable(
@@ -63,6 +66,10 @@ export const sites = pgTable(
     seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
     /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
     templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
+    /**
+     * @deprecated R23 (2026-10-10): the review step is gone; never read or written. Kept so a container from before
+     * R23 can still read it during a zero-downtime deploy; drop in a later migration.
+     */
     studioStatus: siteStudioStatus('studio_status').notNull().default('building'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
