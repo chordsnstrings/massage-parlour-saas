@@ -1099,9 +1099,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   (tested, no config change): issuer = resource metadata's, S256, DCR public client `none`, `iss` in every authorize
   response, `resource` → audience-bound token checked by `/api/mcp`, every advertised scope grantable. No CIMD (its
   Better Auth plugin needs an app-owned fetch transport; DCR suffices). Tool annotations in one map
-  (`SITE_MCP_TOOL_HINTS`). Texts: consent "Connect your AI assistant" (EN + TH, TH pending native review), console
-  card "Connect Claude or ChatGPT" with both setups, audit `via AI assistant (MCP)` + client name. Owner setup:
-  deploy/droplet/README.md "Connect Claude or ChatGPT".
+  (`SITE_MCP_TOOL_HINTS`); **decision (review, 2026-10-11):** destructiveHint = may delete or overwrite draft content
+  (OpenAI's definition → ChatGPT asks first): remove_block, replace_html_design, update_block, set_theme, rename_page;
+  only add_block, add_page, move_block are non-destructive writes. Texts: consent "Connect your AI assistant" (EN + TH,
+  TH pending native review), console card "Connect Claude or ChatGPT" with both setups (ChatGPT: Plugins → + → Add
+  custom MCP server → URL → OAuth → Create as a plugin, OpenAI docs 2026-10-11), nameless clients listed by redirect
+  host, "changed elsewhere" names "an AI assistant" (EN + TH), audit `via AI assistant (MCP)` + client name.
+  **Prune (review):** ChatGPT registers once per connector and reuses the client_id (OpenAI: keep it valid), so
+  `pruneUnusedOAuthClients` keeps every client with a `platform.mcp.client_authorized` audit row (Revoke deletes only
+  consent + tokens); a connector registered > 24 h before the account could connect must be re-added (README, card).
+  Owner setup: deploy/droplet/README.md "Connect Claude or ChatGPT".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
@@ -1435,7 +1442,7 @@ others till end — finish everything"), built after the Premium/Standard plans 
   filter, bulk assign, the assignee's own sidebar badge, audit per change, optional round-robin auto-assign among
   receptionists on shift (Automations, off by default; worker every minute). Click-to-send only. Migration 0039.
 - ✅ **F29. Studio editor autosave + editing lock.** Autosave ~2 s after the last change and on blur / tab hidden, with
-  the edit stamp (never overwrites silently: "Changed elsewhere (Claude or another editor)" → Reload / Keep mine = an
+  the edit stamp (never overwrites silently: "Changed elsewhere (an AI assistant or another editor)" → Reload / Keep mine = an
   audited overwrite); status line Saved / Saving… / Offline; an unsaved local copy per spa + page (localStorage) is
   offered back after a crash. Soft lock per page (`site_page_locks`): taken on open, 30 s heartbeat, freed 2 min after
   the last beat; others open view-only ("… is editing this page — view only / Take over"; take-over audited
@@ -1724,7 +1731,7 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
     http); `validateRedirectUri` holds every authorize to the same list (no consent phishing, no open redirect, legacy
     rows included); client admin endpoints disabled, `clientPrivileges` = listed editor; consent page shows the
     redirect host (no "Claude" fallback name); grants audited `platform.mcp.client_authorized`; worker
-    `oauth-clients-prune` (hourly) drops clients without consent after 24 h; Caddy trusts Cf-Connecting-Ip /
+    `oauth-clients-prune` (hourly) drops clients without consent after 24 h (R25: only never-approved ones); Caddy trusts Cf-Connecting-Ip /
     X-Forwarded-For only from Cloudflare ranges and overwrites Cf-Connecting-Ip (forged-IP rate-limit bypass).
     Drafts — **decisions:** the Theme panel shows the LIVE theme and saves only changed fields (live + into a draft
     theme); every draft writer takes `lockSite` (row lock on `sites`); the Studio editor sends an `EditStamp` (page

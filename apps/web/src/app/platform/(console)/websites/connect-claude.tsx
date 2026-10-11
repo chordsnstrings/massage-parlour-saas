@@ -54,12 +54,14 @@ export function ConnectClaudeCard({
               connector, paste this URL.
             </li>
             <li>
-              <span className="font-medium text-fg">ChatGPT:</span> Settings → Apps &amp; Connectors →
-              Advanced settings → turn on Developer mode → Create, paste this URL and choose OAuth.
+              <span className="font-medium text-fg">ChatGPT:</span> Plugins (chatgpt.com/plugins) → + → Add
+              custom MCP server, paste this URL, choose OAuth → Create as a plugin.
             </li>
           </ul>
           <p className="text-xs text-muted">
-            Then sign in here with your super-admin account and two-step code and choose Allow.
+            Then sign in here with your super-admin account and two-step code and choose Allow. Revoke below
+            keeps the connector: connect again from the assistant any time. A connector added more than a day
+            before your account could connect must be removed and added again in the assistant.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg border bg-subtle/50 px-3 py-2 text-sm">

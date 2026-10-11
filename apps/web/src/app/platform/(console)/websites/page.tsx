@@ -23,12 +23,22 @@ export const metadata: Metadata = { title: 'Websites' }
 const ORDER = (r: WebsiteOverviewRow) =>
   r.status === 'none' ? 0 : r.status === 'template' ? 1 : r.status === 'draft' ? 2 : r.unpublished ? 3 : 4
 
+/** A nameless client is shown by where its access goes (as on the consent page), e.g. "chatgpt.com". */
+function redirectHost(uri: string | undefined): string | null {
+  try {
+    return uri ? new URL(uri).host : null
+  } catch {
+    return null
+  }
+}
+
 /** The signed-in super-admin's connected MCP clients (Claude / ChatGPT): consent + newest refresh-token sign-in. */
 async function claudeClients(userId: string): Promise<ClaudeClient[]> {
   const rows = await platformDb()
     .select({
       clientId: oauthConsent.clientId,
       name: oauthClient.name,
+      redirectUris: oauthClient.redirectUris,
       connectedAt: oauthConsent.createdAt,
       lastUsedAt: max(oauthRefreshToken.createdAt),
     })
@@ -39,11 +49,11 @@ async function claudeClients(userId: string): Promise<ClaudeClient[]> {
       and(eq(oauthRefreshToken.clientId, oauthConsent.clientId), eq(oauthRefreshToken.userId, userId)),
     )
     .where(eq(oauthConsent.userId, userId))
-    .groupBy(oauthConsent.clientId, oauthClient.name, oauthConsent.createdAt)
+    .groupBy(oauthConsent.clientId, oauthClient.name, oauthClient.redirectUris, oauthConsent.createdAt)
     .orderBy(desc(oauthConsent.createdAt))
   return rows.map((r) => ({
     clientId: r.clientId,
-    name: r.name?.trim() || 'Claude',
+    name: r.name?.trim() || redirectHost(r.redirectUris[0]) || 'AI assistant',
     connectedAt: r.connectedAt?.toISOString() ?? null,
     lastUsedAt: r.lastUsedAt ? new Date(r.lastUsedAt).toISOString() : null,
   }))

@@ -207,7 +207,7 @@ test('Website Studio: Ask AI previews an edit, applies it to the draft and undoe
     await page.getByRole('button', { name: 'Save draft' }).click()
     await expect(
       page.getByText(
-        'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version',
+        'This page changed elsewhere (an AI assistant or another editor) — reload the editor to get the latest version',
       ),
     ).toBeVisible()
     expect(await draft()).toContain('From Claude')

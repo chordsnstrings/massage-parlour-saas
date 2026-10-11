@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test'
-import { auditLog, oauthClient, pageVersions, sitePages } from '@spa/db'
+import { auditLog, oauthClient, oauthConsent, pageVersions, sitePages, user } from '@spa/db'
 import { ensureSite } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import {
@@ -22,6 +22,8 @@ import {
 const MCP = `${base}/api/mcp`
 /** Claude's real callback; the browser route below answers it locally (no network). */
 const CALLBACK = 'https://claude.ai/api/mcp/auth_callback'
+/** ChatGPT's callbacks (OpenAI Apps SDK auth): the stable one and the per-connector fallback. */
+const CHATGPT_STABLE = 'https://chatgpt.com/connector_platform_oauth_redirect'
 const PASSWORD = 'correct-horse-battery'
 
 const homePage = {
@@ -243,21 +245,29 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
     await p.waitForLoadState('networkidle')
     await passTwoFactor(p, email)
     await expect(p.getByRole('heading', { name: 'Overview' })).toBeVisible()
+    // A connected client registered without client_name is listed by where its access goes, never as "Claude".
+    const nameless = `nameless-${randomBytes(6).toString('hex')}`
+    const [me] = await testDb().select({ id: user.id }).from(user).where(eq(user.email, email))
+    await testDb()
+      .insert(oauthClient)
+      .values({ id: nameless, clientId: nameless, redirectUris: [CHATGPT_STABLE], createdAt: new Date() })
+    await testDb()
+      .insert(oauthConsent)
+      .values({ id: nameless, clientId: nameless, userId: me!.id, scopes: ['sites:edit'] })
     await p.goto(`${admin}/websites`)
     const card = p.getByRole('region', { name: 'Connect Claude or ChatGPT' })
     await expect(card.getByText(MCP)).toBeVisible()
     const clients = card.getByRole('list', { name: 'Connected clients' })
-    await expect(clients).toContainText('Claude')
-    await clients.getByRole('button', { name: 'Revoke' }).click()
+    const item = (text: string) => clients.getByRole('listitem').filter({ hasText: text })
+    await expect(item('chatgpt.com')).toHaveCount(1)
+    await expect(item('Claude')).toHaveCount(1)
+    await item('Claude').getByRole('button', { name: 'Revoke' }).click()
     await expect(p.getByText('Disconnected')).toBeVisible()
     const after = await rpc(request, token, 'tools/list')
     expect(after.status()).toBe(401)
   })
   await ctx.close()
 })
-
-/** ChatGPT's callbacks (OpenAI Apps SDK auth): the stable one and the per-connector fallback. */
-const CHATGPT_STABLE = 'https://chatgpt.com/connector_platform_oauth_redirect'
 
 test('ChatGPT MCP connector: DCR → PKCE + resource → consent → code at chatgpt.com → token → annotated tools', async ({
   page,
@@ -361,6 +371,8 @@ test('ChatGPT MCP connector: DCR → PKCE + resource → consent → code at cha
     .from(auditLog)
     .where(and(eq(auditLog.action, 'platform.mcp.client_authorized'), eq(auditLog.entityId, clientId)))
   expect(granted?.data).toMatchObject({ redirectHost: 'chatgpt.com', client: 'ChatGPT' })
+  // The grant row keeps the client through Revoke (pruneUnusedOAuthClients matches entity + entityId).
+  expect(granted?.entity).toBe('oauth_client')
 
   const tools = await rpc(request, first.access_token, 'tools/list')
   expect(tools.status()).toBe(200)
@@ -372,9 +384,10 @@ test('ChatGPT MCP connector: DCR → PKCE + resource → consent → code at cha
     expect(hints[name], name).toMatchObject({ readOnlyHint: true, openWorldHint: false })
   expect(hints.update_block).toMatchObject({
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     openWorldHint: false,
   })
+  expect(hints.add_block).toMatchObject({ readOnlyHint: false, destructiveHint: false })
   expect(hints.remove_block).toMatchObject({ readOnlyHint: false, destructiveHint: true })
   expect(Object.keys(hints).some((n) => n.includes('publish'))).toBe(false)
   const spas = await rpc(request, first.access_token, 'tools/call', {

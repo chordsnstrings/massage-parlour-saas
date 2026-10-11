@@ -315,9 +315,9 @@ async function applyPendingRename(tx: Tx, tenantId: string, page: SitePageRow): 
  */
 export type EditStamp = { page: string; site: string; themeDraft: boolean; pendingRename: boolean }
 
-/** Refusal when a stamp no longer matches (Claude MCP / Ask AI / another tab changed the draft since it loaded). */
+/** Refusal when a stamp no longer matches (an AI assistant via MCP / Ask AI / another tab changed the draft since it loaded). */
 export const EDITED_ELSEWHERE =
-  'This page changed elsewhere (Claude or another editor) — reload the editor to get the latest version'
+  'This page changed elsewhere (an AI assistant or another editor) — reload the editor to get the latest version'
 
 export async function editStamp(tx: Tx, tenantId: string, pageId: string): Promise<EditStamp | null> {
   const site = await getSite(tx, tenantId)

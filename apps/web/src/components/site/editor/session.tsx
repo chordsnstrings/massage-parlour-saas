@@ -175,7 +175,7 @@ export function saveStatusText(o: {
   if (o.lock.kind === 'other') return 'View only'
   if (o.state === 'saving') return 'Saving…'
   if (o.state === 'offline') return 'Offline – changes kept locally'
-  if (o.state === 'conflict') return 'Changed elsewhere (Claude or another editor)'
+  if (o.state === 'conflict') return 'Changed elsewhere (an AI assistant or another editor)'
   if (o.state === 'error') return 'Not saved'
   if (o.dirty) return 'Unsaved changes'
   if (o.savedAt !== null && o.state === 'saved') return `Saved · ${savedAgo(o.savedAt, o.now)}`
@@ -291,8 +291,8 @@ export function ConflictBanner({ onReload, onKeepMine }: { onReload: () => void;
       }
     >
       <p>
-        <span className="font-medium">Changed elsewhere (Claude or another editor).</span> Reload to get the
-        latest version (your unsaved changes are dropped), or keep yours and replace it.
+        <span className="font-medium">Changed elsewhere (an AI assistant or another editor).</span> Reload to
+        get the latest version (your unsaved changes are dropped), or keep yours and replace it.
       </p>
     </Banner>
   )
@@ -330,7 +330,7 @@ export function RestoreBanner({
         <span className="font-medium">Unsaved changes from {savedAgo(copy.at, now)}</span> were kept on this
         device.
         {stale &&
-          ' The page was saved since (by you, Claude or another editor) — restoring replaces that version.'}
+          ' The page was saved since (by you, an AI assistant or another editor) — restoring replaces that version.'}
       </p>
     </Banner>
   )

@@ -146,17 +146,22 @@ host later means adding it to `packages/core/src/security-headers.ts`.
    it with a copy button).
    - **Claude** (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
      "spamanagement", paste the URL.
-   - **ChatGPT**: **Settings → Apps & Connectors → Advanced settings → Developer mode** on, then **Create**: name e.g.
-     "spamanagement", paste the URL, authentication **OAuth**.
+   - **ChatGPT**: **Plugins** (chatgpt.com/plugins) → **+** → **Add custom MCP server**: name e.g. "spamanagement",
+     paste the URL as the connection, authentication **OAuth**, confirm the risk notice, **Create as a plugin** (OpenAI's
+     "Connect from ChatGPT" guide, checked 2026-10-11; menu names may move, the steps stay: add a custom MCP server,
+     paste the URL, OAuth).
    The assistant opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
 3. Ask e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ". Every change is a **draft**: preview
    and publish in the Website Studio as usual (the assistant can also give a preview link). ChatGPT may ask you to
    confirm changes (each tool says whether it only reads, edits or removes).
 4. Disconnect any time: console → Websites → Connect Claude or ChatGPT → **Revoke** (takes effect on the next call).
+   The assistant's registration is kept, so connecting again from the same connector just asks for sign-in + Allow.
    Removing your email from `SITE_AI_EDITOR_EMAILS` also stops it at once.
 5. Only Claude's (claude.ai / claude.com) and ChatGPT's (chatgpt.com) own callbacks can be registered and receive
    sign-in codes; the consent page shows where access goes ("Approving sends access to chatgpt.com"). Registrations
-   nobody approves are deleted after a day. Every approval is in the audit log (`platform.mcp.client_authorized`).
+   nobody ever approved are deleted after a day (approved ones stay, also after Revoke). So a connector added more
+   than a day before the account could connect (not yet enabled, no 2FA) answers "invalid_client": remove it in the
+   assistant and add it again. Every approval is in the audit log (`platform.mcp.client_authorized`).
 
 ## Google: Business Profile, Book button, Search Console (F17)
 

@@ -168,9 +168,18 @@ describe('site MCP server (/api/mcp)', () => {
     const writes = names.filter((n) => !hints[n]?.readOnlyHint)
     expect(writes.length).toBeGreaterThan(0)
     for (const name of writes) expect(hints[name], name).toMatchObject({ readOnlyHint: false })
+    // Overwrites of existing drafts count as destructive (OpenAI: "may delete or overwrite user data").
     expect(writes.filter((n) => hints[n]?.destructiveHint).sort()).toEqual([
       'remove_block',
+      'rename_page',
       'replace_html_design',
+      'set_theme',
+      'update_block',
+    ])
+    expect(writes.filter((n) => !hints[n]?.destructiveHint).sort()).toEqual([
+      'add_block',
+      'add_page',
+      'move_block',
     ])
   })
 

@@ -516,22 +516,24 @@ type ToolHints = { readOnlyHint: boolean; destructiveHint?: boolean; idempotentH
 
 /**
  * MCP tool annotations (ChatGPT and Claude use them to decide which calls need the user's confirmation) — the one
- * place for them: one entry per SITE_MCP_TOOLS name (a test checks). destructiveHint only for removals and
- * replacements; idempotentHint where repeating the same call changes nothing more. openWorldHint is false for all
- * (only this platform). A tool without an entry is announced as a destructive write.
+ * place for them: one entry per SITE_MCP_TOOLS name (a test checks). destructiveHint for every tool that may delete or
+ * overwrite existing draft content (OpenAI's definition: the host asks for explicit approval first) — removals,
+ * replacements and in-place edits of blocks, theme and page title/slug; false only for purely additive tools and
+ * reordering. idempotentHint where repeating the same call changes nothing more. openWorldHint is false for all (only
+ * this platform). A tool without an entry is announced as a destructive write.
  */
 export const SITE_MCP_TOOL_HINTS: Record<string, ToolHints> = {
   list_spas: { readOnlyHint: true },
   get_site: { readOnlyHint: true },
   list_block_types: { readOnlyHint: true },
   preview_link: { readOnlyHint: true },
-  update_block: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  update_block: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   add_block: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   remove_block: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   move_block: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  set_theme: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  set_theme: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   add_page: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-  rename_page: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  rename_page: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   replace_html_design: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
 }
 
