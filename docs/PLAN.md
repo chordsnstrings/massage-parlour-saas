@@ -1087,6 +1087,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   publishes; pages open in another editor are skipped; a hand-written draft is kept as a "Before Write texts" version;
   only `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; audited `site.ai_texts_written`. Replaces the old "Write with AI"
   sheet. e2e `console-website.spec.ts`. Details: CODEMAP "Site builder → Website Studio (R23, console)".
+  ✅ Live 2026-10-11 (PR #34, a3029fe). The spa CRM menu item keeps its label "Website studio" (`nav.website`) — owner
+  2026-10-11: "no rename for now".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
