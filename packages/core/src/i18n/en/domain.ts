@@ -338,4 +338,9 @@ export const domain = {
   planNotArchived: '{name} is not archived',
   // R24 HTML designs (console / AI assistant connector).
   notHtmlDesignPage: '{page} is not an HTML design page',
+  htmlDesignFileMissing: 'The design file of {page} is missing',
+  htmlDesignEmpty: 'The HTML design is empty',
+  htmlDesignTooLarge: 'The design is {size} MB as UTF-8 text; the limit is {limit} MB.',
+  templateDesignMissing: 'An HTML design file of this template is missing',
+  templateDesignMissingUpload: 'An HTML design file of this template is missing — upload it again',
 } as const

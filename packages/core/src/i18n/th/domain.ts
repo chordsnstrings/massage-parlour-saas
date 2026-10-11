@@ -303,4 +303,9 @@ export const domain: Messages['errors']['domain'] = {
   planNotArchived: '{name} ยังไม่ได้ถูกเก็บถาวร',
   // R24 (new strings, flagged for native TH review)
   notHtmlDesignPage: '{page} ไม่ใช่หน้าดีไซน์ HTML',
+  htmlDesignFileMissing: 'ไม่พบไฟล์ดีไซน์ของ {page}',
+  htmlDesignEmpty: 'ดีไซน์ HTML ว่างเปล่า',
+  htmlDesignTooLarge: 'ดีไซน์มีขนาด {size} MB (ข้อความ UTF-8) เกินขีดจำกัด {limit} MB',
+  templateDesignMissing: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้',
+  templateDesignMissingUpload: 'ไม่พบไฟล์ดีไซน์ HTML ของเทมเพลตนี้ — อัปโหลดใหม่อีกครั้ง',
 }
