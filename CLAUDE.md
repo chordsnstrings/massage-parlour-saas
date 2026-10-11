@@ -54,7 +54,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
   **Website Studio:** only super-admins edit and publish sites; spa users edit only services + prices (owner 2026-10-09, PLAN §18.1).
   **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
-  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA (owner, 2026-10-09; PLAN §18.2, CODEMAP "Claude MCP connector").
+  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; production default `*` = every super-admin (owner, 2026-10-11;
+  PLAN §18.2, CODEMAP "Claude MCP connector").
 - **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM layout (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
   identical for every spa (spa logo + name in the sidebar from onboarding), ~15–20% more compact, light only, EN + Thai
   (all UI text and system messages; typed names never translated). Plan: PLAN §14.6. **Look (owner, 2026-10-09,
@@ -99,7 +100,7 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Super-admin locally: create the login at admin.localhost:3000/join with an email in `PLATFORM_ADMIN_EMAILS` (the
   public /signup is the spa application form and refuses listed emails), verify it (link, or another super-admin's
   Company → Super-admins "Mark email verified"), then enrol 2FA. Production list = droplet base value + the two
-  owner-added admins appended in deploy/droplet/compose.yml (they are also the default `SITE_AI_EDITOR_EMAILS`).
+  owner-added admins appended in deploy/droplet/compose.yml (`SITE_AI_EDITOR_EMAILS` defaults to `*` there).
 
 ## Gotchas
 - Biome reformats on `pnpm format`; patch the formatted code (prefer the Edit tool over string-replace scripts).
