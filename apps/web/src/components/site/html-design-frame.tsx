@@ -2,7 +2,7 @@
 // F10: an uploaded HTML design (R17) runs in the shell document app/api/html-design/frame, which has its own policy
 // (a `srcdoc` frame would inherit the hosting page's strict CSP and lose the design's scripts and fonts). The shell
 // asks for the design once loaded; we also send it at mount in case the shell loaded before hydration.
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** Same as @spa/core HTML_DESIGN_FRAME_PATH (client code doesn't import the @spa/core root). */
 const SHELL = '/api/html-design/frame'
@@ -41,7 +41,10 @@ export function HtmlDesignFrame({ html, sandbox, editing, ...rest }: Props) {
   const shown = useRef<string | null>(null)
   const inEditor = useRef(editing)
   inEditor.current = editing
+  // A new frame element per design shown (see below).
+  const [frameKey, setFrameKey] = useState(0)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `frameKey` = a new frame element to talk to
   useEffect(() => {
     const frame = ref.current
     // In the site editor the frame sits inside Puck's canvas iframe: the shell talks to that window.
@@ -72,13 +75,18 @@ export function HtmlDesignFrame({ html, sandbox, editing, ...rest }: Props) {
     return () => {
       host.removeEventListener('message', onMessage)
     }
-  }, [])
+  }, [frameKey])
 
-  // A new design (upload, image adjustment): reload the shell, which asks for the latest one.
+  // A new design (upload, image adjustment, a restored version or local copy once its file is fetched): a new frame,
+  // whose shell asks for the latest one. Not a reload of this one: a shell still writing the design it was sent
+  // (document.open) cancels that navigation and stays on the old design.
   useEffect(() => {
-    if (shown.current === null || shown.current === html || !ref.current) return
-    ref.current.src = SHELL
+    if (shown.current === null || shown.current === html) return
+    shown.current = null
+    setFrameKey((k) => k + 1)
   }, [html])
 
-  return <iframe ref={ref} src={SHELL} sandbox={sandbox} allow={ALLOW} allowFullScreen {...rest} />
+  return (
+    <iframe key={frameKey} ref={ref} src={SHELL} sandbox={sandbox} allow={ALLOW} allowFullScreen {...rest} />
+  )
 }

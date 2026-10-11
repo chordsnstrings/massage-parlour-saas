@@ -510,7 +510,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     is not yet loaded when the next script reads it, as it is in a parsed page; a `blob:` document instead would break
     every #fragment navigation (Chromium: "Not allowed to load local resource") — then `document.write`s the design
     once (with `<base>` = hosting page URL) and posts `spa:html-design-shown` (the host focuses the frame only on a
-    full-page, non-editor view). Link script (window,
+    full-page, non-editor view). A changed design → a new `<iframe>` element (React key), never a reload of this
+    one: the shell's `document.open` cancels a pending navigation, so a shell still writing the previous design kept
+    it (Chrome 153; CI failure of html-upload "local copy … once restored"). Link script (window,
     bubble phase, skipped when the design prevented the default): `#x` → fragment navigation of the frame itself (the
     `<base>` would load the hosting page into the frame); exact designs: links/forms without target → `_top`; legacy:
     http(s) → new tab; inert when `meta.editing`. site.css: `html:has(.site-html-root)` overflow hidden (one scroller).
