@@ -33,7 +33,10 @@ export const auth: Messages['auth'] = {
     allow: 'อนุญาต',
     deny: 'ปฏิเสธ',
     notEnabled: 'บัญชีของคุณยังไม่ได้เปิดการเชื่อมต่อ Claude',
+    notAdmin: 'เฉพาะบัญชีผู้ดูแลระบบเท่านั้นที่เชื่อมต่อ Claude ได้', // 2026-10-11: pending native Thai review.
+    unverified: 'โปรดยืนยันอีเมลของบัญชีนี้ก่อน แล้วเริ่มใหม่จาก Claude', // 2026-10-11: pending native Thai review.
     needs2fa: 'โปรดเปิดการยืนยันตัวตนสองขั้นตอนสำหรับบัญชีผู้ดูแลระบบนี้ก่อน',
+    ready: 'บัญชีของคุณเชื่อมต่อ Claude ได้แล้ว โปรดกลับไปที่ Claude แล้วเชื่อมต่ออีกครั้ง', // 2026-10-11: pending native Thai review.
     expired: 'คำขอเชื่อมต่อนี้หมดอายุแล้ว โปรดเริ่มใหม่จาก Claude',
   },
   twoFactor: {

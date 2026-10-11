@@ -550,6 +550,7 @@ function buildServer(ctx: Ctx) {
 
 const NOT_ENABLED: Record<Exclude<SiteAiEditorStatus, 'ok'>, string> = {
   not_listed: 'Editing sites with Claude is not enabled for this account.',
+  unverified: 'Editing sites with Claude needs a verified email address on this account.',
   not_admin: 'Editing sites with Claude needs a super-admin account.',
   needs2fa: 'Turn on two-factor authentication for this super-admin account first.',
 }

@@ -1687,8 +1687,9 @@ New spas **apply**; the platform owner accepts or rejects. Self-serve instant si
   holding the slug / notifying only after email verification, expiring unverified pending applications.
 - **Prompt site editing (owner, 2026-10-09):** two ways to edit a spa's site with prompts, both editing the DRAFT
   only (never publish), both limited to `SITE_AI_EDITOR_EMAILS` (comma-separated, verified email, must also be a
-  super-admin with 2FA; `*` = every super-admin, the production default since 2026-10-11; empty = nobody; re-checked
-  on every action/request, never hard-coded).
+  super-admin with 2FA; `*` = every super-admin, the production default since 2026-10-11 — then no verified-email check,
+  the console's own rule (owner 2026-10-11; the first production super-admin login may never have been verified);
+  empty = nobody; re-checked on every action/request, never hard-coded).
   - **A — ops layer** `@spa/services` `site-edit.ts`: `runSiteEdit` (update / add (index, after/before, into slot) /
     preset / move / remove block, theme, add_page, rename_page, html_design; zod shapes + `applySiteEditOps` against
     the Puck block schema; all-or-nothing; `dryRun` returns the resulting drafts; saves via `saveDraft` / `addPage` /

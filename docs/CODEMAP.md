@@ -565,7 +565,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   e2e `site-import.spec.ts`.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
   Gated by `SITE_AI_EDITOR_EMAILS` (`server/site-ai-gate.ts` `siteAiGuard` → `siteAiEditorStatus` in `@spa/db`
-  admins.ts: listed (or `*`) verified email + super-admin + 2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
+  admins.ts: `*` = super-admin + 2FA like the console; a named list = listed + verified email + super-admin + 2FA; read fresh; statuses ok / not_listed / unverified / not_admin / needs2fa, each with its own message incl. the OAuth consent page) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
   (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
   reverts the newest.
   - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the

@@ -1,11 +1,20 @@
 import { isAllowedMcpRedirectUri, verifyOAuthQueryParams } from '@spa/auth'
-import { oauthClient, platformDb, siteAiEditorStatus } from '@spa/db'
+import { oauthClient, platformDb, type SiteAiEditorStatus, siteAiEditorStatus } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import type { Metadata } from 'next'
 import { AuthLayout } from '@/components/auth/auth-layout'
 import { getT } from '@/i18n/server'
 import { getSession } from '@/server/session'
 import { ConsentForm } from './consent-form'
+
+/** Why this account can (`ready`: a stale "not enabled" link) or can't connect Claude — the exact reason, not a catch-all. */
+const OAUTH_REASON = {
+  ok: 'auth.oauth.ready',
+  not_listed: 'auth.oauth.notEnabled',
+  unverified: 'auth.oauth.unverified',
+  not_admin: 'auth.oauth.notAdmin',
+  needs2fa: 'auth.oauth.needs2fa',
+} as const satisfies Record<SiteAiEditorStatus, string>
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('auth.oauth.title') }
@@ -39,7 +48,7 @@ export default async function ConsentPage({
       <AuthLayout title={t('auth.oauth.title')}>
         <p className="mb-3 text-sm text-muted">{t('auth.oauth.account', { email: session.user.email })}</p>
         <p role="alert" className="rounded-xl border bg-subtle/50 p-3 text-sm">
-          {status === 'needs2fa' ? t('auth.oauth.needs2fa') : t('auth.oauth.notEnabled')}
+          {t(OAUTH_REASON[status])}
         </p>
       </AuthLayout>
     )
@@ -72,7 +81,7 @@ export default async function ConsentPage({
           </>
         ) : (
           <p role="alert" className="rounded-xl border bg-subtle/50 p-3 text-sm">
-            {status === 'needs2fa' ? t('auth.oauth.needs2fa') : t('auth.oauth.notEnabled')}
+            {t(OAUTH_REASON[status])}
           </p>
         )}
       </div>

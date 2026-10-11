@@ -56,8 +56,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).
   **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
-  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; production default `*` = every super-admin (owner, 2026-10-11;
-  PLAN §18.2, CODEMAP "Claude MCP connector").
+  `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; production default `*` = every super-admin, same rule as the console
+  (a named list also needs a verified email) (owner, 2026-10-11; PLAN §18.2, CODEMAP "Claude MCP connector").
 - **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM layout (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
   identical for every spa (spa logo + name in the sidebar from onboarding), ~15–20% more compact, light only, EN + Thai
   (all UI text and system messages; typed names never translated). Plan: PLAN §14.6. **Look (owner, 2026-10-09,
@@ -132,4 +132,6 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - Tailwind arbitrary classes: no escaped quotes or spaces inside `[…]` (the scanner skips them; percent-encode data URLs),
   and type-hint ambiguous `bg-[…]` (`bg-[position:…]`, `bg-[length:…]`) or `cn()`/tailwind-merge drops the bg colour.
   Arbitrary breakpoints in px (`min-[1440px]:`) sort before the rem theme ones (`md:`) and lose; write them in rem (`min-[90rem]:`).
+- DB unit tests and e2e share `spa_test` and reset it: never run `pnpm test` / a services vitest while an e2e run is going
+  (symptom: e2e "no plan", missing rows); take `/tmp/e2e.lock` for both.
 - Sandbox-only: Docker builds need the proxy CA (`--build-context ca=/root/.ccr` on a temp Dockerfile copy); committed Dockerfiles stay clean.
