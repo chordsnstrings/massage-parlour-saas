@@ -1,0 +1,170 @@
+'use server'
+import { mediaAssets, withTenant } from '@spa/db'
+import {
+  assetUsage,
+  DomainError,
+  deleteAsset,
+  fileIdFromUrl,
+  listAssets,
+  persistRemoteAsset,
+  postImageUrl,
+  repointPostImages,
+  saveRemoteImage,
+  setTags,
+  updateAlt,
+} from '@spa/services'
+import { eq } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { toMediaItem } from '@/components/media/types'
+import { getT } from '@/i18n/server'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
+import { guard } from '@/server/access'
+import { audit } from '@/server/audit'
+import { canonicalUrls } from '@/server/origin'
+
+const uuid = z.string().uuid()
+const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/media`)
+
+const Filter = z.object({
+  q: z.string().trim().max(80).optional(),
+  source: z.enum(['upload', 'ai']).optional(),
+  tag: z.string().trim().max(32).optional(),
+  offset: z.number().int().min(0).max(5000).optional(),
+})
+
+/**
+ * Library page for the image picker (website editor, service / therapist photos). AI images still on their
+ * temporary 7-day link are left out — picking one would embed a URL that soon breaks.
+ */
+export async function listMediaAction(slug: string, filter: z.input<typeof Filter> = {}) {
+  const { ctx, error } = await guard(slug, 'site.content')
+  if (error) return { ok: false as const, error }
+  const f = Filter.safeParse(filter)
+  if (!f.success) return { ok: false as const, error: (await getT())('errors.generic') }
+  const rows = await withTenant(ctx.tenant.id, (tx) =>
+    listAssets(tx, { ...f.data, storedOnly: true, limit: 49 }),
+  )
+  return { ok: true as const, items: rows.slice(0, 48).map(toMediaItem), more: rows.length > 48 }
+}
+
+const AltSchema = z.object({
+  altEn: z.string().trim().max(300, 'media.tooLong').optional(),
+  altAr: z.string().trim().max(300, 'media.tooLong').optional(),
+  tags: z.string().trim().max(300, 'media.tooLong').optional(),
+})
+
+export async function saveAssetAction(
+  slug: string,
+  id: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.content')
+  if (error) return fail(error)
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
+  const parsed = AltSchema.safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  try {
+    await withTenant(ctx.tenant.id, async (tx) => {
+      await updateAlt(tx, id, { en: d.altEn, ar: d.altAr })
+      await setTags(tx, id, (d.tags ?? '').split(','))
+    })
+  } catch (e) {
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'media.updated',
+    entity: 'media_asset',
+    entityId: id,
+    data: { alt: { en: d.altEn, ar: d.altAr }, tags: d.tags },
+  })
+  revalidate(slug)
+  return ok('media.detailsSaved')
+}
+
+/** Where this image is used — pages, service and therapist photos, unpublished posts (for the delete warning). */
+export async function assetUsageAction(slug: string, id: string) {
+  const { ctx, error } = await guard(slug, 'site.content')
+  if (error) return { ok: false as const, error }
+  if (!uuid.safeParse(id).success) return { ok: false as const, error: 'media.notFound' }
+  const used = await withTenant(ctx.tenant.id, async (tx) => {
+    const [row] = await tx.select({ url: mediaAssets.url }).from(mediaAssets).where(eq(mediaAssets.id, id))
+    return row ? assetUsage(tx, row.url) : null
+  })
+  return {
+    ok: true as const,
+    usage: {
+      pages: (used?.pages ?? []).map((p) => p.title.en || 'Home'),
+      services: (used?.services ?? []).map((s) => s.name.en || s.name.ar || 'Service'),
+      staff: (used?.staff ?? []).map((s) => s.name),
+      posts: used?.posts.length ?? 0,
+      sections: (used?.sections ?? []).map((s) => s.name),
+    },
+  }
+}
+
+export async function deleteAssetAction(slug: string, id: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.content')
+  if (error) return fail(error)
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
+  const removed = await withTenant(ctx.tenant.id, (tx) => deleteAsset(tx, id))
+  if (!removed) return fail('media.notFound')
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'media.deleted',
+    entity: 'media_asset',
+    entityId: id,
+    data: { url: removed.url, source: removed.source },
+  })
+  revalidate(slug)
+  return ok('media.deleted')
+}
+
+/**
+ * Saves an AI image that still points at its temporary (7-day) link into the library, and moves the social
+ * posts that use that link onto the stored copy (so approval doesn't download it again, and it outlives the link).
+ */
+export async function persistAssetAction(slug: string, id: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'site.content')
+  if (error) return fail(error)
+  if (!uuid.safeParse(id).success) return fail('media.notFound')
+  const [row] = await withTenant(ctx.tenant.id, (tx) =>
+    tx.select().from(mediaAssets).where(eq(mediaAssets.id, id)),
+  )
+  if (!row) return fail('media.notFound')
+  if (fileIdFromUrl(row.url)) return ok('media.alreadySaved')
+  try {
+    const image = await saveRemoteImage(row.url)
+    const origin = new URL(canonicalUrls().site(slug)).origin
+    await withTenant(ctx.tenant.id, async (tx) => {
+      const asset = await persistRemoteAsset(tx, {
+        tenantId: ctx.tenant.id,
+        remoteUrl: row.url,
+        image,
+        createdBy: ctx.user.id,
+      })
+      await repointPostImages(tx, row.url, postImageUrl(asset.url, origin))
+    })
+  } catch (e) {
+    if (e instanceof DomainError)
+      return fail({ key: 'media.saveFailedReason', params: { reason: e.message } })
+    console.error('persist media failed', e)
+    return fail('media.saveFailed')
+  }
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'media.persisted',
+    entity: 'media_asset',
+    entityId: id,
+  })
+  revalidate(slug)
+  revalidatePath(`/dashboard/${slug}/ai/content`)
+  return ok('media.savedToLibrary')
+}

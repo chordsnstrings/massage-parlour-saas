@@ -1,0 +1,53 @@
+// `assistant` namespace (EN source): the dashboard "Ask AI" drawer for staff (F30, PLAN §17). Mirror every key in
+// th/assistant.ts. New strings (2026-10-10) still need the owner's native review (TH).
+export const assistant = {
+  open: 'Ask AI',
+  /** Accessible name of the top-bar button (keeps the visible "Ask AI"; distinct from the Studio's page editor AI). */
+  openLabel: 'Ask AI about your spa',
+  title: 'Ask AI',
+  subtitle: 'Questions about your spa, answered from your own data. Read-only.',
+  close: 'Close Ask AI',
+  newChat: 'New chat',
+  you: 'You',
+  ai: 'AI',
+  placeholder: 'Ask about bookings, clients, sales or shifts…',
+  question: 'Your question',
+  send: 'Ask',
+  thinking: 'Looking it up…',
+  disclaimer: 'AI can make mistakes. Check important numbers on the linked screens before acting on them.',
+  intro: 'Try one of these:',
+  suggestions: {
+    tomorrow: 'How many bookings do we have tomorrow?',
+    topMonth: 'What were our top treatments this month?',
+    lapsed: "Which clients haven't come back in 60 days?",
+    revenue: 'Revenue last week vs the week before?',
+    friday: 'Who is on shift on Friday?',
+  },
+  links: 'Open',
+  link: {
+    calendar: 'Calendar · {date}',
+    bookings: 'Bookings',
+    reports: 'Reports',
+    overview: 'Dashboard',
+    clients: 'Clients',
+    client: '{name}',
+    staff: 'Staff',
+    whatsapp: 'WhatsApp draft · {name}',
+  },
+  whatsappNote: 'Opens WhatsApp with the message ready. Nothing is sent until you press send.',
+  incomplete: "I couldn't finish that one. Try a shorter or more specific question.",
+  errors: {
+    question: 'Type a question (up to 500 characters).',
+    off: 'AI is not set up on this platform yet.',
+    rate: 'You have asked a lot of questions in a short time. Try again in a while.',
+    budget: "This month's AI allowance is used up. Ask the owner to raise it with us.",
+    paused: 'AI is switched off for this spa right now.',
+    disabled: 'Ask AI is switched off right now.',
+    plan: 'Ask AI is part of the Premium plan.',
+    busy: 'The AI is busy right now. Try again in a moment.',
+  },
+  upsell: {
+    title: 'Ask AI is part of Premium',
+    text: 'Ask questions about your spa in plain language — bookings tomorrow, top treatments, clients to win back, revenue week on week, who is on shift — and jump straight to the right screen.',
+  },
+}

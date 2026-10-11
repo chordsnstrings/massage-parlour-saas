@@ -1,0 +1,412 @@
+@import "./site-designs.css";
+
+/* Public tenant site — theme-bound primitives (docs/PLAN.md §11.5, §11.8). Variables come from themeVars(). */
+
+.site-root {
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.site-root ::selection {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+.sb-heading {
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  text-transform: var(--heading-case);
+  letter-spacing: var(--heading-tracking);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+.site-root[dir="rtl"] .sb-heading {
+  /* Arabic script must not be letter-spaced or upper-cased. */
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+.sb-prose {
+  text-wrap: pretty;
+}
+.sb-card {
+  border-radius: var(--radius);
+}
+/* Template tokens: Arabic heading face, image-block shape (arch / organic) and tinted-band patterns. */
+.site-root[dir="rtl"] .sb-heading {
+  font-family: var(--font-heading-ar, var(--font-heading));
+}
+figure > .sb-card {
+  border-radius: var(--img-radius, var(--radius));
+}
+
+/* Framed images (image.ts → imageFrameVars): fit, focal point, zoom per device. Unframed images get the old
+   centred cover. Positions are physical percentages, so RTL never mirrors the focal point. */
+.sb-frame {
+  display: block;
+  overflow: hidden;
+}
+.sb-img {
+  display: block;
+  object-fit: var(--if-b, cover);
+  object-position: var(--ip-b, 50% 50%);
+  transform-origin: var(--ip-b, 50% 50%);
+  transform: scale(var(--iz-b, 1));
+}
+@media (min-width: 768px) {
+  .sb-img {
+    object-fit: var(--if-m, cover);
+    object-position: var(--ip-m, 50% 50%);
+    transform-origin: var(--ip-m, 50% 50%);
+    transform: scale(var(--iz-m, 1));
+  }
+}
+@media (min-width: 1024px) {
+  .sb-img {
+    object-fit: var(--if-l, cover);
+    object-position: var(--ip-l, 50% 50%);
+    transform-origin: var(--ip-l, 50% 50%);
+    transform: scale(var(--iz-l, 1));
+  }
+}
+
+/* Section background bands. Inverse/accent bands re-map the semantic tokens for their content. */
+.sb-bg-surface {
+  background: var(--surface);
+}
+.sb-bg-subtle {
+  background: var(--subtle);
+}
+.sb-bg-soft {
+  background: var(--accent-soft);
+}
+.sb-bg-subtle,
+.sb-bg-soft {
+  background-image: var(--pattern, none);
+}
+.sb-bg-inverse,
+.sb-bg-image {
+  background: var(--inverse-bg);
+  --fg: var(--inverse-fg);
+  --muted: color-mix(in srgb, var(--inverse-fg) 72%, transparent);
+  --border: color-mix(in srgb, var(--inverse-fg) 16%, transparent);
+  --surface: color-mix(in srgb, var(--inverse-fg) 7%, transparent);
+  --subtle: color-mix(in srgb, var(--inverse-fg) 10%, transparent);
+  color: var(--fg);
+}
+.sb-bg-accent {
+  background: var(--brand);
+  --fg: var(--brand-fg);
+  --muted: color-mix(in srgb, var(--brand-fg) 80%, transparent);
+  --border: color-mix(in srgb, var(--brand-fg) 22%, transparent);
+  --surface: color-mix(in srgb, var(--brand-fg) 8%, transparent);
+  --accent: var(--brand-fg);
+  --accent-fg: var(--brand);
+  color: var(--fg);
+}
+
+/* F15 enquiry form fields: theme surfaces, ≥44px targets, visible focus. */
+.sb-input {
+  display: block;
+  min-height: 44px;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px;
+  transition:
+    border-color 150ms var(--ease),
+    box-shadow 150ms var(--ease);
+}
+.sb-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sb-input[aria-invalid="true"] {
+  border-color: #b42318;
+}
+.sb-input:disabled {
+  opacity: 0.7;
+}
+
+/* Buttons: ≥44px touch targets, theme shape, press + hover micro-interactions. */
+.sb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1.4rem;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition:
+    transform 120ms var(--ease),
+    background-color 150ms var(--ease),
+    border-color 150ms var(--ease),
+    color 150ms var(--ease),
+    filter 150ms var(--ease);
+}
+.sb-btn:active {
+  transform: scale(0.98);
+}
+.sb-btn svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.sb-btn-lg {
+  min-height: 52px;
+  padding: 0 1.75rem;
+  font-size: 16px;
+}
+.sb-btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.sb-btn-secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--fg);
+}
+.sb-btn-link {
+  padding: 0 0.25rem;
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 6px;
+}
+@media (hover: hover) {
+  .sb-btn-primary:hover {
+    filter: brightness(1.07);
+    transform: translateY(-1px);
+  }
+  .sb-btn-secondary:hover {
+    border-color: var(--fg);
+  }
+  .sb-btn-link:hover {
+    text-decoration-color: currentColor;
+  }
+  .sb-lift {
+    transition:
+      transform 200ms var(--ease),
+      border-color 200ms var(--ease),
+      box-shadow 200ms var(--ease);
+  }
+  .sb-lift:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--fg) 22%, transparent);
+    box-shadow: 0 16px 32px -24px rgb(0 0 0 / 0.35);
+  }
+}
+.site-root a[aria-disabled="true"] {
+  cursor: default;
+}
+.site-root :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Responsive style props (base → md ≥768 → lg ≥1024), compiled to variables by responsiveStyle(). */
+.sb-py {
+  padding-block: calc(var(--py-b) * var(--density, 1));
+}
+.sb-h {
+  height: calc(var(--h-b) * var(--density, 1));
+}
+.sb-al {
+  text-align: var(--al-b);
+  justify-content: var(--al-b);
+  align-items: var(--al-b);
+}
+@media (min-width: 768px) {
+  .sb-py {
+    padding-block: calc(var(--py-m) * var(--density, 1));
+  }
+  .sb-h {
+    height: calc(var(--h-m) * var(--density, 1));
+  }
+  .sb-al {
+    text-align: var(--al-m);
+    justify-content: var(--al-m);
+    align-items: var(--al-m);
+  }
+}
+@media (min-width: 1024px) {
+  .sb-py {
+    padding-block: calc(var(--py-l) * var(--density, 1));
+  }
+  .sb-h {
+    height: calc(var(--h-l) * var(--density, 1));
+  }
+  .sb-al {
+    text-align: var(--al-l);
+    justify-content: var(--al-l);
+    align-items: var(--al-l);
+  }
+}
+@media (max-width: 767.98px) {
+  [data-hide~="base"] {
+    display: none;
+  }
+  [data-ghost~="base"] {
+    opacity: 0.35;
+    outline: 1px dashed var(--muted);
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  [data-hide~="md"] {
+    display: none;
+  }
+  [data-ghost~="md"] {
+    opacity: 0.35;
+    outline: 1px dashed var(--muted);
+  }
+}
+@media (min-width: 1024px) {
+  [data-hide~="lg"] {
+    display: none;
+  }
+  [data-ghost~="lg"] {
+    opacity: 0.35;
+    outline: 1px dashed var(--muted);
+  }
+}
+
+/* FAQ accordion (no JS). */
+.sb-faq summary {
+  list-style: none;
+  cursor: pointer;
+}
+.sb-faq summary::-webkit-details-marker {
+  display: none;
+}
+.sb-faq .sb-faq-icon {
+  transition: transform 200ms var(--ease);
+}
+.sb-faq[open] .sb-faq-icon {
+  transform: rotate(45deg);
+}
+.sb-faq[open] .sb-faq-body {
+  animation: sb-fade 240ms var(--ease) both;
+}
+
+/* Floating WhatsApp button. */
+.sb-float {
+  position: fixed;
+  z-index: 40;
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  inset-inline-end: 1.25rem;
+  animation: sb-pop 500ms 600ms var(--ease) both;
+}
+.sb-float[data-side="start"] {
+  inset-inline-end: auto;
+  inset-inline-start: 1.25rem;
+}
+
+/*
+ * Section entrance: scroll-driven CSS animations (zero JS). Intensity follows the theme's motion token;
+ * reduced motion → no entrance movement; browsers without scroll timelines simply show the content.
+ */
+@keyframes sb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise, 16px)) scale(var(--rise-scale, 1));
+  }
+}
+@keyframes sb-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sb-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+}
+@supports (animation-timeline: view()) {
+  .site-root[data-motion="subtle"] [data-reveal] {
+    --rise: 18px;
+  }
+  .site-root[data-motion="expressive"] [data-reveal] {
+    --rise: 48px;
+    --rise-scale: 0.97;
+  }
+  /* On for every visitor, including OS reduced motion (owner decision 2026-10-07, PLAN §14.4). */
+  .site-root:not([data-motion="none"]) [data-reveal] {
+    animation: sb-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 55%;
+  }
+}
+.site-root[data-motion="none"] .sb-float {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-float {
+    animation-name: sb-fade;
+  }
+}
+
+/* Site editor chrome (PLAN §12): always the light admin palette, Puck tinted to the sage accent. */
+.site-editor {
+  color-scheme: light;
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --subtle: #f3f2ef;
+  --border: #e7e5e0;
+  --fg: #1c1c1a;
+  --muted: #6b6a66;
+  --accent: #5e7d6b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8eeea;
+  --success: #4f7a5a;
+  --warning: #a8823a;
+  --danger: #a5523f;
+  --danger-soft: #f6e9e5;
+  --warning-soft: #f5eedf;
+  --puck-font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --puck-color-azure-01: #16241c;
+  --puck-color-azure-02: #22372b;
+  --puck-color-azure-03: #2f4a3a;
+  --puck-color-azure-04: #3f5f4c;
+  --puck-color-azure-05: #5e7d6b;
+  --puck-color-azure-06: #7d978a;
+  --puck-color-azure-07: #9bb0a4;
+  --puck-color-azure-08: #b9c9bf;
+  --puck-color-azure-09: #d4dfd8;
+  --puck-color-azure-10: #e8eeea;
+  --puck-color-azure-11: #f2f6f3;
+  --puck-color-azure-12: #f8faf8;
+  /* Semantic Puck tokens resolve at :root, so they are re-pointed here too. */
+  --puck-color-interactive: #3f5f4c;
+  --puck-color-interactive-hover: #2f4a3a;
+  --puck-color-interactive-active: #22372b;
+  --puck-color-interactive-subtle: #e8eeea;
+  --puck-color-interactive-soft: #f2f6f3;
+  --puck-color-interactive-soft-hover: #f8faf8;
+  --puck-color-interactive-inverse-hover: #7d978a;
+  --puck-color-interactive-inverse-active: #9bb0a4;
+  --puck-color-focus-ring: #5e7d6b;
+  --puck-color-selection-bg: color-mix(in srgb, #d4dfd8 30%, transparent);
+  --puck-color-selection-border: #b9c9bf;
+  --puck-color-line-placeholder: #7d978a;
+  --puck-color-border: #e7e5e0;
+  --puck-color-surface-subtle: #fafaf8;
+  --puck-color-surface-muted: #f3f2ef;
+  --puck-radius-m: 8px;
+  --puck-radius-l: 12px;
+  --puck-field-radius: 8px;
+}

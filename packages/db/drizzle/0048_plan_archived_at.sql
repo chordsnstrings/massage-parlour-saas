@@ -1,0 +1,2 @@
+ALTER TABLE "plans" ADD COLUMN "archived_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "plans" ADD CONSTRAINT "plans_archived_inactive" CHECK ("plans"."archived_at" IS NULL OR NOT "plans"."active");

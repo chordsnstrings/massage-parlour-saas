@@ -1,0 +1,680 @@
+// Instagram API with Instagram Login (no Facebook Page): OAuth, webhook verification + parsing, Graph calls; plus
+// Facebook Login for Business (F19: pick the Page linked to the Instagram professional account) and the same Instagram
+// calls on graph.facebook.com with that Page's token. Pure helpers and fetch-based clients — no database access here
+// (see ../social.ts, ../facebook.ts).
+// Never log or return access tokens: errors are sanitised before they leave this module.
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+
+export const GRAPH_VERSION = 'v21.0'
+const GRAPH = 'https://graph.instagram.com'
+const FB_GRAPH = 'https://graph.facebook.com'
+const OAUTH_AUTHORIZE = 'https://www.instagram.com/oauth/authorize'
+const OAUTH_TOKEN = 'https://api.instagram.com/oauth/access_token'
+
+export const INSTAGRAM_SCOPES = [
+  'instagram_business_basic',
+  'instagram_business_manage_messages',
+  'instagram_business_manage_comments',
+  'instagram_business_content_publish',
+] as const
+
+/** Bot DMs are only allowed within 24 hours of the customer's last message. */
+export const DM_WINDOW_MS = 24 * 3600_000
+/** Instagram DM text limit (bytes). */
+export const MAX_DM_BYTES = 1000
+const STATE_TTL_MS = 10 * 60_000
+
+// ── Configuration ───────────────────────────────────────────────────────────
+
+export const META_ENV = ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN'] as const
+export type MetaConfig = { appId: string; appSecret: string; verifyToken: string }
+
+/** The Meta app settings, or null while any of META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN is missing. */
+export function metaConfig(env: Record<string, string | undefined> = process.env): MetaConfig | null {
+  const appId = env.META_APP_ID?.trim()
+  const appSecret = env.META_APP_SECRET?.trim()
+  const verifyToken = env.META_WEBHOOK_VERIFY_TOKEN?.trim()
+  return appId && appSecret && verifyToken ? { appId, appSecret, verifyToken } : null
+}
+
+export const missingMetaEnv = (env: Record<string, string | undefined> = process.env) =>
+  META_ENV.filter((k) => !env[k]?.trim())
+
+/** Origin of the dashboard app (API routes live at `{origin}/api/...` in both routing modes). */
+export const appOrigin = (env: Record<string, string | undefined> = process.env) =>
+  (env.APP_URL ?? 'http://app.localhost:3000').replace(/\/$/, '')
+
+/** URLs to paste into the Meta app dashboard. */
+export const metaUrls = (origin = appOrigin()) => ({
+  callback: `${origin}/api/integrations/meta/callback`,
+  /** Facebook Login for Business redirect (F19) — a second "Valid OAuth Redirect URI" in the Meta app. */
+  facebookCallback: `${origin}/api/integrations/meta/facebook/callback`,
+  webhook: `${origin}/api/integrations/meta/webhook`,
+  deauthorize: `${origin}/api/integrations/meta/deauthorize`,
+  dataDeletion: `${origin}/api/integrations/meta/data-deletion`,
+})
+
+// ── OAuth state (HMAC-signed, 10 minutes) ───────────────────────────────────
+
+export type OAuthState = { t: string; u: string; n: string; exp: number }
+
+const b64 = (s: string | Buffer) => Buffer.from(s).toString('base64url')
+const hmac = (secret: string, data: string) => createHmac('sha256', secret).update(data).digest()
+
+export const newNonce = () => randomBytes(16).toString('base64url')
+
+/** `base64url(json).base64url(hmac)` — binds tenant, user and a cookie nonce to one connect attempt. */
+export function signState(
+  input: { tenantId: string; userId: string; nonce: string },
+  secret: string,
+  now = Date.now(),
+) {
+  const payload = b64(
+    JSON.stringify({ t: input.tenantId, u: input.userId, n: input.nonce, exp: now + STATE_TTL_MS }),
+  )
+  return `${payload}.${b64(hmac(secret, payload))}`
+}
+
+/** The state payload when the signature matches and it hasn't expired; null otherwise. */
+export function verifyState(state: string | null | undefined, secret: string, now = Date.now()) {
+  if (!state) return null
+  const [payload, sig] = state.split('.')
+  if (!payload || !sig) return null
+  if (!safeEqual(Buffer.from(sig, 'base64url'), hmac(secret, payload))) return null
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as OAuthState
+    if (typeof data.t !== 'string' || typeof data.u !== 'string' || typeof data.n !== 'string') return null
+    if (typeof data.exp !== 'number' || data.exp < now) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+export function authorizeUrl(opts: { appId: string; redirectUri: string; state: string }) {
+  const q = new URLSearchParams({
+    client_id: opts.appId,
+    redirect_uri: opts.redirectUri,
+    response_type: 'code',
+    scope: INSTAGRAM_SCOPES.join(','),
+    state: opts.state,
+  })
+  return `${OAUTH_AUTHORIZE}?${q.toString()}`
+}
+
+// ── Signatures ──────────────────────────────────────────────────────────────
+
+function safeEqual(a: Buffer, b: Buffer) {
+  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b)
+}
+
+/** Constant-time string comparison (hashes first so lengths don't leak). */
+export function constantTimeEqual(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false
+  const h = (s: string) => createHmac('sha256', 'compare').update(s).digest()
+  return timingSafeEqual(h(a), h(b))
+}
+
+/** Checks `X-Hub-Signature-256: sha256=<hex>` against an HMAC-SHA256 of the raw body with the app secret. */
+export function verifyMetaSignature(
+  rawBody: string | Buffer,
+  header: string | null | undefined,
+  appSecret: string,
+) {
+  if (!header || !appSecret) return false
+  const m = /^sha256=([0-9a-f]{64})$/i.exec(header.trim())
+  if (!m?.[1]) return false
+  return safeEqual(Buffer.from(m[1].toLowerCase(), 'hex'), hmac(appSecret, rawBody.toString()))
+}
+
+/** Test/helper: the header Meta would send for `rawBody`. */
+export const metaSignature = (rawBody: string, appSecret: string) =>
+  `sha256=${createHmac('sha256', appSecret).update(rawBody).digest('hex')}`
+
+/** Meta `signed_request` (deauthorize / data-deletion callbacks): `sig.payload`, HMAC-SHA256 of the payload. */
+export function parseSignedRequest(signed: string | null | undefined, appSecret: string) {
+  if (!signed) return null
+  const [sig, payload] = signed.split('.')
+  if (!sig || !payload) return null
+  if (!safeEqual(Buffer.from(sig, 'base64url'), hmac(appSecret, payload))) return null
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
+    return data.algorithm && String(data.algorithm).toUpperCase() !== 'HMAC-SHA256' ? null : data
+  } catch {
+    return null
+  }
+}
+
+// ── Webhook payloads ────────────────────────────────────────────────────────
+
+export type InstagramEvent =
+  | {
+      kind: 'dm'
+      /** Our Instagram professional account (the recipient). */
+      accountId: string
+      /** Instagram-scoped id of the customer (the thread id). */
+      senderId: string
+      mid: string
+      text: string
+      at: Date
+    }
+  | {
+      kind: 'comment'
+      accountId: string
+      commentId: string
+      mediaId?: string
+      parentId?: string
+      fromId?: string
+      fromUsername?: string
+      text: string
+      at: Date
+    }
+
+type Obj = Record<string, unknown>
+const obj = (v: unknown): Obj | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : undefined
+const str = (v: unknown) => (typeof v === 'string' && v ? v : typeof v === 'number' ? String(v) : undefined)
+const arr = (v: unknown) => (Array.isArray(v) ? v : [])
+const clip = (s: string) => (s.length > 2000 ? `${s.slice(0, 2000)}…` : s)
+const when = (v: unknown, fallback: Date) => {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return fallback
+  return new Date(n < 1e12 ? n * 1000 : n) // entry.time is seconds, messaging timestamps are ms
+}
+
+/**
+ * Flattens an Instagram webhook body into the events we act on: customer DMs and comments.
+ * Echoes of our own messages, deletions, reads, reactions and our own comment replies are skipped.
+ */
+export function parseInstagramWebhook(body: unknown, now = new Date()): InstagramEvent[] {
+  const root = obj(body)
+  if (!root || (root.object !== undefined && root.object !== 'instagram')) return []
+  const out: InstagramEvent[] = []
+  for (const e of arr(root.entry)) {
+    const entry = obj(e)
+    if (!entry) continue
+    const entryId = str(entry.id)
+    const entryAt = when(entry.time, now)
+    for (const raw of arr(entry.messaging)) {
+      const m = obj(raw)
+      const message = obj(m?.message)
+      if (!m || !message) continue
+      if (message.is_echo || message.is_deleted) continue
+      const senderId = str(obj(m.sender)?.id)
+      const accountId = str(obj(m.recipient)?.id) ?? entryId
+      const mid = str(message.mid)
+      if (!senderId || !accountId || !mid || senderId === accountId) continue
+      const attachment = obj(arr(message.attachments)[0])
+      const text =
+        str(message.text)?.trim() ||
+        (attachment
+          ? `[${str(attachment.type) ?? 'attachment'}]`
+          : message.is_unsupported
+            ? '[unsupported]'
+            : '')
+      if (!text) continue
+      out.push({ kind: 'dm', accountId, senderId, mid, text: clip(text), at: when(m.timestamp, entryAt) })
+    }
+    for (const raw of arr(entry.changes)) {
+      const change = obj(raw)
+      if (change?.field !== 'comments') continue
+      const v = obj(change.value)
+      const commentId = str(v?.id)
+      const text = str(v?.text)?.trim()
+      if (!v || !entryId || !commentId || !text) continue
+      const from = obj(v.from)
+      const fromId = str(from?.id)
+      if (fromId && fromId === entryId) continue // our own reply
+      out.push({
+        kind: 'comment',
+        accountId: entryId,
+        commentId,
+        mediaId: str(obj(v.media)?.id),
+        parentId: str(v.parent_id),
+        fromId,
+        fromUsername: str(from?.username),
+        text: clip(text),
+        at: entryAt,
+      })
+    }
+  }
+  return out
+}
+
+// ── Graph API client ────────────────────────────────────────────────────────
+
+export class MetaApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: number,
+  ) {
+    super(message)
+    this.name = 'MetaApiError'
+  }
+}
+
+/** Removes anything token-like from provider messages before they are stored or shown. */
+export const scrubSecrets = (s: string) =>
+  s
+    .replace(/(access_token|client_secret)=[^&\s"]+/gi, '$1=[redacted]')
+    .replace(/\b(IG|EA)[A-Za-z0-9_-]{20,}\b/g, '[redacted]')
+    .slice(0, 300)
+
+type FetchFn = typeof fetch
+
+async function request<T>(fetchImpl: FetchFn, url: string, init: RequestInit & { token?: string } = {}) {
+  const { token, ...rest } = init
+  const headers = new Headers(rest.headers)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  let res: Response
+  try {
+    res = await fetchImpl(url, { ...rest, headers, signal: rest.signal ?? AbortSignal.timeout(15_000) })
+  } catch {
+    throw new MetaApiError(0, 'Could not reach Instagram — check the connection and try again.')
+  }
+  const text = await res.text()
+  let data: Obj = {}
+  try {
+    data = obj(JSON.parse(text)) ?? {}
+  } catch {
+    // non-JSON error page
+  }
+  const err = obj(data.error)
+  if (!res.ok || err) {
+    const message =
+      str(err?.error_user_msg) ?? str(err?.message) ?? str(data.error_message) ?? `HTTP ${res.status}`
+    throw new MetaApiError(res.status, scrubSecrets(message), Number(err?.code ?? data.code) || undefined)
+  }
+  return data as T
+}
+
+const json = (body: unknown): RequestInit => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
+export type InstagramClient = ReturnType<typeof instagramClient>
+/** Which Graph host an Instagram call goes to: Instagram Login tokens → graph.instagram.com, Facebook Page tokens (F19)
+ * → graph.facebook.com. Paths are the same for the calls both support (media, comments, messages, private replies). */
+export type InstagramHost = 'instagram' | 'facebook'
+
+/** Container parameters for `/{ig-user-id}/media` (image_url, video_url, media_type, children, caption, …). */
+export type ContainerParams = Record<string, string | boolean>
+
+export function instagramClient(fetchImpl: FetchFn = fetch, host: InstagramHost = 'instagram') {
+  const graph = (path: string) => `${host === 'facebook' ? FB_GRAPH : GRAPH}/${GRAPH_VERSION}${path}`
+  /** Any media container: feed image, REELS, STORIES, carousel item or CAROUSEL parent (F18). */
+  const createContainer = async (o: { igUserId: string; params: ContainerParams; accessToken: string }) => {
+    const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media`), {
+      ...json(o.params),
+      token: o.accessToken,
+    })
+    const id = str(data.id)
+    if (!id) throw new MetaApiError(502, 'Instagram did not create the media container')
+    return { id }
+  }
+  return {
+    host,
+    /** Short-lived user token from the OAuth code. */
+    async exchangeCode(o: { appId: string; appSecret: string; redirectUri: string; code: string }) {
+      const body = new URLSearchParams({
+        client_id: o.appId,
+        client_secret: o.appSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: o.redirectUri,
+        code: o.code.replace(/#_$/, ''),
+      })
+      const data = await request<Obj>(fetchImpl, OAUTH_TOKEN, { method: 'POST', body })
+      const row = obj(arr(data.data)[0]) ?? data
+      const accessToken = str(row.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Instagram did not return an access token')
+      const perms = row.permissions
+      return {
+        accessToken,
+        userId: str(row.user_id),
+        permissions: Array.isArray(perms) ? perms.map(String) : (str(perms)?.split(',') ?? []),
+      }
+    },
+    /** Long-lived (60-day) token. */
+    async longLivedToken(o: { appSecret: string; accessToken: string }) {
+      const q = new URLSearchParams({
+        grant_type: 'ig_exchange_token',
+        client_secret: o.appSecret,
+        access_token: o.accessToken,
+      })
+      const data = await request<Obj>(fetchImpl, `${GRAPH}/access_token?${q}`)
+      const accessToken = str(data.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Instagram did not return a long-lived token')
+      return { accessToken, expiresIn: Number(data.expires_in) || 60 * 86_400 }
+    },
+    /** Extends a long-lived token (must be ≥ 24 h old and unexpired). */
+    async refreshToken(accessToken: string) {
+      const q = new URLSearchParams({ grant_type: 'ig_refresh_token', access_token: accessToken })
+      const data = await request<Obj>(fetchImpl, `${GRAPH}/refresh_access_token?${q}`)
+      const next = str(data.access_token)
+      if (!next) throw new MetaApiError(502, 'Instagram did not return a refreshed token')
+      return { accessToken: next, expiresIn: Number(data.expires_in) || 60 * 86_400 }
+    },
+    async me(accessToken: string) {
+      const data = await request<Obj>(fetchImpl, graph('/me?fields=user_id,username,profile_picture_url'), {
+        token: accessToken,
+      })
+      const userId = str(data.user_id) ?? str(data.id)
+      if (!userId) throw new MetaApiError(502, 'Instagram did not return the account id')
+      return { userId, username: str(data.username), profilePictureUrl: str(data.profile_picture_url) }
+    },
+    /** Turns on message + comment webhooks for this account. */
+    async subscribeWebhooks(accessToken: string) {
+      await request(fetchImpl, graph('/me/subscribed_apps?subscribed_fields=messages,comments'), {
+        method: 'POST',
+        token: accessToken,
+      })
+    },
+    /** Customer profile (needs a conversation with the account). */
+    async userProfile(igsid: string, accessToken: string) {
+      const data = await request<Obj>(
+        fetchImpl,
+        graph(`/${encodeURIComponent(igsid)}?fields=name,username`),
+        { token: accessToken },
+      )
+      return { username: str(data.username), name: str(data.name) }
+    },
+    async sendMessage(o: { igUserId: string; recipientId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/messages`), {
+        ...json({ recipient: { id: o.recipientId }, message: { text: o.text } }),
+        token: o.accessToken,
+      })
+      return { messageId: str(data.message_id) }
+    },
+    async replyToComment(o: { commentId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.commentId)}/replies`), {
+        ...json({ message: o.text }),
+        token: o.accessToken,
+      })
+      return { id: str(data.id) }
+    },
+    createContainer,
+    async createMediaContainer(o: {
+      igUserId: string
+      imageUrl: string
+      caption: string
+      accessToken: string
+    }) {
+      return createContainer({
+        igUserId: o.igUserId,
+        params: { image_url: o.imageUrl, caption: o.caption },
+        accessToken: o.accessToken,
+      })
+    },
+    async containerStatus(containerId: string, accessToken: string) {
+      const data = await request<Obj>(
+        fetchImpl,
+        graph(`/${encodeURIComponent(containerId)}?fields=status_code`),
+        { token: accessToken },
+      )
+      return str(data.status_code) ?? 'FINISHED'
+    },
+    /**
+     * Private Replies API: one DM to the person who wrote a comment, within 7 days of it (`recipient.comment_id`).
+     * The same path on both hosts (Instagram user token or the linked Page's token).
+     */
+    async sendPrivateReply(o: { igUserId: string; commentId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/messages`), {
+        ...json({ recipient: { comment_id: o.commentId }, message: { text: o.text } }),
+        token: o.accessToken,
+      })
+      return { messageId: str(data.message_id), recipientId: str(data.recipient_id) }
+    },
+    async publishMedia(o: { igUserId: string; creationId: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.igUserId)}/media_publish`), {
+        ...json({ creation_id: o.creationId }),
+        token: o.accessToken,
+      })
+      const id = str(data.id)
+      if (!id) throw new MetaApiError(502, 'Instagram did not return the published post id')
+      return { id }
+    },
+  }
+}
+
+export type FacebookPageClient = ReturnType<typeof facebookPageClient>
+
+/** Facebook Page Graph calls (R7 Meta MCP tools) with a stored Page access token. */
+export function facebookPageClient(fetchImpl: FetchFn = fetch) {
+  const graph = (path: string) => `${FB_GRAPH}/${GRAPH_VERSION}${path}`
+  return {
+    /** Recent Page posts with their latest comments. */
+    async recentComments(o: { pageId: string; accessToken: string; limit?: number }) {
+      const fields = 'id,message,created_time,comments.limit(10){id,message,created_time,from{name}}'
+      const q = new URLSearchParams({ fields, limit: String(Math.min(o.limit ?? 10, 25)) })
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/feed?${q}`), {
+        token: o.accessToken,
+      })
+      return arr(data.data).flatMap((p) => {
+        const post = obj(p) ?? {}
+        return arr(obj(post.comments)?.data).map((c) => {
+          const cm = obj(c) ?? {}
+          return {
+            commentId: str(cm.id) ?? '',
+            postId: str(post.id) ?? '',
+            post: (str(post.message) ?? '').slice(0, 140),
+            from: str(obj(cm.from)?.name) ?? null,
+            text: (str(cm.message) ?? '').slice(0, 1000),
+            at: str(cm.created_time) ?? null,
+          }
+        })
+      })
+    },
+    async replyToComment(o: { commentId: string; text: string; accessToken: string }) {
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.commentId)}/comments`), {
+        ...json({ message: o.text }),
+        token: o.accessToken,
+      })
+      return { id: str(data.id) }
+    },
+    /** Photo post when an image URL is given, else a text post. */
+    async publish(o: { pageId: string; caption: string; imageUrl?: string | null; accessToken: string }) {
+      const path = o.imageUrl ? 'photos' : 'feed'
+      const body = o.imageUrl ? { url: o.imageUrl, caption: o.caption } : { message: o.caption }
+      const data = await request<Obj>(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/${path}`), {
+        ...json(body),
+        token: o.accessToken,
+      })
+      const id = str(data.post_id) ?? str(data.id)
+      if (!id) throw new MetaApiError(502, 'Facebook did not return the post id')
+      return { id }
+    },
+  }
+}
+
+// ── Facebook Login for Business (F19) ───────────────────────────────────────
+
+/**
+ * Permissions asked for when no Facebook Login for Business configuration id (`META_FB_CONFIG_ID`) is set: the Page
+ * list + Page posts/comments (Meta MCP Page tools) and the linked Instagram account's comments, messages and
+ * publishing (reels, stories, carousels, private replies). Each needs Meta app review before other businesses can use it.
+ */
+export const FACEBOOK_SCOPES = [
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_metadata',
+  'pages_manage_posts',
+  'pages_read_user_content',
+  'pages_manage_engagement',
+  'business_management',
+  'instagram_basic',
+  'instagram_manage_comments',
+  'instagram_manage_messages',
+  'instagram_content_publish',
+] as const
+
+/** The Facebook Login dialog: a Login for Business configuration when one is set, else the scope list above. */
+export function facebookAuthorizeUrl(opts: {
+  appId: string
+  redirectUri: string
+  state: string
+  configId?: string | null
+}) {
+  const q = new URLSearchParams({
+    client_id: opts.appId,
+    redirect_uri: opts.redirectUri,
+    response_type: 'code',
+    state: opts.state,
+  })
+  if (opts.configId) q.set('config_id', opts.configId)
+  else q.set('scope', FACEBOOK_SCOPES.join(','))
+  return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${q.toString()}`
+}
+
+/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use. */
+export const facebookConfigId = (env: Record<string, string | undefined> = process.env) =>
+  env.META_FB_CONFIG_ID?.trim() || null
+
+export type FacebookPageChoice = {
+  id: string
+  name: string
+  accessToken: string
+  tasks: string[]
+  instagram: { id: string; username?: string; profilePictureUrl?: string } | null
+}
+
+export type FacebookTokenInfo = {
+  isValid: boolean
+  /** null = the token itself never expires (Page tokens from a long-lived user token). */
+  expiresAt: Date | null
+  /** When Meta stops returning data until the person logs in again (90 days after their last login). */
+  dataAccessExpiresAt: Date | null
+  scopes: string[]
+}
+
+const epoch = (v: unknown) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1000) : null
+}
+
+export type FacebookLoginClient = ReturnType<typeof facebookLoginClient>
+
+export function facebookLoginClient(fetchImpl: FetchFn = fetch) {
+  const graph = (path: string) => `${FB_GRAPH}/${GRAPH_VERSION}${path}`
+  return {
+    /** Code → short-lived user token. */
+    async exchangeCode(o: { appId: string; appSecret: string; redirectUri: string; code: string }) {
+      const q = new URLSearchParams({
+        client_id: o.appId,
+        client_secret: o.appSecret,
+        redirect_uri: o.redirectUri,
+        code: o.code.replace(/#_$/, ''),
+      })
+      const data = await request<Obj>(fetchImpl, graph(`/oauth/access_token?${q}`))
+      const accessToken = str(data.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Facebook did not return an access token')
+      return { accessToken, expiresIn: Number(data.expires_in) || 3600 }
+    },
+    /** Short-lived → long-lived (≈ 60-day) user token; Page tokens read with it don't expire. */
+    async longLivedUserToken(o: { appId: string; appSecret: string; accessToken: string }) {
+      const q = new URLSearchParams({
+        grant_type: 'fb_exchange_token',
+        client_id: o.appId,
+        client_secret: o.appSecret,
+        fb_exchange_token: o.accessToken,
+      })
+      const data = await request<Obj>(fetchImpl, graph(`/oauth/access_token?${q}`))
+      const accessToken = str(data.access_token)
+      if (!accessToken) throw new MetaApiError(502, 'Facebook did not return a long-lived token')
+      return { accessToken, expiresIn: Number(data.expires_in) || 60 * 86_400 }
+    },
+    async me(accessToken: string) {
+      const data = await request<Obj>(fetchImpl, graph('/me?fields=id,name'), { token: accessToken })
+      const id = str(data.id)
+      if (!id) throw new MetaApiError(502, 'Facebook did not return the account id')
+      return { id, name: str(data.name) }
+    },
+    /** Pages the person manages, each with its Page token and linked Instagram professional account. */
+    async pages(userToken: string): Promise<FacebookPageChoice[]> {
+      const fields = 'id,name,access_token,tasks,instagram_business_account{id,username,profile_picture_url}'
+      const out: FacebookPageChoice[] = []
+      let url: string | undefined = graph(`/me/accounts?${new URLSearchParams({ fields, limit: '100' })}`)
+      for (let i = 0; url && i < 5; i++) {
+        const data: Obj = await request<Obj>(fetchImpl, url, { token: userToken })
+        for (const raw of arr(data.data)) {
+          const p = obj(raw)
+          const id = str(p?.id)
+          const accessToken = str(p?.access_token)
+          if (!p || !id || !accessToken) continue
+          const ig = obj(p.instagram_business_account)
+          const igId = str(ig?.id)
+          out.push({
+            id,
+            name: str(p.name) ?? id,
+            accessToken,
+            tasks: arr(p.tasks).map(String),
+            instagram: igId
+              ? { id: igId, username: str(ig?.username), profilePictureUrl: str(ig?.profile_picture_url) }
+              : null,
+          })
+        }
+        const next = str(obj(data.paging)?.next)
+        url = next?.startsWith(`${FB_GRAPH}/`) ? next : undefined
+      }
+      return out
+    },
+    /** Token validity + expiry (app token = `{app-id}|{app-secret}`, sent as the bearer, never logged). */
+    async debugToken(o: { appId: string; appSecret: string; token: string }): Promise<FacebookTokenInfo> {
+      const q = new URLSearchParams({ input_token: o.token })
+      const data = await request<Obj>(fetchImpl, graph(`/debug_token?${q}`), {
+        token: `${o.appId}|${o.appSecret}`,
+      })
+      const d = obj(data.data) ?? {}
+      return {
+        isValid: d.is_valid === true,
+        expiresAt: epoch(d.expires_at),
+        dataAccessExpiresAt: epoch(d.data_access_expires_at),
+        scopes: arr(d.scopes).map(String),
+      }
+    },
+    /** Installs the app on the Page (Page webhooks; also lets Instagram comment webhooks reach us via the Page). */
+    async subscribePage(o: { pageId: string; pageToken: string }) {
+      const q = new URLSearchParams({ subscribed_fields: 'feed' })
+      await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps?${q}`), {
+        method: 'POST',
+        token: o.pageToken,
+      })
+    },
+    async unsubscribePage(o: { pageId: string; pageToken: string }) {
+      await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps`), {
+        method: 'DELETE',
+        token: o.pageToken,
+      })
+    },
+  }
+}
+
+/** Why staff DM text can't go out as written (Instagram counts UTF-8 bytes: Arabic letters take 2); null = it fits. */
+export function dmTooLong(text: string, max = MAX_DM_BYTES) {
+  const bytes = new TextEncoder().encode(text).length
+  return bytes > max
+    ? `Too long for an Instagram DM (${bytes}/${max} bytes; Arabic letters count as 2) — shorten it a little.`
+    : null
+}
+
+/** UTF-8 byte-safe truncation for DM text. */
+export function clipBytes(text: string, max = MAX_DM_BYTES) {
+  const enc = new TextEncoder()
+  if (enc.encode(text).length <= max) return text
+  let out = text
+  while (out && enc.encode(`${out}…`).length > max) out = out.slice(0, -1)
+  return `${out}…`
+}
+
+/** True while a DM reply is allowed (within 24 h of the customer's last message). */
+export function dmWindowOpen(lastCustomerMsgAt: Date | null | undefined, now = new Date()) {
+  return Boolean(lastCustomerMsgAt) && now.getTime() - lastCustomerMsgAt!.getTime() < DM_WINDOW_MS
+}
+
+/** Milliseconds left in the DM window (0 when closed). */
+export function dmWindowLeftMs(lastCustomerMsgAt: Date | null | undefined, now = new Date()) {
+  if (!lastCustomerMsgAt) return 0
+  return Math.max(0, DM_WINDOW_MS - (now.getTime() - lastCustomerMsgAt.getTime()))
+}

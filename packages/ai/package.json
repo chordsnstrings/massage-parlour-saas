@@ -1,0 +1,21 @@
+{
+  "name": "@spa/ai",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "tsx --env-file-if-exists=../../.env src/smoke.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "@spa/core": "workspace:*",
+    "@spa/db": "workspace:*",
+    "@spa/services": "workspace:*",
+    "drizzle-orm": "0.45.3",
+    "zod": "^4.6.5"
+  }
+}

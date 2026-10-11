@@ -1,0 +1,193 @@
+import { describe, expect, it } from 'vitest'
+import {
+  canonicalScheme,
+  hostRoutedUrl,
+  keepsTemporaryAddress,
+  ownDomainUrl,
+  parseRoots,
+  pathRoutedAddress,
+  platformOnlyPath,
+  temporarySitePath,
+} from '../src'
+
+// The move from path routing (sslip.io, ROUTING=path) to host routing on spamanagement.co: old addresses on any platform
+// root (or its www.) → their host-routed home on the canonical root (proxy.ts).
+describe('path-routed → host-routed addresses', () => {
+  const HOST = { pathRouting: false }
+  const roots = parseRoots('spamanagement.co', '134-209-145-162.sslip.io spamanagement.ae')
+  const target = (host: string, path: string, current?: string | null) => {
+    const old = pathRoutedAddress(host, path, roots, HOST)
+    return old && hostRoutedUrl(old, roots[0]!, 'https', current)
+  }
+
+  it.each([
+    ['134-209-145-162.sslip.io', '/app', 'https://app.spamanagement.co/'],
+    ['134-209-145-162.sslip.io', '/app/', 'https://app.spamanagement.co/'],
+    ['134-209-145-162.sslip.io', '/app/login', 'https://app.spamanagement.co/login'],
+    ['134-209-145-162.sslip.io', '/app/pilot/calendar', 'https://app.spamanagement.co/pilot/calendar'],
+    ['134-209-145-162.sslip.io', '/app/invite/abc123', 'https://app.spamanagement.co/invite/abc123'],
+    [
+      '134-209-145-162.sslip.io',
+      '/app/pilot/app.webmanifest',
+      'https://app.spamanagement.co/pilot/app.webmanifest',
+    ],
+    ['134-209-145-162.sslip.io', '/admin', 'https://admin.spamanagement.co/'],
+    ['134-209-145-162.sslip.io', '/admin/tenants/42', 'https://admin.spamanagement.co/tenants/42'],
+    ['134-209-145-162.sslip.io', '/s/pilot', 'https://pilot.spamanagement.co/'],
+    ['134-209-145-162.sslip.io', '/s/pilot/', 'https://pilot.spamanagement.co/'],
+    ['134-209-145-162.sslip.io', '/s/pilot/book/embed', 'https://pilot.spamanagement.co/book/embed'],
+    ['134-209-145-162.sslip.io', '/s/Pilot/ar/services', 'https://pilot.spamanagement.co/ar/services'],
+    // Every platform root and its www. (canonical included), always onto the canonical root.
+    ['www.134-209-145-162.sslip.io', '/s/pilot/book', 'https://pilot.spamanagement.co/book'],
+    ['SpaManagement.ae:443', '/admin/', 'https://admin.spamanagement.co/'],
+    ['spamanagement.co', '/app/pilot', 'https://app.spamanagement.co/pilot'],
+    ['www.spamanagement.co', '/s/pilot/sitemap.xml', 'https://pilot.spamanagement.co/sitemap.xml'],
+  ])('%s%s → %s', (host, path, expected) => expect(target(host, path)).toBe(expected))
+
+  it('swaps in the current slug of a renamed spa (F23) in one hop', () => {
+    expect(target('134-209-145-162.sslip.io', '/s/old-spa/book', 'new-spa')).toBe(
+      'https://new-spa.spamanagement.co/book',
+    )
+    expect(target('134-209-145-162.sslip.io', '/app/old-spa/clients', 'new-spa')).toBe(
+      'https://app.spamanagement.co/new-spa/clients',
+    )
+    expect(pathRoutedAddress('spamanagement.co', '/app/old-spa/x', roots, HOST)).toEqual({
+      surface: 'app',
+      slug: 'old-spa',
+      rest: '/x',
+    })
+    expect(pathRoutedAddress('spamanagement.co', '/admin/old-spa', roots, HOST)?.slug).toBeNull()
+  })
+
+  it.each([
+    ['134-209-145-162.sslip.io', '/'],
+    ['134-209-145-162.sslip.io', '/pricing'],
+    ['134-209-145-162.sslip.io', '/apps'],
+    ['134-209-145-162.sslip.io', '/administrator'],
+    ['134-209-145-162.sslip.io', '/sitemap.xml'],
+    ['134-209-145-162.sslip.io', '/s'],
+    ['134-209-145-162.sslip.io', '/s/'],
+    ['134-209-145-162.sslip.io', '/s/x'], // too short for a slug
+    ['134-209-145-162.sslip.io', '/s/www/'], // reserved
+    ['134-209-145-162.sslip.io', '/s/evil.example.com/'],
+    ['134-209-145-162.sslip.io', '/s/a%2eb/'],
+    ['134-209-145-162.sslip.io', '/s/user@evil.example/'],
+    // Hosts that never served the path-routed surfaces: subdomains, custom domains, unknown hosts.
+    ['app.spamanagement.co', '/app/pilot'],
+    ['admin.spamanagement.co', '/admin'],
+    ['pilot.spamanagement.co', '/s/pilot'],
+    ['www.serenityspa.ae', '/app/pilot'],
+    ['evil.example.com', '/s/pilot'],
+    ['134.209.145.162', '/app'],
+  ])('%s%s is not an old address', (host, path) =>
+    expect(pathRoutedAddress(host, path, roots, HOST)).toBeNull(),
+  )
+
+  // Production runs path routing until the switch: there every /app, /admin, /s/{slug} link must be served, never
+  // redirected (app./admin./{slug}. of a path-routed root are custom-domain lookups → 404).
+  it.each([
+    ['134-209-145-162.sslip.io', '/app/pilot'],
+    ['134-209-145-162.sslip.io', '/admin/tenants'],
+    ['134-209-145-162.sslip.io', '/s/pilot/book'],
+    ['spamanagement.co', '/app'],
+    ['www.spamanagement.co', '/s/pilot'],
+  ])('path routing: %s%s is served, not redirected', (host, path) =>
+    expect(pathRoutedAddress(host, path, roots, { pathRouting: true })).toBeNull(),
+  )
+
+  it('keeps the host fixed whatever the path holds (no open redirect)', () => {
+    for (const path of [
+      '/app//evil.example/x',
+      '/app/%2F%2Fevil.example',
+      '/admin//evil.example',
+      '/app/@evil',
+    ])
+      expect(new URL(target('spamanagement.co', path)!).host).toMatch(/^(app|admin)\.spamanagement\.co$/)
+    expect(target('spamanagement.co', '/app//evil.example/x')).toBe(
+      'https://app.spamanagement.co//evil.example/x',
+    )
+  })
+
+  it('uses the canonical scheme and keeps a dev port', () => {
+    const dev = parseRoots('localhost:3100', 'alt.localhost:3100')
+    const old = pathRoutedAddress('alt.localhost:3100', '/s/pilot/book', dev, HOST)!
+    expect(hostRoutedUrl(old, dev[0]!, canonicalScheme(dev[0]!, 'http://app.localhost:3100'))).toBe(
+      'http://pilot.localhost:3100/book',
+    )
+    expect(canonicalScheme('spamanagement.co', 'https://app.spamanagement.co')).toBe('https')
+    expect(canonicalScheme('spamanagement.co')).toBe('https')
+    expect(canonicalScheme('localhost:3000')).toBe('http')
+    expect(canonicalScheme('10.0.0.5')).toBe('http')
+    expect(canonicalScheme('localhost:3000', 'https://app.localhost:3000')).toBe('https')
+  })
+})
+
+// R20: once a spa's own domain is active + primary, its temporary address 301s there (proxy.ts, server/own-domain.ts).
+describe('temporary site address → own domain', () => {
+  it.each([
+    ['/site/pilot', { slug: 'pilot', path: '' }],
+    ['/site/pilot/', { slug: 'pilot', path: '/' }],
+    ['/site/Pilot/book', { slug: 'pilot', path: '/book' }],
+    ['/site/pilot/ar/services', { slug: 'pilot', path: '/ar/services' }],
+    ['/site/pilot/sitemap.xml', { slug: 'pilot', path: '/sitemap.xml' }],
+    ['/site/pilot/voucher/abc', { slug: 'pilot', path: '/voucher/abc' }],
+    ['/site/pilot/book/embedded', { slug: 'pilot', path: '/book/embedded' }],
+  ])('%s is handed to the own domain', (internal, expected) => {
+    expect(temporarySitePath(internal)).toEqual(expected)
+  })
+
+  it.each([
+    '/site/pilot/book/embed',
+    '/site/pilot/book/embed/',
+    '/site/pilot/robots.txt',
+    '/marketing/s/pilot',
+    '/dashboard/pilot',
+    '/platform/tenants',
+    '/domain/www.pilot.ae/book',
+    '/site',
+    '/sitex/pilot',
+  ])('%s is served where it is', (internal) => {
+    expect(temporarySitePath(internal)).toBeNull()
+  })
+
+  it('keeps only the widget iframe and robots.txt on the temporary address', () => {
+    expect(keepsTemporaryAddress('/book/embed')).toBe(true)
+    expect(keepsTemporaryAddress('/robots.txt')).toBe(true)
+    expect(keepsTemporaryAddress('/book')).toBe(false)
+    expect(keepsTemporaryAddress('/sitemap.xml')).toBe(false)
+    expect(keepsTemporaryAddress('')).toBe(false)
+  })
+
+  it('keeps path + query on https://{own domain}; the host stays the domain row whatever the path holds', () => {
+    expect(ownDomainUrl('www.pilot.ae', '')).toBe('https://www.pilot.ae/')
+    expect(ownDomainUrl('www.pilot.ae', '/book', '?src=qr&lang=ar')).toBe(
+      'https://www.pilot.ae/book?src=qr&lang=ar',
+    )
+    const odd = new URL(ownDomainUrl('www.pilot.ae', '//evil.example/x', '?a=@evil.example'))
+    expect(odd.host).toBe('www.pilot.ae')
+  })
+
+  it('knows the platform-only endpoints a custom domain never answers', () => {
+    for (const p of [
+      '/api/auth',
+      '/api/auth/get-session',
+      '/api/mcp',
+      '/api/mcp/meta',
+      '/api/integrations/google/callback',
+      '/.well-known/oauth-authorization-server',
+    ])
+      expect(platformOnlyPath(p), p).toBe(true)
+    for (const p of [
+      '/api/collect',
+      '/api/csp-report',
+      '/api/client-error',
+      '/api/health',
+      '/api/html-design/frame',
+      '/api/domains/allowed',
+      '/api/authx',
+      '/book',
+      '/files/abc',
+    ])
+      expect(platformOnlyPath(p), p).toBe(false)
+  })
+})

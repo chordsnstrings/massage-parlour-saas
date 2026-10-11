@@ -1,0 +1,1202 @@
+# Code map
+
+Where things live and how a request flows. Verified against the code on 2026-10-08 (re-checked at commit `6992d74`).
+`docs/PLAN.md` stays the source of truth for product decisions; update this file when the structure changes.
+
+## Workspace (pnpm + Turborepo)
+
+| Package | Role |
+|---|---|
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `resend-domains.ts` (R18): `resendDomains(key, {fetch, baseUrl})` (tests only inject; base URL never from env), `setUpSendingDomain`/`checkSendingDomain`, `namecheapHost`, `ResendDomainError` codes. `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview; `TURNSTILE` is web-only, left out of the worker flags). `turnstile.ts` (F9): `turnstileConfig` (both keys or off), `turnstileOnCustomDomains`, `verifyTurnstileToken` (siteverify, fail closed). `attribution.ts` (F13): `webEntrySource` (raw web_events.source), `attributionOf`/`bookingAttribution` → `BOOKING_ATTRIBUTIONS` (= db `booking_attribution` enum). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
+| `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
+| `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
+| `@spa/ai` (packages/ai) | `modelark.ts` (OpenAI-compatible client, no SDK) and `gateway.ts` `runChat`/`runImage`: config from `ai_model_config` by `agentKey` → `assertAiAllowed` (platform + per-spa kill switch `ai_enabled`, monthly budget `tenants.ai_budget_usd`, Dubai month) → call → zod validation (`json_schema` when `supportsStructuredOutput`, else instructions + 1 retry) → meter `ai_usage` → 80 %/100 % bell notification once per month (G18). Aggregation of `ai_usage` lives only in `services/ai-usage.ts` (console AI usage, Performance, dashboard meter). Agents: `dm` (receptionist chat that books via tools), `instagram` (comment replies, `respondToInstagram`), `content` (IG post, review reply, SEO), `insights` (weekly), `receipt` (OCR: `vision` key, else `dm_agent`), `slots` (slot filler → outbox), `context` (`loadSpaContext`, `SAFETY`), `meta` (R7 Meta tools assistant). `tool-loop.ts` `runToolLoop` = the shared OpenAI-style tool loop (local tools + MCP sources, every step through `runChat`, so budget + `ai_usage` per step; the DM agent uses it). `mcp/`: Meta MCP (see "Meta MCP" below). |
+| `@spa/web` (apps/web) | Next.js 16; one app serves every surface. |
+| `@spa/worker` (apps/worker) | pg-boss 12 on `DATABASE_URL_OWNER`; job registry `src/jobs/index.ts`. |
+
+PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don't exist. Site blocks live in
+`apps/web/src/components/site`, the admin UI kit in `apps/web/src/components/ui`, and tool config at the root
+(`biome.json`, `tsconfig.base.json`, `turbo.json`).
+
+## Database & tenancy
+
+- **Roles** (`sql/bootstrap.sql`, policies in `schema/_rls.ts`):
+  - `spa_owner` owns the schema and runs migrations, pg-boss and the worker.
+  - `spa_platform` gets policy `platform_all` (every row).
+  - `spa_app` gets policy `tenant_isolation`: `tenant_id = current_setting('app.tenant_id')`.
+  - `spa_drill` (F11): LOGIN CREATEDB only, no grants: the worker's restore drill creates/restores/drops its own
+    scratch DB. Attributes + password re-applied on every bootstrap run; empty `drill_password` → sha256 of
+    `spa_drill:<owner password>` (worker `drillUrl` derives the same). Dev/CI password `spa_drill_dev`.
+  - No role has BYPASSRLS. bootstrap.sql runs at first boot (postgres init) **and every deploy** (compose one-shot
+    `db-roles`, official postgres image; the only container besides postgres with the superuser password; not a
+    dependency of migrate) — add new roles there, idempotently.
+- `withTenant(tenantId, fn)` rejects non-UUIDs, opens a transaction on `appDb()` and runs
+  `set_config('app.tenant_id', id, true)`.
+- **Platform-only tables** (invisible to `spa_app`): auth tables, `platform_admins`, `platform_settings` (single row),
+  `plans`, `ai_model_config`, `push_subscriptions`, `site_templates`, `spa_applications` (PLAN §18.3;
+  `created_tenant_id`), `rate_limits` (fixed-window counters: services `hitRateLimit`, web `server/rate-limit.ts`
+  `withinIpLimit` → services `withinRateLimits` — per-IP limits for public actions Better Auth's HTTP limiter never sees,
+  e.g. apply, contact form), `contact_enquiries` (PLAN §18.4; marketing Contact form, services `enquiries.ts`), `tenant_purges` (G12 purge record; its column is
+  `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
+  `tenant_slug_history` (F23: old slug PK → `renamed_tenant_id`, `reserved_until`; services `tenant-slug.ts`).
+  `tenants` adds a `tenant_self` policy so a spa sees its own row.
+- **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
+  tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
+  delete `deleteTenantObjects` (storage.ts), `autoPurgeDeletedTenants` (worker `tenant-auto-purge`, off unless
+  `platform_settings.auto_purge_days`), `eraseClient` (anonymise, keep financial rows; a new client FK in
+  `CLIENT_REFERENCES` must also be decided here: keep or delete on erase). Erase deletes the signed intake PDFs
+  (`deleteClientIntakePdfs`, file row + bucket object) before the submissions; purge removes them with `stored_files`.
+- **F20 tables (`schema/console.ts`)**: `feature_flags` + `announcements` platform-only; `feature_flag_overrides` +
+  `announcement_dismissals` tenant tables (cascade on tenant delete). F22 columns: `tenants.billing_stage`
+  (`billing_stage` enum) / `billing_overdue_since` / `billing_stage_at`, `platform_settings.billing_overdue_after_days`
+  / `billing_grace_days`; F21: `user.last_sign_in_at`. Migration 0042_console_flags_billing_usage.
+- **Tenant-policy tables in `platform.ts`**: `domains`, `subscriptions`, `platform_invoices`, `platform_payments`,
+  `platform_reminders`, `audit_log`, `ai_usage`, `domain_orders`. SaaS billing logic (schedule, mark paid/unpaid,
+  reminders, pause/resume/soft delete) = services `platform-billing.ts` (PLAN §14.8 "as built"); `tenants.deleted_at`
+  = soft delete (`requireMember` 404s members).
+- **Notifications (B2, migration 0022)**: `notifications` (tenant, `user_id` NULL = everyone holding `permission`,
+  `kind`, `payload {params,url}`, partial-unique `dedupe_key`, `read_at` for personal rows) + `notification_reads`
+  (per-user read of shared rows). Kinds → permission + text: `@spa/core` `NOTIFICATION_KINDS`/`notificationText`
+  (i18n ns `notifications.kind.*`; params `at`/`date`/`amount` formatted in the reader's locale). Services
+  `notifications.ts` (`notify` = create deduped → push per recipient locale via `notify.ts`; list/unread/markRead/
+  markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
+  `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
+  10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
+  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest (`jobs/engage.ts`)
+  write `weekly_insights` / `daily_digest` rows (dedupe per week Monday / business date) via `notify()`.
+  **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
+  expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
+  stock, AI drafts waiting for review, billing) always run. `runNotificationScan(name, scan, now, {key, job})`.
+- **DB-enforced invariants**:
+  - `reservations` has `EXCLUDE USING gist (resource_kind =, resource_id =, period &&)`. `resource_kind` is
+    `staff | room | equipment` (equipment added in migration 0026, B5.3).
+  - `time_entries`: unique partial index `time_entries_one_open` (one open clock entry per person) + EXCLUDE
+    `time_entries_no_overlap`; `leave_requests`: EXCLUDE `leave_no_overlap` (same person, overlapping dates,
+    status ≠ rejected) — all migration 0026 (B5.4).
+  - `shifts` has `EXCLUDE` per staff member over `[starts_at, ends_at)` (migration 0003).
+  - Ledger (migration 0005):
+    - a one-sided-line CHECK;
+    - a deferred constraint trigger that requires balanced entries;
+    - an append-only trigger (UPDATE/DELETE raise for `spa_app`);
+    - a period-lock trigger (`period_locks.locked_through`).
+  - Unique keys: `outbox_booking_kind` (booking_id, kind), `sales_tenant_number`, `bookings_tenant_ref`,
+    `site_pages_slug`.
+- `packages/db/test/rls.test.ts` checks that RLS is on for every table, that each tenant table has exactly the tenant
+  policy, and isolation, platform-table invisibility and tx-local scope.
+
+## Request flow (web)
+
+1. **`src/proxy.ts`** rewrites Host and path to internal route dirs:
+   - Host routing: `/marketing` (root, www), `/dashboard` (`app.`), `/platform` (`admin.`), `/site/{slug}`
+     (`{slug}.`), `/domain/{host}` (any other host).
+   - Path routing (`NEXT_PUBLIC_ROUTING=path`, inlined at build): `/app`, `/admin`, `/s/{slug}`; non-platform hosts
+     go to `/domain/{host}`.
+   - Sets `x-original-path`. A trailing-dot host gets a 308 redirect.
+   - F10: sets the page security headers with a fresh nonce (see "Security headers").
+   - F23: GET/HEAD for a renamed spa's previous slug (site `{old}.{root}` / `/s/{old}`, dashboard `app/{old}`) →
+     301 to the current slug, path + query kept (`server/slug-redirect.ts`: one old→current map per process from
+     services `slugRedirects`, 30 s TTL, cleared by the console rename; imports `@spa/services/tenant-slug`, never the
+     services barrel). `api/domains/allowed` (Caddy ask) allows the old host too.
+   - Host routing only (the move off path routing): an old path-routed address — `/app/…`, `/admin/…`, `/s/{slug}/…` on
+     any platform root or its `www.` — → `app.` / `admin.` / `{slug}.` of the canonical root (`ROOT_DOMAIN`), rest of
+     the path + query kept, one hop (slug through `currentSlugFor`, so a renamed spa lands on its current slug; the app
+     path's first segment too). GET/HEAD 301 (as F23), other methods 308 (keeps method + body);
+     `cache-control: private, max-age=300` (a rename or a switch back to path routing applies within minutes). Runs
+     before the rewrite/F23/CSP, which stay unchanged. Pure parse/build in core `hosts.ts` (`pathRoutedAddress`:
+     null under path routing (`{ pathRouting }`, so the production guard is unit-tested), marketing-surface host +
+     `/s/{checkSlug-valid slug}` only; `hostRoutedUrl`: target host = fixed label or that
+     validated slug on the canonical root, never other request input; `canonicalScheme` = APP_URL's) →
+     `packages/core/test/hosts.test.ts`; e2e `path-redirects.spec` + a host-mode step in `slug-rename.spec`. Never
+     redirected (not rewritten, served on every platform host incl. the old one; R20's platform-only 404 aside): `/api/*` (OAuth callbacks, Meta webhook /
+     deauthorize / data-deletion, `/api/mcp`, `/api/health`, Caddy ask), `/files/*`, `/.well-known/*`, `_next`, static
+     files (`/widget.js`); `/_status/*` is Caddy's (`SITE_HOST`, and the sslip.io fallback). Owner steps:
+     deploy/droplet/README.md "Move to spamanagement.co".
+   - R20 (own domain only): when a spa has an active **primary** custom domain (not cancelled), every GET/HEAD for its
+     site on the temporary address (`{slug}.{any platform root}`, `/s/{slug}` with path routing; an old `/s/{slug}`
+     path address under host routing too) → 301 to the same path + query on `https://{domain}`, one hop (a renamed
+     slug resolves through `currentSlugFor` first), `cache-control: private, max-age=300`; runs before F23. Kept
+     (served as before): other methods (forms/server actions started there), `/book/embed` (widget iframe; snippets
+     on other sites point at it), `robots.txt` (the host still serves `/book/embed`, so its Disallow must stay readable
+     to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
+     `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
+     for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
+     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio previews live on the console
+     (`/websites/{slug}/preview`, R23), the spa's preview + preview-share links on the app host (`/{slug}/website/preview`,
+     `/website/preview?token=`), never on the temporary address.
+     Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;
+     core/test/hosts.test.ts); lookup `server/own-domain.ts` `ownDomainTarget` (one slug → hostname map per process,
+     30 s TTL for the worker's checks; `forgetOwnDomains()` from sites.ts `invalidateSiteHost`/`forgetSiteTenants` and
+     the spa "Make primary" action). Pending/failed domains never redirect. The 301 starts only once the own domain
+     serves: each map load drops sites.ts host-cache `'missing'` entries (`h:{hostname}`, read via globalThis, no import
+     cycle) for its hostnames, and no redirect while one says `'missing'`. e2e `own-domain-redirect.spec`.
+   - R20: a custom-domain host never answers platform-only endpoints (core `platformOnlyPath`: `/api/auth`,
+     `/api/mcp`, `/api/integrations`, `/.well-known` — extra matcher entries → 404 there, `NextResponse.next()` on
+     platform hosts, no rewrite/page headers). Its pages are always `/domain/{host}/…` (no /login, /dashboard, …).
+   - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
+     lang/dir + home link for the root layout's `<html>` and the status pages.
+   - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
+     `/robots.txt` + `/sitemap.xml` ARE rewritten, so each surface answers its own (F12, see "Search + social").
+2. **`server/session.ts`**: `getSession` reads `headers()` first; `requireUser` redirects to `{surface}/login?next=`.
+   - `/api`, `/files`, `_next` and static assets are not rewritten.
+2. **`server/session.ts`**: `getSession` reads `headers()` first, then confirms the session row still exists and the
+   login isn't disabled (the 5-minute cookie cache would otherwise keep a revoked session alive); `requireUser`
+   redirects to `{surface}/login?next=`.
+3. **`server/access.ts`**:
+   - `requireMember(slug)`: tenant via `platformDb`, membership via `withTenant`. A platform admin who is not a
+     member gets owner permissions and `impersonating: true`. Anyone else gets a 404.
+   - `guard(slug, perm)`: permission check plus writable status (trial / active / past_due).
+   - `studioGuard` (Website Studio) and `requirePlatformAdmin`.
+   - G3: super-admin powers (`isPlatformAdmin`, impersonation, console) need TOTP 2FA on (fresh DB read). Without it
+     the console/impersonation redirect to the account page on the current host with `?admin2fa=1`
+     (`platform/account` re-exports `dashboard/account`, outside `(console)`, so enrolment + sign-out stay reachable).
+4. **Server actions** (`app/dashboard/[tenant]/**/actions.ts`, `'use server'`, slug bound on the client):
+   - Order: `guard` → zod (`formObject`, `fromZod`) → `withTenant(ctx.tenant.id, tx => service(tx, …))` →
+     `audit()` (`server/audit.ts`, platformDb `audit_log`; request IP (core `clientIpFrom`) unless `ip` is passed — `null` for public events like an enquiry) → `revalidatePath` → `ok()`/`fail()` (`lib/action.ts`).
+   - `DomainError` becomes `failDomain(e)` (dashboard; `e.i18n` = catalogue key + params when set); other errors
+     rethrow to the error boundary.
+   - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
+     plus `key`/`params`, which the client renders in the viewer's language (`resultText`); `fromZod` → `errors.checkFields`.
+     `guard` errors are translated server-side (`getT`); `studioGuard` (and `guard(…, { english: true })` in the console)
+     answers in English, since the console is English only.
+   - UI side: `ActionForm` (useTransition, double-submit guard, toasts, field errors — keys translated) and `FormSheet`.
+6. **i18n (spa dashboard)**: `i18n/server.ts` `getLocale` (row `user.locale` → `spa_locale` cookie → en; reads the row,
+   not the 5-min cached session) / `getT` / `getI18n` (locale, t, fmt, messages); `i18n/client.tsx` `I18nProvider`
+   (tenant layout) + `useI18n`/`useT` (outside the provider: English UI-kit strings only); `i18n/actions.ts`
+   `setLocaleAction` (updateUser + cookie + `refresh()`). `lib/utils.ts` `formatAed/Date/DateTime` = English `fmt`.
+5. **URLs**:
+   - `server/origin.ts`: `requestUrls()` uses the visitor's platform domain; `canonicalUrls()` is for anything
+     shared, stored or sent. Links to a spa's site that are shown or sent use `publicSiteUrl` (sites.ts; services
+     `publicSiteBase`/`spaSiteUrl` in the worker) — own domain once primary (R20), so we never link to a redirect;
+     `canonicalUrls().site()` only where the free address itself is meant (Domains page, rename, applications,
+     `/files` origins). Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
+     (production: the old `134-209-145-162.sslip.io`); droplet `APP_URL`/`ADMIN_URL`/`ROUTING` come from site.env.
+   - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
+
+## Web routes (`apps/web/src/app`)
+
+- **`dashboard/(auth)`**: login, signup, invite/[token], 2FA, forgot/reset password.
+  - Signup = **spa application** (PLAN §18.3): `signup/actions.ts` creates the login (Better Auth) + a pending
+    `spa_applications` row (`submitApplication`); `/application` is the applicant's waiting page (locked logins:
+    `server/applications.ts` `applicantState`). The console accepts (`acceptApplication` → `provisionTenantTx` in
+    services/applications.ts: tenant, default branch, the 6 system roles, owner member, active subscription, logo,
+    setup invoice (VAT optional: `createPlatformInvoice({ vat })` / `invoiceTotals(…, chargeVat)`; due date
+    `setupBalanceDueDate` = start or start + 10 days, never before today) + `recordPlatformPayment`, then the plan's
+    schedule from the start date via `generateBillingScheduleTx` = the console button's code, so the button later
+    creates nothing; deposit bounds/wording `depositRule` + due choices in `@spa/core` `setup-fee.ts`, shared with the
+    Accept dialog) or rejects (`rejectApplication`: `user.disabled_at`, sessions deleted; Better
+    Auth session hook + `getSession` refuse disabled logins). `provisionTenant` without `subscription` = old trial path. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
+    platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
+    `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
+    sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
+  - **Super-admin join** (owner, 2026-10-09): listed emails never apply (`submitApplication` + `signupAction` refuse
+    them, before any login is created); they join on the admin host `platform/(auth)/join` (Better Auth sign-up, no
+    spa; `assertAdminJoinAllowed` = neutral refusal; per-IP limit; callback = console). Unverified listed login →
+    `requirePlatformAdmin` redirects to `/join` (how to finish + resend). `applicantState.listedAdmin`: never
+    `locked`; dashboard home / `/application` / `/signup` send listed or super-admin logins without a spa to the
+    console (`adminUrl()`). Console Company → **Super-admins** card (`superAdminRoster`, `markListedAdminVerified` in
+    services/platform-admins.ts: listed + not disabled + actor super-admin with 2FA + not yourself; audit
+    `platform.admin.email_verified`; no removal). `listedAdminEmails` drops empty segments/duplicates (compose appends).
+- **`dashboard/[tenant]`** (PLAN §14.6): `layout.tsx` renders `.crm` (`lang` = viewer locale) → `I18nProvider` →
+  `components/shell/spa-shell.tsx` (sidebar: logo/initials + name + branch line, profile menu, grouped menu, plan card
+  with AI meter = month `ai_usage` ÷ `tenants.ai_budget_usd`, platform badge `Logo` → marketing site (PLAN §18.6); top bar: group crumb + title (home = greeting), EN | ไทย;
+  ≤860 px drawer). Look = `crm.css` (tokens on `:root:has(.crm)`, lifted under `[data-crm-off]` = site editor/preview
+  overlays; UI kit reads `--ui-*` density hooks whose fallbacks are its old sizes). Menu (permission-filtered; items
+  with several pages show section tabs under the top bar):
+  - Workspace: Dashboard, Calendar, Sales, Inbox & follow-ups (messages · inbox · campaigns · enquiries — F15,
+    `clients.view`).
+  - People: Clients, Services & menu (services · packages · inventory · purchases · warehouse), Team & roles (staff · timeclock · team · documents).
+  - Growth: Marketing (ai/content · analytics · AI studio = ai, ai/try), Website studio (website · media), Reviews
+    (ai/reviews).
+  - Finance: Reports (F31, below), Accounts (P&L, VAT, expenses with receipt scan, journal, export), VAT & payroll
+    (payroll + WPS SIF), Billing (Stripe Checkout for platform invoices only).
+  - System: Settings (incl. logo, hours, intake, integrations, domains, data).
+  - Not in the menu (X6): `waitlist` (linked from the Calendar + Bookings headers) and `clients/duplicates`
+    (Clients header "Duplicates", needs `clients.merge`; `?keep=&merge=` = preview + merge).
+  - Hidden until Phase 3: Bookings list, Automations, Coming next. Account + switch spa = profile menu.
+  - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG
+    + new website enquiries (`enquiriesNew`, F15).
+  - **Reports (F31)** `reports/` (`reports.view`; RevPATH card also `dashboard.revenue`, liability `accounting.view`):
+    `data.ts` `loadReports` (branch scoping as on Home, `performanceRange` keys 7/30/90/month/last-month, today =
+    business date at the branch cutoff, `?rebook=30|60|90`, `?asOf=` ≤ today) → services `kpi-reports.ts`, one query
+    per KPI: `rebookingRate` (completed visits with a client; rebooked = another non-cancelled booking starting later,
+    business date ≤ visit + N; per therapist via `booking_items.staff_ids`; `pending` = window still open),
+    `retentionCohorts` (12 months ending at the period month; cohort = first completed visit in scope, whole spa also
+    `clients.first_visit_at` at the cutoff so imports stay in old cohorts; +1…+6 months, null = not started),
+    `revPath` (ex-VAT service lines of paid|refunded sales + package/membership session values matched to the 0-priced
+    line's therapist − service `refund_lines` by refund date ÷ bookable staff hours: shifts clipped to the business-day
+    window, else time entries; reception = not bookable), `roomUtilisation` (booked `duration_min` of bookings not
+    cancelled/no-show ÷ `openIntervals` × rooms; inactive rooms only when used), `prepaidLiability(asOf)` (spa-wide,
+    rebuilt from movements: gift-card txns by sale / refund / cutoff date; packages + memberships = price − redemptions,
+    0 from the refund line or `package_expiry`/`membership_expiry` entry date; vs ledger 2100/2110 credit − debit,
+    `difference` = ledger − items). `export/route.ts` = .xlsx (R10), one sheet per KPI, viewer's language.
+    Console Performance detail adds `tenantOperations` (whole-spa aggregates only). Migration 0038_kpi_indexes: indexes
+    `booking_items_booking`, `shifts_branch_time`.
+    `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG;
+    `outboxMine` (F28) = due messages assigned to the viewer → second, dark-green Inbox badge (`ShellItem.mine`).
+  - Calendar ranges: `calendar/page.tsx` `?range=week|month` → `loadCalendarSpan` (data.ts) → services
+    `loadCalendarRange` → `components/calendar/span-view.tsx`; Day view takes `?open=<bookingId>` (PLAN §14.6 Phase 3).
+  - Top bar global search (`components/search`: `searchAction` + `SearchPalette`, ⌘K/Ctrl+K; PLAN §14.9).
+  - Settings → Security: require-2FA toggle (`saveSecurityAction`; on by default, G23), recent audit rows;
+    Settings → Online booking: auto-confirm returning clients (`saveOnlineBookingAction`, G21 → `selfBookingStatus`).
+  - Therapist (G14): booking sheet own-status buttons → `setOwnStatusAction` (calendar/actions.ts) → services
+    `setOwnBookingStatus` (ownership check); TherapistHome "My earnings" → `staffEarnings` (payroll.ts).
+    `settings/audit` = audit log viewer (`audit.view`).
+  - Installable app per spa (PLAN §18.6): `app.webmanifest/route.ts` + `app-icon/[key]/[variant]/route.ts` (public,
+    cookie-free; `server/pwa.ts` = name rule via core `pwaAppName`, icon key = hash(ICON_VERSION + logo file id |
+    initials), 30 s slug cache; `server/pwa-icons.tsx` = sharp logo tiles / next/og initials, in-memory LRU). Layout
+    `generateMetadata` links them (+ apple title, theme colour); `components/pwa` registers `public/sw.js` (scope `/`,
+    shared with push via `lib/sw.ts`; answers every in-scope page load with the preload response — never return early
+    for a navigation, or it is fetched twice), stores the localised offline page, "Install app" menu item + tip.
+- **`dashboard/account`** (profile, 2FA, push) (`?require2fa=<slug>` notice from the 2FA policy) and **`dashboard/dev/kit`** (design-system gallery).
+- **Console tools (F20–F22, PLAN §17)**: `platform/(console)/flags` (feature flags: services `feature-flags.ts`, core
+  `flags.ts` `FEATURE_FLAGS` = keys code may read; web `server/flags.ts` `flag(key, tenantId)`), `announcements`
+  (services `announcements.ts`; spa side `server/announcements.ts` `announcementsFor` (platform read, plan code from
+  entitlements) → `components/shell/announcements.tsx` in the SpaShell banner slot, dismiss =
+  `dashboard/[tenant]/announcements/actions.ts` (requireMember, not guard; `announcement_dismissals` via withTenant)),
+  Spas list = services `tenant-usage.ts` `tenantUsageList` (one query, sortable; also returns `featureTier` +
+  `planTier`) → `platform/(console)/tenants/page.tsx` + page-scoped `tenants.css` (own table, not DataTable: merged
+  columns Spa | Activity | Usage | AI | Plan with one header sort link per key, container query on the card:
+  ≥ 880 px 6 cols, 660–879 compact with Plan in the Spa cell, < 660 a `<ul>` of cards; no overflow-x by
+  construction, e2e `console-spa-list.spec`), billing transitions =
+  `billing-actions.ts` (rules card on Company, per-spa pause + Check now on the spa page) → services
+  `billing-transitions.ts`; payment paths (`setInvoicePaid`, `recordPlatformPayment` → `.billing`,
+  `settleCheckoutSession`) call `liftBillingHold` in their tx and `billingTransitionEffects` after commit. Tenant
+  layout banners: `tenants.billing_stage` overdue/grace → red "read-only on {date}" bar, read_only → read-only notice.
+- **`platform/(console)`**: overview, applications (PLAN §18.3), enquiries (PLAN §18.4: list/search/filter, detail with
+  tel/wa.me/mailto, status + note via `updateEnquiry`; nav badge = `newEnquiryCount`), tenants, plans, settings, audit,
+  ai models, domains (order approval), templates
+  (studio templates), websites (R23 Website Studio: list + `websites/[slug]` spa page; editor + draft preview full
+  screen in the `platform/(studio)` group, layout `requirePlatformAdmin`, no console shell), performance (PLAN §18.1: `performance/data.ts` loops tenants via
+  `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
+  `tenantPerformance`; detail adds `tenantPerformanceDetail` + F31 `tenantOperations`). Revenue there = sales (paid|refunded) by sale business
+  date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
+- **`marketing/`**: `/`, features, crm, website-builder, pricing, contact — "C · Bold product-led" look (`marketing.css`,
+  scoped `.mkt`; Space Grotesk + DM Sans; Noto Sans Thai as the Thai-glyph fallback in `--font`/`--head`) + motion (`components/marketing/motion.tsx`: `data-mkt-nav`, `data-rise`,
+  `data-tilt` 3D frames, `data-depth` hero parallax, aurora canvas); PLAN §14.3. `/crm` EN/TH demo: labels resolved
+  server-side from the dashboard catalogues (`components/marketing/crm-demo-copy.ts`) → client `crm-demo.tsx`; PLAN §18.5.
+  Home CRM showcase = `crm-showcase.tsx` (same mock, `overview`, + 4 floating cards): CSS scroll-driven 3D
+  (`.mkt-show*` in marketing.css; timelines on untransformed wrappers, unitless `--show-*` amounts the JS fallback
+  reads) — keep it out of MarketingMotion (no `data-tilt`/`data-rise` inside); PLAN §18.8.
+  Plan cards = `components/marketing/plan-cards.tsx`, one server component for home (`compact`) + /pricing (`full`):
+  `activePlans()` rows (pricing keeps `FALLBACK_PLANS` for a DB-less build), Premium/Standard via `planTier`, lists
+  from `PLAN_FEATURES`/`FEATURE_LABELS`, `formatAed` split at its NBSP; `.mkt-plans`/`.mkt-pc*` use a row subgrid from
+  768px (never put containment on `.mkt-pc` — it stops being a subgrid; the price row is the cqi container) and the
+  Premium raise is margin + padding, not a transform (`data-rise="card"` owns transform). /pricing keeps one
+  `signup?plan=` link per plan (applications.spec), so none in the comparison header.
+  Each list ends on a `.mkt-pl-end` link row pinned to the foot of the shared row (`margin-top: auto`), so the cards end
+  level whatever the wrapping; CTAs wrap (DB names). Marketing focus ring = `.mkt :focus-visible` in marketing.css
+  (accent, lime on `.mkt-dark`/`.mkt-demo`/`.mkt-pc-spot`) — globals.css's ring uses the app's `:root` accent.
+  `.mkt-link:hover` turns links `--accent-hover` (dark green), so the Premium card overrides it to white
+  (`.mkt-pc-spot .mkt-link:hover`); don't redefine `--accent-hover` there (the card shadow uses it). Two-sentence
+  headings: `<br />` + the second sentence in `.mkt-plx-2` (inline-block on the /pricing h1 so phones still balance it).
+  Contact = enquiry form (`components/marketing/enquiry-form.tsx` → `contact/actions.ts`: honeypot, `enquirySchema`,
+  `withinIpLimit`, Turnstile (F9), `submitEnquiry`, `after()` → `server/enquiries.ts` `emailNewEnquiry`, reply-to = sender) + cards;
+  email = console company email or `PLATFORM_CONTACT_EMAIL` (ask@spamanagement.co, core email.ts). PLAN §18.4.
+  Footer = brand + 5 link columns into
+  section `id`s (features/website-builder/pricing; keep them stable, platform-domains.spec checks them), PLAN §18.5.
+- **Public sites**: `site/[slug]` and `domain/[hostname]` render `components/site/public.tsx`, plus `/book`.
+- **Status pages (F24)**: root `not-found.tsx` (server, per surface via `requestSurface()`), `error.tsx` (client,
+  `SurfaceProvider` context from the root layout → `errorCopy`), `global-error.tsx` (no layout: surface guessed from
+  `<html data-surface>` / host / path), all through `components/status/status-page.tsx` + `status.css` (looks `crm`,
+  `marketing`, `console`, `site`; self-contained so they render when a surface layout failed). The spa shell keeps
+  its own `[tenant]/not-found.tsx` (unknown paths via `[tenant]/[...missing]`) and `[tenant]/error.tsx`. Copy:
+  dashboard `errors.page.*` / `errors.boundary.*` (EN/TH), sites `components/site/i18n.ts` (EN/AR). Only the
+  digest is shown. `<html lang/dir>`: marketing + console en, dashboard `getLocale()`, sites `?lang=ar` → ar/rtl.
+- **Slug rename (F23)**: console spa page "Web address" → `renameSlugAction` → services `renameTenantSlug` (checks as
+  Apply + `claimSlugTx`; `provisionTenantTx` claims too; `slugStatus` adds `previous`) → audit
+  `platform.tenant.slug_renamed` → clears the redirect map, `resolveSiteTenant` cache, the R20 own-domain map and PWA
+  slug caches (globalThis-backed so the action reaches the bundles that read them).
+- **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
+  receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
+  "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=`.
+  e2e matrix: `files-access.spec.ts`.
+- Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
+  WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); kept on the application at sign-up (optional, validated before
+  the account is created; stored as the spa's logo on acceptance) and Settings (`saveLogoAction`, `intent=remove`); `components/media/logo-input.tsx` shrinks the
+  pick in the browser (server actions take ≤ 1 MB). Replaced logo files are kept (URL may be reused).
+- **`api/`**:
+  - `auth`, `health`, `client-error`.
+  - `collect`: analytics beacon; inserts into `web_events` via platformDb.
+  - `domains/allowed`: Caddy's on-demand TLS "ask".
+  - `integrations/meta|google`: OAuth, Meta webhook, deauthorize, data deletion.
+  - `mcp/meta`: first-party Meta MCP server (R7, `handleMetaMcpRequest`; bearer = 5-minute signed tenant token).
+
+## Search + social (F12, PLAN §17)
+
+- Pure builders in `@spa/core` `seo.ts` (tests: core/test/seo.test.ts): `jsonLdString` (escapes `< > &` U+2028/9 —
+  always use it for inline JSON-LD), `spaJsonLd` (DaySpa + branch address/emirate, geo from a Maps link that carries
+  coordinates, hasMap, hours → OpeningHoursSpecification, priceRange, sameAs, services as Offers — prices only where
+  `publicPrice` shows them; BreadcrumbList on inner pages), `platformJsonLd`, `robotsTxt`, `sitemapXml`.
+- Spa sites: `server/seo.ts` `siteSeo(tenant)` (React-cached): canonical base = `publicSiteUrl` (primary active custom
+  domain, else free address), logo/Instagram, published pages, `indexable` = not suspended and ≥ 1 published page.
+  Routes `site/[slug]/{robots.txt,sitemap.xml}` + `domain/[hostname]/…`; robots disallow `/book/embed`, `/api/`.
+  Not indexable → robots without Sitemap, empty sitemap, pages `noindex` (crawlable, so search drops them).
+  `publicSiteMetadata` / `bookingMetadata`: canonical + hreflang (`?lang=ar` when the site has `ar`), og/twitter image
+  = first Hero (or band background) image, else the logo. `PublicSite` renders the JSON-LD script.
+- Platform: `marketing/{robots.txt,sitemap.xml}` (path routing: also Disallow `/app/ /admin/ /s/*/book/embed` and a
+  Sitemap line per `/s/{slug}` spa without a primary custom domain); `dashboard|platform/robots.txt` = disallow all.
+  Marketing pages use `marketingMetadata(key, …)` (`components/marketing/seo.ts`, `MARKETING_PAGES` = sitemap list +
+  OG headlines); the marketing layout sets `metadataBase` (canonical domain) and the Organization/WebSite/
+  SoftwareApplication JSON-LD. OG images: `app/og/[page]/route.tsx` (`next/og`, default font).
+
+## Google + Meta integrations (F17–F19, Premium)
+
+- **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
+  business.manage + webmasters; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
+  `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via
+  `settings.integrations.google.errors.*`; Place Actions `list|create|update|deleteBookLink`, `findOurBookLink`;
+  Search Console `listScSites|addScSite|submitScSitemap|getScSitemap`, `scPropertyCandidates`/`pickScProperty`).
+  `services/integrations/meta.ts`: `instagramClient(fetch, host)` (`'instagram'` = graph.instagram.com with the
+  Instagram Login token, `'facebook'` = graph.facebook.com with a Page token — same paths), `createContainer`,
+  `sendPrivateReply` (`/{ig}/messages` + `recipient.comment_id`); `facebookLoginClient` (code → long-lived user token,
+  `pages()` with `instagram_business_account`, `debugToken`, `subscribePage`); `facebookAuthorizeUrl` (`config_id`
+  when `META_FB_CONFIG_ID`, else `FACEBOOK_SCOPES`).
+- **F17** `services/gbp-sync.ts` (state in the `gbp` row's meta, merged with jsonb `||`: `bookAction|bookUri|
+  bookLinkName|bookError…`, `scState|scSiteUrl|scSubmittedAt|scDueAt…`): `setGbpBookAction` / `removeGbpBookAction`,
+  `syncGbpBookActions` (worker), `submitGbpSitemap`, `markSitemapDue` (website publish actions call it),
+  `submitDueSitemaps` (worker). Address outside a request: `services/site-url.ts` `publicSiteBase` (same rule as web
+  `publicSiteUrl`), `googleBookingUrl` = `/book?src=google`. UI `components/integrations/gbp-site.tsx`; actions in
+  `api/integrations/google/actions.ts` (`setBookButtonAction`, `removeBookButtonAction`, `submitSitemapAction`, all
+  `guard(…, 'ai.manage', 'marketing')`; disconnect / change location remove the Book link first, best effort).
+- **F18 formats**: `social_posts.type` ∈ feed|reel|story|carousel, `media[].type` image|video, `meta` = parked
+  container ids. `instagramPublishPlan` (pure; `PublishProblem` codes → `marketing.problem.*`) feeds
+  `publishInstagramPost` (claim → children → parent → poll → media_publish; `StillProcessing` parks the post as
+  `scheduled` + `PROCESSING_NOTE`, the job resumes the same container, > 1 h fails). UI: `ai/content/post-format.tsx`
+  + `setPostFormatAction` (drops parked containers).
+- **F18 private replies**: `privateReplyState` (pure: available until comment + 7 days / sent / sending / expired),
+  `sendPrivateReply` (claim row `kind = private_reply` + `SENDING_NOTE` under a thread lock → Graph → keep or delete;
+  failures store nothing; never retried through `deliverReply`). AI: `@spa/ai` `draftPrivateReply` (`comment_agent`,
+  1,000-byte clip) only fills `components/inbox/private-reply.tsx`; staff send (`sendPrivateReplyAction`, audit
+  `inbox.private_reply` with `aiDrafted`).
+- **F19** `services/facebook.ts`: pending row (`external_id 'pending'`, status `pending_page`, encrypted user token) →
+  `chooseFacebookPage` (Page token encrypted, meta `igUserId|igUsername|fbUserId|dataAccessExpiresAt`, pending row
+  deleted, other Pages disconnected) → `facebookView` (expiresSoon < 14 days). `social.ts` `getInstagramSender`:
+  Instagram Login row first, else the Facebook row with `igUserId` (`via: 'facebook'`) — used by DMs/comment
+  replies, publishing, private replies, profile lookups; `instagramOwners` (webhook → tenant) and the publish job
+  also match Page-linked accounts; `forgetInstagramUser` also clears Page rows by `fbUserId`. Web:
+  `api/integrations/meta/facebook-actions.ts` + `facebook/callback/route.ts` (state + `fb_oauth_nonce`, ai.manage +
+  marketing), `components/integrations/facebook-card.tsx`. Tests: services `gbp-sync.test.ts`,
+  `instagram-formats.test.ts`; ai `instagram.test.ts`; e2e `instagram.spec.ts` (F18/F19 test).
+
+## Site builder
+
+- **Puck config** (`components/site/config.tsx`), 25 blocks:
+  - layout: Section, Columns, Stack, Spacer;
+  - content: Hero, Heading, RichText, ButtonGroup, Image, Gallery, Video;
+  - smart: ServicesMenu, Team, OpeningHours, Map, BookingCTA, WhatsAppButton, Reviews, InstagramFeed, BlogList;
+  - more: Testimonials, FAQ, EnquiryForm, Footer;
+  - hidden: GlobalSection, HtmlDesign, BlogPost (post page article).
+- **F15 blocks** (`blocks/extras.tsx`; data loaded per request in `data.ts` `loadLive` → `SiteData.posts/reviews/
+  instagram`; data blocks with nothing to show render nothing live and a dashed `[data-editor-note]` in the editor):
+  - Map: card (address via `addressLinkProps`, "Open in Google Maps" = `mapHref`, WhatsApp) + optional embed
+    `@spa/core` `mapEmbedSrc` (pin coordinates from the Maps link, else the address; `google.com/maps?…&output=embed`,
+    no API key) in a lazy sandboxed iframe; editor shows a placeholder (no Google iframe in the canvas). Layouts
+    split / embed / map / card.
+  - Video: `url` = `videoField` (`video-field.tsx`: link or upload, AI kind `text`) parsed by core `parseVideoUrl`
+    (YouTube watch/share/shorts/embed/nocookie, Vimeo + private hash, or a same-origin `/files/{id}`). YouTube/Vimeo =
+    `VideoPlayer` (client): poster button (custom poster, else YouTube's still), iframe only after the click
+    (`videoEmbedSrc`: youtube-nocookie autoplay rel=0, Vimeo dnt=1). Uploads: `POST /files/upload?kind=video`
+    (`site.design`, MP4/WebM by magic bytes `sniffVideoType`, ≤ 8 MB = stored-file cap, `media_assets.kind = 'video'`,
+    kept out of the photo library/pickers via `listAssets` kind filter); `/files` serves videos with single byte
+    ranges (206/416, Safari needs them); `<video preload="none">`. Preflight warns "Video has no video yet".
+  - Reviews / InstagramFeed: Premium `marketing` (`hasFeature` in `loadSite`; null = not on plan). Services
+    `site-feeds.ts`: `siteReviews` (Google rows, avg + count over all, newest with text ≥ min rating, name shown as
+    "Layla M." `reviewerName`), `siteInstagram` (connected account + `social_posts` published on Instagram, first
+    picture, `/files/…` or https only; links to the profile — no Graph API call, no permalinks).
+  - Blog: `site_posts` (tenant, RLS; slug unique per spa; EN/AR title/excerpt/body/SEO; plain-text body →
+    `site-kit` `postBlocks`: blank line = paragraph, `## ` = h2, `- ` = bullets). Studio card "Blog" on
+    the console spa page → `websites/[slug]/blog/[postId]` (`new` = create; `post-form.tsx`, cover via `ImageInput`) →
+    `blog-actions.ts` (studioGuard: save `site.content`, publish/unpublish/delete `site.publish`; audit
+    `site.post.*`). BlogList links `{base}/blog/{slug}`; `public.tsx` `postSlugOf` + `PostPage` renders hidden
+    `BlogPost` + the home page's last Footer/WhatsAppButton through the same config (published theme); metadata
+    `postMetadata` (canonical/hreflang only when the title has Arabic, og:type article, cover → og:image), JSON-LD
+    core `blogPostJsonLd` (DaySpa graph + BlogPosting), sitemap `blog/{slug}` entries (`siteSeo.posts`).
+  - EnquiryForm: client `blocks/enquiry-form.tsx` (honeypot `company`, Turnstile action `enquiry`, action imported on
+    submit so the block config stays importable outside Next) → `components/site/enquiry-actions.ts`
+    (`sendSiteEnquiryAction`: honeypot → services `siteEnquirySchema` (error codes → EN/AR site strings) →
+    `withinIpLimit('site-enquiry', 5/h, 20/day)` → `passesBotCheck` → `resolveSiteTenant` + `acceptsBookings` →
+    `site_enquiries` (keyed `ip_hash`) → audit `site.enquiry.received` (ip null) → bell/push `enquiry.site`).
+    `SiteMeta.form` (site key + Turnstile key) is set only by `PublicSite`; editor/previews show the form disabled.
+    Dashboard `enquiries/` (EN+TH `enquiries` namespace; filter new/replied/closed/all + search; phone only with
+    `clients.phone`; "Reply on WhatsApp" = wa.me with `siteEnquiryReplyText` in the visitor's language, marks
+    replied; status moves `clients.manage`, audit `site.enquiry.status`). Nothing is emailed to the visitor.
+  - Presets (Library): google-reviews, instagram-feed, contact-map, contact-enquiry, video-feature, blog-latest
+    (category `media` = "Video & blog"). Template defaults via `templates.ts` `extraBlocks(key)` (own id prefix
+    `{key}-x-…`, so existing node ids don't shift). E2E `site-blocks.spec.ts`.
+- **Props**:
+  - Content is `{en, ar?}`; AR falls back to EN, and `{name}` becomes the spa name.
+  - Style is `{base, md?, lg?}`, compiled to CSS variables (`style.ts`).
+  - `advanced` holds the schedule and scoped custom CSS.
+- **Photo framing**: every image prop (`imageField`) holds a URL (all older pages) or `{ src, frame: {base, md?, lg?} }`
+  with focal point x/y 0–100 %, fit `cover|contain`, zoom 1–2× (`@spa/services/site-kit/image.ts`: `imageSrc`,
+  `normalizeImage`, `toImageProp` — stores a plain URL again when unframed — `imageFrameVars`). Render =
+  `FramedImage` (`blocks/shared.tsx`: clipped `.sb-frame` wrapper + `.sb-img`, site.css vars → object-fit /
+  object-position / `transform: scale` with the focal point as origin; physical %, never mirrored in RTL); used by
+  Image, Gallery, Hero split, Section/Hero-banner backgrounds (Team photos are staff records, not framed). Editor:
+  `media/image-frame.tsx` under the image field (drag/click/arrow-key focal dot, Fill/Fit, zoom, Reset; base frame
+  by default, tablet/desktop tabs add overrides); picking a new photo resets framing. Preflight, template scrub and AI
+  ops (`{src?, frame}`, src omitted = reframe) accept both shapes. E2E: `image-frame.spec.ts`.
+- **Themes and templates**: theme tokens in `sites.theme`; 23 built-in templates — 8 classic (`templates.ts`) + 15
+  design templates (R5, `templates-designs.ts`); 24 section presets + one "3D motion" preset per design scene, and 7
+  page templates (`presets.ts`). Studio rows in `site_templates` override built-ins by key.
+- **Design templates (R5)**: look = theme tokens `headingFace` (self-hosted @fontsource faces, `site-designs.css`),
+  `backdrop` (CSS-drawn hero art), `emblem` (hero art built from the spa name + live hours/prices, shown when the
+  hero has no photo; `blocks/hero-art.tsx`), `emphasis` (`*word*` in headings). Motion = per-band `scene` props set by
+  `applyMotion` (fan, cube, doors, coverflow, road, pages, prism, slabs, layers, blocks, brochure, turn — pose scenes
+  in `lib/scenes.ts`, all ending at rest). Scroll scenes are off in the editor; ambient hero loops stop in the editor
+  and under OS reduced motion. Gallery thumbnails: `public/site-templates/{key}.webp`, regenerated with
+  `THUMBS=1 pnpm --filter @spa/web e2e template-thumbs` (studio rows keep the live iframe preview).
+- **HTML designs (R17)**: `/platform/templates` "Upload HTML" (`uploadHtmlTemplateAction`) saves a studio template
+  whose home page is one hidden `HtmlDesign` block (`components/site/blocks/html-design.tsx`, category `design`,
+  `visible: false` ⇒ out of the AI schema) with the raw file in `props.html`; root prop `htmlDesign: true` makes the root
+  render skip `SiteFrame`. Render = `HtmlDesignFrame` (`components/site/html-design-frame.tsx`): `<iframe
+  src=/api/html-design/frame sandbox="allow-scripts allow-forms allow-popups…">` (no `allow-same-origin`: design scripts
+  can't touch platform cookies/APIs). F10: not `srcdoc` (it would inherit the page's strict CSP): the shell route answers
+  with the design's own CSP (anything, but CSP `sandbox` + `frame-ancestors 'self'`), asks the hosting page for the
+  design by postMessage and `document.write`s it once (with a `<base>` = hosting page URL); a new design/adjustment
+  reloads the shell. The design shows after hydration. `{{placeholders}}` filled + HTML-escaped from
+  `SiteMeta`; injected click handler keeps `#anchors` in-frame, sends other links to `_top` (external → new tab), inert
+  when `meta.editing`. Size cap = page JSON ≤ 500 KB. E2E: `templates.spec.ts` "HTML design upload".
+- **Map links (owner, 2026-10-09)**: every rendered branch address links to Google Maps (new tab, label "Open in Google
+  Maps" EN/AR via `ui('openInMaps')`, `data-maps-link`): contact/hours block, footer, placeholder site, booking page.
+  Target = `branchMapsHref` (`@spa/core/maps.ts`): `branches.maps_url` (exact pin; `normalizeGoogleMapsUrl` =
+  explicit host allowlist google.com|ae/maps…, maps.google.com|ae (/ or /maps…; no /url redirector), maps.app.goo.gl,
+  goo.gl/maps; no whitespace/quotes/backslash/<>/backtick; the actions store `URL.href` (RFC 3986 chars only), never
+  the raw paste; re-checked on read) else an address search. Site: `mapHref(meta)` / `addressLinkProps(meta)`
+  (`links.ts`). HTML designs: `{{map_url}}` = same target; `{{address}}` in plain text becomes an escaped
+  `<a data-spa-map>` — text positions come from a quote-aware tokenizer (`linkableTextRanges`; `>` inside attribute
+  values doesn't end a tag), never inside comments, `<a>`/`<select>`/`<button>` or raw-text elements (script, style,
+  title, textarea, xmp, plaintext, iframe, noembed, noframes, noscript); `escapeHtml` also escapes `\` and `` ` ``.
+  Tests `packages/core/test/maps.test.ts`; E2E: `site.spec.ts`.
+  - Transforms are pure in `@spa/core` `html-design.ts` (tests `packages/core/test/html-design.test.ts`):
+    `htmlDesignDocument` adds a viewport meta if missing + `HTML_DESIGN_BASE_CSS` (all `:where()`, first in <head> so
+    the design's rules win) + the link script; `fixHtmlDesign` (upload) adds the viewport and turns inline img
+    `width:Npx` > 360 into `width:100%;max-width:Npx`; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
+    `bg-<n>` (n-th `background(-image)` url in `<style>` + inline styles; scripts/comments/fonts skipped).
+  - Adjustments = block prop `images: HtmlImageAdjust[]` ({id, src (first 300 chars, must still match), fit, x, y,
+    align, replace}); applied by `applyHtmlImageAdjustments`: `data-spa-img` attr + `!important` rules at the end,
+    background position/size appended after the declaration, replace URL must match `HTML_IMAGE_URL` (https or
+    site path; srcset dropped). UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
+    client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview); saved via `uploadHtmlTemplateAction` (hidden
+    `images` JSON) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate` now takes `pages`).
+    Replacement uploads go into the chosen spa's media library (`/files/upload`, normal size cap; public files, so
+    they break if that spa is deleted). E2E: "HTML design images".
+- **Website Studio (R23, console)** (PLAN §14.8 R23): `platform/(console)/websites/page.tsx` lists every spa
+  (services `site-studio.ts` `websiteOverview` = platform read, deleted spas out; `websiteProgress` status none →
+  template → draft → live + `unpublished` + next step; `next-step.tsx` button; nav badge = open change requests;
+  `listChangeRequests` puts open ones first, so its limit never hides one the counts include).
+  `websites/[slug]/page.tsx` (+ `cards.tsx`, `website-client.tsx`) = everything of the studio; actions in that folder
+  (`actions.ts`, `studio-actions.ts`, `blog-actions.ts`, `import-actions.ts`, `write-texts-actions.ts`,
+  `editor/*-actions.ts`) are `studioGuard`ed and refresh both sides via `server/studio.ts` `revalidateStudio`;
+  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. Editor + preview: `platform/(studio)/
+  websites/[slug]/{editor/[pageId],preview}` ("Back to console"; preview shared with the CRM via
+  `components/site/draft-preview.tsx`); English-only text provider `components/site/studio-i18n.tsx` for the shared
+  media/image fields. No review step: `sites.studio_status` is deprecated (kept for zero-downtime deploys, never read).
+  - Spa members (`dashboard/[tenant]/website/page.tsx`, `site.content` or `services.manage`): preview of their site
+    (`/website/preview?live=1` = published, else the draft), `ServicesPrices` (`services-prices.tsx`, menu-only
+    `ServiceSheet`), **Request a change** (`request-change.tsx` → `request-actions.ts` `requestChangeAction`, audited
+    `site.change_requested`; refused when read-only) + their requests with status/note. Console "Mark done" =
+    `resolveChangeAction`. Super-admins opening `/{slug}/website`, `/website/editor/{id}` or `/website/blog/{id|new}`
+    are redirected to the console (id checked first, built from the stored slug with `adminUrl`); members get 404 there.
+  - **Write texts** (`write-texts-actions.ts` `writeTextsAction`, sheet `WriteTextsSheet`): `server/site-ai-gate.ts`
+    `siteAiGuard` (= studioGuard + `siteAiEditorStatus` ok; Ask AI uses it too) + `aiEditReady`; one run per spa;
+    ≤ 12 pages, slots = `@spa/services/site-kit` `textSlots` (every non-empty `bi` prop incl. lists/objects/slots;
+    alt texts, HTML-design pages, GlobalSection out; `multiline` from the field's AI meta) → `@spa/ai` `planSiteTexts`
+    (agent `site_editor`, facts from `loadSiteFacts`: brand profile, active branches, public menu with hidden prices
+    as "price on request"; ≤ 40 slots per call, 2 at a time, ≤ 24 calls, 150 s) → per page in its own tx: `lockSite`,
+    `assertPagesUnlocked` (locked pages skipped up front too), `fillTextSlots` (only seen keys whose EN is unchanged;
+    `plainText` strips tags/control chars, caps 200/1500 code points), `designSignature` must not change, the unnamed
+    working draft is labelled "Before Write texts {Dubai time}", `saveDraft`; a page whose save fails is reported
+    "could not be saved — run again" and the run goes on. Each AI call gets the run's 150 s `AbortSignal` (through
+    `runChat` → ModelArk fetch). Never publishes; audit `site.ai_texts_written`.
+    Tests `packages/services/test/site-text-slots.test.ts`, `packages/ai/test/site-edit.test.ts`, e2e
+    `console-website.spec.ts` (fixture slug `texts-editor`). Replaced the old "Write with AI" sheet
+    (`server/site-writer.ts` and the services site-copy helpers `applySiteCopy*`/`extractSiteCopy` removed).
+- **Saving and publishing**:
+  - Draft JSON is capped at 512 KB.
+  - Design changes need `site.design` (checked via `designSignature`).
+  - Preflight runs before publish (`server/site-preflight.ts`); errors block publishing, warnings don't.
+- **Site-edit ops layer** (`@spa/services` `site-edit.ts`, shared by Ask AI and the Claude MCP connector): `runSiteEdit`
+  (zod op shapes → per-page `applySiteEditOps` against the block schema the caller passes, all-or-nothing, `dryRun`,
+  `base` = editor canvas data; writes `saveDraft` / `addPage` / `renamePage` / `updateDraftTheme`; `check` callback =
+  caller policy), `restoreSiteEdit`, `getSiteForEdit`, `blockCatalogue`, `siteEditAuditData`. Edit ops accept `index`.
+  Drafts only: `sites.theme_draft` (`editingTheme()`; editor, previews and preflight use it; `loadSite({published:
+  false})` swaps it in) and `site_pages.pending` (rename of a live page); `publishPage` applies both.
+- **Editor session (F29)**: autosave + local copy + editing lock. Client: `components/site/editor/session.tsx`
+  (`useEditorLock`: take on open, heartbeat 30 s + on tab visible, view-only polling, `pagehide` release; local copy
+  `spa-editor-draft:{slug}:{pageId}` in localStorage; status text + Lock / Conflict / Restore banners as
+  `region`s) wired in `editor/[pageId]/editor.tsx` (`persist('auto'|'manual'|'overwrite')`: debounce `AUTOSAVE_MS`
+  2 s, flush on window blur (not into the canvas iframe) / tab hidden, offline → local copy + retry on `online` /
+  15 s; paused while an Ask AI plan is previewed — `AiEditPanel onPreview`). Conflict = reply key
+  `errors.domain.editedElsewhere` (Keep mine = `saveDraftAction(…, { overwrite: true })`, audited
+  `overwroteChangesElsewhere`); lock refusal = key `errors.domain.pageLocked` (→ view only). Server: `editor/lock-
+  actions.ts` (`editorLockAction` take/heartbeat/take over → audit `site.page.lock_taken_over`,
+  `editorLockStatusAction`, `releaseEditorLockAction`); the editor page reads the holder (read only, so a prefetch
+  never locks) and opens view-only. Services `site-locks.ts`: `site_page_locks` (unique page, RLS), `acquirePageLock`
+  (atomic upsert with `setWhere`: ours / expired / take over), `getPageLock`, `pageLocksHeldByOthers`,
+  `assertPagesUnlocked` (`PageLockedError`), TTL 2 min. Checked (before the edit stamp, so a taken-over editor gets
+  `pageLocked`, not "changed elsewhere — keep mine") in `storeDraft`, `publishPageAction`,
+  `restoreVersionAction`, `runSiteEdit` (changed + renamed pages, dry runs too) and `restoreSiteEdit`; MCP `get_site`
+  shows `editing` per page. Autosave audits once per page + editor per 10 min. E2E: `editor-session.spec.ts`.
+  Unsaved baseline: taken 400 ms after load, always from Puck's first history entry (the loaded page as normalised),
+  never the canvas: an edit made before the timer still autosaves, even one Puck's 250 ms history debounce hasn't
+  recorded yet (the CI take-over race, 2026-10-10). Publish waits for an autosave in flight and no autosave starts while
+  publishing (server actions run one at a time: a queued publish would carry the pre-save stamp → "changed elsewhere").
+  Take over reloads the page
+  (`reloadEditor` → `window.location.reload`).
+- **Import from existing website (F32)**: Studio Pages card → console `websites/[slug]/import-sheet.tsx` → `import-actions.ts`
+  (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
+  preset / update root on that page, used photos downloaded outside the tx, then `saveImportImages` + `runSiteEdit`
+  in one tx). Services `site-import/`: `safe-fetch.ts` (SSRF guard: http(s), ports 80/443, no credentials, every
+  resolved address public via `isPrivateAddress`, socket pinned to the checked address through a custom `lookup`,
+  redirects re-checked, decompressed size cap, deadline; `allow` / `isBlocked` / `ports` = test seams),
+  `robots.ts` (RFC 9309 groups, longest match, `$`/`*`), `extract.ts` (quote-aware tokenizer; skips script/style/
+  nav/form/svg/hidden; JSON-LD business + offers; services/prices/durations incl. table rows and Arabic digits; hours;
+  contact; photos incl. og:image, lazy/srcset, inline backgrounds; `linksToFollow`), `ops.ts` (`mergeImportPages`,
+  `buildImportOps` with `/files/import-image-N` placeholders, `resolveImportImages`), `index.ts`
+  (`crawlSiteForImport`, `fetchImportImage`, `saveImportImages`). AI mapping: `@spa/ai` `planSiteImport` (agent
+  `site_editor`, imported content marked as untrusted data; only add / preset / update root kept; invalid AI ops →
+  standard layout). Playwright only: `SITE_IMPORT_E2E_ALLOW=127.0.0.1:<E2E_PORT+1>` exempts the fixture server (never
+  set in deploy env). Tests: `packages/services/test/site-import.test.ts` (SSRF incl. DNS rebinding + redirects,
+  robots, extractor fixture `test/fixtures/spa-site.html`, ops → draft page), `packages/ai/test/site-edit.test.ts`,
+  e2e `site-import.spec.ts`.
+- **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
+  Gated by `SITE_AI_EDITOR_EMAILS` (`server/site-ai-gate.ts` `siteAiGuard` → `siteAiEditorStatus` in `@spa/db`
+  admins.ts: listed (or `*`) verified email + super-admin + 2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
+  (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
+  reverts the newest.
+  - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the
+    instruction, the trimmed page (`trimPageForPrompt`: ids/types/props, page text marked as data) and the vocabulary
+    from `siteEditSchema()` (`components/site/ai-schema.ts`: built from the Puck config — custom fields carry
+    `ai` meta in `field-defs.tsx` — plus `SECTION_PRESETS` and theme tokens; GlobalSection, custom CSS and
+    schedules excluded). Output = ops (add / preset / move / remove / update incl. `{en,ar}` + per-device / theme).
+  - `applySiteEditOps` (`@spa/services/site-kit/edit-ops.ts`, pure): validates every op against that schema
+    (unknown block/prop/option/id or disallowed slot ⇒ the whole plan is rejected), applies to a copy.
+  - Preview on the canvas (Puck `setData` + theme state), then Apply = draft save (512 KB cap, `designSignature`
+    ⇒ `site.design`; theme ops update `sites.theme`, live like the Theme panel) → audit `site.page.ai_edit`;
+    Undo restores the previous draft + theme (`site.page.ai_edit_undone`). Never publishes.
+  - E2E: `AI_E2E_FIXTURE_DIR` (Playwright only) makes the action answer from `<dir>/<slug>.json` via
+    `server/ai-fixture.ts`, still through the real gateway (`mockAiReply` helper, `ai-edit.spec.ts`).
+- **Share preview**: an HMAC token signed with `BETTER_AUTH_SECRET`, valid for 1, 7 or 30 days, opened at
+  `/website/preview?token=` on the app host.
+- **Analytics**:
+  - `public/t.js` is cookieless. It sends pageviews, a `block_view` when 40% of a block is visible, and
+    WhatsApp/Instagram/booking clicks.
+  - `/api/collect` caps bodies at 4 KB, allows 240 requests/min per IP and uses a daily-salted session hash.
+  - Events land in `web_events`, are rolled up hourly and pruned after 90 days. `source` = core `webEntrySource`
+    (`?src`/`utm_source` tag, known referrer, referrer host, `direct`).
+
+## Client IP (F26, G6)
+
+- One source: `@spa/core` `client-ip.ts`. `clientIpFrom(headers)` reads only `CLIENT_IP_HEADER` (`cf-connecting-ip`,
+  which Caddy overwrites on every request: deploy/droplet/README.md "Client IP"), returns null unless it's a single
+  valid IPv4/IPv6 (dev/e2e without Caddy → null). `ipRateLimitKey(ip)` = rate-limit bucket: IPv4 (and IPv4-mapped)
+  as is, IPv6 by /64, null → `unknown`; Better Auth's limiter uses the same header and `ipv6Subnet: 64`.
+- Callers: web `server/rate-limit.ts` `clientIp()` / `withinIpLimit` (signup, admin join, contact), booking
+  `bookOnline` in-memory limits, `/api/collect` + `/api/client-error` limits, `audit()` IP, intake signature IP,
+  enquiry `ipHash` (null without IP; also website enquiries, F15), Turnstile `remoteip`, auth MCP consent audit. `packages/core/test/client-ip.test.ts`
+  fails if any `apps/*/src` / `packages/*/src` file names an IP header itself.
+
+## Bot check (F9, Cloudflare Turnstile)
+
+- Client `components/turnstile.tsx` `useTurnstile(siteKey, action, lang)`: explicit render, managed +
+  `interaction-only`; `getToken()` before submit (waits ≤ 30 s, '' at once when the script is blocked/errored),
+  `reset()` after every non-ok answer (single-use tokens). Server `server/turnstile.ts`: `turnstileSiteKey()` for the
+  page, `passesBotCheck(token, action)` in the action (siteverify + `clientIp()`); both skip when keys are unset or on
+  a custom domain without `TURNSTILE_CUSTOM_DOMAINS=on`. Used by `bookOnline` (booking page + widget iframe, action
+  `booking`), `signupAction` (`apply`, after the IP limit, before the login is created), `sendEnquiryAction`
+  (`contact`) and the website enquiry form `sendSiteEnquiryAction` (`enquiry`, F15). Honeypots + per-IP limits stay. e2e runs with Cloudflare's always-pass test keys (playwright.config);
+  `online.spec` also covers a blocked script → refused. CSP (F10) allows `challenges.cloudflare.com` (script + frame) on
+  marketing/app/site/domain pages, not the admin console.
+- Keys from the console (owner, 2026-10-09): console Company page → "Bot check (Cloudflare Turnstile)" card
+  (`saveTurnstileSettingsAction`; services `turnstile-settings.ts`, `platform_settings.turnstile_*`): site key visible,
+  secret write-only (`…last4`, sealed with `sealEmailKey`, never audited/logged), "Also check spa custom domains" switch
+  (null = env). Core `resolveTurnstile(saved, env)`: each value console first, then env; `turnstileStatusText` feeds the
+  Configuration row ("from console/env", or which key is missing). Web `server/turnstile.ts` caches the console values
+  30 s per process (`invalidateTurnstileSettings()` on save); `turnstileSiteKey()` is async. E2E: `security-headers.spec`.
+- **Staff email (Resend) from the console:** Company page → "Email (Resend)" card. Key + From: `saveEmailSettingsAction`
+  (services `email-settings.ts`: key sealed with `sealEmailKey`, write-only, `…last4`; never logged/audited), core
+  `resolveEmailConfig` (console, then `RESEND_API_KEY`/`EMAIL_FROM`, then `DEFAULT_EMAIL_FROM`), web
+  `server/email-settings.ts` registers the cached console source; "Send test email to me" = `sendTestEmailAction`.
+  **Sending domain (R18):** client `settings/sending-domain.tsx` → `sendingDomainAction` (intent `setup` | `check`,
+  optional one-off `setupKey`): core `resend-domains.ts` against Resend (docs checked 2026-10-10, URLs in its header):
+  setup = list (all pages) → create `{name, region: eu-west-1}` only when missing → get; check = get → verify unless
+  verified or pending (read first: verify resets the status to pending, hiding the last result and which records
+  failed) → message names the last result; never adds on check. Records → Namecheap rows (`namecheapHost`: relative host, `@` for the
+  apex), rendered from the action result (no table). Errors → plain text (`restricted_key` (401 restricted_api_key /
+  invalid_permission) → the section shows "Full-access key for setup" via `fieldErrors.setupKey`; `invalid_key`,
+  (also Resend's live 400 validation_error "API key is invalid"; under the setup field when that key was refused),
+  `rate_limited`, `unreachable`, `domain_taken`, `not_set_up`, `failed` = Resend's message with any `re_…` scrubbed).
+  The key never reaches the client, an error, a log line or an audit row (`platform.email.domain_setup` {domain,
+  created, status}, `platform.email.domain_checked` {domain, status}). E2E: `RESEND_E2E_FAKE` (playwright.config only)
+  swaps in `server/resend-fake.ts` (in-memory Resend behind the real client; "SendOnly" keys = sending access; verify → pending, next read verified);
+  `email-settings.spec`.
+
+## Security headers (F10, G11)
+
+- Pure builders in `@spa/core` `security-headers.ts` (tests `packages/core/test/security-headers.test.ts`):
+  `pageKindOf(internalPath)` → surface (marketing/app/admin/site/domain) + `embed` (only `/{site|domain}/x/book/embed`),
+  `contentSecurityPolicy`, `pageSecurityHeaders`, `newNonce`, `API_CSP`, `htmlDesignFrameCsp`, `parseCspReports`.
+- **Pages** (everything `proxy.ts` matches): proxy makes a 128-bit nonce per request, puts the CSP on the response and
+  on the request (Next reads the nonce from the request CSP and stamps its own scripts/chunks) plus `x-nonce` for ours
+  (`server/nonce.ts` `getNonce()`: root layout `scenes-on` bootstrap, dashboard early-prompt listener, marketing + spa
+  JSON-LD). The root layout reads it, so every page renders per request (nonces can't be prerendered).
+  Policy: `default-src 'self'`; `script-src 'self' 'nonce-…' 'strict-dynamic'` (+ Turnstile origin outside the admin
+  console; + `'unsafe-eval'` on `next dev` only) — Next chunks, `t.js` (next/script), Turnstile load via strict-dynamic;
+  `style-src 'self' 'unsafe-inline'`; `img-src 'self' data: blob: https:`; `font-src 'self' data:`; `connect-src 'self'`;
+  `frame-src 'self'` (+ Turnstile; + www.google.com, www.youtube-nocookie.com, player.vimeo.com on site/domain/app for
+  the F15 Map/Video players — `SITE_EMBED_ORIGINS`; on the admin console only for the Website Studio pages
+  `/platform/websites/{slug}…`, `PageKind.studio`, R23); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
+  `form-action 'self'`; `frame-ancestors 'self'` (embed: `*`); `upgrade-insecure-requests` on https;
+  `report-uri /api/csp-report?s={surface}`. Also `X-Frame-Options: SAMEORIGIN` (not embed), COOP `same-origin`
+  (dashboard: `same-origin-allow-popups`, the outbox reuses one named WhatsApp tab), HSTS on https only
+  (`includeSubDomains` on platform hosts, not on spa custom domains).
+- **Decisions:** style-src keeps `'unsafe-inline'`: React renders `style` props as attributes (theme colours, Puck
+  per-device overrides), and Radix (scroll lock), Puck (copies styles into its canvas iframe) and Turnstile insert
+  `<style>` without a nonce; a nonce in style-src would disable `'unsafe-inline'`. CSS can't run script and img/font/
+  connect-src limit what it can load. img-src `https:`: image fields accept any https URL (AI images, pasted links,
+  Instagram/Google media); stored files are served by the app (`/files`), never from the S3/R2 host. Stripe Checkout
+  and OAuth (Google, Meta, MCP consent) are top-level navigations, not form posts, so `form-action 'self'` holds. Puck
+  needs nothing extra: both editors import `components/site/editor/puck-css.ts` first (Puck's `no-external.css` + the
+  `--_puck-styles-loaded` flag set before Puck renders; otherwise Puck injects its own copy, which `@import`s rsms.me's
+  Inter — the editor uses local Inter Variable). Zod in the browser is jitless (`lib/zod-jitless.ts`, imported first by
+  `components/campaigns/rules.ts`): its JIT probes `new Function`, which the CSP blocks and reports.
+- **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy` (camera, mic, geolocation, payment, usb, serial, hid, midi, sensors, display-capture,
+  browsing-topics off); `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
+  `X-Frame-Options: DENY`; `/files/*` keeps its own sandbox CSP (`app/files/serve.ts`) + XFO SAMEORIGIN; HSTS (no
+  includeSubDomains) on those when `x-forwarded-proto: https`. Never set CSP/XFO/HSTS there for a proxied path (a
+  second CSP is enforced too; only the first HSTS counts). `/api/html-design/frame` sends its own CSP (excluded).
+- **Reports:** `app/api/csp-report` (public; 30/min per IP in memory, ≤ 16 KB, CSP2 + Reporting API bodies, extension
+  noise dropped) logs `[csp] {surface} {directive} blocked {origin|inline|eval} on {path}` and counts into
+  `csp_violations` (day × surface × directive × blocked, path without query; > 300 rows/day fold into `other`;
+  services `csp-reports.ts`). Console Overview → Server health row "Content-Security-Policy" (`health-csp`, 7 days, top 3).
+- E2E `security-headers.spec`: headers per surface + API/MCP/.well-known, nonce on every `<script>`, fresh per response,
+  HSTS behind https, injected un-nonced script/handler never runs, no violations across the main screens (Apply,
+  contact, dashboard, editor, spa site + booking with Turnstile, widget, console), reports → console row, console
+  Turnstile keys win over env. `widget.spec` frames the embed from another origin; `templates.spec` runs designs.
+
+## Online booking (`components/booking`)
+
+- **Steps**: service → when (up to 14 days ahead, 60-min lead time) → details (name, UAE phone, honeypot `website`) →
+  done (.ics + WhatsApp confirm).
+- **`bookOnline`**:
+  1. In-memory per-IP limits: 20 attempts/h, 5 bookings/h (off with `AUTH_RATE_LIMIT=off`, the e2e server); honeypot;
+     Turnstile `passesBotCheck` (F9).
+  2. `findOrCreateClient`; blocklisted clients are refused.
+  3. `createBooking` with status `pending`, source `online`, `attribution` (F13) = core `bookingAttribution` of the
+     `entry` the flow sends (t.js `sessionStorage.spa_entry`, else the page's own tags + external referrer; widget
+     iframe → `widget`). Shown as "Online · Instagram" (`bookingSourceLabel`), counted in `kpis.byAttribution`
+     (dashboard Booking sources card) and `tenantPerformance.onlineSources` (console Performance detail).
+     F16: `entry.utm.partner` (t.js + booking page keep `?partner=`) → `partnerByCode` (active partners only) →
+     `bookings.partner_id`; booking detail shows "Online · QR code · {partner}".
+  4. `enqueueBookingMessage`.
+  5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
+  5. Push to the spa via `after(notifyTenant)`.
+- **Embeddable widget (B5.5)**: `public/widget.js` (no deps, excluded from Biome like `t.js`) injects a button + iframe
+  modal; data attributes `data-spa`, `data-url` (spa site + `/book/embed`), `data-lang` en|ar, `data-color`, `data-text`.
+  Iframe route `site/[slug]/book/embed` + `domain/[hostname]/book/embed` = `BookingPage embed` (chrome-less
+  `BookingFlow`, noindex). postMessage to the parent: `spa-widget:resize` {height}, `spa-widget:booked` {ref,start,service}
+  (re-dispatched as a window `CustomEvent`), `spa-widget:close` (Escape); widget.js takes them only from the frame's
+  own window (`e.source`), origin pinned by that frame's first message (an old path-routed `data-url` 301s to the
+  spa's host-routed address; `widget.spec` host-mode step). `next.config.ts` headers: only `/book/embed` and
+  `/s/:slug/book/embed` get `frame-ancestors *` and no X-Frame-Options; everything else stays SAMEORIGIN. Same
+  `bookOnline` (limits + honeypot) with `via: 'widget'` (audit data only; booking source stays `online`). Analytics
+  source `widget` comes from `?src=widget` (t.js: a tagged URL now starts a new session entry). Snippet:
+  Settings → Booking widget (`settings/widget`, i18n namespace `widget`). e2e `widget.spec.ts`.
+
+## Service invariants (`packages/services`)
+
+- **Plans + entitlements (PLAN §18.8)**: rules only in `@spa/core` `plans.ts` (`PLAN_CODES`, `FEATURES` ai /
+  marketing / multiBranch, `effectiveFeatures` = `tenants.feature_tier` override else `plans.limits` switches with
+  missing = on, `branchCap`, `PLAN_FEATURES` pricing rows, `AUTOMATION_FEATURE`, `STUDIO_AI_AGENTS`, discounts
+  `parseDiscount`/`applyDiscount`, `vatTotals` = services `invoiceTotals`, `planPriceLine`). Lookup: services
+  `entitlements.ts` (`tenantEntitlements`, `assertFeature`, `featureError` → `errors.domain.featureNotInPlan`,
+  `entitledSql` for platform-role cross-tenant SQL — plans are invisible to the app role, so it fails closed there;
+  `planByCode`, `isLegacyPlan`). Super-admin controls: `subscription-plans.ts` (`switchPlan` — legacy only from 30
+  days before renewal, new period on the old end date, no setup fee; `setSubscriptionDiscounts`; `setFeatureTier`;
+  `reissueUnpaidInvoices` voids + re-issues unpaid, not-yet-due invoices, setup keeps due date + VAT choice; all
+  return from/to for the audit; R19 `removePlan` deletes an unused plan or archives a used one — spas = distinct tenants
+  via `tenants.plan_id` or `subscriptions.plan_id`, plus `spa_applications` rows (any status; the sheet's copy tells
+  pending from past ones), counted under a lock on every plan row; the built-in `PLAN_CODES` plans (`isBuiltInPlan`)
+  are always archived, never deleted, because every deploy re-runs the seed (`insert … on conflict do nothing` by
+  code) and would add a deleted one back; `acceptApplication`, `switchPlan` and the new-subscription save read their
+  plan FOR SHARE, so they wait for a removal in flight and then see the plan archived or gone; refused for the last
+  plan new spas can get (`offeredToNewSpas`: active, not archived, not legacy) —
+  `restorePlan` clears `archived_at` but leaves it inactive; DB check `plans_archived_inactive` keeps archived plans
+  inactive, so the `active = true` lists (pricing `activePlans`, sign-up, `offeredPlans`, approval choices) never show
+  them while spa pages read the plan by id and keep its name; the application page marks a chosen plan that is not
+  among its choices "(no longer offered)" and its Accept sheet then preselects none). Discounts apply in `generateBillingScheduleTx` / `acceptApplication` via
+  `discounted()` (invoice `list_aed`/`discount_aed`/`discount_label` + description note; setup discounted to 0 = no
+  invoice). Where enforced: web `server/access.ts` `guard(slug, perm, feature)` + `server/entitlements.ts`
+  (`getEntitlements` per request, `featureRef`), `components/plan/upsell.tsx` (`PlanUpsell`, `FeatureGate` used by
+  the `layout.tsx` of inbox, campaigns, ai/content, ai/reviews, ai/try; ai/page + settings/branches check inline),
+  tenant layout nav (`gated()`), SettingsTabs `showBranches`, automations page (Premium pill), F15 vouchers + F16
+posters (`vouchers/layout.tsx`, `posters/layout.tsx` FeatureGate; Packages gift-card list shows a Premium pill),
+integrations note,
+  billing page, receipt scan, insights card; AI gateway `assertAiAllowed` (`AiNotInPlanError`); worker via
+  `automationOnSql` (includes `entitledSql`) and `tenantsWithDueReplies` (`ai` flag → rows dropped).
+
+- **Spreadsheets (R10)**: every export is .xlsx via `@spa/services/xlsx` (server-only subpath, exceljs, external in
+  next.config; the main entry stays client-safe). `toXlsx` = streaming writer, title + subtitle rows, bold frozen
+  header + autofilter, kinds inferred (`*AED` money, ISO dates/`YYYY-MM-DD HH:MM` → date cells, Date → Dubai wall
+  time, code/phone/SKU headers stay text); text > 32,767 chars is cut and kept whole on a `long_values` sheet.
+  Routes: data export (headers TH via `sheets.columns` when the viewer is th), full export = one workbook (README +
+  sheet per table, raw column names), import template (EN), import errors (upload reply base64 + past-import
+  route), accounts journal (EN audit file). WPS SIF keeps its bank format. Import takes CSV **or** .xlsx (first
+  visible sheet; `headerRowIndex` skips one-cell title rows, so our own files re-import; TH export headers are
+  autoMap aliases `TH_EXPORT_ALIASES`). Legacy .xls is refused. CSV writer (`toCsv`) removed.
+- **Search / audit (X5)**: `globalSearch` takes a caller-built `scope` (missing group = not queried; phones only with
+  `scope.clients.phone`); trigram GIN indexes from migration 0024. `listAuditLog`/`auditFilterOptions` read
+  `audit_log` via the tenant tx; names via platformDb for those ids only.
+- **Errors**: `DomainError(message, code)` with codes `slot_taken | not_found | invalid | no_room | no_staff`;
+  `pgCode(e)` unwraps drizzle-wrapped errors.
+- **Bookings**:
+  - Each item inserts one `reservations` row per therapist plus one for the room, covering service time plus
+    buffers, inside a savepoint.
+  - `23P01` becomes `DomainError('slot_taken')`.
+  - Ref code: insert-and-retry on `bookings_tenant_ref` `23505` (up to 5 codes), then `DomainError('invalid')`.
+  - Reschedule deletes and re-inserts the reservations; cancel and no-show delete them.
+  - Equipment (B5.3, `schema/workforce.ts` `equipment`; services `equipment.ts`): `services.equipment_types` lists
+    required types (one unit per entry; types typed by the spa); `findSlots` needs one free unit per type
+    (`pickEquipment`, `Slot.equipmentIds`); `createBooking`/`rescheduleItem` reserve them (`resource_kind =
+    'equipment'`, `booking_items.equipment_ids`) in the same savepoint → EXCLUDE makes concurrent bookings of the
+    last unit fail with `slot_taken`; none free → `DomainError('no_equipment')`. Delete refused while a unit holds a
+    future reservation (deactivate instead). `equipmentStatus` = calendar conflict (required type not covered by an
+    active reserved unit). UI: Services & rooms → Equipment card + "Equipment needed" chips in the service sheet.
+  - Leave (B5.4): `loadDay` adds approved leave as `StaffAvailability.leave` (business-day windows by the branch
+    cutoff); `findSlots` and the walk-in picker skip people on leave; explicit `staffIds` on leave → `DomainError
+    ('no_staff')` (create + reschedule; also with `allowOffShift`). Existing bookings keep their reservations:
+    `decideLeave` returns the clash count for the toast.
+  - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
+    internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
+    cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
+  - Commission (R2): `completeBooking` = complete + `recordBookingCommissions` (AED per item + therapist, every
+    pair required, 0 allowed). `booking_commissions` is append-only (trigger): edits insert the delta, leaving
+    `completed` inserts the negative; each change posts 6010/2300 (`booking_commission[_reversal]`) on the
+    branch's current business date; row `business_date` = the booking's. POS checkout completes without
+    commission → list filter "Commission missing". Calendar can't complete/re-open (booking page only);
+    entering/re-opening needs `calendar.commission` (owner, manager, receptionist).
+- **Ledger**:
+  - `post` only inserts; `reverseSource` posts a mirror entry with source type `<type>_reversal`.
+  - `DEFAULT_CHART` codes:
+
+    | Code | Account |
+    |---|---|
+    | 1000 | Cash |
+    | 1010 | Card clearing |
+    | 1020 | Bank |
+    | 1150 | Staff advances |
+    | 1200 | Inventory |
+    | 1300 | VAT in |
+    | 2000 | VAT out |
+    | 2100 | Gift cards |
+    | 2110 | Packages/memberships |
+    | 2200 | Tips |
+    | 2300 | Commissions payable |
+    | 2400 | Salaries payable |
+    | 3000 | Equity |
+    | 4000 | Treatments |
+    | 4100 | Retail |
+    | 4300 | Breakage |
+    | 5000 | COGS |
+    | 5100 | Consumables |
+    | 6150 / 6160 / 6170 | Cleaning supplies / Spa materials & supplies / Small equipment (purchases) |
+    | 6xxx | Expenses |
+
+  - Payment method maps to an account via `PAYMENT_ACCOUNT`.
+- **Sales**:
+  - The business date comes from the branch cutoff.
+  - Void is allowed only on the same open day, with no refunds and nothing prepaid. It reverses the sale,
+    commission and COGS entries and returns stock.
+  - Refunds are line-level (`refundSale` takes `lines: [{saleLineId, qty}]`; `refundOptions` feeds the sheet).
+    Unit amount = share of the line's net paid `line_total_aed`, cumulative rounding in fils; VAT, COGS and
+    commission use the same shares. `refund_lines` records each line (prepaid: one row per card/package, `ref_id`).
+  - Refund ledger mirrors `postSale` per line (4000/4100 + 2000; 2100/2110 no VAT; credit the method's account),
+    plus `refund_cogs` (1200/5000, stock back via `returnSoldStock`) and `refund_commission` (2300/6010, negative
+    `commission_entries` on the refund date). Tips stay in 2200.
+  - Prepaid lines refund only the unused value (card balance / package remaining value as a share of what was
+    paid), then void the card / set the package `refunded`; used-up ones are blocked. Cards/packages carry
+    `sale_line_id` (older ones match by sale + definition).
+  - **Memberships (G15, migration 0030)**: line kind `membership` (prepaid like packages: 2110, no VAT at sale) →
+    `loyalty.issueMembership` = one `client_memberships` row per one-month period (`membershipPeriodEnd`; name,
+    `discount_pct`, balances, `price_paid_aed`/`remaining_value_aed`, `sale_id`/`sale_line_id` snapshotted); a live
+    period of the same plan makes it a renewal (starts the day after, old `due` → `active`, queued reminder skipped).
+    Service lines take `membership: {id, use: 'session'|'discount'}`: session = price 0, qty 1,
+    `redeemMembershipSession` (→ `membership_redemptions`, `postRedemption`, commission via `sessionCommission`,
+    shared with package sessions); discount = `round(gross × pct)` added to the typed line discount (client mirrors
+    it in checkout.tsx `memberOff`). Live = status `active|due` and period covers the business date.
+    `runMembershipRenewals` (job `memberships-renew`): ended → `expired` + `membership_expiry` (2110 → 4000 + VAT);
+    ≤ `RENEWAL_NOTICE_DAYS` (7) to the end and no later period → `due` + `membership_renewal` outbox row. Refund:
+    unused value, period `refunded` (balances cleared); void blocked like packages. Statuses `paused/cancelled/lapsed`
+    are unused legacy enum values.
+  - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
+    The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
+  - `closeDay` runs once per branch and day.
+  - Full tax invoice (G16): `sales.billing` / `clients.billing` jsonb (`BillingDetails`); `taxInvoiceLines` splits
+    VAT-inclusive line totals into taxable + VAT (prepaid kinds 0 %), matching `sales.vat_aed`; invoice no. = sale
+    number. Route `dashboard/[tenant]/sales/[id]/invoice`, action `saveBillingAction` (pos.use + branch scope).
+- **Branches (G22)**: services/branches.ts — `createBranch` (copies main hours, plan cap), `updateBranch`,
+  `setBranchActive` (archive = `active=false`, never the default), `setMemberBranches` ('all' | ids, active only),
+  `memberBranchIds`, `branchesForMember`. UI: settings/branches, team edit/invite `BranchScope`. Member scope is read
+  in `requireMember` (access.ts) and filtered by `allowedBranches` (calendar/data.ts, also used by the overview).
+  Public booking: `bookingBranches` / `bookingBranch(tx, id?)` in components/booking/data.ts.
+- **Stock locations + purchases (R8/R9, migration 0017)**:
+  - A location is a branch or the spa's central warehouse = `branch_id IS NULL` on `stock_levels` /
+    `stock_movements` (unique `stock_levels_location` NULLS NOT DISTINCT on tenant+branch+product; PK dropped).
+    `stock_levels.low_stock_at` overrides the product threshold per location (`lowStock(tx, branchId|null)`).
+  - `inventory.stockIn`/`stockOut` = movement only (no ledger); `receiveStock` = stockIn + its own entry.
+    `transferStock` writes `transfer_out`/`transfer_in` with one shared `ref_id`, no ledger, locks the source level
+    (`FOR UPDATE`) and never goes below zero. `countStock` = adjustStock by the difference.
+  - `purchases` + `purchase_lines` + `suppliers` (`supplierByName` dedupes case-insensitively). `recordPurchase` posts
+    one `purchase` entry: Dr 1200 (product lines, via stockIn with `ref_id` = purchase) / Dr `PURCHASE_ACCOUNT[category]`
+    (non-stock lines) / Dr 1300 / Cr `EXPENSE_CREDIT[paidVia]` (cash 1000, card+bank 1020). `voidPurchase` takes the
+    stock back out (blocked if it was used/moved), `reverseSource('purchase')`, row kept with `status = 'void'`.
+  - Permission `inventory.purchase` (accountant has it); warehouse = `inventory.manage`. Receipt scan shared via
+    `server/receipt-scan.ts` (expenses + purchases routes) and `accounts/expenses/receipt-scan.tsx`.
+  - Purchases are not in Expenses list / data export yet (the ledger, P&L and VAT include them).
+- **Payroll / pay types (R2)**: `staff.pay_type` = `booking_commission` (therapists: only their unpaid
+  `booking_commissions`), `salary` (base_salary_aed), `sales_commission` (commission_pct of the net POS lines
+  credited to them via `accrueCommissions`; package-session accrual too). Every line = base (salary only) +
+  unpaid booking commissions + unpaid `commission_entries` (older accruals still paid) + tips − advances;
+  `finalisePayroll` links both commission tables. A correction after a finalised run is a new unpaid row → next run.
+  Owner decisions (migration 0021): `booking_fee` = `tenants.settings.receptionistBookingFee` × bookings whose
+  `created_by` is the person's member user and that are `completed` with business date in the period
+  (`completedBookingsCreated`; `payroll_lines.fee_aed`, expensed Dr 6010 at finalise). Therapist lines carry no
+  tips/advances (their advances are not linked/recovered by payroll); `therapistTipsAdvances` = the separate
+  "Tips & advances payout" card (tips − advances in the month, a report, no posting). "% of sales" is only shown
+  in the staff form for people already on it. Re-opening a completed booking never restocks consumables
+  (`consumeForBooking` is once per booking). `inventory.adjust` (receive + count; accountant, receptionist,
+  manager) opens /inventory without product/usage editing (`inventory.manage`). Migration 0021 also moves
+  monthly-priced subscriptions to the yearly price on the 12-month plan (`convertMonthlySubscriptions`, idempotent).
+- **Waitlist (B5.1, migration 0025, X6)**: `waitlist_entries` (branch, client, optional service/variant, business
+  date, optional `from_at`/`until_at` window — CHECK from < until, notes, status waiting · notified · booked ·
+  cancelled, booking_id, created_by). services `waitlist.ts`: `addToWaitlist`, `cancelWaitlistEntry`,
+  `listWaitlist`, `notifyWaitlistForFreedSlot` (called by `setBookingStatus` → cancelled/no_show and by
+  `rescheduleItem` when the time moves; opt out with `notifyWaitlist: false`): same branch + business date,
+  service matches or is open, window overlaps the freed time, client has a mobile, slot not in the past; claims ≤ 5
+  oldest via `FOR UPDATE SKIP LOCKED` + status → `notified` (no double message under concurrent cancels), then queues
+  outbox kind `waitlist_slot` (EN/AR default template, click-to-send). `bookFromWaitlist` locks the entry and uses
+  `createBooking` (reservations EXCLUDE decides) → `booked`. Web: `dashboard/[tenant]/waitlist` (calendar.view;
+  edits calendar.manage).
+- **Merge duplicate clients (B5.2, X6)**: services `client-merge.ts`. `duplicateClientPairs` = same phone key (last 9
+  digits) or same normalised name (two equi-join unions). `mergePreview` counts; `mergeClients` locks both rows in id
+  order, re-points every FK in `CLIENT_REFERENCES` (bookings, sales, outbox, intake_submissions, treatment_notes,
+  client_packages, client_memberships, gift_cards.purchaser_client_id, conversations, waitlist_entries — the test
+  compares this list with `pg_constraint`, so a new FK to clients must be added there), combines fields (earliest
+  created_at / first visit, latest last visit, summed no-shows, union of tags, notes joined, kept values win, gaps
+  filled, opt-out/blocklist kept), deletes the merged row (hard delete). Ledger untouched. Permission `clients.merge`
+  (owner + manager); audit `client.merged` with keptId + mergedId.
+  Unpaid leave (B5.4): `buildPayroll` sets `deductions_aed` = salary base ÷ days in the period × approved unpaid
+  leave days in it (salary pay type only; capped at base; Cr 6900 at finalise as before), `unpaid_leave_days` and
+  `worked_minutes` (closed clock entries by business date; info only). WPS EDR: fixed = base − deduction, leave
+  days filled.
+- **Time clock (B5.4, services `timeclock.ts`)**: `staff.pin_hash` = scrypt `v1.<salt>.<hash>`; `punch` locks the
+  staff row, counts wrong PINs (returned, not thrown, so they commit; 5 → locked 5 min), toggles the open entry
+  (a second punch < 1 min after clock-in is refused, so double taps / two kiosks never clock straight out);
+  `business_date` = branch business date of the clock-in. `adjustTimeEntry` = manager fix (`source = 'manual'`).
+  `timesheet` = planned (shifts split per business day) vs worked per person/date + approved leave. Leave:
+  `requestLeave` (≤ 90 days), `decideLeave` (pending only), `cancelLeave` (own pending; approvers also approved
+  before it starts). Permissions `timeclock.kiosk` (receptionist), `timeclock.leave` (receptionist, therapist: own
+  staff record only), `timeclock.approve` (owner/manager). Route `/timeclock` (tabs Kiosk · Timesheet · Leave),
+  menu Team & roles; calendar marks staff "On leave".
+- **Outbox**:
+  - EN/AR `DEFAULT_TEMPLATES` or the tenant's own; inserted with `onConflictDoNothing`.
+  - Staff open the WhatsApp link, then `markOutbox`.
+  - Booking messages (G4): `planBookingMessages(tx, bookingId, {now, rescheduled})` in outbox.ts is the single
+    planner, called by `createBooking` (when created confirmed), `setBookingStatus` (every transition) and
+    `rescheduleItem` (when the start moved). Confirmed → `booking_confirmation` (now) + `reminder` (start − 24 h)
+    + `reminder_2h` (start − 2 h); a reminder whose time has passed is skipped. Unsent rows are re-rendered/re-timed;
+    on reschedule sent/skipped rows are re-queued. Checked-in/completed → unsent planned kinds skipped; cancelled /
+    no-show → every unsent row of the booking skipped. Pending (online / AI / IG) → nothing until staff confirm;
+    returning clients auto-confirmed by `selfBookingStatus` (G21) are created confirmed, so they are planned at once.
+    Gated by the `bookingMessages` automation + client mobile. Queues hide rows of cancelled/no-show bookings
+    (`outboxBookingLive()`: messages page, dashboard count, `navCounts`).
+  - `queueCampaign` takes a row lock plus a per-tenant advisory lock.
+  - Marketing rows = campaign rows + automatic `birthday` / `winback` / `review_request` drafts (F15):
+    `campaignConsentWithdrawn` re-checks consent for all of them at send time (messages page, counts, hourly
+    withdrawal); `planAudience`'s 7-day cap also counts birthday / win-back drafts.
+  - Assignment (F28, services `outbox-assign.ts`): `outbox.assigned_to` (members.id, set null on delete) /
+    `assigned_at` / `assigned_by` (user; null with an assignee = the auto rule). `assignableMembers` = active
+    members whose role resolves `marketing.send` (+ branch scope); `assignOutbox` changes unsent rows only and skips
+    rows of a branch the assignee can't see; web `assignMessagesAction` audits `outbox.assigned` / `outbox.unassigned`
+    per row (from → to). Messages page: `?who=all|mine|unassigned` (`outboxAssigneeWhere`, counts
+    `outboxAssigneeCounts`), per-card select, select-all + bulk bar. Auto rule = automation `outboxAutoAssign`
+    (the only default-off switch: core `DEFAULT_OFF_AUTOMATIONS`, `automationOn` / `automationOnSql` honour it):
+    worker `outbox-auto-assign` every minute → `autoAssignDueOutbox` (advisory lock per spa; due + unassigned rows,
+    round-robin by member id after the last auto pick, among receptionist-role members whose linked staff has a shift
+    covering now in the message's branch; nobody on shift → stays unassigned).
+- **Gift vouchers + booking partners (F15/F16, services `vouchers.ts`, migration 0044_vouchers_partners)**: `gift_cards.check_token`
+  (random 32-hex, default `gen_random_uuid()` without dashes, globally unique) is the QR key, never the code;
+  `voucher_service_id` = treatment voucher (shows the service; value stays the AED balance). `voucherCheck(tx, token)`
+  returns only status / value / balance / expiry / treatment / code's last 4 (public page
+  `components/voucher/voucher-check.tsx`, routes `site/[slug]/voucher/[token]` + `domain/[hostname]/voucher/[token]`,
+  `withinIpLimit('voucher-check')`, noindex + no-referrer; `/api/collect` rewrites `/voucher/{token}` → `/voucher`).
+  `giftCardForPayment` / `giftCardCode` accept a scanned check URL (core `giftCardInput`); `createSale` stores the
+  card's code as the payment reference. `updateVoucher` edits display fields only (recipient phone only for
+  `clients.phone` roles). Dashboard print views (`vouchers/[id]`, `posters`) = inline print CSS (container units,
+  `@page` A6/A5/A4) + server-side SVG from `qrcode` 1.5.4 (pinned). Partners: `booking_partners` (name, unique
+  `(tenant, code)`, active); `createPartner` retries a code clash in a savepoint; `partnerBookingStats` = per partner
+  (cancelled excluded) + reception (attribution `qr`, no partner). i18n namespace `growth` (+ `nav.posters`).
+- **Intake PDFs (F27)**: services `intake.ts` (main entry: `intakeContentHash` = SHA-256 of the canonical record —
+  ids, template version, sorted answers, waiver, signature, signed_at, ip — stored as `content_sha256` at signing;
+  `intakeAnswerRows`, export list, filenames) + `pdf/intake-pdf.ts` (subpath `@spa/services/intake-pdf`):
+  `renderIntakePdf` (pdfkit 0.17.2 pinned, A4, no headless browser; spa logo via sharp → JPEG, answers, consent,
+  signature path, footer = submission id + record hash + page n/N) and `generateIntakePdf(tx, id)` (stores a private
+  `stored_files` row, purpose `intake_pdf`; sets `pdf_file_id`, `pdf_sha256`, `pdf_generated_at`; deletes the old
+  file on regenerate; fills `content_sha256` for pre-F27 rows). Web: `submitIntakeAction` renders right after the
+  insert commits (failure → page offers "Create PDF"); `regenerateIntakePdfAction` (clients.manage); submission page
+  Download / Regenerate + Integrity card (stored vs recomputed hash); profile list PDF icon; Settings → Data
+  `export?type=intake_pdfs` = streamed STORE zip (`zip.ts`, needs clients.export + clients.view).
+  Text (`pdf/text.ts`): fonts are base64 OFL subsets in `pdf/fonts.generated.ts` (DM Sans / Noto Sans Thai / Noto
+  Naskh Arabic, 400 + 700; rebuilt by `packages/services/scripts/pdf-fonts.py` from the installed @fontsource
+  packages; licence `pdf/FONTS-OFL.txt`; biome-ignored), per-character font fallback, reduced UBA (W4/W5/W7, N0
+  brackets, N1/N2, L2 reorder), Intl.Segmenter word breaks (Thai). pdfkit gotchas: pass `features` (else it lays
+  out word by word and reverses RTL word order); Noto Naskh shares skeleton/dot glyphs between letters, so Arabic
+  pieces carry `/ActualText` spans (copy text in Acrobat/PDFium; pdf.js shows near-letters) and glyphs without text
+  map to U+034F; `font: null` (no Helvetica AFM read).
+- **Secrets**: AES-256-GCM, stored as `v1.<iv>.<tag>.<ct>`. The key is `APP_ENCRYPTION_KEY`, else HKDF from
+  `BETTER_AUTH_SECRET`.
+- **Storage**:
+  - Bytes go in `stored_files.bytes` unless all `S3_*` vars are set; then they go to R2/Spaces under
+    `<tenantId>/<fileId>`.
+  - `MAX_FILE_BYTES` is 8 MB.
+  - Images are re-encoded to WebP q82, longest edge ≤ 2400 px.
+
+## Worker jobs (cron in Asia/Dubai)
+
+| Job | Schedule |
+|---|---|
+| `db-backup` (pg_dump → off-site bucket: `R2_*`, else the `S3_*` bucket under `backups/` (`offsiteConfig`; a half-set `R2_*` = not configured); every ok/skipped/failed run in `platform_job_runs`; console overview warns when the last ok run is missing or > 36 h old) | 03:30 |
+| `worker-heartbeat` (G8: `platform_job_runs` row with disk %, `deploy.json`, `configFlags` presence map; 1 day kept; touches `/tmp/worker-heartbeat`; incidents disk > 85 % / backup > 36 h / deploy failed → `ops-alert` rows open=failed/closed=ok, one email per incident to `PLATFORM_ADMIN_EMAILS`; also sent once at worker start) | every 5 min |
+| `restore-drill` (latest R2 daily dump → scratch DB as `spa_drill` (F11: `DATABASE_URL_DRILL`, else built from `DATABASE_URL_OWNER`'s host + `SPA_DRILL_PASSWORD`/derived; refuses SUPERUSER/CREATEROLE/BYPASSRLS/REPLICATION via core `drillRoleProblem`; superuser-only extensions e.g. pg_stat_statements left out of the restore list; drops only its own scratch DB; passwords via PGPASSWORD, masked in errors; old `RESTORE_DRILL_ADMIN_URL` ignored with a warning) → counts + migrations → drop; result in platform-only table `platform_job_runs` (tenant `job_runs` is B3's spa log), shown on the super-admin overview; skipped run recorded when R2 is unset; manual twin `scripts/restore-drill.sh [dump]`) | 2nd of month 05:00 |
+| `instagram-reply` (DB queue `instagram_reply_queue`, RLS, PK = message id: the Meta webhook's `ingestInstagramWebhook` inserts the row in the message's transaction for live spas; the job finds spas with due rows (`tenantsWithDueReplies`, platform role), `claimDueReplies` (5-min lease, SKIP LOCKED), `inboundAnswered` skips threads already answered, `finishReply` deletes, `failReply` backs off 30 s ×2 … 30 min, `failed_at` after 5 tries. Web has no pg-boss / owner URL / `after()`) | every minute |
+| `analytics-rollup` | hourly at :07 |
+| `analytics-prune` | 04:20 |
+| `packages-expire` | 04:10 |
+| `memberships-renew` (switch `membershipRenewals`; due + WhatsApp renewal reminder, expiry) | 04:25 |
+| `media-prune-ai` | 04:40 |
+| `slot-filler` | 10:30, 15:30 |
+| `verify-custom-domains` | every 10 min |
+| `instagram-publish` (also resumes videos parked while Instagram processes them, F18) | every 5 min |
+| `instagram-token-refresh` (+ Facebook Page token check `checkFacebookPageTokens`, F19) | 03:40 |
+| `gbp-reviews-sync` | every 2 h at :15 |
+| `gbp-site-sync` (F17: `syncGbpBookActions` re-points Book buttons whose address changed, 6 h retry; `submitDueSitemaps` sends sitemaps queued by a publish ≥ 2 min ago; Premium live spas) | every 10 min |
+| `campaigns-housekeeping` | hourly at :15 |
+| `outbox-auto-assign` (F28; spas with the default-off switch on; logged only when it assigned something) | every minute |
+| `client-drafts` (F15 review / birthday / win-back drafts; default-off switches, Premium) | hourly at :25 |
+| `document-reminders` | 09:00 |
+| `weekly-insights` | Mon 08:00 |
+| `daily-digest` | 09:30 |
+| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
+
+Integration jobs do nothing until their credentials are configured.
+
+**Automation switches (B3).** `tenants.settings.automations` = `{ [AutomationKey]: boolean }`, missing = on
+(`AUTOMATIONS` / `automationOn` in `packages/core/src/automations.ts`; `automationOnSql` / `setAutomation` (atomic
+jsonb merge) / `getAutomations` / `isAutomationOn` in `services/src/automations.ts`). Gates: `bookingMessages`
+(confirmation + reminder), `thankYou` (thank_you) and `reviewRequests` (review_request) inside `enqueueBookingMessage`
+(returns null when off); `slotFiller` (plus the AI agent's own enabled flag), `packageExpiry`, `membershipRenewals`, `instagram` (in
+`publishDueInstagramPosts`), `googleReviews`, `weeklyInsights`, `dailyDigest`, `documentAlerts` in the worker's
+tenant queries (`apps/worker/src/jobs/runs.ts` `activeTenants(key)`). F15 `reviewRequests` / `birthdayMessages` /
+`winbackMessages` (default off, Premium `marketing`): hourly `client-drafts` → services `client-drafts.ts`
+(`queueReviewRequests` / `queueBirthdayMessages` / `queueWinbackMessages`; advisory lock per spa + kind; consent via
+growth `marketingConsent`; due time through `afterQuietHours`; caps `CLIENT_DRAFT_LIMITS`; branch = the client's last
+booking, else the default branch; `{link}` = review link / `spaSiteUrl(slug)/book`); logged as `review-requests` /
+`birthday-messages` / `winback-messages` only when something was queued. Timing card on `/automations`
+(`saveClientDraftsAction`, settings.manage + marketing). Backups + domain checks are locked on. Not
+switchable (housekeeping): analytics, media prune, campaigns housekeeping, Instagram token refresh. **Run log:**
+tenant-scoped `job_runs` (job, status ok·skipped·failed, `summary` counts; RLS) written by `recordRun()` (never
+throws; prunes > 7 days); Instagram logs only when it published/failed. UI: `/automations` (`settings.manage`),
+i18n namespace `automations`.
+
+## Deploy, CI, e2e
+
+- **Droplet stack** (`deploy/droplet/compose.yml`):
+  - postgres 16 (1200m);
+  - `migrate` (worker image: migrate + seed);
+  - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`, also set at run time for web + worker: services
+    `freeSiteUrl` reads it from `process.env`, which Next doesn't inline);
+  - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`);
+  - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
+  - every service: json-file log rotation 5 × 10 MB (`x-logging`);
+  - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
+    catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
+    stops Caddy).
+    Client IP (F26): `trusted_proxies static` = Cloudflare ranges (+ `trusted_proxies_strict`), `client_ip_headers
+    Cf-Connecting-Ip` only; `proxy_to_web` sets `Cf-Connecting-Ip {client_ip}` (Cloudflare's header from a Cloudflare
+    peer, else the TCP peer) and strips Do-Connecting-Ip / X-Real-Ip / True-Client-Ip. `test-caddy-ip.sh` (caddy or
+    docker) runs the real file against a header echo; `cloudflare-ips.sh [--write]` checks/refreshes the ranges.
+  - There is no cloudflared in the running stack.
+- **`update.sh`**:
+  - The systemd timer runs it every 2 minutes. G7: it deploys the CI-green ref `deploy/green` (moved by CI job
+    `promote`, forward only; tip fallback only until the ref first exists, marker `/opt/spa/ci-gated`), never the raw
+    tip. Steps: build → `pg_dump -Fc` `/opt/spa/backups/pre-migrate-<sha12>.dump` (keep 5) → `up` (migrate with
+    `lock_timeout`/`statement_timeout`, `migrationUrl` in packages/db/src/migrate.ts) → `/api/health`; any failure →
+    redeploy `/opt/spa/last-good`, `deploy.json` state `failed`, commit in `status/failed` (not retried without
+    `--force`). Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
+    (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
+    file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
+    Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.
+  - `build_env` (each `deploy_commit`, so a rollback brings the last good commit's own settings): `.env` =
+    `.env.base` (first-boot env; copied from `.env` once) < `secrets.env.enc` (AES-256-CBC, pbkdf2 200k, key
+    `/opt/spa/secrets.key`; unknown contents, only the droplet can decrypt) < `deploy/droplet/site.env` (plain,
+    public; allow-list `SITE_KEYS` = SITE_HOST ROUTING APP_URL ADMIN_URL EXTRA_ROOT_DOMAINS ACME_EMAIL VAPID_SUBJECT
+    CF_CNAME_TARGET EMAIL_FROM; other lines skipped + logged to build.log, never fatal), later layer wins per key,
+    written atomically, mode 600. No overlay + no site.env = `.env` untouched; overlay that won't decrypt = untouched
+    + status error (as before). Main body guarded (`BASH_SOURCE`) so `test-update.sh` can source the functions.
+  - A changed `update.sh` takes effect from the deploy after the one that ships it (`updater-sync` installs it during
+    `up`), so a change that relies on it (e.g. a site.env value) must land in a later push, once a commit with the
+    new updater and without that value shows `"state":"ok"` (it is the rollback target; README "Move to
+    spamanagement.co" step 3). `.env` is generated: hand edits go to `.env.base` (SSH) or the overlay.
+- **Deploy branch**: `claude/intelligent-heisenberg-g9e81o` (confirmed by the owner 2026-10-08). It is set as
+  `BRANCH` in the droplet secrets and is also the GitHub default branch; a push reaches production once its CI run
+  is green (job `promote` → `deploy/green`), ~2 min after that.
+- **CI** (`.github/workflows/ci.yml`) runs on PRs and on pushes to `main` and the deploy branch: job `check`
+  (bootstrap `spa_test` → lint → typecheck → test → web build → Playwright e2e) and, in parallel, job `guards` (F25):
+  `pnpm db:check-drift` (packages/db/scripts/check-drift.sh: drizzle-kit generate into a scratch copy of drizzle/ via
+  `DRIZZLE_OUT`; passes only on "No schema changes" + unchanged copy), the migration-journal tests, `pnpm audit
+  --prod --audit-level=high` (accepted advisories: pnpm-workspace.yaml `auditConfig.ignoreGhsas`, reason + review
+  date each), `deploy/droplet/test-caddy-ip.sh` and `deploy/droplet/test-update.sh` (build_env fixtures + the
+  committed site.env: allowed keys, no duplicates or empty values, SITE_HOST/ROUTING/APP_URL/ADMIN_URL together and matching).
+  `promote` needs both. Also: `codeql.yml` (codeql-action v3,
+  javascript-typescript, security-extended; deploy-branch pushes, PRs, Mondays; baseline 2026-10-10: only
+  `js/insufficient-password-hash` in restore-drill.ts, for the owner to dismiss ("won't fix", §17); trailing-run trims use core `trimTrailing`, not
+  `/x+$/`), `cloudflare-ips.yml` (Mondays + PRs
+  touching the Caddyfile; not a deploy gate), `.github/dependabot.yml` (npm + actions weekly, minor/patch grouped;
+  stack pins' majors, and 0.x/minor pins' minors, ignored).
+- **e2e**:
+  - Playwright starts its own dev server on :3100 (via `scripts/next.mjs`) against `spa_test`.
+  - Settings: workers 1, test timeout 90 s, `PLATFORM_ADMIN_EMAILS=admin@e2e.test` + the admin-join.spec addresses
+    (`join-confirm@`, `join-link@`, `listed-apply@e2e.test`; deliberately with a duplicate and an empty segment).
+  - Host routing by default; set `E2E_ROUTING=path` for path routing (needs a build with `NEXT_PUBLIC_ROUTING=path`).
+    The super-admin helper and slug-rename.spec work in both since R20 (verify link on the bare host; one-host 2FA
+    landing → console). Same-host redirects come back with a relative Location (Next `getRelativeURL`), so specs
+    compare `new URL(location, from).href`; CI runs host mode.
+  - `global-setup` resets the DB and seeds the platform.
+  - Helpers sign up owners through the UI; `makeStudio` grants platform admin; `createLogin` (login only, browser
+    sign-up) + `addMember(slug, email, role)` for staff; `consoleEmailKey(page, key|null)` routes staff mail to the
+    outbox (`outboxMails()`; remove the key again afterwards).
+  - Auth coverage (F14): `two-factor.spec` (enrol, sign-in step, 5-attempt cap, backup codes once, off, manager
+    policy, super-admin without 2FA), `password-reset.spec` (outbox link, single use, expiry, sign-out elsewhere,
+    unknown email, closed login), `files-access.spec`; per-IP limits are off on the e2e server (`AUTH_RATE_LIMIT=off`)
+    and live in `packages/auth/test/rate-limit.test.ts`.
+
+## Ask AI (F30, dashboard assistant)
+
+- **UI** `components/assistant/ask-ai.tsx` (top-bar button → Radix side drawer, crm.css `.crm-ask*`; full screen
+  ≤680 px), rendered by the tenant layout for members with `dashboard.view` (SpaShell `assistant` prop) — never for a
+  super-admin acting on the spa (no spa data; the Studio editor lives in the console since R23); accessible name "Ask AI about your spa" (`assistant.openLabel`, the Studio's
+  page AI is "Ask AI to edit this page"). Standard (no `ai`): the
+  drawer is the Premium upsell (`plan.upsell.*`). Conversation state is client-only; i18n namespace `assistant`.
+- **Action** `components/assistant/actions.ts` `askAssistantAction`: guard(dashboard.view, 'ai') → members only
+  (`ctx.member`; impersonation → `errors.forbidden`) → zod →
+  `withinRateLimits` (`assistant`, tenant:user, 30/h + 150/day) → `runAssistant` (fixtureClient in e2e) → audit
+  `ai.assistant.asked` {question ≤200, locale, outcome, tools, denied, costUsd} (never the answer). Maps gateway
+  errors (budget / paused / plan / disabled / busy) to `assistant.errors.*`; translates link labels; prefixes
+  dashboard paths with `appPath('/{slug}')` and only passes `https://wa.me/` drafts.
+- **Agent** `packages/ai/src/agents/assistant.ts`: `runAssistant` → `runToolLoop` (agent key `staff_assistant`, seeded
+  in `defaultAiModels`; limits `ASSISTANT_LIMITS`). Tools (each: required permissions checked first, zod args, own
+  `withTenant`, branch scope re-read via `memberBranchIds`; super-admin view = all branches): `list_branches`,
+  `bookings_summary` (calendar.view; therapists-style roles = own bookings via `staffIdForMember`; client names need
+  clients.view, amounts dashboard.revenue), `revenue_summary` (reports.view + dashboard.revenue; `kpis` summed per
+  allowed branch), `top_services` (reports.view; revenue only with dashboard.revenue), `lapsed_clients` (clients.view;
+  limited members: clients who booked at their branches), `staff_on_shift` (staff.view), `whatsapp_draft`
+  (marketing.send + clients.phone; campaign consent rules; returns no phone to the model). Refusals come back as
+  `{error:'not_allowed'}` and are listed in `denied`. Links (`AssistantLink`) are pushed by tools, deduped, max 8.
+- **Services** `packages/services/src/assistant.ts`: `bookingStatusCounts`, `staffNames`, `lapsedClients`,
+  `shiftsOnDate`, `assistantDraftTarget`, `staffIdForMember` (no permission checks inside, as everywhere).
+- **Tests**: `packages/ai/test/assistant.test.ts` (scripted ModelArk fetch), e2e `ask-ai.spec.ts` (`__steps` fixture).
+
+## Meta MCP (R7, AI tools)
+
+- **Server** `packages/ai/src/mcp/meta-server.ts`: stateless Streamable HTTP (`@modelcontextprotocol/sdk` 1.31.0, JSON
+  responses), one McpServer per request. Auth = `signMcpToken` (`mcp/token.ts`: HMAC of `META_MCP_SECRET` or
+  `BETTER_AUTH_SECRET`, domain-separated; claims tenant, agent, acting user; ≤ 5 min). Live tenants only.
+  Served at `/api/mcp/meta`; agents call it **in-process** through the same handler (`metaMcpSources`, real MCP client
+  + token) unless `META_MCP_URL` is set.
+- **Tools** (`mcp/tools.ts` registry, domain code in `@spa/services` `meta-mcp.ts` on the existing Graph client +
+  stored tokens): `instagram.list_comments|reply_comment|list_dms|draft_dm_reply|create_post_draft|publish_approved_post`,
+  `facebook_page.list_comments|reply_comment|create_post_draft|publish_approved_post` (only with a connected
+  `social_accounts` platform `facebook` row = Page id + Page token, connected via F19 Facebook Login), `whatsapp.read_inbox_summary`,
+  `whatsapp.draft_message` (outbox row `custom`/`queued` for tap-send). **No WhatsApp send tool**; `isForbiddenTool`
+  drops any WhatsApp send-like tool from every server (name rules + description/schema mentioning WhatsApp).
+- **Exposure** = agent allow-list (`AGENT_META_TOOLS`: dm_agent, comment_agent, content_agent, slot_filler, meta_agent)
+  ∩ spa toggles (`tenants.settings.metaMcp.groups`: instagram_inbox, instagram_posts, facebook_page, whatsapp on by
+  default; external off) ∩ connections (publish needs Meta configured + IG connected). `instagram.reply_comment` sends
+  only when `metaMcp.autopilot` (else an `ai_draft` in the inbox); `facebook_page.reply_comment` only exists on autopilot.
+  Publish tools only publish `scheduled` (approved) posts whose time has come. Model function names map `.` → `__`.
+- **Audit**: every write tool inserts `audit_log` `ai.mcp.<tool>` (tenant, acting user, agent, clipped args, outcome);
+  the run itself `ai.mcp.run`; settings `ai.mcp.settings.updated`; console `platform.meta_mcp.updated`.
+- **External server** (super-admin AI page): `platform_settings.meta_mcp_enabled|url|key_enc (AES-GCM)|tools` — only
+  listed names, prefixed `ext__`, only for agents allowing `external` (meta_agent) and spas with the group on.
+- **UI**: Settings → Integrations card `components/integrations/meta-mcp-card.tsx` (account, tool states, group +
+  autopilot toggles, "Ask the AI" → `askMetaAiAction` → `runMetaAgent`). E2E `meta-mcp.spec.ts` scripts the model with
+  `{"__steps": [...]}` fixtures (`server/ai-fixture.ts`). Migration 0028_meta_mcp (also `social_platform` += `facebook`).
+
+## Claude MCP connector (site editing, `/api/mcp`)
+
+- **OAuth** (packages/auth): Better Auth `jwt()` + `@better-auth/mcp` `mcp()` (oauth-provider 1.7.7; tables in
+  `@spa/db` `schema/oauth.ts`: jwks, oauth_client/resource/client_resource/refresh_token/access_token/consent/
+  client_assertion). Resource = `mcpResourceUrl()` (canonical APP_URL + `/api/mcp`; dev `*.localhost` → `localhost`).
+  Open DCR (rate-limited), PKCE, login `/login`, consent `/oauth/consent` (`(auth)/oauth/consent`, EN+TH keys
+  `auth.oauth.*`). Auth `hooks.before` on `/oauth2/authorize` (ineligible → consent page `?not_enabled=1`) and
+  `/oauth2/consent` (403). `oauthProviderClient()` in the browser client sends the signed query, so sign-in / 2FA
+  resume the flow (`forms.tsx` follows the returned `url`). Discovery: `app/.well-known/[...path]` → auth handler
+  (proxy no longer rewrites `/.well-known/*`). `verifyMcpAccessToken`: local JWKS (cached 5 min), audience-bound.
+- **Server** `packages/ai/src/mcp/site-server.ts` `handleSiteMcpRequest` (stateless, JSON): bearer → verify →
+  `siteAiEditorStatus` → consent row for (user, client) → 60/min per token (in memory) → tools (`SITE_MCP_TOOLS`) over
+  the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
+  Writes to a page open in someone else's Studio editor are refused with the holder's name (F29 lock); `get_site`
+  lists `editing` per page.
+  Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
+- **Links** (R23): server option `adminUrl` (route passes `canonicalUrls().admin`): `list_spas` + `get_site` return
+  `console_url`; `list_spas` reports `website` (none / template / draft / live, from `websiteOverview`) +
+  `unpublished_changes`; texts say the owner previews and publishes in the console (Websites → spa).
+- **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
+  deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
+  `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
+  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`,
+  `texts-editor`).
+- **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
+  `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
+  authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on
+  `/oauth2/consent` audits grants. Prune: services `oauth-clients.ts` `pruneUnusedOAuthClients` (worker
+  `oauth-clients-prune`, hourly). Real client IP: see "Client IP" below (Better Auth `ipAddressHeaders` =
+  `[CLIENT_IP_HEADER]`, `ipv6Subnet: 64`).
+- **Draft concurrency + publish** (services sites.ts): `lockSite` (FOR UPDATE on `sites`, re-entrant) at the start of
+  saveDraft / publishPage / publishAll / addPage / renamePage / restoreVersion / runSiteEdit (non-dry) /
+  restoreSiteEdit and the Theme panel action. `editStamp` / `assertEditStamp` / `EDITED_ELSEWHERE`: the editor page
+  passes the stamp; editor.tsx `takeStamp` refreshes it from every save / publish / restore / Ask AI reply.
+  `promoteDraftTheme` + `applyPendingRename` (re-checks the slug) run in publishPage and publishAll. Preflight:
+  `server/site-preflight.ts` `themeDraftWarnings` (editor `publishNotesAction`, overview Publish site sheet).
+
+## Known gaps (verified 2026-10-08, not fixed yet)
+
+Check these before touching POS, ledger, loyalty or inventory code. The fix plan, order and open owner decisions are
+in **PLAN §17** (items F1–F8 match the numbers below; all fixed).
+
+1. ✅ **Refund postings** (fixed): `ledger.postRefund` now prorates the sale entry's own credit lines. Refunds posted
+   before the fix stay as they are (no correcting entries; see the PLAN §17 owner decision).
+2. ✅ **Refund side effects** (fixed, F2): refunds are line-level; they return stock, reverse COGS and offset
+   commissions for exactly the refunded quantity, and refund only the unused value of prepaid items (then void
+   them). Migration 0015 adds `refund_lines` and `sale_line_id` on `gift_cards`/`client_packages`.
+3. ✅ **Double checkout** (fixed, F3): `createSale` locks the booking row (`FOR UPDATE`) before the earlier-sale check;
+   partial unique index `sales_booking_once` (one non-void sale per booking, migration 0014) backs it up and its
+   `23505` maps to a `DomainError`. Migration 0014 skips the index with a WARNING if duplicates already exist.
+4. ✅ **Booking ref race** (fixed, F4): `createBooking` inserts inside the savepoint without a pre-check; a
+   `bookings_tenant_ref` `23505` retries with a new code (up to 5 attempts), then `DomainError('invalid')`.
+5. ✅ **Loyalty cutoff** (fixed, F5): `redeemPackageSession` takes the sale's `businessDate` from `createSale`; otherwise
+   it and `expirePackages` use the branch's `business_day_cutoff` (given branch, else the default branch).
+6. ✅ **Unreversible stock entries** (fixed, F6): `inventory.move()` returns the `stock_movements` id; `receiveStock`/
+   `adjustStock` post with it as `sourceId` (and return it), so `reverseSource` can target them. Older rows unchanged.
+7. ✅ **Slot filler DB role** (fixed, F7): `runSlotFiller` finds enabled spas via `platformDb()` and reads per-spa
+   `outbox`/`branches` inside `withTenant()`.
+8. ✅ **Discounted package liability** (fixed, F8): `issuePackage` takes optional `pricePaidAed` (default list price);
+   `createSale` passes each package's share of the line's net `line_total_aed` (cumulative fils rounding). Older
+   packages unchanged.

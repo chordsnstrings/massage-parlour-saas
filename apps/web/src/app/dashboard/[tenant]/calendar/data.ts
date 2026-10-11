@@ -1,0 +1,369 @@
+import {
+  addDays,
+  addMonths,
+  businessDateOf,
+  dubaiInstant,
+  monthGridRange,
+  type OpeningHours,
+  openIntervals,
+  overlaps,
+  weekStartOf,
+  whatsappLink,
+} from '@spa/core'
+import {
+  bookingItems,
+  bookings,
+  branches,
+  clients,
+  services,
+  serviceVariants,
+  staff,
+  type Tx,
+  withTenant,
+} from '@spa/db'
+import { equipmentStatus, loadCalendarRange, loadDay, rotationFor } from '@spa/services'
+import { and, asc, desc, eq } from 'drizzle-orm'
+import { formatPhone, maskPhone } from '@/components/calendar/time'
+import type {
+  BookingStatus,
+  CalendarData,
+  CalItem,
+  RotationRow,
+  SpanData,
+  SpanItem,
+} from '@/components/calendar/types'
+import { getI18n } from '@/i18n/server'
+import { appPath } from '@/lib/paths'
+import { can, type MemberContext } from '@/server/access'
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+const ACTIVE: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'in_service']
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return (h ?? 0) * 60 + (m ?? 0)
+}
+
+/** Branches this member may work in (all when the member is unrestricted). */
+export async function allowedBranches(tx: Tx, ctx: MemberContext) {
+  const rows = await tx
+    .select()
+    .from(branches)
+    .where(eq(branches.active, true))
+    .orderBy(desc(branches.isDefault), asc(branches.name))
+  if (!ctx.member || ctx.member.allBranches) return rows
+  return rows.filter((b) => ctx.member!.branchIds.includes(b.id))
+}
+
+/** The staff profile linked to the signed-in member (therapists see only their own bookings). */
+export async function ownStaffId(tx: Tx, ctx: MemberContext) {
+  if (!ctx.member) return null
+  const [row] = await tx.select({ id: staff.id }).from(staff).where(eq(staff.memberId, ctx.member.id))
+  return row?.id ?? null
+}
+
+export async function loadCalendar(
+  ctx: MemberContext,
+  q: { date?: string; branch?: string; view?: string; cancelled?: string; open?: string },
+): Promise<CalendarData | null> {
+  const canManage = can(ctx, 'calendar.manage')
+  const seePhone = can(ctx, 'clients.phone')
+  const { t, fmt } = await getI18n()
+  return withTenant(ctx.tenant.id, async (tx) => {
+    const branchRows = await allowedBranches(tx, ctx)
+    const branch = branchRows.find((b) => b.id === q.branch) ?? branchRows[0]
+    if (!branch) return null
+    const cutoff = branch.businessDayCutoff.slice(0, 5)
+    const cutoffMin = toMin(cutoff)
+    const now = new Date()
+    const today = businessDateOf(now, cutoff)
+    const date = q.date && DATE.test(q.date) ? q.date : today
+    const dayStart = dubaiInstant(date, 0).getTime()
+    const rel = (d: Date) => Math.round((d.getTime() - dayStart) / 60_000)
+
+    const day = await loadDay(tx, branch.id, date)
+    const myStaff = await ownStaffId(tx, ctx)
+    const ownOnly = ctx.member?.roleKey === 'therapist' || (!canManage && myStaff !== null)
+
+    const rows = await tx
+      .select({ item: bookingItems, booking: bookings, client: clients })
+      .from(bookingItems)
+      .innerJoin(bookings, eq(bookings.id, bookingItems.bookingId))
+      .leftJoin(clients, eq(clients.id, bookings.clientId))
+      .where(and(eq(bookings.branchId, branch.id), eq(bookings.businessDate, date)))
+      .orderBy(asc(bookingItems.startsAt))
+
+    const allStaff = await tx
+      .select({ id: staff.id, name: staff.displayName, color: staff.color })
+      .from(staff)
+      .orderBy(asc(staff.sort), asc(staff.displayName))
+    const staffNames = Object.fromEntries(allStaff.map((s) => [s.id, { name: s.name, color: s.color }]))
+
+    const kit = await equipmentStatus(
+      tx,
+      rows.map((r) => r.item),
+    )
+    let items: CalItem[] = rows.map(({ item, booking, client }) => ({
+      id: item.id,
+      bookingId: booking.id,
+      refCode: booking.refCode,
+      status: booking.status,
+      source: booking.source,
+      attribution: booking.attribution,
+      startMin: rel(item.startsAt),
+      endMin: rel(item.endsAt),
+      staffIds: item.staffIds,
+      roomId: item.roomId,
+      serviceName: item.serviceName,
+      durationMin: item.durationMin,
+      priceAed: item.priceAed,
+      // Anonymous walk-ins keep the name they gave in the notes.
+      clientName: client?.name ?? (booking.notes?.startsWith('Walk-in: ') ? booking.notes.slice(9) : null),
+      clientPhone: client?.phoneE164
+        ? seePhone
+          ? formatPhone(client.phoneE164)
+          : maskPhone(client.phoneE164)
+        : null,
+      clientWhatsapp: client?.phoneE164 && seePhone ? whatsappLink(client.phoneE164, '', 'mobile') : null,
+      notes: booking.notes,
+      cancelReason: booking.cancelReason,
+      equipment: kit.get(item.id)?.names ?? [],
+      equipmentMissing: kit.get(item.id)?.missing ?? [],
+    }))
+
+    // Shifts clipped to this business day (loadDay also returns the neighbouring days).
+    const dayLo = cutoffMin
+    const dayHi = cutoffMin + 1440
+    let staffCols = day.staff.map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      shifts: s.shifts
+        .map((sh) => ({ start: Math.max(rel(sh.start), dayLo), end: Math.min(rel(sh.end), dayHi) }))
+        .filter((sh) => sh.end > sh.start),
+      onLeave: (s.leave ?? []).some((l) => overlaps(l, day.window)),
+    }))
+    // Bookings with someone who is no longer bookable still need a column.
+    for (const it of items)
+      for (const sid of it.staffIds)
+        if (!staffCols.some((c) => c.id === sid) && staffNames[sid])
+          staffCols.push({
+            id: sid,
+            name: staffNames[sid].name,
+            color: staffNames[sid].color,
+            shifts: [],
+            onLeave: false,
+          })
+    const roomCols = day.rooms.map((r) => ({ id: r.id, name: r.name }))
+
+    if (ownOnly) {
+      staffCols = staffCols.filter((c) => c.id === myStaff)
+      items = items.filter((i) => myStaff !== null && i.staffIds.includes(myStaff))
+    }
+
+    // Grid spans opening hours, shifts and bookings, clamped to the business day.
+    const spans: number[][] = openIntervals(date, branch.openingHours as OpeningHours).map((o) => [
+      rel(o.start),
+      rel(o.end),
+    ])
+    for (const c of staffCols) for (const s of c.shifts) spans.push([s.start, s.end])
+    for (const i of items) spans.push([i.startMin, i.endMin])
+    const lo = Math.max(dayLo, Math.min(...spans.map((s) => s[0]!), 10 * 60))
+    const hi = Math.min(dayHi, Math.max(...spans.map((s) => s[1]!), lo + 8 * 60))
+    const gridStart = Math.floor(lo / 60) * 60
+    const gridEnd = Math.max(gridStart + 60, Math.ceil(hi / 60) * 60)
+
+    const variants = (
+      await tx
+        .select({ variant: serviceVariants, service: services })
+        .from(serviceVariants)
+        .innerJoin(services, eq(services.id, serviceVariants.serviceId))
+        .where(and(eq(services.active, true), eq(serviceVariants.active, true)))
+        .orderBy(asc(services.sort), asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+    ).map(({ variant, service }) => ({
+      id: variant.id,
+      label: t('calendar.variant', {
+        service: service.name.en,
+        min: variant.durationMin,
+        price: variant.priceAed == null ? t('common.priceOnRequest') : fmt.aed(variant.priceAed),
+      }),
+      durationMin: variant.durationMin,
+      priceAed: variant.priceAed,
+    }))
+
+    let rotation: RotationRow[] | null = null
+    if (canManage && !ownOnly && date === today) {
+      const nowMin = rel(now)
+      const entries = await rotationFor(tx, ctx.tenant.id, branch.id, date)
+      rotation = entries.map((e) => {
+        const col = staffCols.find((c) => c.id === e.staffId)
+        const onShift = col?.shifts.some((s) => s.start <= nowMin && nowMin < s.end) ?? false
+        const busy = items.some(
+          (i) =>
+            i.staffIds.includes(e.staffId) &&
+            ACTIVE.includes(i.status) &&
+            (i.status === 'in_service' || (i.startMin <= nowMin && nowMin < i.endMin)),
+        )
+        const status: RotationRow['status'] =
+          e.status === 'break' || e.status === 'off' ? e.status : busy ? 'busy' : onShift ? 'free' : 'off'
+        return {
+          staffId: e.staffId,
+          name: staffNames[e.staffId]?.name ?? t('calendar.details.therapist'),
+          color: staffNames[e.staffId]?.color ?? '#5e7d6b',
+          turns: e.turns,
+          status,
+        }
+      })
+    }
+
+    return {
+      slug: ctx.tenant.slug,
+      date,
+      dayLabel: fmt.weekdayDate(`${date}T12:00:00Z`),
+      today,
+      branchId: branch.id,
+      branches: branchRows.map((b) => ({ id: b.id, name: b.name })),
+      view: q.view === 'rooms' && !ownOnly ? 'rooms' : 'staff',
+      showCancelled: q.cancelled === '1',
+      dayStartMs: dayStart,
+      cutoffMin,
+      gridStart,
+      gridEnd,
+      staff: staffCols,
+      rooms: roomCols,
+      staffNames,
+      items,
+      variants,
+      rotation,
+      canManage,
+      canCheckout: can(ctx, 'pos.use'),
+      ownOnly,
+      // G14: a therapist may check in / start / complete bookings with their own staff profile on them.
+      ownStatusStaffId: can(ctx, 'calendar.ownStatus') ? myStaff : null,
+      checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
+      bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
+      calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
+      openBooking: items.some((i) => i.bookingId === q.open) ? q.open! : null,
+    }
+  })
+}
+
+/**
+ * Week (7 business days Mon–Sun) or Month (Mon-start grid) for one branch: one range query (business dates from the
+ * branch cutoff), therapists limited to their own bookings like the Day view.
+ */
+export async function loadCalendarSpan(
+  ctx: MemberContext,
+  q: { range: 'week' | 'month'; date?: string; branch?: string },
+): Promise<SpanData | null> {
+  const canManage = can(ctx, 'calendar.manage')
+  const { fmt } = await getI18n()
+  return withTenant(ctx.tenant.id, async (tx) => {
+    const branchRows = await allowedBranches(tx, ctx)
+    const branch = branchRows.find((b) => b.id === q.branch) ?? branchRows[0]
+    if (!branch) return null
+    const cutoff = branch.businessDayCutoff.slice(0, 5)
+    const cutoffMin = toMin(cutoff)
+    const today = businessDateOf(new Date(), cutoff)
+    const date = q.date && DATE.test(q.date) ? q.date : today
+    const month = monthGridRange(date)
+    const from = q.range === 'week' ? weekStartOf(date) : month.from
+    const to = q.range === 'week' ? addDays(from, 6) : month.to
+
+    const myStaff = await ownStaffId(tx, ctx)
+    const ownOnly = ctx.member?.roleKey === 'therapist' || (!canManage && myStaff !== null)
+    // A therapist without a linked profile sees nothing (same as the Day view's empty grid).
+    const staffFilter = ownOnly ? (myStaff ?? '00000000-0000-0000-0000-000000000000') : null
+    const range = await loadCalendarRange(tx, { branchId: branch.id, from, to, staffId: staffFilter })
+
+    const people = await tx.select({ id: staff.id, name: staff.displayName, color: staff.color }).from(staff)
+    const person = new Map(people.map((p) => [p.id, p]))
+    const items: SpanItem[] =
+      q.range === 'week'
+        ? range.items.map((r) => {
+            const dayStart = dubaiInstant(r.businessDate, 0).getTime()
+            const first = r.staffIds.map((id) => person.get(id)).find(Boolean)
+            return {
+              id: r.itemId,
+              bookingId: r.bookingId,
+              date: r.businessDate,
+              startMin: Math.round((r.startsAt.getTime() - dayStart) / 60_000),
+              endMin: Math.round((r.endsAt.getTime() - dayStart) / 60_000),
+              status: r.status,
+              title:
+                r.clientName ?? (r.notes?.startsWith('Walk-in: ') ? r.notes.slice(9) : null) ?? r.refCode,
+              serviceName: r.serviceName,
+              staffName: first?.name ?? null,
+              color: first?.color ?? '#5e7d6b',
+            }
+          })
+        : []
+
+    // Week rows span opening hours + bookings, clamped to the business day (as the Day view).
+    const spans: number[][] = []
+    if (q.range === 'week')
+      for (let d = from; d <= to; d = addDays(d, 1)) {
+        const base = dubaiInstant(d, 0).getTime()
+        for (const o of openIntervals(d, branch.openingHours as OpeningHours))
+          spans.push([(o.start.getTime() - base) / 60_000, (o.end.getTime() - base) / 60_000])
+      }
+    for (const i of items) spans.push([i.startMin, i.endMin])
+    const lo = Math.max(cutoffMin, Math.min(...spans.map((s) => s[0]!), 10 * 60))
+    const hi = Math.min(cutoffMin + 1440, Math.max(...spans.map((s) => s[1]!), lo + 8 * 60))
+    const gridStart = Math.floor(lo / 60) * 60
+    const gridEnd = Math.max(gridStart + 60, Math.ceil(hi / 60) * 60)
+
+    const noon = (d: string) => `${d}T12:00:00Z`
+    const ratio = (booked: number, shift: number) => (shift > 0 ? Math.min(1, booked / shift) : null)
+    const inView = (d: string) => q.range === 'week' || d.slice(0, 7) === date.slice(0, 7)
+    const sum = range.days
+      .filter((d) => inView(d.date))
+      .reduce(
+        (a, d) => ({
+          bookings: a.bookings + d.bookings,
+          revenue: a.revenue + d.revenueAed,
+          booked: a.booked + d.bookedMin,
+          shift: a.shift + d.shiftMin,
+        }),
+        { bookings: 0, revenue: 0, booked: 0, shift: 0 },
+      )
+    return {
+      range: q.range,
+      date,
+      today,
+      title:
+        q.range === 'week'
+          ? `${fmt.dateShort(noon(from))} – ${fmt.date(noon(to))}`
+          : fmt.monthYear(noon(month.first)),
+      from,
+      to,
+      prev: q.range === 'week' ? addDays(date, -7) : addMonths(date, -1),
+      next: q.range === 'week' ? addDays(date, 7) : addMonths(date, 1),
+      branchId: branch.id,
+      branches: branchRows.map((b) => ({ id: b.id, name: b.name })),
+      weekdays: Array.from({ length: 7 }, (_, i) => fmt.weekdayDate(noon(addDays(from, i))).split(' ')[0]!),
+      days: range.days.map((d) => ({
+        date: d.date,
+        label: fmt.weekdayDate(noon(d.date)),
+        dayNum: Number(d.date.slice(8)),
+        inMonth: inView(d.date),
+        bookings: d.bookings,
+        pending: d.pending,
+        revenue: fmt.aed(d.revenueAed),
+        occupancy: ratio(d.bookedMin, d.shiftMin),
+      })),
+      items,
+      cutoffMin,
+      gridStart,
+      gridEnd,
+      totals: {
+        bookings: sum.bookings,
+        revenue: fmt.aed(sum.revenue),
+        occupancy: ratio(sum.booked, sum.shift),
+      },
+      ownOnly,
+      canManage,
+      calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
+    }
+  })
+}

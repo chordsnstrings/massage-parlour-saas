@@ -1,0 +1,32 @@
+{
+  "name": "@spa/services",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./intake-pdf": "./src/pdf/intake-pdf.ts",
+    "./site-kit": "./src/site-kit/index.ts",
+    "./tenant-slug": "./src/tenant-slug.ts",
+    "./xlsx": "./src/xlsx.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spa/core": "workspace:*",
+    "@spa/db": "workspace:*",
+    "aws4fetch": "^1.0.20",
+    "drizzle-orm": "0.45.3",
+    "exceljs": "^4.4.0",
+    "pdfkit": "0.17.2",
+    "sharp": "^0.35.5",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.17.6",
+    "@types/web-push": "^3.6.4",
+    "unpdf": "1.8.1"
+  }
+}
