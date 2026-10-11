@@ -152,7 +152,6 @@ export const domain: Messages['errors']['domain'] = {
   publishHomeFirst: 'เผยแพร่หน้าแรกก่อนบันทึกเว็บไซต์นี้เป็นเทมเพลต',
   noWebsiteYet: 'สปานี้ยังไม่มีเว็บไซต์',
   globalSectionInUse: { other: 'ส่วนกลางนี้อยู่ใน {count} หน้า — นำออกจากหน้าเหล่านั้นก่อน' },
-  studioNoWebsite: 'ยังไม่มีเว็บไซต์',
   studioPageGone: 'หน้านั้นไม่มีอยู่แล้ว',
   studioRequestClosed: 'คำขอนั้นปิดไปแล้ว',
   studioDescribeChange: 'บอกเราว่าต้องการเปลี่ยนอะไร',

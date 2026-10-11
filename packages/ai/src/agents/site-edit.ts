@@ -343,6 +343,7 @@ export async function planSiteTexts(opts: {
   slots: TextSlot[]
   client?: ModelArkClient
   db?: Db
+  signal?: AbortSignal
 }) {
   const slots = opts.slots.map((s) => ({
     key: s.key,
@@ -360,6 +361,7 @@ export async function planSiteTexts(opts: {
     maxTokens: 6000,
     client: opts.client,
     db: opts.db,
+    signal: opts.signal,
     messages: [
       { role: 'system', content: siteTextsSystemPrompt(opts.facts.name) },
       {

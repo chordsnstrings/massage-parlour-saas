@@ -148,6 +148,8 @@ export type RunChatOptions<T extends z.ZodType | undefined> = {
   maxTokens?: number
   db?: Db
   client?: ModelArkClient
+  /** Aborts the model call(s), e.g. at the caller's deadline. */
+  signal?: AbortSignal
 }
 
 export type RunChatResult<T> = {
@@ -200,7 +202,7 @@ export async function runChat<T extends z.ZodType | undefined = undefined>(
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Awaited<ReturnType<ModelArkClient['chat']>>
     try {
-      res = await client.chat({ ...request, messages })
+      res = await client.chat({ ...request, messages }, { signal: opts.signal })
     } catch (e) {
       await db
         .insert(aiUsage)

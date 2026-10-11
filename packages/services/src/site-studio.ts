@@ -19,6 +19,7 @@ export type ChangeRequestRow = Awaited<ReturnType<typeof listChangeRequests>>[nu
 /** Open requests a spa may have at once — enough for real feedback, not a flood. */
 export const MAX_OPEN_REQUESTS = 20
 
+/** Open requests first (at most MAX_OPEN_REQUESTS, so all fit), then the newest closed ones. */
 export async function listChangeRequests(tx: Tx, tenantId: string, limit = 50) {
   return tx
     .select({
@@ -34,7 +35,7 @@ export async function listChangeRequests(tx: Tx, tenantId: string, limit = 50) {
     .from(siteChangeRequests)
     .leftJoin(sitePages, eq(sitePages.id, siteChangeRequests.pageId))
     .where(eq(siteChangeRequests.tenantId, tenantId))
-    .orderBy(desc(siteChangeRequests.createdAt))
+    .orderBy(desc(sql`${siteChangeRequests.status} = 'open'`), desc(siteChangeRequests.createdAt))
     .limit(limit)
 }
 

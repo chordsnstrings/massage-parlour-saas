@@ -432,7 +432,7 @@ export async function blockStatsAction(
   pageId: string,
   blockIds: unknown,
 ): Promise<ActionResult> {
-  const { ctx, error } = await guard(slug, 'reports.view')
+  const { ctx, error } = await guard(slug, 'reports.view', undefined, { english: true })
   if (error) return fail(error)
   const parsed = z
     .object({ pageId: uuid, blockIds: z.array(z.string().max(80)).max(200) })

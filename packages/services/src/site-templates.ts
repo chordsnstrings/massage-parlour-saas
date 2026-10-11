@@ -1,20 +1,11 @@
 // Site templates beyond the built-ins (docs/PLAN.md §11.2): template studio rows (platform table), sanitising a
-// spa's site into a template, JSON export/import, AI copy slots and a structural check for preset trees.
+// spa's site into a template, JSON export/import, copy slots and a structural check for preset trees.
 import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { isImageValue } from './site-kit/image'
 import type { PuckNode } from './site-kit/tree'
-import {
-  getEditablePage,
-  getSite,
-  listPages,
-  PAGE_SLUG,
-  type PageData,
-  type SiteTemplate,
-  type SiteText,
-  saveDraft,
-} from './sites'
+import { getSite, PAGE_SLUG, type PageData, type SiteTemplate, type SiteText } from './sites'
 
 export type StudioTemplateRow = typeof siteTemplates.$inferSelect
 export type TemplatePage = SiteTemplate['pages'][number]
@@ -50,133 +41,14 @@ export function listNodes(data: PageData): PuckNode[] {
   return out
 }
 
-/* ------------------------------------------------------------------ AI copy slots */
+/* ------------------------------------------------------------------ Copy slots */
 
 /**
- * Template nodes that hold the spa's own words carry a copy slot at the end of their id (`…--hero`). The AI
- * site writer fills these; everything else (layout, smart blocks) is left alone.
+ * Template nodes that hold the spa's own words carry a copy slot at the end of their id (`…--hero`), kept when a
+ * site is sanitised into a template.
  */
 export const COPY_SLOT = /--((?:hero|about|faq|cta)|usp-[1-3]-(?:title|text))$/
 export const slotOf = (id: unknown) => (typeof id === 'string' ? (COPY_SLOT.exec(id)?.[1] ?? null) : null)
-
-export type SiteCopy = {
-  hero: { headline: SiteText; sub: SiteText }
-  about: SiteText
-  usps: { title: SiteText; text: SiteText }[]
-  faqs: { q: SiteText; a: SiteText }[]
-  cta: { title: SiteText; text: SiteText }
-}
-
-function fillNode(node: PuckNode, copy: SiteCopy): PuckNode | null {
-  const slot = slotOf(node.props.id)
-  if (!slot) return null
-  const p = node.props
-  if (slot === 'hero' && node.type === 'Hero')
-    return { ...node, props: { ...p, title: copy.hero.headline, subtitle: copy.hero.sub } }
-  if (slot === 'about' && node.type === 'RichText') return { ...node, props: { ...p, text: copy.about } }
-  if (slot === 'faq' && node.type === 'FAQ' && copy.faqs.length)
-    return { ...node, props: { ...p, items: copy.faqs.map((f) => ({ q: f.q, a: f.a })) } }
-  if (slot === 'cta' && node.type === 'BookingCTA')
-    return { ...node, props: { ...p, title: copy.cta.title, text: copy.cta.text } }
-  const usp = /^usp-([1-3])-(title|text)$/.exec(slot)
-  const item = usp ? copy.usps[Number(usp[1]) - 1] : undefined
-  if (usp && item) {
-    if (usp[2] === 'title' && node.type === 'Heading') return { ...node, props: { ...p, text: item.title } }
-    if (usp[2] === 'text' && node.type === 'RichText') return { ...node, props: { ...p, text: item.text } }
-  }
-  return null
-}
-
-/** One page's data with AI copy written into its slotted nodes (input untouched), and how many nodes changed. */
-export function fillPageCopy(data: PageData, copy: SiteCopy): { data: PageData; filled: number } {
-  let filled = 0
-  const out = mapNodes(structuredClone(data), (node) => {
-    const next = fillNode(node, copy)
-    if (!next) return node
-    filled++
-    return next
-  })
-  return { data: out, filled }
-}
-
-/** The template with AI copy written into its slotted nodes (input untouched). Returns how many nodes changed. */
-export function applySiteCopy(
-  template: SiteTemplate,
-  copy: SiteCopy,
-): { template: SiteTemplate; filled: number } {
-  let filled = 0
-  const pages = template.pages.map((p) => {
-    const r = fillPageCopy(p.data, copy)
-    filled += r.filled
-    return { ...p, data: r.data }
-  })
-  return { template: { ...template, pages }, filled }
-}
-
-/** Whether any of these pages has AI copy slots (sites made before slots existed have none). */
-export const hasCopySlots = (pages: { data: PageData }[]) =>
-  pages.some((p) => listNodes(p.data).some((n) => slotOf(n.props.id) !== null))
-
-/**
- * Writes AI copy into the spa's own pages, in place: only slotted text changes, so layout, images, added
- * sections and the theme stay. Saved as drafts (never published). Returns how many nodes / pages changed.
- */
-export async function applySiteCopyToPages(
-  tx: Tx,
-  tenantId: string,
-  copy: SiteCopy,
-  userId?: string,
-): Promise<{ filled: number; pages: number }> {
-  let filled = 0
-  let pages = 0
-  for (const p of await listPages(tx, tenantId)) {
-    const current = await getEditablePage(tx, tenantId, p.id)
-    if (!current) continue
-    const r = fillPageCopy(current.data, copy)
-    if (!r.filled) continue
-    await saveDraft(tx, { tenantId, pageId: p.id, data: r.data, userId })
-    filled += r.filled
-    pages++
-  }
-  return { filled, pages }
-}
-
-const EMPTY: SiteText = { en: '' }
-
-/** The copy currently in a page set's slots (first occurrence wins) — the "before" side of the AI preview. */
-export function extractSiteCopy(pages: { data: PageData }[]): SiteCopy {
-  const copy: SiteCopy = {
-    hero: { headline: EMPTY, sub: EMPTY },
-    about: EMPTY,
-    usps: [0, 1, 2].map(() => ({ title: EMPTY, text: EMPTY })),
-    faqs: [],
-    cta: { title: EMPTY, text: EMPTY },
-  }
-  const seen = new Set<string>()
-  const text = (v: unknown): SiteText => (v && typeof v === 'object' && 'en' in v ? (v as SiteText) : EMPTY)
-  for (const p of pages) {
-    for (const node of listNodes(p.data)) {
-      const slot = slotOf(node.props.id)
-      if (!slot || seen.has(slot)) continue
-      seen.add(slot)
-      const pr = node.props
-      if (slot === 'hero') copy.hero = { headline: text(pr.title), sub: text(pr.subtitle) }
-      else if (slot === 'about') copy.about = text(pr.text)
-      else if (slot === 'faq')
-        copy.faqs = Array.isArray(pr.items)
-          ? (pr.items as { q?: unknown; a?: unknown }[]).map((i) => ({ q: text(i.q), a: text(i.a) }))
-          : []
-      else if (slot === 'cta') copy.cta = { title: text(pr.title), text: text(pr.text) }
-      else {
-        const [, n, part] = /^usp-([1-3])-(title|text)$/.exec(slot) ?? []
-        const item = copy.usps[Number(n) - 1]
-        if (item && part === 'title') item.title = text(pr.text)
-        if (item && part === 'text') item.text = text(pr.text)
-      }
-    }
-  }
-  return copy
-}
 
 /* ------------------------------------------------------------------ Sanitising a spa's site into a template */
 

@@ -4,23 +4,18 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   addPage,
-  applySiteCopy,
-  applySiteCopyToPages,
   type BlockSpec,
   checkNodes,
   DomainError,
   ensureSite,
   exportStudioTemplate,
-  extractSiteCopy,
   getEditablePage,
   getSite,
-  hasCopySlots,
   listPages,
   listStudioTemplates,
   parseTemplateJson,
   publishAll,
   publishPage,
-  type SiteCopy,
   type SiteTemplate,
   sanitizeTemplatePages,
   saveDraft,
@@ -82,18 +77,6 @@ const template = (key: string, headline: string): SiteTemplate => ({
   ],
 })
 
-const copy: SiteCopy = {
-  hero: { headline: { en: 'New headline', ar: 'عنوان جديد' }, sub: { en: 'New sub', ar: 'نص جديد' } },
-  about: { en: 'New about', ar: 'نبذة جديدة' },
-  usps: [
-    { title: { en: 'U1', ar: 'م1' }, text: { en: 'U1 text', ar: 'نص م1' } },
-    { title: { en: 'U2' }, text: { en: 'U2 text' } },
-    { title: { en: 'U3' }, text: { en: 'U3 text' } },
-  ],
-  faqs: [1, 2, 3, 4].map((i) => ({ q: { en: `Q${i}` }, a: { en: `A${i}` } })),
-  cta: { title: { en: 'CTA title', ar: 'احجز' }, text: { en: 'CTA text' } },
-}
-
 beforeAll(async () => {
   await resetTestDatabase()
   const [a, b] = await platform
@@ -107,35 +90,6 @@ beforeAll(async () => {
   ids.other = b!.id
 })
 afterAll(() => closeAllDbs())
-
-describe('AI copy slots', () => {
-  it('fills slotted nodes on every page without touching the input', () => {
-    const t = template('zen', 'Slow down')
-    const before = structuredClone(t)
-    const { template: out, filled } = applySiteCopy(t, copy)
-    expect(t).toEqual(before)
-    // hero, usp title, usp text, about, faq, cta on two pages
-    expect(filled).toBe(12)
-    const home = out.pages[0]!.data as ReturnType<typeof page>
-    expect(home.content[0]!.props).toMatchObject({ title: copy.hero.headline, subtitle: copy.hero.sub })
-    expect(home.content[2]!.props.items).toEqual(copy.faqs)
-    expect(home.content[3]!.props).toMatchObject({ title: copy.cta.title, text: copy.cta.text })
-    expect(extractSiteCopy(out.pages)).toMatchObject({
-      hero: copy.hero,
-      about: copy.about,
-      cta: copy.cta,
-      faqs: copy.faqs,
-      usps: [copy.usps[0], { title: { en: '' } }, { title: { en: '' } }],
-    })
-  })
-
-  it('reads the current copy for the preview', () => {
-    const current = extractSiteCopy(template('zen', 'Slow down').pages)
-    expect(current.hero.headline).toEqual({ en: 'Slow down' })
-    expect(current.about).toEqual({ en: 'About us at Calm Spa' })
-    expect(current.usps[0]).toEqual({ title: { en: 'USP one' }, text: { en: 'USP one text' } })
-  })
-})
 
 describe('sanitising a site into a template', () => {
   it('renews ids (keeping copy slots), templatises the name and strips images and outside links', () => {
@@ -364,25 +318,11 @@ describe('template switching with undo', () => {
     await expect(tx((db) => undoTemplateSwitch(db, ids.tenant!))).rejects.toBeInstanceOf(DomainError)
     await tx((db) => updateTheme(db, ids.tenant!, { accent: '#8a7560' }))
 
-    // Keeping the theme (AI copy for the current template) leaves the spa's look alone.
+    // Keeping the theme leaves the spa's look alone.
     const kept = await tx((db) =>
       switchTemplate(db, ids.tenant!, template('zen', 'Zen'), { keepTheme: true }),
     )
     expect(kept.theme).toEqual({ accent: '#8a7560' })
-  })
-
-  it("AI copy for the current template is written into the spa's own pages, keeping their layout", async () => {
-    const before = await tx((db) => getEditablePage(db, ids.tenant!, ids.home!))
-    expect(hasCopySlots([{ data: before!.data }])).toBe(true)
-    expect(hasCopySlots([{ data: { root: {}, content: [node('Hero', 'legacy-hero')] } }])).toBe(false)
-    const written = await tx((db) => applySiteCopyToPages(db, ids.tenant!, copy))
-    expect(written).toEqual({ filled: 12, pages: 2 })
-    const home = (await tx((db) => getEditablePage(db, ids.tenant!, ids.home!)))!.data as ReturnType<
-      typeof page
-    >
-    expect(home.content[0]!.props).toMatchObject({ title: copy.hero.headline, image: 'https://cdn/x.jpg' })
-    // Everything outside the copy slots (here: the buttons) is untouched.
-    expect(home.content[4]).toEqual((before!.data as ReturnType<typeof page>).content[4])
   })
 })
 

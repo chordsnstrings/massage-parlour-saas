@@ -39,6 +39,7 @@ export const website: Messages['website'] = {
     sent: 'ส่งให้สตูดิโอแล้ว',
     tooShort: 'บอกเราว่าอยากเปลี่ยนอะไร',
   },
+  // R23 (2026-10-10): pending the owner's native Thai review.
   requests: 'คำขอของคุณ',
   noRequests: 'ยังไม่มีคำขอ',
   noRequestsBody: 'รูปใหม่ โปรตามฤดูกาล หรือเปลี่ยนข้อความ — บอกเราได้เลย',

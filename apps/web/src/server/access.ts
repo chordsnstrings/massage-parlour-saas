@@ -6,6 +6,7 @@ import {
   SYSTEM_ROLES,
   TWO_FACTOR_POLICY_ROLES,
 } from '@spa/core'
+import { translator } from '@spa/core/i18n'
 import {
   grantListedPlatformAdmins,
   isListedAdminEmail,
@@ -147,30 +148,38 @@ export const isWritable = (tenant: TenantRow) =>
 /**
  * Common guard for tenant server actions. Returns an error message or null. `feature` (PLAN §18.8): the action needs
  * that plan feature — a spa without it gets "… is available on the Premium plan." (impersonation included).
+ * `english`: the English-only console (R23) — not the user's spa-dashboard language.
  */
-export async function guard(slug: string, permission: Permission, feature?: Feature) {
+export async function guard(
+  slug: string,
+  permission: Permission,
+  feature?: Feature,
+  opts: { english?: boolean } = {},
+) {
   const ctx = await requireMember(slug)
-  if (!can(ctx, permission)) return { ctx, error: (await getT())('errors.forbidden') }
+  const t = async () => (opts.english ? translator('en') : await getT())
+  if (!can(ctx, permission)) return { ctx, error: (await t())('errors.forbidden') }
   if (feature && !(await hasFeature(ctx.tenant.id, feature))) {
     const ref = featureRef(feature)
-    return { ctx, error: (await getT())(ref.key, ref.params) }
+    return { ctx, error: (await t())(ref.key, ref.params) }
   }
-  if (!isWritable(ctx.tenant)) return { ctx, error: (await getT())('errors.readOnly') }
+  if (!isWritable(ctx.tenant)) return { ctx, error: (await t())('errors.readOnly') }
   return { ctx, error: null }
 }
 
 /**
  * Website Studio (PLAN §14.4): sites are built as a bespoke service, so only a super-admin (acting on the spa, or
  * also a member of it) may change them. Spa members see a read-only view and send change requests instead.
+ * The studio lives in the English-only console (R23), so its errors are English.
  */
 export const isStudio = async (ctx: MemberContext) => ctx.impersonating || isPlatformAdmin(ctx.user.id)
 
 export async function studioGuard(slug: string, permission: Permission) {
-  const result = await guard(slug, permission)
+  const result = await guard(slug, permission, undefined, { english: true })
   if (!result.error && !(await isStudio(result.ctx)))
     return {
       ctx: result.ctx,
-      error: (await getT())('errors.studioOnly'),
+      error: translator('en')('errors.studioOnly'),
     }
   return result
 }

@@ -169,7 +169,6 @@ export const domain = {
     one: 'This global section is on {count} page — remove it there first.',
     other: 'This global section is on {count} pages — remove it there first.',
   },
-  studioNoWebsite: 'There is no website yet.',
   studioPageGone: 'That page no longer exists.',
   studioRequestClosed: 'That request is already closed.',
   studioDescribeChange: 'Tell us what you would like changed.',

@@ -52,19 +52,22 @@ export function createModelArkClient(opts: { apiKey?: string; baseUrl?: string; 
   ).replace(/\/$/, '')
   const doFetch = opts.fetch ?? fetch
 
-  async function post<T>(path: string, body: unknown): Promise<T> {
+  async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
     if (!apiKey) throw new Error('ARK_API_KEY is not set')
     const res = await doFetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     })
     if (!res.ok) throw new ModelArkError(res.status, await res.text())
     return (await res.json()) as T
   }
 
   return {
-    chat: (req: ChatRequest) => post<ChatResponse>('/chat/completions', req),
+    /** `signal` bounds the whole call (headers + body), e.g. a caller's deadline. */
+    chat: (req: ChatRequest, opts: { signal?: AbortSignal } = {}) =>
+      post<ChatResponse>('/chat/completions', req, opts.signal),
     /** Seedream. Returned URLs expire after 7 days — copy to storage immediately. */
     image: (req: { model: string; prompt: string; size?: string }) =>
       post<{ data: { url: string }[] }>('/images/generations', {

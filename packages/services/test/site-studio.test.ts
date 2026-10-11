@@ -117,6 +117,17 @@ describe('website studio', () => {
       hasSite: true,
       openRequests: 0,
     })
+
+    // Open requests come first, so a short list never hides one the counts include.
+    const older = await tx((db) =>
+      createChangeRequest(db, ids.tenant!, { body: 'Older ask', userId: 'u-spa' }),
+    )
+    const newer = await tx((db) =>
+      createChangeRequest(db, ids.tenant!, { body: 'Newer ask', userId: 'u-spa' }),
+    )
+    await tx((db) => resolveChangeRequest(db, ids.tenant!, newer, { status: 'done', userId: 'u-spa' }))
+    expect(await tx((db) => listChangeRequests(db, ids.tenant!, 1))).toMatchObject([{ id: older }])
+    await tx((db) => resolveChangeRequest(db, ids.tenant!, older, { status: 'done', userId: 'u-spa' }))
   })
 
   it('websiteOverview: none → template → draft → live → unpublished changes (R23)', async () => {

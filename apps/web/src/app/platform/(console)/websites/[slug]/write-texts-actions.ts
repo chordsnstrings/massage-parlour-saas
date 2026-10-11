@@ -114,14 +114,19 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
   const siteMap = loaded.drafts.map(({ page }) => ({ slug: page.slug, title: page.title.en || page.slug }))
   const label = `Before Write texts ${dubaiStamp()}`
   const deadline = Date.now() + DEADLINE_MS
+  // Bounds calls already running at the deadline too (runChat → ModelArk fetch).
+  const signal = AbortSignal.timeout(DEADLINE_MS)
   let calls = 0
   let costUsd = 0
   let stop: string | null = null
 
-  /** Writes one page's drafts in its own transaction (locks re-checked; an edit made during the run wins). */
+  /**
+   * Writes one page's drafts in its own transaction (locks re-checked; an edit made during the run wins). Never
+   * throws: a page that can't be saved is reported, and the other pages (and the audit) go on.
+   */
   const save = async (job: Job, drafts: TextDraft[]) => {
     try {
-      const reason = await withTenant(tenantId, async (tx) => {
+      const outcome = await withTenant(tenantId, async (tx): Promise<number | string> => {
         await lockSite(tx, tenantId)
         await assertPagesUnlocked(tx, { tenantId, pageIds: [job.id], userId: ctx.user.id })
         const current = await getEditablePage(tx, tenantId, job.id)
@@ -137,13 +142,17 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
         if (current.version?.status === 'draft' && !current.version.label)
           await labelVersion(tx, tenantId, current.version.id, label)
         await saveDraft(tx, { tenantId, pageId: job.id, data: out.data, userId: ctx.user.id })
-        result.pages.push({ id: job.id, slug: job.slug, title: job.title, filled: out.filled })
-        return null
+        return out.filled
       })
-      if (reason) result.skipped.push({ title: job.title, reason })
+      if (typeof outcome === 'string') result.skipped.push({ title: job.title, reason: outcome })
+      else result.pages.push({ id: job.id, slug: job.slug, title: job.title, filled: outcome })
     } catch (e) {
-      if (!(e instanceof PageLockedError)) throw e
-      result.skipped.push({ title: job.title, reason: `open in ${e.lock.holderName}'s editor` })
+      if (e instanceof PageLockedError)
+        result.skipped.push({ title: job.title, reason: `open in ${e.lock.holderName}'s editor` })
+      else {
+        console.error('write texts save failed', e)
+        result.skipped.push({ title: job.title, reason: 'could not be saved — run again' })
+      }
     }
   }
 
@@ -164,6 +173,7 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
             siteMap,
             slots,
             client: fixtureClient(slug),
+            signal,
           })
           drafts.push(...r.texts)
           costUsd += r.costUsd
@@ -171,8 +181,11 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
           if (e instanceof AiBudgetExceededError) stop = 'The monthly AI budget for this spa is used up.'
           else if (e instanceof AiDisabledError)
             stop = 'AI site editing is switched off in the AI model settings.'
-          else console.error('write texts failed', e)
-          failed = true
+          // Out of time (the deadline aborted the call): "run again", like the pages not started.
+          else if (!signal.aborted) {
+            console.error('write texts failed', e)
+            failed = true
+          }
           break
         }
       }
@@ -180,11 +193,13 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
       else
         result.skipped.push({
           title: job.title,
-          reason: failed && !stop ? 'the AI reply could not be read — run again' : RUN_AGAIN,
+          reason: failed ? 'the AI reply could not be read — run again' : RUN_AGAIN,
         })
     }
   }
-  await Promise.all([worker(), worker()])
+  // Both workers finish before the audit (and before the per-spa slot frees up).
+  for (const r of await Promise.allSettled([worker(), worker()]))
+    if (r.status === 'rejected') console.error('write texts failed', r.reason)
   // Two pages run at a time: report them in menu order.
   const order = new Map(jobs.map((j, i) => [j.id, i]))
   result.pages.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))

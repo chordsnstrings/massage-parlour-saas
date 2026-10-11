@@ -278,6 +278,7 @@ describe('planSiteTexts (R23 Write texts)', () => {
       }),
     )
     const before = await platform.select().from(aiUsage).where(eq(aiUsage.tenantId, tenantId))
+    const signal = new AbortController().signal
     const res = await planSiteTexts({
       tenantId,
       facts,
@@ -290,7 +291,10 @@ describe('planSiteTexts (R23 Write texts)', () => {
       slots,
       client,
       db: platform,
+      signal,
     })
+    // The caller's deadline reaches the ModelArk request.
+    expect((fetch.mock.calls[0]![1] as { signal?: AbortSignal }).signal).toBe(signal)
     const body = JSON.parse(fetch.mock.calls[0]![1].body) as { messages: { role: string; content: string }[] }
     const system = body.messages
       .filter((m) => m.role === 'system')

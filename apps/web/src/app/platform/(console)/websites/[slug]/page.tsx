@@ -89,6 +89,8 @@ export default async function SpaWebsitePage({
   const themePending = Boolean(site?.themeDraft)
   const hasLive = pages.some((p) => p.publishedAt)
   const openRequests = requests.filter((r) => r.status === 'open').length
+  // R23 Write texts: SITE_AI_EDITOR_EMAILS super-admins only (re-checked by the action).
+  const writeTexts = canEdit && aiEditor === 'ok' && pages.length > 0
   const current = site ? catalog.find((t) => t.key === site.templateKey) : null
   const nameOf = (key: string) => catalog.find((t) => t.key === key)?.name ?? key
   // The undo offer stays for a week after a switch (the snapshot itself lives until the next switch).
@@ -106,7 +108,9 @@ export default async function SpaWebsitePage({
     .join(' and ')
   const nextText = {
     none: 'Pick a template below.',
-    template: 'Write the texts, then adjust each page.',
+    template: writeTexts
+      ? 'Write the texts, then adjust each page.'
+      : 'Edit each page’s texts, then publish.',
     draft: 'Ready? Publish to make it live.',
     live: unpublished
       ? `${changes.charAt(0).toUpperCase()}${changes.slice(1)} ${pending + Number(themePending) === 1 ? 'has' : 'have'} unpublished changes.`
@@ -134,10 +138,7 @@ export default async function SpaWebsitePage({
         actions={
           site && (
             <>
-              {/* R23 Write texts: SITE_AI_EDITOR_EMAILS super-admins only (re-checked by the action). */}
-              {canEdit && aiEditor === 'ok' && pages.length > 0 && (
-                <WriteTextsSheet slug={slug} ready={aiEditReady()} />
-              )}
+              {writeTexts && <WriteTextsSheet slug={slug} ready={aiEditReady()} />}
               <Button variant="secondary" asChild>
                 <a href={studioPath(slug, '/preview')} target="_blank" rel="noreferrer">
                   <Eye /> Preview

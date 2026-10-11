@@ -158,7 +158,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      rethrow to the error boundary.
    - `ok()`/`fail()` accept plain text or a catalogue key / `{ key, params }`: results keep English `message`/`error`
      plus `key`/`params`, which the client renders in the viewer's language (`resultText`); `fromZod` → `errors.checkFields`.
-     `guard`/`studioGuard` errors are translated server-side (`getT`).
+     `guard` errors are translated server-side (`getT`); `studioGuard` (and `guard(…, { english: true })` in the console)
+     answers in English, since the console is English only.
    - UI side: `ActionForm` (useTransition, double-submit guard, toasts, field errors — keys translated) and `FormSheet`.
 6. **i18n (spa dashboard)**: `i18n/server.ts` `getLocale` (row `user.locale` → `spa_locale` cookie → en; reads the row,
    not the 5-min cached session) / `getT` / `getI18n` (locale, t, fmt, messages); `i18n/client.tsx` `I18nProvider`
@@ -485,7 +486,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     they break if that spa is deleted). E2E: "HTML design images".
 - **Website Studio (R23, console)** (PLAN §14.8 R23): `platform/(console)/websites/page.tsx` lists every spa
   (services `site-studio.ts` `websiteOverview` = platform read, deleted spas out; `websiteProgress` status none →
-  template → draft → live + `unpublished` + next step; `next-step.tsx` button; nav badge = open change requests).
+  template → draft → live + `unpublished` + next step; `next-step.tsx` button; nav badge = open change requests;
+  `listChangeRequests` puts open ones first, so its limit never hides one the counts include).
   `websites/[slug]/page.tsx` (+ `cards.tsx`, `website-client.tsx`) = everything of the studio; actions in that folder
   (`actions.ts`, `studio-actions.ts`, `blog-actions.ts`, `import-actions.ts`, `write-texts-actions.ts`,
   `editor/*-actions.ts`) are `studioGuard`ed and refresh both sides via `server/studio.ts` `revalidateStudio`;
@@ -506,11 +508,13 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     (agent `site_editor`, facts from `loadSiteFacts`: brand profile, active branches, public menu with hidden prices
     as "price on request"; ≤ 40 slots per call, 2 at a time, ≤ 24 calls, 150 s) → per page in its own tx: `lockSite`,
     `assertPagesUnlocked` (locked pages skipped up front too), `fillTextSlots` (only seen keys whose EN is unchanged;
-    `plainText` strips tags/control chars, caps 200/1500), `designSignature` must not change, the unnamed working
-    draft is labelled "Before Write texts {Dubai time}", `saveDraft`. Never publishes; audit `site.ai_texts_written`.
+    `plainText` strips tags/control chars, caps 200/1500 code points), `designSignature` must not change, the unnamed
+    working draft is labelled "Before Write texts {Dubai time}", `saveDraft`; a page whose save fails is reported
+    "could not be saved — run again" and the run goes on. Each AI call gets the run's 150 s `AbortSignal` (through
+    `runChat` → ModelArk fetch). Never publishes; audit `site.ai_texts_written`.
     Tests `packages/services/test/site-text-slots.test.ts`, `packages/ai/test/site-edit.test.ts`, e2e
     `console-website.spec.ts` (fixture slug `texts-editor`). Replaced the old "Write with AI" sheet
-    (`server/site-writer.ts` removed; services site-copy helpers `applySiteCopy*`/`extractSiteCopy` now unused).
+    (`server/site-writer.ts` and the services site-copy helpers `applySiteCopy*`/`extractSiteCopy` removed).
 - **Saving and publishing**:
   - Draft JSON is capped at 512 KB.
   - Design changes need `site.design` (checked via `designSignature`).

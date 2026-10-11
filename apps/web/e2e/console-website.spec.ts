@@ -93,8 +93,11 @@ test('console Websites: status + next step, full-screen editor, publish without 
     await list()
     await expect(row().getByText('Draft', { exact: true })).toBeVisible()
     await row().getByRole('link', { name: 'Publish for Linden Spa' }).click()
-    await studio.waitForURL(studioUrl(slug, '?publish=1'))
-    await studio.getByRole('dialog').getByRole('button', { name: 'Publish now' }).click()
+    const publish = studio.getByRole('dialog').getByRole('button', { name: 'Publish now' })
+    await expect(publish).toBeVisible({ timeout: 30_000 })
+    // The sheet drops ?publish=1, so it doesn't open by itself when new drafts appear later.
+    await expect(studio).toHaveURL(studioUrl(slug))
+    await publish.click()
     await expect(studio.getByText(/Published \d+ pages/)).toBeVisible({ timeout: 30_000 })
     await expect(studio.getByTestId('website-status')).toContainText('Live')
     await list()
@@ -109,6 +112,19 @@ test('console Websites: status + next step, full-screen editor, publish without 
     expect(page.url()).toBe(`${app}/${slug}/website`)
     await expect(page.getByRole('heading', { name: 'Services & prices' })).toBeVisible()
     await expect(page.getByText('60 min · AED 350')).toBeVisible()
+    // Menu-only edit (name, description, durations, prices; no delete): the live site shows it without a republish.
+    await page.getByRole('button', { name: 'Edit Swedish massage' }).click()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByLabel('Price 1 (AED)')).toBeVisible()
+    await expect(sheet.getByRole('button', { name: 'Delete' })).toHaveCount(0)
+    await sheet.getByLabel('Price 1 (AED)').fill('375')
+    await sheet.getByRole('button', { name: 'Save service' }).click()
+    await expect(page.getByText('60 min · AED 375')).toBeVisible({ timeout: 30_000 })
+    const live = await page.context().newPage()
+    await live.goto(site(slug))
+    await expect(live.getByText('AED 375').first()).toBeVisible()
+    await expect(live.getByText('AED 350')).toHaveCount(0)
+    await live.close()
     await expect(
       page.frameLocator('iframe[title="Preview of your website"]').getByRole('heading').first(),
     ).toBeVisible({ timeout: 30_000 })

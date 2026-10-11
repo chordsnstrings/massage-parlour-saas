@@ -85,9 +85,10 @@ export function plainText(s: string, multiline: boolean) {
         .join('\n')
         .replace(/\n{3,}/g, '\n\n')
     : t.replace(/\s+/g, ' ')
-  return t
-    .trim()
+  // Cut by code points: a split surrogate pair is invalid JSON text for Postgres jsonb.
+  return Array.from(t.trim())
     .slice(0, multiline ? MAX_MULTILINE : MAX_LINE)
+    .join('')
     .trim()
 }
 

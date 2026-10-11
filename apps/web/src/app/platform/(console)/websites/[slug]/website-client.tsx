@@ -1,6 +1,7 @@
 'use client'
 import { ArrowRight, FilePlus2, History, Paintbrush, Rocket, Sparkles, Undo2 } from 'lucide-react'
-import { useOptimistic, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useOptimistic, useState, useTransition } from 'react'
 import { ScaledFrame } from '@/components/site/scaled-frame'
 import { BACKDROPS, EMBLEMS, type SiteTheme } from '@/components/site/theme'
 import { Button } from '@/components/ui/button'
@@ -332,6 +333,11 @@ export function PublishSiteSheet({
   theme?: boolean
   themeWarnings?: string[]
 }) {
+  const router = useRouter()
+  // Drop `?publish=1` once the sheet is open, so a later remount (new drafts after this publish) stays closed.
+  useEffect(() => {
+    if (defaultOpen) router.replace(studioPath(slug), { scroll: false })
+  }, [defaultOpen, router, slug])
   const what = [
     pending ? `${pending} ${pending === 1 ? 'page has' : 'pages have'} unpublished changes` : null,
     theme ? `${pending ? 'the' : 'The'} site theme has unpublished changes (every page)` : null,

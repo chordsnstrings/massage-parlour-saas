@@ -132,5 +132,8 @@ describe('plainText', () => {
     expect(plainText('a\nb', false)).toBe('a b')
     expect(plainText('x'.repeat(500), false)).toHaveLength(200)
     expect(plainText('y'.repeat(2000), true)).toHaveLength(1500)
+    // An emoji across the cap is kept whole or dropped, never split into a lone surrogate.
+    const cut = plainText(`${'x'.repeat(199)}\u{1F33F}tail`, false)
+    expect(cut).toBe(`${'x'.repeat(199)}\u{1F33F}`)
   })
 })
