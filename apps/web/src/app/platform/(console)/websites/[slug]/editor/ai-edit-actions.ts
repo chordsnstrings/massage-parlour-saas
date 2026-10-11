@@ -1,12 +1,6 @@
 'use server'
 import { AiBudgetExceededError, AiDisabledError, AiOutputError, loadSpaContext, planSiteEdit } from '@spa/ai'
-import {
-  platformDb,
-  type SiteAiEditorStatus,
-  siteAiEditorStatus,
-  type ThemeTokens,
-  withTenant,
-} from '@spa/db'
+import { type ThemeTokens, withTenant } from '@spa/db'
 import {
   assertEditStamp,
   DomainError,
@@ -25,9 +19,10 @@ import { siteEditSchema } from '@/components/site/ai-schema'
 import { designSignature, isPageData } from '@/components/site/content'
 import { normalizeTheme } from '@/components/site/theme'
 import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
-import { can, type MemberContext, studioGuard } from '@/server/access'
-import { aiFixturesOn, fixtureClient } from '@/server/ai-fixture'
+import { can, type MemberContext } from '@/server/access'
+import { fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
+import { aiEditReady, siteAiGuard } from '@/server/site-ai-gate'
 import { editStampSchema } from '@/server/site-preflight'
 import { revalidateStudio } from '@/server/studio'
 
@@ -41,21 +36,6 @@ import { revalidateStudio } from '@/server/studio'
 const MAX_PAGE_BYTES = 512 * 1024
 const uuid = z.string().uuid()
 const DESIGN_NEEDED = "Layout and theme changes need the 'Edit design' permission."
-const NOT_ENABLED: Record<Exclude<SiteAiEditorStatus, 'ok'>, string> = {
-  not_listed: 'AI site editing isn’t enabled for your account.',
-  not_admin: 'AI site editing needs a super-admin account.',
-  needs2fa: 'Turn on two-factor authentication to use AI site editing.',
-}
-
-const aiEditReady = () => Boolean(process.env.ARK_API_KEY) || aiFixturesOn()
-
-/** studioGuard + the SITE_AI_EDITOR_EMAILS allow-list (fresh read, so removing an email takes effect at once). */
-async function editorGuard(slug: string) {
-  const { ctx, error } = await studioGuard(slug, 'site.content')
-  if (error) return { ctx, error }
-  const status = await siteAiEditorStatus(platformDb(), ctx.user.id)
-  return { ctx, error: status === 'ok' ? null : NOT_ENABLED[status] }
-}
 
 function pageError(pageId: string, data: unknown) {
   if (!uuid.safeParse(pageId).success) return 'Page not found'
@@ -102,7 +82,7 @@ const planSchema = z.object({
  * stored: the editor previews the result first. Returns the ops too, so Apply saves exactly what was previewed.
  */
 export async function aiEditPlanAction(slug: string, pageId: string, input: unknown): Promise<ActionResult> {
-  const { ctx, error } = await editorGuard(slug)
+  const { ctx, error } = await siteAiGuard(slug)
   if (error) return fail(error)
   const parsed = planSchema.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)
@@ -181,7 +161,7 @@ const applySchema = z.object({
 
 /** Saves a previewed plan: the same ops on the same starting page, through the ops layer → DRAFT only. */
 export async function aiEditApplyAction(slug: string, pageId: string, input: unknown): Promise<ActionResult> {
-  const { ctx, error } = await editorGuard(slug)
+  const { ctx, error } = await siteAiGuard(slug)
   if (error) return fail(error)
   const parsed = applySchema.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)
@@ -252,7 +232,7 @@ const undoSchema = z.object({
 
 /** Undo of an applied AI change: restores the page draft (and draft theme) from before it. Never publishes. */
 export async function aiEditUndoAction(slug: string, pageId: string, input: unknown): Promise<ActionResult> {
-  const { ctx, error } = await editorGuard(slug)
+  const { ctx, error } = await siteAiGuard(slug)
   if (error) return fail(error)
   const parsed = undoSchema.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error)

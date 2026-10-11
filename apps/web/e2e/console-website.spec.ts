@@ -1,16 +1,23 @@
 import { expect, type Page, test } from '@playwright/test'
-import { sitePages, sites, tenants } from '@spa/db'
-import { eq } from 'drizzle-orm'
+import { aiUsage, auditLog, pageVersions, sitePageLocks, sitePages, sites, tenants, user } from '@spa/db'
+import { textSlots } from '@spa/services/site-kit'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { siteEditSchema } from '../src/components/site/ai-schema'
+import { designSignature } from '../src/components/site/content'
 import {
+  ADMIN,
   admin,
   app,
   editorUrl,
+  makeSiteAiEditor,
   makeStudio,
+  mockAiReply,
   OWNER_PASSWORD,
   PATH,
   passTwoFactor,
   seedCatalog,
   signInPlatformAdmin,
+  signInStudioOnAdmin,
   signUpOwner,
   site,
   studioUrl,
@@ -234,5 +241,173 @@ test('old studio links forward super-admins to the console; spa members keep the
     )
     expect(text).toContain('Only our studio team can change the website design or publish it.')
     expect(await db.select().from(sites).where(eq(sites.tenantId, spaTenant!.id))).toHaveLength(0)
+  })
+})
+
+/** Page data with every bilingual text blanked: equal before/after ⇒ only texts changed (images, links, styles kept). */
+const withoutTexts = (data: unknown): unknown =>
+  JSON.parse(JSON.stringify(data), (_k, v) =>
+    v && typeof v === 'object' && !Array.isArray(v) && typeof v.en === 'string' ? { bi: true } : v,
+  )
+
+test('Write texts: AI drafts every page in EN + AR, never publishes; a locked page is skipped; listed super-admins only', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000)
+  // SITE_AI_EDITOR_EMAILS (playwright.config.ts) lists this owner's email: owner-texts-editor@e2e.test.
+  const { slug, email } = await signUpOwner(page, { spa: 'Texts Spa', slug: 'texts-editor' })
+  await makeSiteAiEditor(slug)
+  const seed = await seedCatalog(slug)
+  const db = testDb()
+  await signInStudioOnAdmin(page, email)
+  await page.goto(studioUrl(slug))
+  await page.getByRole('button', { name: 'Use Nordic Clean' }).click()
+  await expect(page.getByTestId('current-template')).toHaveText('Nordic Clean', { timeout: 30_000 })
+
+  const pages = await db
+    .select()
+    .from(sitePages)
+    .where(eq(sitePages.tenantId, seed.tenantId))
+    .orderBy(asc(sitePages.sort))
+  const versionsOf = (pageId: string) =>
+    db
+      .select()
+      .from(pageVersions)
+      .where(eq(pageVersions.pageId, pageId))
+      .orderBy(desc(pageVersions.createdAt))
+  const before = new Map<string, unknown>()
+  for (const p of pages) before.set(p.id, (await versionsOf(p.id))[0]!.data)
+  const home = pages.find((p) => p.slug === '')!
+  const about = pages.find((p) => p.slug === 'about')!
+  const heroKey = textSlots(before.get(home.id), siteEditSchema()).find(
+    (s) => s.type === 'Hero' && s.prop === 'title',
+  )!.key
+  // One canned reply for every page call: keys of other pages (and 'nope/x') are ignored.
+  const texts = [
+    { key: heroKey, en: 'Quiet hours at Texts Spa', ar: 'ساعات هادئة في تكستس سبا' },
+    ...pages
+      .flatMap((p) => textSlots(before.get(p.id), siteEditSchema()).slice(0, 8))
+      .filter((s) => s.key !== heroKey)
+      .map((s, i) => ({ key: s.key, en: `Drafted text ${i}`, ar: `نص مكتوب ${i}` })),
+    { key: 'nope/x', en: 'Ignored', ar: 'تجاهل' },
+  ]
+  await mockAiReply(slug, { texts, note: 'Calm, clear texts.' })
+
+  // Another editor has About open: it is skipped (no tokens spent on it).
+  const adminPage = await (await browser.newContext()).newPage()
+  await signInPlatformAdmin(adminPage)
+  const [adminUser] = await db.select({ id: user.id }).from(user).where(eq(user.email, ADMIN.email))
+  await db.insert(sitePageLocks).values({
+    tenantId: seed.tenantId,
+    pageId: about.id,
+    userId: adminUser!.id,
+    holderName: 'Sara',
+    expiresAt: new Date(Date.now() + 10 * 60_000),
+  })
+  const aboutBefore = await versionsOf(about.id)
+
+  let call: { url: string; action: string; type: string; body: string } | undefined
+  await test.step('listed super-admin: Write texts drafts every page and says what to do next', async () => {
+    await page.reload()
+    await page.getByRole('button', { name: 'Write texts' }).click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByLabel('Anything to highlight? (optional)').fill('Female therapists available')
+    const sent = page.waitForRequest((r) => r.method() === 'POST' && !!r.headers()['next-action'])
+    await sheet.getByRole('button', { name: 'Write texts' }).click()
+    const req = await sent
+    call = {
+      url: req.url(),
+      action: req.headers()['next-action']!,
+      type: req.headers()['content-type'] ?? '',
+      body: req.postData() ?? '',
+    }
+    const status = sheet.getByRole('status')
+    await expect(status).toContainText('in English and Arabic (Home ', { timeout: 120_000 })
+    await expect(status).toContainText("Skipped: About (open in Sara's editor)")
+    await expect(status).toContainText('Nothing is published — read each page, adjust, then Publish.')
+    const drafted = sheet.getByRole('list', { name: 'Drafted pages' })
+    await expect(drafted.getByRole('listitem')).toHaveCount(pages.length - 1)
+    await expect(drafted.getByRole('link', { name: 'Open editor' }).first()).toHaveAttribute(
+      'href',
+      new RegExp(`/websites/${slug}/editor/${home.id}$`),
+    )
+  })
+
+  await test.step('drafts only: texts in EN + AR, structure and images unchanged, nothing published, audited', async () => {
+    const [latest, previous] = await versionsOf(home.id)
+    const hero = textSlots(latest!.data, siteEditSchema()).find((s) => s.key === heroKey)!
+    expect({ en: hero.en, ar: hero.ar }).toEqual({
+      en: 'Quiet hours at Texts Spa',
+      ar: 'ساعات هادئة في تكستس سبا',
+    })
+    expect(latest!.status).toBe('draft')
+    expect(withoutTexts(latest!.data)).toEqual(withoutTexts(before.get(home.id)))
+    expect(designSignature(latest!.data)).toBe(designSignature(before.get(home.id)))
+    // The template's draft stays restorable in the editor's Versions.
+    expect(previous!.label).toMatch(/^Before Write texts \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+    for (const p of pages.filter((x) => x.id !== about.id))
+      expect(JSON.stringify((await versionsOf(p.id))[0]!.data)).toContain('نص مكتوب')
+    expect(await versionsOf(about.id)).toEqual(aboutBefore)
+    const published = await db
+      .select()
+      .from(pageVersions)
+      .where(
+        and(
+          inArray(
+            pageVersions.pageId,
+            pages.map((p) => p.id),
+          ),
+          eq(pageVersions.status, 'published'),
+        ),
+      )
+    expect(published).toHaveLength(0)
+    const [logged] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.tenantId, seed.tenantId), eq(auditLog.action, 'site.ai_texts_written')))
+    expect(logged?.data).toMatchObject({
+      via: 'studio_write_texts',
+      notes: true,
+      skipped: [{ title: 'About', reason: "open in Sara's editor" }],
+    })
+    // One call per 40 texts of every page but the locked one.
+    const calls = pages
+      .filter((p) => p.id !== about.id)
+      .reduce((n, p) => n + Math.ceil(textSlots(before.get(p.id), siteEditSchema()).length / 40), 0)
+    const usage = await db.select().from(aiUsage).where(eq(aiUsage.tenantId, seed.tenantId))
+    expect(usage.filter((u) => u.agentKey === 'site_editor')).toHaveLength(calls)
+  })
+
+  await test.step('a super-admin not on the list: no button, and the replayed action is refused', async () => {
+    const versions = async () =>
+      (
+        await db
+          .select({ id: pageVersions.id })
+          .from(pageVersions)
+          .where(
+            inArray(
+              pageVersions.pageId,
+              pages.map((p) => p.id),
+            ),
+          )
+      ).length
+    const count = await versions()
+    await adminPage.goto(studioUrl(slug))
+    await expect(adminPage.getByTestId('website-status')).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Write texts' })).toHaveCount(0)
+    const text = await adminPage.evaluate(
+      async ({ url, action, type, body }) => {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'next-action': action, 'content-type': type, accept: 'text/x-component' },
+          body,
+        })
+        return r.text()
+      },
+      { ...call!, url: adminPage.url() },
+    )
+    expect(text).toContain('AI site editing isn’t enabled for your account.')
+    expect(await versions()).toBe(count)
   })
 })

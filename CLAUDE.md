@@ -52,7 +52,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17, PLAN §14.8).
-  **Website Studio:** only super-admins edit and publish sites; spa users edit only services + prices (owner 2026-10-09, PLAN §18.1).
+  **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
+  super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
+  Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).
   **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
   `SITE_AI_EDITOR_EMAILS` super-admins with 2FA (owner, 2026-10-09; PLAN §18.2, CODEMAP "Claude MCP connector").
 - **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM layout (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),

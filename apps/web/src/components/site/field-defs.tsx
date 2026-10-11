@@ -19,7 +19,7 @@ type FieldProps<V> = {
 type Loose = any
 /** What a custom field holds, for AI editing (R16): Puck only knows them as `custom`. See `ai-schema.ts`. */
 export type AiFieldMeta =
-  | { kind: 'bi' }
+  | { kind: 'bi'; multiline?: boolean }
   | { kind: 'image' }
   | { kind: 'text' }
   | { kind: 'responsive'; options: string[] }
@@ -37,7 +37,12 @@ const custom = <V,>(
 
 /** Field builders shared by the blocks. Content fields are bilingual; style fields are responsive. */
 export const biField = (label: string, opts: { multiline?: boolean } = {}) =>
-  custom<Bi>(label, (props) => <BilingualField {...props} multiline={opts.multiline} />, { kind: 'bi' })
+  custom<Bi>(
+    label,
+    (props) => <BilingualField {...props} multiline={opts.multiline} />,
+    // R23 Write texts: paragraph breaks are kept only in multiline texts.
+    opts.multiline ? { kind: 'bi', multiline: true } : { kind: 'bi' },
+  )
 
 const responsive = <T extends string>(label: string, options: { value: T; label: string }[], fallback: T) =>
   custom<Responsive<T>>(

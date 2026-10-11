@@ -122,8 +122,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
      `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
      for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
-     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio/editor previews + preview-share links
-     live on the app host (`/{slug}/website/preview`, `/website/preview?token=`), never on the temporary address.
+     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio previews live on the console
+     (`/websites/{slug}/preview`, R23), the spa's preview + preview-share links on the app host (`/{slug}/website/preview`,
+     `/website/preview?token=`), never on the temporary address.
      Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;
      core/test/hosts.test.ts); lookup `server/own-domain.ts` `ownDomainTarget` (one slug → hostname map per process,
      30 s TTL for the worker's checks; `forgetOwnDomains()` from sites.ts `invalidateSiteHost`/`forgetSiteTenants` and
@@ -266,7 +267,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - **`platform/(console)`**: overview, applications (PLAN §18.3), enquiries (PLAN §18.4: list/search/filter, detail with
   tel/wa.me/mailto, status + note via `updateEnquiry`; nav badge = `newEnquiryCount`), tenants, plans, settings, audit,
   ai models, domains (order approval), templates
-  (studio templates), websites (studio overview), performance (PLAN §18.1: `performance/data.ts` loops tenants via
+  (studio templates), websites (R23 Website Studio: list + `websites/[slug]` spa page; editor + draft preview full
+  screen in the `platform/(studio)` group, layout `requirePlatformAdmin`, no console shell), performance (PLAN §18.1: `performance/data.ts` loops tenants via
   `platformDb()` and reads each spa in its own `withTenant()` — one query per spa from `services/src/performance.ts`
   `tenantPerformance`; detail adds `tenantPerformanceDetail` + F31 `tenantOperations`). Revenue there = sales (paid|refunded) by sale business
   date − `refunds` by refund business date; web numbers from `web_events` (90-day retention → range cap 92 days).
@@ -405,7 +407,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     picture, `/files/…` or https only; links to the profile — no Graph API call, no permalinks).
   - Blog: `site_posts` (tenant, RLS; slug unique per spa; EN/AR title/excerpt/body/SEO; plain-text body →
     `site-kit` `postBlocks`: blank line = paragraph, `## ` = h2, `- ` = bullets). Studio card "Blog" on
-    `website/page.tsx` → `website/blog/[postId]` (`new` = create; `post-form.tsx`, cover via `ImageInput`) →
+    the console spa page → `websites/[slug]/blog/[postId]` (`new` = create; `post-form.tsx`, cover via `ImageInput`) →
     `blog-actions.ts` (studioGuard: save `site.content`, publish/unpublish/delete `site.publish`; audit
     `site.post.*`). BlogList links `{base}/blog/{slug}`; `public.tsx` `postSlugOf` + `PostPage` renders hidden
     `BlogPost` + the home page's last Footer/WhatsAppButton through the same config (published theme); metadata
@@ -481,14 +483,34 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `images` JSON) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate` now takes `pages`).
     Replacement uploads go into the chosen spa's media library (`/files/upload`, normal size cap; public files, so
     they break if that spa is deleted). E2E: "HTML design images".
-- **Website Studio gating** (`dashboard/[tenant]/website/page.tsx`):
-  - Edit, design and publish need `isStudio` plus the matching permission.
-  - Non-studio members (`site.content` or `services.manage`) get `ServicesPrices` (`website/services-prices.tsx`,
-    PLAN §18.1): services + prices with the menu-only `ServiceSheet` (`menuOnly`: operational fields posted as hidden
-    inputs) and a live-site link; no preview, status or change requests. Every status move (send for review,
-    withdraw, approve, reopen) is `setStudioStatusAction` behind `studioGuard(…, 'site.publish')` (R1); every
-    studio-actions.ts action is `studioGuard`ed. `createChangeRequest` (services) has no caller in the app now.
-  - The editor route 404s for non-studio users.
+- **Website Studio (R23, console)** (PLAN §14.8 R23): `platform/(console)/websites/page.tsx` lists every spa
+  (services `site-studio.ts` `websiteOverview` = platform read, deleted spas out; `websiteProgress` status none →
+  template → draft → live + `unpublished` + next step; `next-step.tsx` button; nav badge = open change requests).
+  `websites/[slug]/page.tsx` (+ `cards.tsx`, `website-client.tsx`) = everything of the studio; actions in that folder
+  (`actions.ts`, `studio-actions.ts`, `blog-actions.ts`, `import-actions.ts`, `write-texts-actions.ts`,
+  `editor/*-actions.ts`) are `studioGuard`ed and refresh both sides via `server/studio.ts` `revalidateStudio`;
+  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. Editor + preview: `platform/(studio)/
+  websites/[slug]/{editor/[pageId],preview}` ("Back to console"; preview shared with the CRM via
+  `components/site/draft-preview.tsx`); English-only text provider `components/site/studio-i18n.tsx` for the shared
+  media/image fields. No review step: `sites.studio_status` is deprecated (kept for zero-downtime deploys, never read).
+  - Spa members (`dashboard/[tenant]/website/page.tsx`, `site.content` or `services.manage`): preview of their site
+    (`/website/preview?live=1` = published, else the draft), `ServicesPrices` (`services-prices.tsx`, menu-only
+    `ServiceSheet`), **Request a change** (`request-change.tsx` → `request-actions.ts` `requestChangeAction`, audited
+    `site.change_requested`; refused when read-only) + their requests with status/note. Console "Mark done" =
+    `resolveChangeAction`. Super-admins opening `/{slug}/website`, `/website/editor/{id}` or `/website/blog/{id|new}`
+    are redirected to the console (id checked first, built from the stored slug with `adminUrl`); members get 404 there.
+  - **Write texts** (`write-texts-actions.ts` `writeTextsAction`, sheet `WriteTextsSheet`): `server/site-ai-gate.ts`
+    `siteAiGuard` (= studioGuard + `siteAiEditorStatus` ok; Ask AI uses it too) + `aiEditReady`; one run per spa;
+    ≤ 12 pages, slots = `@spa/services/site-kit` `textSlots` (every non-empty `bi` prop incl. lists/objects/slots;
+    alt texts, HTML-design pages, GlobalSection out; `multiline` from the field's AI meta) → `@spa/ai` `planSiteTexts`
+    (agent `site_editor`, facts from `loadSiteFacts`: brand profile, active branches, public menu with hidden prices
+    as "price on request"; ≤ 40 slots per call, 2 at a time, ≤ 24 calls, 150 s) → per page in its own tx: `lockSite`,
+    `assertPagesUnlocked` (locked pages skipped up front too), `fillTextSlots` (only seen keys whose EN is unchanged;
+    `plainText` strips tags/control chars, caps 200/1500), `designSignature` must not change, the unnamed working
+    draft is labelled "Before Write texts {Dubai time}", `saveDraft`. Never publishes; audit `site.ai_texts_written`.
+    Tests `packages/services/test/site-text-slots.test.ts`, `packages/ai/test/site-edit.test.ts`, e2e
+    `console-website.spec.ts` (fixture slug `texts-editor`). Replaced the old "Write with AI" sheet
+    (`server/site-writer.ts` removed; services site-copy helpers `applySiteCopy*`/`extractSiteCopy` now unused).
 - **Saving and publishing**:
   - Draft JSON is capped at 512 KB.
   - Design changes need `site.design` (checked via `designSignature`).
@@ -521,7 +543,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   publishing (server actions run one at a time: a queued publish would carry the pre-save stamp → "changed elsewhere").
   Take over reloads the page
   (`reloadEditor` → `window.location.reload`).
-- **Import from existing website (F32)**: Studio Pages card → `website/import-sheet.tsx` → `website/import-actions.ts`
+- **Import from existing website (F32)**: Studio Pages card → console `websites/[slug]/import-sheet.tsx` → `import-actions.ts`
   (`studioGuard(…, 'site.design')`; preview = crawl + map + `runSiteEdit` dry run; apply = only `add_page` + add /
   preset / update root on that page, used photos downloaded outside the tx, then `saveImportImages` + `runSiteEdit`
   in one tx). Services `site-import/`: `safe-fetch.ts` (SSRF guard: http(s), ports 80/443, no credentials, every
@@ -538,8 +560,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   robots, extractor fixture `test/fixtures/spa-site.html`, ops → draft page), `packages/ai/test/site-edit.test.ts`,
   e2e `site-import.spec.ts`.
 - **Ask AI (R16, studio editor only)**: header ✨ panel (`components/site/editor/ai-edit.tsx`) → `editor/ai-edit-actions.ts`.
-  Gated by `SITE_AI_EDITOR_EMAILS` (`siteAiEditorStatus` in `@spa/db` admins.ts: listed verified email + super-admin +
-  2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
+  Gated by `SITE_AI_EDITOR_EMAILS` (`server/site-ai-gate.ts` `siteAiGuard` → `siteAiEditorStatus` in `@spa/db`
+  admins.ts: listed verified email + super-admin + 2FA, read fresh) on every action; the panel says "not enabled" otherwise. Plan + Apply run through the ops layer
   (Apply re-runs the previewed ops on the same base); theme ops → draft theme; last 5 applied changes listed, Undo
   reverts the newest.
   - Plan: `planSiteEdit` (`@spa/ai` agent `site_editor`, model from `ai_model_config`, metered + budget) gets the
@@ -622,7 +644,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   console; + `'unsafe-eval'` on `next dev` only) — Next chunks, `t.js` (next/script), Turnstile load via strict-dynamic;
   `style-src 'self' 'unsafe-inline'`; `img-src 'self' data: blob: https:`; `font-src 'self' data:`; `connect-src 'self'`;
   `frame-src 'self'` (+ Turnstile; + www.google.com, www.youtube-nocookie.com, player.vimeo.com on site/domain/app for
-  the F15 Map/Video players — `SITE_EMBED_ORIGINS`); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
+  the F15 Map/Video players — `SITE_EMBED_ORIGINS`; on the admin console only for the Website Studio pages
+  `/platform/websites/{slug}…`, `PageKind.studio`, R23); `worker-src`/`manifest-src 'self'`; `object-src 'none'`; `base-uri 'self'`;
   `form-action 'self'`; `frame-ancestors 'self'` (embed: `*`); `upgrade-insecure-requests` on https;
   `report-uri /api/csp-report?s={surface}`. Also `X-Frame-Options: SAMEORIGIN` (not embed), COOP `same-origin`
   (dashboard: `same-origin-allow-popups`, the outbox reuses one named WhatsApp tab), HSTS on https only
@@ -1064,8 +1087,7 @@ i18n namespace `automations`.
 
 - **UI** `components/assistant/ask-ai.tsx` (top-bar button → Radix side drawer, crm.css `.crm-ask*`; full screen
   ≤680 px), rendered by the tenant layout for members with `dashboard.view` (SpaShell `assistant` prop) — never for a
-  super-admin acting on the spa (no spa data) and left out on the Studio editor routes (`hiddenUnder`
-  `/website/editor`, `/website/blog`); accessible name "Ask AI about your spa" (`assistant.openLabel`, the Studio's
+  super-admin acting on the spa (no spa data; the Studio editor lives in the console since R23); accessible name "Ask AI about your spa" (`assistant.openLabel`, the Studio's
   page AI is "Ask AI to edit this page"). Standard (no `ai`): the
   drawer is the Premium upsell (`plan.upsell.*`). Conversation state is client-only; i18n namespace `assistant`.
 - **Action** `components/assistant/actions.ts` `askAssistantAction`: guard(dashboard.view, 'ai') → members only
@@ -1129,10 +1151,14 @@ i18n namespace `automations`.
   Writes to a page open in someone else's Studio editor are refused with the holder's name (F29 lock); `get_site`
   lists `editing` per page.
   Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
+- **Links** (R23): server option `adminUrl` (route passes `canonicalUrls().admin`): `list_spas` + `get_site` return
+  `console_url`; `list_spas` reports `website` (none / template / draft / live, from `websiteOverview`) +
+  `unpublished_changes`; texts say the owner previews and publishes in the console (Websites → spa).
 - **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
   deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
   `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
-  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`).
+  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`,
+  `texts-editor`).
 - **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
   `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on
   authorize; client admin API in `disabledPaths`; `clientPrivileges` = `siteAiEditorStatus` ok; `hooks.after` on

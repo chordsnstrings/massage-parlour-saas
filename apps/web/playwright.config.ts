@@ -53,8 +53,9 @@ export default defineConfig({
       // admin@e2e.test = signInPlatformAdmin; the join-* / listed-apply ones: admin-join.spec (no login until it runs).
       PLATFORM_ADMIN_EMAILS:
         'admin@e2e.test, join-confirm@e2e.test,,join-link@e2e.test,listed-apply@e2e.test,admin@e2e.test',
-      // Prompt-based site editing (Studio Ask AI, Claude MCP) is limited to these accounts (owners of fixed e2e slugs).
-      SITE_AI_EDITOR_EMAILS: 'owner-ai-editor@e2e.test,owner-mcp-editor@e2e.test',
+      // Prompt-based site editing (Studio Ask AI, Write texts, Claude MCP) is limited to these accounts (owners of
+      // fixed e2e slugs).
+      SITE_AI_EDITOR_EMAILS: 'owner-ai-editor@e2e.test,owner-mcp-editor@e2e.test,owner-texts-editor@e2e.test',
       // A second platform domain (resolves to loopback): links and sign-in must follow whichever domain is used.
       EXTRA_ROOT_DOMAINS: `alt.localhost:${PORT}`,
       RESEND_API_KEY: '',

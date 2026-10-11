@@ -21,13 +21,13 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { adminPath, studioPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, isStudio, requireMember } from '@/server/access'
-import { aiFixturesOn } from '@/server/ai-fixture'
+import { aiEditReady } from '@/server/site-ai-gate'
 import { themeDraftWarnings } from '@/server/site-preflight'
 import { templateCatalog } from '@/server/site-templates'
 import { publicSiteUrl } from '@/server/sites'
 import { WebsiteStatusBadge } from '../next-step'
 import { BlogCard, DomainCard, PagesCard, pageUnpublished, RequestsCard, TemplatesCard } from './cards'
-import { PublishSiteSheet, ThemeSheet, UndoTemplateBar } from './website-client'
+import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
 export const metadata: Metadata = { title: 'Website' }
 
@@ -84,7 +84,7 @@ export default async function SpaWebsitePage({
   ])
   const { site, pages, posts, undoBlocked, requests, hosts, glance, themeWarnings } = data
   // F32 import: AI mapping for SITE_AI_EDITOR_EMAILS accounts when ModelArk is set up (re-checked by the action).
-  const importAi = canDesign && (Boolean(process.env.ARK_API_KEY) || aiFixturesOn()) && aiEditor === 'ok'
+  const importAi = canDesign && aiEditReady() && aiEditor === 'ok'
   const pending = pages.filter(pageUnpublished).length
   const themePending = Boolean(site?.themeDraft)
   const hasLive = pages.some((p) => p.publishedAt)
@@ -134,6 +134,10 @@ export default async function SpaWebsitePage({
         actions={
           site && (
             <>
+              {/* R23 Write texts: SITE_AI_EDITOR_EMAILS super-admins only (re-checked by the action). */}
+              {canEdit && aiEditor === 'ok' && pages.length > 0 && (
+                <WriteTextsSheet slug={slug} ready={aiEditReady()} />
+              )}
               <Button variant="secondary" asChild>
                 <a href={studioPath(slug, '/preview')} target="_blank" rel="noreferrer">
                   <Eye /> Preview

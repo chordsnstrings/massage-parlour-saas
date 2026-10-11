@@ -2,23 +2,16 @@
 import { type Tx, withTenant } from '@spa/db'
 import {
   addPage,
-  applySiteCopy,
-  applySiteCopyToPages,
   assertEditStamp,
   assertPagesUnlocked,
   DomainError,
   editStamp,
-  extractSiteCopy,
   getEditablePage,
   getSite,
-  hasCopySlots,
-  listPages,
   lockSite,
   markSitemapDue,
-  type PageData,
   publishAll,
   publishPage,
-  type SiteCopy,
   saveDraft,
   setPageVisible,
   switchTemplate,
@@ -35,7 +28,6 @@ import { can, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { editStampSchema, publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
-import { SiteCopySchema, siteWriterReady, writerError, writeSiteCopy } from '@/server/site-writer'
 import { revalidateStudio } from '@/server/studio'
 
 const MAX_PAGE_BYTES = 512 * 1024
@@ -143,136 +135,6 @@ export async function addPageFromTemplateAction(
   await auditAs(ctx, 'site.page.created', 'site_page', page.id, { template: t.key, slug: page.slug })
   revalidateStudio(slug)
   return ok(`${t.name} added as a draft`, { pageId: page.id })
-}
-
-/* ------------------------------------------------------------------ AI site writer */
-
-/**
- * What applying will do: `new` creates the site from the template; `in-place` writes the copy into the spa's
- * own pages (layout, images and theme stay); `starter` keeps the theme but replaces drafts with the template's
- * starter pages (the spa's pages have no copy areas yet); `switch` changes template — the theme is live at once.
- */
-export type SiteCopyMode = 'new' | 'in-place' | 'starter' | 'switch'
-
-export type SiteCopyPreview = {
-  template: string
-  templateName: string
-  mode: SiteCopyMode
-  /** The spa's own copy, or null when its pages have no copy areas to compare against. */
-  current: SiteCopy | null
-  proposed: SiteCopy
-}
-
-/**
- * Writes hero, about, USPs, FAQs and CTA (EN + AR) from the spa's facts. Nothing is saved: the member reviews
- * the before/after first and applies it with `applySiteCopyAction`.
- */
-export async function generateSiteCopyAction(
-  slug: string,
-  input: { template: string; notes?: string },
-): Promise<{ ok: true; preview: SiteCopyPreview } | { ok: false; error: string }> {
-  const { ctx, error } = await studioGuard(slug, 'site.design')
-  if (error) return { ok: false, error }
-  const parsed = z
-    .object({ template: z.string().trim().min(1).max(60), notes: z.string().trim().max(400).optional() })
-    .safeParse(input)
-  if (!parsed.success) return { ok: false, error: 'Choose a template' }
-  const template = await resolveTemplate(parsed.data.template)
-  if (!template) return { ok: false, error: 'Choose a template' }
-  if (!(await siteWriterReady())) return { ok: false, error: writerError(new Error('disabled')) }
-  let proposed: SiteCopy
-  try {
-    proposed = await writeSiteCopy({
-      tenantId: ctx.tenant.id,
-      template: { name: template.name, feel: template.feel },
-      notes: parsed.data.notes || undefined,
-    })
-  } catch (e) {
-    console.error('site writer failed', e)
-    return { ok: false, error: writerError(e) }
-  }
-  // "Before": what the spa's own pages say now (never the template's sample copy).
-  const { site, drafts } = await withTenant(ctx.tenant.id, async (tx) => {
-    const pages = await listPages(tx, ctx.tenant.id)
-    const out: { data: PageData }[] = []
-    for (const p of pages) {
-      const page = await getEditablePage(tx, ctx.tenant.id, p.id)
-      if (page) out.push({ data: page.data })
-    }
-    return { site: await getSite(tx, ctx.tenant.id), drafts: out }
-  })
-  const slotted = hasCopySlots(drafts)
-  const mode: SiteCopyMode = !site
-    ? 'new'
-    : site.templateKey !== template.key
-      ? 'switch'
-      : slotted
-        ? 'in-place'
-        : 'starter'
-  await auditAs(ctx, 'site.ai_copy_generated', 'site', undefined, { template: template.key })
-  return {
-    ok: true,
-    preview: {
-      template: template.key,
-      templateName: template.name,
-      mode,
-      current: slotted ? extractSiteCopy(drafts) : null,
-      proposed,
-    },
-  }
-}
-
-/**
- * Applies reviewed AI copy as drafts (never publishes). For the current template it is written into the spa's
- * own pages, keeping layout, images and theme; only pages without copy areas fall back to the template's
- * starter pages (theme kept). Choosing another template switches to it (undoable).
- */
-export async function applySiteCopyAction(
-  slug: string,
-  input: { template: string; copy: SiteCopy },
-): Promise<ActionResult> {
-  const { ctx, error } = await studioGuard(slug, 'site.design')
-  if (error) return fail(error)
-  const parsed = z
-    .object({ template: z.string().trim().min(1).max(60), copy: SiteCopySchema })
-    .safeParse(input)
-  if (!parsed.success) return fail('This suggestion could not be read. Generate it again.')
-  const template = await resolveTemplate(parsed.data.template)
-  if (!template) return fail('Choose a template')
-  const copy = parsed.data.copy
-  let mode: SiteCopyMode
-  let count = 0
-  try {
-    mode = await withTenant(ctx.tenant.id, async (tx): Promise<SiteCopyMode> => {
-      const site = await getSite(tx, ctx.tenant.id)
-      if (site?.templateKey === template.key) {
-        const written = await applySiteCopyToPages(tx, ctx.tenant.id, copy, ctx.user.id)
-        count = written.filled
-        if (written.filled) return 'in-place'
-      }
-      const { template: filled, filled: n } = applySiteCopy(template, copy)
-      count = n
-      await switchTemplate(tx, ctx.tenant.id, filled, {
-        replaceContent: true,
-        keepTheme: site?.templateKey === template.key,
-        userId: ctx.user.id,
-      })
-      return !site ? 'new' : site.templateKey === template.key ? 'starter' : 'switch'
-    })
-  } catch (e) {
-    return domainFail(e)
-  }
-  await auditAs(ctx, 'site.ai_copy_applied', 'site', undefined, {
-    template: template.key,
-    fields: count,
-    mode,
-  })
-  revalidateStudio(slug)
-  return ok(
-    mode === 'switch'
-      ? `Switched to ${template.name} — your new copy is saved as drafts; publish when you are happy`
-      : 'Your new copy is saved as drafts — review and publish when you are happy',
-  )
 }
 
 /* ------------------------------------------------------------------ Theme */
