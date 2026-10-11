@@ -13,6 +13,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { collectGlobalIds } from './site-kit/tree'
+import { assertPagesUnlocked, pageLocksHeldByOthers } from './site-locks'
 
 export type SiteText = { en: string; ar?: string }
 /** Puck page data: `{ root: { props }, content: [...] }`. */
@@ -397,6 +398,26 @@ export async function listVersions(tx: Tx, tenantId: string, pageId: string, lim
     .limit(limit)
 }
 
+export type SwitchTemplateOpts = {
+  replaceContent?: boolean
+  keepTheme?: boolean
+  userId?: string
+  prepare?: PreparePageData
+  /**
+   * R24 (Claude connector): the template's theme becomes the DRAFT theme (`sites.themeDraft`); the live theme is left
+   * alone, so nothing on the live site changes until the owner publishes. Default (console): the live theme is swapped.
+   */
+  draftTheme?: boolean
+  /** R24: refuse (PageLockedError) when a page the switch would write is open in someone else's Studio editor (F29). */
+  lockUserId?: string
+}
+
+/** The spa's pages a `replaceContent` switch would write (same slug as a template page). */
+async function pagesWritten(tx: Tx, tenantId: string, template: SiteTemplate) {
+  const slugs = new Set(template.pages.map((p) => p.slug))
+  return (await listPages(tx, tenantId)).filter((p) => slugs.has(p.slug))
+}
+
 /**
  * Applies another template. Theme tokens are swapped (kept with `keepTheme`) and page content kept; with
  * `replaceContent` the template's starter pages are saved as new drafts (missing pages are created), nothing
@@ -406,21 +427,32 @@ export async function switchTemplate(
   tx: Tx,
   tenantId: string,
   template: SiteTemplate,
-  opts: { replaceContent?: boolean; keepTheme?: boolean; userId?: string; prepare?: PreparePageData } = {},
+  opts: SwitchTemplateOpts = {},
 ): Promise<SiteRow> {
+  await lockSite(tx, tenantId)
+  const existing = await getSite(tx, tenantId)
+  if (existing && opts.replaceContent && opts.lockUserId !== undefined)
+    await assertPagesUnlocked(tx, {
+      tenantId,
+      pageIds: (await pagesWritten(tx, tenantId, template)).map((p) => p.id),
+      userId: opts.lockUserId,
+    })
   // Only pages that will be written are prepared (a switch without replaceContent keeps the spa's pages).
-  if (opts.prepare && (opts.replaceContent || !(await getSite(tx, tenantId))))
+  if (opts.prepare && (opts.replaceContent || !existing))
     template = await preparedPages(template, opts.prepare)
   const { site, created } = await ensureSite(tx, tenantId, template)
-  const theme = opts.keepTheme ? site.theme : template.theme
+  const draftMode = Boolean(opts.draftTheme) && !created
+  const theme = opts.keepTheme || draftMode ? site.theme : template.theme
+  const themeDraft = draftMode ? (opts.keepTheme ? site.themeDraft : template.theme) : null
   const undo: TemplateUndo | null = created
     ? null
     : {
         templateKey: site.templateKey,
         theme: site.theme,
-        appliedTheme: theme,
+        appliedTheme: themeDraft ?? theme,
         at: new Date().toISOString(),
         pages: [],
+        ...(draftMode ? { draftTheme: true as const, themeDraft: site.themeDraft } : {}),
       }
   if (opts.replaceContent && undo) {
     const pages = await listPages(tx, tenantId)
@@ -450,10 +482,57 @@ export async function switchTemplate(
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: template.key, theme, themeDraft: null, ...(undo ? { templateUndo: undo } : {}) })
+    .set({ templateKey: template.key, theme, themeDraft, ...(undo ? { templateUndo: undo } : {}) })
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
+}
+
+export type TemplateSwitchPlan = {
+  createsSite: boolean
+  /** Template pages saved as drafts (`new` = the page is added). */
+  pages: { slug: string; title: SiteText; new: boolean }[]
+  /** The spa's other pages, left as they are. */
+  keptPages: { slug: string; title: SiteText }[]
+  /** Pages the switch would write that someone else has open in the Studio editor (the switch is refused). */
+  locked: { slug: string; by: string }[]
+  /** Template pages that are uploaded HTML designs (their files are copied into the spa). */
+  htmlDesignPages: number
+}
+
+/** R24: what `switchTemplate({ replaceContent: true })` would do, without writing anything (connector dry runs). */
+export async function planTemplateSwitch(
+  tx: Tx,
+  tenantId: string,
+  template: SiteTemplate,
+  opts: { lockUserId?: string } = {},
+): Promise<TemplateSwitchPlan> {
+  const site = await getSite(tx, tenantId)
+  const pages = site ? await listPages(tx, tenantId) : []
+  const written = site ? await pagesWritten(tx, tenantId, template) : []
+  const locks = await pageLocksHeldByOthers(
+    tx,
+    tenantId,
+    opts.lockUserId,
+    written.map((p) => p.id),
+  )
+  const slugs = new Set(template.pages.map((p) => p.slug))
+  const isHtml = (data: PageData) =>
+    (data.root as { props?: { htmlDesign?: unknown } } | undefined)?.props?.htmlDesign === true
+  return {
+    createsSite: !site,
+    pages: template.pages.map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      new: !pages.some((x) => x.slug === p.slug),
+    })),
+    keptPages: pages.filter((p) => !slugs.has(p.slug)).map((p) => ({ slug: p.slug, title: p.title })),
+    locked: written.flatMap((p) => {
+      const lock = locks.get(p.id)
+      return lock ? [{ slug: p.slug, by: lock.holderName }] : []
+    }),
+    htmlDesignPages: template.pages.filter((p) => isHtml(p.data)).length,
+  }
 }
 
 const sameTokens = (a: ThemeTokens, b: ThemeTokens | undefined) =>
@@ -471,7 +550,11 @@ export async function templateUndoChanges(
   const current = site === undefined ? await getSite(tx, tenantId) : site
   const undo = current?.templateUndo
   if (!current || !undo) return []
-  const changed = sameTokens(current.theme, undo.appliedTheme) ? [] : ['Theme']
+  // A draft-theme switch (R24): the live theme must be what it was and the editing theme what the switch wrote.
+  const themeKept = undo.draftTheme
+    ? sameTokens(current.theme, undo.theme) && sameTokens(editingTheme(current), undo.appliedTheme)
+    : sameTokens(current.theme, undo.appliedTheme)
+  const changed = themeKept ? [] : ['Theme']
   for (const p of undo.pages) {
     const page = await getPage(tx, tenantId, p.pageId)
     if (!page) continue
@@ -522,7 +605,11 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
   }
   const [updated] = await tx
     .update(sites)
-    .set({ templateKey: undo.templateKey, theme: undo.theme, themeDraft: null, templateUndo: null })
+    .set(
+      undo.draftTheme
+        ? { templateKey: undo.templateKey, themeDraft: undo.themeDraft ?? null, templateUndo: null }
+        : { templateKey: undo.templateKey, theme: undo.theme, themeDraft: null, templateUndo: null },
+    )
     .where(eq(sites.id, site.id))
     .returning()
   return updated!

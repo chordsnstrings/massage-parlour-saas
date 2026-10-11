@@ -145,8 +145,11 @@ host later means adding it to `packages/core/src/security-headers.ts`.
 2. In Claude (claude.ai or Claude desktop): **Settings → Connectors → Add custom connector**, name it e.g.
    "spamanagement", URL **`https://app.<your domain>/api/mcp`** (the console → Websites "Connect Claude" card shows it
    with a copy button). Claude opens the sign-in page: sign in with the super-admin account + 2FA code, then **Allow**.
-3. Ask Claude e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ". Every change is a **draft**:
-   preview and publish in the Website Studio as usual (Claude can also give a preview link).
+3. Ask Claude e.g. "List my spas", "On saffron-spa make the hero gold and add an FAQ", "Switch Saffron Spa to the
+   Desert Sand template", "Make Saffron's home page this HTML design: …", "In Saffron's HTML design change the hero
+   headline to …", "Add this photo https://… to Saffron's media and use it in the hero". Every change is a **draft**
+   (a template switch too — undo it in the console): preview and publish in the console (Websites → spa) as usual
+   (Claude can also give a preview link). HTML designs are shown exactly as written.
 4. Disconnect any time: console → Websites → Connect Claude → **Revoke** (takes effect on Claude's next call).
    Removing your email from `SITE_AI_EDITOR_EMAILS` also stops it at once.
 5. Only Claude's own callback (claude.ai / claude.com) can be registered and receive sign-in codes; the consent page

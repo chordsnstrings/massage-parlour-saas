@@ -1210,14 +1210,32 @@ i18n namespace `automations`.
   the ops layer; no publish tool; every call audited `site.mcp.<tool>` with `via: 'via Claude (MCP)'` + client name.
   Writes to a page open in someone else's Studio editor are refused with the holder's name (F29 lock); `get_site`
   lists `editing` per page.
-  Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL.
+  Route `app/api/mcp/route.ts` passes the Puck schema, `normalizeTheme`, preview secret, canonical app URL, and (R24)
+  `templates` (`templateCatalog` + kind classic/design/studio/html via `DESIGN_TEMPLATE_KEYS` + console preview URL),
+  `fileUrl` (`designFileUrl`, canonical `/files/{id}/{name}`) and `imageFetch.allow` (`SITE_IMPORT_E2E_ALLOW`, e2e only).
+- **R24 design tools** (all audited, drafts only): `list_templates`; `apply_template` = services `switchTemplate`
+  with `replaceContent`, `draftTheme` (template theme → `sites.themeDraft`, live `theme` untouched; `TemplateUndo`
+  `draftTheme`/`themeDraft`, so the console Undo restores the previous draft theme and is refused once it changed or was
+  published), `lockUserId` (F29 locks → `PageLockedError`) and `prepare` = `materializeTemplatePageData` (HTML template
+  files copied into the spa); dry run = `planTemplateSwitch` (pages new/kept, locked, HTML pages). The console switch is
+  unchanged (live theme). HTML pages: `set_html_design` (op `html_design`, `convert` for a page with blocks),
+  `replace_html_design` (same op, no convert), `patch_html_design` (op `html_patch`), `get_html_design`
+  (`getHtmlDesign`; slices ≤ 200 000 chars, `search` → positions + context); ops get `prepareHtml` = `prepareHtmlDesign`
+  + `tenantHtmlAssetSink` (data: files → the spa's public `html_design` files), `phone_fixes` default false (patch keeps
+  the flag unless given); `get_site` pages carry `html: {chars, phone_fixes}`. `add_image`: services `fetchMediaImage`
+  (F32 `safeFetch`: public addresses only, redirects re-checked, 10 s, ≤ 8 MB; https only except allow-listed test
+  hosts; declared Content-Type AND magic bytes ∈ IMAGE_TYPES, never SVG) → `createAsset` (public, purpose media, tags
+  `claude` + host); 10/min per token (also refused attempts) + 100/day per spa (`imageLimits`); returns `path`
+  (`/files/{id}`, for block props) + absolute `url` + an `<img>` tag. Merging with R25: add the six tools to
+  `SITE_MCP_TOOL_HINTS` (list_templates / get_html_design read-only; apply_template, set/patch_html_design
+  destructive; add_image additive).
 - **Links** (R23): server option `adminUrl` (route passes `canonicalUrls().admin`): `list_spas` + `get_site` return
   `console_url`; `list_spas` reports `website` (none / template / draft / live, from `websiteOverview`) +
   `unpublished_changes`; texts say the owner previews and publishes in the console (Websites → spa).
 - **Console** → Websites: `ConnectClaudeCard` (URL + copy, own connected clients, Revoke = `revokeClaudeClientAction`:
   deletes consent + tokens, audited `platform.mcp.client_revoked`). Tests: `packages/ai/test/site-mcp.test.ts`,
-  `packages/services/test/site-edit.test.ts`, e2e `site-mcp.spec.ts` (real DCR → authorize → 2FA → consent → token →
-  tools → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`,
+  `packages/services/test/site-edit.test.ts` + `sites.test.ts` (draft-theme switch), e2e `site-mcp.spec.ts` (real DCR →
+  authorize → 2FA → consent → token → tools incl. R24 templates / HTML design / add_image, live site unchanged → revoke; `SITE_AI_EDITOR_EMAILS` in playwright.config.ts lists owners of slugs `ai-editor`, `mcp-editor`,
   `texts-editor`).
 - **Hardening** (packages/auth): `hooks.before` on `/oauth2/register|create-client|update-client` →
   `isAllowedMcpRedirectUri` (mcp.ts; Claude callbacks / `MCP_REDIRECT_URIS`); `validateRedirectUri` same list on

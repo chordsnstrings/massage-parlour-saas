@@ -34,6 +34,12 @@ export type TemplateUndo = {
   theme: ThemeTokens
   appliedTheme: ThemeTokens
   at: string
+  /**
+   * R24 (Claude connector): the switch wrote the template's theme as the DRAFT theme (live `theme` untouched);
+   * `themeDraft` = the draft theme before it (null = none). `appliedTheme` is then the editing theme after the switch.
+   */
+  draftTheme?: true
+  themeDraft?: ThemeTokens | null
   /** `draft` = the page's previous draft data (null when it had none); `created` = page added by the switch. */
   pages: {
     pageId: string

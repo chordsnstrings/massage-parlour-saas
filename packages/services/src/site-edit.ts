@@ -683,6 +683,8 @@ export type SiteEditView = {
     hasDraft: boolean
     pendingRename: { title?: SiteText; slug?: string } | null
     htmlDesign: boolean
+    /** R24: an HTML design page's stored size and "Phone fixes" switch (resolved), else null. */
+    html: { chars: number; phoneFixes: boolean } | null
     /** Open in a Studio editor (F29 lock): edits to this page are refused for anyone else until it frees. */
     editing: { by: string; userId: string; until: string } | null
     /** Draft content: block ids, types and props (long text clipped unless `full`). */
@@ -712,6 +714,7 @@ export async function getSiteForEdit(
     const lock = locks.get(p.id)
     const editable = await getEditablePage(tx, tenantId, p.id)
     const data = asPageData(editable?.data)
+    const htmlBlock = data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
     pages.push({
       id: p.id,
       slug: p.slug,
@@ -721,6 +724,10 @@ export async function getSiteForEdit(
       hasDraft: p.hasDraft,
       pendingRename: p.pending ?? null,
       htmlDesign: isHtmlDesign(data),
+      html:
+        htmlBlock && typeof htmlBlock.props.html === 'string'
+          ? { chars: htmlBlock.props.html.length, phoneFixes: htmlDesignPhoneFixes(htmlBlock.props) }
+          : null,
       editing: lock
         ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() }
         : null,

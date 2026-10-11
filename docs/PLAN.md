@@ -1104,7 +1104,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   still too big); applying a template copies them into the spa's own public files. Proof: e2e `html-fidelity.spec.ts`
   (pixels + computed styles vs the raw file, 1440×900 + 390×844, several scroll positions; Phone-fixes negative
   control). What a sandbox still can't give (storage per page view, no IndexedDB/service workers, `Origin: null`
-  fetches) and details: CODEMAP "Site builder → HTML designs". Part B (connector tools) follows.
+  fetches) and details: CODEMAP "Site builder → HTML designs". **Part B built (2026-10-11), connector tools** (same
+  gate/consent/audit, drafts only, no publish tool): `list_templates` (23 built-ins + active studio/HTML templates) and
+  `apply_template` (the console's template switch, but the theme goes to the DRAFT theme — live site unchanged — with
+  the console's one-click Undo; refused while a page it writes is open in someone else's editor; HTML templates' files
+  copied into the spa); `set_html_design` / `get_html_design` (paged + search) / `patch_html_design` (exact find/replace,
+  each find must match once; all or nothing); `replace_html_design` kept (≤ 5 MB in, `phone_fixes` default false);
+  `add_image` (F32 SSRF-safe fetch, https only, raster types only, ≤ 8 MB, 10/min + 100/day per spa → media library).
+  Details: CODEMAP "Claude MCP connector".
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

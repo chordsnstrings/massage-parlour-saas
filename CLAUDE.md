@@ -59,7 +59,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).
-  **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`): drafts only, no publish tool, only
+  **Prompt editing** (Studio "Ask AI", Claude MCP connector `/api/mcp`; R24 adds templates, HTML designs
+  get/set/patch and add_image): drafts only (a connector template switch writes the DRAFT theme), no publish tool, only
   `SITE_AI_EDITOR_EMAILS` super-admins with 2FA; production default `*` = every super-admin, same rule as the console
   (a named list also needs a verified email) (owner, 2026-10-11; PLAN §18.2, CODEMAP "Claude MCP connector").
 - **Spa dashboard** (owner, 2026-10-08): the Be Relax CRM layout (`docs/design/be-relax-crm.html`, spec `docs/design/crm-spec.md`),
