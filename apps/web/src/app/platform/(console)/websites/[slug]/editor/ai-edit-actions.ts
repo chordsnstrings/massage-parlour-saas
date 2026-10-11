@@ -20,7 +20,6 @@ import {
   type SiteEditResult,
   siteEditAuditData,
 } from '@spa/services'
-import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { siteEditSchema } from '@/components/site/ai-schema'
 import { designSignature, isPageData } from '@/components/site/content'
@@ -30,6 +29,7 @@ import { can, type MemberContext, studioGuard } from '@/server/access'
 import { aiFixturesOn, fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
 import { editStampSchema } from '@/server/site-preflight'
+import { revalidateStudio } from '@/server/studio'
 
 /*
  * Studio "Ask AI" (R16 + PLAN §14.4 prompt box; super-admin tooling, EN UI): instruction → planned ops (site_editor
@@ -220,7 +220,7 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
     instruction: parsed.data.instruction || undefined,
     theme: result.theme !== null,
   })
-  revalidatePath(`/dashboard/${slug}/website`, 'layout')
+  revalidateStudio(slug)
   const before = result.previous.pages.find((p) => p.id === pageId)
   const { theme } = result.previous
   return ok('AI changes saved as a draft', {
@@ -292,6 +292,6 @@ export async function aiEditUndoAction(slug: string, pageId: string, input: unkn
     summary: parsed.data.summary,
     theme: theme !== null,
   })
-  revalidatePath(`/dashboard/${slug}/website`, 'layout')
+  revalidateStudio(slug)
   return ok('AI change undone', { stamp })
 }

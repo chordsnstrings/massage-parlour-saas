@@ -60,7 +60,12 @@ export async function publicSiteUrl(tenant: { id: string; slug: string }): Promi
       .where(and(eq(domains.kind, 'custom'), eq(domains.status, 'active'), eq(domains.isPrimary, true)))
       .limit(1),
   )
-  return primary ? `https://${primary.hostname}` : canonicalUrls().site(tenant.slug)
+  return siteUrlFrom(tenant.slug, primary?.hostname ?? null)
+}
+
+/** The public-address rule on its own, for lists that already know the primary custom domain (console Websites). */
+export function siteUrlFrom(slug: string, primaryHost: string | null): string {
+  return primaryHost ? `https://${primaryHost}` : canonicalUrls().site(slug)
 }
 
 export async function siteData(tenant: SiteTenant) {

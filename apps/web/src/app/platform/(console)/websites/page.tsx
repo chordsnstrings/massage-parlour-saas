@@ -1,30 +1,28 @@
 import { mcpResourceUrl } from '@spa/auth'
 import { oauthClient, oauthConsent, oauthRefreshToken, platformDb, siteAiEditorStatus } from '@spa/db'
-import { studioOverview } from '@spa/services'
+import { type WebsiteOverviewRow, websiteOverview } from '@spa/services'
 import { and, desc, eq, max } from 'drizzle-orm'
-import { ArrowUpRight, PanelsTopLeft } from 'lucide-react'
+import { PanelsTopLeft } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
+import { studioPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
-import { requestUrls } from '@/server/origin'
+import { siteUrlFrom } from '@/server/sites'
 import { type ClaudeClient, ConnectClaudeCard } from './connect-claude'
+import { NextStepButton, WebsiteStatusBadge } from './next-step'
 
 export const metadata: Metadata = { title: 'Websites' }
 
-const STATUS = {
-  none: { label: 'Not started', tone: 'warning' },
-  building: { label: 'In the studio', tone: 'neutral' },
-  review: { label: 'With the spa', tone: 'accent' },
-  approved: { label: 'Approved', tone: 'success' },
-} as const
+/** List order: open requests first, then the furthest from live, then name. */
+const ORDER = (r: WebsiteOverviewRow) =>
+  r.status === 'none' ? 0 : r.status === 'template' ? 1 : r.status === 'draft' ? 2 : r.unpublished ? 3 : 4
 
-/** Website Studio (PLAN §14.4): every spa's site, its review state and open change requests. */
 /** The signed-in super-admin's connected Claude (MCP) clients: consent + newest refresh-token sign-in. */
 async function claudeClients(userId: string): Promise<ClaudeClient[]> {
   const rows = await platformDb()
@@ -53,28 +51,29 @@ async function claudeClients(userId: string): Promise<ClaudeClient[]> {
 
 export default async function PlatformWebsitesPage() {
   const { user } = await requirePlatformAdmin()
-  const [claudeEnabled, clients] = await Promise.all([
+  const [claudeEnabled, clients, overview] = await Promise.all([
     siteAiEditorStatus(platformDb(), user.id).then((s) => s === 'ok'),
     claudeClients(user.id),
+    websiteOverview(),
   ])
-  const urls = await requestUrls()
-  const rows = (await studioOverview()).sort(
-    (a, b) => b.openRequests - a.openRequests || Number(a.hasSite) - Number(b.hasSite),
+  const rows = overview.sort(
+    (a, b) => b.openRequests - a.openRequests || ORDER(a) - ORDER(b) || a.name.localeCompare(b.name),
   )
   const open = rows.reduce((n, r) => n + r.openRequests, 0)
   return (
     <>
       <PageHeader
         title="Websites"
-        description="Every spa's site is built here as a bespoke service. Open a studio to design, then send it for review."
+        description="Every spa's website, built and published here. The spa sends change requests."
       />
       <PageBody>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard label="Not started" value={rows.filter((r) => !r.hasSite).length} />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard label="Not started" value={rows.filter((r) => r.status === 'none').length} />
           <StatCard
-            label="Waiting on the spa"
-            value={rows.filter((r) => r.studioStatus === 'review').length}
+            label="In progress"
+            value={rows.filter((r) => r.status === 'template' || r.status === 'draft').length}
           />
+          <StatCard label="Live" value={rows.filter((r) => r.status === 'live').length} />
           <StatCard label="Open change requests" value={open} />
         </div>
         <Card>
@@ -89,8 +88,14 @@ export default async function PlatformWebsitesPage() {
                 primary: true,
                 cell: (r) => (
                   <span className="block min-w-0">
-                    <span className="block truncate font-medium">{r.name}</span>
+                    <Link
+                      href={studioPath(r.slug)}
+                      className="block truncate font-medium underline-offset-4 hover:underline"
+                    >
+                      {r.name}
+                    </Link>
                     <span className="block truncate text-xs text-muted">
+                      /{r.slug} ·{' '}
                       {r.livePages
                         ? `${r.livePages} live ${r.livePages === 1 ? 'page' : 'pages'}`
                         : 'Not live'}
@@ -101,33 +106,26 @@ export default async function PlatformWebsitesPage() {
               },
               {
                 key: 'status',
-                header: 'Studio',
-                cell: (r) => {
-                  const s = STATUS[r.hasSite ? (r.studioStatus ?? 'building') : 'none']
-                  return <Badge tone={s.tone}>{s.label}</Badge>
-                },
+                header: 'Website',
+                cell: (r) => <WebsiteStatusBadge status={r.status} unpublished={r.unpublished} />,
               },
               {
                 key: 'requests',
                 header: 'Requests',
                 cell: (r) =>
                   r.openRequests ? (
-                    <Badge tone="accent">{r.openRequests} open</Badge>
+                    <Link href={studioPath(r.slug, '#requests')} aria-label={`Open requests for ${r.name}`}>
+                      <Badge tone="accent">{r.openRequests} open</Badge>
+                    </Link>
                   ) : (
                     <span className="text-sm text-muted">—</span>
                   ),
               },
               {
-                key: 'open',
-                header: <span className="sr-only">Actions</span>,
-                className: 'text-end',
-                cell: (r) => (
-                  <Button variant="secondary" size="sm" asChild className="h-10">
-                    <a href={urls.app(`/${r.slug}/website`)} aria-label={`Open studio for ${r.name}`}>
-                      Open studio <ArrowUpRight />
-                    </a>
-                  </Button>
-                ),
+                key: 'next',
+                header: 'Next step',
+                className: 'md:text-end',
+                cell: (r) => <NextStepButton row={r} url={siteUrlFrom(r.slug, r.primaryHost)} />,
               },
             ]}
           />

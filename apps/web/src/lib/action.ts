@@ -51,11 +51,16 @@ export const failDomain = (
   } as ActionResult
 }
 
-export function fromZod(error: ZodError): ActionResult {
+/**
+ * Zod failure → field errors. `english` (the English-only console, R23): catalogue keys among the messages become
+ * their English text, since the console's forms have no catalogue to resolve them with.
+ */
+export function fromZod(error: ZodError, opts: { english?: boolean } = {}): ActionResult {
   const fieldErrors: Record<string, string> = {}
   for (const issue of error.issues) {
     const key = issue.path.join('.')
-    if (key && !fieldErrors[key]) fieldErrors[key] = issue.message
+    if (key && !fieldErrors[key])
+      fieldErrors[key] = opts.english && english.has(issue.message) ? english(issue.message) : issue.message
   }
   return fail('errors.checkFields', fieldErrors)
 }

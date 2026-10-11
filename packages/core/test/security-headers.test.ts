@@ -23,16 +23,29 @@ const directives = (csp: string) =>
 
 describe('pageKindOf (F10)', () => {
   it('maps internal paths to surfaces; only the widget iframe route is an embed', () => {
-    expect(pageKindOf('/marketing/pricing')).toEqual({ surface: 'marketing', embed: false })
-    expect(pageKindOf('/dashboard/serenity/bookings')).toEqual({ surface: 'app', embed: false })
-    expect(pageKindOf('/platform/settings')).toEqual({ surface: 'admin', embed: false })
-    expect(pageKindOf('/site/serenity/book')).toEqual({ surface: 'site', embed: false })
-    expect(pageKindOf('/site/serenity/book/embed')).toEqual({ surface: 'site', embed: true })
-    expect(pageKindOf('/domain/www.spa.ae/book/embed')).toEqual({ surface: 'domain', embed: true })
-    expect(pageKindOf('/domain/www.spa.ae')).toEqual({ surface: 'domain', embed: false })
+    expect(pageKindOf('/marketing/pricing')).toEqual({ surface: 'marketing', embed: false, studio: false })
+    expect(pageKindOf('/dashboard/serenity/bookings')).toEqual({
+      surface: 'app',
+      embed: false,
+      studio: false,
+    })
+    expect(pageKindOf('/platform/settings')).toEqual({ surface: 'admin', embed: false, studio: false })
+    expect(pageKindOf('/site/serenity/book')).toEqual({ surface: 'site', embed: false, studio: false })
+    expect(pageKindOf('/site/serenity/book/embed')).toEqual({ surface: 'site', embed: true, studio: false })
+    expect(pageKindOf('/domain/www.spa.ae/book/embed')).toEqual({
+      surface: 'domain',
+      embed: true,
+      studio: false,
+    })
+    expect(pageKindOf('/domain/www.spa.ae')).toEqual({ surface: 'domain', embed: false, studio: false })
     // A page slug that merely contains "embed" is not the widget route.
     expect(pageKindOf('/site/serenity/embed').embed).toBe(false)
     expect(pageKindOf('/dashboard/x/book/embed').embed).toBe(false)
+    // R23: the console Website Studio pages (spa page, full-screen editor, draft preview).
+    expect(pageKindOf('/platform/websites/serenity/editor/x').studio).toBe(true)
+    expect(pageKindOf('/platform/websites/serenity').studio).toBe(true)
+    expect(pageKindOf('/platform/websites').studio).toBe(false)
+    expect(pageKindOf('/dashboard/serenity/website').studio).toBe(false)
   })
 })
 
@@ -91,6 +104,9 @@ describe('contentSecurityPolicy (F10)', () => {
       const d = directives(contentSecurityPolicy({ surface, embed: false, nonce }))
       for (const origin of SITE_EMBED_ORIGINS) expect(d['frame-src']).not.toContain(origin)
     }
+    // R23: the console Website Studio previews site blocks too (still no Turnstile there).
+    const studio = directives(contentSecurityPolicy({ surface: 'admin', embed: false, studio: true, nonce }))
+    expect(studio['frame-src']).toEqual(["'self'", ...SITE_EMBED_ORIGINS])
   })
 
   it('lets any site frame the booking widget, adds eval only in dev and upgrades only over https', () => {

@@ -25,7 +25,6 @@ import {
   updateSavedSection,
 } from '@spa/services'
 import { inArray } from 'drizzle-orm'
-import { revalidatePath } from 'next/cache'
 import QRCode from 'qrcode'
 import { z } from 'zod'
 import { siteConfig } from '@/components/site/config'
@@ -38,6 +37,7 @@ import { can, guard, type MemberContext, studioGuard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
 import { publishErrors, themeDraftWarnings } from '@/server/site-preflight'
+import { revalidateStudio } from '@/server/studio'
 import { publishPageAction } from '../actions'
 
 const uuid = z.string().uuid()
@@ -53,8 +53,6 @@ const auditAs = (ctx: MemberContext, action: string, entity: string, entityId?: 
     entityId,
     data,
   })
-
-const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/website`, 'layout')
 
 function domainFail(e: unknown): ActionResult {
   if (e instanceof DomainError) return failDomain(e)
@@ -231,7 +229,7 @@ export async function labelVersionAction(
   } catch (e) {
     return domainFail(e)
   }
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(parsed.data.label ? 'Version named' : 'Name removed')
 }
 
@@ -275,7 +273,7 @@ export async function restoreVersionAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.page.version_restored', 'site_page', pageId, { versionId })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok('Restored as your draft — publish when you’re ready', { data, stamp })
 }
 
@@ -340,7 +338,7 @@ export async function saveSectionAction(slug: string, input: unknown): Promise<A
     isGlobal: row.isGlobal,
     type: parsed.data.node.type,
   })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(row.isGlobal ? 'Saved as a global section' : 'Saved to your library', { section: toClient(row) })
 }
 
@@ -358,7 +356,7 @@ export async function renameSectionAction(slug: string, id: string, name: string
     return domainFail(e)
   }
   await auditAs(ctx, 'site.section.renamed', 'saved_section', row.id, { name: row.name })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok('Renamed', { section: toClient(row) })
 }
 
@@ -372,7 +370,7 @@ export async function deleteSectionAction(slug: string, id: string): Promise<Act
   } catch (e) {
     return domainFail(e)
   }
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok('Removed from your library')
 }
 
@@ -418,7 +416,7 @@ export async function updateGlobalSectionAction(
     global: true,
     livePages: live.length,
   })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(
     live.length
       ? 'Global section updated — live pages show it straight away'

@@ -1,16 +1,15 @@
 'use client'
-// F15 blog post editor (Website Studio): EN + AR side by side, cover from the media library, search fields.
-// Saving never publishes; Publish / Unpublish / Delete are separate (site.publish).
+// F15 blog post editor (Website Studio in the console, R23 — English): EN + AR side by side, cover from the media
+// library, search fields. Saving never publishes; Publish / Unpublish / Delete are separate (site.publish).
 import { ExternalLink, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { Card } from '@/components/crm'
+import { useConfirmAction } from '@/app/dashboard/[tenant]/services/services-client'
 import { ImageInput } from '@/components/media/image-input'
 import { Button } from '@/components/ui/button'
+import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { ActionForm, FieldError, SubmitButton } from '@/components/ui/form'
 import { Input, Label, Textarea } from '@/components/ui/input'
-import { useT } from '@/i18n/client'
-import { appPath } from '@/lib/paths'
-import { useConfirmAction } from '../../services/services-client'
+import { studioPath } from '@/lib/paths'
 import { deletePostAction, savePostAction, setPostStatusAction } from '../blog-actions'
 
 type Bi = { en: string; ar?: string }
@@ -41,15 +40,14 @@ function BiInputs({
   rows?: number
   hint?: string
 }) {
-  const t = useT()
   const Control = multiline ? Textarea : Input
   return (
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium">{label}</legend>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor={`${name}.en`} className="crm-muted text-xs">
-            {t('website.blog.english')}
+          <Label htmlFor={`${name}.en`} className="text-xs text-muted">
+            English
           </Label>
           <Control
             id={`${name}.en`}
@@ -60,8 +58,8 @@ function BiInputs({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`${name}.ar`} className="crm-muted text-xs">
-            {t('website.blog.arabic')}
+          <Label htmlFor={`${name}.ar`} className="text-xs text-muted">
+            Arabic (optional)
           </Label>
           <Control
             id={`${name}.ar`}
@@ -73,7 +71,7 @@ function BiInputs({
           />
         </div>
       </div>
-      {hint && <p className="crm-muted text-[13px]">{hint}</p>}
+      {hint && <p className="text-[13px] text-muted">{hint}</p>}
       <FieldError name={name} />
     </fieldset>
   )
@@ -91,7 +89,6 @@ export function PostForm({
   /** Public URL of the post (shown once it is published). */
   liveUrl: string | null
 }) {
-  const t = useT()
   const router = useRouter()
   const { pending, run } = useConfirmAction()
   return (
@@ -99,16 +96,17 @@ export function PostForm({
       action={(_prev, fd) => savePostAction(slug, post?.id ?? null, fd)}
       onSuccess={(r) => {
         const id = r.data?.id
-        if (!post && typeof id === 'string') router.replace(appPath(`/${slug}/website/blog/${id}`))
+        if (!post && typeof id === 'string') router.replace(studioPath(slug, `/blog/${id}`))
         else router.refresh()
       }}
       className="space-y-4"
     >
-      <Card title={t('website.blog.fieldTitle')}>
-        <div className="space-y-5">
-          <BiInputs name="title" label={t('website.blog.fieldTitle')} value={post?.title} />
+      <Card>
+        <CardHeader title="Post" />
+        <CardBody className="space-y-5">
+          <BiInputs name="title" label="Title" value={post?.title} />
           <div className="space-y-1.5">
-            <Label htmlFor="slug">{t('website.blog.fieldSlug')}</Label>
+            <Label htmlFor="slug">Web address</Label>
             <Input
               id="slug"
               name="slug"
@@ -117,49 +115,49 @@ export function PostForm({
               autoComplete="off"
               required
             />
-            <p className="crm-muted text-[13px]">{t('website.blog.slugHint')}</p>
+            <p className="text-[13px] text-muted">
+              Lowercase letters, numbers and dashes, e.g. hot-stone-benefits. The post opens at /blog/…
+            </p>
             <FieldError name="slug" />
           </div>
           <BiInputs
             name="excerpt"
-            label={t('website.blog.fieldExcerpt')}
+            label="Summary (shown in the list)"
             value={post?.excerpt}
             multiline
             rows={2}
           />
           <BiInputs
             name="body"
-            label={t('website.blog.fieldBody')}
+            label="Article"
             value={post?.body}
             multiline
             rows={14}
-            hint={t('website.blog.bodyHint')}
+            hint={
+              'Blank line = new paragraph · a line starting with "## " is a sub-heading · "- " starts a bullet.'
+            }
           />
           <div className="space-y-1.5">
-            <ImageInput
-              slug={slug}
-              name="coverImage"
-              label={t('website.blog.fieldCover')}
-              defaultValue={post?.coverImage}
-            />
+            <ImageInput slug={slug} name="coverImage" label="Cover photo" defaultValue={post?.coverImage} />
             <FieldError name="coverImage" />
           </div>
-        </div>
+        </CardBody>
       </Card>
-      <Card title={t('website.blog.seo')} sub={t('website.blog.seoHint')}>
-        <div className="space-y-5">
-          <BiInputs name="seoTitle" label={t('website.blog.seoTitle')} value={post?.seoTitle} />
+      <Card>
+        <CardHeader title="Search results" description="Leave empty to use the title and summary." />
+        <CardBody className="space-y-5">
+          <BiInputs name="seoTitle" label="Search title" value={post?.seoTitle} />
           <BiInputs
             name="seoDescription"
-            label={t('website.blog.seoDescription')}
+            label="Search description"
             value={post?.seoDescription}
             multiline
             rows={2}
           />
-        </div>
+        </CardBody>
       </Card>
       <div className="flex flex-wrap items-center gap-2">
-        <SubmitButton>{t('website.blog.save')}</SubmitButton>
+        <SubmitButton>Save</SubmitButton>
         {post && canPublish && (
           <Button
             type="button"
@@ -174,13 +172,13 @@ export function PostForm({
             }
           >
             {post.status === 'published' ? <EyeOff /> : <Eye />}
-            {post.status === 'published' ? t('website.blog.unpublish') : t('website.blog.publish')}
+            {post.status === 'published' ? 'Unpublish' : 'Publish'}
           </Button>
         )}
         {post?.status === 'published' && liveUrl && (
           <Button type="button" variant="ghost" asChild>
             <a href={liveUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink /> {t('website.blog.viewLive')}
+              <ExternalLink /> View live
             </a>
           </Button>
         )}
@@ -192,13 +190,13 @@ export function PostForm({
             pending={pending}
             onClick={() =>
               run(
-                t('website.blog.deleteConfirm'),
+                'Delete this post? It disappears from the website.',
                 () => deletePostAction(slug, post.id),
-                () => router.replace(appPath(`/${slug}/website`)),
+                () => router.replace(studioPath(slug)),
               )
             }
           >
-            <Trash2 /> {t('website.blog.delete')}
+            <Trash2 /> Delete post
           </Button>
         )}
       </div>

@@ -2,6 +2,7 @@
 // approves it and sends change requests; only a super-admin acting on the tenant edits the site itself.
 import {
   type DbOrTx,
+  domains,
   pageVersions,
   platformDb,
   siteChangeRequests,
@@ -10,7 +11,7 @@ import {
   type Tx,
   tenants,
 } from '@spa/db'
-import { and, asc, count, countDistinct, desc, eq } from 'drizzle-orm'
+import { and, asc, type Column, count, countDistinct, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 
 export type StudioStatus = (typeof sites.$inferSelect)['studioStatus']
@@ -107,40 +108,156 @@ export async function setStudioStatus(tx: Tx, tenantId: string, to: StudioStatus
   await tx.update(sites).set({ studioStatus: to, updatedAt: new Date() }).where(eq(sites.tenantId, tenantId))
 }
 
-/** Super-admin Websites list: every spa with its studio status, live pages and open requests. */
-export async function studioOverview(db: DbOrTx = platformDb()) {
-  const [rows, open, live] = await Promise.all([
+export type WebsiteStatus = 'none' | 'template' | 'draft' | 'live'
+export type WebsiteNextStep = 'choose_template' | 'continue_editing' | 'publish' | 'open_site'
+export type WebsiteFacts = {
+  hasSite: boolean
+  /** Pages with a published version. */
+  livePages: number
+  /** Pages with a version a person or AI wrote (`created_by` set) — template starter pages have none. */
+  editedPages: number
+  /** Pages whose newest version is a draft, or with a rename waiting for the next publish. */
+  changedPages: number
+  themeDraft: boolean
+}
+
+/**
+ * R23: where a spa's website stands, computed from its data (no stored status). Not started → Template chosen (only
+ * the starter pages of the first pick) → Draft (someone wrote a page) → Live (a page is published), plus
+ * "unpublished changes" while live. `next` is the one step the console offers.
+ */
+export function websiteProgress(f: WebsiteFacts): {
+  status: WebsiteStatus
+  unpublished: boolean
+  next: WebsiteNextStep
+} {
+  if (!f.hasSite) return { status: 'none', unpublished: false, next: 'choose_template' }
+  if (f.livePages > 0) {
+    const unpublished = f.changedPages > 0 || f.themeDraft
+    return { status: 'live', unpublished, next: unpublished ? 'publish' : 'open_site' }
+  }
+  if (f.editedPages > 0) return { status: 'draft', unpublished: false, next: 'publish' }
+  return { status: 'template', unpublished: false, next: 'continue_editing' }
+}
+
+export type WebsiteOverviewRow = Awaited<ReturnType<typeof websiteOverview>>[number]
+
+/**
+ * Console → Websites (R23; platform code path — super-admin console and the Claude connector, never tenant code):
+ * every spa that isn't deleted with its website status, next step, open change requests, home page and primary custom
+ * domain. `tenantId` narrows it to one spa.
+ */
+export async function websiteOverview(db: DbOrTx = platformDb(), opts: { tenantId?: string } = {}) {
+  const only = (col: Column) => (opts.tenantId ? eq(col, opts.tenantId) : undefined)
+  const [rows, open, live, edited, newest, renames, homes, hosts] = await Promise.all([
     db
       .select({
         tenantId: tenants.id,
         name: tenants.name,
         slug: tenants.slug,
         tenantStatus: tenants.status,
-        hasSite: sites.id,
-        studioStatus: sites.studioStatus,
+        siteId: sites.id,
         updatedAt: sites.updatedAt,
+        themeDraft: sql<boolean>`${sites.themeDraft} is not null`,
       })
       .from(tenants)
       .leftJoin(sites, eq(sites.tenantId, tenants.id))
+      .where(and(isNull(tenants.deletedAt), only(tenants.id)))
       .orderBy(asc(tenants.name)),
     db
       .select({ tenantId: siteChangeRequests.tenantId, n: count() })
       .from(siteChangeRequests)
-      .where(eq(siteChangeRequests.status, 'open'))
+      .where(and(eq(siteChangeRequests.status, 'open'), only(siteChangeRequests.tenantId)))
       .groupBy(siteChangeRequests.tenantId),
     db
-      .select({ tenantId: sitePages.tenantId, n: countDistinct(sitePages.id) })
+      .select({ tenantId: pageVersions.tenantId, n: countDistinct(pageVersions.pageId) })
       .from(pageVersions)
-      .innerJoin(sitePages, eq(sitePages.id, pageVersions.pageId))
-      .where(eq(pageVersions.status, 'published'))
-      .groupBy(sitePages.tenantId),
+      .where(and(eq(pageVersions.status, 'published'), only(pageVersions.tenantId)))
+      .groupBy(pageVersions.tenantId),
+    db
+      .select({ tenantId: pageVersions.tenantId, n: countDistinct(pageVersions.pageId) })
+      .from(pageVersions)
+      .where(and(isNotNull(pageVersions.createdBy), only(pageVersions.tenantId)))
+      .groupBy(pageVersions.tenantId),
+    // Each page's newest version (same rule as the page list's "unpublished" pill).
+    db
+      .selectDistinctOn([pageVersions.pageId], {
+        tenantId: pageVersions.tenantId,
+        pageId: pageVersions.pageId,
+        status: pageVersions.status,
+      })
+      .from(pageVersions)
+      .where(only(pageVersions.tenantId))
+      .orderBy(pageVersions.pageId, desc(pageVersions.createdAt)),
+    db
+      .select({ tenantId: sitePages.tenantId, pageId: sitePages.id })
+      .from(sitePages)
+      .where(and(isNotNull(sitePages.pending), only(sitePages.tenantId))),
+    // Home page ('' slug), else the first page.
+    db
+      .selectDistinctOn([sitePages.tenantId], { tenantId: sitePages.tenantId, id: sitePages.id })
+      .from(sitePages)
+      .where(only(sitePages.tenantId))
+      .orderBy(
+        sitePages.tenantId,
+        sql`(${sitePages.slug} = '') desc`,
+        asc(sitePages.sort),
+        asc(sitePages.createdAt),
+      ),
+    db
+      .select({ tenantId: domains.tenantId, hostname: domains.hostname })
+      .from(domains)
+      .where(
+        and(
+          eq(domains.kind, 'custom'),
+          eq(domains.status, 'active'),
+          eq(domains.isPrimary, true),
+          only(domains.tenantId),
+        ),
+      ),
   ])
-  const openBy = new Map(open.map((r) => [r.tenantId, r.n]))
-  const liveBy = new Map(live.map((r) => [r.tenantId, r.n]))
-  return rows.map((r) => ({
-    ...r,
-    hasSite: !!r.hasSite,
-    openRequests: openBy.get(r.tenantId) ?? 0,
-    livePages: liveBy.get(r.tenantId) ?? 0,
-  }))
+  const by = (list: { tenantId: string; n: number }[]) => new Map(list.map((r) => [r.tenantId, r.n]))
+  const openBy = by(open)
+  const liveBy = by(live)
+  const editedBy = by(edited)
+  const changed = new Map<string, Set<string>>()
+  const mark = (tenantId: string, pageId: string) => {
+    const set = changed.get(tenantId) ?? new Set<string>()
+    changed.set(tenantId, set.add(pageId))
+  }
+  for (const v of newest) if (v.status === 'draft') mark(v.tenantId, v.pageId)
+  for (const p of renames) mark(p.tenantId, p.pageId)
+  const homeBy = new Map(homes.map((h) => [h.tenantId, h.id]))
+  const hostBy = new Map(hosts.map((h) => [h.tenantId, h.hostname]))
+  return rows.map((r) => {
+    const facts: WebsiteFacts = {
+      hasSite: r.siteId !== null,
+      livePages: liveBy.get(r.tenantId) ?? 0,
+      editedPages: editedBy.get(r.tenantId) ?? 0,
+      changedPages: changed.get(r.tenantId)?.size ?? 0,
+      themeDraft: r.siteId !== null && Boolean(r.themeDraft),
+    }
+    return {
+      tenantId: r.tenantId,
+      name: r.name,
+      slug: r.slug,
+      tenantStatus: r.tenantStatus,
+      updatedAt: r.updatedAt,
+      openRequests: openBy.get(r.tenantId) ?? 0,
+      homePageId: homeBy.get(r.tenantId) ?? null,
+      primaryHost: hostBy.get(r.tenantId) ?? null,
+      ...facts,
+      ...websiteProgress(facts),
+    }
+  })
+}
+
+/** Open change requests of every spa that isn't deleted (console nav badge). */
+export async function openChangeRequestCount(db: DbOrTx = platformDb()) {
+  const [row] = await db
+    .select({ n: count() })
+    .from(siteChangeRequests)
+    .innerJoin(tenants, eq(tenants.id, siteChangeRequests.tenantId))
+    .where(and(eq(siteChangeRequests.status, 'open'), isNull(tenants.deletedAt)))
+  return row?.n ?? 0
 }

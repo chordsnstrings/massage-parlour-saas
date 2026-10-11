@@ -15,6 +15,7 @@ export function FormSheet({
   submitVariant,
   children,
   className,
+  defaultOpen = false,
 }: {
   title: string
   description?: string
@@ -25,8 +26,10 @@ export function FormSheet({
   submitVariant?: React.ComponentProps<typeof SubmitButton>['variant']
   children: React.ReactNode
   className?: string
+  /** Opens on first render (e.g. a "Publish" link from another page lands with the sheet open). */
+  defaultOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const t = useT()
   return (
     <Sheet

@@ -36,6 +36,32 @@ import {
   useState,
   useTransition,
 } from 'react'
+import { saveDraftAction } from '@/app/platform/(console)/websites/[slug]/actions'
+import {
+  aiTextAction,
+  blockStatsAction,
+  deleteSectionAction,
+  labelVersionAction,
+  listVersionsAction,
+  previewLinkAction,
+  publishCheckedAction,
+  publishNotesAction,
+  renameSectionAction,
+  restoreVersionAction,
+  saveSectionAction,
+  translateBatchAction,
+  updateGlobalSectionAction,
+} from '@/app/platform/(console)/websites/[slug]/editor/actions'
+import {
+  aiEditApplyAction,
+  aiEditPlanAction,
+  aiEditUndoAction,
+} from '@/app/platform/(console)/websites/[slug]/editor/ai-edit-actions'
+import {
+  editorLockAction,
+  editorLockStatusAction,
+  releaseEditorLockAction,
+} from '@/app/platform/(console)/websites/[slug]/editor/lock-actions'
 import { editorConfig } from '@/components/site/config'
 import { AiEditPanel } from '@/components/site/editor/ai-edit'
 import { preflightColors } from '@/components/site/editor/colors'
@@ -78,24 +104,6 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
-import { saveDraftAction } from '../../actions'
-import {
-  aiTextAction,
-  blockStatsAction,
-  deleteSectionAction,
-  labelVersionAction,
-  listVersionsAction,
-  previewLinkAction,
-  publishCheckedAction,
-  publishNotesAction,
-  renameSectionAction,
-  restoreVersionAction,
-  saveSectionAction,
-  translateBatchAction,
-  updateGlobalSectionAction,
-} from '../actions'
-import { aiEditApplyAction, aiEditPlanAction, aiEditUndoAction } from '../ai-edit-actions'
-import { editorLockAction, editorLockStatusAction, releaseEditorLockAction } from '../lock-actions'
 
 const usePuckStore = createUsePuck()
 
@@ -184,6 +192,8 @@ type EditorProps = {
   /** Someone else holds the editing lock (read when the page loaded): opens view-only. */
   lockHolder: LockHolder | null
   backHref: string
+  /** R23: the editor opens full screen from the console; this names the way back. */
+  backLabel: string
   previewHref: string
   liveHref: string
 }
@@ -727,9 +737,9 @@ function EditorHeader() {
   return (
     <>
       <header className="flex h-14 items-center gap-2 border-b bg-surface px-2 sm:gap-3 sm:px-4">
-        <Button variant="ghost" size="icon" asChild className="shrink-0">
-          <Link href={props.backHref} aria-label="Back to website" onClick={chrome.releaseLock}>
-            <ArrowLeft />
+        <Button variant="ghost" asChild className="shrink-0 px-2.5 sm:px-3">
+          <Link href={props.backHref} aria-label={props.backLabel} onClick={chrome.releaseLock}>
+            <ArrowLeft /> <span className="hidden sm:inline">{props.backLabel}</span>
           </Link>
         </Button>
         <div className="min-w-0 flex-1 md:flex-none">

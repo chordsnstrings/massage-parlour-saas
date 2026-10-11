@@ -26,7 +26,6 @@ import {
   updateDraftTheme,
   updateTheme,
 } from '@spa/services'
-import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { designSignature, isPageData } from '@/components/site/content'
 import { PAGE_TEMPLATES, pageTemplateData } from '@/components/site/presets'
@@ -37,6 +36,7 @@ import { audit } from '@/server/audit'
 import { editStampSchema, publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
 import { SiteCopySchema, siteWriterReady, writerError, writeSiteCopy } from '@/server/site-writer'
+import { revalidateStudio } from '@/server/studio'
 
 const MAX_PAGE_BYTES = 512 * 1024
 const uuid = z.string().uuid()
@@ -51,8 +51,6 @@ const auditAs = (ctx: MemberContext, action: string, entity: string, entityId?: 
     entityId,
     data,
   })
-
-const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/website`, 'layout')
 
 function domainFail(e: unknown): ActionResult {
   if (e instanceof DomainError) return failDomain(e)
@@ -90,7 +88,7 @@ export async function applyTemplateAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.template_applied', 'site', undefined, { template: template.key, replaceContent })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(`${template.name} applied`)
 }
 
@@ -110,7 +108,7 @@ export async function undoTemplateAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.template_undone', 'site', undefined, { template: key })
-  revalidate(slug)
+  revalidateStudio(slug)
   const template = await resolveTemplate(key)
   return ok(`Back to ${template?.name ?? key}`)
 }
@@ -143,7 +141,7 @@ export async function addPageFromTemplateAction(
     return domainFail(e)
   }
   await auditAs(ctx, 'site.page.created', 'site_page', page.id, { template: t.key, slug: page.slug })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(`${t.name} added as a draft`, { pageId: page.id })
 }
 
@@ -269,7 +267,7 @@ export async function applySiteCopyAction(
     fields: count,
     mode,
   })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(
     mode === 'switch'
       ? `Switched to ${template.name} — your new copy is saved as drafts; publish when you are happy`
@@ -334,7 +332,7 @@ export async function saveThemeAction(
   }
   if (!changed.length) return ok('Nothing changed')
   await auditAs(ctx, 'site.theme_updated', 'site', undefined, { ...d, changed })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(
     hasDraft
       ? 'Theme saved — your changes are live; the unpublished theme draft goes live when you publish'
@@ -448,7 +446,7 @@ export async function saveDraftAction(
       versionId: saved.versionId,
       ...(overwrite ? { overwroteChangesElsewhere: true } : {}),
     })
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok('Draft saved', { stamp: saved.stamp, savedAt: new Date().toISOString() })
 }
 
@@ -494,7 +492,7 @@ export async function publishPageAction(
   }
   await auditAs(ctx, 'site.page.published', 'site_page', pageId, { versionId: published.versionId })
   await queueSitemap(ctx.tenant.id)
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok('Published — your page is live', { stamp: published.stamp })
 }
 
@@ -518,7 +516,7 @@ export async function publishSiteAction(
   }
   await auditAs(ctx, 'site.published', 'site', undefined, result)
   if (result.pages) await queueSitemap(ctx.tenant.id)
-  revalidate(slug)
+  revalidateStudio(slug)
   const pages = result.pages ? `${result.pages} ${result.pages === 1 ? 'page' : 'pages'}` : ''
   return ok(
     pages && result.theme
@@ -546,6 +544,6 @@ export async function setPageVisibleAction(
     return domainFail(e)
   }
   await auditAs(ctx, visible ? 'site.page.shown' : 'site.page.hidden', 'site_page', pageId)
-  revalidate(slug)
+  revalidateStudio(slug)
   return ok(visible ? 'Page is visible' : 'Page hidden from your site')
 }

@@ -11,7 +11,6 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
-import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
 import {
   addPageFromTemplateAction,
@@ -24,6 +23,7 @@ import {
   setPageVisibleAction,
   undoTemplateAction,
 } from './actions'
+import { resolveChangeAction } from './studio-actions'
 
 /** First template pick: creates the site with the template's starter pages. */
 export function UseTemplateButton({
@@ -440,9 +440,12 @@ export function PublishSiteSheet({
   pending,
   theme = false,
   themeWarnings = [],
+  defaultOpen = false,
 }: {
   slug: string
   pending: number
+  /** The console list's "Publish" step lands here with the sheet open. */
+  defaultOpen?: boolean
   /** An unpublished draft theme (Ask AI / Claude) goes live with it, on every page. */
   theme?: boolean
   themeWarnings?: string[]
@@ -455,6 +458,7 @@ export function PublishSiteSheet({
     <FormSheet
       title="Publish your site?"
       description={`${what.join('; ')}. Visitors will see them immediately.`}
+      defaultOpen={defaultOpen}
       trigger={
         <Button>
           <Rocket /> Publish site
@@ -491,7 +495,6 @@ export function VisibilityToggle({
   disabled?: boolean
   label: string
 }) {
-  const t = useT()
   const [pending, start] = useTransition()
   const [optimistic, setOptimistic] = useOptimistic(visible)
   return (
@@ -499,7 +502,7 @@ export function VisibilityToggle({
       type="button"
       role="switch"
       aria-checked={optimistic}
-      aria-label={t('website.visibleLabel', { name: label })}
+      aria-label={`${label} visible`}
       disabled={disabled || pending}
       onClick={() =>
         start(async () => {
@@ -523,7 +526,7 @@ export function VisibilityToggle({
           )}
         />
       </span>
-      <span className="text-muted">{optimistic ? t('website.visible') : t('website.hidden')}</span>
+      <span className="text-muted">{optimistic ? 'Visible' : 'Hidden'}</span>
     </button>
   )
 }
@@ -653,6 +656,34 @@ export function ThemeSheet({
           </p>
         </div>
       </div>
+    </FormSheet>
+  )
+}
+
+/** Closes a spa's change request as done or declined, with an optional note the spa sees next to it. */
+export function ResolveRequestSheet({ slug, id }: { slug: string; id: string }) {
+  return (
+    <FormSheet
+      title="Close this request"
+      description="The spa sees the outcome and your note next to their request."
+      trigger={
+        <Button variant="secondary" size="sm" className="h-10">
+          Mark done
+        </Button>
+      }
+      action={resolveChangeAction.bind(null, slug)}
+      submitLabel="Close request"
+    >
+      <input type="hidden" name="id" value={id} />
+      <Field label="Outcome" name="status">
+        <Select id="status" name="status" defaultValue="done">
+          <option value="done">Done</option>
+          <option value="declined">Declined</option>
+        </Select>
+      </Field>
+      <Field label="Note to the spa (optional)" name="response">
+        <Textarea id="response" name="response" maxLength={2000} />
+      </Field>
     </FormSheet>
   )
 }

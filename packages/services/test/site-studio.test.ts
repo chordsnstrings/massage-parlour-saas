@@ -1,4 +1,4 @@
-import { closeAllDbs, sites, tenants, user, withTenant } from '@spa/db'
+import { closeAllDbs, domains, sitePages, sites, tenants, user, withTenant } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -7,10 +7,14 @@ import {
   ensureSite,
   listChangeRequests,
   listPages,
+  openChangeRequestCount,
+  publishPage,
   resolveChangeRequest,
   type SiteTemplate,
+  saveDraft,
   setStudioStatus,
-  studioOverview,
+  websiteOverview,
+  websiteProgress,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -51,16 +55,38 @@ beforeAll(async () => {
 afterAll(() => closeAllDbs())
 
 describe('website studio', () => {
-  it('runs building → review → approved, all moved by the studio', async () => {
-    expect(await status()).toBe('building')
-    await expect(tx((db) => setStudioStatus(db, ids.tenant!, 'building'))).rejects.toThrow()
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'review'))
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'approved'))
-    expect(await status()).toBe('approved')
-    await tx((db) => setStudioStatus(db, ids.tenant!, 'building'))
-    await expect(tx((db) => setStudioStatus(db, ids.other!, 'review'), ids.other)).rejects.toThrow(
-      'no website',
-    )
+  it('websiteProgress: status + next step from the site data (R23)', () => {
+    const f = { hasSite: true, livePages: 0, editedPages: 0, changedPages: 0, themeDraft: false }
+    expect(websiteProgress({ ...f, hasSite: false })).toEqual({
+      status: 'none',
+      unpublished: false,
+      next: 'choose_template',
+    })
+    expect(websiteProgress({ ...f, changedPages: 3 })).toEqual({
+      status: 'template',
+      unpublished: false,
+      next: 'continue_editing',
+    })
+    expect(websiteProgress({ ...f, editedPages: 1, changedPages: 3 })).toEqual({
+      status: 'draft',
+      unpublished: false,
+      next: 'publish',
+    })
+    expect(websiteProgress({ ...f, livePages: 2, editedPages: 2 })).toEqual({
+      status: 'live',
+      unpublished: false,
+      next: 'open_site',
+    })
+    // A pending rename or a draft page counts as a changed page; a draft theme alone too.
+    expect(websiteProgress({ ...f, livePages: 2, changedPages: 1 })).toMatchObject({
+      status: 'live',
+      unpublished: true,
+      next: 'publish',
+    })
+    expect(websiteProgress({ ...f, livePages: 2, themeDraft: true })).toMatchObject({
+      unpublished: true,
+      next: 'publish',
+    })
   })
 
   it('records change requests; one made during review sends the site back to the studio', async () => {
@@ -88,10 +114,71 @@ describe('website studio', () => {
     await expect(
       tx((db) => resolveChangeRequest(db, ids.tenant!, id, { status: 'declined', userId: 'u-spa' })),
     ).rejects.toThrow('already closed')
-    expect((await studioOverview(platform)).find((r) => r.slug === 'calm')).toMatchObject({
+    expect((await websiteOverview(platform)).find((r) => r.slug === 'calm')).toMatchObject({
       hasSite: true,
-      studioStatus: 'building',
       openRequests: 0,
     })
+  })
+
+  it('websiteOverview: none → template → draft → live → unpublished changes (R23)', async () => {
+    const row = async (tenantId = ids.fresh!) => (await websiteOverview(platform, { tenantId }))[0]
+    const [fresh, gone] = await platform
+      .insert(tenants)
+      .values([
+        { slug: 'fresh', name: 'Fresh Spa' },
+        { slug: 'gone', name: 'Gone Spa', deletedAt: new Date() },
+      ])
+      .returning()
+    ids.fresh = fresh!.id
+    expect(await row()).toMatchObject({ status: 'none', next: 'choose_template', homePageId: null })
+
+    await tx((db) => ensureSite(db, ids.fresh!, template), ids.fresh)
+    const [home] = await tx((db) => listPages(db, ids.fresh!), ids.fresh)
+    expect(await row()).toMatchObject({ status: 'template', next: 'continue_editing', homePageId: home!.id })
+
+    const data = { root: { props: { title: 'Hi' } }, content: [] }
+    await tx(
+      (db) => saveDraft(db, { tenantId: ids.fresh!, pageId: home!.id, data, userId: 'u-spa' }),
+      ids.fresh,
+    )
+    expect(await row()).toMatchObject({ status: 'draft', next: 'publish', livePages: 0 })
+
+    await tx((db) => publishPage(db, { tenantId: ids.fresh!, pageId: home!.id, userId: 'u-spa' }), ids.fresh)
+    expect(await row()).toMatchObject({ status: 'live', unpublished: false, next: 'open_site', livePages: 1 })
+
+    await tx(
+      (db) => saveDraft(db, { tenantId: ids.fresh!, pageId: home!.id, data, userId: 'u-spa' }),
+      ids.fresh,
+    )
+    expect(await row()).toMatchObject({ status: 'live', unpublished: true, next: 'publish', changedPages: 1 })
+
+    // A rename waiting for the next publish counts too (after publishing the draft).
+    await tx((db) => publishPage(db, { tenantId: ids.fresh!, pageId: home!.id, userId: 'u-spa' }), ids.fresh)
+    expect(await row()).toMatchObject({ unpublished: false })
+    await platform
+      .update(sitePages)
+      .set({ pending: { title: { en: 'Start' } } })
+      .where(eq(sitePages.id, home!.id))
+    expect(await row()).toMatchObject({ unpublished: true, changedPages: 1 })
+
+    // Primary custom domain, open requests (badge), deleted spas left out, tenant filter.
+    await platform.insert(domains).values({
+      tenantId: ids.fresh!,
+      hostname: 'www.fresh-spa.test',
+      kind: 'custom',
+      status: 'active',
+      isPrimary: true,
+    })
+    const before = await openChangeRequestCount(platform)
+    await tx(
+      (db) => createChangeRequest(db, ids.fresh!, { body: 'New photos please', userId: 'u-spa' }),
+      ids.fresh,
+    )
+    expect(await row()).toMatchObject({ primaryHost: 'www.fresh-spa.test', openRequests: 1 })
+    expect(await openChangeRequestCount(platform)).toBe(before + 1)
+    const all = await websiteOverview(platform)
+    expect(all.map((r) => r.slug)).not.toContain('gone')
+    expect(all.find((r) => r.slug === 'other')).toMatchObject({ status: 'none', primaryHost: null })
+    expect(await websiteOverview(platform, { tenantId: gone!.id })).toEqual([])
   })
 })
