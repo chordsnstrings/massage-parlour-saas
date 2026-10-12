@@ -54,6 +54,7 @@ export function ApplyTemplateSheet({
   name,
   currentName,
   hasLiveContent,
+  htmlDesign,
   nowSrc,
   keepSrc,
   starterSrc,
@@ -63,15 +64,21 @@ export function ApplyTemplateSheet({
   name: string
   currentName: string
   hasLiveContent: boolean
+  /** An uploaded HTML design: its pages are the design, so they always replace yours (the action enforces it). */
+  htmlDesign: boolean
   nowSrc: string
   keepSrc: string
   starterSrc: string
 }) {
-  const [replace, setReplace] = useState(!hasLiveContent)
+  const [replace, setReplace] = useState(htmlDesign || !hasLiveContent)
   return (
     <FormSheet
       title={`Switch to ${name}?`}
-      description="Colours, fonts, shapes and motion change right away. Your words and images stay."
+      description={
+        htmlDesign
+          ? 'Its design replaces your pages with the same address as drafts. Nothing changes on your live site until you publish.'
+          : 'Colours, fonts, shapes and motion change right away. Your words and images stay.'
+      }
       className="md:max-w-3xl"
       trigger={
         <Button variant="secondary" className="h-11 w-full" aria-label={`Apply ${name}`}>
@@ -100,6 +107,7 @@ export function ApplyTemplateSheet({
           <ScaledFrame
             key={replace ? 'starter' : 'keep'}
             src={replace ? starterSrc : keepSrc}
+            scripts={htmlDesign}
             title={`${name} after`}
             className="aspect-[16/11] rounded-lg border"
           />
@@ -109,6 +117,7 @@ export function ApplyTemplateSheet({
         <Checkbox
           name="replaceContent"
           checked={replace}
+          disabled={htmlDesign}
           onChange={(e) => setReplace(e.currentTarget.checked)}
           className="mt-0.5"
         />

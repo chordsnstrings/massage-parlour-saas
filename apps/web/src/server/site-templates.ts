@@ -1,5 +1,10 @@
 import { platformDb } from '@spa/db'
-import { listStudioTemplates, type SiteTemplate, studioToSiteTemplate } from '@spa/services'
+import {
+  isHtmlDesignTemplate,
+  listStudioTemplates,
+  type SiteTemplate,
+  studioToSiteTemplate,
+} from '@spa/services'
 import { cache } from 'react'
 import { isTemplateKey, TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
 
@@ -8,6 +13,8 @@ export type CatalogTemplate = SiteTemplate & {
   source: 'builtin' | 'studio'
   /** The template-studio row (console preview `/templates/{id}/preview`); built-ins preview by key. */
   id?: string
+  /** R24: an uploaded HTML design: its look is its page(s), its theme is empty (`{}`). */
+  htmlDesign: boolean
 }
 
 /**
@@ -19,7 +26,7 @@ export type CatalogTemplate = SiteTemplate & {
 export const templateCatalog = cache(async (): Promise<CatalogTemplate[]> => {
   const rows = await listStudioTemplates(platformDb(), { activeOnly: true })
   const studio = new Map(rows.map((r) => [r.key, r]))
-  const out: CatalogTemplate[] = TEMPLATE_KEYS.map((key) => {
+  const out: Omit<CatalogTemplate, 'htmlDesign'>[] = TEMPLATE_KEYS.map((key) => {
     const row = studio.get(key)
     return row
       ? {
@@ -34,7 +41,7 @@ export const templateCatalog = cache(async (): Promise<CatalogTemplate[]> => {
     if (!isTemplateKey(row.key))
       out.push({ ...studioToSiteTemplate(row), feel: row.description ?? '', source: 'studio', id: row.id })
   }
-  return out
+  return out.map((t) => ({ ...t, htmlDesign: isHtmlDesignTemplate(t) }))
 })
 
 export async function resolveTemplate(key: string | undefined | null) {

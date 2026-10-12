@@ -86,6 +86,7 @@ export function TemplatesCard({
                   ) : (
                     <ScaledFrame
                       src={preview(slug, `template=${tpl.key}&starter=1`)}
+                      scripts={tpl.htmlDesign}
                       title={`${tpl.name} preview`}
                       className="aspect-[4/3] border-b"
                     />
@@ -121,6 +122,7 @@ export function TemplatesCard({
                               name={tpl.name}
                               currentName={current?.name ?? site.templateKey}
                               hasLiveContent={hasLive}
+                              htmlDesign={tpl.htmlDesign}
                               nowSrc={preview(slug)}
                               keepSrc={preview(slug, `template=${tpl.key}`)}
                               starterSrc={preview(slug, `template=${tpl.key}&starter=1`)}

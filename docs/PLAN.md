@@ -1175,6 +1175,13 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   **D3** Arabic: Arabic texts show inside the design's English layout (no separate RTL rebuild); **go live phase by
   phase** (each phase ships when its checks pass). **P0 (2026-10-12):** `@spa/core` html-crm.ts — D1, D2, area label
   from the CRM city (own design: its finer label), a treatment in two menus shows once (`collapseSameName`).
+  **Fix with P0 (owner report 2026-10-12: "uploaded the html … applied on one spa and it applied a different
+  design"):** the console Apply sheet over a spa with a live site defaulted to "theme only" (sample-pages box off), so
+  an HTML template wrote no page and swapped the LIVE theme to its empty one (Zen blocks without their look, before
+  any publish). Now an HTML template always writes its pages as drafts (box on + disabled, "Nothing changes on your
+  live site until you publish") and keeps the spa's theme (services `isHtmlDesignTemplate` in `switchTemplate`; also
+  the connector), so pages it doesn't replace keep their look once published; console thumbnails of HTML designs run
+  scripts and the home thumbnail reloads after a switch / undo / edit.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

@@ -11,11 +11,17 @@ export function ScaledFrame({
   src,
   title,
   width = 1280,
+  scripts = false,
   className,
 }: {
   src: string
   title: string
   width?: number
+  /**
+   * Run the preview page's scripts: needed when it shows an HTML design (its frame gets the design by postMessage).
+   * The preview is the platform's own page; the design itself stays in its opaque-origin sandboxed frame inside it.
+   */
+  scripts?: boolean
   className?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -36,8 +42,9 @@ export function ScaledFrame({
           src={src}
           title={title}
           loading="lazy"
-          // Thumbnails are server-rendered HTML: no scripts, so a gallery of previews doesn't boot one app each.
-          sandbox="allow-same-origin"
+          // Thumbnails are server-rendered HTML: no scripts, so a gallery of previews doesn't boot one app each
+          // (HTML designs excepted, see `scripts`).
+          sandbox={scripts ? 'allow-same-origin allow-scripts' : 'allow-same-origin'}
           tabIndex={-1}
           aria-hidden
           onLoad={() => setLoaded(true)}

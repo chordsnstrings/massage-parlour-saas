@@ -72,11 +72,14 @@ export async function applyTemplateAction(
   if (!parsed.success) return fromZod(parsed.error)
   const template = await resolveTemplate(parsed.data.template)
   if (!template) return fail('Choose a template', { template: 'Choose a template' })
-  const replaceContent = parsed.data.replaceContent === 'on'
+  // An HTML design's look is its page (its theme is empty): switching to it always writes its pages as drafts and
+  // keeps the spa's theme (switchTemplate), so the live site doesn't change before Publish (as the connector does).
+  const replaceContent = parsed.data.replaceContent === 'on' || template.htmlDesign
   try {
     await withTenant(ctx.tenant.id, (tx) =>
       switchTemplate(tx, ctx.tenant.id, template, {
         replaceContent,
+        draftTheme: template.htmlDesign,
         userId: ctx.user.id,
         // R24: an HTML design template's files are copied into the spa (its site never depends on the template).
         prepare: templateIntoSpa(tx, ctx.tenant.id, ctx.user.id),

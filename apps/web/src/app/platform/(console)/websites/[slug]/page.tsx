@@ -88,6 +88,7 @@ export default async function SpaWebsitePage({
   const pending = pages.filter(pageUnpublished).length
   const themePending = Boolean(site?.themeDraft)
   const hasLive = pages.some((p) => p.publishedAt)
+  const home = pages.find((p) => p.slug === '')
   const openRequests = requests.filter((r) => r.status === 'open').length
   // R23 Write texts: SITE_AI_EDITOR_EMAILS super-admins only (re-checked by the action).
   const writeTexts = canEdit && aiEditor === 'ok' && pages.length > 0
@@ -209,7 +210,11 @@ export default async function SpaWebsitePage({
                     <div className="overflow-hidden rounded-lg border">
                       <p className="truncate border-b bg-subtle px-3 py-1.5 text-xs text-muted">{host}</p>
                       <ScaledFrame
+                        // A new frame after a switch, undo, theme or home edit (the same src would keep the old page).
+                        key={`${site.updatedAt.getTime()}:${home?.editedAt?.getTime() ?? 0}`}
                         src={studioPath(slug, '/preview')}
+                        // One frame, not a gallery: scripts on, so a home page that is an HTML design shows too.
+                        scripts
                         title="Home page preview"
                         className="aspect-[16/11]"
                       />

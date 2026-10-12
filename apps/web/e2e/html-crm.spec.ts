@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, type Frame, type Page, test } from '@playwright/test'
 import { addDays } from '@spa/core'
-import { auditLog, branches, services, serviceVariants, siteEnquiries, staff, tenants } from '@spa/db'
+import { auditLog, branches, services, serviceVariants, siteEnquiries, sites, staff, tenants } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
   admin,
@@ -391,4 +391,52 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(await enquiries(seed2.tenantId)).toHaveLength(1)
     await ctx.close()
   })
+})
+
+test('R28: an HTML template applied over a live block site becomes a draft; the live site keeps its look', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const owner = await signUpOwner(page, { spa: 'Live Block Spa' })
+  const { slug } = owner
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await page.goto(studioUrl(slug))
+  await page.getByRole('button', { name: 'Use Zen Minimal' }).click()
+  await expect(page.getByTestId('current-template')).toHaveText('Zen Minimal', { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Publish site' }).click()
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText(/^Published \d+ pages?/)).toBeVisible({ timeout: 30_000 })
+  const db = testDb()
+  const [t] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [before] = await db.select().from(sites).where(eq(sites.tenantId, t!.id))
+
+  await upload(page, 'Over Live', fixture)
+  await page.goto(studioUrl(slug))
+  await page
+    .getByRole('article', { name: 'Over Live' })
+    .getByRole('button', { name: 'Apply Over Live' })
+    .click()
+  const dialog = page.getByRole('dialog')
+  // The design IS its page: it always replaces the page with the same address (as a draft), never only the theme.
+  await expect(dialog.getByRole('checkbox')).toBeChecked()
+  await expect(dialog.getByRole('checkbox')).toBeDisabled()
+  await expect(
+    dialog.getByText(/^Its design replaces your pages with the same address as drafts/),
+  ).toBeVisible()
+  await dialog.getByRole('button', { name: 'Switch to Over Live' }).click()
+  await expect(page.getByTestId('current-template')).toHaveText('Over Live', { timeout: 30_000 })
+
+  // Live: the Zen site and its theme, untouched; the design waits as the home draft. The theme is kept (an HTML
+  // design ignores it), so the pages it doesn't replace keep their look once published.
+  const [after] = await db.select().from(sites).where(eq(sites.tenantId, t!.id))
+  expect(after!.theme).toEqual(before!.theme)
+  expect(after!.themeDraft).toBeNull()
+  await page.goto(site(slug))
+  await expect(page.locator('#spa')).toHaveCount(0)
+  // The console's home thumbnail shows the draft design right away (scripts on, a new frame after the switch).
+  await page.goto(studioUrl(slug))
+  const thumb = page.frameLocator('iframe[title="Home page preview"]').frameLocator('iframe.site-html-design')
+  await expect(thumb.locator('#spa')).toHaveText('Live Block Spa', { timeout: 30_000 })
 })

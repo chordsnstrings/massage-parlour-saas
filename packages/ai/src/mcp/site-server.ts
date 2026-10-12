@@ -34,6 +34,7 @@ import {
   getPage,
   getSite,
   getSiteForEdit,
+  isHtmlDesignTemplate,
   lockSite,
   materializeTemplatePageData,
   type ProcessedImage,
@@ -508,7 +509,8 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
         creates_site: plan.createsSite,
         pages: plan.pages.map((p) => ({ slug: slugOut(p.slug), title: p.title, new: p.new })),
         kept_pages: plan.keptPages.map((p) => ({ slug: slugOut(p.slug), title: p.title })),
-        theme: keepTheme ? 'kept' : 'draft',
+        // An HTML design ignores the theme: switching to one keeps the spa's (switchTemplate).
+        theme: keepTheme || isHtmlDesignTemplate(template) ? 'kept' : 'draft',
         html_design_pages: plan.htmlDesignPages,
         ...(dry ? {} : { html_files_copied: copied }),
         ...(dry && locked.length
