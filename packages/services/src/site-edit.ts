@@ -75,6 +75,8 @@ const place = {
 }
 const text = z.object({ en: z.string().trim().min(1).max(80), ar: z.string().trim().max(80).nullish() })
 const contentText = z.object({ en: z.string().max(2000), ar: z.string().max(2000).nullish() })
+// A page text may carry Arabic only (no en: the spa's English override stays, else the design's English).
+const pageText = z.object({ en: z.string().max(2000).nullish(), ar: z.string().max(2000).nullish() })
 const contentTags = z.array(z.string().max(200)).max(20)
 /** R28: one website-content value of an HTML design (@spa/core html-content.ts). */
 export const HtmlContentValueSchema = z.union([
@@ -130,7 +132,7 @@ export const SiteOpSchema = z.discriminatedUnion('op', [
     // values paths, 'text:<id>', 'picture:<id>'; 'all' = every value, page text and picture
     reset: z.union([z.literal('all'), z.array(z.string().max(400)).max(500)]).nullish(),
     texts: z
-      .array(z.object({ id: z.string().max(40), t: contentText }))
+      .array(z.object({ id: z.string().max(40), t: pageText }))
       .max(2000)
       .nullish(),
     pictures: z
@@ -570,11 +572,18 @@ export async function runSiteEdit(
               if (!x)
                 throw new OpFail(`${at}: no page text "${e.id}" in this design — get_html_content lists them`)
               if (x.bound)
-                throw new OpFail(`${at}: ${e.id} is filled by the design from the CRM — change it in the CRM`)
+                throw new OpFail(
+                  x.boundBy === 'script'
+                    ? `${at}: ${e.id} is filled by the design's script — change it in the design file with html_patch`
+                    : `${at}: ${e.id} is filled from the CRM — change it in the CRM`,
+                )
+              // No en (null / left out): the current English override stays; '' = the design's English.
+              const prev = parts.texts[e.id]?.src === x.src ? parts.texts[e.id]?.t.en : undefined
+              const en = e.t.en ?? prev
               parts.texts[e.id] = {
                 id: e.id,
                 src: x.src,
-                t: { en: e.t.en, ...(e.t.ar ? { ar: e.t.ar } : {}) },
+                t: { ...(en?.trim() ? { en } : {}), ...(e.t.ar?.trim() ? { ar: e.t.ar } : {}) },
               }
             }
           }

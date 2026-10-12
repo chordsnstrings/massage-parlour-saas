@@ -275,7 +275,7 @@ export function HtmlContentField({ value, onChange, readOnly }: Props) {
                 <Outdated
                   key={e.id}
                   id={textById.has(e.id) ? undefined : rowId(`text:${e.id}`)}
-                  what={clip(e.t.en, 60)}
+                  what={clip(e.t.en || e.t.ar || '', 60)}
                   readOnly={readOnly}
                   onRemove={() => setText(e.id, null)}
                 />
@@ -290,7 +290,7 @@ export function HtmlContentField({ value, onChange, readOnly }: Props) {
                       <TextRow
                         key={t.id}
                         text={t}
-                        value={own?.src === t.src ? own.t : undefined}
+                        value={own?.src === t.src ? { ...own.t, en: own.t.en ?? '' } : undefined}
                         locale={locale}
                         readOnly={readOnly}
                         field={path && slotPaths.has(path) ? path : undefined}

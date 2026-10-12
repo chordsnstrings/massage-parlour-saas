@@ -10,6 +10,7 @@ import {
   fixHtmlDesign,
   HTML_DESIGN_BASE_CSS,
   HTML_DESIGN_COMPAT_SHIM,
+  HTML_IMAGE_URL,
   htmlDesignDocOf,
   htmlDesignDocument,
   htmlDesignEmbedHosts,
@@ -515,6 +516,54 @@ describe('applyHtmlImageAdjustments: replace-only (R28 P4)', () => {
     expect(out).toContain('[data-spa-img="0"]{object-fit:cover!important;object-position:10% 50%!important}')
     expect(out).not.toContain(R)
   })
+  it('a URL with $& / $1 / $$ is refused (never a replacement pattern): every attribute stays as it was; & is escaped in src / srcset', () => {
+    const pic =
+      '<body><picture><source srcset="https://cdn.test/p.webp"><img class="a" src="https://cdn.test/p.jpg" alt="x" data-k="v"></picture></body>'
+    for (const url of [
+      'https://cdn.test/$&.jpg',
+      'https://cdn.test/$1" onerror="x.jpg',
+      '/files/$$x',
+      'https://x.test/$`',
+    ])
+      expect(
+        applyHtmlImageAdjustments(pic, [{ id: 'img-0', src: 'https://cdn.test/p.jpg', replace: url }]),
+      ).toBe(pic)
+    const amp = 'https://cdn.test/n.jpg?w=1&h=2'
+    expect(
+      applyHtmlImageAdjustments(pic, [{ id: 'img-0', src: 'https://cdn.test/p.jpg', replace: amp }]),
+    ).toBe(
+      '<body><picture><source srcset="https://cdn.test/n.jpg?w=1&amp;h=2"><img class="a" src="https://cdn.test/n.jpg?w=1&amp;h=2" alt="x" data-k="v"></picture></body>',
+    )
+  })
+  it('bg pictures: a character reference (&#41; / &rpar;) is refused, so no CSS is added; & escaped in a style attribute, kept in a <style> body', () => {
+    const page =
+      '<html><head><style>.h{background:url(https://cdn.test/s.jpg)}</style></head><body>' +
+      '<div style="background-image:url(https://cdn.test/a.jpg);color:red"></div></body></html>'
+    for (const url of [
+      'https://cdn.test/b.jpg&#41;;position:fixed',
+      'https://cdn.test/b.jpg&rpar;',
+      'https://x.test/&#x29;',
+    ])
+      expect(
+        applyHtmlImageAdjustments(page, [
+          { id: 'bg-0', src: 'https://cdn.test/s.jpg', replace: url },
+          { id: 'bg-1', src: 'https://cdn.test/a.jpg', replace: url },
+        ]),
+      ).toBe(page)
+    const amp = 'https://cdn.test/b.jpg?x=1&y=2'
+    expect(
+      applyHtmlImageAdjustments(page, [
+        { id: 'bg-0', src: 'https://cdn.test/s.jpg', replace: amp },
+        { id: 'bg-1', src: 'https://cdn.test/a.jpg', replace: amp },
+      ]),
+    ).toBe(
+      page
+        .replace('url(https://cdn.test/s.jpg)', `url(${amp})`)
+        .replace('url(https://cdn.test/a.jpg)', 'url(https://cdn.test/b.jpg?x=1&amp;y=2)'),
+    )
+    expect(HTML_IMAGE_URL.test(amp)).toBe(true)
+    expect(HTML_IMAGE_URL.test('https://x.test/a&amp;b.jpg')).toBe(false)
+  })
 })
 
 /** Every page text of a design (test fixture): text nodes, attributes, title, meta, groups, raw-text bodies. */
@@ -559,7 +608,7 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
       ['txt-0', 'text', '', 'a', 'Home'],
       ['attr-1', 'attr', 'title', 'a', 'Our rituals'],
       ['txt-1', 'text', '', 'a', 'Rituals'],
-      ['txt-2', 'text', '', 'h2', 'Our story'],
+      ['txt-2', 'text', '', 'h2', 'Our \u00a0story'], // U+00A0 kept, HTML whitespace collapsed
       ['txt-3', 'text', '', 'p', 'Since 2010 — calm hands.'],
       ['attr-2', 'attr', 'alt', 'img', 'Lounge'],
       ['txt-4', 'text', '', 'p', 'a < b'],
@@ -597,8 +646,8 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
       'meta-description': '',
       'attr-0': 'Main menu',
       'txt-0': 'Main menu',
-      'txt-2': 'Our story',
-      'attr-2': 'Our story',
+      'txt-2': 'Our \u00a0story',
+      'attr-2': 'Our \u00a0story',
       'txt-5': 'Treatments',
       'attr-3': 'Form 1',
       'txt-7': 'Form 1',
@@ -608,26 +657,92 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
     })
   })
 
-  it('marks bound: data-crm / data-item / data-book-service (inherited), the parent id the design’s JS uses, document.title; the CRM_DATA literal is not read', () => {
+  it('marks bound: data-crm / data-item / data-book-service (inherited, "crm"); text the design’s JS writes by id, document.title ("script"); the CRM_DATA literal is not read', () => {
     const html = `<html><head><title>Design</title></head><body>
 <div data-crm="spa.name"><h1>Design Spa</h1></div>
 <ul data-item="services"><li><b>Ritual</b></li></ul>
 <a data-book-service href="#" title="Book now">Book</a>
 <p id="hours">Mon–Sun</p><p id="note">Free text</p><span id="promo">Promo</span><p id="crm-only">Literal only</p>
-<script>document.getElementById('hours').textContent = 'x'; document.querySelector("#promo .x"); document.title = 'Live'</script>
+<script>document.getElementById('hours').textContent = 'x'; document.querySelector("#promo .x").textContent = 'y'; document.title = 'Live'</script>
 <script>window.CRM_DATA = {"id":"crm-only","note":"#note"}</script>
 </body></html>`
-    expect(listHtmlDesignTexts(html).map((x) => [x.text, x.bound, x.binding ?? ''])).toEqual([
-      ['Design', true, 'document.title'],
-      ['Design Spa', true, 'data-crm=spa.name'],
-      ['Ritual', true, 'data-item=services'],
-      ['Book now', true, 'data-book-service'],
-      ['Book', true, 'data-book-service'],
-      ['Mon–Sun', true, '#hours'],
-      ['Free text', false, ''],
-      ['Promo', true, '#promo'],
-      ['Literal only', false, ''],
+    expect(listHtmlDesignTexts(html).map((x) => [x.text, x.bound, x.boundBy ?? '', x.binding ?? ''])).toEqual(
+      [
+        ['Design', true, 'script', 'document.title'],
+        ['Design Spa', true, 'crm', 'data-crm=spa.name'],
+        ['Ritual', true, 'crm', 'data-item=services'],
+        ['Book now', true, 'crm', 'data-book-service'],
+        ['Book', true, 'crm', 'data-book-service'],
+        ['Mon–Sun', true, 'script', '#hours'],
+        ['Free text', false, '', ''],
+        ['Promo', false, '', ''], // a descendant of #promo is written, not its own text
+        ['Literal only', false, '', ''],
+      ],
+    )
+  })
+
+  it('bound by script only where the script writes the text: listener / toggle / read-only ids, getAttribute and attributes stay editable; direct, variable, helper and ancestor writes bind', () => {
+    const html = `<html><head><title>T</title></head><body>
+<button id="burger" aria-label="Menu">Menu</button><button id="langBtn" aria-label="Language">EN</button>
+<h2 id="title">Our rituals</h2><button id="book">Book now</button><p id="yr">2025</p>
+<p id="v1">Var text</p><p id="h1">Helper text</p><p id="h2">Arrow helper</p><div id="box"><p>Inner</p></div>
+<p id="read">Read only</p><p id="jq">jQuery</p>
+<script>
+// document.getElementById('read').textContent = 'commented out'
+document.getElementById('burger').onclick = () => document.getElementById('mmenu').classList.toggle('open')
+document.getElementById("langBtn").textContent = 'ع'
+document.querySelector('#book').addEventListener('click', () => {})
+const t = document.getElementById('title').getAttribute('title')
+document.getElementById('yr').textContent=new Date().getFullYear()
+const v = document.getElementById('v1'); if (v) v.innerText = 'x'
+function setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value }
+setText('h1', 'x')
+const put = (key, html) => { document.querySelector('#' + key).innerHTML = html }
+put('h2', '<b>x</b>')
+document.getElementById('box').innerHTML += ''
+const n = document.getElementById('read').textContent.length
+$('#jq').text('x')
+</script></body></html>`
+    const bound = listHtmlDesignTexts(html)
+      .filter((x) => x.bound)
+      .map((x) => [x.kind, x.attr ?? '', x.text, x.boundBy, x.binding])
+    expect(bound).toEqual([
+      ['text', '', 'EN', 'script', '#langBtn'],
+      ['text', '', '2025', 'script', '#yr'],
+      ['text', '', 'Var text', 'script', '#v1'],
+      ['text', '', 'Helper text', 'script', '#h1'],
+      ['text', '', 'Arrow helper', 'script', '#h2'],
+      ['text', '', 'Inner', 'script', '#box'],
+      ['text', '', 'jQuery', 'script', '#jq'],
     ])
+    // Editable: the menu button (listener), its and the language button's aria-label (attributes never), the
+    // heading (getAttribute), "Book now" (listener only), "Read only" (read, or written in a comment).
+    expect(
+      listHtmlDesignTexts(html)
+        .filter((x) => !x.bound)
+        .map((x) => x.text),
+    ).toEqual(['T', 'Menu', 'Menu', 'Language', 'Our rituals', 'Book now', 'Read only'])
+    // Linear: long runs of letters, many id-like literals and calls.
+    const big = `<p id="a">x</p><script>${'a'.repeat(300_000)} = (${'b'.repeat(100_000)}${"f('a');g = (x) => y;".repeat(20_000)}</script>`
+    const t = Date.now()
+    expect(listHtmlDesignTexts(big).map((x) => x.bound)).toEqual([false])
+    expect(Date.now() - t).toBeLessThan(2000)
+  })
+
+  it('decodes common named references (exact case); a run or value with an unknown / ambiguous reference is not listed (no id taken)', () => {
+    const html =
+      '<p>Caf&eacute; &rarr; &hearts; &check; &bull; &ldquo;x&rdquo; &mdash; &euro;5 &pound; &yen; &Eacute;&nbsp;A</p>' +
+      '<p>Explore &unknownref; now</p><p title="A &zzz; b">Kept</p><p>Fish&Chips R&D a&b=1 &copy 2026</p>' +
+      '<p>&notice</p><p>&#x1F600; &#39; &#128;</p><p>&EACUTE;</p><p>Last</p>'
+    expect(listHtmlDesignTexts(html).map((x) => [x.id, x.text])).toEqual([
+      ['txt-0', 'Café → ♥ ✓ • “x” — €5 £ ¥ É A'],
+      ['txt-1', 'Kept'],
+      ['txt-2', 'Fish&Chips R&D a&b=1 © 2026'],
+      ['txt-3', 'Last'],
+    ])
+    // Render ids match the listing: an override of "Last" lands on it, the unlisted runs keep their bytes.
+    const out = applyHtmlTextOverrides(html, [{ id: 'txt-3', src: 'Last', t: { en: 'New' } }], 'en')
+    expect(out).toBe(html.replace('<p>Last</p>', '<p>New</p>'))
   })
 
   it('ids, src and bound are identical after the CRM splice', () => {
@@ -706,6 +821,46 @@ describe('applyHtmlTextOverrides (R28 P4)', () => {
     expect(applyHtmlTextOverrides(html, texts, 'en')).toBe('<p>Hello</p><p>Hi</p><p>Three</p>')
   })
 
+  it('Arabic-only entries: the English page is byte-identical (the very same string); the Arabic page uses them', () => {
+    const texts = listHtmlDesignTexts(textsDoc).map((x) => ({ id: x.id, src: x.src, t: { ar: 'نص' } }))
+    expect(applyHtmlTextOverrides(textsDoc, texts, 'en')).toBe(textsDoc)
+    expect(
+      applyHtmlTextOverrides(
+        textsDoc,
+        texts.map((x) => ({ ...x, t: { en: '', ar: 'نص' } })),
+        'en',
+      ),
+    ).toBe(textsDoc)
+    expect(applyHtmlTextOverrides('<p>One</p>', [{ id: 'txt-0', src: 'One', t: { ar: 'واحد' } }], 'ar')).toBe(
+      '<p>واحد</p>',
+    )
+  })
+
+  it('a value equal to the design text keeps the original bytes (references, U+00A0, <pre> whitespace, the 2000-character listing)', () => {
+    const html =
+      '<html><head><title>Caf&eacute; &amp; Spa</title></head><body><h2>Caf&eacute; &rarr; ritual</h2>' +
+      '<p>Price&nbsp;AED 350</p><pre>a\n   b</pre><p title="I &hearts; spa">x</p>' +
+      `<p>${'y'.repeat(2500)}</p></body></html>`
+    const listed = listHtmlDesignTexts(html)
+    expect(listed.map((x) => x.text.slice(0, 20))).toEqual([
+      'Café & Spa',
+      'Café → ritual',
+      'Price AED 350',
+      'a b',
+      'I ♥ spa',
+      'x',
+      'y'.repeat(20),
+    ])
+    // Echoed as English (the editor / AI copy the listed text), or as the Arabic fallback: nothing changes.
+    const echo = listed.map((x) => ({ id: x.id, src: x.src, t: { en: x.text } }))
+    expect(applyHtmlTextOverrides(html, echo, 'en')).toBe(html)
+    expect(applyHtmlTextOverrides(html, echo, 'ar')).toBe(html)
+    expect(applyHtmlTextOverrides(html, [{ ...echo[3]!, t: { en: ' a  b ' } }], 'en')).toBe(html)
+    expect(applyHtmlTextOverrides(html, [{ ...echo[1]!, t: { en: 'Tea → ritual' } }], 'en')).toBe(
+      html.replace('<h2>Caf&eacute; &rarr; ritual</h2>', '<h2>Tea → ritual</h2>'),
+    )
+  })
+
   it('skeleton property: overriding every text changes values only (inline fixture, fidelity + CRM contract fixtures)', () => {
     for (const raw of [textsDoc, fixture('fidelity.html'), fixture('crm-contract.html')]) {
       const out = all(raw, `<"'&>={{x}}`)
@@ -743,6 +898,42 @@ describe('htmlDesignDocument with page texts (R28 P4)', () => {
     expect(out).toContain('<img data-spa-img="0" alt="New alt" src="https://cdn.test/a.jpg">')
     expect(out).toContain('[data-spa-img="0"]{object-fit:cover!important;object-position:10% 50%!important}')
     expect(out).toContain(`<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>`)
+  })
+  it('{{placeholders}} in an override are plain escaped text: {{address}} adds no <a> and no map sheet; the designer’s own still links', () => {
+    const links = { address: { href: 'https://maps.example/?q=1', label: 'Open in Google Maps' } }
+    const values = { address: 'Al <Wasl> & Co', spa_name: '{{address}}' }
+    const own = '<html><head><title>T</title></head><body><h1>Old</h1><p>{{address}}</p></body></html>'
+    const texts = [{ id: 'txt-0', src: 'Old', t: { en: 'Find us: {{address}} · {{spa_name}} · {{nope}}' } }]
+    const out = htmlDesignDocument(own, values, false, [], links, { texts, top: true })
+    expect(out).toContain(
+      '<h1>Find us: Al &lt;Wasl&gt; &amp; Co · &#123;&#123;address}} · &#123;&#123;nope}}</h1>',
+    )
+    expect(count(out, '<a ')).toBe(1) // the design's own {{address}}
+    expect(count(out, 'data-spa-map-style')).toBe(1)
+    const none = htmlDesignDocument(own.replace('<p>{{address}}</p>', ''), values, false, [], links, {
+      texts,
+      top: true,
+    })
+    expect(none).not.toContain('<a ')
+    expect(none).not.toContain('data-spa-map')
+    // A title / attribute override: escaped, never a link either.
+    const attr = htmlDesignDocument(
+      '<title>T</title><img alt="Old alt" src="/a.jpg">',
+      values,
+      false,
+      [],
+      links,
+      {
+        texts: [
+          { id: 'title', src: 'T', t: { en: '{{address}}' } },
+          { id: 'attr-0', src: 'Old alt', t: { en: 'At {{address}}' } },
+        ],
+        top: true,
+      },
+    )
+    expect(attr).toContain('<title>Al &lt;Wasl&gt; &amp; Co</title>')
+    expect(attr).toContain('alt="At Al &lt;Wasl&gt; &amp; Co"')
+    expect(attr).not.toContain('<a ')
   })
   it('no texts → output identical to the call without texts / locale', () => {
     const plain = htmlDesignDocument(page, {}, false, [], {})

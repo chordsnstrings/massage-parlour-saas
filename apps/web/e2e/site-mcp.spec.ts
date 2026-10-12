@@ -473,7 +473,7 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
       texts: [{ id: 'txt-1', t: { en: 'Open now' } }],
     })
     expect(bound.isError).toBe(true)
-    expect(bound.data.error).toMatch(/txt-1 is filled by the design from the CRM/)
+    expect(bound.data.error).toMatch(/txt-1 is filled by the design's script/)
     await ok('set_html_content', {
       page: 'texts',
       texts: [

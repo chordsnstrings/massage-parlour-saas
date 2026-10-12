@@ -66,8 +66,11 @@ export function htmlContentParts(content: unknown): HtmlContentParts {
   for (const e of isObj(content) && Array.isArray(content.texts) ? content.texts : []) {
     if (!isObj(e) || typeof e.id !== 'string' || !HTML_TEXT_ID.test(e.id) || typeof e.src !== 'string')
       continue
-    if (!isObj(e.t) || typeof e.t.en !== 'string') continue
-    const t = typeof e.t.ar === 'string' ? { en: e.t.en, ar: e.t.ar } : { en: e.t.en }
+    if (!isObj(e.t) || (typeof e.t.en !== 'string' && typeof e.t.ar !== 'string')) continue
+    const t = {
+      ...(typeof e.t.en === 'string' ? { en: e.t.en } : {}),
+      ...(typeof e.t.ar === 'string' ? { ar: e.t.ar } : {}),
+    }
     texts[e.id] = { id: e.id, src: e.src, t }
   }
   for (const e of isObj(content) && Array.isArray(content.pictures) ? content.pictures : []) {
@@ -322,7 +325,7 @@ export const hasHtmlPageContent = (content: unknown): boolean => {
 }
 
 const PARTS = new Set(['v', 'values', 'texts', 'pictures'])
-/** A content picture: a content URL that is also safe in an unquoted CSS `url()` (no parentheses). */
+/** A content picture: a content URL that is also safe in an unquoted CSS `url()` (HTML_IMAGE_URL: no parentheses, `$` or character references). */
 const pictureUrlOk = (url: unknown): url is string =>
   typeof url === 'string' && contentUrlOk(url) && HTML_IMAGE_URL.test(url)
 
@@ -399,7 +402,7 @@ function valueErrors(content: Record<string, unknown>, slots: HtmlContentSlot[] 
   return errors
 }
 
-/** R28 P4: the page-text list (ids from listHtmlDesignTexts, src guard, English required, Arabic optional). */
+/** R28 P4: the page-text list (ids from listHtmlDesignTexts, src guard, English and / or Arabic: one not blank). */
 function textErrors(texts: unknown): string[] {
   if (!Array.isArray(texts)) return ['content: texts must be a list']
   if (texts.length > HTML_CONTENT_LIMITS.texts)
@@ -414,10 +417,13 @@ function textErrors(texts: unknown): string[] {
     else if (seen.has(id)) errors.push(`text ${id}: set twice`)
     else if (typeof e.src !== 'string' || e.src.length > HTML_IMAGE_SRC_MAX)
       errors.push(`text ${id}: src must be the design text's first ${HTML_IMAGE_SRC_MAX} characters`)
-    else if (!t || typeof t.en !== 'string' || !t.en.trim() || t.en.length > max)
-      errors.push(`text ${id}: an English text of 1 to ${max} characters`)
+    else if (!t) errors.push(`text ${id}: an English or Arabic text of 1 to ${max} characters`)
+    else if (t.en !== undefined && (typeof t.en !== 'string' || t.en.length > max))
+      errors.push(`text ${id}: the English text must be at most ${max} characters`)
     else if (t.ar !== undefined && (typeof t.ar !== 'string' || t.ar.length > max))
       errors.push(`text ${id}: the Arabic text must be at most ${max} characters`)
+    else if (!String(t.en ?? '').trim() && !String(t.ar ?? '').trim())
+      errors.push(`text ${id}: an English or Arabic text of 1 to ${max} characters`)
     seen.add(id)
   }
   return errors
@@ -567,7 +573,7 @@ export function htmlContentLeftovers(
   for (const e of Object.values(parts.texts)) {
     if (texts.get(e.id)?.src !== e.src) out.push({ path: `text:${e.id}`, reason: 'stale', text: '' })
     else if (englishOnly(e.t))
-      out.push({ path: `text:${e.id}`, reason: 'arabic', text: leftoverText(e.t.en) })
+      out.push({ path: `text:${e.id}`, reason: 'arabic', text: leftoverText(e.t.en ?? '') })
   }
   const images = new Map(ctx.page.images.map((x) => [x.id, x]))
   for (const p of Object.values(parts.pictures)) {
@@ -599,7 +605,9 @@ export type HtmlContentView = {
     group: string
     design: string
     bound: boolean
-    spa?: HtmlContentBi
+    /** Bound texts: 'crm' (change it in the CRM) or 'script' (the design's script writes it). */
+    boundBy?: 'crm' | 'script'
+    spa?: HtmlTextOverride['t']
   }[]
   /** Page texts after part / search filtering, before paging. */
   textsTotal: number
@@ -675,6 +683,7 @@ export function htmlContentView(
         group: x.group,
         design: summarise(x.text, clip) as string,
         bound: x.bound,
+        ...(x.boundBy ? { boundBy: x.boundBy } : {}),
         ...(t ? { spa: t } : {}),
       }
     }),

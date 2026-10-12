@@ -485,10 +485,13 @@ describe('site edit ops layer', () => {
         /no page text "txt-9" in this design — get_html_content lists them/,
       )
       expect(await refused({ texts: [{ id: 'txt-0', t: { en: 'x' } }] })).toMatch(
-        /txt-0 is filled by the design from the CRM — change it in the CRM/,
+        /txt-0 is filled by the design's script — change it in the design file with html_patch/,
       )
       expect(await refused({ texts: [{ id: 'txt-1', t: { en: ' ' } }] })).toMatch(
-        /text txt-1: an English text/,
+        /text txt-1: an English or Arabic text/,
+      )
+      expect(await refused({ texts: [{ id: 'txt-1', t: { ar: ' ' } }] })).toMatch(
+        /text txt-1: an English or Arabic text/,
       )
       expect(await refused({ pictures: [{ id: 'img-3', img: `/files/${mine!.id}` }] })).toMatch(
         /no picture "img-3" in this design/,
@@ -524,6 +527,25 @@ describe('site edit ops layer', () => {
         ],
         pictures: [{ id: 'img-0', src: 'https://example.com/design.jpg', img: `/files/${mine!.id}` }],
       })
+      // Arabic only: no en keeps the stored English; '' drops it (the design's English stays on the page).
+      expect(
+        (
+          await run([
+            {
+              op: 'html_content',
+              page: 'texts-me',
+              texts: [
+                { id: 'txt-1', t: { ar: 'طقوسنا' } },
+                { id: 'attr-0', t: { en: '', ar: 'صالة' } },
+              ],
+            },
+          ])
+        ).ok,
+      ).toBe(true)
+      expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'texts-me')))!.content!.texts).toEqual([
+        { id: 'txt-1', src: 'Design heading', t: { en: 'Our rituals', ar: 'طقوسنا' } },
+        { id: 'attr-0', src: 'Design picture', t: { ar: 'صالة' } },
+      ])
     })
 
     it('R28 P4: a values edit keeps stored texts and pictures; reset text:<id> / picture:<id>; ‘all’ clears every part (content removed)', async () => {

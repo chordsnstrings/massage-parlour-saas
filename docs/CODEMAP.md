@@ -586,13 +586,22 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     **Page texts + pictures (P4):** core html-design.ts `listHtmlDesignTexts` (one walker `textSites`, tokenized like
     `fillSpans`; ids positional on the raw file: `txt-n` text runs, `attr-n` alt / placeholder / aria-label / title,
     `title` (first outside svg), `meta-description`; only runs / values without `<` or `>`; script and raw-text bodies
-    skipped, so ids survive the CRM splice; `src` = first 300 chars of the collapsed text; `group` = nearest
+    skipped, so ids survive the CRM splice; text = references decoded (numeric + the common named set, exact case;
+    a run / value holding an unknown or ambiguous one is not listed and takes no id), HTML whitespace collapsed
+    (U+00A0 kept); `src` = first 300 chars of it; `group` = nearest
     section/header/nav/footer/main/aside/article/form/dialog by aria-label > first heading > id > "Section n"; `bound`
-    (listing only) = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor, the owner
-    element's id quoted or as `#id` in the design's JS (the CRM_DATA literal not read), `document.title =` for the
-    title) and `applyHtmlTextOverrides` (first step of `htmlDesignDocument`, on the html after `designWithCrm`; same
-    id + src only, escaped (`<` `>` quotes `=`), AR → EN, `{{placeholders}}` filled afterwards; nothing applied → the
-    same string). `htmlPictureAdjustments(images, content)`: pictures over the block's `images` by id (same src →
+    (listing only) + `boundBy`: 'crm' = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor
+    (attributes too); 'script' = text runs inside an element whose text the design's JS writes (`scriptTextIds`:
+    `getElementById('x')` / `querySelector('#x')` / `$('#x')` + `.textContent` / `.innerText` / `.innerHTML` / jQuery
+    `.text(v)` right after, via a variable, or via a helper writing through its first parameter; never attributes;
+    listener / read-only ids stay editable; the CRM_DATA literal not read), `document.title =` for the title; op
+    errors word them "filled from the CRM" / "filled by the design's script") and `applyHtmlTextOverrides` (first step
+    of `htmlDesignDocument`, on the html after `designWithCrm`; same id + src only, escaped (`<` `>` quotes `=`); EN
+    page `t.en`, AR page `t.ar` → `t.en`; either may be missing (Arabic-only keeps the design's English); a blank
+    value or one equal to the listed design text keeps the original bytes; `{{placeholders}}` in a value filled there
+    as plain escaped text and `{` written as `&#123;`, so no later pass links them; nothing applied → the same
+    string). The `html_content` op: `t.en` optional (null / left out keeps the stored English, '' drops it), one of en
+    / ar not blank. `htmlPictureAdjustments(images, content)`: pictures over the block's `images` by id (same src →
     framing kept + `replace`; else a replace-only entry; none → the same array). `htmlContentView(html, content, opts)`:
     slots + page texts (search, `start`/`limit` paging, `bound: false` filter) + pictures + stale (connector, Ask AI).
     `htmlContentLeftovers(…, {page})` adds unbound page texts and stale `text:` / `picture:` entries.
@@ -697,7 +706,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     align, replace}); applied by `applyHtmlImageAdjustments`: framed only when fit / x / y / align is set
     (`htmlImageFramed`, R28 P4): `data-spa-img` attr + `!important` rules at the end, background position/size
     appended after the declaration; a replacement alone only swaps the URL; replace URL must match `HTML_IMAGE_URL`
-    (https or site path; srcset dropped; inside `<picture>` every `<source srcset>` takes it too); of several entries
+    (https or site path; no `$` / character references; inserted by replacer functions, `&` escaped in src / srcset /
+    style attributes, not in `<style>` bodies; srcset dropped; inside `<picture>` every `<source srcset>` takes it too); of several entries
     with one id the last whose src still matches applies. UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
     client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview, honours Phone fixes); saved with the upload (hidden
     `images` JSON, remapped to the moved URLs) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate`

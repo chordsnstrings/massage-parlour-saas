@@ -320,7 +320,7 @@ describe('website content parts (R28 P4)', () => {
     expect(hasHtmlPageContent(c({ a: { on: true } }))).toBe(false)
   })
 
-  it('htmlContentErrors: texts and pictures (id format, src ≤ 300, en required ≤ 2000, duplicates, list caps, URL incl. parentheses refused, unknown parts, 192 KB)', () => {
+  it('htmlContentErrors: texts and pictures (id format, src ≤ 300, English and / or Arabic ≤ 2000 (one not blank), duplicates, list caps, URL incl. parentheses / $ / character references refused, unknown parts, 192 KB)', () => {
     const slots = htmlContentSlots(design())
     expect(
       htmlContentErrors(
@@ -350,6 +350,9 @@ describe('website content parts (R28 P4)', () => {
             { id: 'txt-4', src: '', t: { en: 'x', ar: 5 } },
             { id: 'txt-5', src: '', t: { en: 'x' } },
             { id: 'txt-5', src: '', t: { en: 'y' } },
+            { id: 'txt-6', src: '', t: { ar: 'مرحبا' } },
+            { id: 'txt-7', src: '', t: { en: '', ar: ' ' } },
+            { id: 'txt-8', src: '', t: {} },
           ],
         },
         slots,
@@ -357,10 +360,12 @@ describe('website content parts (R28 P4)', () => {
     ).toEqual([
       'text txt-a: not a page text of a design',
       "text txt-1: src must be the design text's first 300 characters",
-      'text txt-2: an English text of 1 to 2000 characters',
-      'text txt-3: an English text of 1 to 2000 characters',
+      'text txt-2: an English or Arabic text of 1 to 2000 characters',
+      'text txt-3: the English text must be at most 2000 characters',
       'text txt-4: the Arabic text must be at most 2000 characters',
       'text txt-5: set twice',
+      'text txt-7: an English or Arabic text of 1 to 2000 characters',
+      'text txt-8: an English or Arabic text of 1 to 2000 characters',
     ])
     expect(
       htmlContentErrors(
@@ -374,6 +379,10 @@ describe('website content parts (R28 P4)', () => {
             { id: 'img-4', src: 'x'.repeat(301), img: FILE },
             { id: 'img-5', src: '', img: FILE },
             { id: 'img-5', src: '', img: FILE },
+            { id: 'img-6', src: '', img: 'https://x.test/a$&.jpg' },
+            { id: 'img-7', src: '', img: 'https://x.test/a&#41;.jpg' },
+            { id: 'img-8', src: '', img: 'https://x.test/a&rpar;.jpg' },
+            { id: 'img-9', src: '', img: 'https://x.test/a.jpg?w=1&h=2' },
           ],
         },
         slots,
@@ -385,6 +394,9 @@ describe('website content parts (R28 P4)', () => {
       'picture img-3: a picture from the media library (/files/…) or an https link',
       "picture img-4: src must be the design picture's first 300 characters",
       'picture img-5: set twice',
+      'picture img-6: a picture from the media library (/files/…) or an https link',
+      'picture img-7: a picture from the media library (/files/…) or an https link',
+      'picture img-8: a picture from the media library (/files/…) or an https link',
     ])
     const many = (n: number, f: (i: number) => unknown) => Array.from({ length: n }, (_, i) => f(i))
     expect(
@@ -505,7 +517,7 @@ describe('website content parts (R28 P4)', () => {
     const html =
       '<!doctype html><html><head><title>Old</title></head><body><section aria-label="Intro"><h1 id="spa">Name</h1>' +
       `<p>Hello there</p><p>Second text</p></section><img src="data:image/png;base64,${'A'.repeat(4000)}">` +
-      '<div style="background:url(https://cdn.test/bg.jpg)"></div><script>document.getElementById(\'spa\')</script></body></html>'
+      "<div style=\"background:url(https://cdn.test/bg.jpg)\"></div><script>document.getElementById('spa').textContent = 'x'</script></body></html>"
     const content = {
       v: 1,
       values: [{ path: 'x', value: { t: { en: 'y' } } }],
