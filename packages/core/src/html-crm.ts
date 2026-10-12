@@ -245,7 +245,8 @@ export function uaePhoneDisplay(e164: string): string {
   return d ? `+${d}` : ''
 }
 
-const UAE_CITIES = [
+/** UAE cities and towns an address names (normalised, `crmName`). */
+export const UAE_CITIES = [
   'abu dhabi',
   'dubai',
   'sharjah',
@@ -442,6 +443,12 @@ function namesSpa(part: unknown, name: string) {
   const s = crmName(part)
   const full = crmName(name)
   return s !== '' && (full === s || full.startsWith(`${s} `))
+}
+
+/** Whether a design was made for the spa `name` (its own `spa.name` or `spa.short_name` names it). */
+export function isOwnDesign(design: Record<string, unknown> | null | undefined, name: string): boolean {
+  const spa = obj(obj(design).spa)
+  return namesSpa(spa.name, name) || namesSpa(spa.short_name, name)
 }
 
 /**

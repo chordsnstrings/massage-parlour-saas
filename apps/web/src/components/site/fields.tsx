@@ -25,8 +25,16 @@ export type AiAssist = {
   ) => Promise<{ ok: true; text: string } | { ok: false; error: string }>
 }
 
-/** Editor-wide state the custom fields read: content language, device and (in the tenant editor) AI assists. */
-export const EditorContext = createContext<{ locale: Locale; device: Device; ai?: AiAssist }>({
+/**
+ * Editor-wide state the custom fields read: content language, device, (in the tenant editor) AI assists, and (R28) the
+ * page's HTML design files + the spa facts the Website content field's readiness check needs.
+ */
+export const EditorContext = createContext<{
+  locale: Locale
+  device: Device
+  ai?: AiAssist
+  html?: { docs: Record<string, string>; spaName: string; city: string }
+}>({
   locale: 'en',
   device: 'lg',
 })

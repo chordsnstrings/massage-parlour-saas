@@ -3,6 +3,7 @@ import {
   hasHtmlContent,
   htmlContentErrors,
   htmlContentFileIds,
+  htmlContentLeftovers,
   htmlContentOf,
   htmlContentSlots,
   overlayHtmlContent,
@@ -219,5 +220,50 @@ describe('htmlContentErrors', () => {
         }),
       ),
     ).toEqual([FILE.slice(7)])
+  })
+})
+
+describe('htmlContentLeftovers', () => {
+  const d = () => {
+    const x = design()
+    x.journey[0]!.eyebrow = 'Al Zahiyah · {hours}'
+    x.journey[1]!.title = 'Call 052 510 8633 or write to hello@berelax.ae'
+    x.spa.experience[0]!.text = 'Welcome to Be Relax — Test Build'
+    return x
+  }
+
+  it("flags what still belongs to the design's spa on another spa's site", () => {
+    const out = htmlContentLeftovers(d(), undefined, { spaName: 'last test', city: 'Dubai', arabic: false })
+    expect(out.map((o) => [o.path, o.reason])).toEqual([
+      ['spa.experience[0].text', 'other-spa'],
+      ['journey[welcome].body', 'city'], // "… heart of Abu Dhabi …" on a Dubai spa
+      ['journey[book].title', 'phone'],
+    ])
+  })
+
+  it("on the spa's own design its name is fine; replaced values, English-only and stale ones", () => {
+    const own = htmlContentLeftovers(d(), undefined, {
+      spaName: 'Be Relax Spa',
+      city: 'Abu Dhabi',
+      arabic: false,
+    })
+    expect(own.map((o) => [o.path, o.reason])).toEqual([
+      ['spa.experience[0].text', 'test'],
+      ['journey[book].title', 'phone'],
+    ])
+    const out = htmlContentLeftovers(
+      d(),
+      c({
+        'journey[book].title': { t: { en: 'Your hour is waiting.' } },
+        'journey[welcome].body': { t: { en: 'Massage in Dubai', ar: 'مساج في دبي' } },
+        'journey[gone].title': { t: { en: 'x' } },
+      }),
+      { spaName: 'Be Relax Spa', city: 'Abu Dhabi', arabic: true },
+    )
+    expect(out.map((o) => [o.path, o.reason])).toEqual([
+      ['spa.experience[0].text', 'test'],
+      ['journey[book].title', 'arabic'],
+      ['journey[gone].title', 'stale'],
+    ])
   })
 })
