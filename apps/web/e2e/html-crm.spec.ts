@@ -553,7 +553,8 @@ test('R28 P3: fill the CRM from the design', async ({ page }) => {
   // The design's "Normal massage" pairs with the CRM's (same name), its own picture shown; "Design ritual" has none.
   await expect(row('Normal massage')).toContainText('CRM: Normal massage')
   await expect(row('Normal massage')).toContainText('Same name')
-  await expect(row('Normal massage').locator('img')).toHaveAttribute('src', /^data:image\/gif;base64,/)
+  // A small server-made thumbnail of the design's own picture (never the full data: URI).
+  await expect(row('Normal massage').locator('img')).toHaveAttribute('src', /^data:image\/webp;base64,/)
   await expect(row('Normal massage').getByRole('combobox')).toHaveValue('fill')
   await expect(row('Design ritual')).toContainText('No match')
   await expect(row('Design ritual').getByRole('combobox')).toHaveValue('skip')
