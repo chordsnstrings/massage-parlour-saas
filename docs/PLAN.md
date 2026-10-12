@@ -1140,6 +1140,30 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `pruneUnusedOAuthClients` keeps every client with a `platform.mcp.client_authorized` audit row (Revoke deletes only
   consent + tokens); a connector registered > 24 h before the account could connect must be re-added (README, card).
   Owner setup: deploy/droplet/README.md "Connect Claude or ChatGPT".
+- **R26 Live CRM feed for HTML designs + booking form → website enquiry + staff "Show on website" (owner,
+  2026-10-12: apply the BE RELAX design "with ALL operational data bound to the spa's CRM (single source of truth) so CRM
+  changes show on the live site immediately without editing the HTML … Visual structure, layout, 3D motion, styling
+  100% untouched").** Owner decisions: (1) the design's booking form creates a **website enquiry** in the CRM's
+  Website enquiries inbox (service, length, date, time, guests, therapist, name, phone, notes; the spa confirms on
+  WhatsApp) — no automatic booking; (2) staff appear only with a new per-staff **"Show on website"** switch (default
+  off; EN + TH, TH flagged for review); (3) when the CRM has no value (no photo, no logo, no services …) the design
+  file's own value stays — never an empty section. R24 hard rule kept: a design without the contract is unchanged; a
+  contract design differs only inside its `window.CRM_DATA` JSON. **Built (2026-10-12, branch r26):** the platform
+  standard `docs/design/html-crm-contract.md` (detection, field table + precedence, delivery, endpoints, perf):
+  `window.CRM_DATA` literal → the merged CRM contract on every render (live page, frames, previews, editor, share
+  links; parsed once per stored design, content-addressed caches only); `<meta name="crm-endpoint">` →
+  `{site}/crm-data.json` (CORS `*`, no-store); `{site}/crm-enquiry` (JSON POST, Origin null, per-spa 30/h + 150/day,
+  honeypot) → `site_enquiries.booking`; staff form "Show on website" + short bio (EN/AR); inbox "Booking request" line +
+  WhatsApp reply naming service/date/time; upload message + connector `crm_contract`. Migration 0050
+  (`staff.show_on_site`, `site_enquiries.booking`). e2e `html-crm.spec.ts` (+ `own-domain-redirect` step); the real
+  BE RELAX file checked locally at 1440×900 / 390×844. Owner step: upload BE RELAX in the console, apply it to the spa,
+  switch "Show on website" on for the therapists to show, publish. **Review fixes (2026-10-12):** `crm-enquiry` only
+  for spas whose live site has a contract design (404 otherwise; Origin required); no CRM booking url (the design's
+  Book links / form stay: requests, never automatic bookings); nobody opted in → no staff (never the design's
+  people); logo on dark stays the design's for the spa it names; the WhatsApp reply never quotes typed text;
+  "Show on website" is the one public-staff rule (block Team sections too; migration 0050 switched it on for the
+  staff a live Team section showed: active + bookable).
+  **R27 Instagram via the Claude/ChatGPT connector:** planned 2026-10-12, owner: "leave it" — not building.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

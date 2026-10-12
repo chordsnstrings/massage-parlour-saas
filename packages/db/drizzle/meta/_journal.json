@@ -351,6 +351,13 @@
       "when": 1791735710289,
       "tag": "0049_site_template_files",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1791793171516,
+      "tag": "0050_r26_crm_feed",
+      "breakpoints": true
     }
   ]
 }

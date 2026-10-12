@@ -7,6 +7,7 @@ import {
   htmlDesignDocument,
   htmlDesignPhoneFixes,
 } from '@spa/core'
+import { designKey, designWithCrm } from '../html-crm'
 import { HtmlDesignFrame } from '../html-design-frame'
 import { htmlDesignLinks, htmlDesignValues } from '../html-design-values'
 import type { SiteMeta } from '../types'
@@ -40,7 +41,10 @@ export const HtmlDesign: ComponentConfig<Props> = {
   render: ({ html, doc, images, phoneFixes, puck }) => {
     const meta = puck.metadata as SiteMeta
     const ref = htmlDesignDocOf({ doc })
-    const source = html || (ref && meta.htmlDocs?.[ref.file]) || ''
+    // R26: a design with the CRM data contract gets the spa's live CRM data (only its window.CRM_DATA JSON changes).
+    const source = designWithCrm(html || (ref && meta.htmlDocs?.[ref.file]) || '', designKey(ref), meta.crm, {
+      inject: true,
+    })
     return (
       <HtmlDesignFrame
         title={meta.data.tenant.name}

@@ -160,6 +160,8 @@ export const staff = pgTable(
       .notNull()
       .default({}),
     active: boolean('active').notNull().default(true),
+    /** R26: name, photo and short bio appear on the website (Team block, HTML designs' CRM feed). Opt-in. */
+    showOnSite: boolean('show_on_site').notNull().default(false),
     sort: integer('sort').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

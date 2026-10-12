@@ -1,17 +1,17 @@
 import { businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
-import { branches, serviceCategories, services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
+import { branches, type Tx, withTenant } from '@spa/db'
 import {
   editingTheme,
   getSite,
   listPages,
   listPublishedPosts,
-  publicPrice,
   type SiteRow,
   siteInstagram,
   siteReviews,
-  spaHidesPrices,
+  websiteServices,
+  websiteStaff,
 } from '@spa/services'
-import { and, asc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { hasFeature } from '@/server/entitlements'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
@@ -19,40 +19,15 @@ import type { Locale, SiteData, SiteMeta } from './types'
 export type TenantLite = { id: string; slug: string; name: string }
 
 /**
- * Live data for the smart blocks (services + prices, bookable staff, main branch, blog posts; Google reviews and the
- * Instagram feed only when the plan has `marketing` — F15, PLAN §18.8).
+ * Live data for the smart blocks (services + prices, "Show on website" staff, main branch, blog posts; Google reviews
+ * and the Instagram feed only when the plan has `marketing` — F15, PLAN §18.8).
  */
 async function loadLive(tx: Tx, tenant: TenantLite, marketing: boolean): Promise<Omit<SiteData, 'pages'>> {
   const [branch] = await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1)
-  const serviceRows = await tx
-    .select({
-      id: services.id,
-      name: services.name,
-      description: services.description,
-      category: serviceCategories.name,
-      categorySort: serviceCategories.sort,
-      showPrice: services.showPrice,
-      sort: services.sort,
-    })
-    .from(services)
-    .leftJoin(serviceCategories, eq(serviceCategories.id, services.categoryId))
-    .where(and(eq(services.active, true), eq(services.onlineBookable, true)))
-    .orderBy(asc(serviceCategories.sort), asc(services.sort), asc(services.createdAt))
-  const variants = await tx
-    .select({
-      serviceId: serviceVariants.serviceId,
-      durationMin: serviceVariants.durationMin,
-      priceAed: serviceVariants.priceAed,
-    })
-    .from(serviceVariants)
-    .where(eq(serviceVariants.active, true))
-    .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin))
-  const spaHides = await spaHidesPrices(tx, tenant.id)
-  const people = await tx
-    .select({ id: staff.id, name: staff.displayName, photoUrl: staff.photoUrl, bio: staff.bio })
-    .from(staff)
-    .where(and(eq(staff.active, true), eq(staff.bookable, true)))
-    .orderBy(asc(staff.sort), asc(staff.displayName))
+  // The CRM Website page's "On the website" rule (services websiteServices; R26 adds the photo).
+  const serviceRows = await websiteServices(tx, tenant.id)
+  // One public-staff rule for every site (Team block, HTML designs): active with "Show on website" on (R26).
+  const people = await websiteStaff(tx)
   const posts = await listPublishedPosts(tx, 24)
   const reviews = marketing ? await siteReviews(tx, { limit: 12, minRating: 4 }) : null
   const instagram = marketing ? await siteInstagram(tx, { limit: 12 }) : null
@@ -69,21 +44,8 @@ async function loadLive(tx: Tx, tenant: TenantLite, marketing: boolean): Promise
           businessDayCutoff: branch.businessDayCutoff.slice(0, 5),
         }
       : null,
-    services: serviceRows
-      .map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description ?? null,
-        category: s.category ?? null,
-        variants: variants
-          .filter((v) => v.serviceId === s.id)
-          .map((v) => ({
-            durationMin: v.durationMin,
-            priceAed: publicPrice(v.priceAed, s.showPrice, spaHides),
-          })),
-      }))
-      .filter((s) => s.variants.length > 0),
-    staff: people.map((p) => ({ ...p, bio: p.bio ?? null })),
+    services: serviceRows,
+    staff: people,
     posts: posts.map((p) => ({
       slug: p.slug,
       title: p.title,

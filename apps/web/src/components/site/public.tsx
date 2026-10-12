@@ -21,6 +21,7 @@ import { absoluteImage, heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/se
 import { siteData } from '@/server/sites'
 import { turnstileSiteKey } from '@/server/turnstile'
 import { siteConfig } from './config'
+import { crmFeedMeta } from './crm-feed'
 import { buildMeta, loadSite, localeOf } from './data'
 import { tr, ui } from './i18n'
 import { pageHref } from './links'
@@ -209,16 +210,25 @@ export async function PublicSite({
     if (slug === '') return <PlaceholderSite data={await siteData(tenant)} />
     notFound()
   }
+  const locale = localeOf(lang)
   const meta = {
     ...buildMeta({
       data: loaded.data,
       theme: loaded.published.site.theme,
-      locale: localeOf(lang),
+      locale,
       base,
       slug,
     }),
     globals: loaded.published.globals,
     form,
+    // R26: an HTML design with the CRM data contract (frame: Phone fixes on, legacy designs, fallback).
+    ...(await crmFeedMeta(tenant, loaded.published.data, {
+      locale,
+      live: true,
+      base,
+      slug,
+      services: loaded.data.services,
+    })),
   }
   const data = loaded.published.data as Partial<Data>
   const ld = await siteJsonLd(tenant, slug, loaded, meta.locale)

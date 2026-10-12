@@ -1,4 +1,4 @@
-import type { OpeningHours } from '@spa/core'
+import type { CrmContract, OpeningHours } from '@spa/core'
 import type { SiteTheme } from './theme'
 
 export type Locale = 'en' | 'ar'
@@ -13,6 +13,8 @@ export type SiteService = {
   name: Bi
   description: Bi | null
   category: Bi | null
+  /** R26: the service photo (CRM services.image_url), for HTML designs' CRM feed. */
+  imageUrl?: string | null
   /** null = "Price on request": none set, or hidden by the service / spa default (R4; never sent to the page). */
   variants: { durationMin: number; priceAed: string | null }[]
 }
@@ -90,6 +92,11 @@ export type SiteMeta = {
    * editor saves back). Everywhere else the html is filled into the page data before rendering.
    */
   htmlDocs?: Record<string, string>
+  /**
+   * R26: the CRM side of the HTML design data contract (docs/design/html-crm-contract.md), set only when the page has
+   * a design that uses it (`window.CRM_DATA` / crm-endpoint); the HtmlDesign block merges it into the design's data.
+   */
+  crm?: CrmContract
 }
 
 /** A published post on its own page (`{site}/blog/{slug}`). */

@@ -41,6 +41,13 @@ const refresh = (slug: string) => revalidatePath(`/dashboard/${slug}/staff`, 'la
 // Profile
 // ---------------------------------------------------------------------------
 
+/** One line for the website team card (typed text; never translated). */
+const shortBio = z
+  .string()
+  .optional()
+  .transform((v) => (v ?? '').replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim())
+  .pipe(z.string().max(120, 'staff.validation.bio'))
+
 const staffSchema = z.object({
   id: uuidOrEmpty,
   displayName: z.string().trim().min(2, 'staff.validation.name').max(60),
@@ -49,6 +56,10 @@ const staffSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'staff.validation.colour'),
   bookable: bool,
   active: bool,
+  // R26: name, photo and short bio on the website (HTML designs' team section); off by default.
+  showOnSite: bool,
+  bioEn: shortBio,
+  bioAr: shortBio,
   payType: z
     .enum(['booking_commission', 'salary', 'sales_commission', 'booking_fee'])
     .default('booking_commission'),
@@ -87,12 +98,17 @@ export async function saveStaffAction(
     color: d.color,
     bookable: d.bookable,
     active: d.active,
+    // Archived people never show on the website.
+    showOnSite: d.active && d.showOnSite,
     payType: d.payType,
     commissionPct: d.commissionPct.toFixed(2),
     baseSalaryAed: d.baseSalaryAed.toFixed(2),
     memberId: d.memberId ?? null,
     // Only forms that post the field change the photo.
     ...(formData.has('photoUrl') ? { photoUrl: d.photoUrl ?? null } : {}),
+    ...(formData.has('bioEn')
+      ? { bio: d.bioEn || d.bioAr ? { en: d.bioEn, ...(d.bioAr ? { ar: d.bioAr } : {}) } : null }
+      : {}),
   }
   const result = await withTenant(ctx.tenant.id, async (tx) => {
     if (d.memberId) {
@@ -142,7 +158,7 @@ export async function deleteStaffAction(slug: string, id: string): Promise<Actio
   if (!z.string().uuid().safeParse(id).success) return fail('staff.result.notFound')
   // Keep history (bookings, commissions): archive rather than delete.
   await withTenant(ctx.tenant.id, (tx) =>
-    tx.update(staff).set({ active: false, bookable: false }).where(eq(staff.id, id)),
+    tx.update(staff).set({ active: false, bookable: false, showOnSite: false }).where(eq(staff.id, id)),
   )
   await record(ctx, 'staff.archived', id)
   refresh(slug)

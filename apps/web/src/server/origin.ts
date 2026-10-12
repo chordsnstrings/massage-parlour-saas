@@ -76,3 +76,19 @@ export const canonicalUrls = () => builders(canonicalDomain())
 export const appUrl = async (path = '/') => (await requestUrls()).app(path)
 export const adminUrl = async (path = '/') => (await requestUrls()).admin(path)
 export const marketingUrl = async () => (await requestUrls()).marketing()
+
+/**
+ * R26: the public site origin a request came in on (`{scheme}://{host}` + `base`, e.g. `/s/{slug}` under path
+ * routing): a spa's temporary address or its own domain, exactly as the visitor typed it, so a design's booking form
+ * posts back to the same site. Null for a malformed Host.
+ */
+export function siteOriginFrom(h: { get(name: string): string | null }, base = ''): string | null {
+  const host = (h.get('host') ?? '').toLowerCase()
+  if (!/^[a-z0-9.-]+(?::\d{1,5})?$/.test(host)) return null
+  const proto = h.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const scheme = proto === 'http' || proto === 'https' ? proto : isLocal(host) ? 'http' : 'https'
+  return `${scheme}://${host}${base}`
+}
+
+/** `siteOriginFrom` for the current request (server components). */
+export const siteRequestOrigin = async (base = '') => siteOriginFrom(await headers(), base)

@@ -1,8 +1,12 @@
 // Tenant website: site settings, pages and Puck page versions (docs/PLAN.md §11).
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
+  type Bilingual,
   pageVersions,
   savedSections,
+  serviceCategories,
+  services,
+  serviceVariants,
   sitePages,
   sites,
   type TemplateUndo,
@@ -616,7 +620,7 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
 }
 
 /** Slugs the public site uses for its own routes. */
-export const RESERVED_SLUGS: ReadonlySet<string> = new Set(['book', 'api', 's'])
+export const RESERVED_SLUGS: ReadonlySet<string> = new Set(['book', 'api', 's', 'crm-enquiry'])
 
 /**
  * Addresses other pages hold: their live slug and any pending rename's slug (reserved until it is published or
@@ -979,4 +983,58 @@ export function publicPrice(
   spaHides: boolean,
 ): string | null {
   return (serviceShowPrice ?? !spaHides) ? priceAed : null
+}
+
+/** A service as the website shows it (smart blocks, JSON-LD, HTML designs' CRM feed). */
+export type WebsiteService = {
+  id: string
+  name: Bilingual
+  description: Bilingual | null
+  category: Bilingual | null
+  /** The service photo (stored file path or https URL), or null. */
+  imageUrl: string | null
+  /** null price = "Price on request" (none set, or hidden by the service / spa default; never sent to the page). */
+  variants: { durationMin: number; priceAed: string | null }[]
+}
+
+/**
+ * The services on the spa's website — the CRM Website page's "On the website" rule: active, online bookable, at
+ * least one active variant. Category sort, then service sort, then created; variants by sort then length.
+ */
+export async function websiteServices(tx: Tx, tenantId: string): Promise<WebsiteService[]> {
+  const rows = await tx
+    .select({
+      id: services.id,
+      name: services.name,
+      description: services.description,
+      category: serviceCategories.name,
+      showPrice: services.showPrice,
+      imageUrl: services.imageUrl,
+    })
+    .from(services)
+    .leftJoin(serviceCategories, eq(serviceCategories.id, services.categoryId))
+    .where(and(eq(services.active, true), eq(services.onlineBookable, true)))
+    .orderBy(asc(serviceCategories.sort), asc(services.sort), asc(services.createdAt))
+  const variants = await tx
+    .select({
+      serviceId: serviceVariants.serviceId,
+      durationMin: serviceVariants.durationMin,
+      priceAed: serviceVariants.priceAed,
+    })
+    .from(serviceVariants)
+    .where(eq(serviceVariants.active, true))
+    .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+  const hides = await spaHidesPrices(tx, tenantId)
+  return rows
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description ?? null,
+      category: s.category ?? null,
+      imageUrl: s.imageUrl ?? null,
+      variants: variants
+        .filter((v) => v.serviceId === s.id)
+        .map((v) => ({ durationMin: v.durationMin, priceAed: publicPrice(v.priceAed, s.showPrice, hides) })),
+    }))
+    .filter((s) => s.variants.length > 0)
 }

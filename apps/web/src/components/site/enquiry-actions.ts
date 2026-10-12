@@ -1,18 +1,14 @@
 'use server'
-import { withTenant } from '@spa/db'
 // F15 website enquiry form (EnquiryForm block). Public: honeypot → zod (server-side) → per-IP limit across all spa
 // sites (5/hour, 20/day, ipRateLimitKey) → Turnstile (F9, like /book) → the spa (resolved server-side, must take
 // bookings) → stored per tenant (RLS) → audit + bell/push to the front desk. Nothing is emailed to the visitor;
 // the spa replies by WhatsApp click-to-send from Inbox → Enquiries.
-import { notify, SITE_ENQUIRY_LIMITS, siteEnquirySchema, submitSiteEnquiry } from '@spa/services'
-import { revalidatePath } from 'next/cache'
-import { after } from 'next/server'
+import { SITE_ENQUIRY_LIMITS, siteEnquirySchema } from '@spa/services'
 import { z } from 'zod'
 import { acceptsBookings } from '@/components/booking/data'
 import { type ActionResult, fail, ok } from '@/lib/action'
-import { audit } from '@/server/audit'
-import { hashIp } from '@/server/enquiries'
 import { clientIp, withinIpLimit } from '@/server/rate-limit'
+import { recordSiteEnquiry } from '@/server/site-enquiry'
 import { resolveSiteTenant } from '@/server/sites'
 import { passesBotCheck } from '@/server/turnstile'
 import { type SiteUiKey, ui } from './i18n'
@@ -76,27 +72,6 @@ export async function sendSiteEnquiryAction(input: SiteEnquiryForm): Promise<Act
     return fail(ui('errBotCheck', lang))
   const tenant = await resolveSiteTenant(where.data)
   if (!tenant || !acceptsBookings(tenant.status)) return fail(ui('errUnavailable', lang))
-  const ip = await clientIp()
-  const enquiry = await withTenant(tenant.id, (tx) =>
-    submitSiteEnquiry(tx, tenant.id, parsed.data, { ipHash: ip ? hashIp(ip) : null }),
-  )
-  await audit({
-    tenantId: tenant.id,
-    action: 'site.enquiry.received',
-    entity: 'site_enquiry',
-    entityId: enquiry.id,
-    data: { page: enquiry.page, locale: enquiry.locale },
-    ip: null, // public event: only the enquiry's keyed ip_hash is kept
-  })
-  revalidatePath(`/dashboard/${tenant.slug}/enquiries`)
-  after(() =>
-    notify({
-      tenantId: tenant.id,
-      kind: 'enquiry.site',
-      params: { name: enquiry.name, message: enquiry.message.replace(/\s+/g, ' ').slice(0, 120) },
-      url: `/${tenant.slug}/enquiries`,
-      dedupeKey: `enquiry.site:${enquiry.id}`,
-    }).catch((e) => console.error('enquiry notification failed', e)),
-  )
+  await recordSiteEnquiry(tenant, parsed.data, await clientIp())
   return ok(done)
 }

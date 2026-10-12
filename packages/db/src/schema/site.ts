@@ -195,6 +195,18 @@ export const sitePosts = pgTable(
  */
 export const siteEnquiryStatus = pgEnum('site_enquiry_status', ['new', 'replied', 'closed'])
 
+/** R26: what a design's booking form asked for (names resolved server-side; the spa confirms on WhatsApp). */
+export type SiteEnquiryBooking = {
+  service: string
+  serviceId: string | null
+  durationMin: number | null
+  date: string
+  time: string
+  guests: number
+  staff: string | null
+  staffId: string | null
+}
+
 export const siteEnquiries = pgTable(
   'site_enquiries',
   {
@@ -211,6 +223,8 @@ export const siteEnquiries = pgTable(
     page: text('page').notNull().default(''),
     /** Keyed SHA-256 of the sender's IP (abuse checks without storing the address). */
     ipHash: text('ip_hash'),
+    /** R26: a booking request from an HTML design's form (null = a plain message); `message` holds its notes. */
+    booking: jsonb('booking').$type<SiteEnquiryBooking>(),
     handledBy: text('handled_by').references(() => user.id, { onDelete: 'set null' }),
     handledAt: timestamp('handled_at', { withTimezone: true }),
     createdAt: createdAt(),

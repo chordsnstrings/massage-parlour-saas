@@ -1,6 +1,7 @@
 import {
   decodeHtmlBytes,
   fixHtmlDesign,
+  htmlCrmContractOf,
   htmlDesignEmbedHosts,
   htmlDesignEmbedWarning,
   MAX_HTML_UPLOAD_BYTES,
@@ -115,6 +116,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
   }
   const fixes = phoneFixes ? fixHtmlDesign(raw).fixes : []
   const embeds = htmlDesignEmbedHosts(raw)
+  const crm = htmlCrmContractOf(raw)?.mode ?? null
   await audit({
     actorUserId: userId,
     action: 'platform.site_template.html_uploaded',
@@ -128,6 +130,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
       placeholders: HTML_DESIGN_PLACEHOLDERS.filter((p) => raw.includes(`{{${p}}}`)),
       fixes,
       embeds,
+      crm,
       adjustedImages: images.length,
     },
   })
@@ -136,11 +139,17 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
     ? ` Fixed for phones: ${fixes.map((f) => (f === 'viewport' ? 'added the mobile viewport' : 'fluid image widths')).join(', ')}.`
     : ''
   const warning = htmlDesignEmbedWarning(embeds)
+  // R26: a design with the CRM data contract gets each spa's live CRM data (docs/design/html-crm-contract.md).
+  const live = crm
+    ? ' CRM data contract found: services, prices, hours, phones, address and staff (opt-in) come live from each spa’s CRM.'
+    : /CRM_DATA/.test(raw)
+      ? ' window.CRM_DATA is not a plain JSON literal, so the design keeps its own data.'
+      : ''
   return [
     200,
     ok(
-      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}. Stored exactly as the file${encoding === 'utf-8' ? '' : ` (read as ${encoding})`}.${fixed}${warning ? ` ${warning}` : ''}`,
-      { embeds },
+      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}. Stored exactly as the file${encoding === 'utf-8' ? '' : ` (read as ${encoding})`}.${fixed}${live}${warning ? ` ${warning}` : ''}`,
+      { embeds, crm },
     ),
   ]
 }

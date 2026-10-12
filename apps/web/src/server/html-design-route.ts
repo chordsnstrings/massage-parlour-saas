@@ -15,7 +15,7 @@ export const HTML_ROUTE_FALLBACK = '__page'
 
 // Same as @spa/services PAGE_SLUG / RESERVED_SLUGS (not imported: the services index is heavy for the proxy).
 const PAGE_SLUG = /^$|^[a-z0-9]+(?:-[a-z0-9]+)*$/
-const RESERVED = new Set(['book', 'api', 's'])
+const RESERVED = new Set(['book', 'api', 's', 'crm-enquiry'])
 
 // globalThis: the proxy and the route handlers / server actions are separate bundles in one process.
 const g = globalThis as unknown as {

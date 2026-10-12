@@ -1,5 +1,7 @@
-import { htmlDesignDocument } from '@spa/core'
+import { htmlDesignDocOf, htmlDesignDocument } from '@spa/core'
+import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
+import { designKey, designWithCrm } from '@/components/site/html-crm'
 import { HTML_DESIGN, htmlDesignLinks, htmlDesignValues } from '@/components/site/html-design-values'
 import { tr } from '@/components/site/i18n'
 import { loadPublished, siteJsonLd } from '@/components/site/published'
@@ -71,15 +73,25 @@ async function render(req: Request, head: boolean) {
 
   const lang = new URL(original, 'http://x').searchParams.get('lang') ?? undefined
   const locale = localeOf(lang)
+  const base = p.kind === 'slug' && PATH_ROUTING ? `/s/${tenant.slug}` : ''
   const meta = buildMeta({
     data: loaded.data,
     theme: loaded.published.site.theme,
     locale,
-    base: p.kind === 'slug' && PATH_ROUTING ? `/s/${tenant.slug}` : '',
+    base,
     slug: p.page,
   })
+  // R26: a design with the CRM data contract: only its window.CRM_DATA JSON becomes the live CRM data (an
+  // endpoint-only design fetches crm-data.json itself); its booking form posts to this host's crm-enquiry.
+  const { crm } = await crmFeedMeta(tenant, data, {
+    locale,
+    live: true,
+    base,
+    slug: p.page,
+    services: loaded.data.services,
+  })
   let html = htmlDesignDocument(
-    block.props.html,
+    designWithCrm(block.props.html, designKey(htmlDesignDocOf(block.props)), crm, { inject: false }),
     htmlDesignValues(meta),
     false,
     Array.isArray(block.props.images) ? block.props.images : [],

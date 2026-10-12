@@ -1,8 +1,8 @@
 // F15 enquiry form: leads from a spa's website (EnquiryForm block) → the spa's dashboard (Inbox → Enquiries), answered
 // by WhatsApp click-to-send (never emailed). Callers run these inside withTenant(); bot check, rate limit,
 // permission and audit stay in the caller.
-import { toE164 } from '@spa/core'
-import { siteEnquiries, type Tx } from '@spa/db'
+import { addDays, dubaiParts, toE164 } from '@spa/core'
+import { type SiteEnquiryBooking, siteEnquiries, type Tx } from '@spa/db'
 import { and, desc, eq, ilike, or, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -68,10 +68,83 @@ export const siteEnquirySchema = z.object({
 })
 export type SiteEnquiryInput = z.output<typeof siteEnquirySchema>
 
+/**
+ * R26: booking requests from an HTML design's form (`{site}/crm-enquiry`, no Turnstile — the design runs sandboxed):
+ * per spa 30 an hour, 150 a day, always on (one spa's inbox stays usable against rotating IPs); the per-IP
+ * `SITE_ENQUIRY_LIMITS` apply too.
+ */
+export const DESIGN_ENQUIRY_TENANT_LIMITS = [
+  [30, 3600],
+  [150, 86_400],
+] as const
+/** Largest booking-request body read (bytes). */
+export const DESIGN_ENQUIRY_MAX_BYTES = 8192
+/** How far ahead (days) a requested date may be; yesterday is accepted (time zones of the visitor's clock). */
+export const DESIGN_ENQUIRY_MAX_DAYS = 120
+
+const ymd = /^\d{4}-\d{2}-\d{2}$/
+const realDate = (v: string) => {
+  const d = new Date(`${v}T12:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
+}
+const inWindow = (v: string) => {
+  const today = dubaiParts(new Date()).date
+  return v >= addDays(today, -1) && v <= addDays(today, DESIGN_ENQUIRY_MAX_DAYS)
+}
+const optionalId = z
+  .string()
+  .trim()
+  .max(100, 'long:id')
+  .nullish()
+  .transform((v) => v || null)
+
+/**
+ * The booking form body of a contract design (documented in its header): `{spa, service_id, service_name,
+ * duration_minutes, guests, date, time, staff_id, name, phone, notes, source, submitted_at}`. `spa`, `source`,
+ * `submitted_at` and unknown keys are dropped; ids are resolved server-side by the caller (never trusted).
+ */
+export const designEnquirySchema = z
+  .object({
+    name: siteEnquirySchema.shape.name,
+    phone: siteEnquirySchema.shape.phone,
+    service_id: optionalId,
+    service_name: z
+      .string()
+      .overwrite(oneLine)
+      .trim()
+      .max(120, 'long:service')
+      .nullish()
+      .transform((v) => v || ''),
+    duration_minutes: z
+      .number()
+      .int()
+      .min(5, 'duration')
+      .max(600, 'duration')
+      .nullish()
+      .transform((v) => v ?? null),
+    guests: z.number().int().min(1, 'guests').max(10, 'guests').default(1),
+    date: z
+      .string({ error: 'required:date' })
+      .regex(ymd, 'date')
+      .refine(realDate, 'date')
+      .refine(inWindow, 'date'),
+    time: z.string({ error: 'required:time' }).regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'time'),
+    staff_id: optionalId,
+    notes: z
+      .string()
+      .overwrite(multiLine)
+      .trim()
+      .max(1000, 'long:notes')
+      .nullish()
+      .transform((v) => v ?? ''),
+  })
+  .refine((v) => Boolean(v.service_id || v.service_name), { path: ['service_id'], error: 'required:service' })
+export type DesignEnquiryInput = z.output<typeof designEnquirySchema>
+
 export async function submitSiteEnquiry(
   tx: Tx,
   tenantId: string,
-  input: SiteEnquiryInput,
+  input: SiteEnquiryInput & { booking?: SiteEnquiryBooking | null },
   meta: { ipHash: string | null },
 ): Promise<SiteEnquiry> {
   const [row] = await tx
@@ -101,6 +174,7 @@ export async function listSiteEnquiries(
     const match = or(
       ilike(siteEnquiries.name, like),
       ilike(siteEnquiries.message, like),
+      sql`${siteEnquiries.booking}->>'service' ilike ${like}`,
       digits.length >= 3 ? ilike(siteEnquiries.phone, `%${digits}%`) : undefined,
     )
     if (match) where.push(match)
@@ -145,10 +219,32 @@ export async function setSiteEnquiryStatus(
   return { from: before.status, row: row! }
 }
 
-/** First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest). */
-export function siteEnquiryReplyText(e: { name: string; locale: string }, spaName: string) {
-  const first = e.name.trim().split(/\s+/)[0] ?? ''
+/** A greeting name: the visitor's first word when it reads as a name (letters, marks, ' ’ -), else nothing. */
+const greetingName = (name: string) => {
+  const first = name.trim().split(/\s+/)[0] ?? ''
+  return /^[\p{L}\p{M}'’-]{1,40}$/u.test(first) ? first : ''
+}
+
+/**
+ * First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest).
+ * The spa's own number sends it to the phone on the enquiry, which anyone can type: only names the CRM resolved
+ * (a website service) and validated values go in, never the visitor's free text (no links in the spa's name).
+ */
+export function siteEnquiryReplyText(
+  e: { name: string; locale: string; booking?: SiteEnquiryBooking | null },
+  spaName: string,
+) {
+  const first = greetingName(e.name)
+  const hi = e.locale === 'ar' ? (first ? `مرحبًا ${first}، ` : 'مرحبًا، ') : first ? `Hi ${first}, ` : 'Hi, '
+  const b = e.booking
+  // R26: a booking request (Arabic copy needs native review); the service only when the CRM named it.
+  if (b) {
+    const service = b.serviceId ? b.service : ''
+    return e.locale === 'ar'
+      ? `${hi}شكرًا لطلب الحجز في ${spaName}${service ? ` لـ ${service}` : ''} يوم ${b.date} الساعة ${b.time}. `
+      : `${hi}thank you for your booking request at ${spaName}${service ? ` for ${service}` : ''} on ${b.date} at ${b.time}. `
+  }
   return e.locale === 'ar'
-    ? `مرحبًا ${first}، شكرًا لرسالتك إلى ${spaName}. `
-    : `Hi ${first}, thank you for your message to ${spaName}. `
+    ? `${hi}شكرًا لرسالتك إلى ${spaName}. `
+    : `${hi}thank you for your message to ${spaName}. `
 }
