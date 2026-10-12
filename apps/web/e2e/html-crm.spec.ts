@@ -102,7 +102,12 @@ async function seedSpa(slug: string) {
     .insert(staff)
     .values([
       // A photo: photo-less therapists never show on HTML designs (R28 D2).
-      { tenantId, displayName: 'Maya Test', sort: 1, photoUrl: '/files/maya-photo' },
+      {
+        tenantId,
+        displayName: 'Maya Test',
+        sort: 1,
+        photoUrl: '/files/00000000-0000-4000-8000-000000000001',
+      },
       { tenantId, displayName: 'Ploy Test', sort: 2 },
     ])
     .returning()
