@@ -1,11 +1,10 @@
 'use server'
 import { addDays, dubaiInstant, dubaiParts, toUaeE164, type Weekday } from '@spa/core'
 import { branches, members, services, shifts, staff, staffServices, withTenant } from '@spa/db'
-import { pgCode } from '@spa/services'
+import { cleanStaffBio, IMAGE_URL_PATTERN, pgCode, STAFF_BIO_MAX, setStaffPhoto } from '@spa/services'
 import { eq, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { IMAGE_URL_PATTERN } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -46,7 +45,7 @@ const shortBio = z
   .string()
   .optional()
   .transform((v) => (v ?? '').replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim())
-  .pipe(z.string().max(120, 'staff.validation.bio'))
+  .pipe(z.string().max(STAFF_BIO_MAX, 'staff.validation.bio'))
 
 const staffSchema = z.object({
   id: uuidOrEmpty,
@@ -104,11 +103,11 @@ export async function saveStaffAction(
     commissionPct: d.commissionPct.toFixed(2),
     baseSalaryAed: d.baseSalaryAed.toFixed(2),
     memberId: d.memberId ?? null,
-    // Only forms that post the field change the photo.
+  }
+  // Website profile: only forms that post the field change the photo / bio.
+  const profile = {
     ...(formData.has('photoUrl') ? { photoUrl: d.photoUrl ?? null } : {}),
-    ...(formData.has('bioEn')
-      ? { bio: d.bioEn || d.bioAr ? { en: d.bioEn, ...(d.bioAr ? { ar: d.bioAr } : {}) } : null }
-      : {}),
+    ...(formData.has('bioEn') ? { bio: cleanStaffBio({ en: d.bioEn, ar: d.bioAr }) } : {}),
   }
   const result = await withTenant(ctx.tenant.id, async (tx) => {
     if (d.memberId) {
@@ -133,6 +132,7 @@ export async function saveStaffAction(
         .returning({ id: staff.id })
       staffId = row!.id
     }
+    if (Object.keys(profile).length) await setStaffPhoto(tx, staffId, profile)
     // Skills: only services of this tenant (RLS) are accepted.
     const valid = d.skills.length
       ? (await tx.select({ id: services.id }).from(services).where(inArray(services.id, d.skills))).map(
@@ -147,7 +147,11 @@ export async function saveStaffAction(
     return { id: staffId }
   })
   if ('error' in result) return fail(result.error as string)
-  await record(ctx, d.id ? 'staff.updated' : 'staff.created', result.id, { ...values, skills: d.skills })
+  await record(ctx, d.id ? 'staff.updated' : 'staff.created', result.id, {
+    ...values,
+    ...profile,
+    skills: d.skills,
+  })
   refresh(slug)
   return ok(d.id ? 'staff.result.saved' : 'staff.result.added', { id: result.id })
 }

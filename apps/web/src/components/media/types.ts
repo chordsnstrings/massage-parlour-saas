@@ -54,6 +54,3 @@ export function formatBytes(n: number | null | undefined) {
 
 export const ACCEPT = 'image/jpeg,image/png,image/webp,image/avif,image/gif'
 export const MAX_UPLOAD_MB = 20
-
-/** Server-side check for an image URL posted by a form (ImageInput): a /files path or an https link. */
-export const IMAGE_URL_PATTERN = /^(\/files\/[0-9a-f-]{36}(\/[\w.-]+)?|https:\/\/[^\s"'<>]+)$/i
