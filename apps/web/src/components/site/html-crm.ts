@@ -4,12 +4,16 @@
 import {
   type CrmContract,
   type CrmJsonMemo,
+  type CrmLocale,
   crmJsonMemo,
   crmScriptJson,
   cyrb53,
   type HtmlCrmContract,
+  type HtmlDesignContent,
+  hasHtmlContent,
   htmlCrmContractOf,
   mergeCrmContract,
+  overlayHtmlContent,
   spliceCrmData,
 } from '@spa/core'
 
@@ -71,25 +75,37 @@ export function designContract(html: string, key: string | null): Parsed | null 
 }
 
 /**
- * The design with the CRM's data: `literal` designs get only their `window.CRM_DATA` JSON replaced by the merged
- * contract; endpoint-only designs get it injected in frames (`inject`), and are left as they are on the live page
- * (which fetches `crm-data.json`). No contract or no CRM data → `html` unchanged.
+ * The design with the spa's data: `literal` designs get only their `window.CRM_DATA` JSON replaced — the design's
+ * data with the spa's website content over it (R28, draft → publish with the page), then the CRM's operational keys
+ * (R26); endpoint-only designs get the CRM contract injected in frames (`inject`), and are left as they are on the
+ * live page (which fetches `crm-data.json`). No contract, or neither CRM data nor content → `html` unchanged.
  */
 export function designWithCrm(
   html: string,
   key: string | null,
   crm: CrmContract | null | undefined,
-  opts: { inject: boolean },
+  opts: { inject: boolean; content?: HtmlDesignContent | null; locale?: CrmLocale },
 ): string {
-  if (!crm) return html
+  const content = hasHtmlContent(opts.content) ? opts.content : null
+  if (!crm && !content) return html
   const parsed = designContract(html, key)
   if (!parsed?.found) return html
   const found = parsed.found
-  if (!found.literal && !opts.inject) return html
-  const outKey = key ? `${key}|${found.literal ? 'l' : 'i'}|${cyrb53(JSON.stringify(crm))}` : null
+  if (!found.literal && (!opts.inject || !crm)) return html
+  const locale = opts.locale ?? 'en'
+  const outKey = key
+    ? `${key}|${found.literal ? 'l' : 'i'}|${crm ? cyrb53(JSON.stringify(crm)) : '-'}${
+        content && found.literal ? `|${locale}|${cyrb53(JSON.stringify(content))}` : ''
+      }`
+    : null
   const hit = outKey ? outputs.get(outKey) : undefined
   if (hit !== undefined) return hit
-  const json = crmScriptJson(mergeCrmContract(found.literal?.data ?? null, crm), parsed.memo)
+  const own = found.literal
+    ? content
+      ? overlayHtmlContent(found.literal.data, content, { locale })
+      : found.literal.data
+    : null
+  const json = crmScriptJson(crm ? mergeCrmContract(own, crm) : own, parsed.memo)
   const out = spliceCrmData(html, found, json, opts)
   if (outKey) outputs.set(outKey, out, out.length * 2)
   return out

@@ -1,6 +1,7 @@
 import type { ComponentConfig } from '@puckeditor/core'
 import {
   HTML_DESIGN_SANDBOX,
+  type HtmlDesignContent,
   type HtmlDesignDoc,
   type HtmlImageAdjust,
   htmlDesignDocOf,
@@ -18,8 +19,16 @@ import type { SiteMeta } from '../types'
  * `images`: the super-admin's per-image adjustments (focal point, fill/fit, replacement), applied in the frame.
  * `phoneFixes` (R24): the design's "Phone fixes" switch. It has NO default on purpose (Puck merges defaults into loaded
  * props): absent = stored before R24 = on (`htmlDesignPhoneFixes`); every writer since stores an explicit boolean.
+ * `content` (R28): the spa's website content for a CRM-contract design (values over the design's own data; the
+ * stored file never changes). No default either: absent = the design's own values.
  */
-type Props = { html: string; doc?: HtmlDesignDoc; images?: HtmlImageAdjust[]; phoneFixes?: boolean }
+type Props = {
+  html: string
+  doc?: HtmlDesignDoc
+  images?: HtmlImageAdjust[]
+  phoneFixes?: boolean
+  content?: HtmlDesignContent
+}
 
 /**
  * An uploaded HTML design shown exactly as built (its CSS, fonts, motion and scripts), full screen. It runs in a
@@ -36,14 +45,18 @@ export const HtmlDesign: ComponentConfig<Props> = {
     doc: { type: 'custom', render: () => <></>, visible: false },
     images: { type: 'custom', render: () => <></>, visible: false },
     phoneFixes: { type: 'custom', render: () => <></>, visible: false },
+    content: { type: 'custom', render: () => <></>, visible: false },
   },
   defaultProps: { html: '', images: [] },
-  render: ({ html, doc, images, phoneFixes, puck }) => {
+  render: ({ html, doc, images, phoneFixes, content, puck }) => {
     const meta = puck.metadata as SiteMeta
     const ref = htmlDesignDocOf({ doc })
-    // R26: a design with the CRM data contract gets the spa's live CRM data (only its window.CRM_DATA JSON changes).
+    // R26 + R28: a design with the CRM data contract gets the spa's website content and live CRM data (only its
+    // window.CRM_DATA JSON changes).
     const source = designWithCrm(html || (ref && meta.htmlDocs?.[ref.file]) || '', designKey(ref), meta.crm, {
       inject: true,
+      content,
+      locale: meta.locale,
     })
     return (
       <HtmlDesignFrame

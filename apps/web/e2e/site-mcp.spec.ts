@@ -376,6 +376,7 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
       res.end(PNG)
     })
     await new Promise<void>((r) => fixture.listen(PORT + 1, '127.0.0.1', r))
+    let picture = ''
     try {
       const added = await ok('add_image', {
         url: `http://127.0.0.1:${PORT + 1}/stones.png`,
@@ -385,6 +386,7 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
       const [asset] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, added.id))
       expect(asset).toMatchObject({ tenantId: seed.tenantId, url: added.path })
       expect(asset!.tags).toContain('ai-assistant')
+      picture = added.path
     } finally {
       await new Promise<void>((r) => fixture.close(() => r()))
     }
@@ -396,6 +398,49 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
     expect(blocked.data.error).toMatch(/private network/)
     const plain = await tool(request, token, 'add_image', { spa: slug, url: 'http://example.com/x.png' })
     expect(plain.data.error).toMatch(/Only https:\/\//)
+
+    // R28: a design with window.CRM_DATA â€” its words and pictures change as website content, the file never does.
+    await ok('add_page', { slug: 'scenes', title_en: 'Scenes' })
+    const data = {
+      spa: { name: 'Design Spa' },
+      journey: [
+        { id: 'welcome', title: 'Design title', image: `data:image/png;base64,${img.toString('base64')}` },
+      ],
+    }
+    const scenes = `<!doctype html><html><head><meta charset="utf-8"><title>Scenes</title></head><body><h1 id="t"></h1><img id="pic" alt=""><script>window.CRM_DATA = ${JSON.stringify(data)};</script><script>const j = window.CRM_DATA.journey[0]; document.getElementById('t').textContent = j.title; document.getElementById('pic').src = j.image</script></body></html>`
+    await ok('set_html_design', { page: 'scenes', html: scenes })
+    const content = await ok('get_html_content', { page: 'scenes' })
+    expect(content.slots).toEqual([
+      expect.objectContaining({ path: 'journey[welcome].title', kind: 'text', design: 'Design title' }),
+      expect.objectContaining({
+        path: 'journey[welcome].image',
+        kind: 'image',
+        design: expect.stringMatching(/^embedded image\/png, \d+ KB$/),
+      }),
+    ])
+    const operational = await tool(request, token, 'set_html_content', {
+      spa: slug,
+      page: 'scenes',
+      set: { 'spa.name': { t: { en: 'Other' } } },
+    })
+    expect(operational.isError).toBe(true)
+    expect(operational.data.error).toMatch(/spa.name: not an editable part of this design/)
+    await ok('set_html_content', {
+      page: 'scenes',
+      set: {
+        'journey[welcome].title': { t: { en: 'Spa title' } },
+        'journey[welcome].image': { img: picture },
+      },
+    })
+    expect((await ok('get_html_design', { page: 'scenes' })).html).toBe(scenes)
+    const scenesPreview = await ok('preview_link', { page: 'scenes', days: 1 })
+    await page.goto(scenesPreview.url)
+    const scenesFrame = page.frameLocator('iframe.site-html-design')
+    await expect(scenesFrame.getByRole('heading', { name: 'Spa title' })).toBeVisible()
+    await expect(scenesFrame.locator('#pic')).toHaveAttribute('src', new RegExp(`${picture}$`))
+    await expect
+      .poll(() => scenesFrame.locator('#pic').evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0)
 
     // Throughout: nothing was published; the live site is the old one and the new page isn't public.
     expect(await publishedCount()).toBe(1)
@@ -412,6 +457,8 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) â†’ tools edit the draft â†
       'patch_html_design',
       'get_html_design',
       'add_image',
+      'get_html_content',
+      'set_html_content',
     ])
       expect(
         audited.some((a) => a.action === `site.mcp.${t}`),

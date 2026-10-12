@@ -1182,6 +1182,11 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   live site until you publish") and keeps the spa's theme (services `isHtmlDesignTemplate` in `switchTemplate`; also
   the connector), so pages it doesn't replace keep their look once published; console thumbnails of HTML designs run
   scripts and the home thumbnail reloads after a switch / undo / edit.
+  **P1 (2026-10-12):** per-spa website content — core `html-content.ts` (slots of a contract design's own
+  `window.CRM_DATA`, copy-on-write overlay AR → EN, save-time checks), HtmlDesign prop `content` (draft → publish),
+  `designWithCrm` overlays it before the CRM merge (live page, frames, previews, editor), site-edit op `html_content`
+  (pictures must be the spa's public files), connector `get_html_content` / `set_html_content` (drafts only). The file
+  never changes (html-fidelity green).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

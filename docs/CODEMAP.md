@@ -570,6 +570,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     host, `server/origin.ts` `siteOriginFrom`), draft-preview, share link, Studio editor (no endpoint). Endpoints
     `{site}/crm-data.json` + `{site}/crm-enquiry` (`server/crm-feed-routes.ts`, route files under `app/site/[slug]` and
     `app/domain/[hostname]`): see Website enquiries. Upload message + connector `get_html_design.crm_contract`.
+  - **Website content (R28, `docs/design/r28-dynamic-html-designs.md`):** per-spa values over a contract design's own
+    `window.CRM_DATA` (story scenes, experience, booking label / picture, message templates; never operational keys).
+    Core `html-content.ts`: `htmlContentSlots(data)` (every editable leaf: path `journey[welcome].title` — items by
+    unique `id`, else index —, kind from key + value), `overlayHtmlContent` (copy-on-write, locale pick AR → EN, stale
+    paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors` (save time:
+    slots, kinds, ≤ 2000 chars, ≤ 64 KB, pictures `/files/{uuid}` or https only), `htmlContentFileIds`. Stored as the
+    HtmlDesign block prop `content` (`{v: 1, data}`, no Puck default; draft → publish with the page). Render:
+    `designWithCrm(…, {content, locale})` overlays before `mergeCrmContract` (output cache key + locale + content
+    hash; none → R26's key). Writes: site-edit op `html_content` (`set` / `reset` / `'all'`; checks slots against the
+    stored design and that pictures are this spa's public `stored_files`) — connector `get_html_content` /
+    `set_html_content` (drafts only; `patch_html_design` = structure).
   - **Legacy designs (pre-R24 uploads):** R17 stored `fixHtmlDesign(raw)` (viewport + fluid widths baked into the html);
     `htmlDesignBakedFixes` (no switch value and inline html, or `bakedFixes: true` kept after the switch was used):
     the row switch says "old upload: re-upload to show exactly" and Off's message says to upload the original again.

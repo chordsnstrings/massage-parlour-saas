@@ -1,4 +1,4 @@
-import { htmlDesignDocOf, htmlDesignDocument } from '@spa/core'
+import { type HtmlDesignContent, htmlDesignDocOf, htmlDesignDocument } from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
 import { designKey, designWithCrm } from '@/components/site/html-crm'
@@ -91,7 +91,11 @@ async function render(req: Request, head: boolean) {
     services: loaded.data.services,
   })
   let html = htmlDesignDocument(
-    designWithCrm(block.props.html, designKey(htmlDesignDocOf(block.props)), crm, { inject: false }),
+    designWithCrm(block.props.html, designKey(htmlDesignDocOf(block.props)), crm, {
+      inject: false,
+      content: block.props.content as HtmlDesignContent | undefined,
+      locale,
+    }),
     htmlDesignValues(meta),
     false,
     Array.isArray(block.props.images) ? block.props.images : [],

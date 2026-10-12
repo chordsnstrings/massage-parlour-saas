@@ -6,6 +6,10 @@
 // callers audit with `siteEditAuditData`.
 import {
   dubaiParts,
+  type HtmlContentValue,
+  htmlContentErrors,
+  htmlContentFileIds,
+  htmlContentSlots,
   htmlCrmContractOf,
   htmlDesignDocOf,
   htmlDesignEmbedHosts,
@@ -13,8 +17,8 @@ import {
   MAX_HTML_UPLOAD_BYTES,
   patchHtml,
 } from '@spa/core'
-import { pageVersions, sites, type ThemeTokens, type Tx } from '@spa/db'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { pageVersions, sites, storedFiles, type ThemeTokens, type Tx } from '@spa/db'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
 import { htmlDesignDocFor, htmlDesignSource, spaHtmlDocReader, storeSpaHtmlDoc } from './site-html-assets'
@@ -64,6 +68,17 @@ const place = {
   index: z.number().int().min(0).max(500).nullish(),
 }
 const text = z.object({ en: z.string().trim().min(1).max(80), ar: z.string().trim().max(80).nullish() })
+const contentText = z.object({ en: z.string().max(2000), ar: z.string().max(2000).nullish() })
+const contentTags = z.array(z.string().max(200)).max(20)
+/** R28: one website-content value of an HTML design (@spa/core html-content.ts). */
+export const HtmlContentValueSchema = z.union([
+  z.object({ t: contentText }),
+  z.object({ tags: z.object({ en: contentTags, ar: contentTags.nullish() }) }),
+  z.object({ img: z.string().max(2000) }),
+  z.object({ video: z.string().max(2000) }),
+  z.object({ on: z.boolean() }),
+  z.object({ hide: z.literal(true) }),
+])
 
 /** Shape of one operation; block/prop/option validity is checked against the block schema when applied. */
 export const SiteOpSchema = z.discriminatedUnion('op', [
@@ -99,6 +114,14 @@ export const SiteOpSchema = z.discriminatedUnion('op', [
     html: z.string().min(1).max(MAX_HTML_UPLOAD_BYTES),
     phone_fixes: z.boolean().nullish(),
     convert: z.boolean().nullish(),
+  }),
+  // R28: the page's website content — values over the design's own data (its window.CRM_DATA), never the file.
+  // `set` by slot path (get_html_content lists them); `reset` drops values back to the design's ('all' = every one).
+  z.object({
+    op: z.literal('html_content'),
+    page: pageRef,
+    set: z.record(z.string().max(400), HtmlContentValueSchema).nullish(),
+    reset: z.union([z.literal('all'), z.array(z.string().max(400)).max(500)]).nullish(),
   }),
   // R24: exact find/replace edits of the stored design (each `find` must occur exactly once), applied in order.
   z.object({
@@ -205,6 +228,13 @@ const looksLikeHtml = (html: string) => /<(?:!doctype|html|head|body|div|section
 const dubaiStamp = (now = new Date()) => {
   const p = dubaiParts(now)
   return `${p.date} ${String(Math.floor(p.minutes / 60)).padStart(2, '0')}:${String(p.minutes % 60).padStart(2, '0')}`
+}
+
+/** A content value as stored: nulls the client sent for unused fields dropped. */
+function contentValue(v: z.infer<typeof HtmlContentValueSchema>): HtmlContentValue {
+  if ('t' in v) return { t: v.t.ar == null ? { en: v.t.en } : { en: v.t.en, ar: v.t.ar } }
+  if ('tags' in v) return { tags: v.tags.ar == null ? { en: v.tags.en } : { en: v.tags.en, ar: v.tags.ar } }
+  return v
 }
 
 /** One op that doesn't fit (collected into the batch's error list; never thrown out of runSiteEdit). */
@@ -436,6 +466,58 @@ export async function runSiteEdit(
           w.changed = true
           summary.push(
             `Edited the HTML design of ${pageLabel(w)} (${op.edits.length} edit${op.edits.length === 1 ? '' : 's'})`,
+          )
+          break
+        }
+        case 'html_content': {
+          const w = await load(op.page, at)
+          const block = w.data.content.find((n) => n.type === HTML_DESIGN_BLOCK)
+          if (!block || (typeof block.props.html !== 'string' && !htmlDesignDocOf(block.props)))
+            throw new OpFail(`${at}: ${pageLabel(w)} is not an uploaded HTML design page`)
+          const source = w.pendingHtml?.raw ?? (await htmlDesignSource(block.props, readDoc))
+          if (source === null)
+            throw new OpFail(
+              `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
+            )
+          const literal = htmlCrmContractOf(source)?.literal
+          if (!literal)
+            throw new OpFail(
+              `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA, so its words and pictures live in the file — use html_patch`,
+            )
+          const before =
+            isObj(block.props.content) && isObj(block.props.content.data) ? block.props.content.data : {}
+          const data: Record<string, HtmlContentValue> = { ...(before as Record<string, HtmlContentValue>) }
+          const resets = op.reset === 'all' ? Object.keys(data) : (op.reset ?? [])
+          for (const k of resets) delete data[k]
+          for (const [k, v] of Object.entries(op.set ?? {})) data[k] = contentValue(v)
+          const next = { v: 1 as const, data }
+          const problems = htmlContentErrors(next, htmlContentSlots(literal.data))
+          if (problems.length) throw new OpFail(`${at}: ${problems.slice(0, 6).join(' · ')}`)
+          const ids = htmlContentFileIds(next)
+          if (ids.length) {
+            const own = await tx
+              .select({ id: storedFiles.id })
+              .from(storedFiles)
+              .where(
+                and(
+                  eq(storedFiles.tenantId, input.tenantId),
+                  eq(storedFiles.isPublic, true),
+                  inArray(storedFiles.id, ids),
+                ),
+              )
+            const mine = new Set(own.map((r) => r.id))
+            const missing = ids.filter((x) => !mine.has(x))
+            if (missing.length)
+              throw new OpFail(
+                `${at}: /files/${missing[0]} is not one of this spa's pictures — add it with add_image first`,
+              )
+          }
+          if (Object.keys(data).length) block.props.content = next
+          else delete block.props.content
+          w.changed = true
+          const n = Object.keys(op.set ?? {}).length
+          summary.push(
+            `Website content of ${pageLabel(w)}: ${n} value${n === 1 ? '' : 's'} set${resets.length ? `, ${resets.length} back to the design's` : ''} (the design file is unchanged)`,
           )
           break
         }
@@ -754,6 +836,8 @@ export type HtmlDesignView = {
   images: number
   /** R26: CRM data contract (operational values come live from the CRM; don't edit them in the design), or null. */
   crm: 'literal' | 'endpoint' | null
+  /** R28: the page's website content (values over the design's data), or null. */
+  content: { v: 1; data?: Record<string, HtmlContentValue> } | null
   editing: { by: string; userId: string; until: string } | null
 }
 
@@ -784,6 +868,7 @@ export async function getHtmlDesign(
     phoneFixes: htmlDesignPhoneFixes(block.props),
     images: Array.isArray(block.props.images) ? block.props.images.length : 0,
     crm: htmlCrmContractOf(html)?.mode ?? null,
+    content: isObj(block.props.content) ? (block.props.content as HtmlDesignView['content']) : null,
     editing: lock ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() } : null,
   }
 }

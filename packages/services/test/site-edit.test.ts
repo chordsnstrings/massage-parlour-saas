@@ -5,6 +5,7 @@ import {
   siteAiEditorStatus,
   sitePages,
   sites,
+  storedFiles,
   tenants,
   user,
   withTenant,
@@ -386,6 +387,74 @@ describe('site edit ops layer', () => {
       expect(over.length).toBeLessThan(5 * 1024 * 1024)
       const refused = await run([{ op: 'html_design', page: 'convert-me', html: over }])
       expect(refused.ok ? '' : refused.errors[0]).toMatch(/the limit is 5 MB/)
+    })
+
+    it('R28: html_content sets website content over the design data; the file never changes', async () => {
+      const literal = {
+        spa: { name: 'Design Spa', experience_image: 'data:image/png;base64,AA' },
+        journey: [{ id: 'welcome', title: 'Old title', image: 'data:image/png;base64,AA', cta: true }],
+        booking: { label: 'Book', url: null },
+      }
+      const sent = doc(`<h1>x</h1><script>window.CRM_DATA = ${JSON.stringify(literal)};</script>`)
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'content-me', title: { en: 'Content' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'content-me', html: sent, convert: true }])).ok).toBe(
+        true,
+      )
+      const [mine, theirs, hidden] = await platform
+        .insert(storedFiles)
+        .values([
+          { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: true },
+          { tenantId: ids.other!, contentType: 'image/webp', size: 1, isPublic: true },
+          { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: false },
+        ])
+        .returning()
+      const set = (values: Record<string, unknown>, o: { dryRun?: boolean } = {}) =>
+        run([{ op: 'html_content', page: 'content-me', set: values }], o)
+      const refused = await set({
+        'spa.name': { t: { en: 'Other' } },
+        'journey[welcome].cta': { t: { en: 'x' } },
+      })
+      expect(refused.ok ? [] : refused.errors).toEqual([
+        'Change 1: spa.name: not an editable part of this design · journey[welcome].cta: expects a bool value',
+      ])
+      for (const f of [theirs!, hidden!])
+        expect(
+          ((await set({ 'journey[welcome].image': { img: `/files/${f.id}` } })) as { errors: string[] })
+            .errors[0],
+        ).toMatch(/is not one of this spa's pictures/)
+      const before = await draftOf((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.page.id)
+      expect((await set({ 'booking.label': { t: { en: 'Dry' } } }, { dryRun: true })).ok).toBe(true)
+      const pageId = (await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.page.id
+      expect(await draftOf(pageId)).toBe(before)
+      const ok = await set({
+        'journey[welcome].title': { t: { en: 'Relax in Dubai', ar: null } },
+        'journey[welcome].image': { img: `/files/${mine!.id}` },
+        'journey[welcome].cta': { on: false },
+      })
+      expect(ok.ok && ok.summary).toEqual([
+        'Website content of Content: 3 values set (the design file is unchanged)',
+      ])
+      const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me'))
+      expect(view!.html).toBe(sent)
+      expect(view!.content).toEqual({
+        v: 1,
+        data: {
+          'journey[welcome].title': { t: { en: 'Relax in Dubai' } },
+          'journey[welcome].image': { img: `/files/${mine!.id}` },
+          'journey[welcome].cta': { on: false },
+        },
+      })
+      await run([{ op: 'html_content', page: 'content-me', reset: ['journey[welcome].cta'] }])
+      expect(
+        Object.keys((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content!.data!),
+      ).toHaveLength(2)
+      await run([{ op: 'html_content', page: 'content-me', reset: 'all' }])
+      expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content).toBeNull()
+      // A design without window.CRM_DATA: its words live in the file.
+      const plain = await run([{ op: 'html_content', page: 'design-a', set: {} }])
+      expect(plain.ok ? '' : plain.errors[0]).toMatch(/has no window.CRM_DATA/)
     })
   })
 
