@@ -36,6 +36,8 @@ export const branches = pgTable(
     mapsUrl: text('maps_url'),
     phone: text('phone'),
     whatsappE164: text('whatsapp_e164'),
+    /** Area shown on HTML-design websites (R28), e.g. "Al Barsha, Dubai"; null = the city from the address. */
+    areaLabel: jsonb('area_label').$type<{ en: string; ar?: string }>(),
     openingHours: jsonb('opening_hours').$type<OpeningHours>().notNull().default({}),
     /** Business day ends at this local time (late-night shops), e.g. 05:00. */
     businessDayCutoff: time('business_day_cutoff').notNull().default('05:00'),

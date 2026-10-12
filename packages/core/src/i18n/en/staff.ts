@@ -82,6 +82,7 @@ export const staff = {
     activeHint: 'Archived staff keep their history.',
     showOnSite: 'Show on website',
     showOnSiteHint: 'Name, photo and short bio appear in your website’s team section.',
+    sitePhotoNeeded: 'Add a photo to show on HTML-design websites',
     bioEn: 'Short bio for the website (English)',
     bioAr: 'Short bio for the website (Arabic, optional)',
     archive: 'Archive',

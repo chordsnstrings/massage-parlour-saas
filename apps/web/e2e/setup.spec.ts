@@ -46,6 +46,10 @@ test('owner sets up menu, rooms, a therapist with shifts and opening hours', asy
     await expect(page.getByText('No therapists yet')).toBeVisible()
     await page.getByRole('button', { name: 'Add therapist' }).first().click()
     const sheet = page.getByRole('dialog')
+    // No photo yet: HTML-design websites leave her out, the sheet says so (R28).
+    await expect(sheet.getByTestId('site-photo-needed')).toHaveText(
+      'Add a photo to show on HTML-design websites',
+    )
     await sheet.getByLabel('Display name').fill('Maya')
     await sheet.getByLabel('Gender').selectOption('female')
     await sheet.getByLabel('UAE mobile').fill('050 765 4321')

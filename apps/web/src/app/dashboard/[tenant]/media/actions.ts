@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { toMediaItem } from '@/components/media/types'
 import { getT } from '@/i18n/server'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
-import { guard } from '@/server/access'
+import { guard, guardAny, IMAGE_UPLOAD_PERMISSIONS } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
 
@@ -38,7 +38,8 @@ const Filter = z.object({
  * temporary 7-day link are left out — picking one would embed a URL that soon breaks.
  */
 export async function listMediaAction(slug: string, filter: z.input<typeof Filter> = {}) {
-  const { ctx, error } = await guard(slug, 'site.content')
+  // The picker also serves the CRM's service / therapist photos (R28): any image-upload permission may list.
+  const { ctx, error } = await guardAny(slug, IMAGE_UPLOAD_PERMISSIONS)
   if (error) return { ok: false as const, error }
   const f = Filter.safeParse(filter)
   if (!f.success) return { ok: false as const, error: (await getT())('errors.generic') }

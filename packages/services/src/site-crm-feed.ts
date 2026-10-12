@@ -34,6 +34,7 @@ export async function crmFeedFacts(tx: Tx, tenantId: string) {
       phone: branches.phone,
       whatsappE164: branches.whatsappE164,
       openingHours: branches.openingHours,
+      areaLabel: branches.areaLabel,
     })
     .from(branches)
     .where(eq(branches.active, true))

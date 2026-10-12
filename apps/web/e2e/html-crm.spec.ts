@@ -224,6 +224,8 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await page.goto(`${app}/${slug}/staff/${seed.maya}`)
     await page.getByRole('button', { name: 'Edit profile' }).click()
     const sheet = page.getByRole('dialog')
+    await expect(sheet.getByRole('checkbox', { name: /^Show on website/ })).toBeVisible()
+    await expect(sheet.getByTestId('site-photo-needed')).toHaveCount(0) // Maya has a photo
     await sheet.getByRole('checkbox', { name: /^Show on website/ }).check()
     await sheet.getByLabel('Short bio for the website (English)').fill('Thai massage specialist')
     await sheet.getByRole('button', { name: 'Save' }).click()
@@ -245,6 +247,13 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await live(page, slug)
     await expect(page.locator('#staff li.member')).toHaveCount(1)
     await expect(page.getByText('Ploy Test')).toHaveCount(0)
+    // …and the CRM staff sheet says why (R28 P3).
+    await page.goto(`${app}/${slug}/staff/${seed.ploy}`)
+    await page.getByRole('button', { name: 'Edit profile' }).click()
+    await expect(page.getByRole('dialog').getByTestId('site-photo-needed')).toHaveText(
+      'Add a photo to show on HTML-design websites',
+    )
+    await page.keyboard.press('Escape')
   })
 
   await test.step('a price / hours change in the CRM shows on reload, without republishing', async () => {
@@ -389,6 +398,18 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(json.booking.url).toBeNull()
     expect(json.booking.form_endpoint).toBe(`${site(second.slug)}/crm-enquiry?page=`)
     expect(JSON.stringify(json)).not.toContain('match')
+    expect(json.spa.area_label).toBe('Dubai') // the city from the address
+    expect(JSON.stringify(json)).not.toContain('area_explicit')
+
+    // Settings → Main branch "Area shown on the website" → the contract's area label (R28 P3).
+    await other.goto(`${app}/${second.slug}/settings`)
+    await other.getByLabel('Area shown on the website').fill('Al Barsha, Dubai')
+    await other.getByRole('button', { name: 'Save changes' }).click()
+    await expect(other.getByText('Settings saved')).toBeVisible()
+    const labelled = await viaHost(page, `${site(second.slug)}/crm-data.json`, {
+      headers: { origin: 'null' },
+    })
+    expect((await labelled.json()).spa.area_label).toBe('Al Barsha, Dubai')
 
     // The live page is the uploaded file byte for byte (from <body>): the design fetches its data itself.
     const served = await (await viaHost(page, `${site(second.slug)}/`)).text()

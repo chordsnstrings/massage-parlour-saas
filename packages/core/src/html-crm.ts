@@ -163,6 +163,8 @@ export type CrmBranchSource = {
   phone: string | null
   whatsappE164: string | null
   openingHours: OpeningHours | null
+  /** The branch's "Area shown on the website" (R28); null / empty = the city from the address. */
+  areaLabel?: Bi | null
 }
 
 /** What the platform reads from the CRM (public facts only). */
@@ -209,6 +211,8 @@ export type CrmContract = {
     name: string
     short_name: string
     area_label: string
+    /** `area_label` is the branch's own label (wins over the design's); never sent to the page. */
+    area_explicit?: boolean
     logo_on_dark: string
     logo_on_light: string
     timezone: 'Asia/Dubai'
@@ -352,11 +356,13 @@ export function buildCrmContract(src: CrmContractSource, opts: { locale: CrmLoca
   }
   const address = branch?.address?.trim() ? crmAddress(branch.address) : null
   const logo = img(src.spa.logoUrl)
+  const area = pick(branch?.areaLabel)
   return {
     spa: {
       name: src.spa.name.trim(),
       short_name: src.spa.name.trim(),
-      area_label: address?.city ?? '',
+      area_label: area || (address?.city ?? ''),
+      area_explicit: area !== '',
       logo_on_dark: logo,
       logo_on_light: logo,
       timezone: 'Asia/Dubai',
@@ -483,8 +489,11 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
     ...dSpa,
     name,
     short_name: namesSpa(dSpa.short_name, name) ? str(dSpa.short_name) : name,
-    // Own design: its finer label ("Al Zahiyah, Abu Dhabi") over the CRM city; another spa's: never its area.
-    area_label: (ownDesign && str(dSpa.area_label)) || crm.spa.area_label,
+    // The branch's own area label always wins; else own design: its finer label ("Al Zahiyah, Abu Dhabi") over the
+    // CRM city; another spa's: never its area.
+    area_label: crm.spa.area_explicit
+      ? crm.spa.area_label
+      : (ownDesign && str(dSpa.area_label)) || crm.spa.area_label,
     logo_on_dark: (ownDesign && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
     logo_on_light: crm.spa.logo_on_light || own(str(dSpa.logo_on_light), ''),
     timezone: crm.spa.timezone,

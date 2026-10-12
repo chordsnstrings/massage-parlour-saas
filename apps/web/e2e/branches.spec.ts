@@ -31,6 +31,7 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
   await page.getByLabel('Branch name').fill('JLT')
   await page.getByLabel('Address').fill('Cluster D, JLT')
   await page.getByLabel('Business day ends at').fill('04:00')
+  await page.getByLabel('Area shown on the website').fill(' JLT, Dubai ')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByTestId('branch-name').filter({ hasText: 'JLT' })).toBeVisible()
   await screenshotAt(page, 'settings-branches')
@@ -38,7 +39,12 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
     .select()
     .from(branches)
     .where(and(eq(branches.tenantId, seed.tenantId), eq(branches.name, 'JLT')))
-  expect(jlt).toMatchObject({ address: 'Cluster D, JLT', isDefault: false, active: true })
+  expect(jlt).toMatchObject({
+    address: 'Cluster D, JLT',
+    isDefault: false,
+    active: true,
+    areaLabel: { en: 'JLT, Dubai' }, // R28: the area HTML-design websites show
+  })
   expect(jlt!.businessDayCutoff.slice(0, 5)).toBe('04:00')
   expect(Object.keys(jlt!.openingHours)).toHaveLength(7) // copied from the main branch
 

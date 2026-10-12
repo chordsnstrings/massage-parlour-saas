@@ -358,6 +358,13 @@
       "when": 1791793171516,
       "tag": "0050_r26_crm_feed",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1791822753476,
+      "tag": "0051_r28_branch_area",
+      "breakpoints": true
     }
   ]
 }

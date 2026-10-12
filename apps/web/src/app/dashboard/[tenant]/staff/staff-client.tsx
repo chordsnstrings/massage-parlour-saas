@@ -50,6 +50,8 @@ export function StaffSheet({
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
+  // R28: HTML-design websites leave out therapists without a photo (no empty frames).
+  const [photo, setPhoto] = useState(person?.photoUrl ?? '')
   const router = useRouter()
   const { pending, run } = useConfirmAction()
   return (
@@ -87,6 +89,7 @@ export function StaffSheet({
           label={t('staff.form.photo')}
           hint={t('staff.form.photoHint')}
           defaultValue={person?.photoUrl}
+          onChange={setPhoto}
         />
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
@@ -225,12 +228,19 @@ export function StaffSheet({
             hint={t('staff.form.activeHint')}
             defaultChecked={person?.active ?? true}
           />
-          <Toggle
-            name="showOnSite"
-            label={t('staff.form.showOnSite')}
-            hint={t('staff.form.showOnSiteHint')}
-            defaultChecked={person?.showOnSite ?? false}
-          />
+          <div className="space-y-1.5">
+            <Toggle
+              name="showOnSite"
+              label={t('staff.form.showOnSite')}
+              hint={t('staff.form.showOnSiteHint')}
+              defaultChecked={person?.showOnSite ?? false}
+            />
+            {!photo && (
+              <p className="text-[13px] text-muted" data-testid="site-photo-needed">
+                {t('staff.form.sitePhotoNeeded')}
+              </p>
+            )}
+          </div>
         </div>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('staff.form.bioEn')} name="bioEn">

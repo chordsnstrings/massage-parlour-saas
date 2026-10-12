@@ -411,6 +411,31 @@ describe('mergeCrmContract', () => {
     ).toBe('Abu Dhabi')
   })
 
+  it("the branch's own area label wins everywhere; empty = the address city (R28 P3)", () => {
+    const main = source().branches[0]!
+    const labelled = (areaLabel: { en: string; ar?: string } | null) =>
+      source({ branches: [{ ...main, areaLabel }] })
+    const en = buildCrmContract(labelled({ en: 'Al Barsha, Dubai', ar: 'البرشاء، دبي' }), { locale: 'en' })
+    expect(en.spa).toMatchObject({ area_label: 'Al Barsha, Dubai', area_explicit: true })
+    expect(
+      buildCrmContract(labelled({ en: 'Al Barsha, Dubai', ar: 'البرشاء، دبي' }), { locale: 'ar' }).spa
+        .area_label,
+    ).toBe('البرشاء، دبي')
+    // No Arabic → English; blank → the city, not explicit.
+    expect(buildCrmContract(labelled({ en: 'Al Barsha, Dubai' }), { locale: 'ar' }).spa.area_label).toBe(
+      'Al Barsha, Dubai',
+    )
+    const blank = buildCrmContract(labelled({ en: '  ' }), { locale: 'en' })
+    expect(blank.spa).toMatchObject({ area_label: 'Abu Dhabi', area_explicit: false })
+    expect(buildCrmContract(labelled(null), { locale: 'en' }).spa.area_label).toBe('Abu Dhabi')
+    // The spa's own design: an explicit label beats the design's; without one the design's finer label stays.
+    const own = mergeCrmContract(design, en) as Json
+    expect(own.spa.area_label).toBe('Al Barsha, Dubai')
+    expect(own.spa).not.toHaveProperty('area_explicit') // internal, never sent to the page
+    expect((mergeCrmContract(design, blank) as Json).spa.area_label).toBe('Al Zahiyah')
+    expect((mergeCrmContract(null, en) as Json).spa).not.toHaveProperty('area_explicit')
+  })
+
   it('leaves out staff still without a photo (R28 D2)', () => {
     const src = source({
       staff: [
