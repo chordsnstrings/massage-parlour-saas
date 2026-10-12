@@ -109,6 +109,11 @@ describe('textSlots', () => {
     })
     expect(slots.find((s) => s.key === 'd-1/text:meta-description')?.multiline).toBe(true)
     expect(textSlots(designPage(), schema, { html: design, maxPerPage: 2 })).toHaveLength(2)
+    // Leftovers (`first`) go ahead before the cap: the last texts of a big page still make it.
+    const first = new Set(['d-1/text:attr-1', 'd-1/text:txt-0', 'd-1/text:gone'])
+    expect(textSlots(designPage(), schema, { html: design, maxPerPage: 3, first }).map((s) => s.key)).toEqual(
+      ['d-1/text:txt-0', 'd-1/text:attr-1', 'd-1/content:journey[welcome].title'],
+    )
   })
 })
 

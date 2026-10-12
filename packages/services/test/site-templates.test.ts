@@ -136,6 +136,34 @@ describe('sanitising a site into a template', () => {
     expect(props).toMatchObject({ url: '', poster: '', title: { en: 'Tour' } })
   })
 
+  it('keeps an HTML design’s image adjustments and website content as they are (their src guards)', () => {
+    const design = {
+      html: '',
+      doc: { file: 'f', sha256: 'x' },
+      images: [{ id: 'img-0', src: 'a.jpg', replace: '/files/y' }],
+      content: {
+        v: 1,
+        texts: [{ id: 'txt-0', src: 'Welcome', t: { en: 'Welcome to Calm Spa' } }],
+        pictures: [{ id: 'img-1', src: 'b.jpg', img: '/files/z' }],
+      },
+    }
+    const [home] = sanitizeTemplatePages(
+      [
+        {
+          slug: '',
+          title: { en: 'Home' },
+          data: {
+            root: { props: { htmlDesign: true } },
+            content: [{ type: 'HtmlDesign', props: { id: 'd1', ...design } }],
+          },
+        },
+      ],
+      { key: 'des', tenantName: 'Calm Spa' },
+    )
+    const props = (home!.data as { content: { props: Record<string, unknown> }[] }).content[0]!.props
+    expect(props).toEqual({ id: 'des-htmldesign-1', ...design })
+  })
+
   it('replaces client reviews, strips contact details and only rewrites whole words of copy', () => {
     const data = {
       root: { props: { title: { en: 'Hero' } } },

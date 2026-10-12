@@ -7,14 +7,18 @@
 // The HtmlDesign block holds the reference (`props.doc`, @spa/core HtmlDesignDoc) with `props.html` = ''; renderers
 // fill the html right before rendering (`resolveHtmlDesignDocs`), writers never store it inline again. Designs stored
 // before keep their inline html (read as is). Applying a template copies its document into the spa, and any /files URL
-// it or an image replacement uses that belongs to a template or another spa (`localiseHtmlDesignAssets`): a spa's site
-// never depends on a template row or on another spa. Like every service: takes the caller's tx; no permission checks.
+// it, an image replacement or its website content uses that belongs to a template or another spa
+// (`localiseHtmlDesignAssets`): a spa's site never depends on a template row or on another spa. Like every service:
+// takes the caller's tx; no permission checks.
 import { createHash } from 'node:crypto'
 import {
   businessDateOf,
   businessDayWindow,
+  type HtmlContentValue,
   type HtmlDesignDoc,
   type HtmlImageAdjust,
+  htmlContentFrom,
+  htmlContentParts,
   htmlDesignAssetRefs,
   htmlDesignBakedFixes,
   htmlDesignDocOf,
@@ -295,7 +299,8 @@ async function rehomeHtmlDesigns<T>(
   change?: (
     html: string,
     images: HtmlImageAdjust[],
-  ) => Promise<{ html: string; images: HtmlImageAdjust[]; copied: number }>,
+    content: unknown,
+  ) => Promise<{ html: string; images: HtmlImageAdjust[]; content: unknown; copied: number }>,
 ): Promise<{ data: T; copied: number }> {
   let copied = 0
   const out = await mapHtmlDesignNodes(data, async (props) => {
@@ -303,9 +308,18 @@ async function rehomeHtmlDesigns<T>(
     if (source === null)
       throw new DomainError('An HTML design file of this template is missing — upload it again')
     const images = Array.isArray(props.images) ? (props.images as HtmlImageAdjust[]) : []
-    const r = change ? await change(source, images) : { html: source, images, copied: 0 }
+    const r = change
+      ? await change(source, images, props.content)
+      : { html: source, images, content: props.content, copied: 0 }
     copied += r.copied
-    return { ...props, html: '', doc: await store(r.html), images: r.images }
+    const { content: _content, ...rest } = props
+    return {
+      ...rest,
+      html: '',
+      doc: await store(r.html),
+      images: r.images,
+      ...(r.content === undefined || r.content === null ? {} : { content: r.content }),
+    }
   })
   return { data: out, copied }
 }
@@ -365,10 +379,22 @@ const withQuery = (url: string, from: string) => {
   return url + from.slice(q, hash < 0 ? undefined : hash)
 }
 
+/** The /files URLs of a design's website content (R28: values img / video, pictures img). */
+function contentFileUrls(content: unknown): string[] {
+  const parts = htmlContentParts(content)
+  const urls: string[] = []
+  for (const v of Object.values(parts.values))
+    if ('img' in v && typeof v.img === 'string') urls.push(v.img)
+    else if ('video' in v && typeof v.video === 'string') urls.push(v.video)
+  for (const p of Object.values(parts.pictures)) urls.push(p.img)
+  return urls
+}
+
 /**
- * Makes a design use only the spa's own files: every /files URL (in the design and in adjustment replacements) that
- * points at a template file, or at another spa's public file, is copied into this spa (deduplicated) and rewritten.
- * Its own files and outside URLs stay as they are; another spa's private files are never copied.
+ * Makes a design use only the spa's own files: every /files URL (in the design, in adjustment replacements and in its
+ * website content) that points at a template file, or at another spa's public file, is copied into this spa
+ * (deduplicated) and rewritten. Its own files and outside URLs stay as they are; another spa's private files are
+ * never copied (a content entry using one is dropped: the design's own shows, and the spa's draft saves keep passing).
  */
 export async function localiseHtmlDesignAssets(
   tx: Tx,
@@ -376,24 +402,27 @@ export async function localiseHtmlDesignAssets(
     tenantId: string
     html: string
     images?: HtmlImageAdjust[]
+    /** The block's website content (R28); returned with its /files URLs localised. */
+    content?: unknown
     fileUrl: FileUrl
     userId?: string | null
     /** Platform-role reads of template / other spas' files (default platformDb()). */
     platform?: Db
   },
-): Promise<{ html: string; images: HtmlImageAdjust[]; copied: number }> {
+): Promise<{ html: string; images: HtmlImageAdjust[]; content: unknown; copied: number }> {
   const images = input.images ?? []
   const refs = htmlDesignAssetRefs(input.html)
   const ids = new Set<string>()
-  for (const r of refs) {
-    const id = fileIdFromUrl(r.url)
+  for (const url of [
+    ...refs.map((r) => r.url),
+    ...images.map((a) => a.replace),
+    ...contentFileUrls(input.content),
+  ]) {
+    const id = fileIdFromUrl(url)
     if (id) ids.add(id)
   }
-  for (const a of images) {
-    const id = fileIdFromUrl(a.replace)
-    if (id) ids.add(id)
-  }
-  if (!ids.size) return { html: input.html, images, copied: 0 }
+  const unchanged = { html: input.html, images, content: input.content, copied: 0 }
+  if (!ids.size) return unchanged
   const own = await tx
     .select({ id: storedFiles.id })
     .from(storedFiles)
@@ -401,7 +430,9 @@ export async function localiseHtmlDesignAssets(
   for (const o of own) ids.delete(o.id)
   const db = input.platform ?? platformDb()
   const sink = tenantHtmlAssetSink(tx, input.tenantId, input.userId)
-  const moved = new Map<string, string>()
+  const moved = new Map<string, { id: string; url: string }>()
+  /** Other spas' files left as they were (private, or not a type a design uses). */
+  const foreign = new Set<string>()
   for (const id of ids) {
     let file: { bytes: Buffer; contentType: string } | null = await getTemplateFile(db, id)
     if (!file) {
@@ -409,25 +440,74 @@ export async function localiseHtmlDesignAssets(
         .select({ isPublic: storedFiles.isPublic, tenantId: storedFiles.tenantId })
         .from(storedFiles)
         .where(eq(storedFiles.id, id))
+      if (meta && meta.tenantId !== input.tenantId) foreign.add(id)
       if (!meta?.isPublic || meta.tenantId === input.tenantId) continue
       file = await getFile(db, id)
     }
     if (!file || !MOVABLE.has(file.contentType) || !file.bytes.length) continue
     const asset = assetOf(file.bytes, file.contentType)
-    moved.set(id, input.fileUrl(await sink(asset), asset.name))
+    const copy = await sink(asset)
+    moved.set(id, { id: copy, url: input.fileUrl(copy, asset.name) })
+    foreign.delete(id)
   }
-  if (!moved.size) return { html: input.html, images, copied: 0 }
+  if (!moved.size && !foreign.size) return unchanged
   const target = (url: string | undefined) => {
     const id = fileIdFromUrl(url)
     const to = id ? moved.get(id) : undefined
-    return to && url ? withQuery(to, url) : null
+    return to && url ? withQuery(to.url, url) : null
   }
-  const html = rewriteHtmlDesignAssets(input.html, refs, (r) => target(r.url))
-  const remapped = remapHtmlImageAdjustments(input.html, html, images).map((a) => {
-    const to = target(a.replace)
-    return to ? { ...a, replace: to } : a
-  })
-  return { html, images: remapped, copied: moved.size }
+  const html = moved.size ? rewriteHtmlDesignAssets(input.html, refs, (r) => target(r.url)) : input.html
+  const remapped = moved.size
+    ? remapHtmlImageAdjustments(input.html, html, images).map((a) => {
+        const to = target(a.replace)
+        return to ? { ...a, replace: to } : a
+      })
+    : images
+  return {
+    html,
+    images: remapped,
+    content: localiseContent(input.content, moved, foreign),
+    copied: moved.size,
+  }
+}
+
+/**
+ * Website content with its /files URLs on the spa's copies (`/files/{id}`, the form content stores; an absolute URL
+ * keeps its form like adjustments do); entries on another spa's file that wasn't copied are dropped. Same object when
+ * nothing changes.
+ */
+function localiseContent(
+  content: unknown,
+  moved: Map<string, { id: string; url: string }>,
+  foreign: Set<string>,
+): unknown {
+  const parts = htmlContentParts(content)
+  let changed = false
+  /** The URL on the spa's copy; null = drop the entry; undefined = keep it as is. */
+  const to = (url: string): string | null | undefined => {
+    const id = fileIdFromUrl(url)
+    if (!id) return undefined
+    const m = moved.get(id)
+    if (m) return /^\/files\//.test(url) ? `/files/${m.id}` : withQuery(m.url, url)
+    return foreign.has(id) ? null : undefined
+  }
+  for (const [path, v] of Object.entries(parts.values)) {
+    const key = 'img' in v ? 'img' : 'video' in v ? 'video' : null
+    const url = key ? (v as Record<string, unknown>)[key] : null
+    const next = typeof url === 'string' ? to(url) : undefined
+    if (next === undefined || !key) continue
+    changed = true
+    if (next === null) delete parts.values[path]
+    else parts.values[path] = { ...v, [key]: next } as HtmlContentValue
+  }
+  for (const [id, p] of Object.entries(parts.pictures)) {
+    const next = to(p.img)
+    if (next === undefined) continue
+    changed = true
+    if (next === null) delete parts.pictures[id]
+    else parts.pictures[id] = { ...p, img: next }
+  }
+  return changed ? (htmlContentFrom(parts) ?? null) : content
 }
 
 /**
@@ -446,11 +526,12 @@ export async function materializeTemplatePageData<T extends Record<string, unkno
     templateHtmlDocReader(platform),
     (html) => storeSpaHtmlDoc(tx, { tenantId: input.tenantId, html, userId: input.userId }),
     fileUrl
-      ? (html, images) =>
+      ? (html, images, content) =>
           localiseHtmlDesignAssets(tx, {
             tenantId: input.tenantId,
             html,
             images,
+            content,
             fileUrl,
             userId: input.userId,
             platform,

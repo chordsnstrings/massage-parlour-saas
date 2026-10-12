@@ -592,23 +592,57 @@ describe('site edit ops layer', () => {
       expect(await designOf('mixed-me')).toBe(sent)
     })
 
-    it('R28 P4: htmlDesignContentErrors: shape problems and other tenants’ /files refused; stale entries allowed', async () => {
-      const [mine, theirs] = await platform
+    it('R28 P4: an English value copied from a cut-short listing ("…") is refused; Arabic only and a short teaser pass', async () => {
+      const long = `${'Our rituals bring calm to the city. '.repeat(12)}Book today.`
+      const sent = doc(
+        `<p>${long}</p><script>window.CRM_DATA = ${JSON.stringify({ about: { body: long } })};</script>`,
+      )
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'cut-me', title: { en: 'Cut' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'cut-me', html: sent, convert: true }])).ok).toBe(true)
+      const op = (o: Record<string, unknown>) => run([{ op: 'html_content', page: 'cut-me', ...o }])
+      const errorOf = async (o: Record<string, unknown>) => {
+        const r = await op(o)
+        return r.ok ? '' : r.errors[0]
+      }
+      for (const clip of [160, 400].filter((n) => n < long.length)) {
+        const cut = `${long.slice(0, clip)}…`
+        expect(await errorOf({ texts: [{ id: 'txt-0', t: { en: cut, ar: 'طقوسنا' } }] })).toMatch(
+          /txt-0: the English is the design's text cut short \(it ends with "…"\) — to add Arabic send only ar/,
+        )
+        expect(await errorOf({ set: { 'about.body': { t: { en: cut, ar: 'طقوسنا' } } } })).toMatch(
+          /about\.body: the English is the design's text cut short .* send the whole English text/,
+        )
+      }
+      expect((await op({ texts: [{ id: 'txt-0', t: { ar: 'طقوسنا' } }] })).ok).toBe(true)
+      expect((await op({ texts: [{ id: 'txt-0', t: { en: 'Our rituals…' } }] })).ok).toBe(true)
+      expect((await op({ set: { 'about.body': { t: { en: long, ar: 'طقوسنا' } } } })).ok).toBe(true)
+    })
+
+    it('R28 P4: htmlDesignContentErrors: shape problems, private and other tenants’ /files refused; stale entries and own deleted files allowed', async () => {
+      const [mine, theirs, hidden] = await platform
         .insert(storedFiles)
         .values([
           { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: true },
           { tenantId: ids.other!, contentType: 'image/webp', size: 1, isPublic: true },
+          { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: false },
         ])
         .returning()
       const check = (content: unknown) =>
         tx((db) =>
-          htmlDesignContentErrors(db, ids.tenant!, {
-            root: { props: {} },
-            content: [
-              { type: 'Heading', props: { id: 'h', content: { v: 9 } } },
-              { type: 'HtmlDesign', props: { id: 'd', html: '', content } },
-            ],
-          }),
+          htmlDesignContentErrors(
+            db,
+            ids.tenant!,
+            {
+              root: { props: {} },
+              content: [
+                { type: 'Heading', props: { id: 'h', content: { v: 9 } } },
+                { type: 'HtmlDesign', props: { id: 'd', html: '', content } },
+              ],
+            },
+            { platform },
+          ),
         )
       expect(await check(undefined)).toEqual([])
       expect(
@@ -626,6 +660,12 @@ describe('site edit ops layer', () => {
       expect(
         await check({ v: 1, pictures: [{ id: 'img-0', src: '', img: `/files/${theirs!.id}` }] }),
       ).toEqual([`/files/${theirs!.id} is not one of this spa's pictures`])
+      expect(
+        await check({ v: 1, pictures: [{ id: 'img-0', src: '', img: `/files/${hidden!.id}` }] }),
+      ).toEqual([`/files/${hidden!.id} is not one of this spa's pictures`])
+      // A file of this spa deleted since (no row anywhere): the draft still saves (the site just misses it).
+      const gone = `/files/${crypto.randomUUID()}`
+      expect(await check({ v: 1, values: [{ path: 'a', value: { img: gone } }] })).toEqual([])
       // Not a uuid: refused without a query (a uuid cast would fail the transaction).
       const odd = `/files/${'-'.repeat(36)}`
       expect(await check({ v: 1, values: [{ path: 'a', value: { img: odd } }] })).toEqual([

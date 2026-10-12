@@ -93,6 +93,10 @@ function scrub(value: unknown, name: RegExp | null): unknown {
     return out
   }
   const obj = value as Record<string, unknown>
+  // An HTML design (R24 / R28) is carried as built: its image adjustments' and website content's `src` are the
+  // design's own guards (not uploaded images), and `{name}` is no placeholder there. Content is written neutral on
+  // purpose (Website content on a demo spa); applying the template copies its files into the spa.
+  if (obj.type === 'HtmlDesign' && typeof obj.props === 'object' && obj.props !== null) return obj
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
     if (IMAGE_KEYS.has(k) && (typeof v === 'string' || isImageValue(v))) out[k] = ''

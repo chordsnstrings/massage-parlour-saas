@@ -49,17 +49,20 @@ const htmlDesignNode = (data: unknown): PuckNode | null => {
 
 /**
  * Every non-empty bilingual text of a page (root props + every block, slots included), in reading order. An
- * HTML-design page has none unless `html` (its design) is given: then its website content texts (`htmlTextSlots`).
+ * HTML-design page has none unless `html` (its design) is given: then its website content texts (`htmlTextSlots`,
+ * `first` keys ahead).
  */
 export function textSlots(
   data: unknown,
   schema: SiteEditSchema,
-  opts: { maxPerPage?: number; html?: string } = {},
+  opts: { maxPerPage?: number; html?: string; first?: ReadonlySet<string> } = {},
 ): TextSlot[] {
   const max = opts.maxPerPage ?? 120
   const out: TextSlot[] = []
   if (isHtmlPage(data))
-    return opts.html === undefined ? out : htmlTextSlots(data, opts.html, { maxPerPage: opts.maxPerPage })
+    return opts.html === undefined
+      ? out
+      : htmlTextSlots(data, opts.html, { maxPerPage: opts.maxPerPage, first: opts.first })
   const visit = (block: string, type: string, specs: Record<string, PropSpec>, props: unknown, at = '') => {
     if (!isObj(props)) return
     for (const [name, spec] of Object.entries(specs)) {
@@ -96,8 +99,13 @@ export function textSlots(
  * R28 P4: the texts of an HTML-design page (`html` = its design) as slots, with the spa's values over the design's:
  * the design data's text / longtext values (`{block}/content:{path}`; hidden or empty ones left out) and its page
  * texts the CRM doesn't fill (`{block}/text:{id}`, with the design text's src guard). Pictures and tags never.
+ * `first` (Write texts' leftovers) go ahead of the rest before the cap, so late ones (a footer) still make it.
  */
-export function htmlTextSlots(data: unknown, html: string, opts: { maxPerPage?: number } = {}): TextSlot[] {
+export function htmlTextSlots(
+  data: unknown,
+  html: string,
+  opts: { maxPerPage?: number; first?: ReadonlySet<string> } = {},
+): TextSlot[] {
   const max = opts.maxPerPage ?? 400
   const node = htmlDesignNode(data)
   const block = typeof node?.props.id === 'string' ? node.props.id : ''
@@ -105,7 +113,7 @@ export function htmlTextSlots(data: unknown, html: string, opts: { maxPerPage?: 
   if (!node || !block) return out
   const parts = htmlContentParts(node.props.content)
   const push = (slot: TextSlot) => {
-    if (out.length < max && slot.key.length <= MAX_KEY && slot.en.trim()) out.push(slot)
+    if (slot.key.length <= MAX_KEY && slot.en.trim()) out.push(slot)
   }
   for (const s of htmlContentSlots(htmlCrmContractOf(html)?.literal?.data)) {
     const v = parts.values[s.path]
@@ -135,7 +143,11 @@ export function htmlTextSlots(data: unknown, html: string, opts: { maxPerPage?: 
       src: x.src,
     })
   }
-  return out
+  const first = opts.first
+  const ordered = first?.size
+    ? [...out.filter((s) => first.has(s.key)), ...out.filter((s) => !first.has(s.key))]
+    : out
+  return ordered.slice(0, max)
 }
 
 /**

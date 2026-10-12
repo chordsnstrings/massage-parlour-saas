@@ -164,10 +164,10 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
       continue
     }
     const html = design?.source ?? undefined
-    const slots = textSlots(data, schema, { html })
     const leftovers = new Set<string>()
     if (design && html !== undefined) {
-      // R28 P4: texts that still name another spa, city, phone or test copy go first (and are named in the prompt).
+      // R28 P4: texts that still name another spa, city, phone or test copy go first — ahead of the page's slot cap —
+      // and are named in the prompt.
       const block = String(design.node.props?.id ?? '')
       for (const l of htmlContentLeftovers(
         htmlCrmContractOf(html)?.literal?.data ?? null,
@@ -181,8 +181,8 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
       ))
         if (l.reason !== 'stale' && l.reason !== 'arabic')
           leftovers.add(`${block}/${l.path.startsWith('text:') ? l.path : `content:${l.path}`}`)
-      slots.sort((a, b) => Number(leftovers.has(b.key)) - Number(leftovers.has(a.key)))
     }
+    const slots = textSlots(data, schema, { html, first: leftovers })
     if (!slots.length) result.skipped.push({ title, reason: 'no texts to write' })
     else
       jobs.push({

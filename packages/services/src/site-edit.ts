@@ -23,8 +23,8 @@ import {
   MAX_HTML_UPLOAD_BYTES,
   patchHtml,
 } from '@spa/core'
-import { pageVersions, sites, storedFiles, type ThemeTokens, type Tx } from '@spa/db'
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { type Db, pageVersions, platformDb, sites, storedFiles, type ThemeTokens, type Tx } from '@spa/db'
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
 import { htmlDesignDocFor, htmlDesignSource, spaHtmlDocReader, storeSpaHtmlDoc } from './site-html-assets'
@@ -257,6 +257,19 @@ function contentValue(v: z.infer<typeof HtmlContentValueSchema>): HtmlContentVal
 /** One op that doesn't fit (collected into the batch's error list; never thrown out of runSiteEdit). */
 class OpFail extends Error {}
 
+/**
+ * Ask AI and the connector see long design texts cut short (core `htmlContentView`: the first n characters + '…'): an
+ * English value copied from there would cut the English page short. At least 100 characters before the '…' (the
+ * views cut at 160 / 400), so a short teaser written on purpose still passes.
+ */
+const clippedCopy = (en: string | null | undefined, full: unknown) => {
+  const s = en?.trim() ?? ''
+  if (!s.endsWith('…') || typeof full !== 'string') return false
+  const head = s.slice(0, -1).trimEnd()
+  return head.length >= 100 && head.length < full.length && full.startsWith(head)
+}
+const CUT_SHORT = `the English is the design's text cut short (it ends with "…")`
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Of these `/files` ids, the ones that are not this spa's public files. */
 async function missingContentFiles(tx: Tx, tenantId: string, ids: string[]): Promise<string[]> {
@@ -277,8 +290,46 @@ async function missingContentFiles(tx: Tx, tenantId: string, ids: string[]): Pro
   return ids.filter((x) => !mine.has(x))
 }
 
-/** Every HtmlDesign block's content: shape (no slot check — stale entries are fine, the render skips them) + this spa's public files. */
-export async function htmlDesignContentErrors(tx: Tx, tenantId: string, data: unknown): Promise<string[]> {
+/**
+ * Of these `/files` ids, the ones a draft save refuses: not a file id, this spa's private files and other spas' files
+ * (platform-role read: the tenant transaction can't see them). This spa's files that no longer exist pass (deleted from
+ * the media library since; the site just misses that picture, as a block page would).
+ */
+async function foreignContentFiles(
+  tx: Tx,
+  tenantId: string,
+  ids: string[],
+  platform?: Db,
+): Promise<string[]> {
+  const valid = ids.filter((x) => UUID.test(x))
+  const own = valid.length
+    ? await tx
+        .select({ id: storedFiles.id, isPublic: storedFiles.isPublic })
+        .from(storedFiles)
+        .where(and(eq(storedFiles.tenantId, tenantId), inArray(storedFiles.id, valid)))
+    : []
+  const mine = new Map(own.map((r) => [r.id, r.isPublic]))
+  const unknown = valid.filter((x) => !mine.has(x))
+  const others = unknown.length
+    ? await (platform ?? platformDb())
+        .select({ id: storedFiles.id })
+        .from(storedFiles)
+        .where(and(inArray(storedFiles.id, unknown), ne(storedFiles.tenantId, tenantId)))
+    : []
+  const theirs = new Set(others.map((r) => r.id))
+  return ids.filter((x) => !UUID.test(x) || mine.get(x) === false || theirs.has(x))
+}
+
+/**
+ * Every HtmlDesign block's content on a draft save: shape (no slot check — stale entries are fine, the render skips
+ * them) and its /files (`foreignContentFiles`; the html_content op is stricter: only this spa's public files).
+ */
+export async function htmlDesignContentErrors(
+  tx: Tx,
+  tenantId: string,
+  data: unknown,
+  opts: { platform?: Db } = {},
+): Promise<string[]> {
   const content = isObj(data) && Array.isArray(data.content) ? data.content : []
   const errors: string[] = []
   for (const n of content) {
@@ -289,8 +340,13 @@ export async function htmlDesignContentErrors(tx: Tx, tenantId: string, data: un
       errors.push(...problems)
       continue
     }
-    const missing = await missingContentFiles(tx, tenantId, htmlContentFileIds(n.props.content))
-    errors.push(...missing.map((x) => `/files/${x} is not one of this spa's pictures`))
+    const foreign = await foreignContentFiles(
+      tx,
+      tenantId,
+      htmlContentFileIds(n.props.content),
+      opts.platform,
+    )
+    errors.push(...foreign.map((x) => `/files/${x} is not one of this spa's pictures`))
   }
   return errors
 }
@@ -564,7 +620,15 @@ export async function runSiteEdit(
               else if (k.startsWith('picture:')) delete parts.pictures[k.slice(8)]
               else delete parts.values[k]
             }
-          for (const [k, v] of Object.entries(op.set ?? {})) parts.values[k] = contentValue(v)
+          const slots = literal ? htmlContentSlots(literal.data) : []
+          if (n) {
+            const design = new Map(slots.map((x) => [x.path, x.value]))
+            for (const [k, v] of Object.entries(op.set ?? {})) {
+              if ('t' in v && clippedCopy(v.t.en, design.get(k)))
+                throw new OpFail(`${at}: ${k}: ${CUT_SHORT} — send the whole English text`)
+              parts.values[k] = contentValue(v)
+            }
+          }
           if (op.texts?.length) {
             const listed = new Map(listHtmlDesignTexts(source).map((x) => [x.id, x]))
             for (const e of op.texts) {
@@ -576,6 +640,10 @@ export async function runSiteEdit(
                   x.boundBy === 'script'
                     ? `${at}: ${e.id} is filled by the design's script — change it in the design file with html_patch`
                     : `${at}: ${e.id} is filled from the CRM — change it in the CRM`,
+                )
+              if (clippedCopy(e.t.en, x.text))
+                throw new OpFail(
+                  `${at}: ${e.id}: ${CUT_SHORT} — to add Arabic send only ar (the design's English stays), or send the whole English text`,
                 )
               // No en (null / left out): the current English override stays; '' = the design's English.
               const prev = parts.texts[e.id]?.src === x.src ? parts.texts[e.id]?.t.en : undefined
@@ -597,7 +665,7 @@ export async function runSiteEdit(
             }
           }
           const next = htmlContentFrom(parts)
-          const problems = htmlContentErrors(next ?? { v: 1 }, literal ? htmlContentSlots(literal.data) : [])
+          const problems = htmlContentErrors(next ?? { v: 1 }, slots)
           if (problems.length) throw new OpFail(`${at}: ${problems.slice(0, 6).join(' · ')}`)
           const missing = await missingContentFiles(tx, input.tenantId, htmlContentFileIds(next))
           if (missing.length)
