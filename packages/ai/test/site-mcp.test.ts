@@ -198,6 +198,7 @@ describe('site MCP server (/api/mcp)', () => {
       'remove_block',
       'rename_page',
       'replace_html_design',
+      'set_html_content',
       'set_html_design',
       'set_theme',
       'update_block',
@@ -208,7 +209,7 @@ describe('site MCP server (/api/mcp)', () => {
       'add_page',
       'move_block',
     ])
-    for (const name of ['list_templates', 'get_html_design'])
+    for (const name of ['list_templates', 'get_html_design', 'get_html_content'])
       expect(hints[name]?.readOnlyHint, name).toBe(true)
   })
 
