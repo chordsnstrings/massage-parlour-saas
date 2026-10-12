@@ -636,10 +636,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     flushed on unmount); `EditorContext.html` = `{docs, spaName, city}` from the Studio editor; HTML-design pages open
     with the block selected + `rightSideBarWidth: 400`. P4: local state = `htmlContentParts`, emitted with
     `htmlContentFrom` (all three parts kept); **Page texts** on every design (no CRM_DATA → CRM groups hidden + a note;
-    searchable, grouped, title + meta first, ≤ 200 rows rendered only while open; bound texts read-only + "Go to
-    field" for a `data-crm` slot; the guard `src` = the listed text's; English required — Arabic-only keeps the
-    design's English; outdated entries → Remove) and **Pictures** (`ImageFieldControl` per listed image, frame
-    dropped, `/files` or https without parentheses); `editor/html-content-labels.ts` = slot / page-text / leftover
+    searchable, grouped, title + meta first, ≤ 200 rows rendered only while open; bound texts read-only, worded by
+    `boundBy` ("from the CRM" + "Go to field" for a `data-crm` slot / "the design's script"); the guard `src` = the
+    listed text's; an Arabic-only edit stores `t: {ar}` only (English page = the design's bytes); outdated entries →
+    Remove) and **Pictures** (`ImageFieldControl` per listed image, frame dropped, `/files` or https without
+    parentheses); data-slot pictures / videos (`SlotImage` / `SlotVideo`) reach `onSet` only when `contentUrlOk`
+    (partial / invalid links stay local with a hint, so draft saves never meet them); `editor/html-content-labels.ts` = slot / page-text / leftover
     labels (`kindLabel`, `textLabel`, `leftoverLabel`) + `designListing` (texts + images per `designKey`, last 4);
     the editor `PublishSheet` adds a non-blocking "Website content checks" section (same leftovers with `page`, first
     5, "Open Website content" selects the block; never sent to `publishCheckedAction`). Readiness: core `htmlContentLeftovers(data, content, {spaName,

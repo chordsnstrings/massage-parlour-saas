@@ -114,9 +114,9 @@ export function HtmlContentField({ value, onChange, readOnly }: Props) {
     const next = { ...local.texts }
     const en = t?.en.trim() ? t.en : ''
     const ar = t?.ar?.trim() ? t.ar : ''
-    // English is required: an Arabic-only text keeps the design's English.
+    // Arabic only: no English stored, so the English page keeps the design's own text (its original bytes).
     if (listed && (en || ar))
-      next[id] = { id, src: listed.src, t: { en: en || listed.text, ...(ar ? { ar } : {}) } }
+      next[id] = { id, src: listed.src, t: { ...(en ? { en } : {}), ...(ar ? { ar } : {}) } }
     else delete next[id]
     commit({ ...local, texts: next })
   }
@@ -421,7 +421,9 @@ function TextRow({
         <p className="font-medium text-fg">{kindLabel(text)}</p>
         <p className="line-clamp-2">{clip(text.text, 160)}</p>
         <p className="mt-1">
-          Filled by the design from the CRM{text.binding ? ` (${text.binding})` : ''}.
+          {text.boundBy === 'script'
+            ? "Filled by the design's script."
+            : `Filled by the design from the CRM${text.binding ? ` (${text.binding})` : ''}.`}
           {field && (
             <button
               type="button"
@@ -576,15 +578,12 @@ function SlotRow({
           // biome-ignore lint/performance/noImgElement: the design's own embedded picture (data: URL), editor only
           <img src={design} alt="" className="mb-1.5 h-20 w-full rounded-md border object-cover" />
         )}
-        <ImageFieldControl
-          field={{ label: value ? '' : 'Replace the design picture' }}
+        <SlotImage
+          label={value ? '' : 'Replace the design picture'}
           id={`${id}-img`}
           value={value && 'img' in value ? value.img : ''}
-          onChange={(v) => {
-            const src = typeof v === 'string' ? v : (v as { src?: string } | null)?.src
-            onSet(src ? { img: src } : null)
-          }}
           readOnly={readOnly}
+          onSet={onSet}
         />
       </div>
     )
@@ -669,16 +668,7 @@ function SlotRow({
     return (
       <div id={id}>
         {head}
-        <input
-          className={control}
-          value={value && 'video' in value ? value.video : ''}
-          placeholder="https://… or /files/…"
-          disabled={readOnly}
-          onChange={(e) => {
-            const v = e.currentTarget.value.trim()
-            onSet(v ? { video: v } : null)
-          }}
-        />
+        <SlotVideo value={value && 'video' in value ? value.video : ''} readOnly={readOnly} onSet={onSet} />
       </div>
     )
 
@@ -704,5 +694,79 @@ function SlotRow({
         </p>
       )}
     </div>
+  )
+}
+
+/** A data slot's picture: only a media-library file or an https link is stored (as the draft save checks). */
+function SlotImage({
+  label,
+  id,
+  value,
+  readOnly,
+  onSet,
+}: {
+  label: string
+  id: string
+  value: string
+  readOnly?: boolean
+  onSet: (v: HtmlContentValue | null) => void
+}) {
+  const [bad, setBad] = useState(false)
+  return (
+    <>
+      <ImageFieldControl
+        field={{ label }}
+        id={id}
+        value={value}
+        onChange={(v) => {
+          const src = (typeof v === 'string' ? v : (v as { src?: string } | null)?.src)?.trim() ?? ''
+          const ok = !src || contentUrlOk(src)
+          setBad(!ok)
+          if (ok) onSet(src ? { img: src } : null)
+        }}
+        readOnly={readOnly}
+      />
+      {bad && (
+        <p className="mt-1 text-[11px] text-danger">Use a picture from the media library or an https link.</p>
+      )}
+    </>
+  )
+}
+
+/** A data slot's video: a partial or invalid link stays in the field with a hint and is never stored. */
+function SlotVideo({
+  value,
+  readOnly,
+  onSet,
+}: {
+  value: string
+  readOnly?: boolean
+  onSet: (v: HtmlContentValue | null) => void
+}) {
+  // What was typed but not stored, over the stored value it was typed on: back to the design drops it.
+  const [typed, setTyped] = useState<{ raw: string; over: string } | null>(null)
+  const draft = typed?.over === value ? typed.raw : null
+  return (
+    <>
+      <input
+        className={cn(control, draft !== null && 'border-danger')}
+        value={draft ?? value}
+        placeholder="https://… or /files/…"
+        disabled={readOnly}
+        aria-invalid={draft !== null}
+        onChange={(e) => {
+          const raw = e.currentTarget.value
+          const v = raw.trim()
+          const ok = !v || contentUrlOk(v)
+          setTyped(ok ? null : { raw, over: value })
+          if (ok) onSet(v ? { video: v } : null)
+        }}
+      />
+      {draft !== null && (
+        <p className="mt-1 text-[11px] text-danger">
+          Use a video from the media library (/files/…) or an https link.
+        </p>
+      )}
+    </>
   )
 }
