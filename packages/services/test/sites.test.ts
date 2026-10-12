@@ -7,6 +7,7 @@ import {
   ensureSite,
   getEditablePage,
   getPublishedPage,
+  isHtmlDesignTemplate,
   listPages,
   listPublishedPages,
   listVersions,
@@ -172,5 +173,36 @@ describe('sites service', () => {
     await tx((db) => switchTemplate(db, ids.tenant!, zen, { replaceContent: true, draftTheme: true }))
     await tx((db) => publishAll(db, ids.tenant!))
     expect(await tx((db) => templateUndoChanges(db, ids.tenant!))).toContain('Theme')
+  })
+
+  it('R28: switching to an HTML design keeps the theme (it ignores it), so kept pages keep their look', async () => {
+    const html: SiteTemplate = {
+      key: 'html-design',
+      name: 'HTML design',
+      theme: {},
+      pages: [
+        {
+          slug: '',
+          title: { en: 'Home' },
+          data: {
+            root: { props: { htmlDesign: true } },
+            content: [{ type: 'HtmlDesign', props: { id: 'd', html: '<html><body>x</body></html>' } }],
+          },
+        },
+      ],
+    }
+    expect(isHtmlDesignTemplate(html)).toBe(true)
+    expect(isHtmlDesignTemplate(zen)).toBe(false)
+    expect(isHtmlDesignTemplate({ ...html, pages: [] })).toBe(false)
+    const [site] = await tx((db) => db.select().from(sites).where(eq(sites.tenantId, ids.tenant!)))
+    for (const opts of [{ replaceContent: true }, { replaceContent: true, draftTheme: true }]) {
+      const s = await tx((db) => switchTemplate(db, ids.tenant!, html, opts))
+      expect(s).toMatchObject({
+        templateKey: 'html-design',
+        theme: site!.theme,
+        themeDraft: site!.themeDraft,
+      })
+      await tx((db) => undoTemplateSwitch(db, ids.tenant!))
+    }
   })
 })

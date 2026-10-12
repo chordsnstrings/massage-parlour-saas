@@ -41,13 +41,17 @@ staff[]{id, name, specialty, photo, photo_alt}
 digits → one space) in English or the page locale, or the design `id` equal to the English name's slug
 (`normal-massage`); staff by normalised name (an empty name never matches).
 
-| Key | From the CRM | When the CRM has no value |
+**"When the CRM has no value" applies only on the spa's own design** (its `name` or `short_name` names the tenant,
+as for `short_name`). On another spa's design an empty CRM value or list stays empty and the design hides that block
+(owner R28 D1, 2026-10-12: never another spa's phones, logo, address, hours or menu).
+
+| Key | From the CRM | When the CRM has no value (own design only) |
 |---|---|---|
 | `spa.name` | tenant name | design |
 | `spa.short_name` | design's, if it is a whole-word start of the tenant name, else the tenant name | — |
-| `spa.area_label` | design-owned (journey copy) | CRM city when the design's is empty |
+| `spa.area_label` | CRM city (the address's UAE city); on the spa's own design its finer label first ("Al Zahiyah, Abu Dhabi") | — |
 | `spa.logo_on_light` | the spa's CRM logo (`/files/{id}` on the public site origin; made for the light-only CRM) | design |
-| `spa.logo_on_dark` | the design's, when the design is this spa's own (its `name` or `short_name` names the tenant, as for `short_name`) and has one; else the CRM logo (never another spa's) | design |
+| `spa.logo_on_dark` | the design's, when the design is this spa's own and has one; else the CRM logo (never another spa's) | — |
 | `spa.timezone` / `currency` | `Asia/Dubai` / `AED` | — |
 | `contact.whatsapp_number` | default branch WhatsApp, else the first active branch's, `+E164` | design |
 | `contact.phones[]` | all active branches, default first: the phone (`calls`, `whatsapp` when the same number) and a different WhatsApp number (`calls: false`); deduped; `display` 05X XXX XXXX / 0A XXX XXXX / +CC…; `label` = the design's label for the same number, else the branch name (several branches) | design list when no branch has a number |
@@ -56,13 +60,13 @@ digits → one space) in English or the page locale, or the design `id` equal to
 | `hours[]` | default branch opening hours, 7 rows (first open – last close a day; no interval = closed) | design when hours were never set up |
 | `booking.url` | — (owner R26 (1): booking requests, never the automatic online booking page) | design's (BE RELAX: `null` → `#book`, its form) |
 | `booking.form_endpoint` | live pages: `{this host}{base}/crm-enquiry?page={slug}[&lang=ar]`; previews / editor / share links: `null` (WhatsApp fallback, nothing stored) | — (the designer's endpoint is never used) |
-| `services[]` | website services = the CRM Website "On the website" rule (active, online bookable, ≥ 1 active variant), site order | design list (whole) when empty |
+| `services[]` | website services = the CRM Website "On the website" rule (active, online bookable, ≥ 1 active variant), site order; **one entry per English name** (R28: a treatment in two menus shows once — durations joined, lowest public price, first id / description / photo / category) | design list (whole) when empty |
 | `.id`, `.name`, `.category`, `.description` | uuid; name / category / description in the locale (English fallback) | description: matched |
 | `.durations` | active variant lengths, unique, ascending | — |
 | `.price` | lowest public price (`services.show_price`, else the spa default) as a number; `null` when hidden / on request | **never inherited** |
 | `.image` / `.image_alt` | `services.image_url` (absolute) / the service name | matched image / its alt |
 | `.note` | — | matched (else '') |
-| `staff[]` | active staff with **Show on website** on (default off), by sort | `[]` (owner R26 (2): never the design's people; designs hide an empty team, BE RELAX `data-if="staff"`) |
+| `staff[]` | active staff with **Show on website** on (default off), by sort; **left out while they have no photo** (CRM or the matched design item; R28 D2: no empty frames, the therapist select follows) | `[]` (owner R26 (2): never the design's people; designs hide an empty team, BE RELAX `data-if="staff"`) |
 | `.name`, `.specialty`, `.photo` | display name (typed, never translated), first line of the short bio (≤ 80), photo | matched specialty / photo — same name only, never another person's photo |
 | everything else | — | design (journey, experience, story texts, message templates, booking url / label / image, theme, unknown keys) |
 

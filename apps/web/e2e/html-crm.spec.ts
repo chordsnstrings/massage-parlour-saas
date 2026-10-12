@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, type Frame, type Page, test } from '@playwright/test'
 import { addDays } from '@spa/core'
-import { auditLog, branches, services, serviceVariants, siteEnquiries, staff, tenants } from '@spa/db'
+import { auditLog, branches, services, serviceVariants, siteEnquiries, sites, staff, tenants } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
   admin,
@@ -101,7 +101,13 @@ async function seedSpa(slug: string) {
   const people = await db
     .insert(staff)
     .values([
-      { tenantId, displayName: 'Maya Test', sort: 1 },
+      // A photo: photo-less therapists never show on HTML designs (R28 D2).
+      {
+        tenantId,
+        displayName: 'Maya Test',
+        sort: 1,
+        photoUrl: '/files/00000000-0000-4000-8000-000000000001',
+      },
       { tenantId, displayName: 'Ploy Test', sort: 2 },
     ])
     .returning()
@@ -223,6 +229,11 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await expect(page.locator('#staff .specialty')).toHaveText('Thai massage specialist')
     await expect(page.getByText('Ploy Test')).toHaveCount(0)
     await expect(page.locator('#staff li.photo-only')).toHaveCount(0)
+    // Switched on but no photo → left out (R28 D2: no empty frames).
+    await testDb().update(staff).set({ showOnSite: true }).where(eq(staff.id, seed.ploy))
+    await live(page, slug)
+    await expect(page.locator('#staff li.member')).toHaveCount(1)
+    await expect(page.getByText('Ploy Test')).toHaveCount(0)
   })
 
   await test.step('a price / hours change in the CRM shows on reload, without republishing', async () => {
@@ -238,12 +249,12 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await expect(page.locator('#hours')).toContainText('mon 11:00-23:00')
   })
 
-  await test.step('no website services in the CRM → the design keeps its own list', async () => {
+  await test.step("no website services in the CRM → none of the design's (another spa's design, R28 D1)", async () => {
     const db = testDb()
     await db.update(services).set({ onlineBookable: false }).where(eq(services.tenantId, seed.tenantId))
     await live(page, slug)
-    await expect(page.locator('#services').getByText('Design ritual')).toBeVisible()
-    await expect(page.locator('li[data-id="normal-massage"] .price')).toHaveText('from 999 AED')
+    await expect(page.locator('#services li')).toHaveCount(0)
+    await expect(page.getByText(/999/)).toHaveCount(0)
     await db.update(services).set({ onlineBookable: true }).where(eq(services.tenantId, seed.tenantId))
   })
 
@@ -380,4 +391,52 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(await enquiries(seed2.tenantId)).toHaveLength(1)
     await ctx.close()
   })
+})
+
+test('R28: an HTML template applied over a live block site becomes a draft; the live site keeps its look', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const owner = await signUpOwner(page, { spa: 'Live Block Spa' })
+  const { slug } = owner
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await page.goto(studioUrl(slug))
+  await page.getByRole('button', { name: 'Use Zen Minimal' }).click()
+  await expect(page.getByTestId('current-template')).toHaveText('Zen Minimal', { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Publish site' }).click()
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText(/^Published \d+ pages?/)).toBeVisible({ timeout: 30_000 })
+  const db = testDb()
+  const [t] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [before] = await db.select().from(sites).where(eq(sites.tenantId, t!.id))
+
+  await upload(page, 'Over Live', fixture)
+  await page.goto(studioUrl(slug))
+  await page
+    .getByRole('article', { name: 'Over Live' })
+    .getByRole('button', { name: 'Apply Over Live' })
+    .click()
+  const dialog = page.getByRole('dialog')
+  // The design IS its page: it always replaces the page with the same address (as a draft), never only the theme.
+  await expect(dialog.getByRole('checkbox')).toBeChecked()
+  await expect(dialog.getByRole('checkbox')).toBeDisabled()
+  await expect(
+    dialog.getByText(/^Its design replaces your pages with the same address as drafts/),
+  ).toBeVisible()
+  await dialog.getByRole('button', { name: 'Switch to Over Live' }).click()
+  await expect(page.getByTestId('current-template')).toHaveText('Over Live', { timeout: 30_000 })
+
+  // Live: the Zen site and its theme, untouched; the design waits as the home draft. The theme is kept (an HTML
+  // design ignores it), so the pages it doesn't replace keep their look once published.
+  const [after] = await db.select().from(sites).where(eq(sites.tenantId, t!.id))
+  expect(after!.theme).toEqual(before!.theme)
+  expect(after!.themeDraft).toBeNull()
+  await page.goto(site(slug))
+  await expect(page.locator('#spa')).toHaveCount(0)
+  // The console's home thumbnail shows the draft design right away (scripts on, a new frame after the switch).
+  await page.goto(studioUrl(slug))
+  const thumb = page.frameLocator('iframe[title="Home page preview"]').frameLocator('iframe.site-html-design')
+  await expect(thumb.locator('#spa')).toHaveText('Live Block Spa', { timeout: 30_000 })
 })

@@ -1164,6 +1164,24 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   "Show on website" is the one public-staff rule (block Team sections too; migration 0050 switched it on for the
   staff a live Team section showed: active + bookable).
   **R27 Instagram via the Claude/ChatGPT connector:** planned 2026-10-12, owner: "leave it" — not building.
+- **R28 Dynamic HTML-design websites (owner, 2026-10-12: "The website has to be dynamic, not static … Understand
+  what you need to do").** Everything a visitor sees on an HTML-design site comes from the system: L1 CRM (live, no
+  publish) > L2 per-spa website content (draft → publish; the design's story scenes, experience, booking label /
+  picture, message templates, every markup text EN + AR, pictures) > L3 the design file's defaults. The stored file
+  stays byte for byte and only values change (R24 kept). Full plan + phases P0–P6: `docs/design/r28-dynamic-html-designs.md`.
+  Owner decisions 2026-10-12: **D1** an empty CRM value on another spa's design shows nothing (the design hides the
+  block; the design's own values only on the spa's own design); **D2** a therapist without a photo is hidden on HTML
+  designs until a photo is added (the design's nameless photos only via an explicit pick when filling the CRM);
+  **D3** Arabic: Arabic texts show inside the design's English layout (no separate RTL rebuild); **go live phase by
+  phase** (each phase ships when its checks pass). **P0 (2026-10-12):** `@spa/core` html-crm.ts — D1, D2, area label
+  from the CRM city (own design: its finer label), a treatment in two menus shows once (`collapseSameName`).
+  **Fix with P0 (owner report 2026-10-12: "uploaded the html … applied on one spa and it applied a different
+  design"):** the console Apply sheet over a spa with a live site defaulted to "theme only" (sample-pages box off), so
+  an HTML template wrote no page and swapped the LIVE theme to its empty one (Zen blocks without their look, before
+  any publish). Now an HTML template always writes its pages as drafts (box on + disabled, "Nothing changes on your
+  live site until you publish") and keeps the spa's theme (services `isHtmlDesignTemplate` in `switchTemplate`; also
+  the connector), so pages it doesn't replace keep their look once published; console thumbnails of HTML designs run
+  scripts and the home thumbnail reloads after a switch / undo / edit.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

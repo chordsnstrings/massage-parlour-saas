@@ -203,7 +203,7 @@ export type CrmService = {
 }
 export type CrmStaffMember = { id: string; name: string; specialty: string; photo: string }
 
-/** The CRM side of the contract ('' / [] = the CRM has no value; the merge then keeps the design's). */
+/** The CRM side of the contract ('' / [] = the CRM has no value; the merge keeps the design's only on its own design). */
 export type CrmContract = {
   spa: {
     name: string
@@ -368,23 +368,28 @@ export function buildCrmContract(src: CrmContractSource, opts: { locale: CrmLoca
     },
     hours: crmHours(branch?.openingHours),
     booking: { form_endpoint: src.formEndpoint },
-    services: src.services.map((s) => {
-      const prices = s.variants
-        .map((v) => (v.priceAed === null ? Number.NaN : Number(v.priceAed)))
-        .filter((p) => Number.isFinite(p) && p > 0)
-      return {
-        id: s.id,
-        name: pick(s.name),
-        category: pick(s.category),
-        description: pick(s.description),
-        durations: [...new Set(s.variants.map((v) => v.durationMin))]
-          .filter((m) => Number.isInteger(m) && m > 0)
-          .sort((a, b) => a - b),
-        price: prices.length ? Math.round(Math.min(...prices) * 100) / 100 : null,
-        image: img(s.imageUrl),
-        match: { names: [...new Set([crmName(s.name.en), crmName(pick(s.name))])], slug: crmSlug(s.name.en) },
-      }
-    }),
+    services: collapseSameName(
+      src.services.map((s) => {
+        const prices = s.variants
+          .map((v) => (v.priceAed === null ? Number.NaN : Number(v.priceAed)))
+          .filter((p) => Number.isFinite(p) && p > 0)
+        return {
+          id: s.id,
+          name: pick(s.name),
+          category: pick(s.category),
+          description: pick(s.description),
+          durations: [...new Set(s.variants.map((v) => v.durationMin))]
+            .filter((m) => Number.isInteger(m) && m > 0)
+            .sort((a, b) => a - b),
+          price: prices.length ? Math.round(Math.min(...prices) * 100) / 100 : null,
+          image: img(s.imageUrl),
+          match: {
+            names: [...new Set([crmName(s.name.en), crmName(pick(s.name))])],
+            slug: crmSlug(s.name.en),
+          },
+        }
+      }),
+    ),
     staff: src.staff
       .map((m) => ({
         id: m.id,
@@ -394,6 +399,33 @@ export function buildCrmContract(src: CrmContractSource, opts: { locale: CrmLoca
       }))
       .filter((m) => m.name),
   }
+}
+
+/**
+ * One entry per treatment name (R28): a service in two menus (e.g. "Asian Menu" + "Arabic Menu") shows once —
+ * durations joined, the lowest public price, the first id (booking requests resolve it), description, photo and
+ * category, every identity name for the design match. Unnamed services are never joined.
+ */
+function collapseSameName(services: CrmService[]): CrmService[] {
+  const out: CrmService[] = []
+  const byName = new Map<string, CrmService>()
+  for (const s of services) {
+    const key = s.match.names[0] ?? ''
+    const seen = key ? byName.get(key) : undefined
+    if (!seen) {
+      const first = { ...s, durations: [...s.durations], match: { ...s.match, names: [...s.match.names] } }
+      out.push(first)
+      if (key) byName.set(key, first)
+      continue
+    }
+    seen.durations = [...new Set([...seen.durations, ...s.durations])].sort((a, b) => a - b)
+    if (s.price !== null && (seen.price === null || s.price < seen.price)) seen.price = s.price
+    seen.description ||= s.description
+    seen.image ||= s.image
+    seen.category ||= s.category
+    for (const n of s.match.names) if (!seen.match.names.includes(n)) seen.match.names.push(n)
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -415,11 +447,14 @@ function namesSpa(part: unknown, name: string) {
 /**
  * The contract the page gets: the design's embedded data with the CRM's operational keys over it. CRM wins for
  * name, logo (on light; on dark too unless the design is this spa's own and has one), phones, WhatsApp, address,
- * maps, hours, form endpoint, services (prices, durations) and staff (opted-in only: none → []); any other empty CRM
- * value or collection keeps the design's; per-item image / alt / note / description / specialty come only from the
- * design item with the same identity (normalised name, or the service's slug as id); prices are never inherited.
- * Everything else (booking url, journey, experience, story texts, message templates, booking label/image, unknown
- * keys) is the design's, kept by reference (the serializer memoises it). `design` null = the CRM alone.
+ * maps, area label, hours, form endpoint, services (prices, durations) and staff (opted-in only: none → []). An empty
+ * CRM value or collection keeps the design's only when the design is this spa's own (its name names the tenant);
+ * on another spa's design it stays empty and the design hides that block (owner R28 D1: never another spa's phones,
+ * logo or menu). Per-item image / alt / note / description / specialty come only from the design item with the same
+ * identity (normalised name, or the service's slug as id); prices are never inherited. Staff still without a photo
+ * after that are left out (R28 D2: no empty frames; the therapist select follows). Everything else (booking url,
+ * journey, experience, story texts, message templates, booking label/image, unknown keys) is the design's, kept by
+ * reference (the serializer memoises it). `design` null = the CRM alone.
  */
 export function mergeCrmContract(design: Record<string, unknown> | null, crm: CrmContract) {
   const d = obj(design)
@@ -435,25 +470,28 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
   // The design was made for this spa (its name or short name names the tenant): its logo for dark backgrounds is this
   // spa's own variant, which the CRM (one logo, made for the light-only CRM) doesn't have. Another spa's never shows.
   const ownDesign = namesSpa(dSpa.name, name) || namesSpa(dSpa.short_name, name)
+  // The design's own value when the CRM has none — only on this spa's own design (R28 D1).
+  const own = <T>(v: T, empty: T): T => (ownDesign ? v : empty)
   const spa = {
     ...dSpa,
     name,
     short_name: namesSpa(dSpa.short_name, name) ? str(dSpa.short_name) : name,
-    area_label: str(dSpa.area_label) || crm.spa.area_label,
-    logo_on_dark: (ownDesign && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark || str(dSpa.logo_on_dark),
-    logo_on_light: crm.spa.logo_on_light || str(dSpa.logo_on_light),
+    // Own design: its finer label ("Al Zahiyah, Abu Dhabi") over the CRM city; another spa's: never its area.
+    area_label: (ownDesign && str(dSpa.area_label)) || crm.spa.area_label,
+    logo_on_dark: (ownDesign && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
+    logo_on_light: crm.spa.logo_on_light || own(str(dSpa.logo_on_light), ''),
     timezone: crm.spa.timezone,
     currency: crm.spa.currency,
   }
   const contact = {
     ...dContact,
-    whatsapp_number: crm.contact.whatsapp_number || str(dContact.whatsapp_number),
+    whatsapp_number: crm.contact.whatsapp_number || own(str(dContact.whatsapp_number), ''),
     phones: crm.contact.phones.length
       ? crm.contact.phones.map((p) => {
           const same = dPhones.find((x) => digitsOf(x.number) === digitsOf(p.number))
           return { ...p, label: str(same?.label) || p.label }
         })
-      : list(dContact.phones),
+      : own(list(dContact.phones), []),
   }
   const hasAddress = Boolean(crm.location.address_line1 || crm.location.city)
   const location = {
@@ -462,7 +500,7 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
     city: '',
     country: '',
     maps_url: '',
-    ...dLoc,
+    ...(ownDesign ? dLoc : {}),
     ...(hasAddress
       ? {
           address_line1: crm.location.address_line1,
@@ -494,26 +532,28 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
           image_alt: s.image ? s.name : str(m?.image_alt) || s.name,
         }
       })
-    : list(d.services)
+    : own(list(d.services), [])
   // Staff only with "Show on website" (owner R26 (2)): nobody switched on → [] (designs hide an empty team), never
-  // the design's own people.
-  const staff = crm.staff.map((s) => {
-    const key = crmName(s.name)
-    const m = key ? dStaff.find((x) => crmName(x.name) === key) : undefined
-    return {
-      ...m,
-      ...s,
-      specialty: s.specialty || str(m?.specialty),
-      photo: s.photo || str(m?.photo),
-      photo_alt: s.photo ? s.name : str(m?.photo_alt) || s.name,
-    }
-  })
+  // the design's own people. Still no photo (CRM or same-name design item) → left out (R28 D2).
+  const staff = crm.staff
+    .map((s) => {
+      const key = crmName(s.name)
+      const m = key ? dStaff.find((x) => crmName(x.name) === key) : undefined
+      return {
+        ...m,
+        ...s,
+        specialty: s.specialty || str(m?.specialty),
+        photo: s.photo || str(m?.photo),
+        photo_alt: s.photo ? s.name : str(m?.photo_alt) || s.name,
+      }
+    })
+    .filter((s) => s.photo !== '')
   return {
     ...d,
     spa,
     contact,
     location,
-    hours: crm.hours.length ? crm.hours : list(d.hours),
+    hours: crm.hours.length ? crm.hours : own(list(d.hours), []),
     booking,
     services,
     staff,

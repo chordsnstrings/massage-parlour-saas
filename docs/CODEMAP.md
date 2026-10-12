@@ -557,8 +557,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `buildCrmContract` (pure: branches default first, website services = services `websiteServices` = the CRM Website
     "On the website" rule + `image_url`, staff = services `websiteStaff` (active + `staff.show_on_site`; also the
     block sites' Team data, `components/site/data.ts` loadLive), logo; no booking url) → `mergeCrmContract` (CRM wins
-    for operational keys; empty CRM value / list keeps the design's, except staff (none → []); booking url stays the
-    design's; logo on dark stays the design's when the design names this spa; per-item
+    for operational keys; an empty CRM value / list keeps the design's only on the spa's own design (R28 D1: another
+    spa's design shows nothing there); staff: none opted in → [], no photo after the merge → left out (R28 D2); area
+    label = CRM city (own design: its own first); same-name services collapse to one (`collapseSameName`); booking url
+    stays the design's; logo on dark stays the design's when the design names this spa; per-item
     image/note/description/specialty only from the same-name item; prices never inherited) → `crmScriptJson`
     (script-safe, memoised for the design's objects) → `spliceCrmData` (only the literal's JSON range). Web
     `components/site/html-crm.ts` `designWithCrm` (isomorphic; parsed design by `file:sha256`, output by + CRM hash)

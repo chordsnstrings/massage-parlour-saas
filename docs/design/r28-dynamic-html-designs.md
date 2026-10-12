@@ -1,0 +1,218 @@
+# R28 Dynamic HTML-design websites — build plan
+
+Owner request 2026-10-12: "The website has to be dynamic, not static. You're creating static websites. Understand what
+you need to do." Planned 2026-10-12 (4 code readers → 3 independent plans → judged + synthesized; claims checked in code).
+
+**Owner decisions (2026-10-12):**
+- **D1** — an empty CRM value (logo, phones, WhatsApp, address, hours, services) on a design made for another spa shows
+  nothing; the design hides that block. Template previews and the spa's own design keep the design's values.
+- **D2** — on HTML designs a therapist without a photo is hidden (team + therapist select) until a photo is added; the
+  design's nameless photos are given to a real therapist only by a super-admin's explicit pick when filling the CRM.
+- **D3** — Arabic: Arabic texts show inside the design's English (left-to-right) layout; no separate RTL rebuild of the
+  design. The `/ar` address renders the content layer's Arabic values with English fallback.
+- **Delivery** — phase by phase: each phase goes live when its checks pass.
+
+**Goal:** everything a visitor sees comes from one of three places:
+- **L1, CRM:** live, shows without a publish.
+- **L2, per-spa website content:** goes through draft and publish.
+- **L3, design defaults:** used only when nobody has set a value.
+
+The stored file never changes. With no content set, the output is the very same string as today, so `html-fidelity`, `html-upload` and `html-crm` stay green without changes. The content layer changes only values: the `CRM_DATA` JSON range, text-node characters and attribute values. Layout, CSS and scripts are never touched. This goes into CLAUDE.md as a locked decision that extends R24.
+
+## 1. Content model and storage
+
+- **Precedence:**
+  - Operational keys: L1 > L3 (neutral fallback per D1).
+  - Design-owned keys: L2 > L3.
+  - `logo_on_dark`: L2 > the spa's own design > CRM logo.
+  - `area_label`: CRM only (branch area > CRM city > the design's value only when it is the spa's own design). The content layer refuses it, so it has one source.
+- **New file `packages/core/src/html-content.ts`** (pure, client-safe):
+  ```ts
+  type Bi = { en: string; ar?: string }
+  type HtmlContentValue = { t: Bi } | { tags: { en: string[]; ar?: string[] } } | { img: string; alt?: Bi }
+                        | { video: string } | { on: boolean } | { hide: true }
+  type HtmlDesignContent = { v: 1; data?: Record<string, HtmlContentValue>   // 'journey[welcome].title', 'spa.experience[1].text'
+                                  texts?: Record<string, { src: string; t: Bi }> } // 'txt-n' | 'attr-n' | 'title' | 'meta-description'
+  htmlContentSlots(literalData, html?) → HtmlContentSlot[]   // what can be edited, read from the literal
+  overlayCrmData(designData, data, locale, filesOrigin)      // copy-on-write; empty content returns the same object (===)
+  htmlContentErrors(content, slots) → string[]
+  ```
+- **What becomes a slot:**
+  - Every string, boolean, string-array or null leaf of the literal, except these operational roots: `spa.name`, `short_name`, `area_label`, `logo_on_light`, `timezone`, `currency`, `contact.whatsapp_number`, `phones`, `location`, `hours`, `booking.url`, `form_endpoint`, `services`, `staff`.
+  - Kind comes from the key name (image, photo, logo or still → picture; clip or video → video; long → multi-line text).
+  - `focus` and `accent` become focal-point and colour fields.
+  - Array items are addressed by `[id]` when they have one, otherwise `[n]`. Items are edited in place, never added or removed, because the scroll choreography depends on the 5 scenes.
+  - Optional keys (`clip`, `clipMobile`) are offered only when the design declares them (the schema comment in v1, the manifest in v2).
+- **Where it is stored:** a new block prop `content?: HtmlDesignContent` on `HtmlDesign` (`blocks/html-design.tsx`). Like `phoneFixes`, it has no Puck default.
+  - It lives in `page_versions.data`, so draft, preview, share link, publish, versions, restore, F29 locks, edit stamps and template undo all work without new code.
+- **Validation:** `cleanHtmlDesignContent(data, tenantId, tx)` in `packages/services/src/site-edit.ts`. It runs in `saveDraft` (every HtmlDesign block), `runSiteEdit`, import and template save/apply. It refuses:
+  - unknown or operational paths and wrong kinds;
+  - `data:` and `javascript:` values;
+  - texts over 2,000 characters, or more than 64 KB in total;
+  - `/files` ids that are not this tenant's public files (checked with `withTenant`).
+
+  `overlayCrmData` checks the whitelist again at render time.
+
+## 2. Render integration points
+
+1. **`apps/web/src/components/site/html-crm.ts`:** `designWithCrm(html, key, crm, {inject, content, locale, filesOrigin})`.
+   - Change `if (!crm) return html` to `if (!crm && !content) return html`.
+   - Merge: `mergeCrmContract(overlayCrmData(literal.data, content.data, locale, origin), crm)`; with no CRM (template preview), the overlay alone.
+   - Cache key: `key|l/i|cyrb53(crm)|cyrb53(stableJson(resolvedForLocale))`. Empty content gives exactly today's key.
+   - Copy-on-write keeps the `crmScriptJson` WeakMap hits for untouched subtrees, including the 4.4 MB of pictures.
+2. **`packages/core/src/html-design.ts`:**
+   - New `listHtmlDesignTexts(html)`: the same tokenizer as `scan` (skips script, style and comments) plus text nodes inside `a`, `button`, `option` and `template`; `<title>`; `meta[name=description]`; the attributes `alt`, `placeholder`, `aria-label` and `title`.
+   - Each text has a `src` guard of at most 300 characters and a `group` from the nearest section, header, nav or footer.
+   - Texts are marked `bound` when the design's script fills them (`data-crm*`, `data-item*`, `data-book-service`).
+   - New `applyHtmlTextOverrides(html, texts, locale)` runs as the **first** step of `htmlDesignDocument`, so ids match the raw file, and before `fillSpans`, so `{{spa_name}}` inside an override is filled. It escapes HTML and attributes and keeps the node's surrounding whitespace.
+   - A stale `src` is skipped at render and shown as outdated.
+   - `HtmlDesignRender` gets `locale` and `texts`.
+3. **Callers:** `blocks/html-design.tsx` (`meta.locale`), `app/site-html/route.ts` (`locale`) and `platform/(console)/templates/[id]/preview/page.tsx`.
+4. **Copies:** `materializeTemplatePageData` and `localiseHtmlDesignAssets` (`site-html-assets.ts:369`) also make local copies of `/files` values in `content`. "Save site as template" carries `content` through `cleanHtmlDesignContent`. That lets a super-admin write neutral BE RELAX content once on a demo spa and save it as the template.
+5. **Pop-in check:** P1 measures whether URL pictures pop in during the scroll scenes. If they do, `site-html` adds `<link rel=preload as=image>` for those pictures; this needs to be listed as an allowed invisible change. Embedding them as `data:` at render is the last resort.
+
+## 3. Console editor (English)
+
+- In the full-screen editor, the `content` field on `HtmlDesign` becomes visible: `{type:'custom', label:'Website content', render: HtmlContentField}`.
+- New folder `components/site/editor/html-content/`: `field.tsx`, `slot-field.tsx`, `readiness.tsx`, `text-slots.tsx`.
+- On HTML-design pages the editor selects the block on load and widens the panel.
+- The slot list is built on the client from `designContract(meta.htmlDocs[file])`, which is already parsed and cached.
+- **Sections:**
+  - **From the CRM:** read-only, with "Edit in CRM" links: name, logo, phones, address and area, hours, services (missing photos flagged), team (hidden ones and why).
+  - **Story:** 5 scenes with label, eyebrow (`{area}`/`{hours}` chips), title, body, tags, button switch, picture with focal point, accent, and video where declared.
+  - **Your visit, Booking, WhatsApp messages, Logo on dark.**
+  - **Page texts:** grouped and searchable; bound texts link to their data field.
+  - **Pictures:** the existing `HtmlImageAdjuster` from `templates/html-images.tsx`.
+- **Each field:** the design default as placeholder, "Reset to design", "Hide" only where a `data-if` covers it, `BilingualField` (follows the EN/AR switch and has AI rewrite and translate), and `imageField`/`MediaPicker` uploading into the spa's media library.
+- The canvas reloads 800 ms after the last change. Autosave, undo, versions and publish are unchanged.
+- **Readiness** uses `designLeftovers()` in core. It lists:
+  - design-owned texts that are not overridden and mention the design's spa name, another UAE city (`UAE_CITIES`), phone numbers or emails that aren't the CRM's, or "Test Build";
+  - untranslated AR fields;
+  - stale overrides;
+  - design photos never assigned.
+
+  It also shows as a non-blocking warning in `publishCheckedAction` and `PublishSiteSheet`.
+- **Spa page card** (`websites/[slug]/cards.tsx`): "Website content: N changes · M leftovers", plus "Edit content" and "Fill CRM from design". `ResolveRequestSheet` links straight to the field a change request is about.
+
+## 4. Filling the CRM on apply (preview, then confirm)
+
+- **Matching** (`packages/core/src/html-crm-seed.ts`): `crmMatchScore` = exact `crmName`/`crmSlug` match, plus number words (4 ↔ four), a shared prefix of at least 5 letters (moroccan ↔ morocco) and token Jaccard ≥ 0.5.
+  - The core helper `ownDesign(designData, tenantName)` is exported; `namesSpa` stays private.
+- **Shared service logic** (`packages/services/src/catalog.ts`): `saveService`, `setServiceImage` and `setStaffPhoto`, moved out of `dashboard/[tenant]/services/actions.ts:177` and `staff/actions.ts:82` with the same rules (at least 1 variant, 10–480 minutes, `IMAGE_URL_PATTERN`, bio ≤ 120). The web actions keep zod, guard and audit.
+- **`packages/services/src/design-seed.ts`:**
+  - `planDesignSeed(tx, tenantId, literal)` is read-only. It returns the service pairings with scores, 160 px WebP thumbnails, the staff photo pool and the CRM staff list.
+  - `applyDesignSeed(tx, tenantId, literal, choices, {userId})`:
+    - pictures: decode the `data:` value, then `processImage`, then `createAsset`, tagged `['design', 'design:{sha8}:{path}']`; a re-run creates no duplicates;
+    - fills `imageUrl` and `description` only where empty, unless "replace" is ticked; prices are never touched;
+    - creates unmatched services only when ticked: the design's durations (60 min if none) and price on request;
+    - sets a therapist photo only for a CRM staff member the super-admin picked; "Show on website" is switched on only when ticked;
+    - every unassigned photo goes into the media library.
+- **Console:** step 2 of `ApplyTemplateSheet` plus the card button open `seed-sheet.tsx`. The sheet says these are CRM changes that go live at once.
+  - `seed-actions.ts` `seedCrmFromDesignAction`: `studioGuard(slug,'site.design')`, then `can('services.manage')` and `can('staff.manage')`, then zod, `withTenant`, `auditAs('site.design_seed')`, a revalidate of the services, staff and website paths, and `forgetHtmlDesignRoutes`.
+  - The connector gets only a read-only `plan_design_seed`.
+
+## 5. Fixes for what you saw live (P0, render-time, no republish needed)
+
+All in `packages/core/src/html-crm.ts`:
+- **Area label:** `area_label = crm.spa.area_label || (ownDesign ? design : '')`. last-test shows the city parsed from its address.
+- **D1, empty CRM values:** when the design is not the spa's own, an empty CRM value (logos, WhatsApp, phones, address, hours, services) renders empty and the design hides the block. Template previews and a spa's own design keep the current rule.
+- **Therapists without a photo:** when the design's staff items carry photos, CRM staff still without a photo after merging are left out of `staff[]`. That also removes them from the therapist select (D2).
+- **Same name twice:** `collapseSameName` in `buildCrmContract`, so `crm-data.json` gets it too.
+  - It groups by `crmName(name.en)`: durations combined, the lowest price, the first id (the enquiry lookup at `crm-feed-routes.ts:162` still works), the first description and photo, all match names.
+  - This is the plan's default, recorded in `html-crm-contract.md` §3.
+
+**Later, in P3:**
+- New column `branches.area_label jsonb {en, ar?}`, migration `0051_r28_branch_area.sql`. It flows through `BranchInput`, `createBranch`/`updateBranch`, Settings → Branches and the default-branch form (EN + TH keys), `crmFeedFacts` and `buildCrmContract`. It is pre-filled from the application's emirate (`applications.ts:344`).
+- Staff form hint `staff.form.sitePhotoNeeded` (EN + TH).
+- `/files/upload` and the media picker accept `services.manage` or `staff.manage` for image uploads.
+
+## 6. Ask AI, Write texts and the connector (one ops layer, drafts only)
+
+- **New op `html_content`** `{page, set?, reset?: string[] | 'all', dry_run?}` in `site-edit.ts` and `site-kit/edit-ops.ts`. It is checked against the page design's slots (doc via `spaHtmlDocReader`) and `cleanHtmlDesignContent`, and needs `SITE_AI_EDITOR_EMAILS` + 2FA.
+- **Connector** (`packages/ai/src/mcp/site-server.ts`):
+  - `get_html_content`: slots grouped and paged, defaults (pictures as "embedded picture, 180 KB"), current values, leftovers;
+  - `set_html_content`;
+  - `add_image` already returns a usable `url`;
+  - the `patch_html_design` description becomes "structure only; words and pictures → set_html_content".
+- **Ask AI:** add `html_content` to the allow-list at `ai-edit-actions.ts:171`. `aiEditPlanAction` passes the slots and current values. `planSiteEdit` still never writes HTML.
+- **Write texts:** `textSlots()` returns the unbound content texts for HTML pages instead of returning early at l.42, and `fillTextSlots` writes `content`. The prompt gets the spa's CRM facts and the leftovers, so one click drafts EN + AR for that spa.
+
+## 7. Contract v2 and designs without CRM_DATA (P5)
+
+- **`docs/design/html-crm-contract.md` §9** describes v2:
+  - neutral defaults (no real spa's name, phones, address or alt text);
+  - an `id` on every repeatable item;
+  - `ui{}` for every script string, plus `data-crm-text` / `data-crm-attr` bindings for markup strings;
+  - `contract{version:2, locales, fields}`;
+  - the platform supplies `locale` in the JSON; Arabic values show in the design's own layout (D3: no RTL rebuild); an Arabic-capable font is recommended;
+  - `data-if="photo"` on staff cards.
+- **`htmlDesignReport(html)`** in core: contract none / v1 / v2, slot counts and warnings, shown in `TemplateUploadSheet` and on the Studio page. It never blocks an upload.
+- **BE RELAX v2** is made once through the connector as a new template version; you sign off the look.
+  - `carryHtmlContent(old, newSlots)` keeps values whose path or text `src` still exists, so spas keep their edits when they move to v2. Undo still works.
+- **Endpoint-only designs:** `crm-data.json?page=` merges the published block's `content`.
+- **Designs without CRM_DATA:** they still get page texts, pictures and placeholders. The card says "Not connected to the CRM" and offers a connector conversion into a draft.
+- **Video:** `/files/upload` gets a video kind (mp4/webm, ≤ 8 MB, under `site.design`).
+
+## 8. Tests
+
+**Core (Vitest):**
+- `html-content.test.ts`:
+  - slot snapshot from a BE RELAX fixture (stripped literal);
+  - a deep-frozen input is never mutated, and empty content returns the same object;
+  - operational paths refused;
+  - `[id]` addressing;
+  - AR → EN → design fallback;
+  - hide;
+  - leftovers.
+- `html-design.test.ts`:
+  - text ids are the same before and after the CRM splice;
+  - escaping, kept whitespace, stale `src` skipped;
+  - no overrides gives the very same string;
+  - **skeleton property:** tags, CSS and scripts unchanged except the literal and the overridden values;
+  - a replace-only picture adds no forced fit, and old adjustments give the same output.
+- `html-crm.test.ts`: area label, D1 fallback, photo-less staff, `collapseSameName`.
+- `html-crm-seed.test.ts`: the fuzzy pairs from live data.
+
+**Services (`spa_test`, under `/tmp/e2e.lock`):**
+- `design-seed.test.ts`: RLS between tenants; only empty fields filled; a re-run creates no duplicate assets; prices never touched.
+- Parity of the moved `saveService`.
+- `cleanHtmlDesignContent` and the `html_content` op (drafts only, another tenant's `/files` refused).
+- `branches.area_label`.
+
+**Web unit:** `designWithCrm` with no content gives the same string and key as R26; changed content gives a new key.
+
+**E2E:**
+- New `html-content.spec.ts`:
+  - edit a scene title and picture, a heading, then reset one;
+  - the draft preview changes and the live page does not;
+  - publish, and the live page changes;
+  - the stored sha is unchanged and the leftover warning clears.
+- New `design-seed.spec.ts`: apply, pair, confirm; the CRM gets the photos; no empty frames on the site.
+- Extend `site-mcp.spec.ts` and `packages/ai/test/site-mcp.test.ts`.
+- `html-fidelity`, `html-upload` and `html-crm` stay unchanged and green.
+- The Thai parity test covers the new keys.
+
+## 9. Docs
+
+- `html-crm-contract.md`: the layers, the precedence table, seeding, §9 v2.
+- `docs/CODEMAP.md`: "HTML designs" plus a new "Website content (R28)" entry.
+- `docs/PLAN.md` §14.8 R28.
+- `CLAUDE.md`: a locked-decision line (content overlays change values only, R24 kept; the D1–D3 outcomes).
+- New Thai strings flagged for your team's review.
+- Docs are merged into `claude/intelligent-heisenberg-g9e81o` with each phase; code goes through the normal review path.
+
+## 10. Phases
+
+Each phase runs typecheck, lint, the touched packages' tests and that phase's e2e spec. The full suite runs only in P6.
+
+| # | Work | Hours | What you see afterwards |
+|---|---|---|---|
+| P0 | §5 merge fixes in core (area label, D1, photo-less staff, same-name collapse) + tests + docs | 3 | Same day, no republish: last-test shows its own city, no BE RELAX phones or logos on other spas, no empty therapist frames, each treatment once |
+| P1 | `html-content.ts`, `designWithCrm` options and cache key, 3 callers, `content` prop, `cleanHtmlDesignContent`, file copy rules, the `html_content` op + `get/set_html_content`, pop-in check | 12 | You can ask Claude to "rewrite last-test's journey for Dubai and swap scene 2's picture": it becomes a draft, you preview and publish. The file is untouched |
+| P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
+| P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
+| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
+| P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
+| P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
+
+**Total: about 58 h.** P0–P2 already make each spa's site its own; P3–P5 complete it.

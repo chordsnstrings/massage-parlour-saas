@@ -427,6 +427,13 @@ async function pagesWritten(tx: Tx, tenantId: string, template: SiteTemplate) {
  * `replaceContent` the template's starter pages are saved as new drafts (missing pages are created), nothing
  * goes live until it is published. The previous template, theme and drafts are kept on the site for undo.
  */
+/** Whether a template is an uploaded HTML design (every page an HtmlDesign page; R17/R24). */
+export const isHtmlDesignTemplate = (template: SiteTemplate) =>
+  template.pages.length > 0 &&
+  template.pages.every(
+    (p) => (p.data.root as { props?: { htmlDesign?: unknown } } | undefined)?.props?.htmlDesign === true,
+  )
+
 export async function switchTemplate(
   tx: Tx,
   tenantId: string,
@@ -446,8 +453,11 @@ export async function switchTemplate(
     template = await preparedPages(template, opts.prepare)
   const { site, created } = await ensureSite(tx, tenantId, template)
   const draftMode = Boolean(opts.draftTheme) && !created
-  const theme = opts.keepTheme || draftMode ? site.theme : template.theme
-  const themeDraft = draftMode ? (opts.keepTheme ? site.themeDraft : template.theme) : null
+  // An uploaded HTML design ignores the theme (its look is its own file; its theme is `{}`): switching to one keeps
+  // the spa's theme, so pages it doesn't replace keep their look once published.
+  const keepTheme = opts.keepTheme || (!created && isHtmlDesignTemplate(template))
+  const theme = keepTheme || draftMode ? site.theme : template.theme
+  const themeDraft = draftMode ? (keepTheme ? site.themeDraft : template.theme) : null
   const undo: TemplateUndo | null = created
     ? null
     : {
