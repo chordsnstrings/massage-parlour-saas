@@ -11,6 +11,7 @@ import { FormSheet } from '@/components/ui/form-sheet'
 import { Checkbox, Input, Label, Select, Textarea } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
+import type { ActionResult } from '@/lib/action'
 import { studioPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import {
@@ -24,6 +25,16 @@ import {
 import { resolveChangeAction } from './studio-actions'
 import { type WriteTextsResult, writeTextsAction } from './write-texts-actions'
 
+/**
+ * R28 P3: after applying an HTML design with window.CRM_DATA (the action returns its page), the website page offers
+ * "Fill the CRM from the design" as the next step: `?seed={pageId}` (seed-sheet.tsx SeedOffer), set without a
+ * navigation so nothing on the page remounts.
+ */
+const offerSeed = (slug: string) => (result: Extract<ActionResult, { ok: true }>) => {
+  const page = result.data?.seedPage
+  if (typeof page === 'string') window.history.replaceState(null, '', studioPath(slug, `?seed=${page}`))
+}
+
 /** First template pick: creates the site with the template's starter pages. */
 export function UseTemplateButton({
   slug,
@@ -35,7 +46,7 @@ export function UseTemplateButton({
   name: string
 }) {
   return (
-    <ActionForm action={applyTemplateAction.bind(null, slug)}>
+    <ActionForm action={applyTemplateAction.bind(null, slug)} onSuccess={offerSeed(slug)}>
       <input type="hidden" name="template" value={template} />
       <SubmitButton className="h-11 w-full" aria-label={`Use ${name}`}>
         Use {name}
@@ -73,6 +84,7 @@ export function ApplyTemplateSheet({
   const [replace, setReplace] = useState(htmlDesign || !hasLiveContent)
   return (
     <FormSheet
+      onSuccess={offerSeed(slug)}
       title={`Switch to ${name}?`}
       description={
         htmlDesign

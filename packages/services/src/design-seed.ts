@@ -6,7 +6,7 @@
 // media library (tag `design:{sha8}`; a re-run reuses them). Prices and durations of existing services are never
 // touched. Like every service: takes the caller's tenant tx; no permission or audit checks (web: seed-actions.ts).
 import { createHash } from 'node:crypto'
-import { crmName, crmSlug, designSeedPairs } from '@spa/core'
+import { crmName, crmSlug, designSeedPairs, htmlCrmContractOf, htmlDesignDocOf } from '@spa/core'
 import { type Bilingual, mediaAssets, services, staff, type Tx } from '@spa/db'
 import { and, arrayContains, asc, eq, inArray } from 'drizzle-orm'
 import {
@@ -19,6 +19,9 @@ import {
 } from './catalog'
 import { DomainError } from './errors'
 import { createAsset, MediaError, processImage, sniffImageType } from './media'
+import { HTML_DESIGN_BLOCK } from './site-edit'
+import { htmlDesignSource, spaHtmlDocReader } from './site-html-assets'
+import { getEditablePage, listPages, type PageSummary } from './sites'
 import { MAX_FILE_BYTES } from './storage'
 
 /** Picture types a design may embed for seeding (`data:` URIs; never SVG). */
@@ -385,4 +388,78 @@ export async function applyDesignSeed(
     for (const s of team.values()) await picture(s.photo, s.name)
   }
   return summary
+}
+
+// ─── Which pages can seed (console + connector) ──────────────────────────────
+
+export type DesignSeedPage = Pick<PageSummary, 'id' | 'slug' | 'title'>
+
+/** The props of a page draft's HtmlDesign block, or null (a block page). */
+function designBlock(data: unknown): Record<string, unknown> | null {
+  const content = isObj(data) ? data.content : null
+  const node = Array.isArray(content) ? content.find((n) => isObj(n) && n.type === HTML_DESIGN_BLOCK) : null
+  return isObj(node) && isObj(node.props) ? node.props : null
+}
+
+/** Whether a stored design document holds a CRM_DATA literal (documents are content-addressed: never stale). */
+const literalSeen = new Map<string, boolean>()
+const LITERAL_SEEN_MAX = 512
+
+/**
+ * Pages (menu order) whose DRAFT is an HTML design with a `window.CRM_DATA` literal: the ones "Fill the CRM from the
+ * design" can read. Each design document is parsed once per process (cached by tenant + file + sha256).
+ */
+export async function designSeedPages(
+  tx: Tx,
+  tenantId: string,
+  pages?: PageSummary[],
+): Promise<DesignSeedPage[]> {
+  const read = spaHtmlDocReader(tx, tenantId)
+  const out: DesignSeedPage[] = []
+  for (const p of pages ?? (await listPages(tx, tenantId))) {
+    const props = designBlock((await getEditablePage(tx, tenantId, p.id))?.data)
+    if (!props) continue
+    const doc = htmlDesignDocOf(props)
+    const key = doc ? `${tenantId}:${doc.file}:${doc.sha256}` : null
+    let has = key ? literalSeen.get(key) : undefined
+    if (has === undefined) {
+      const html = await htmlDesignSource(props, read)
+      if (html === null) continue
+      has = Boolean(htmlCrmContractOf(html)?.literal)
+      if (key) {
+        if (literalSeen.size >= LITERAL_SEEN_MAX) literalSeen.delete(literalSeen.keys().next().value!)
+        literalSeen.set(key, has)
+      }
+    }
+    if (has) out.push({ id: p.id, slug: p.slug, title: p.title })
+  }
+  return out
+}
+
+/**
+ * The `window.CRM_DATA` of a page's DRAFT HTML design: the input of planDesignSeed / applyDesignSeed. `pageRef` = the
+ * page id or address slug ("home" / "" = home); without one, the home page, else the first page whose design has it.
+ * Null when that page isn't an HTML design with the literal.
+ */
+export async function designSeedSource(
+  tx: Tx,
+  tenantId: string,
+  pageRef?: string,
+): Promise<{ page: DesignSeedPage; data: Record<string, unknown> } | null> {
+  const all = await listPages(tx, tenantId)
+  const slug = pageRef === 'home' || pageRef === '/' ? '' : pageRef?.replace(/^\//, '')
+  const chosen =
+    pageRef === undefined
+      ? [...all.filter((p) => p.slug === ''), ...all.filter((p) => p.slug !== '')]
+      : [all.find((p) => p.id === pageRef) ?? all.find((p) => p.slug === slug)].filter(
+          (p): p is PageSummary => Boolean(p),
+        )
+  const read = spaHtmlDocReader(tx, tenantId)
+  for (const p of chosen) {
+    const props = designBlock((await getEditablePage(tx, tenantId, p.id))?.data)
+    const html = props ? await htmlDesignSource(props, read) : null
+    const literal = html === null ? null : htmlCrmContractOf(html)?.literal
+    if (literal) return { page: { id: p.id, slug: p.slug, title: p.title }, data: literal.data }
+  }
+  return null
 }

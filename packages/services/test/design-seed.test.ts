@@ -8,6 +8,9 @@ import {
   applyDesignSeed,
   type DesignSeedChoices,
   DomainError,
+  designSeedPages,
+  designSeedSource,
+  ensureSite,
   planDesignSeed,
   saveService,
   setServiceImage,
@@ -454,5 +457,41 @@ describe('catalog rules', () => {
     )
     expect((await person(ids.Maya!)).bio).toEqual({ en: 'Thai massage' })
     expect(await inA((db) => setStaffPhoto(db, ids.otherStaff!, { photoUrl: null }))).toBe(false)
+  })
+})
+
+describe('which pages can seed', () => {
+  it('only draft HTML designs with window.CRM_DATA; the source is that literal', async () => {
+    const html = (body: string) => ({
+      root: { props: { htmlDesign: true } },
+      content: [{ type: 'HtmlDesign', props: { id: 'h', html: body, phoneFixes: false } }],
+    })
+    const literal = { services: [{ id: 'normal', name: 'Normal massage' }] }
+    await inA((db) =>
+      ensureSite(db, a, {
+        key: 'zen',
+        name: 'Zen',
+        theme: {},
+        pages: [
+          { slug: '', title: { en: 'Home' }, data: { root: { props: {} }, content: [] } },
+          {
+            slug: 'design',
+            title: { en: 'Design' },
+            data: html(`<p>x</p><script>window.CRM_DATA = ${JSON.stringify(literal)};</script>`),
+          },
+          { slug: 'plain', title: { en: 'Plain' }, data: html('<p>No contract</p>') },
+        ],
+      }),
+    )
+    const pages = await inA((db) => designSeedPages(db, a))
+    expect(pages.map((p) => p.slug)).toEqual(['design'])
+    // No page named: the home page first, else the first page that has the literal.
+    expect(await inA((db) => designSeedSource(db, a))).toEqual({ page: pages[0], data: literal })
+    expect((await inA((db) => designSeedSource(db, a, pages[0]!.id)))?.data).toEqual(literal)
+    expect(await inA((db) => designSeedSource(db, a, 'plain'))).toBeNull()
+    expect(await inA((db) => designSeedSource(db, a, 'home'))).toBeNull()
+    // Another spa sees none of it (RLS).
+    expect(await inB((db) => designSeedPages(db, b))).toEqual([])
+    expect(await inB((db) => designSeedSource(db, b, pages[0]!.id))).toBeNull()
   })
 })
