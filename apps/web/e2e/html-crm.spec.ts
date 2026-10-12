@@ -586,10 +586,13 @@ test('R28 P4: page texts, the page title and a picture per spa (draft → publis
   // The page title: set, then back to the design with its "Design" button, then set for good.
   const title = field.getByRole('textbox', { name: 'Page title: CRM contract fixture' })
   await title.fill('A title to undo')
-  await expect(design.locator('title')).toHaveText('A title to undo', { timeout: 30_000 })
+  // <title> is never rendered: toHaveText reads it as empty, so poll its textContent.
+  await expect.poll(() => design.locator('title').textContent(), { timeout: 30_000 }).toBe('A title to undo')
   await field.getByRole('button', { name: 'Back to the design: Page title: CRM contract fixture' }).click()
   await expect(title).toHaveValue('')
-  await expect(design.locator('title')).toHaveText('CRM contract fixture', { timeout: 30_000 })
+  await expect
+    .poll(() => design.locator('title').textContent(), { timeout: 30_000 })
+    .toBe('CRM contract fixture')
   await title.fill('Rituals at Page Texts Spa')
   // An Arabic-only text: the English page keeps the design's words (nothing stored in English).
   const button = field.getByRole('textbox', { name: 'Button: Request booking' })
