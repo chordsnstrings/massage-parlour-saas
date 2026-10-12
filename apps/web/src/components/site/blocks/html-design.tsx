@@ -7,6 +7,7 @@ import {
   htmlDesignDocOf,
   htmlDesignDocument,
   htmlDesignPhoneFixes,
+  htmlPictureAdjustments,
 } from '@spa/core'
 import { lazy, Suspense } from 'react'
 import { designKey, designWithCrm } from '../html-crm'
@@ -20,8 +21,8 @@ import type { SiteMeta } from '../types'
  * `images`: the super-admin's per-image adjustments (focal point, fill/fit, replacement), applied in the frame.
  * `phoneFixes` (R24): the design's "Phone fixes" switch. It has NO default on purpose (Puck merges defaults into loaded
  * props): absent = stored before R24 = on (`htmlDesignPhoneFixes`); every writer since stores an explicit boolean.
- * `content` (R28): the spa's website content for a CRM-contract design (values over the design's own data; the
- * stored file never changes). No default either: absent = the design's own values.
+ * `content` (R28): the spa's website content — values over a CRM-contract design's own data, page texts, pictures
+ * (P4: over `images` by id) — the stored file never changes. No default either: absent = the design's own values.
  */
 type Props = {
   html: string
@@ -79,9 +80,9 @@ export const HtmlDesign: ComponentConfig<Props> = {
           source,
           htmlDesignValues(meta),
           Boolean(meta.editing),
-          images ?? [],
+          htmlPictureAdjustments(images ?? [], content),
           htmlDesignLinks(meta),
-          { phoneFixes: htmlDesignPhoneFixes({ phoneFixes }) },
+          { phoneFixes: htmlDesignPhoneFixes({ phoneFixes }), texts: content?.texts, locale: meta.locale },
         )}
         sandbox={HTML_DESIGN_SANDBOX}
         editing={Boolean(meta.editing)}

@@ -371,25 +371,64 @@ const pct = (n: number | undefined) => {
   return `${Math.round(v * 10) / 10}%`
 }
 
-/** CSS / attribute edits for the adjustments whose id still points at the same image. */
+/** R28 P4: an adjustment frames its image (focal point, fill / fit, alignment); a replacement alone only swaps the URL. */
+export const htmlImageFramed = (a: Pick<HtmlImageAdjust, 'fit' | 'x' | 'y' | 'align'>) =>
+  a.fit !== undefined || a.x !== undefined || a.y !== undefined || a.align !== undefined
+
+/**
+ * CSS / attribute edits for the adjustments whose id still points at the same image (of several with one id, the last
+ * whose src matches). Only framed ones get the `data-spa-img` hook + rule (img) or position / size (bg); a replaced
+ * `<img>` inside a `<picture>` also gets its `<source srcset>`s (they would win over its src).
+ */
 function adjustmentEdits(html: string, adjust: HtmlImageAdjust[]) {
-  const byId = new Map(adjust.filter((a) => HTML_IMAGE_ID.test(a.id)).map((a) => [a.id, a]))
+  const byId = new Map<string, HtmlImageAdjust[]>()
+  for (const a of adjust) if (HTML_IMAGE_ID.test(a.id)) byId.set(a.id, [...(byId.get(a.id) ?? []), a])
+  const pick = (id: string, src: string) => byId.get(id)?.findLast((a) => a.src === srcKey(src))
   const { imgs, bgs } = scan(html)
   const edits: Edit[] = []
   const rules: string[] = []
+  let pictures: { opens: number[]; closes: number[]; skip: Range[] } | null = null
+  const sourcesBefore = (at: number) => {
+    if (!/<picture\b/i.test(html)) return []
+    if (!pictures) {
+      const skip = skipRanges(html)
+      const outside = (re: RegExp, end: boolean) =>
+        [...html.matchAll(re)]
+          .filter((m) => !inside(skip, m.index))
+          .map((m) => m.index + (end ? m[0].length : 0))
+      pictures = { opens: outside(/<picture\b[^>]*>/gi, true), closes: outside(/<\/picture/gi, false), skip }
+    }
+    const { opens, closes, skip } = pictures
+    const open = opens.filter((o) => o <= at).pop()
+    if (open === undefined || closes.some((c) => c >= open && c < at)) return []
+    return [...html.slice(open, at).matchAll(/<source\b[^>]*>/gi)]
+      .map((m) => ({ at: open + m.index, tag: m[0] }))
+      .filter((m) => !inside(skip, m.at))
+  }
   for (const img of imgs) {
-    const a = byId.get(img.id)
-    if (!a || a.src !== srcKey(img.src)) continue
+    const a = pick(img.id, img.src)
+    if (!a) continue
     const n = img.id.slice(4)
-    let tag = img.tag.replace(/^<img\b/i, `<img data-spa-img="${n}"`)
+    const framed = htmlImageFramed(a)
+    let tag = framed ? img.tag.replace(/^<img\b/i, `<img data-spa-img="${n}"`) : img.tag
     if (a.replace && HTML_IMAGE_URL.test(a.replace)) {
       // A replaced image must not come back through srcset.
       tag = tag.replace(/\s(?:srcset|sizes)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
       tag = /\ssrc\s*=/i.test(tag)
         ? tag.replace(/(\ssrc\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${a.replace}"`)
         : tag.replace(/^<img\b/i, `<img src="${a.replace}"`)
+      for (const s of sourcesBefore(img.tagStart)) {
+        const set = /(\ssrcset\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i.exec(s.tag)
+        if (set)
+          edits.push({
+            at: s.at + set.index,
+            end: s.at + set.index + set[0].length,
+            text: `${set[1]}"${a.replace}"`,
+          })
+      }
     }
-    edits.push({ at: img.tagStart, end: img.tagEnd, text: tag })
+    if (tag !== img.tag) edits.push({ at: img.tagStart, end: img.tagEnd, text: tag })
+    if (!framed) continue
     const align = a.align && ALIGN_MARGINS[a.align]
     rules.push(
       `[data-spa-img="${n}"]{object-fit:${a.fit === 'contain' ? 'contain' : 'cover'}!important;object-position:${pct(a.x)} ${pct(a.y)}!important${
@@ -400,10 +439,11 @@ function adjustmentEdits(html: string, adjust: HtmlImageAdjust[]) {
     )
   }
   for (const bg of bgs) {
-    const a = byId.get(bg.id)
-    if (!a || a.src !== srcKey(bg.src)) continue
+    const a = pick(bg.id, bg.src)
+    if (!a) continue
     if (a.replace && HTML_IMAGE_URL.test(a.replace))
       edits.push({ at: bg.urlStart, end: bg.urlEnd, text: `url(${a.replace})` })
+    if (a.fit === undefined && a.x === undefined && a.y === undefined) continue
     const contain = a.fit === 'contain'
     edits.push({
       at: bg.declEnd,
@@ -636,6 +676,410 @@ function fillSpans(src: string): FillSpan[] {
   return spans
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// R28 P4: page texts (text nodes, alt / placeholder / aria-label / title, the page title, the meta description)
+// ---------------------------------------------------------------------------------------------------------------
+
+export type HtmlDesignTextKind = 'text' | 'attr' | 'title' | 'meta'
+export type HtmlTextAttr = 'alt' | 'placeholder' | 'aria-label' | 'title'
+export type HtmlDesignText = {
+  /** 'txt-<n>' text node · 'attr-<n>' attribute · 'title' · 'meta-description' (positional, on the raw file). */
+  id: string
+  kind: HtmlDesignTextKind
+  /** kind 'attr' only. */
+  attr?: HtmlTextAttr
+  /** Owner element name (h2, a, button, option, img, input …): editor labels. 'title' / 'meta' for those kinds. */
+  tag: string
+  /** Full decoded text, whitespace collapsed + trimmed, ≤ 2000 chars (what the editor / AI see). */
+  text: string
+  /** srcKey(text): first HTML_IMAGE_SRC_MAX (300) chars — the stored guard. */
+  src: string
+  /** Label of the nearest open section/header/nav/footer/main/aside/article/form/dialog; '' = page level (title/meta: ''). */
+  group: string
+  bound: boolean
+  /** Why bound: 'data-crm=<path>' | 'data-item…' | 'data-book-service' | '#<id>' | 'document.title'. */
+  binding?: string
+}
+/** A stored page text (content.texts entry): what the render applies. */
+export type HtmlTextOverride = { id: string; src: string; t: { en: string; ar?: string } }
+
+export const HTML_TEXT_ID = /^(?:txt-\d{1,5}|attr-\d{1,5}|title|meta-description)$/
+export const MAX_HTML_TEXTS = 2000
+
+const TEXT_ATTRS = new Set<string>(['alt', 'placeholder', 'aria-label', 'title'])
+/** Start tags whose attributes are never page text. */
+const NO_TEXT_ATTRS = new Set(['html', 'head', 'meta', 'link', 'style', 'script', 'base', 'title'])
+const VOID = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+])
+const TEXT_GROUPS = new Set([
+  'section',
+  'header',
+  'nav',
+  'footer',
+  'main',
+  'aside',
+  'article',
+  'form',
+  'dialog',
+])
+const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4'])
+/** Attributes through which the design's script fills an element from the CRM (R26 contract). */
+const BINDING = /^data-(?:crm|item)(?:-|$)|^data-book-service$/
+/** The `window.CRM_DATA` literal (or the injected one): data, not the design's script. */
+const CRM_DATA_BODY = /^\s*window\.CRM_DATA\s*=/
+const MAX_TEXT = 2000
+
+type TextSite = {
+  id: string
+  kind: HtmlDesignTextKind
+  attr?: HtmlTextAttr
+  tag: string
+  text: string
+  src: string
+  /** `[start, end)`: the replaceable range (a text node's core, an attribute value without its quotes). */
+  start: number
+  end: number
+  quoted: boolean
+  /** Listing only: the owner element's id, its (inherited) data binding, the innermost group, inside an h1–h4. */
+  owner?: string
+  binding?: string
+  group?: number
+  heading?: boolean
+  bound?: boolean
+}
+type OpenElement = { name: string; id?: string; binding?: string }
+
+const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+const collapse = (s: string) => s.replace(/\s+/g, ' ').trim()
+
+/** Contents of a script's string literals (+ every `#id` inside them): what the bound heuristic compares ids with. */
+function jsStrings(js: string, out: Set<string>) {
+  const n = js.length
+  let i = 0
+  while (i < n) {
+    const c = js[i]
+    if (c === '/' && js[i + 1] === '/') {
+      const e = js.indexOf('\n', i)
+      i = e < 0 ? n : e
+      continue
+    }
+    if (c === '/' && js[i + 1] === '*') {
+      const e = js.indexOf('*/', i + 2)
+      i = e < 0 ? n : e + 2
+      continue
+    }
+    if (c !== '"' && c !== "'" && c !== '`') {
+      i++
+      continue
+    }
+    let j = i + 1
+    while (j < n && js[j] !== c && (c === '`' || js[j] !== '\n')) j += js[j] === '\\' ? 2 : 1
+    const s = js.slice(i + 1, j)
+    if (s.length <= 200) out.add(s)
+    for (const m of s.matchAll(/#([A-Za-z][\w-]*)/g)) out.add(m[1]!)
+    i = j + 1
+  }
+}
+
+/**
+ * The page texts of a design, in document order (tokenized like `fillSpans`: comments, doctypes and raw-text bodies
+ * are skipped; only runs and values without `<` / `>` are listed, so an escaped override never changes the markup).
+ * Ids are positional and only listed sites take a number, so they stay the same through the CRM splice (it rewrites
+ * a script body or adds one script at a markup boundary). `listing`: also owners, bindings and groups.
+ */
+function textSites(html: string, listing: boolean): { sites: TextSite[]; groups: string[] } {
+  const sites: TextSite[] = []
+  const stack: OpenElement[] = []
+  const groups: { tag: string; n: number; aria: string; id: string; heading?: string }[] = []
+  const openGroups: number[] = []
+  const counts = new Map<string, number>()
+  const strings = new Set<string>()
+  let docTitle = false
+  let t = 0
+  let a = 0
+  let svg = 0
+  let title = false
+  let meta = false
+  const n = html.length
+  let text = 0
+  let i = 0
+  const add = (site: Omit<TextSite, 'text' | 'src'>, decoded: string, owner: OpenElement | undefined) => {
+    const value = collapse(decoded).slice(0, MAX_TEXT)
+    const s: TextSite = { ...site, text: value, src: srcKey(value) }
+    if (listing) {
+      s.owner = owner?.id || undefined
+      s.binding = owner?.binding
+      s.group = site.kind === 'title' || site.kind === 'meta' ? -1 : (openGroups.at(-1) ?? -1)
+      s.heading = site.kind === 'text' && stack.some((e) => HEADINGS.has(e.name))
+    }
+    sites.push(s)
+  }
+  const endText = (at: number) => {
+    let s = text
+    let e = at
+    while (s < e && isWs(html[s])) s++
+    while (e > s && isWs(html[e - 1])) e--
+    if (s === e) return
+    const core = html.slice(s, e)
+    if (core.includes('<') || core.includes('>')) return
+    const decoded = decodeText(core)
+    if (!decoded.trim()) return
+    const parent = stack.at(-1)
+    add(
+      { id: `txt-${t++}`, kind: 'text', tag: parent?.name ?? '', start: s, end: e, quoted: false },
+      decoded,
+      parent,
+    )
+  }
+  const tagRe = /<(\/?)([a-z][^\t\n\f\r />]*)/iy
+  while (i < n) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) break
+    if (html.startsWith('<!--', lt)) {
+      endText(lt)
+      const close = /--!?>/g
+      close.lastIndex = lt + 2
+      const m = close.exec(html)
+      i = text = m ? m.index + m[0].length : n
+      continue
+    }
+    tagRe.lastIndex = lt
+    const tag = tagRe.exec(html)
+    if (!tag) {
+      const next = html[lt + 1]
+      if (next === '!' || next === '?' || next === '/') {
+        endText(lt)
+        const gt = html.indexOf('>', lt + 2)
+        i = text = gt === -1 ? n : gt + 1
+      } else i = lt + 1 // a literal '<' in text
+      continue
+    }
+    endText(lt)
+    const name = tag[2]!.toLowerCase()
+    const nameEnd = lt + tag[0].length
+    const end = tagEnd(html, nameEnd)
+    i = text = end
+    if (tag[1]) {
+      const k = stack.findLastIndex((e) => e.name === name)
+      if (k >= 0) stack.length = k
+      if (name === 'svg' && svg > 0) svg--
+      if (listing && TEXT_GROUPS.has(name)) {
+        const g = openGroups.findLastIndex((x) => groups[x]!.tag === name)
+        if (g >= 0) openGroups.length = g
+      }
+      continue
+    }
+    const attrs = attributesOf(html, nameEnd)
+    const el: OpenElement = { name }
+    if (listing) {
+      const id = attrValue(
+        html,
+        attrs.find((x) => x.name === 'id'),
+      )
+      const own = attrs.find((x) => BINDING.test(x.name))
+      const value = own && own.start >= 0 ? decodeText(html.slice(own.start, own.end)) : ''
+      el.id = id || undefined
+      el.binding = own ? (value ? `${own.name}=${value}` : own.name) : stack.at(-1)?.binding
+      if (TEXT_GROUPS.has(name)) {
+        const c = (counts.get(name) ?? 0) + 1
+        counts.set(name, c)
+        const aria = attrs.find((x) => x.name === 'aria-label')
+        groups.push({
+          tag: name,
+          n: c,
+          aria:
+            aria && aria.start >= 0
+              ? clipText(collapse(decodeText(html.slice(aria.start, aria.end))), 60)
+              : '',
+          id,
+        })
+        openGroups.push(groups.length - 1)
+      }
+    }
+    if (!NO_TEXT_ATTRS.has(name))
+      for (const x of attrs) {
+        if (!TEXT_ATTRS.has(x.name) || x.start < 0) continue
+        const raw = html.slice(x.start, x.end)
+        if (raw.includes('<') || raw.includes('>')) continue
+        const decoded = decodeText(raw)
+        if (!decoded.trim()) continue
+        const q = html[x.start - 1]
+        add(
+          {
+            id: `attr-${a++}`,
+            kind: 'attr',
+            attr: x.name as HtmlTextAttr,
+            tag: name,
+            start: x.start,
+            end: x.end,
+            quoted: q === '"' || q === "'",
+          },
+          decoded,
+          el,
+        )
+      }
+    if (name === 'meta' && !meta) {
+      const content = attrs.find((x) => x.name === 'content')
+      const kind = attrs.find((x) => x.name === 'name')
+      const raw = content && content.start >= 0 ? html.slice(content.start, content.end) : null
+      if (
+        content &&
+        raw !== null &&
+        !raw.includes('<') &&
+        !raw.includes('>') &&
+        kind &&
+        kind.start >= 0 &&
+        decodeText(html.slice(kind.start, kind.end)).toLowerCase() === 'description'
+      ) {
+        meta = true
+        const q = html[content.start - 1]
+        add(
+          {
+            id: 'meta-description',
+            kind: 'meta',
+            tag: 'meta',
+            start: content.start,
+            end: content.end,
+            quoted: q === '"' || q === "'",
+          },
+          decodeText(raw),
+          el,
+        )
+      }
+    }
+    // Inside <svg> (foreign content) a tag ending in `/>` closes itself.
+    const selfClosing = html[end - 2] === '/' && !attrs.some((x) => x.end > end - 2)
+    if (!VOID.has(name) && !((svg > 0 || name === 'svg') && selfClosing)) {
+      stack.push(el)
+      if (name === 'svg') svg++
+    }
+    if (!RAW_TEXT.has(name)) continue
+    if (name === 'plaintext') break // the rest of the document is raw text
+    const close = new RegExp(`</${name}(?=[\\t\\n\\f\\r />]|$)`, 'gi')
+    close.lastIndex = end
+    const stop = close.exec(html)?.index ?? n
+    if (name === 'title' && !title && svg === 0) {
+      title = true
+      const body = html.slice(end, stop)
+      if (!body.includes('<') && !body.includes('>')) {
+        let s = end
+        let e = stop
+        while (s < e && isWs(html[s])) s++
+        while (e > s && isWs(html[e - 1])) e--
+        if (s === e) [s, e] = [end, stop] // blank: the whole body
+        add(
+          { id: 'title', kind: 'title', tag: 'title', start: s, end: e, quoted: false },
+          decodeText(html.slice(s, e)),
+          el,
+        )
+      }
+    } else if (listing && name === 'script' && !attrs.some((x) => x.name === 'src')) {
+      const type = attrValue(
+        html,
+        attrs.find((x) => x.name === 'type'),
+      )
+        .toLowerCase()
+        .split(';')[0]!
+        .trim()
+      const body = html.slice(end, stop)
+      if (JS_SCRIPT.test(type) && !CRM_DATA_BODY.test(body)) {
+        if (/\bdocument\.title\s*=(?!=)/.test(body)) docTitle = true
+        jsStrings(body, strings)
+      }
+    }
+    i = text = stop
+  }
+  endText(n)
+  if (!listing) return { sites, groups: [] }
+  for (const s of sites) {
+    const byJs = s.owner !== undefined && strings.has(s.owner)
+    const byTitle = s.kind === 'title' && docTitle
+    s.bound = Boolean(s.binding) || byJs || byTitle
+    s.binding ??= byJs ? `#${s.owner}` : byTitle ? 'document.title' : undefined
+    const g = s.group !== undefined && s.group >= 0 ? groups[s.group]! : null
+    if (g && s.heading && !s.bound && g.heading === undefined) g.heading = clipText(s.text, 60)
+  }
+  const human = (id: string) => {
+    const s = id.replace(/[-_]+/g, ' ').trim()
+    return s ? s[0]!.toUpperCase() + s.slice(1) : ''
+  }
+  return {
+    sites,
+    groups: groups.map(
+      (g) => g.aria || g.heading || human(g.id) || `${g.tag[0]!.toUpperCase()}${g.tag.slice(1)} ${g.n}`,
+    ),
+  }
+}
+
+/** R28 P4: every page text of a design (≤ MAX_HTML_TEXTS listed; ids beyond are still counted), in document order. */
+export function listHtmlDesignTexts(html: string): HtmlDesignText[] {
+  const { sites, groups } = textSites(html, true)
+  return sites.slice(0, MAX_HTML_TEXTS).map((s) => ({
+    id: s.id,
+    kind: s.kind,
+    ...(s.attr ? { attr: s.attr } : {}),
+    tag: s.tag,
+    text: s.text,
+    src: s.src,
+    group: s.group !== undefined && s.group >= 0 ? groups[s.group]! : '',
+    bound: Boolean(s.bound),
+    ...(s.binding ? { binding: s.binding } : {}),
+  }))
+}
+
+/**
+ * R28 P4: a spa's page texts over the design: values only — text-node characters, the listed attribute values, the
+ * page title, the meta description — escaped so no tag, attribute, CSS or script changes (an override never adds a
+ * `<`, `>`, quote or `=`). An entry applies only while its id still points at the same design text (`src`); Arabic
+ * falls back to English; blank values are skipped. Nothing applied → the input string itself. `{{placeholders}}` in
+ * a value are filled afterwards like the design's own.
+ */
+export function applyHtmlTextOverrides(
+  html: string,
+  texts: readonly HtmlTextOverride[] | undefined,
+  locale: 'en' | 'ar',
+): string {
+  if (!Array.isArray(texts) || !texts.length) return html
+  const byId = new Map<string, { src: string; value: string }>()
+  for (const e of texts as unknown[]) {
+    const x = e as Partial<HtmlTextOverride> | null
+    if (typeof x !== 'object' || x === null || typeof x.id !== 'string' || !HTML_TEXT_ID.test(x.id)) continue
+    if (typeof x.src !== 'string' || typeof x.t !== 'object' || x.t === null || typeof x.t.en !== 'string')
+      continue
+    const ar = typeof x.t.ar === 'string' ? x.t.ar : ''
+    byId.set(x.id, { src: x.src, value: locale === 'ar' && ar.trim() ? ar : x.t.en })
+  }
+  if (![...byId.values()].some((e) => e.value.trim())) return html
+  const edits: Edit[] = []
+  for (const s of textSites(html, false).sites) {
+    const e = byId.get(s.id)
+    if (!e || e.src !== s.src || !e.value.trim()) continue
+    const v = e.value
+    const text =
+      s.kind === 'text' || s.kind === 'title'
+        ? escapeHtml(v)
+        : s.quoted
+          ? escapeHtml(v).replace(/=/g, '&#61;')
+          : attrText(v)
+    edits.push({ at: s.start, end: s.end, text })
+  }
+  return edits.length ? applyEdits(html, edits) : html
+}
+
 /** Reads whether the end of the text fed so far (in order, in pieces) is inside a string. */
 type StringScan = { feed: (s: string) => void; inString: () => boolean }
 
@@ -830,15 +1274,40 @@ const REFS: Record<string, string> = {
   newline: '\n',
   tab: '\t',
 }
-/** An attribute value's text as the parser hands it on (character references decoded). */
-const decodeRefs = (s: string) =>
+/** Text with character references decoded (numeric ones, and the named ones of `table`). */
+const refsDecoder = (table: Record<string, string>) => (s: string) =>
   s.includes('&')
     ? s.replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([a-zA-Z]{2,8}));?/g, (m, dec, hex, name: string) => {
-        if (!dec && !hex) return REFS[name.toLowerCase()] ?? m
+        if (!dec && !hex) return table[name.toLowerCase()] ?? m
         const cp = Number.parseInt(dec ?? hex, dec ? 10 : 16)
         return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m
       })
     : s
+/** An attribute value's text as the parser hands it on (character references decoded). */
+const decodeRefs = refsDecoder(REFS)
+/** R28 P4: page text as a visitor reads it (+ the named references designs use in copy). */
+const decodeText = refsDecoder({
+  ...REFS,
+  nbsp: '\u00a0',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  hellip: '…',
+  mdash: '—',
+  ndash: '–',
+  lsquo: '‘',
+  rsquo: '’',
+  ldquo: '“',
+  rdquo: '”',
+  laquo: '«',
+  raquo: '»',
+  middot: '·',
+  bull: '•',
+  euro: '€',
+  pound: '£',
+  times: '×',
+  deg: '°',
+})
 /** A `javascript:` URL runs its percent-decoded text, after the URL parser dropped tabs and newlines. */
 const urlScript = (s: string) =>
   s
@@ -926,6 +1395,10 @@ export type HtmlDesignRender = {
   phoneFixes?: boolean
   /** The live page served as the design document itself (no frame): no frame link handling. */
   top?: boolean
+  /** R28 P4: the spa's page texts (content.texts), applied first on the html given (ids = listHtmlDesignTexts). */
+  texts?: readonly HtmlTextOverride[]
+  /** Language of `texts` (Arabic → English fallback); default 'en'. */
+  locale?: 'en' | 'ar'
 }
 
 /** Frame mode only: link handling of the design shell (see htmlDesignDocument). */
@@ -940,7 +1413,9 @@ const linkScript = (inert: boolean, exact: boolean) =>
   `if(exact)addEventListener('submit',(e)=>{const f=e.target;if(!e.defaultPrevented&&f instanceof HTMLFormElement&&!f.getAttribute('target'))f.setAttribute('target','_top')})})()</script>`
 
 /**
- * The design as shown. Always: the per-image adjustments, `{{placeholders}}` (only where the designer wrote them;
+ * The design as shown. First the spa's page texts (R28 P4, `opts.texts`: values only, on the html given — after the
+ * CRM splice, whose ids match the raw file's), so placeholders in them are filled and adjusted images keep their new
+ * alt / title. Always: the per-image adjustments, `{{placeholders}}` (only where the designer wrote them;
  * `{{address}}` in page text becomes an escaped maps link) and the compat shim first in <head> (before an earlier
  * <script>). Phone fixes on: `fixHtmlDesign`, a viewport meta (if missing) and the base sheet. Frame mode (default): a
  * small click handler on the window (after the design's own handlers; skipped when they prevent the default) —
@@ -957,7 +1432,8 @@ export function htmlDesignDocument(
   opts: HtmlDesignRender = {},
 ): string {
   const fixes = Boolean(opts.phoneFixes)
-  const adjusted = applyHtmlImageAdjustments(fixes ? fluidImages(html).html : html, images)
+  const texted = applyHtmlTextOverrides(html, opts.texts, opts.locale ?? 'en')
+  const adjusted = applyHtmlImageAdjustments(fixes ? fluidImages(texted).html : texted, images)
   const spans = adjusted.includes('{{') ? fillSpans(adjusted) : []
   let k = 0
   const spanAt = (at: number) => {

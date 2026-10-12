@@ -576,15 +576,38 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `window.CRM_DATA` (story scenes, experience, booking label / picture, message templates; never operational keys).
     Core `html-content.ts`: `htmlContentSlots(data)` (every editable leaf: path `journey[welcome].title` — items by
     unique `id`, else index —, kind from key + value), `overlayHtmlContent` (copy-on-write, locale pick AR → EN, stale
-    paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors` (save time:
-    slots, kinds, ≤ 2000 chars, ≤ 64 KB, pictures `/files/{uuid}` or https only), `htmlContentFileIds`. Stored as the
-    HtmlDesign block prop `content` = `{v: 1, values: [{path, value}]}` (`htmlContentMap` / `htmlContentOf`; never an
-    object keyed by path — Puck flattens block props on "." with the `flat` package and would split such keys; no Puck
-    default; draft → publish with the page). Render:
-    `designWithCrm(…, {content, locale})` overlays before `mergeCrmContract` (output cache key + locale + content
-    hash; none → R26's key). Writes: site-edit op `html_content` (`set` / `reset` / `'all'`; checks slots against the
-    stored design and that pictures are this spa's public `stored_files`) — connector `get_html_content` /
-    `set_html_content` (drafts only; `patch_html_design` = structure).
+    paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors(content, slots)`
+    (save time: slots — `null` = shape only —, kinds, ≤ 2000 chars, ≤ 192 KB, page texts / pictures by id + src guard,
+    pictures `/files/{uuid}` or https without parentheses), `htmlContentFileIds` (values + pictures). Stored as the
+    HtmlDesign block prop `content` = `{v: 1, values: [{path, value}], texts: [{id, src, t: {en, ar?}}], pictures:
+    [{id, src, img}]}` (`htmlContentParts` / `htmlContentFrom` / `htmlContentOf(map, keep)` / `htmlContentMap`; lists,
+    never objects keyed by path or id — Puck flattens block props on "." with the `flat` package and would split such
+    keys; no Puck default; draft → publish with the page).
+    **Page texts + pictures (P4):** core html-design.ts `listHtmlDesignTexts` (one walker `textSites`, tokenized like
+    `fillSpans`; ids positional on the raw file: `txt-n` text runs, `attr-n` alt / placeholder / aria-label / title,
+    `title` (first outside svg), `meta-description`; only runs / values without `<` or `>`; script and raw-text bodies
+    skipped, so ids survive the CRM splice; `src` = first 300 chars of the collapsed text; `group` = nearest
+    section/header/nav/footer/main/aside/article/form/dialog by aria-label > first heading > id > "Section n"; `bound`
+    (listing only) = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor, the owner
+    element's id quoted or as `#id` in the design's JS (the CRM_DATA literal not read), `document.title =` for the
+    title) and `applyHtmlTextOverrides` (first step of `htmlDesignDocument`, on the html after `designWithCrm`; same
+    id + src only, escaped (`<` `>` quotes `=`), AR → EN, `{{placeholders}}` filled afterwards; nothing applied → the
+    same string). `htmlPictureAdjustments(images, content)`: pictures over the block's `images` by id (same src →
+    framing kept + `replace`; else a replace-only entry; none → the same array). `htmlContentView(html, content, opts)`:
+    slots + page texts (search, `start`/`limit` paging, `bound: false` filter) + pictures + stale (connector, Ask AI).
+    `htmlContentLeftovers(…, {page})` adds unbound page texts and stale `text:` / `picture:` entries.
+    Render: `designWithCrm(…, {content, locale})` overlays `content.values` before `mergeCrmContract` (output cache key
+    + locale + hash of `content.values` only; `hasHtmlContent` = values only, so texts / pictures-only content keeps
+    R26's no-content path and key); the HtmlDesign block and `app/site-html` pass `texts` + `locale` and
+    `htmlPictureAdjustments(images, content)` to `htmlDesignDocument` (the title override reaches the tab on exact
+    pages; framed pages keep the metadata title). Cost: with page texts set, every render walks the file once more
+    (≤ 5 MB, ~0.2 s worst case; early return without texts). Writes: site-edit op `html_content` (`set` / `texts:
+    [{id, t}]` / `pictures: [{id, img}]` / `reset` (paths, `text:<id>`, `picture:<id>`) / `'all'`; checks slots and
+    ids against the stored design, refuses bound texts, the server fills every `src`; a design without CRM_DATA takes
+    texts / pictures / reset but never `set`; pictures must be this spa's public `stored_files`) — connector
+    `get_html_content` / `set_html_content` (drafts only; `patch_html_design` = structure). Draft saves: console
+    `storeDraft` runs services `htmlDesignContentErrors(tx, tenant, data)` (shape only + own public files; stale
+    entries allowed).
     Editor (P2): HtmlDesign `content` field = `components/site/editor/html-content-field.tsx` (lazy, Suspense; reads
     the design via `useGetPuck().selectedItem` + `EditorContext.html.docs`, local state → `onChange` debounced 700 ms,
     flushed on unmount); `EditorContext.html` = `{docs, spaName, city}` from the Studio editor; HTML-design pages open
@@ -649,9 +672,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     now; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
     `bg-<n>` (n-th `background(-image)` url in `<style>` + inline styles; scripts/comments/fonts skipped).
   - Adjustments = block prop `images: HtmlImageAdjust[]` ({id, src (first 300 chars, must still match), fit, x, y,
-    align, replace}); applied by `applyHtmlImageAdjustments`: `data-spa-img` attr + `!important` rules at the end,
-    background position/size appended after the declaration, replace URL must match `HTML_IMAGE_URL` (https or
-    site path; srcset dropped). UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
+    align, replace}); applied by `applyHtmlImageAdjustments`: framed only when fit / x / y / align is set
+    (`htmlImageFramed`, R28 P4): `data-spa-img` attr + `!important` rules at the end, background position/size
+    appended after the declaration; a replacement alone only swaps the URL; replace URL must match `HTML_IMAGE_URL`
+    (https or site path; srcset dropped; inside `<picture>` every `<source srcset>` takes it too); of several entries
+    with one id the last whose src still matches applies. UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
     client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview, honours Phone fixes); saved with the upload (hidden
     `images` JSON, remapped to the moved URLs) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate`
     takes `pages`).

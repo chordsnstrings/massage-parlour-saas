@@ -27,6 +27,7 @@ import {
   getPublishedPage,
   getSite,
   getSiteForEdit,
+  htmlDesignContentErrors,
   listPages,
   listVersions,
   publishAll,
@@ -456,6 +457,158 @@ describe('site edit ops layer', () => {
       // A design without window.CRM_DATA: its words live in the file.
       const plain = await run([{ op: 'html_content', page: 'design-a', set: {} }])
       expect(plain.ok ? '' : plain.errors[0]).toMatch(/has no window.CRM_DATA/)
+    })
+
+    it('R28 P4: html_content sets page texts and pictures with server-filled src guards; unknown / bound ids and another spa’s files refused; works on a design without window.CRM_DATA (set refused there); file byte-identical', async () => {
+      const sent = doc(
+        `<h1 id="spa">Loading</h1><h2>Design heading</h2><img alt="Design picture" src="https://example.com/design.jpg"><script>document.getElementById('spa').textContent = 'x'</script>`,
+      )
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'texts-me', title: { en: 'Texts' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'texts-me', html: sent, convert: true }])).ok).toBe(true)
+      const [mine, theirs] = await platform
+        .insert(storedFiles)
+        .values([
+          { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: true },
+          { tenantId: ids.other!, contentType: 'image/webp', size: 1, isPublic: true },
+        ])
+        .returning()
+      const refused = async (op: Record<string, unknown>) => {
+        const r = await run([{ op: 'html_content', page: 'texts-me', ...op }])
+        return r.ok ? '' : r.errors[0]
+      }
+      expect(await refused({ set: { 'booking.label': { t: { en: 'x' } } } })).toMatch(
+        /has no window.CRM_DATA: change its page texts and pictures with texts \/ pictures, or the file with html_patch/,
+      )
+      expect(await refused({ texts: [{ id: 'txt-9', t: { en: 'x' } }] })).toMatch(
+        /no page text "txt-9" in this design — get_html_content lists them/,
+      )
+      expect(await refused({ texts: [{ id: 'txt-0', t: { en: 'x' } }] })).toMatch(
+        /txt-0 is filled by the design from the CRM — change it in the CRM/,
+      )
+      expect(await refused({ texts: [{ id: 'txt-1', t: { en: ' ' } }] })).toMatch(
+        /text txt-1: an English text/,
+      )
+      expect(await refused({ pictures: [{ id: 'img-3', img: `/files/${mine!.id}` }] })).toMatch(
+        /no picture "img-3" in this design/,
+      )
+      expect(await refused({ pictures: [{ id: 'img-0', img: 'data:image/png;base64,AA' }] })).toMatch(
+        /picture img-0: a picture from the media library/,
+      )
+      expect(await refused({ pictures: [{ id: 'img-0', img: `/files/${theirs!.id}` }] })).toMatch(
+        /is not one of this spa's pictures/,
+      )
+      const ok = await run([
+        {
+          op: 'html_content',
+          page: 'texts-me',
+          // A client's src is never taken: the server fills the guard from the design.
+          texts: [
+            { id: 'txt-1', src: 'forged', t: { en: 'Our rituals', ar: null } },
+            { id: 'attr-0', t: { en: 'Lounge', ar: 'صالة' } },
+          ],
+          pictures: [{ id: 'img-0', img: `/files/${mine!.id}` }],
+        },
+      ])
+      expect(ok.ok && ok.summary).toEqual([
+        'Website content of Texts: 2 page texts, 1 picture (the design file is unchanged)',
+      ])
+      const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'texts-me'))
+      expect(view!.html).toBe(sent)
+      expect(view!.content).toEqual({
+        v: 1,
+        texts: [
+          { id: 'txt-1', src: 'Design heading', t: { en: 'Our rituals' } },
+          { id: 'attr-0', src: 'Design picture', t: { en: 'Lounge', ar: 'صالة' } },
+        ],
+        pictures: [{ id: 'img-0', src: 'https://example.com/design.jpg', img: `/files/${mine!.id}` }],
+      })
+    })
+
+    it('R28 P4: a values edit keeps stored texts and pictures; reset text:<id> / picture:<id>; ‘all’ clears every part (content removed)', async () => {
+      const sent = doc(
+        `<h1>Welcome</h1><img src="https://example.com/a.jpg"><script>window.CRM_DATA = ${JSON.stringify({ booking: { label: 'Book', url: null } })};</script>`,
+      )
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'mixed-me', title: { en: 'Mixed' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'mixed-me', html: sent, convert: true }])).ok).toBe(true)
+      const content = async () => (await tx((db) => getHtmlDesign(db, ids.tenant!, 'mixed-me')))!.content
+      const pageParts = [
+        {
+          op: 'html_content',
+          page: 'mixed-me',
+          texts: [{ id: 'txt-0', t: { en: 'Hello' } }],
+          pictures: [{ id: 'img-0', img: 'https://cdn.example/b.jpg' }],
+        },
+      ]
+      expect((await run(pageParts)).ok).toBe(true)
+      const values = await run([
+        { op: 'html_content', page: 'mixed-me', set: { 'booking.label': { t: { en: 'Reserve' } } } },
+      ])
+      expect(values.ok && values.summary).toEqual([
+        'Website content of Mixed: 1 value set (the design file is unchanged)',
+      ])
+      const text = { id: 'txt-0', src: 'Welcome', t: { en: 'Hello' } }
+      const picture = { id: 'img-0', src: 'https://example.com/a.jpg', img: 'https://cdn.example/b.jpg' }
+      const value = { path: 'booking.label', value: { t: { en: 'Reserve' } } }
+      expect(await content()).toEqual({ v: 1, values: [value], texts: [text], pictures: [picture] })
+      const reset = await run([
+        { op: 'html_content', page: 'mixed-me', reset: ['text:txt-0', 'picture:img-0'] },
+      ])
+      expect(reset.ok && reset.summary).toEqual([
+        "Website content of Mixed: 2 back to the design's (the design file is unchanged)",
+      ])
+      expect(await content()).toEqual({ v: 1, values: [value] })
+      expect((await run(pageParts)).ok).toBe(true)
+      const all = await run([{ op: 'html_content', page: 'mixed-me', reset: 'all' }])
+      expect(all.ok && all.summary).toEqual([
+        "Website content of Mixed: 0 values set, 3 back to the design's (the design file is unchanged)",
+      ])
+      expect(await content()).toBeNull()
+      expect(await designOf('mixed-me')).toBe(sent)
+    })
+
+    it('R28 P4: htmlDesignContentErrors: shape problems and other tenants’ /files refused; stale entries allowed', async () => {
+      const [mine, theirs] = await platform
+        .insert(storedFiles)
+        .values([
+          { tenantId: ids.tenant!, contentType: 'image/webp', size: 1, isPublic: true },
+          { tenantId: ids.other!, contentType: 'image/webp', size: 1, isPublic: true },
+        ])
+        .returning()
+      const check = (content: unknown) =>
+        tx((db) =>
+          htmlDesignContentErrors(db, ids.tenant!, {
+            root: { props: {} },
+            content: [
+              { type: 'Heading', props: { id: 'h', content: { v: 9 } } },
+              { type: 'HtmlDesign', props: { id: 'd', html: '', content } },
+            ],
+          }),
+        )
+      expect(await check(undefined)).toEqual([])
+      expect(
+        await check({
+          v: 1,
+          values: [{ path: 'journey[gone].title', value: { t: { en: 'x' } } }],
+          texts: [{ id: 'txt-99', src: 'stale', t: { en: 'x' } }],
+          pictures: [{ id: 'img-9', src: 'stale', img: `/files/${mine!.id}` }],
+        }),
+      ).toEqual([])
+      expect(await check({ v: 2 })).toEqual(['content: unknown format'])
+      expect(await check({ v: 1, texts: [{ id: 'nope', src: '', t: { en: 'x' } }] })).toEqual([
+        'text nope: not a page text of a design',
+      ])
+      expect(
+        await check({ v: 1, pictures: [{ id: 'img-0', src: '', img: `/files/${theirs!.id}` }] }),
+      ).toEqual([`/files/${theirs!.id} is not one of this spa's pictures`])
+      // Not a uuid: refused without a query (a uuid cast would fail the transaction).
+      const odd = `/files/${'-'.repeat(36)}`
+      expect(await check({ v: 1, values: [{ path: 'a', value: { img: odd } }] })).toEqual([
+        `${odd} is not one of this spa's pictures`,
+      ])
     })
   })
 

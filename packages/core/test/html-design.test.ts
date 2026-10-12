@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
+import { crmScriptJson, htmlCrmContractOf, spliceCrmData } from '../src/html-crm'
 import {
   applyHtmlImageAdjustments,
+  applyHtmlTextOverrides,
   attributesOf,
   decodeHtmlBytes,
   fixHtmlDesign,
@@ -13,6 +16,7 @@ import {
   htmlDesignEmbedWarning,
   htmlDesignPhoneFixes,
   listHtmlDesignImages,
+  listHtmlDesignTexts,
   withBaseHref,
 } from '../src/html-design'
 
@@ -457,5 +461,292 @@ describe('withBaseHref (F10)', () => {
     const t = Date.now()
     expect(withBaseHref(open, '/x/')).toBe(`<base href="/x/">${open}`)
     expect(Date.now() - t).toBeLessThan(1000)
+  })
+})
+
+describe('applyHtmlImageAdjustments: replace-only (R28 P4)', () => {
+  const R = '/files/0b0f6c2e-5c5e-4e8f-9a4e-1f2a3b4c5d6e'
+  it('replace-only img: only the src swap (+ srcset/sizes dropped), no data-spa-img, no <style data-spa-images>', () => {
+    const out = applyHtmlImageAdjustments(doc, [{ id: 'img-0', src: 'https://cdn.test/a.jpg', replace: R }])
+    expect(out).toBe(
+      doc.replace(
+        '<img src="https://cdn.test/a.jpg" srcset="https://cdn.test/a2.jpg 2x" style="width:1600px">',
+        `<img src="${R}" style="width:1600px">`,
+      ),
+    )
+  })
+  it('replace-only bg: only the url() swap', () => {
+    const out = applyHtmlImageAdjustments(doc, [
+      { id: 'bg-0', src: 'https://cdn.test/hero.jpg', replace: 'https://cdn.test/h2.jpg' },
+    ])
+    expect(out).toBe(doc.replace('url("https://cdn.test/hero.jpg")', 'url(https://cdn.test/h2.jpg)'))
+  })
+  it('{id, src} alone → the same string', () => {
+    expect(
+      applyHtmlImageAdjustments(doc, [
+        { id: 'img-0', src: 'https://cdn.test/a.jpg' },
+        { id: 'bg-1', src: 'https://cdn.test/b.jpg' },
+      ]),
+    ).toBe(doc)
+  })
+  it('a replaced img inside <picture> sets each <source srcset> to the replacement', () => {
+    const pic =
+      '<body><picture><source srcset="https://cdn.test/p.avif" type="image/avif">' +
+      '<source media="(min-width:600px)" srcset=\'https://cdn.test/p-wide.webp 2x\'><source type="image/png">' +
+      '<img src="https://cdn.test/p.jpg" alt="p"></picture><picture><source srcset="https://cdn.test/q.webp"></picture>' +
+      '<script>const t = \'<picture><source srcset="s.webp">\'</script><img src="https://cdn.test/q.jpg"></body>'
+    const out = applyHtmlImageAdjustments(pic, [
+      { id: 'img-0', src: 'https://cdn.test/p.jpg', replace: R },
+      { id: 'img-1', src: 'https://cdn.test/q.jpg', replace: 'https://cdn.test/n.jpg' },
+    ])
+    expect(out).toBe(
+      pic
+        .replace('srcset="https://cdn.test/p.avif"', `srcset="${R}"`)
+        .replace("srcset='https://cdn.test/p-wide.webp 2x'", `srcset="${R}"`)
+        .replace('src="https://cdn.test/p.jpg"', `src="${R}"`)
+        .replace('src="https://cdn.test/q.jpg"', 'src="https://cdn.test/n.jpg"'),
+    )
+  })
+  it('of two adjustments with one id, the one whose src still matches applies', () => {
+    const out = applyHtmlImageAdjustments(doc, [
+      { id: 'img-0', src: 'https://cdn.test/a.jpg', x: 10 },
+      { id: 'img-0', src: 'https://cdn.test/stale.jpg', replace: R },
+    ])
+    expect(out).toContain('[data-spa-img="0"]{object-fit:cover!important;object-position:10% 50%!important}')
+    expect(out).not.toContain(R)
+  })
+})
+
+/** Every page text of a design (test fixture): text nodes, attributes, title, meta, groups, raw-text bodies. */
+const textsDoc = `<!doctype html><html><head>
+<meta charset="utf-8">
+<title> Rituals &amp; Rest </title>
+<meta name="description" content="Calm massage in Dubai">
+<style>.x::after{content:"Not a text"}</style>
+<script>const s = '<p>script text</p>'</script>
+</head><body>
+<!-- <p>commented</p> -->
+<header><nav aria-label="Main menu"><a href="#a">Home</a> <a href="#b" title='Our rituals'>Rituals</a></nav></header>
+<section id="our-story"><h2>Our &nbsp;story</h2><p>
+  Since 2010 &mdash; calm hands.
+</p><img src="https://cdn.test/a.jpg" alt=Lounge alt="dup"><p>a &lt; b</p><p>5 > 3</p><p>&nbsp;</p></section>
+<section><h3>Treatments</h3><form><input placeholder="Your name"><select><option>Swedish</option></select>
+<textarea>Not listed</textarea><button aria-label="Send now">Send</button></form></section>
+<template><p>Later</p></template>
+<svg viewBox="0 0 1 1"><title>Icon</title><path d="M0 0"/><text>Svg label</text></svg>
+<noscript><p>No script</p></noscript>
+<aside id="gift_cards-box"><p>Gift cards</p></aside>
+<footer>© 2026 &copy; Spa</footer>
+</body></html>`
+
+const fixture = (name: string) =>
+  readFileSync(new URL(`../../../apps/web/e2e/fixtures/${name}`, import.meta.url), 'utf8')
+const all = (h: string, en: string) =>
+  applyHtmlTextOverrides(
+    h,
+    listHtmlDesignTexts(h).map((x) => ({ id: x.id, src: x.src, t: { en } })),
+    'en',
+  )
+const count = (h: string, s: string) => h.split(s).length - 1
+
+describe('listHtmlDesignTexts (R28 P4)', () => {
+  it('lists text nodes, alt/placeholder/aria-label/title attributes, the first title outside svg and the meta description with positional ids; skips script/style/comment/raw-text bodies, blank runs and texts or values holding < or >; lists template and option texts', () => {
+    const list = listHtmlDesignTexts(textsDoc)
+    expect(list.map((x) => [x.id, x.kind, x.attr ?? '', x.tag, x.text])).toEqual([
+      ['title', 'title', '', 'title', 'Rituals & Rest'],
+      ['meta-description', 'meta', '', 'meta', 'Calm massage in Dubai'],
+      ['attr-0', 'attr', 'aria-label', 'nav', 'Main menu'],
+      ['txt-0', 'text', '', 'a', 'Home'],
+      ['attr-1', 'attr', 'title', 'a', 'Our rituals'],
+      ['txt-1', 'text', '', 'a', 'Rituals'],
+      ['txt-2', 'text', '', 'h2', 'Our story'],
+      ['txt-3', 'text', '', 'p', 'Since 2010 — calm hands.'],
+      ['attr-2', 'attr', 'alt', 'img', 'Lounge'],
+      ['txt-4', 'text', '', 'p', 'a < b'],
+      ['txt-5', 'text', '', 'h3', 'Treatments'],
+      ['attr-3', 'attr', 'placeholder', 'input', 'Your name'],
+      ['txt-6', 'text', '', 'option', 'Swedish'],
+      ['attr-4', 'attr', 'aria-label', 'button', 'Send now'],
+      ['txt-7', 'text', '', 'button', 'Send'],
+      ['txt-8', 'text', '', 'p', 'Later'],
+      ['txt-9', 'text', '', 'text', 'Svg label'],
+      ['txt-10', 'text', '', 'p', 'Gift cards'],
+      ['txt-11', 'text', '', 'footer', '© 2026 © Spa'],
+    ])
+    expect(list.every((x) => x.src === x.text && !x.bound)).toBe(true)
+    expect(listHtmlDesignTexts('<svg><title>Icon</title></svg><title>Page</title><p>x</p>')[0]).toMatchObject(
+      {
+        id: 'title',
+        text: 'Page',
+      },
+    )
+    expect(listHtmlDesignTexts('<title>  </title><meta name=description content="">')).toMatchObject([
+      { id: 'title', text: '' },
+      { id: 'meta-description', text: '' },
+    ])
+    expect(listHtmlDesignTexts(`<p>${'x'.repeat(2500)}</p>`)[0]).toMatchObject({
+      text: 'x'.repeat(2000),
+      src: 'x'.repeat(300),
+    })
+  })
+
+  it('groups by the nearest section/header/nav/footer: aria-label, first heading, id, fallback', () => {
+    const groups = Object.fromEntries(listHtmlDesignTexts(textsDoc).map((x) => [x.id, x.group]))
+    expect(groups).toMatchObject({
+      title: '',
+      'meta-description': '',
+      'attr-0': 'Main menu',
+      'txt-0': 'Main menu',
+      'txt-2': 'Our story',
+      'attr-2': 'Our story',
+      'txt-5': 'Treatments',
+      'attr-3': 'Form 1',
+      'txt-7': 'Form 1',
+      'txt-8': '',
+      'txt-10': 'Gift cards box',
+      'txt-11': 'Footer 1',
+    })
+  })
+
+  it('marks bound: data-crm / data-item / data-book-service (inherited), the parent id the design’s JS uses, document.title; the CRM_DATA literal is not read', () => {
+    const html = `<html><head><title>Design</title></head><body>
+<div data-crm="spa.name"><h1>Design Spa</h1></div>
+<ul data-item="services"><li><b>Ritual</b></li></ul>
+<a data-book-service href="#" title="Book now">Book</a>
+<p id="hours">Mon–Sun</p><p id="note">Free text</p><span id="promo">Promo</span><p id="crm-only">Literal only</p>
+<script>document.getElementById('hours').textContent = 'x'; document.querySelector("#promo .x"); document.title = 'Live'</script>
+<script>window.CRM_DATA = {"id":"crm-only","note":"#note"}</script>
+</body></html>`
+    expect(listHtmlDesignTexts(html).map((x) => [x.text, x.bound, x.binding ?? ''])).toEqual([
+      ['Design', true, 'document.title'],
+      ['Design Spa', true, 'data-crm=spa.name'],
+      ['Ritual', true, 'data-item=services'],
+      ['Book now', true, 'data-book-service'],
+      ['Book', true, 'data-book-service'],
+      ['Mon–Sun', true, '#hours'],
+      ['Free text', false, ''],
+      ['Promo', true, '#promo'],
+      ['Literal only', false, ''],
+    ])
+  })
+
+  it('ids, src and bound are identical after the CRM splice', () => {
+    const data = { spa: { name: '</script><p>Injected</p>' }, note: 'a < b & c > d', id: 'note' }
+    const literal = `<!doctype html><html><head><title>T</title></head><body><h1 id="note">Hi</h1><p>Text</p>
+<script>window.CRM_DATA = {"spa":{"name":"Design"}};</script><script>const n = 'hours'</script><p id="hours">9-5</p></body></html>`
+    const endpoint = '<meta name="crm-endpoint" content="crm-data.json">'
+    const cases = [
+      literal,
+      `<!doctype html><html><head>${endpoint}<title>T</title></head><body>  <h1 id="note">Hi</h1>\n<p>Text</p></body></html>`,
+      `<!doctype html><html><head>${endpoint}</head><body><p>Before</p><script>const x = 'note'</script><h1 id="note">Hi</h1></body></html>`,
+      `${endpoint}Lead text<h1 id="note">Hi</h1><p>Text</p>`,
+    ]
+    const injectAt = ['literal', 'head', 'script', 0]
+    cases.forEach((raw, k) => {
+      const found = htmlCrmContractOf(raw)!
+      const at = found.literal
+        ? 'literal'
+        : found.inject && (raw.startsWith('<script', found.inject) ? 'script' : 'head')
+      expect(at).toBe(injectAt[k])
+      const out = spliceCrmData(raw, found, crmScriptJson(data), { inject: true })
+      expect(out).not.toBe(raw)
+      expect(listHtmlDesignTexts(out)).toEqual(listHtmlDesignTexts(raw))
+    })
+  })
+})
+
+describe('applyHtmlTextOverrides (R28 P4)', () => {
+  it('no texts / [] / only stale or malformed entries → the very same string', () => {
+    expect(applyHtmlTextOverrides(textsDoc, undefined, 'en')).toBe(textsDoc)
+    expect(applyHtmlTextOverrides(textsDoc, [], 'en')).toBe(textsDoc)
+    expect(applyHtmlTextOverrides(textsDoc, [{ id: 'txt-0', src: 'Other', t: { en: 'X' } }], 'en')).toBe(
+      textsDoc,
+    )
+    expect(
+      applyHtmlTextOverrides(
+        textsDoc,
+        [
+          { id: 'bad', src: 'Home', t: { en: 'X' } },
+          { id: 'txt-0', src: 'Home' },
+          null,
+          { id: 'txt-0', src: 'Home', t: { en: '  ' } },
+        ] as never,
+        'en',
+      ),
+    ).toBe(textsDoc)
+  })
+
+  it('escapes text, quoted / single-quoted / unquoted attributes, the title and meta: X<"\'&>= y adds no <, >, src= or style=; keeps leading/trailing whitespace', () => {
+    const html = `<html><head><title>Old</title><meta name="description" content="Old desc"></head><body><p>
+  Old text  </p><img alt="a" title='b' src="x.jpg"><input placeholder=c style="color:red"></body></html>`
+    const v = `X<"'&>= y src=1 style=2`
+    const out = all(html, v)
+    const e = 'X&lt;&quot;&#39;&amp;&gt;'
+    expect(out).toBe(
+      `<html><head><title>${e}= y src=1 style=2</title><meta name="description" content="${e}&#61; y src&#61;1 style&#61;2"></head><body><p>
+  ${e}= y src=1 style=2  </p><img alt="${e}&#61; y src&#61;1 style&#61;2" title='${e}&#61; y src&#61;1 style&#61;2' src="x.jpg"><input placeholder=${e}&#61;&#32;y&#32;src&#61;1&#32;style&#61;2 style="color:red"></body></html>`,
+    )
+    expect(count(out, '<')).toBe(count(html, '<'))
+    expect(count(out, '>')).toBe(count(html, '>'))
+    // No attribute added or lost: `src=` / `style=` in a value stay text.
+    const names = (h: string, tag: string) => attributesOf(h, h.indexOf(tag) + tag.length).map((a) => a.name)
+    expect(names(out, '<img')).toEqual(['alt', 'title', 'src'])
+    expect(names(out, '<input')).toEqual(['placeholder', 'style'])
+    expect(names(out, '<meta')).toEqual(['name', 'content'])
+  })
+
+  it('Arabic → English fallback; blank values skipped', () => {
+    const html = '<p>One</p><p>Two</p><p>Three</p>'
+    const texts = [
+      { id: 'txt-0', src: 'One', t: { en: 'Hello', ar: 'مرحبا' } },
+      { id: 'txt-1', src: 'Two', t: { en: 'Hi', ar: '  ' } },
+      { id: 'txt-2', src: 'Three', t: { en: ' ' } },
+    ]
+    expect(applyHtmlTextOverrides(html, texts, 'ar')).toBe('<p>مرحبا</p><p>Hi</p><p>Three</p>')
+    expect(applyHtmlTextOverrides(html, texts, 'en')).toBe('<p>Hello</p><p>Hi</p><p>Three</p>')
+  })
+
+  it('skeleton property: overriding every text changes values only (inline fixture, fidelity + CRM contract fixtures)', () => {
+    for (const raw of [textsDoc, fixture('fidelity.html'), fixture('crm-contract.html')]) {
+      const out = all(raw, `<"'&>={{x}}`)
+      expect(out).not.toBe(raw)
+      expect(listHtmlDesignImages(out)).toEqual(listHtmlDesignImages(raw))
+      expect(count(out, '<')).toBe(count(raw, '<'))
+      const shape = (h: string) =>
+        listHtmlDesignTexts(h).map(({ id, kind, attr, tag, bound }) => ({ id, kind, attr, tag, bound }))
+      expect(shape(out)).toEqual(shape(raw))
+      expect(all(out, '§')).toBe(all(raw, '§'))
+    }
+  })
+})
+
+describe('htmlDesignDocument with page texts (R28 P4)', () => {
+  const page =
+    '<html><head><title>T</title></head><body><h1>Old</h1><img alt="Old alt" src="https://cdn.test/a.jpg"></body></html>'
+  it('texts run first: {{spa_name}} in an override is filled; an alt override on an adjusted img keeps the adjustment; phone fixes still apply', () => {
+    const out = htmlDesignDocument(
+      page,
+      { spa_name: 'Zen & Co' },
+      false,
+      [{ id: 'img-0', src: 'https://cdn.test/a.jpg', x: 10 }],
+      {},
+      {
+        phoneFixes: true,
+        texts: [
+          { id: 'txt-0', src: 'Old', t: { en: 'Welcome to {{spa_name}}', ar: 'أهلا في {{spa_name}}' } },
+          { id: 'attr-0', src: 'Old alt', t: { en: 'New alt' } },
+        ],
+        locale: 'ar',
+      },
+    )
+    expect(out).toContain('<h1>أهلا في Zen &amp; Co</h1>')
+    expect(out).toContain('<img data-spa-img="0" alt="New alt" src="https://cdn.test/a.jpg">')
+    expect(out).toContain('[data-spa-img="0"]{object-fit:cover!important;object-position:10% 50%!important}')
+    expect(out).toContain(`<style data-spa-base>${HTML_DESIGN_BASE_CSS}</style>`)
+  })
+  it('no texts → output identical to the call without texts / locale', () => {
+    const plain = htmlDesignDocument(page, {}, false, [], {})
+    expect(htmlDesignDocument(page, {}, false, [], {}, { texts: [], locale: 'ar' })).toBe(plain)
+    expect(htmlDesignDocument(page, {}, false, [], {}, { texts: undefined })).toBe(plain)
   })
 })

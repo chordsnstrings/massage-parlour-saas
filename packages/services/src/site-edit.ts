@@ -6,17 +6,20 @@
 // callers audit with `siteEditAuditData`.
 import {
   dubaiParts,
+  HTML_IMAGE_SRC_MAX,
   type HtmlContentValue,
   type HtmlDesignContent,
   htmlContentErrors,
   htmlContentFileIds,
-  htmlContentMap,
-  htmlContentOf,
+  htmlContentFrom,
+  htmlContentParts,
   htmlContentSlots,
   htmlCrmContractOf,
   htmlDesignDocOf,
   htmlDesignEmbedHosts,
   htmlDesignPhoneFixes,
+  listHtmlDesignImages,
+  listHtmlDesignTexts,
   MAX_HTML_UPLOAD_BYTES,
   patchHtml,
 } from '@spa/core'
@@ -118,13 +121,22 @@ export const SiteOpSchema = z.discriminatedUnion('op', [
     phone_fixes: z.boolean().nullish(),
     convert: z.boolean().nullish(),
   }),
-  // R28: the page's website content — values over the design's own data (its window.CRM_DATA), never the file.
-  // `set` by slot path (get_html_content lists them); `reset` drops values back to the design's ('all' = every one).
+  // R28: the page's website content, never the file — values over the design's own data (its window.CRM_DATA) by
+  // slot path, page texts and pictures by id (P4; get_html_content lists them; the server fills their src guards).
   z.object({
     op: z.literal('html_content'),
     page: pageRef,
     set: z.record(z.string().max(400), HtmlContentValueSchema).nullish(),
+    // values paths, 'text:<id>', 'picture:<id>'; 'all' = every value, page text and picture
     reset: z.union([z.literal('all'), z.array(z.string().max(400)).max(500)]).nullish(),
+    texts: z
+      .array(z.object({ id: z.string().max(40), t: contentText }))
+      .max(2000)
+      .nullish(),
+    pictures: z
+      .array(z.object({ id: z.string().max(12), img: z.string().max(2000) }))
+      .max(200)
+      .nullish(),
   }),
   // R24: exact find/replace edits of the stored design (each `find` must occur exactly once), applied in order.
   z.object({
@@ -242,6 +254,44 @@ function contentValue(v: z.infer<typeof HtmlContentValueSchema>): HtmlContentVal
 
 /** One op that doesn't fit (collected into the batch's error list; never thrown out of runSiteEdit). */
 class OpFail extends Error {}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** Of these `/files` ids, the ones that are not this spa's public files. */
+async function missingContentFiles(tx: Tx, tenantId: string, ids: string[]): Promise<string[]> {
+  const valid = ids.filter((x) => UUID.test(x))
+  const own = valid.length
+    ? await tx
+        .select({ id: storedFiles.id })
+        .from(storedFiles)
+        .where(
+          and(
+            eq(storedFiles.tenantId, tenantId),
+            eq(storedFiles.isPublic, true),
+            inArray(storedFiles.id, valid),
+          ),
+        )
+    : []
+  const mine = new Set(own.map((r) => r.id))
+  return ids.filter((x) => !mine.has(x))
+}
+
+/** Every HtmlDesign block's content: shape (no slot check — stale entries are fine, the render skips them) + this spa's public files. */
+export async function htmlDesignContentErrors(tx: Tx, tenantId: string, data: unknown): Promise<string[]> {
+  const content = isObj(data) && Array.isArray(data.content) ? data.content : []
+  const errors: string[] = []
+  for (const n of content) {
+    if (!isObj(n) || n.type !== HTML_DESIGN_BLOCK || !isObj(n.props) || n.props.content === undefined)
+      continue
+    const problems = htmlContentErrors(n.props.content, null)
+    if (problems.length) {
+      errors.push(...problems)
+      continue
+    }
+    const missing = await missingContentFiles(tx, tenantId, htmlContentFileIds(n.props.content))
+    errors.push(...missing.map((x) => `/files/${x} is not one of this spa's pictures`))
+  }
+  return errors
+}
 
 /** Drops nulls the model / MCP client may send for unused fields. */
 function clean(op: z.infer<typeof SiteOpSchema>): SiteOp {
@@ -483,42 +533,86 @@ export async function runSiteEdit(
               `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
             )
           const literal = htmlCrmContractOf(source)?.literal
-          if (!literal)
+          const n = Object.keys(op.set ?? {}).length
+          const resets = op.reset === 'all' ? null : (op.reset ?? [])
+          if (
+            !literal &&
+            !n &&
+            !op.texts?.length &&
+            !op.pictures?.length &&
+            !(resets === null || resets.length)
+          )
             throw new OpFail(
               `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA, so its words and pictures live in the file — use html_patch`,
             )
-          const data = htmlContentMap(block.props.content)
-          const resets = op.reset === 'all' ? Object.keys(data) : (op.reset ?? [])
-          for (const k of resets) delete data[k]
-          for (const [k, v] of Object.entries(op.set ?? {})) data[k] = contentValue(v)
-          const next = htmlContentOf(data) ?? { v: 1 as const }
-          const problems = htmlContentErrors(next, htmlContentSlots(literal.data))
-          if (problems.length) throw new OpFail(`${at}: ${problems.slice(0, 6).join(' · ')}`)
-          const ids = htmlContentFileIds(next)
-          if (ids.length) {
-            const own = await tx
-              .select({ id: storedFiles.id })
-              .from(storedFiles)
-              .where(
-                and(
-                  eq(storedFiles.tenantId, input.tenantId),
-                  eq(storedFiles.isPublic, true),
-                  inArray(storedFiles.id, ids),
-                ),
-              )
-            const mine = new Set(own.map((r) => r.id))
-            const missing = ids.filter((x) => !mine.has(x))
-            if (missing.length)
-              throw new OpFail(
-                `${at}: /files/${missing[0]} is not one of this spa's pictures — add it with add_image first`,
-              )
+          if (!literal && n)
+            throw new OpFail(
+              `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA: change its page texts and pictures with texts / pictures, or the file with html_patch`,
+            )
+          const parts = htmlContentParts(block.props.content)
+          let reset = resets?.length ?? 0
+          if (resets === null) {
+            reset = Object.values(parts).reduce((sum, p) => sum + Object.keys(p).length, 0)
+            parts.values = {}
+            parts.texts = {}
+            parts.pictures = {}
+          } else
+            for (const k of resets) {
+              if (k.startsWith('text:')) delete parts.texts[k.slice(5)]
+              else if (k.startsWith('picture:')) delete parts.pictures[k.slice(8)]
+              else delete parts.values[k]
+            }
+          for (const [k, v] of Object.entries(op.set ?? {})) parts.values[k] = contentValue(v)
+          if (op.texts?.length) {
+            const listed = new Map(listHtmlDesignTexts(source).map((x) => [x.id, x]))
+            for (const e of op.texts) {
+              const x = listed.get(e.id)
+              if (!x)
+                throw new OpFail(`${at}: no page text "${e.id}" in this design — get_html_content lists them`)
+              if (x.bound)
+                throw new OpFail(`${at}: ${e.id} is filled by the design from the CRM — change it in the CRM`)
+              parts.texts[e.id] = {
+                id: e.id,
+                src: x.src,
+                t: { en: e.t.en, ...(e.t.ar ? { ar: e.t.ar } : {}) },
+              }
+            }
           }
-          if (next.values) block.props.content = next
+          if (op.pictures?.length) {
+            const listed = new Map(listHtmlDesignImages(source).map((x) => [x.id, x]))
+            for (const p of op.pictures) {
+              const x = listed.get(p.id)
+              if (!x)
+                throw new OpFail(`${at}: no picture "${p.id}" in this design — get_html_content lists them`)
+              parts.pictures[p.id] = { id: p.id, src: x.src.slice(0, HTML_IMAGE_SRC_MAX), img: p.img }
+            }
+          }
+          const next = htmlContentFrom(parts)
+          const problems = htmlContentErrors(next ?? { v: 1 }, literal ? htmlContentSlots(literal.data) : [])
+          if (problems.length) throw new OpFail(`${at}: ${problems.slice(0, 6).join(' · ')}`)
+          const missing = await missingContentFiles(tx, input.tenantId, htmlContentFileIds(next))
+          if (missing.length)
+            throw new OpFail(
+              `${at}: /files/${missing[0]} is not one of this spa's pictures — add it with add_image first`,
+            )
+          if (next) block.props.content = next
           else delete block.props.content
           w.changed = true
-          const n = Object.keys(op.set ?? {}).length
+          const texts = op.texts?.length ?? 0
+          const pictures = op.pictures?.length ?? 0
+          const pageParts = texts || pictures || resets?.some((k) => /^(?:text|picture):/.test(k))
+          const plural = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`
           summary.push(
-            `Website content of ${pageLabel(w)}: ${n} value${n === 1 ? '' : 's'} set${resets.length ? `, ${resets.length} back to the design's` : ''} (the design file is unchanged)`,
+            pageParts
+              ? `Website content of ${pageLabel(w)}: ${[
+                  n ? `${plural(n, 'value')} set` : '',
+                  texts ? plural(texts, 'page text') : '',
+                  pictures ? plural(pictures, 'picture') : '',
+                  reset ? `${reset} back to the design's` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')} (the design file is unchanged)`
+              : `Website content of ${pageLabel(w)}: ${plural(n, 'value')} set${reset ? `, ${reset} back to the design's` : ''} (the design file is unchanged)`,
           )
           break
         }
@@ -837,7 +931,7 @@ export type HtmlDesignView = {
   images: number
   /** R26: CRM data contract (operational values come live from the CRM; don't edit them in the design), or null. */
   crm: 'literal' | 'endpoint' | null
-  /** R28: the page's website content (values over the design's data), or null. */
+  /** R28: the page's website content (values, page texts, pictures), or null. */
   content: HtmlDesignContent | null
   editing: { by: string; userId: string; until: string } | null
 }

@@ -78,7 +78,9 @@ export function designContract(html: string, key: string | null): Parsed | null 
  * The design with the spa's data: `literal` designs get only their `window.CRM_DATA` JSON replaced — the design's
  * data with the spa's website content over it (R28, draft → publish with the page), then the CRM's operational keys
  * (R26); endpoint-only designs get the CRM contract injected in frames (`inject`), and are left as they are on the
- * live page (which fetches `crm-data.json`). No contract, or neither CRM data nor content → `html` unchanged.
+ * live page (which fetches `crm-data.json`). No contract, or neither CRM data nor content values → `html` unchanged.
+ * Only `content.values` count here (and in the output key): page texts and pictures (R28 P4) are applied by
+ * htmlDesignDocument afterwards, so texts-only content keeps the no-content path and key.
  */
 export function designWithCrm(
   html: string,
@@ -95,7 +97,7 @@ export function designWithCrm(
   const locale = opts.locale ?? 'en'
   const outKey = key
     ? `${key}|${found.literal ? 'l' : 'i'}|${crm ? cyrb53(JSON.stringify(crm)) : '-'}${
-        content && found.literal ? `|${locale}|${cyrb53(JSON.stringify(content))}` : ''
+        content && found.literal ? `|${locale}|${cyrb53(JSON.stringify(content.values))}` : ''
       }`
     : null
   const hit = outKey ? outputs.get(outKey) : undefined

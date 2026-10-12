@@ -67,6 +67,19 @@ The stored file never changes. With no content set, the output is the very same 
    - New `applyHtmlTextOverrides(html, texts, locale)` runs as the **first** step of `htmlDesignDocument`, so ids match the raw file, and before `fillSpans`, so `{{spa_name}}` inside an override is filled. It escapes HTML and attributes and keeps the node's surrounding whitespace.
    - A stale `src` is skipped at render and shown as outdated.
    - `HtmlDesignRender` gets `locale` and `texts`.
+   - **As built (P4):** one walker (`textSites`, tokenized like `fillSpans`) lists text runs, alt / placeholder /
+     aria-label / title attributes, the first `<title>` outside svg and the meta description with positional ids on
+     the raw file (`txt-n`, `attr-n`, `title`, `meta-description`); only runs and values without `<` or `>` are listed
+     (and numbered), and overrides escape `<`, `>`, quotes and `=`, so an override can never add markup, an attribute
+     or a `src=` / `style=`; script bodies are skipped, so the ids survive the CRM splice. Texts are listed on every
+     design, with or without `CRM_DATA`, `<template>` and `<option>` texts included. `bound` (listing only; the render
+     ignores it, writes refuse it): `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor,
+     the text's own element id used by the design's JS as a quoted string or `#id` (the `window.CRM_DATA` literal or
+     injected body not read), `document.title =` for the title. Pictures: `content.pictures: [{id, src, img}]`,
+     replace-only, merged over the template's `images` by id (same src → its framing kept); no alt on pictures (the
+     `<img alt>` is a page text: one source). Replace-only adjustments no longer get the forced fit (framed only with
+     fit / x / y / align); a replaced `<img>` in a `<picture>` also sets its `<source srcset>`s. Content cap 192 KB.
+     `<input value>` and `og:*` are not texts in P4.
 3. **Callers:** `blocks/html-design.tsx` (`meta.locale`), `app/site-html/route.ts` (`locale`) and `platform/(console)/templates/[id]/preview/page.tsx`.
 4. **Copies:** `materializeTemplatePageData` and `localiseHtmlDesignAssets` (`site-html-assets.ts:369`) also make local copies of `/files` values in `content`. "Save site as template" carries `content` through `cleanHtmlDesignContent`. That lets a super-admin write neutral BE RELAX content once on a demo spa and save it as the template.
 5. **Pop-in check:** P1 measures whether URL pictures pop in during the scroll scenes. If they do, `site-html` adds `<link rel=preload as=image>` for those pictures; this needs to be listed as an allowed invisible change. Embedding them as `data:` at render is the last resort.
@@ -222,7 +235,7 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 | P1 | `html-content.ts`, `designWithCrm` options and cache key, 3 callers, `content` prop, `cleanHtmlDesignContent`, file copy rules, the `html_content` op + `get/set_html_content`, pop-in check | 12 | You can ask Claude to "rewrite last-test's journey for Dubai and swap scene 2's picture": it becomes a draft, you preview and publish. The file is untouched |
 | P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
 | P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
-| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
+| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Building 2026-10-12:** core + render + `html_content` op + draft-save check done (A); Ask AI / Write texts / connector (B) and the editor (C) on top | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
 | P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
 | P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
 

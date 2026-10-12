@@ -9,6 +9,7 @@ import {
   editStamp,
   getEditablePage,
   getSite,
+  htmlDesignContentErrors,
   lockSite,
   markSitemapDue,
   publishAll,
@@ -272,6 +273,9 @@ async function storeDraft(
       "You can edit text and images, but layout changes need the 'Edit design' permission.",
     )
   }
+  // R28 P4: HTML-design website content (shape + this spa's own public files; stale entries are fine).
+  const problems = await htmlDesignContentErrors(tx, ctx.tenant.id, data)
+  if (problems.length) throw new DomainError(`Website content: ${problems[0]}`)
   return saveDraft(tx, { tenantId: ctx.tenant.id, pageId, data, userId: ctx.user.id })
 }
 

@@ -1,4 +1,9 @@
-import { type HtmlDesignContent, htmlDesignDocOf, htmlDesignDocument } from '@spa/core'
+import {
+  type HtmlDesignContent,
+  htmlDesignDocOf,
+  htmlDesignDocument,
+  htmlPictureAdjustments,
+} from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
 import { designKey, designWithCrm } from '@/components/site/html-crm'
@@ -90,17 +95,19 @@ async function render(req: Request, head: boolean) {
     slug: p.page,
     services: loaded.data.services,
   })
+  // R28: the spa's website content (data values in the CRM splice; page texts + pictures in the render).
+  const content = block.props.content as HtmlDesignContent | undefined
   let html = htmlDesignDocument(
     designWithCrm(block.props.html, designKey(htmlDesignDocOf(block.props)), crm, {
       inject: false,
-      content: block.props.content as HtmlDesignContent | undefined,
+      content,
       locale,
     }),
     htmlDesignValues(meta),
     false,
-    Array.isArray(block.props.images) ? block.props.images : [],
+    htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content),
     htmlDesignLinks(meta),
-    { top: true },
+    { top: true, texts: content?.texts, locale },
   )
   const seo = await siteSeo(tenant)
   const title = tr(data.root?.props?.title, { locale, data: loaded.data }) || tenant.name
