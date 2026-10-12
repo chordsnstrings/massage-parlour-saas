@@ -8,6 +8,7 @@ import {
   htmlDesignDocument,
   htmlDesignPhoneFixes,
 } from '@spa/core'
+import { lazy, Suspense } from 'react'
 import { designKey, designWithCrm } from '../html-crm'
 import { HtmlDesignFrame } from '../html-design-frame'
 import { htmlDesignLinks, htmlDesignValues } from '../html-design-values'
@@ -30,6 +31,11 @@ type Props = {
   content?: HtmlDesignContent
 }
 
+// R28: the editor-only field, loaded on first render so this block config stays importable on its own.
+const HtmlContentField = lazy(() =>
+  import('../editor/html-content-field').then((m) => ({ default: m.HtmlContentField })),
+)
+
 /**
  * An uploaded HTML design shown exactly as built (its CSS, fonts, motion and scripts), full screen. It runs in a
  * sandboxed frame with an opaque origin, so its scripts can't reach the platform's pages, cookies or APIs, under the
@@ -39,13 +45,21 @@ type Props = {
  */
 export const HtmlDesign: ComponentConfig<Props> = {
   label: 'HTML design',
-  // Replaced by uploading a new file, never edited here.
+  // The file is replaced by uploading a new one, never edited here; its words and pictures are (R28 Website content).
   fields: {
     html: { type: 'textarea', visible: false },
     doc: { type: 'custom', render: () => <></>, visible: false },
     images: { type: 'custom', render: () => <></>, visible: false },
     phoneFixes: { type: 'custom', render: () => <></>, visible: false },
-    content: { type: 'custom', render: () => <></>, visible: false },
+    content: {
+      type: 'custom',
+      label: 'Website content',
+      render: (props) => (
+        <Suspense fallback={<div className="h-24 animate-pulse rounded-lg bg-subtle" />}>
+          <HtmlContentField {...(props as Parameters<typeof HtmlContentField>[0])} />
+        </Suspense>
+      ),
+    },
   },
   defaultProps: { html: '', images: [] },
   render: ({ html, doc, images, phoneFixes, content, puck }) => {

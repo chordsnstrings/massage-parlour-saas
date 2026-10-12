@@ -452,6 +452,16 @@ export function SiteEditor(props: EditorProps) {
   const closeGlobal = useCallback(() => setEditingGlobal(null), [])
 
   // View only while someone else holds the editing lock (F29); the server refuses this tab's writes meanwhile anyway.
+  const htmlDesignPage =
+    (props.data as { root?: { props?: { htmlDesign?: unknown } } }).root?.props?.htmlDesign === true
+  const htmlFieldCtx = useMemo(
+    () => ({
+      docs: htmlDocs,
+      spaName: props.meta.data.tenant.name,
+      city: props.meta.crm?.location.city ?? '',
+    }),
+    [htmlDocs, props.meta.data.tenant.name, props.meta.crm],
+  )
   const permissions =
     lock.kind === 'other'
       ? { drag: false, duplicate: false, delete: false, insert: false, edit: false }
@@ -460,7 +470,7 @@ export function SiteEditor(props: EditorProps) {
         : { drag: false, duplicate: false, delete: false, insert: false }
   return (
     <div className="site-editor fixed inset-0 z-50 bg-bg text-fg" data-crm-off>
-      <EditorContext.Provider value={{ locale, device, ai }}>
+      <EditorContext.Provider value={{ locale, device, ai, html: htmlFieldCtx }}>
         <EditorServicesContext.Provider value={services}>
           <ChromeContext.Provider value={chrome}>
             <Puck
@@ -477,6 +487,10 @@ export function SiteEditor(props: EditorProps) {
                   controlsVisible: false,
                   options: VIEWPORTS,
                 },
+                // R28: an HTML design page opens on its design block, with room for the Website content field.
+                ...(htmlDesignPage
+                  ? { itemSelector: { index: 0, zone: 'root:default-zone' }, rightSideBarWidth: 400 }
+                  : {}),
               }}
               iframe={{ enabled: true }}
               overrides={OVERRIDES}

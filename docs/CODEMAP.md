@@ -583,6 +583,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     hash; none → R26's key). Writes: site-edit op `html_content` (`set` / `reset` / `'all'`; checks slots against the
     stored design and that pictures are this spa's public `stored_files`) — connector `get_html_content` /
     `set_html_content` (drafts only; `patch_html_design` = structure).
+    Editor (P2): HtmlDesign `content` field = `components/site/editor/html-content-field.tsx` (lazy, Suspense; reads
+    the design via `useGetPuck().selectedItem` + `EditorContext.html.docs`, local state → `onChange` debounced 700 ms,
+    flushed on unmount); `EditorContext.html` = `{docs, spaName, city}` from the Studio editor; HTML-design pages open
+    with the block selected + `rightSideBarWidth: 400`. Readiness: core `htmlContentLeftovers(data, content, {spaName,
+    city, arabic})` + `isOwnDesign` / `UAE_CITIES` (html-crm.ts). Not a CONTENT_KEYS prop (Section's `content` slot
+    shares the name): editing it needs `site.design` (super-admins).
   - **Legacy designs (pre-R24 uploads):** R17 stored `fixHtmlDesign(raw)` (viewport + fluid widths baked into the html);
     `htmlDesignBakedFixes` (no switch value and inline html, or `bakedFixes: true` kept after the switch was used):
     the row switch says "old upload: re-upload to show exactly" and Off's message says to upload the original again.

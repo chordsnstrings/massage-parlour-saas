@@ -1187,6 +1187,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `designWithCrm` overlays it before the CRM merge (live page, frames, previews, editor), site-edit op `html_content`
   (pictures must be the spa's public files), connector `get_html_content` / `set_html_content` (drafts only). The file
   never changes (html-fidelity green).
+  **P2 (2026-10-12):** Studio editor "Website content" field on HtmlDesign blocks (`components/site/editor/
+  html-content-field.tsx`): an HTML-design page opens on its design block (panel 400 px); slots grouped (scenes by
+  their menu label, Experience n, Booking, WhatsApp messages), EN/AR via the editor switch (BilingualField + AI
+  translate), pictures via the media library, colour / focal point / tags / switch fields, "Design" (back to the
+  design's value) and "Hide" per field, the design's own value shown under each field; changes reach the canvas 700 ms
+  after typing stops. Readiness box ("still from the design": the design's spa name on another spa's site, another UAE
+  city, phone / email, test copy, no Arabic yet, stale) from core `htmlContentLeftovers`. Stored content is a list
+  (`{v: 1, values: [{path, value}]}`): Puck flattens props on "." and split path-keyed objects (found in P2, fixed in P1).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

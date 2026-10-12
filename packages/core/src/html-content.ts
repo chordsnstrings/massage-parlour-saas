@@ -3,7 +3,7 @@
 // design-owned VALUES of the design's `window.CRM_DATA` (story scenes, experience, booking label / picture, message
 // templates …) before the CRM merge. Operational keys (name, phones, address, hours, services, staff …) are the CRM's
 // and never content; layout, CSS and scripts are never touched (R24).
-import { type CrmLocale, crmImageUrl } from './html-crm'
+import { type CrmLocale, crmImageUrl, crmName, isOwnDesign, UAE_CITIES } from './html-crm'
 
 export type HtmlContentBi = { en: string; ar?: string }
 /** One slot's value: a text (EN + AR), a tag list, a picture / video URL, a switch, or hidden (empty). */
@@ -314,4 +314,71 @@ export function htmlContentFileIds(content: HtmlDesignContent | null | undefined
     if (m) ids.add(m[1]!.toLowerCase())
   }
   return [...ids]
+}
+
+export type HtmlContentLeftover = {
+  path: string
+  /**
+   * `other-spa`: names the spa the design was made for; `city`: another UAE city than the spa's; `phone` / `email`:
+   * contact details in the copy; `test`: test or filler copy; `arabic`: set in English only; `stale`: the design no
+   * longer has this slot.
+   */
+  reason: 'other-spa' | 'city' | 'phone' | 'email' | 'test' | 'arabic' | 'stale'
+  text: string
+}
+
+const PHONE = /(?:\+|00)?971[\s-]?\d|\b0\d{1,2}[\s-]?\d{3}[\s-]?\d{4}\b/
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/
+const TEST = /\b(?:test build|lorem ipsum|dolor sit|placeholder)\b/i
+
+/**
+ * Readiness (R28): what on a spa's HTML-design page still looks like the design's own spa — design-owned texts the
+ * spa hasn't replaced that name the spa the design was made for (when it isn't this one), name another UAE city than
+ * the spa's, carry a phone number / email or test copy; values set in English only (`arabic`: the site has Arabic);
+ * values whose slot the design no longer has. Never blocks publishing; the console lists it.
+ */
+export function htmlContentLeftovers(
+  data: Record<string, unknown> | null | undefined,
+  content: HtmlDesignContent | null | undefined,
+  ctx: { spaName: string; city: string; arabic: boolean },
+): HtmlContentLeftover[] {
+  const slots = htmlContentSlots(data)
+  const set = htmlContentMap(content)
+  const own = isOwnDesign(data, ctx.spaName)
+  const spa = isObj(data?.spa) ? data.spa : {}
+  const designNames = own ? [] : [spa.name, spa.short_name].map(crmName).filter((n) => n.length >= 3)
+  const city = crmName(ctx.city)
+  const out: HtmlContentLeftover[] = []
+  for (const slot of slots) {
+    if (set[slot.path] || !['text', 'longtext', 'tags'].includes(slot.kind)) continue
+    const raw = Array.isArray(slot.value) ? slot.value.join(' · ') : String(slot.value ?? '')
+    if (!raw.trim()) continue
+    const words = ` ${crmName(raw)} `
+    const reason: HtmlContentLeftover['reason'] | null = designNames.some((n) => words.includes(` ${n} `))
+      ? 'other-spa'
+      : UAE_CITIES.some((c) => c !== city && words.includes(` ${c} `))
+        ? 'city'
+        : PHONE.test(raw)
+          ? 'phone'
+          : EMAIL.test(raw)
+            ? 'email'
+            : TEST.test(raw)
+              ? 'test'
+              : null
+    if (reason) out.push({ path: slot.path, reason, text: raw.length > 160 ? `${raw.slice(0, 159)}…` : raw })
+  }
+  const paths = new Set(slots.map((s) => s.path))
+  for (const [path, v] of Object.entries(set)) {
+    if (!paths.has(path)) out.push({ path, reason: 'stale', text: '' })
+    else if (
+      ctx.arabic &&
+      isObj(v) &&
+      't' in v &&
+      isObj(v.t) &&
+      String(v.t.en ?? '').trim() &&
+      !String(v.t.ar ?? '').trim()
+    )
+      out.push({ path, reason: 'arabic', text: String(v.t.en) })
+  }
+  return out
 }

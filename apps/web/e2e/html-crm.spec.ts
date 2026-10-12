@@ -1,11 +1,22 @@
 import { readFile } from 'node:fs/promises'
 import { expect, type Frame, type Page, test } from '@playwright/test'
 import { addDays } from '@spa/core'
-import { auditLog, branches, services, serviceVariants, siteEnquiries, sites, staff, tenants } from '@spa/db'
+import {
+  auditLog,
+  branches,
+  services,
+  serviceVariants,
+  siteEnquiries,
+  sitePages,
+  sites,
+  staff,
+  tenants,
+} from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
   admin,
   app,
+  editorUrl,
   makeStudio,
   PORT,
   signInStudioOnAdmin,
@@ -439,4 +450,58 @@ test('R28: an HTML template applied over a live block site becomes a draft; the 
   await page.goto(studioUrl(slug))
   const thumb = page.frameLocator('iframe[title="Home page preview"]').frameLocator('iframe.site-html-design')
   await expect(thumb.locator('#spa')).toHaveText('Live Block Spa', { timeout: 30_000 })
+})
+
+test("R28 P2: the editor's Website content field changes a design's words per spa (draft → publish); the file never", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const owner = await signUpOwner(page, { spa: 'Content Field Spa' })
+  const { slug } = owner
+  await seedSpa(slug)
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await upload(page, 'Content Design', fixture)
+  await applyAndPublish(page, slug, 'Content Design')
+  const db = testDb()
+  const [t] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [home] = await db
+    .select({ id: sitePages.id })
+    .from(sitePages)
+    .where(and(eq(sitePages.tenantId, t!.id), eq(sitePages.slug, '')))
+
+  await page.goto(editorUrl(slug, home!.id))
+  // The page opens on its design block: the Website content field, grouped, the CRM's keys absent.
+  // Puck keeps a hidden copy of the fields panel: the visible one.
+  const field = page.locator('[data-testid="html-content"]:visible')
+  await expect(field).toBeVisible({ timeout: 60_000 })
+  await expect(
+    field.getByText('Name, phones, address, hours, treatments, prices and team come live from the CRM'),
+  ).toBeVisible()
+  await expect(field.getByRole('textbox', { name: 'WhatsApp message' })).toBeVisible()
+  await expect(field.getByText('Normal massage')).toHaveCount(0)
+  const label = field.getByRole('textbox', { name: 'Button label' })
+  await label.fill('Request a visit')
+  const design = page.frameLocator('#preview-frame').first().frameLocator('iframe.site-html-design')
+  await expect(design.locator('#label')).toHaveText('Request a visit', { timeout: 30_000 })
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByText('Draft saved')).toBeVisible({ timeout: 30_000 })
+
+  // Live: unchanged until published.
+  const visitor = await (await browser.newContext()).newPage()
+  await live(visitor, slug)
+  await expect(visitor.locator('#label')).toHaveText('Book with the design')
+
+  await page.goto(studioUrl(slug))
+  await page.getByRole('button', { name: 'Publish site' }).click()
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText(/^Published \d+ pages?/)).toBeVisible({ timeout: 30_000 })
+  await live(visitor, slug)
+  await expect(visitor.locator('#label')).toHaveText('Request a visit')
+  // Only the CRM_DATA JSON differs from the uploaded file.
+  const served = await (await viaHost(page, `${site(slug)}/`)).text()
+  const body = (s: string) => s.slice(s.indexOf('<body>')).replace(LITERAL, '')
+  expect(body(served)).toBe(body(fixture))
 })
