@@ -485,7 +485,7 @@ describe('site edit ops layer', () => {
         /no page text "txt-9" in this design — get_html_content lists them/,
       )
       expect(await refused({ texts: [{ id: 'txt-0', t: { en: 'x' } }] })).toMatch(
-        /txt-0 is filled by the design's script — change it in the design file with html_patch/,
+        /txt-0 is filled by the design's script — change it in the design file \(patch_html_design\)/,
       )
       expect(await refused({ texts: [{ id: 'txt-1', t: { en: ' ' } }] })).toMatch(
         /text txt-1: an English or Arabic text/,
@@ -618,6 +618,113 @@ describe('site edit ops layer', () => {
       expect((await op({ texts: [{ id: 'txt-0', t: { ar: 'طقوسنا' } }] })).ok).toBe(true)
       expect((await op({ texts: [{ id: 'txt-0', t: { en: 'Our rituals…' } }] })).ok).toBe(true)
       expect((await op({ set: { 'about.body': { t: { en: long, ar: 'طقوسنا' } } } })).ok).toBe(true)
+    })
+
+    it('R28 P4: a design text that itself ends with "…" can be echoed whole; set values take Arabic only (the stored English, else the design’s, stays; en "" = the design’s English)', async () => {
+      const dots = `${'Our rituals bring calm to the city. '.repeat(4)}and so much more…`
+      const sent = doc(
+        `<p>${dots.replace('calm', 'calm \n ')}</p><script>window.CRM_DATA = ${JSON.stringify({ about: { body: dots, note: 'Short note' } })};</script>`,
+      )
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'dots-me', title: { en: 'Dots' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'dots-me', html: sent, convert: true }])).ok).toBe(true)
+      const op = (o: Record<string, unknown>) => run([{ op: 'html_content', page: 'dots-me', ...o }])
+      const values = async () =>
+        (await tx((db) => getHtmlDesign(db, ids.tenant!, 'dots-me')))!.content?.values ?? []
+      expect((await op({ texts: [{ id: 'txt-0', t: { en: dots, ar: 'طقوسنا' } }] })).ok).toBe(true)
+      expect((await op({ set: { 'about.body': { t: { en: `${dots}\n` } } } })).ok).toBe(true)
+      // Arabic only: the design's English is stored with it…
+      expect((await op({ set: { 'about.note': { t: { ar: 'ملاحظة' } } } })).ok).toBe(true)
+      expect(await values()).toContainEqual({
+        path: 'about.note',
+        value: { t: { en: 'Short note', ar: 'ملاحظة' } },
+      })
+      // …or the spa's own English, once it has one; en '' = the design's English again.
+      expect((await op({ set: { 'about.note': { t: { en: 'Our note' } } } })).ok).toBe(true)
+      expect((await op({ set: { 'about.note': { t: { ar: 'ملاحظتنا', en: null } } } })).ok).toBe(true)
+      expect(await values()).toContainEqual({
+        path: 'about.note',
+        value: { t: { en: 'Our note', ar: 'ملاحظتنا' } },
+      })
+      expect((await op({ set: { 'about.note': { t: { en: '', ar: 'ملاحظة' } } } })).ok).toBe(true)
+      expect(await values()).toContainEqual({
+        path: 'about.note',
+        value: { t: { en: 'Short note', ar: 'ملاحظة' } },
+      })
+      // en '' without Arabic: back to the design's own value; neither: refused.
+      const back = await op({ set: { 'about.note': { t: { en: '' } } } })
+      expect(back.ok && back.summary).toEqual([
+        "Website content of Dots: 0 values set, 1 back to the design's (the design file is unchanged)",
+      ])
+      expect((await values()).map((v) => v.path)).toEqual(['about.body'])
+      const neither = await op({ set: { 'about.note': { t: { ar: ' ' } } } })
+      expect(neither.ok ? '' : neither.errors[0]).toBe('Change 1: about.note: send en or ar')
+    })
+
+    it('R28 P4: Ask AI (htmlContent.clip) drops entries it saw cut, bound / unknown ids, bad values and foreign files with notes; the rest is written; without it the op fails', async () => {
+      const long = `${'Our rituals bring calm to the city. '.repeat(6)}Book today.`
+      const sent = doc(
+        `<p>${long}</p><h2>Short heading</h2><h1 id="spa">Loading</h1><img src="https://example.com/a.jpg"><script>window.CRM_DATA = ${JSON.stringify({ about: { body: long, title: 'Hi' } })};</script><script>document.getElementById('spa').textContent = window.CRM_DATA.about.title</script>`,
+      )
+      await tx((db) =>
+        addPage(db, { tenantId: ids.tenant!, slug: 'ask-me', title: { en: 'Ask' }, data: home }),
+      )
+      expect((await run([{ op: 'html_design', page: 'ask-me', html: sent, convert: true }])).ok).toBe(true)
+      const [theirs] = await platform
+        .insert(storedFiles)
+        .values([{ tenantId: ids.other!, contentType: 'image/webp', size: 1, isPublic: true }])
+        .returning()
+      const ask = (ops: unknown[], htmlContent?: { clip: number }) =>
+        tx((db) => runSiteEdit(db, { tenantId: ids.tenant!, dryRun: false, ops, htmlContent }, deps))
+      const op = {
+        op: 'html_content',
+        page: 'ask-me',
+        set: {
+          'about.body': { t: { ar: 'طقوسنا' } },
+          'about.title': { t: { en: 'Hello' } },
+          nope: { t: { en: 'x' } },
+        },
+        texts: [
+          { id: 'txt-0', t: { ar: 'طقوسنا' } },
+          { id: 'txt-1', t: { en: 'Our heading' } },
+          { id: 'txt-2', t: { en: 'x' } },
+          { id: 'txt-9', t: { en: 'x' } },
+        ],
+        pictures: [{ id: 'img-0', img: `/files/${theirs!.id}` }],
+      }
+      // Elsewhere (the connector) one entry that doesn't fit fails the op; a script on a contract design = the CRM.
+      const strict = await ask([op])
+      expect(strict.ok ? '' : strict.errors[0]).toBe(
+        'Change 1: txt-2 is filled from the CRM — change it in the CRM',
+      )
+      const r = await ask([op], { clip: 160 })
+      const cut =
+        "the AI saw only the first 160 characters of the design's text — change it in Website content"
+      expect(r.ok && r.summary).toEqual([
+        'Website content of Ask: 1 value set, 1 page text (the design file is unchanged)',
+        `Ask: not changed — about.body: ${cut}`,
+        'Ask: not changed — nope: not an editable part of this design',
+        `Ask: not changed — txt-0: ${cut}`,
+        'Ask: not changed — txt-2 is filled from the CRM — change it in the CRM',
+        'Ask: not changed — no page text "txt-9" in this design — get_html_content lists them',
+        'Ask: 1 more not changed',
+      ])
+      expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'ask-me')))!.content).toEqual({
+        v: 1,
+        values: [{ path: 'about.title', value: { t: { en: 'Hello' } } }],
+        texts: [{ id: 'txt-1', src: 'Short heading', t: { en: 'Our heading' } }],
+      })
+      // Every entry dropped: nothing written, only the notes.
+      const none = await ask(
+        [{ op: 'html_content', page: 'ask-me', pictures: [{ id: 'img-0', img: `/files/${theirs!.id}` }] }],
+        { clip: 160 },
+      )
+      expect(none.ok && none.summary).toEqual([
+        `Ask: not changed — /files/${theirs!.id} is not one of this spa's pictures`,
+      ])
+      expect(none.ok && none.pages).toEqual([])
+      expect(await designOf('ask-me')).toBe(sent)
     })
 
     it('R28 P4: htmlDesignContentErrors: shape problems, private and other tenants’ /files refused; stale entries and own deleted files allowed', async () => {

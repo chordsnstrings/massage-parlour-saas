@@ -53,6 +53,13 @@ The stored file never changes. With no content set, the output is the very same 
 
   `overlayCrmData` checks the whitelist again at render time.
 
+  **As built:** there is no `cleanHtmlDesignContent` function (here and in §2, §6, §8 and P1 below). Validation is
+  core `htmlContentErrors` (192 KB cap since P4) through services `htmlDesignContentErrors` on draft saves (shape
+  only; malformed ids, private and other spas' files refused; own files deleted since and stale entries pass) and
+  the `html_content` op (slots and ids against the stored design; only this spa's public files). Template apply
+  copies content files (`materializeTemplatePageData` / `localiseHtmlDesignAssets`); "Save site as template"
+  scrubs content in `sanitizeTemplatePages`.
+
 ## 2. Render integration points
 
 1. **`apps/web/src/components/site/html-crm.ts`:** `designWithCrm(html, key, crm, {inject, content, locale, filesOrigin})`.
@@ -75,19 +82,27 @@ The stored file never changes. With no content set, the output is the very same 
      design, with or without `CRM_DATA`, `<template>` and `<option>` texts included; a run or value with an unknown
      or ambiguous character reference is not listed (common named ones are decoded; U+00A0 kept). `bound` (listing
      only; the render ignores it, writes refuse it) with `boundBy`: `crm` = `data-crm*` / `data-item*` /
-     `data-book-service` on the element or an ancestor; `script` = text inside an element whose text the design's JS
-     writes (`.textContent` / `.innerText` / `.innerHTML` / jQuery `.text()` on `getElementById` / `querySelector('#…')`,
-     directly, via a variable or a helper; never attributes; listener-only ids stay editable; the `window.CRM_DATA`
-     literal or injected body not read), `document.title =` for the title. Overrides: either language may be missing
+     `data-book-service` on the element or an ancestor, and on a contract design (`CRM_DATA` literal or crm-endpoint
+     meta) also text the design's JS writes; `script` = text the JS writes on a design without a contract
+     (`.textContent` / `.innerText` / `.innerHTML` / `replaceChildren` / `append` / `insertAdjacentHTML` / jQuery
+     `.text()` on `getElementById` / `querySelector('#…')` incl. `#id child` selectors and child access, directly, via a
+     variable, a helper, a looped id array or a holder object; never attributes; listener-only and `#id + / ~`
+     sibling ids stay editable; the `window.CRM_DATA` literal or injected body not read), `document.title =` for the
+     title. Overrides: either language may be missing
      (Arabic only keeps the design's English); a value equal to the design text keeps its original bytes;
      `{{placeholders}}` in an override are plain escaped text (no map link). Pictures: `content.pictures: [{id, src, img}]`,
      replace-only, merged over the template's `images` by id (same src → its framing kept); no alt on pictures (the
      `<img alt>` is a page text: one source). Replace-only adjustments no longer get the forced fit (framed only with
-     fit / x / y / align); a replaced `<img>` in a `<picture>` also sets its `<source srcset>`s; picture URLs refuse `$`
-     and character references and get `&` escaped in attributes. Content cap 192 KB.
+     fit / x / y / align); a replaced `<img>` in a `<picture>` also sets its `<source srcset>`s; picture URLs refuse
+     character references (a pasted `&amp;` is read as `&` first; `$` allowed) and get `&` escaped in attributes.
+     Content cap 192 KB.
      `<input value>` and `og:*` are not texts in P4.
 3. **Callers:** `blocks/html-design.tsx` (`meta.locale`), `app/site-html/route.ts` (`locale`) and `platform/(console)/templates/[id]/preview/page.tsx`.
 4. **Copies:** `materializeTemplatePageData` and `localiseHtmlDesignAssets` (`site-html-assets.ts:369`) also make local copies of `/files` values in `content`. "Save site as template" carries `content` through `cleanHtmlDesignContent`. That lets a super-admin write neutral BE RELAX content once on a demo spa and save it as the template.
+   - **As built (P4 review fixes):** the save scrubs `content` like other copy (`sanitizeTemplatePages` →
+     `scrubHtmlContent`: emails, links and 9+ digit phones out of texts and tags in EN + AR, the spa's name →
+     `{{spa_name}}`, blank texts dropped) and drops the source spa's own uploaded pictures / videos (`/files` values
+     and content pictures; outside https links stay); the design file, `images` and src guards stay as built.
 5. **Pop-in check:** P1 measures whether URL pictures pop in during the scroll scenes. If they do, `site-html` adds `<link rel=preload as=image>` for those pictures; this needs to be listed as an allowed invisible change. Embedding them as `data:` at render is the last resort.
 
 ## 3. Console editor (English)
@@ -270,7 +285,7 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 | P1 | `html-content.ts`, `designWithCrm` options and cache key, 3 callers, `content` prop, `cleanHtmlDesignContent`, file copy rules, the `html_content` op + `get/set_html_content`, pop-in check | 12 | You can ask Claude to "rewrite last-test's journey for Dubai and swap scene 2's picture": it becomes a draft, you preview and publish. The file is untouched |
 | P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
 | P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
-| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Done 2026-10-13:** A core + render + `html_content` op + draft-save check, B Ask AI / Write texts / connector, C editor; as built: the "As built (P4)" notes in §2 (item 2), §3 and §6, review fixes below the table | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
+| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Done 2026-10-13 (PR pending):** A core + render + `html_content` op + draft-save check, B Ask AI / Write texts / connector, C editor; as built: the "As built (P4)" notes in §2 (item 2), §3 and §6, review fixes below the table | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
 | P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
 | P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
 
@@ -278,21 +293,35 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 
 **Review fixes (P4, 2026-10-13)** — after the A / B / C review, before release:
 - **Core + op:** picture URLs are swapped with replacer functions (`$&` stays text), `&` escaped in `src` / `srcset`
-  / style attributes (raw in `<style>` bodies), and `$` or character references refused in picture URLs; a text is
-  script-bound only where the design's JS writes it (`scriptTextIds`; listener / read-only ids stay editable) and
-  says by what (`boundBy` `crm` / `script`, op errors worded to match); common named references decoded, U+00A0
-  kept, a run with an unknown reference not listed; an override equal to the design text keeps the original bytes;
-  `{{placeholders}}` in an override are plain escaped text; `t.en` optional (Arabic-only entries leave the English
-  page byte-identical; the op's `en` null / left out keeps the stored English, `''` drops it).
-- **Ask AI, Write texts, connector, draft saves (planned):** the Arabic-only rule for AI (`set_html_content` and
-  Ask AI take `{id, ar}` without English); leftovers first in Write texts; a draft save refuses only other spas'
-  file ids and tolerates the spa's own files deleted since; framed pages get the title / description overrides in
-  their metadata; template content localised (its `/files` values copied) like the design's other files.
+  / style attributes (raw in `<style>` bodies), and character references refused in picture URLs (a pasted `&amp;`
+  read as `&` first; `$` allowed again, core `htmlImageUrl`); a text is script-bound only where the design's JS
+  writes it (`scriptTextIds`, one pass per script, timing-tested on 1 MB scripts; `#id` descendant / child
+  selectors, child access, `append` / `replaceChildren` / `insertAdjacentHTML`, looped id arrays and holder objects
+  count; listener / read-only ids and `#id + / ~` siblings stay editable) and says by what (`boundBy` `crm` on a
+  contract design — `CRM_DATA` literal or crm-endpoint meta — or for `data-crm*`, `script` only without a contract;
+  op errors "filled from the CRM — change it in the CRM" / "filled by the design's script — change it in the design
+  file (patch_html_design)"); common named references decoded, U+00A0 kept, a run with an unknown reference not
+  listed; an override equal to the design text keeps the original bytes; `{{placeholders}}` in an override are
+  plain escaped text; `t.en` optional (Arabic-only entries leave the English page byte-identical; the op's `en` null
+  / left out keeps the stored English, `''` drops it); leftovers skip a design text only when its entry has
+  non-blank English; `htmlContentView` with a clip marks cut texts / values `cut: true` + their full `length`.
+- **Ask AI, Write texts, connector, draft saves:** the Arabic-only rule for AI (`set_html_content` and Ask AI take
+  `{id, ar}` without English, and data values `{t: {ar}}`: the stored English, else the design's, is kept; `en: ''`
+  = the design's English); an AI never writes a `cut` entry (HTML_CONTENT_RULES, get / set_html_content
+  descriptions): Ask AI's dry run and Apply pass `runSiteEdit({htmlContent: {clip: 160}})`, which drops such
+  entries — and any entry that doesn't fit (unknown / bound id, cut-short copy, bad value, foreign file) — with a
+  note instead of failing the op; the connector's `get_html_content` `ids` (≤ 50) returns entries whole so they can
+  be read before translating; a cut-short English copy is refused, the whole design text echoed (one ending in "…"
+  itself) is not; leftovers first in Write texts; a draft save refuses malformed ids, private and other spas' file
+  ids and tolerates the spa's own files deleted since; framed pages get the title / description overrides in their
+  metadata; template content localised (its `/files` values copied) on apply like the design's other files, and
+  scrubbed on "Save site as template" (§2 item 4).
 - **Editor:** an Arabic-only edit stores `{ar}` (never the listed design text as English); bound texts are worded
   by `boundBy`; data-slot pictures / videos are stored only as a complete `/files/…` or https link (inline hint).
 - **E2E (`html-crm.spec.ts` "R28 P4"):** the leftover list names the heading before the edit and drops it after;
   the page title is reset with its "Design" button (canvas title back) and set again; an Arabic-only button text
   shows on `?lang=ar` next to the English fallback of an English-only text, while the English page keeps the
-  design's words.
+  design's words; the contract fixture's script-written text reads "Filled by the design from the CRM (#spa)".
+  `site-mcp.spec.ts`: the script-bound error names `patch_html_design`.
 - **Docs:** PLAN §14.8 owner note — empty `{id, src}` adjustments (an image card opened without changes) also lose
   the forced cover / centred; this phase row.

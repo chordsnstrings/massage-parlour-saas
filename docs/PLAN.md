@@ -1225,8 +1225,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   a BE RELAX-size page are ~60–70 KB); draft saves now check website content (shape + no other spa's files; the
   spa's own files deleted since are tolerated; entries the design no longer has are kept and skipped; the editor
   stores a picture / video link only once it is a complete `/files/…` or https one). A text can be set in Arabic only:
-  the English page keeps the design's own words. Not in P4: `<input value>` / `og:*` texts, content copies on
-  template apply / save (P5).
+  the English page keeps the design's own words. **Review fixes (2026-10-13):** framed pages take the title / search
+  description overrides in their metadata; a template's website content is copied into the spa on apply (its
+  `/files`) and scrubbed on "Save site as template" (contact details, the spa's name → `{{spa_name}}`, the spa's own
+  uploaded pictures dropped); texts the design's script writes are read-only, worded "from the CRM" on contract
+  designs; Ask AI never writes a text it saw cut short (dropped with a note) and the connector can read such texts
+  whole first. Not in P4: `<input value>` / `og:*` texts.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

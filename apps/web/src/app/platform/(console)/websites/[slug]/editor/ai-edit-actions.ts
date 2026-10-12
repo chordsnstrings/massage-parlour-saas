@@ -38,6 +38,11 @@ import { revalidateStudio } from '@/server/studio'
  */
 
 const MAX_PAGE_BYTES = 512 * 1024
+/**
+ * R28 P4: design texts in the AI's content view are cut at this many characters; the ops layer drops (with a note)
+ * whatever the AI writes for a cut one, and any other content entry that doesn't fit, in the preview and the apply.
+ */
+const CONTENT_CLIP = 160
 const uuid = z.string().uuid()
 const DESIGN_NEEDED = "Layout and theme changes need the 'Edit design' permission."
 
@@ -109,7 +114,11 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
       html:
         html === null
           ? undefined
-          : htmlContentView(html, design?.props?.content, { clip: 160, limit: 300, bound: false }),
+          : htmlContentView(html, design?.props?.content, {
+              clip: CONTENT_CLIP,
+              limit: 300,
+              bound: false,
+            }),
     }
   })
   if (!loaded.page || !loaded.site) return fail('Page not found')
@@ -149,6 +158,7 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
         ops,
         dryRun: true,
         base: Object.fromEntries([[pageId, data]]),
+        htmlContent: { clip: CONTENT_CLIP },
       },
       deps(ctx),
     ),
@@ -202,6 +212,7 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
           ops,
           dryRun: false,
           base: Object.fromEntries([[pageId, parsed.data.data]]),
+          htmlContent: { clip: CONTENT_CLIP },
         },
         deps(ctx),
       )

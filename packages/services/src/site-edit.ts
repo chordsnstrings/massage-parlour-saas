@@ -74,7 +74,8 @@ const place = {
   index: z.number().int().min(0).max(500).nullish(),
 }
 const text = z.object({ en: z.string().trim().min(1).max(80), ar: z.string().trim().max(80).nullish() })
-const contentText = z.object({ en: z.string().max(2000), ar: z.string().max(2000).nullish() })
+// No en (null / left out): Arabic only — the stored English stays, else the design's; '' = the design's English.
+const contentText = z.object({ en: z.string().max(2000).nullish(), ar: z.string().max(2000).nullish() })
 // A page text may carry Arabic only (no en: the spa's English override stays, else the design's English).
 const pageText = z.object({ en: z.string().max(2000).nullish(), ar: z.string().max(2000).nullish() })
 const contentTags = z.array(z.string().max(200)).max(20)
@@ -247,9 +248,27 @@ const dubaiStamp = (now = new Date()) => {
   return `${p.date} ${String(Math.floor(p.minutes / 60)).padStart(2, '0')}:${String(p.minutes % 60).padStart(2, '0')}`
 }
 
-/** A content value as stored: nulls the client sent for unused fields dropped. */
-function contentValue(v: z.infer<typeof HtmlContentValueSchema>): HtmlContentValue {
-  if ('t' in v) return { t: v.t.ar == null ? { en: v.t.en } : { en: v.t.en, ar: v.t.ar } }
+/**
+ * A content value as stored: nulls the client sent for unused fields dropped. A text without en keeps the stored
+ * English (`prev`), else the design's (`design`): Arabic only. en '' = the design's English; with no Arabic either,
+ * 'reset' (back to the design's own value). null = a text with neither.
+ */
+function contentValue(
+  v: z.infer<typeof HtmlContentValueSchema>,
+  prev: HtmlContentValue | undefined,
+  design: unknown,
+): HtmlContentValue | 'reset' | null {
+  if ('t' in v) {
+    const ar = v.t.ar?.trim() ? v.t.ar : null
+    const own = typeof design === 'string' ? design : ''
+    if (v.t.en == null)
+      return ar
+        ? { t: { en: prev && 't' in prev && typeof prev.t.en === 'string' ? prev.t.en : own, ar } }
+        : null
+    if (v.t.en === '' && !ar) return 'reset'
+    const en = v.t.en || own
+    return { t: v.t.ar == null ? { en } : { en, ar: v.t.ar } }
+  }
   if ('tags' in v) return { tags: v.tags.ar == null ? { en: v.tags.en } : { en: v.tags.en, ar: v.tags.ar } }
   return v
 }
@@ -260,13 +279,18 @@ class OpFail extends Error {}
 /**
  * Ask AI and the connector see long design texts cut short (core `htmlContentView`: the first n characters + '…'): an
  * English value copied from there would cut the English page short. At least 100 characters before the '…' (the
- * views cut at 160 / 400), so a short teaser written on purpose still passes.
+ * views cut at 160 / 400), so a short teaser written on purpose still passes. Compared with HTML whitespace collapsed
+ * (as the page-text listing does; U+00A0 kept).
  */
+const collapse = (s: string) => s.replace(/[ \t\n\f\r]+/g, ' ').trim()
 const clippedCopy = (en: string | null | undefined, full: unknown) => {
-  const s = en?.trim() ?? ''
-  if (!s.endsWith('…') || typeof full !== 'string') return false
+  if (typeof full !== 'string') return false
+  const s = collapse(en ?? '')
+  const f = collapse(full)
+  // The whole design text echoed back (one that itself ends with "…") is no cut copy.
+  if (!s.endsWith('…') || s === f) return false
   const head = s.slice(0, -1).trimEnd()
-  return head.length >= 100 && head.length < full.length && full.startsWith(head)
+  return head.length >= 100 && head.length < f.length && f.startsWith(head)
 }
 const CUT_SHORT = `the English is the design's text cut short (it ends with "…")`
 
@@ -371,6 +395,12 @@ export async function runSiteEdit(
     ops: unknown[]
     dryRun: boolean
     base?: Record<string, unknown>
+    /**
+     * Studio Ask AI (R28 P4): its content view cut design texts longer than `clip` characters (core `htmlContentView`
+     * `cut`). html_content entries for those (the AI saw only part of them) and entries that don't fit (unknown or
+     * bound ids, a cut-short copy, a bad value or file) are dropped with a note in `summary`, not the whole op.
+     */
+    htmlContent?: { clip: number }
   },
   deps: SiteEditDeps,
 ): Promise<SiteEditResult> {
@@ -591,11 +621,11 @@ export async function runSiteEdit(
               `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
             )
           const literal = htmlCrmContractOf(source)?.literal
-          const n = Object.keys(op.set ?? {}).length
+          const setCount = Object.keys(op.set ?? {}).length
           const resets = op.reset === 'all' ? null : (op.reset ?? [])
           if (
             !literal &&
-            !n &&
+            !setCount &&
             !op.texts?.length &&
             !op.pictures?.length &&
             !(resets === null || resets.length)
@@ -603,7 +633,7 @@ export async function runSiteEdit(
             throw new OpFail(
               `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA, so its words and pictures live in the file — use html_patch`,
             )
-          if (!literal && n)
+          if (!literal && setCount)
             throw new OpFail(
               `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA: change its page texts and pictures with texts / pictures, or the file with html_patch`,
             )
@@ -621,48 +651,138 @@ export async function runSiteEdit(
               else delete parts.values[k]
             }
           const slots = literal ? htmlContentSlots(literal.data) : []
-          if (n) {
+          // Ask AI: an entry that doesn't fit is dropped with a note (`skipped`); elsewhere it fails the op.
+          const lenient = input.htmlContent
+          const skipped: string[] = []
+          const refuse = (msg: string) => {
+            if (!lenient) throw new OpFail(`${at}: ${msg}`)
+            skipped.push(msg)
+          }
+          // Ask AI: the op's /files that are not this spa's public files (one read).
+          const gone = lenient
+            ? new Set(
+                await missingContentFiles(
+                  tx,
+                  input.tenantId,
+                  htmlContentFileIds({
+                    v: 1,
+                    values: Object.entries(op.set ?? {}).map(([path, value]) => ({ path, value })),
+                    pictures: (op.pictures ?? []).map((p) => ({ id: p.id, src: '', img: p.img })),
+                  }),
+                ),
+              )
+            : null
+          /** Ask AI: one entry's own problem (checked alone; the whole content is checked below) or foreign file. */
+          const entryProblem = (c: HtmlDesignContent) => {
+            if (!gone) return null
+            const own = htmlContentErrors(c, c.values ? slots : null)[0]
+            if (own) return own
+            const file = htmlContentFileIds(c).find((x) => gone.has(x))
+            return file ? `/files/${file} is not one of this spa's pictures` : null
+          }
+          const cut = (full: unknown) =>
+            lenient && typeof full === 'string' && !full.startsWith('data:') && full.length > lenient.clip
+          const CUT_VIEW = `the AI saw only the first ${lenient?.clip} characters of the design's text — change it in Website content`
+          let n = 0
+          if (setCount) {
             const design = new Map(slots.map((x) => [x.path, x.value]))
             for (const [k, v] of Object.entries(op.set ?? {})) {
-              if ('t' in v && clippedCopy(v.t.en, design.get(k)))
-                throw new OpFail(`${at}: ${k}: ${CUT_SHORT} — send the whole English text`)
-              parts.values[k] = contentValue(v)
+              if ('t' in v && cut(design.get(k))) {
+                refuse(`${k}: ${CUT_VIEW}`)
+                continue
+              }
+              if ('t' in v && clippedCopy(v.t.en, design.get(k))) {
+                refuse(`${k}: ${CUT_SHORT} — to add Arabic send only ar, or send the whole English text`)
+                continue
+              }
+              const value = contentValue(v, parts.values[k], design.get(k))
+              if (!value) {
+                refuse(`${k}: send en or ar`)
+                continue
+              }
+              if (value === 'reset') {
+                delete parts.values[k]
+                reset++
+                continue
+              }
+              const problem = entryProblem({ v: 1, values: [{ path: k, value }] })
+              if (problem) {
+                refuse(problem)
+                continue
+              }
+              parts.values[k] = value
+              n++
             }
           }
+          let texts = 0
           if (op.texts?.length) {
             const listed = new Map(listHtmlDesignTexts(source).map((x) => [x.id, x]))
             for (const e of op.texts) {
               const x = listed.get(e.id)
-              if (!x)
-                throw new OpFail(`${at}: no page text "${e.id}" in this design — get_html_content lists them`)
-              if (x.bound)
-                throw new OpFail(
+              if (!x) {
+                refuse(`no page text "${e.id}" in this design — get_html_content lists them`)
+                continue
+              }
+              if (x.bound) {
+                refuse(
                   x.boundBy === 'script'
-                    ? `${at}: ${e.id} is filled by the design's script — change it in the design file with html_patch`
-                    : `${at}: ${e.id} is filled from the CRM — change it in the CRM`,
+                    ? `${e.id} is filled by the design's script — change it in the design file (patch_html_design)`
+                    : `${e.id} is filled from the CRM — change it in the CRM`,
                 )
-              if (clippedCopy(e.t.en, x.text))
-                throw new OpFail(
-                  `${at}: ${e.id}: ${CUT_SHORT} — to add Arabic send only ar (the design's English stays), or send the whole English text`,
+                continue
+              }
+              if (cut(x.text)) {
+                refuse(`${e.id}: ${CUT_VIEW}`)
+                continue
+              }
+              if (clippedCopy(e.t.en, x.text)) {
+                refuse(
+                  `${e.id}: ${CUT_SHORT} — to add Arabic send only ar (the design's English stays), or send the whole English text`,
                 )
+                continue
+              }
               // No en (null / left out): the current English override stays; '' = the design's English.
               const prev = parts.texts[e.id]?.src === x.src ? parts.texts[e.id]?.t.en : undefined
               const en = e.t.en ?? prev
-              parts.texts[e.id] = {
+              const entry = {
                 id: e.id,
                 src: x.src,
                 t: { ...(en?.trim() ? { en } : {}), ...(e.t.ar?.trim() ? { ar: e.t.ar } : {}) },
               }
+              const problem = entryProblem({ v: 1, texts: [entry] })
+              if (problem) {
+                refuse(problem)
+                continue
+              }
+              parts.texts[e.id] = entry
+              texts++
             }
           }
+          let pictures = 0
           if (op.pictures?.length) {
             const listed = new Map(listHtmlDesignImages(source).map((x) => [x.id, x]))
             for (const p of op.pictures) {
               const x = listed.get(p.id)
-              if (!x)
-                throw new OpFail(`${at}: no picture "${p.id}" in this design — get_html_content lists them`)
-              parts.pictures[p.id] = { id: p.id, src: x.src.slice(0, HTML_IMAGE_SRC_MAX), img: p.img }
+              if (!x) {
+                refuse(`no picture "${p.id}" in this design — get_html_content lists them`)
+                continue
+              }
+              const entry = { id: p.id, src: x.src.slice(0, HTML_IMAGE_SRC_MAX), img: p.img }
+              const problem = entryProblem({ v: 1, pictures: [entry] })
+              if (problem) {
+                refuse(problem)
+                continue
+              }
+              parts.pictures[p.id] = entry
+              pictures++
             }
+          }
+          const notes = skipped.slice(0, 5).map((s) => `${pageLabel(w)}: not changed — ${s}`.slice(0, 280))
+          if (skipped.length > 5) notes.push(`${pageLabel(w)}: ${skipped.length - 5} more not changed`)
+          if (skipped.length && !n && !texts && !pictures && !reset) {
+            // Ask AI: every entry dropped — nothing to write, only the notes.
+            summary.push(...notes)
+            break
           }
           const next = htmlContentFrom(parts)
           const problems = htmlContentErrors(next ?? { v: 1 }, slots)
@@ -675,8 +795,6 @@ export async function runSiteEdit(
           if (next) block.props.content = next
           else delete block.props.content
           w.changed = true
-          const texts = op.texts?.length ?? 0
-          const pictures = op.pictures?.length ?? 0
           const pageParts = texts || pictures || resets?.some((k) => /^(?:text|picture):/.test(k))
           const plural = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`
           summary.push(
@@ -690,6 +808,7 @@ export async function runSiteEdit(
                   .filter(Boolean)
                   .join(', ')} (the design file is unchanged)`
               : `Website content of ${pageLabel(w)}: ${plural(n, 'value')} set${reset ? `, ${reset} back to the design's` : ''} (the design file is unchanged)`,
+            ...notes,
           )
           break
         }

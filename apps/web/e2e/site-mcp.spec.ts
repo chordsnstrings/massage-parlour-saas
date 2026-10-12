@@ -473,7 +473,9 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
       texts: [{ id: 'txt-1', t: { en: 'Open now' } }],
     })
     expect(bound.isError).toBe(true)
-    expect(bound.data.error).toMatch(/txt-1 is filled by the design's script/)
+    expect(bound.data.error).toMatch(
+      /txt-1 is filled by the design's script — change it in the design file \(patch_html_design\)/,
+    )
     await ok('set_html_content', {
       page: 'texts',
       texts: [
