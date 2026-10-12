@@ -3,10 +3,13 @@ import {
   hasHtmlContent,
   htmlContentErrors,
   htmlContentFileIds,
+  htmlContentOf,
   htmlContentSlots,
   overlayHtmlContent,
 } from '../src/html-content'
 
+/** Stored content from values by path (the block stores a list, see HtmlDesignContent). */
+const c = (data: Record<string, unknown>) => htmlContentOf(data as never) ?? { v: 1 as const }
 const FILE = '/files/0b6c8a52-1d2e-4c3f-9a8b-7c6d5e4f3a21'
 
 /** A small BE RELAX-shaped design literal. */
@@ -109,24 +112,21 @@ describe('overlayHtmlContent', () => {
     const d = design()
     expect(overlayHtmlContent(d, undefined, { locale: 'en' })).toBe(d)
     expect(overlayHtmlContent(d, { v: 1 }, { locale: 'en' })).toBe(d)
-    expect(hasHtmlContent({ v: 1, data: {} })).toBe(false)
+    expect(hasHtmlContent(c({}))).toBe(false)
   })
 
   it('sets values copy-on-write, by locale, and leaves the input and untouched parts as they are', () => {
     const d = freeze(design())
     const out = overlayHtmlContent(
       d,
-      {
-        v: 1,
-        data: {
-          'journey[welcome].title': { t: { en: 'Relax in Dubai.', ar: 'استرخِ في دبي.' } },
-          'journey[welcome].image': { img: FILE },
-          'journey[welcome].tags': { tags: { en: ['Quiet'], ar: [] } },
-          'journey[book].cta': { on: false },
-          'spa.experience[1].text': { hide: true },
-          'booking.label': { t: { en: 'Request a session' } },
-        },
-      },
+      c({
+        'journey[welcome].title': { t: { en: 'Relax in Dubai.', ar: 'استرخِ في دبي.' } },
+        'journey[welcome].image': { img: FILE },
+        'journey[welcome].tags': { tags: { en: ['Quiet'], ar: [] } },
+        'journey[book].cta': { on: false },
+        'spa.experience[1].text': { hide: true },
+        'booking.label': { t: { en: 'Request a session' } },
+      }),
       { locale: 'ar', filesOrigin: 'https://zen.test' },
     ) as ReturnType<typeof design>
     expect(out.journey[0]!.title).toBe('استرخِ في دبي.')
@@ -141,11 +141,7 @@ describe('overlayHtmlContent', () => {
     expect(out.journey[0]!.body).toBe(d.journey[0]!.body)
     expect(d.journey[0]!.title).toBe('Slow down. Breathe.')
     // English, relative files when no origin.
-    const en = overlayHtmlContent(
-      d,
-      { v: 1, data: { 'journey[welcome].image': { img: FILE } } },
-      { locale: 'en' },
-    )
+    const en = overlayHtmlContent(d, c({ 'journey[welcome].image': { img: FILE } }), { locale: 'en' })
     expect((en as ReturnType<typeof design>).journey[0]!.image).toBe(FILE)
   })
 
@@ -153,21 +149,18 @@ describe('overlayHtmlContent', () => {
     const d = freeze(design())
     const out = overlayHtmlContent(
       d,
-      {
-        v: 1,
-        data: {
-          'journey[gone].title': { t: { en: 'x' } },
-          'journey[welcome].cta': { t: { en: 'yes' } },
-          'journey[welcome].title': { img: FILE },
-          'journey[welcome].image': { img: 'javascript:alert(1)' },
-          'booking.image': { img: 'data:image/png;base64,AAAA' },
-          'spa.name': { t: { en: 'Other spa' } },
-          'contact.phones': { tags: { en: ['050'] } },
-          'services[normal].note': { t: { en: 'x' } },
-          'spa.nothere': { t: { en: 'x' } },
-          'spa..x': { t: { en: 'x' } },
-        } as never,
-      },
+      c({
+        'journey[gone].title': { t: { en: 'x' } },
+        'journey[welcome].cta': { t: { en: 'yes' } },
+        'journey[welcome].title': { img: FILE },
+        'journey[welcome].image': { img: 'javascript:alert(1)' },
+        'booking.image': { img: 'data:image/png;base64,AAAA' },
+        'spa.name': { t: { en: 'Other spa' } },
+        'contact.phones': { tags: { en: ['050'] } },
+        'services[normal].note': { t: { en: 'x' } },
+        'spa.nothere': { t: { en: 'x' } },
+        'spa..x': { t: { en: 'x' } },
+      } as never),
       { locale: 'en' },
     )
     expect(out).toBe(d)
@@ -179,19 +172,16 @@ describe('htmlContentErrors', () => {
   it('accepts valid content', () => {
     expect(
       htmlContentErrors(
-        {
-          v: 1,
-          data: {
-            'journey[welcome].title': { t: { en: 'A', ar: 'ب' } },
-            'journey[welcome].image': { img: FILE },
-            'journey[welcome].accent': { t: { en: '#112233' } },
-            'journey[welcome].focus': { t: { en: '50% 30%' } },
-            'journey[welcome].tags': { tags: { en: ['x'] } },
-            'journey[book].cta': { on: true },
-            'booking.image': { img: 'https://cdn.example/a.jpg' },
-            'spa.experience_image': { hide: true },
-          },
-        },
+        c({
+          'journey[welcome].title': { t: { en: 'A', ar: 'ب' } },
+          'journey[welcome].image': { img: FILE },
+          'journey[welcome].accent': { t: { en: '#112233' } },
+          'journey[welcome].focus': { t: { en: '50% 30%' } },
+          'journey[welcome].tags': { tags: { en: ['x'] } },
+          'journey[book].cta': { on: true },
+          'booking.image': { img: 'https://cdn.example/a.jpg' },
+          'spa.experience_image': { hide: true },
+        }),
         slots,
       ),
     ).toEqual([])
@@ -200,38 +190,34 @@ describe('htmlContentErrors', () => {
 
   it('names every problem', () => {
     const errors = htmlContentErrors(
-      {
-        v: 1,
-        data: {
-          'spa.name': { t: { en: 'x' } },
-          'journey[welcome].image': { img: 'data:image/png;base64,AAAA' },
-          'journey[welcome].title': { img: FILE },
-          'journey[welcome].accent': { t: { en: 'red' } },
-          'journey[welcome].focus': { t: { en: 'top' } },
-          'journey[welcome].body': { t: { en: 'x'.repeat(2001) } },
-          'journey[book].tags': { tags: { en: Array(21).fill('x') } },
-        },
-      },
+      c({
+        'spa.name': { t: { en: 'x' } },
+        'journey[welcome].image': { img: 'data:image/png;base64,AAAA' },
+        'journey[welcome].title': { img: FILE },
+        'journey[welcome].accent': { t: { en: 'red' } },
+        'journey[welcome].focus': { t: { en: 'top' } },
+        'journey[welcome].body': { t: { en: 'x'.repeat(2001) } },
+        'journey[book].tags': { tags: { en: Array(21).fill('x') } },
+      }),
       slots,
     )
     expect(errors).toHaveLength(7)
     expect(errors[0]).toBe('spa.name: not an editable part of this design')
     expect(htmlContentErrors({ v: 2 }, slots)).toEqual(['content: unknown format'])
-    expect(
-      htmlContentErrors({ v: 1, data: { 'booking.label': { t: { en: 'x'.repeat(70_000) } } } }, slots),
-    ).toEqual(['content: more than 64 KB'])
+    expect(htmlContentErrors(c({ 'booking.label': { t: { en: 'x'.repeat(70_000) } } }), slots)).toEqual([
+      'content: more than 64 KB',
+    ])
   })
 
   it('lists the platform files it uses', () => {
     expect(
-      htmlContentFileIds({
-        v: 1,
-        data: {
+      htmlContentFileIds(
+        c({
           a: { img: FILE },
           b: { video: FILE.toUpperCase().replace('/FILES/', '/files/') },
           c: { t: { en: FILE } },
-        },
-      }),
+        }),
+      ),
     ).toEqual([FILE.slice(7)])
   })
 })

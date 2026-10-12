@@ -438,18 +438,19 @@ describe('site edit ops layer', () => {
       ])
       const view = await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me'))
       expect(view!.html).toBe(sent)
+      // Stored as a list (Puck's editor flattens block props on "."): never path-keyed objects.
       expect(view!.content).toEqual({
         v: 1,
-        data: {
-          'journey[welcome].title': { t: { en: 'Relax in Dubai' } },
-          'journey[welcome].image': { img: `/files/${mine!.id}` },
-          'journey[welcome].cta': { on: false },
-        },
+        values: [
+          { path: 'journey[welcome].title', value: { t: { en: 'Relax in Dubai' } } },
+          { path: 'journey[welcome].image', value: { img: `/files/${mine!.id}` } },
+          { path: 'journey[welcome].cta', value: { on: false } },
+        ],
       })
       await run([{ op: 'html_content', page: 'content-me', reset: ['journey[welcome].cta'] }])
-      expect(
-        Object.keys((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content!.data!),
-      ).toHaveLength(2)
+      expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content!.values).toHaveLength(
+        2,
+      )
       await run([{ op: 'html_content', page: 'content-me', reset: 'all' }])
       expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content).toBeNull()
       // A design without window.CRM_DATA: its words live in the file.

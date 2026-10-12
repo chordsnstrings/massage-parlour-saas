@@ -7,8 +7,11 @@
 import {
   dubaiParts,
   type HtmlContentValue,
+  type HtmlDesignContent,
   htmlContentErrors,
   htmlContentFileIds,
+  htmlContentMap,
+  htmlContentOf,
   htmlContentSlots,
   htmlCrmContractOf,
   htmlDesignDocOf,
@@ -484,13 +487,11 @@ export async function runSiteEdit(
             throw new OpFail(
               `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA, so its words and pictures live in the file — use html_patch`,
             )
-          const before =
-            isObj(block.props.content) && isObj(block.props.content.data) ? block.props.content.data : {}
-          const data: Record<string, HtmlContentValue> = { ...(before as Record<string, HtmlContentValue>) }
+          const data = htmlContentMap(block.props.content)
           const resets = op.reset === 'all' ? Object.keys(data) : (op.reset ?? [])
           for (const k of resets) delete data[k]
           for (const [k, v] of Object.entries(op.set ?? {})) data[k] = contentValue(v)
-          const next = { v: 1 as const, data }
+          const next = htmlContentOf(data) ?? { v: 1 as const }
           const problems = htmlContentErrors(next, htmlContentSlots(literal.data))
           if (problems.length) throw new OpFail(`${at}: ${problems.slice(0, 6).join(' · ')}`)
           const ids = htmlContentFileIds(next)
@@ -512,7 +513,7 @@ export async function runSiteEdit(
                 `${at}: /files/${missing[0]} is not one of this spa's pictures — add it with add_image first`,
               )
           }
-          if (Object.keys(data).length) block.props.content = next
+          if (next.values) block.props.content = next
           else delete block.props.content
           w.changed = true
           const n = Object.keys(op.set ?? {}).length
@@ -837,7 +838,7 @@ export type HtmlDesignView = {
   /** R26: CRM data contract (operational values come live from the CRM; don't edit them in the design), or null. */
   crm: 'literal' | 'endpoint' | null
   /** R28: the page's website content (values over the design's data), or null. */
-  content: { v: 1; data?: Record<string, HtmlContentValue> } | null
+  content: HtmlDesignContent | null
   editing: { by: string; userId: string; until: string } | null
 }
 
@@ -868,7 +869,7 @@ export async function getHtmlDesign(
     phoneFixes: htmlDesignPhoneFixes(block.props),
     images: Array.isArray(block.props.images) ? block.props.images.length : 0,
     crm: htmlCrmContractOf(html)?.mode ?? null,
-    content: isObj(block.props.content) ? (block.props.content as HtmlDesignView['content']) : null,
+    content: isObj(block.props.content) ? (block.props.content as HtmlDesignContent) : null,
     editing: lock ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() } : null,
   }
 }

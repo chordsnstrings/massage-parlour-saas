@@ -9,7 +9,13 @@
 // unless phone_fixes) and add_image (F32 SSRF-safe fetch into the media library). Still nothing publishes.
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { htmlContentSlots, htmlCrmContractOf, htmlDesignEmbedWarning, MAX_HTML_UPLOAD_BYTES } from '@spa/core'
+import {
+  htmlContentMap,
+  htmlContentSlots,
+  htmlCrmContractOf,
+  htmlDesignEmbedWarning,
+  MAX_HTML_UPLOAD_BYTES,
+} from '@spa/core'
 import {
   auditLog,
   type Db,
@@ -870,7 +876,7 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
           note: 'This design has no window.CRM_DATA: its words and pictures are in the file — use get_html_design / patch_html_design.',
         }
       const group = typeof a.group === 'string' ? a.group : ''
-      const set = view.content?.data ?? {}
+      const set = htmlContentMap(view.content)
       const summarise = (v: unknown) =>
         typeof v === 'string' && v.startsWith('data:')
           ? `embedded ${v.slice(5, v.indexOf(';') > 0 ? v.indexOf(';') : 20)}, ${Math.round((v.length * 3) / 4 / 1024)} KB`

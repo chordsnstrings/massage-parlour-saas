@@ -576,7 +576,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     unique `id`, else index —, kind from key + value), `overlayHtmlContent` (copy-on-write, locale pick AR → EN, stale
     paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors` (save time:
     slots, kinds, ≤ 2000 chars, ≤ 64 KB, pictures `/files/{uuid}` or https only), `htmlContentFileIds`. Stored as the
-    HtmlDesign block prop `content` (`{v: 1, data}`, no Puck default; draft → publish with the page). Render:
+    HtmlDesign block prop `content` = `{v: 1, values: [{path, value}]}` (`htmlContentMap` / `htmlContentOf`; never an
+    object keyed by path — Puck flattens block props on "." with the `flat` package and would split such keys; no Puck
+    default; draft → publish with the page). Render:
     `designWithCrm(…, {content, locale})` overlays before `mergeCrmContract` (output cache key + locale + content
     hash; none → R26's key). Writes: site-edit op `html_content` (`set` / `reset` / `'all'`; checks slots against the
     stored design and that pictures are this spa's public `stored_files`) — connector `get_html_content` /

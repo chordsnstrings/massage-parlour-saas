@@ -14,10 +14,26 @@ export type HtmlContentValue =
   | { video: string }
   | { on: boolean }
   | { hide: true }
-export type HtmlDesignContent = {
-  v: 1
-  /** Design data values by slot path (`journey[welcome].title`, `spa.experience[1].text`, `booking.label`). */
-  data?: Record<string, HtmlContentValue>
+/** One stored value: the slot path (`journey[welcome].title`, `spa.experience[1].text`, `booking.label`) + its value. */
+export type HtmlContentEntry = { path: string; value: HtmlContentValue }
+/**
+ * Stored on the HtmlDesign block. A list, never an object keyed by path: Puck's editor flattens block props on `.`
+ * (the `flat` package) and would split such keys into nested objects.
+ */
+export type HtmlDesignContent = { v: 1; values?: HtmlContentEntry[] }
+
+/** The stored values by path (later entries win; malformed ones skipped). */
+export function htmlContentMap(content: unknown): Record<string, HtmlContentValue> {
+  const out: Record<string, HtmlContentValue> = {}
+  const list = isObj(content) && Array.isArray(content.values) ? content.values : []
+  for (const e of list)
+    if (isObj(e) && typeof e.path === 'string' && isObj(e.value)) out[e.path] = e.value as HtmlContentValue
+  return out
+}
+/** Values by path as stored content; undefined when there is none. */
+export function htmlContentOf(map: Record<string, HtmlContentValue>): HtmlDesignContent | undefined {
+  const values = Object.entries(map).map(([path, value]) => ({ path, value }))
+  return values.length ? { v: 1, values } : undefined
 }
 export type HtmlContentKind = 'text' | 'longtext' | 'tags' | 'image' | 'video' | 'bool' | 'focus' | 'color'
 export type HtmlContentSlot = {
@@ -213,7 +229,7 @@ export function overlayHtmlContent(
   content: HtmlDesignContent | null | undefined,
   opts: { locale: CrmLocale; filesOrigin?: string },
 ): Record<string, unknown> {
-  const entries = isObj(content?.data) ? Object.entries(content.data) : []
+  const entries = Object.entries(htmlContentMap(content))
   let root = data
   for (const [path, v] of entries) {
     const segs = parsePath(path)
@@ -228,16 +244,18 @@ export function overlayHtmlContent(
 
 /** Whether a content object sets anything. */
 export const hasHtmlContent = (content: HtmlDesignContent | null | undefined): boolean =>
-  isObj(content?.data) && Object.keys(content.data).length > 0
+  Object.keys(htmlContentMap(content)).length > 0
 
 /** Save-time check of a spa's content against its design's slots: [] = fine, else readable problems. */
 export function htmlContentErrors(content: unknown, slots: HtmlContentSlot[]): string[] {
   if (content === undefined || content === null) return []
   if (!isObj(content) || content.v !== 1) return ['content: unknown format']
-  const data = content.data
-  if (data === undefined) return []
-  if (!isObj(data)) return ['content: data must be an object']
+  if (content.values === undefined) return []
+  if (!Array.isArray(content.values)) return ['content: values must be a list']
+  if (content.values.some((e) => !isObj(e) || typeof e.path !== 'string'))
+    return ['content: every value needs a path']
   if (JSON.stringify(content).length > HTML_CONTENT_LIMITS.bytes) return ['content: more than 64 KB']
+  const data = htmlContentMap(content)
   const bySlot = new Map(slots.map((s) => [s.path, s]))
   const errors: string[] = []
   const textOk = (s: unknown) => typeof s === 'string' && s.length <= HTML_CONTENT_LIMITS.text
@@ -290,7 +308,7 @@ export function htmlContentErrors(content: unknown, slots: HtmlContentSlot[]): s
 /** The platform files (`/files/{uuid}` ids) a content object uses: the save checks they are this spa's. */
 export function htmlContentFileIds(content: HtmlDesignContent | null | undefined): string[] {
   const ids = new Set<string>()
-  for (const v of Object.values(isObj(content?.data) ? content.data : {})) {
+  for (const v of Object.values(htmlContentMap(content))) {
     const url = isObj(v) ? ('img' in v ? v.img : 'video' in v ? v.video : null) : null
     const m = typeof url === 'string' ? /^\/files\/([0-9a-f-]{36})$/i.exec(url) : null
     if (m) ids.add(m[1]!.toLowerCase())
