@@ -107,6 +107,23 @@ The stored file never changes. With no content set, the output is the very same 
   It also shows as a non-blocking warning in `publishCheckedAction` and `PublishSiteSheet`.
 - **Spa page card** (`websites/[slug]/cards.tsx`): "Website content: N changes · M leftovers", plus "Edit content" and "Fill CRM from design". `ResolveRequestSheet` links straight to the field a change request is about.
 
+**As built (P4, 2026-10-12)** — the editor part, where it differs from the plan above:
+- One field file (`html-content-field.tsx`) plus `html-content-labels.ts` (labels shared with the publish sheet, and
+  the page-text / picture listing cached per stored document, last 4) instead of the `html-content/` folder.
+- **Page texts** on every design (with or without `CRM_DATA`; without it the CRM groups are hidden and a note says
+  why): searchable, grouped by section with the page title + search description first, 200 rows at a time, rows
+  only while open (open by default only without CRM groups). Each unbound text is a bilingual field named by kind +
+  the design's words ("Heading: Our rituals") with a "Design" reset and the design text as hint; CRM-filled texts
+  are read-only ("Filled by the design from the CRM", "Go to field" for a `data-crm` slot). English is required: an
+  Arabic-only text keeps the design's English. Outdated entries (the design changed there) show with Remove.
+- **Pictures:** one URL / media-library field per design picture (replace-only, `/files` or https; the template's
+  framing kept), not the `HtmlImageAdjuster`; a picture's description is its `alt` page text.
+- Leftovers cover page texts and outdated entries and jump to their row. The editor's publish sheet shows them as a
+  non-blocking "Website content checks" section (first 5, "Open Website content" selects the block); the console
+  `PublishSiteSheet` warning and the spa page card are not in P4.
+- Template adjuster (`templates/html-images.tsx`): Fill / Fit shows as chosen only for framed entries, and leaving
+  the URL field untouched no longer adds an empty entry.
+
 ## 4. Filling the CRM on apply (preview, then confirm)
 
 - **Matching** (`packages/core/src/html-crm-seed.ts`): `crmMatchScore` = exact `crmName`/`crmSlug` match, plus number words (4 ↔ four), a shared prefix of at least 5 letters (moroccan ↔ morocco) and token Jaccard ≥ 0.5.
