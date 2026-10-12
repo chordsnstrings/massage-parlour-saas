@@ -548,8 +548,21 @@ export function htmlContentLeftovers(
   const designNames = own ? [] : [spa.name, spa.short_name].map(crmName).filter((n) => n.length >= 3)
   const city = crmName(ctx.city)
   const out: HtmlContentLeftover[] = []
+  /** A set value whose English is still the design's (an Arabic-only edit keeps it): its English is checked too. */
+  const designEnglish = (v: HtmlContentValue | undefined, design: unknown) => {
+    if (!isObj(v)) return false
+    const flat = (x: unknown) =>
+      (Array.isArray(x) ? x.join(' · ') : String(x ?? '')).replace(/\s+/g, ' ').trim()
+    if ('t' in v) return flat(v.t.en) === flat(design)
+    if ('tags' in v) return flat(v.tags.en) === flat(design)
+    return false
+  }
   for (const slot of slots) {
-    if (set[slot.path] || !['text', 'longtext', 'tags'].includes(slot.kind)) continue
+    if (
+      (set[slot.path] && !designEnglish(set[slot.path], slot.value)) ||
+      !['text', 'longtext', 'tags'].includes(slot.kind)
+    )
+      continue
     const raw = Array.isArray(slot.value) ? slot.value.join(' · ') : String(slot.value ?? '')
     if (!raw.trim()) continue
     const reason = leftoverReason(raw, designNames, city)

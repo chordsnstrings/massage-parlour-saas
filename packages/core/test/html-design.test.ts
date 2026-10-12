@@ -692,7 +692,7 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
       ['Book', true, 'crm', 'data-book-service'],
       ['Mon–Sun', true, by, '#hours'],
       ['Free text', false, '', ''],
-      ['Promo', true, by, '#promo'], // `#promo .x` is written: inside #promo, so bound (when unsure, bound)
+      ['Promo', false, '', ''], // `#promo .x` writes a child of #promo, never #promo's own texts
       ['Literal only', false, '', ''],
     ]
     expect(rows(html)).toEqual(expected('crm'))
@@ -755,14 +755,16 @@ $('#jq').text('x')
     expect(Date.now() - t).toBeLessThan(2000)
   })
 
-  it('bound where the script writes the text in other ways: #id + descendant selector, child access, replaceChildren / append / prepend / insertAdjacentHTML, iterated id arrays, holder objects; listener-only and sibling-selector ids stay editable', () => {
+  it('bound where the script replaces the text: replaceChildren, iterated id arrays, holder objects; writes to a child (#id span, child access), appends and listener-only ids stay editable', () => {
     const html = `<html><head><title>T</title></head><body>
 <p id="sel"><span>Selector child</span></p><p id="chain"><b>Chained child</b></p><ul id="kids"><li>Kid</li></ul>
 <div id="q"><i>Query child</i></div><p id="rc">Replaced</p><p id="ap">Appended</p><p id="pp">Prepended</p>
 <p id="ia">Inserted</p><p id="arr1">Array one</p><p id="arr2">Array two</p><p id="loop1">Loop one</p>
 <p id="vl">Var loop</p><p id="hold">Holder</p><p id="self">This holder</p><p id="sibling">Sibling only</p>
 <p id="listen">Listener</p><p id="unused-arr">Unused array</p><p id="opt">Optional</p>
+<footer id="footer"><p>© <span class="year">2024</span> Call +971 50 123 4567</p><a>Privacy policy</a></footer>
 <script>
+document.querySelector('#footer .year').textContent = new Date().getFullYear()
 document.querySelector('#sel span').textContent = 'x'
 document.getElementById('chain').firstElementChild.textContent = 'x'
 document.getElementById('kids').children[0].innerText = 'x'
@@ -787,29 +789,40 @@ o?.replaceChildren()
     const list = listHtmlDesignTexts(html)
     expect(list.filter((x) => x.bound).map((x) => [x.text, x.boundBy, x.binding])).toEqual(
       [
-        ['Selector child', 'sel'],
-        ['Chained child', 'chain'],
-        ['Kid', 'kids'],
-        ['Query child', 'q'],
         ['Replaced', 'rc'],
-        ['Appended', 'ap'],
-        ['Prepended', 'pp'],
-        ['Inserted', 'ia'],
         ['Array one', 'arr1'],
         ['Array two', 'arr2'],
         ['Loop one', 'loop1'],
         ['Var loop', 'vl'],
         ['Holder', 'hold'],
-        ['This holder', 'self'],
         ['Optional', 'opt'],
       ].map(([text, id]) => [text, 'script', `#${id}`]),
     )
     expect(list.filter((x) => !x.bound).map((x) => x.text)).toEqual([
       'T',
+      'Selector child',
+      'Chained child',
+      'Kid',
+      'Query child',
+      'Appended',
+      'Prepended',
+      'Inserted',
+      'This holder',
       'Sibling only',
       'Listener',
       'Unused array',
+      '©',
+      '2024',
+      'Call +971 50 123 4567',
+      'Privacy policy',
     ])
+  })
+
+  it('linear on long child-accessor chains', () => {
+    const html = `<p id="a">A</p><script>a${'.firstChild'.repeat(40_000)}.textContent = 1</script>`
+    const t = performance.now()
+    listHtmlDesignTexts(html)
+    expect(performance.now() - t).toBeLessThan(150)
   })
 
   it('linear: 3000 element variables and a 1 MB script are read in one pass each', () => {

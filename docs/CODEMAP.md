@@ -593,10 +593,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     section/header/nav/footer/main/aside/article/form/dialog by aria-label > first heading > id > "Section n"; `bound`
     (listing only) + `boundBy`: 'crm' = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor
     (attributes too); script-written = text runs inside an element whose text the design's JS writes (`scriptTextIds`,
-    one pass per script: `getElementById('x')` / `querySelector('#x…')` (also `#x span`, `#x > b`, `#x.on`; not `#x +`
-    / `~`) / `$('#x')`, child access (`.children[n]`, `.firstElementChild`, `.querySelector`, jQuery `.find` / `.eq`)
-    + `.textContent` / `.innerText` / `.innerHTML` / `replaceChildren` / `append(Child)` / `prepend` /
-    `insertAdjacentHTML` / jQuery `.text(v)`, directly, via a variable, a helper, an id array looped with `.forEach` /
+    one pass per script: `getElementById('x')` / `querySelector('#x')` (one compound: `#x.on`; never `#x span`) /
+    `$('#x')` + `.textContent` / `.innerText` / `.innerHTML` / `.outerHTML` / `replaceChildren` / jQuery `.text(v)` /
+    `.html(v)` (text replaced; appending nodes or writing a child never binds the element's own texts), directly, via a variable, a helper, an id array looped with `.forEach` /
     `.map` / `for…of`, or a holder object (`els.x.textContent`); never attributes; listener / read-only ids stay
     editable; the CRM_DATA literal not read) and `document.title =` for the title: `boundBy` 'crm' on a contract design
     (`CRM_DATA` literal or crm-endpoint meta), 'script' only without one; op errors "filled from the CRM — change it in
@@ -733,7 +732,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     align, replace}); applied by `applyHtmlImageAdjustments`: framed only when fit / x / y / align is set
     (`htmlImageFramed`, R28 P4): `data-spa-img` attr + `!important` rules at the end, background position/size
     appended after the declaration; a replacement alone only swaps the URL; replace URL must match `HTML_IMAGE_URL`
-    (https or site path; no `$` / character references; inserted by replacer functions, `&` escaped in src / srcset /
+    (https or site path; `$` allowed, character references refused (a pasted `&amp;` is read as `&`); inserted by replacer functions, `&` escaped in src / srcset /
     style attributes, not in `<style>` bodies; srcset dropped; inside `<picture>` every `<source srcset>` takes it too); of several entries
     with one id the last whose src still matches applies. UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
     client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview, honours Phone fixes); saved with the upload (hidden

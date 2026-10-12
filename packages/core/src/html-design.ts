@@ -806,22 +806,22 @@ const collapse = (s: string) => s.replace(/[ \t\n\f\r]+/g, ' ').trim()
 const JS_ID = String.raw`[A-Za-z_$][\w$]{0,63}`
 /** A one-line quoted JS string of at most 200 characters. */
 const JS_STR = String.raw`(?:'[^'\n]{0,200}'|"[^"\n]{0,200}"|\`[^\`]{0,200}\`)`
-/** Child access between an element and its text write (`.firstElementChild`, `.children[n]`, `.querySelector('…')`, jQuery `.find('…')` …). */
-const JS_CHILD = String.raw`\s*\??\.\s*(?:(?:first|last)(?:Element)?Child\b|(?:children|childNodes)\s*\[[^\]\n]{0,40}\]|querySelector(?:All)?\s*\(\s*${JS_STR}\s*\)(?:\s*\[[^\]\n]{0,40}\])?|find\s*\(\s*${JS_STR}\s*\)|(?:children|first|last)\s*\(\s*\)|eq\s*\(\s*\d{1,4}\s*\))`
 /**
- * After an element expression: its text written (`.textContent` / `.innerText` / `.innerHTML` / `.outerHTML`
- * assigned, jQuery `.text(v)` / `.html(v)`, `.replaceChildren(` / `.append(` / `.appendChild(` / `.prepend(` / `.insertAdjacentHTML(`).
+ * After an element expression: its text replaced (`.textContent` / `.innerText` / `.innerHTML` / `.outerHTML`
+ * assigned, jQuery `.text(v)` / `.html(v)`, `.replaceChildren(`). Adding nodes (`append` / `prepend` /
+ * `insertAdjacentHTML` …) and writes to a child (`.firstElementChild…`, `#x span`) never bind the element: its own
+ * texts stay the design's and stay editable.
  */
-const TEXT_WRITE = String.raw`\s*\??\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)|(?:text|html)\s*\(\s*[^)\s]|(?:replaceChildren|append(?:Child)?|prepend|insertAdjacent(?:HTML|Text))\s*\()`
-const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)(?:${JS_CHILD})*${TEXT_WRITE}`)
-/** The call's element (or a child of it) kept: the statement, list item or object entry ends. */
-const KEPT_AFTER_CALL = new RegExp(String.raw`^\s*\)(?:${JS_CHILD})*\s*(?:[;,\n})]|\|\||\?\?|$)`)
+const TEXT_WRITE = String.raw`\s*\??\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)|(?:text|html)\s*\(\s*[^)\s]|replaceChildren\s*\()`
+const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)${TEXT_WRITE}`)
+/** The call's element kept: the statement, list item or object entry ends. */
+const KEPT_AFTER_CALL = /^\s*\)\s*(?:[;,\n})]|\|\||\?\?|$)/
 const ANY_WRITE = new RegExp(TEXT_WRITE)
-/** Every text write's receiver (`el` / `els.p` / `this.p`, child access allowed in between): one pass per script. */
-const WRITE_TARGET = new RegExp(
-  String.raw`(?<![\w$])(${JS_ID})(?:\s*\??\.\s*(${JS_ID}))?(?:${JS_CHILD})*${TEXT_WRITE}`,
-  'g',
-)
+/** Every text write's receiver (`el` / `els.p` / `this.p`): one pass per script. */
+const WRITE_TARGET = new RegExp(String.raw`(?<![\w$])(${JS_ID})(?:\s*\??\.\s*(${JS_ID}))?${TEXT_WRITE}`, 'g')
+/** `a.firstElementChild.textContent`: a child's text, not `a`'s (no binding). */
+const CHILD_PROP =
+  /^(?:(?:first|last)(?:Element)?Child|children|childNodes|nextElementSibling|previousElementSibling|nextSibling|previousSibling|parentNode|parentElement)$/
 /** `.forEach(` …: an array (`['a', 'b']` / `ids` before it) iterated with a callback. */
 const ITERATE = /\.\s*(?:forEach|map|flatMap|filter|some|every|reduce)\s*\(/g
 /** `for (const id of ids)` / `for (const id of [`. */
@@ -846,11 +846,8 @@ const ARROW_PARAM = new RegExp(String.raw`\(\s*(${JS_ID})(?![\w$])`, 'y')
 const MAX_ITERATED = 1000
 /** What a JS scan stops at: comments / division, strings, brackets. */
 const JS_SCAN = /[/'"`[\]]/g
-/**
- * The id a string names: `x` / `#x`, or a selector whose first compound is `#x` (`#x.on`, `#x:hover`) at its end or
- * before a descendant / child combinator or a comma (`#x span`, `#x > b`: the written element is inside `#x`).
- */
-const ID_LITERAL = /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:[][^\s>+~,]{0,200})?(?:$|\s*[>,]|\s+(?![\s+~]))/
+/** The id a string names: `x` / `#x`, or a one-compound selector on it (`#x.on`, `#x:hover`); never `#x span`. */
+const ID_LITERAL = /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:[][^\s>+~,]{0,200})?$/
 const reText = (s: string) => s.replace(/[$]/g, '\\$')
 const isIdCode = (c: number) =>
   (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36
@@ -934,23 +931,21 @@ function jsBody(js: string, at: number) {
 function writesThrough(body: string, p: string, helpers: Set<string>) {
   const q = reText(p)
   const by = String.raw`[\w$]{1,64}\s*\(\s*(?:${q}|['"]#['"]\s*\+\s*${q}|\`#\$\{\s*${q}\s*\}\`)\s*\)`
-  if (new RegExp(`${by}(?:${JS_CHILD})*${TEXT_WRITE}`).test(body)) return true
+  if (new RegExp(`${by}${TEXT_WRITE}`).test(body)) return true
   const kept = new RegExp(
     String.raw`(?<![\w$.])(${JS_ID})\s*=(?!=)\s*(?:[\w$]{1,64}\s*\??\.\s*){0,4}${by}`,
     'g',
   )
   for (const m of body.matchAll(kept))
-    if (new RegExp(String.raw`(?<![\w$.])${reText(m[1]!)}(?:${JS_CHILD})*${TEXT_WRITE}`).test(body))
-      return true
+    if (new RegExp(String.raw`(?<![\w$.])${reText(m[1]!)}${TEXT_WRITE}`).test(body)) return true
   for (const m of body.matchAll(new RegExp(String.raw`(?<![\w$.])(${JS_ID})\s*\(\s*${q}\s*[,)]`, 'g')))
     if (helpers.has(m[1]!)) return true
   return false
 }
 
 /**
- * Ids whose text the design's scripts write (the bound heuristic; when unsure, bound): `getElementById('x')` /
- * `querySelector('#x')` / `querySelector('#x span')` / `$('#x')` with a text write right after the call (child
- * access allowed in between), kept in a variable or a holder object property (`{x: …}`, `this.x = …`) that gets one,
+ * Ids whose text the design's scripts write (the bound heuristic): `getElementById('x')` / `querySelector('#x')` /
+ * `$('#x')` with a text write right after the call, kept in a variable or a holder object property (`{x: …}`, `this.x = …`) that gets one,
  * passed first to a function that writes text through that parameter (`setText('x', …)`), or listed in an array
  * literal iterated with a write through the callback's parameter (`['x', 'y'].forEach((id) => …getElementById(id)
  * .textContent = …)`, `for (const id of ids)`). An id only read, or used for listeners, classes or attributes, stays
@@ -978,6 +973,7 @@ function scriptTextIds(scripts: string[]): Set<string> {
         for (const name of f.names) helpers.add(name)
     }
     for (const m of js.matchAll(WRITE_TARGET)) {
+      if (m[2] && CHILD_PROP.test(m[2])) continue
       // `a.b.textContent`: `b` is a property of `a`; a receiver after a `.` is a property too.
       if (js[wsBack(js, m.index) - 1] === '.') properties.add(m[1]!)
       else receivers.add(m[1]!)

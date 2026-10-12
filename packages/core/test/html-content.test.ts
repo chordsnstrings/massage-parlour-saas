@@ -247,6 +247,15 @@ describe('htmlContentLeftovers', () => {
     ])
   })
 
+  it("an Arabic-only value keeps the design's English, so that English is still checked", () => {
+    const data = d()
+    const content = htmlContentOf({
+      'spa.experience[0].text': { t: { en: data.spa.experience[0]!.text, ar: 'مرحباً' } },
+    })
+    const out = htmlContentLeftovers(data, content, { spaName: 'last test', city: 'Dubai', arabic: true })
+    expect(out.map((o) => [o.path, o.reason])).toContainEqual(['spa.experience[0].text', 'other-spa'])
+  })
+
   it("on the spa's own design its name is fine; replaced values, English-only and stale ones", () => {
     const own = htmlContentLeftovers(d(), undefined, {
       spaName: 'Be Relax Spa',

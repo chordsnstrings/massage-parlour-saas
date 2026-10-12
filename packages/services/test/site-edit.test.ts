@@ -715,6 +715,21 @@ describe('site edit ops layer', () => {
         values: [{ path: 'about.title', value: { t: { en: 'Hello' } } }],
         texts: [{ id: 'txt-1', src: 'Short heading', t: { en: 'Our heading' } }],
       })
+      // A whole new English for a cut text (with its Arabic) is written: only a translation of the fragment is dropped.
+      const rewrite = await ask(
+        [
+          {
+            op: 'html_content',
+            page: 'ask-me',
+            texts: [{ id: 'txt-0', t: { en: 'A whole new paragraph.', ar: 'فقرة جديدة' } }],
+          },
+        ],
+        { clip: 160 },
+      )
+      expect(rewrite.ok).toBe(true)
+      expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'ask-me')))!.content?.texts).toContainEqual(
+        expect.objectContaining({ id: 'txt-0', t: { en: 'A whole new paragraph.', ar: 'فقرة جديدة' } }),
+      )
       // Every entry dropped: nothing written, only the notes.
       const none = await ask(
         [{ op: 'html_content', page: 'ask-me', pictures: [{ id: 'img-0', img: `/files/${theirs!.id}` }] }],

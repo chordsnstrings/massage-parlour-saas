@@ -397,7 +397,7 @@ export async function runSiteEdit(
     base?: Record<string, unknown>
     /**
      * Studio Ask AI (R28 P4): its content view cut design texts longer than `clip` characters (core `htmlContentView`
-     * `cut`). html_content entries for those (the AI saw only part of them) and entries that don't fit (unknown or
+     * `cut`). html_content entries for those that carry no new English (an Arabic translation of a fragment) and entries that don't fit (unknown or
      * bound ids, a cut-short copy, a bad value or file) are dropped with a note in `summary`, not the whole op.
      */
     htmlContent?: { clip: number }
@@ -687,7 +687,8 @@ export async function runSiteEdit(
           if (setCount) {
             const design = new Map(slots.map((x) => [x.path, x.value]))
             for (const [k, v] of Object.entries(op.set ?? {})) {
-              if ('t' in v && cut(design.get(k))) {
+              // A cut text: a whole new English (with its Arabic) is fine; Arabic alone would translate a fragment.
+              if ('t' in v && cut(design.get(k)) && !v.t.en?.trim()) {
                 refuse(`${k}: ${CUT_VIEW}`)
                 continue
               }
@@ -731,7 +732,7 @@ export async function runSiteEdit(
                 )
                 continue
               }
-              if (cut(x.text)) {
+              if (cut(x.text) && !e.t.en?.trim()) {
                 refuse(`${e.id}: ${CUT_VIEW}`)
                 continue
               }
