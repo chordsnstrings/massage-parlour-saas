@@ -92,6 +92,7 @@ describe('CRM feed facts', () => {
     const facts = await tx((db) => crmFeedFacts(db, tenantId))
     expect(facts).toMatchObject({ name: 'Feed Spa', status: 'trial', logoFileId: null })
     expect(facts.branches.map((b) => b.name)).toEqual(['Main'])
+    expect(facts.branches[0]).toHaveProperty('areaLabel', null)
     expect(facts.staff).toHaveLength(2)
     expect(JSON.stringify(facts)).not.toContain('phone_e164')
   })

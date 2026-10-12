@@ -1,7 +1,7 @@
 'use server'
 import { isGoogleMapsUrl, normalizeGoogleMapsUrl, requires2fa, toUaeE164 } from '@spa/core'
 import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
-import { clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
+import { cleanAreaLabel, clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -35,6 +35,8 @@ const schema = z.object({
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),
+  areaLabel: z.string().trim().max(80).optional(),
+  areaLabelAr: z.string().trim().max(80).optional(),
   // Spa-wide default for prices on the website; each service may override it (R4).
   showPrices: z.enum(['on', 'off']).optional(),
 })
@@ -73,6 +75,7 @@ export async function saveSettingsAction(
         phone: d.phone,
         whatsappE164: whatsapp,
         businessDayCutoff: d.cutoff,
+        areaLabel: cleanAreaLabel({ en: d.areaLabel ?? '', ar: d.areaLabelAr }),
       })
       .where(eq(branches.isDefault, true))
   })

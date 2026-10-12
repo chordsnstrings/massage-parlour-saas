@@ -313,7 +313,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   slug caches (globalThis-backed so the action reaches the bundles that read them).
 - **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
   receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
-  "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=`.
+  "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=` (images:
+  `site.content`, `services.manage` or `staff.manage` via `guardAny(IMAGE_UPLOAD_PERMISSIONS)` — the media picker's
+  `listMediaAction` too, so the CRM service/therapist photo pickers work (R28); `kind=video`: `site.design`).
   e2e matrix: `files-access.spec.ts`.
 - Spa logo: `tenants.logo_file_id` → public `stored_files` (purpose `logo`); services `logo.ts` (`processLogo` 512 px
   WebP, `setTenantLogo`, `clearTenantLogo`, `logoUrl`); kept on the application at sign-up (optional, validated before

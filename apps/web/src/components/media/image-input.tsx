@@ -16,15 +16,22 @@ export function ImageInput({
   label,
   hint,
   defaultValue,
+  onChange,
 }: {
   slug: string
   name: string
   label: string
   hint?: string
   defaultValue?: string | null
+  /** Called with the new URL ('' = removed). */
+  onChange?: (url: string) => void
 }) {
   const t = useT()
-  const [value, setValue] = useState(defaultValue ?? '')
+  const [value, setValueState] = useState(defaultValue ?? '')
+  const setValue = (url: string) => {
+    setValueState(url)
+    onChange?.(url)
+  }
   const [open, setOpen] = useState(false)
   return (
     <div className="space-y-1.5">

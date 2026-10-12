@@ -66,7 +66,7 @@ export type ProvisionInput = {
    * subscription on the chosen plan that starts on the agreed date and runs one year.
    */
   subscription?: { planId: string; status: 'active'; start: string; discounts?: SubscriptionDiscounts }
-  branch?: { address?: string | null; phone?: string | null }
+  branch?: { address?: string | null; phone?: string | null; areaLabel?: { en: string; ar?: string } | null }
 }
 
 /** Creates a tenant with default branch, system roles, owner membership and its subscription (inside `tx`). */
@@ -101,6 +101,7 @@ export async function provisionTenantTx(tx: Tx, input: ProvisionInput) {
     isDefault: true,
     address: input.branch?.address ?? null,
     phone: input.branch?.phone ?? null,
+    areaLabel: input.branch?.areaLabel ?? null,
   })
   const roleRows = await tx
     .insert(roles)
@@ -348,7 +349,12 @@ export async function acceptApplication(
       slug: app.slug,
       today: r.today,
       subscription: { planId: plan.id, status: 'active', start: r.startDate, discounts: r.discounts },
-      branch: { address: `${app.streetAddress}, ${emirate}`, phone: app.phone },
+      // R28: the website's area label starts as the emirate (the spa refines it under Settings → Branches).
+      branch: {
+        address: `${app.streetAddress}, ${emirate}`,
+        phone: app.phone,
+        areaLabel: emirate?.trim() ? { en: emirate.trim() } : null,
+      },
     })
 
     // Before any invoice: numbers come from a sequence, so a step failing after them would leave gaps.

@@ -1,7 +1,7 @@
 'use server'
 import { isGoogleMapsUrl, normalizeGoogleMapsUrl, toUaeE164 } from '@spa/core'
 import { withTenant } from '@spa/db'
-import { createBranch, DomainError, setBranchActive, updateBranch } from '@spa/services'
+import { cleanAreaLabel, createBranch, DomainError, setBranchActive, updateBranch } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
@@ -31,6 +31,8 @@ const branchSchema = z.object({
   phone: opt,
   whatsapp: z.string().trim().optional(),
   cutoff: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'settings.branches.errors.time'),
+  areaLabel: z.string().trim().max(80).optional(),
+  areaLabelAr: z.string().trim().max(80).optional(),
 })
 
 /**
@@ -67,6 +69,7 @@ export async function saveBranchAction(
     phone: d.phone,
     whatsappE164,
     businessDayCutoff: d.cutoff,
+    areaLabel: cleanAreaLabel({ en: d.areaLabel ?? '', ar: d.areaLabelAr }),
   }
   try {
     const rules = d.id ? null : await branchRules(ctx.tenant.id)

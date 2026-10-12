@@ -92,6 +92,17 @@ describe('branches (G22)', () => {
       updateBranch(db, ids.jlt!, { name: 'JLT Cluster D', phone: '04 123 4567', businessDayCutoff: '05:00' }),
     )
     expect(edited).toMatchObject({ name: 'JLT Cluster D', phone: '04 123 4567', address: null })
+
+    // R28 area label: trimmed; undefined keeps it on update; blank clears it.
+    const area = (areaLabel: { en: string; ar?: string | null } | null | undefined) =>
+      tx((db) => updateBranch(db, ids.jlt!, { name: 'JLT Cluster D', businessDayCutoff: '05:00', areaLabel }))
+    expect((await area({ en: ' JLT, Dubai ', ar: ' ' })).areaLabel).toEqual({ en: 'JLT, Dubai' })
+    expect((await area(undefined)).areaLabel).toEqual({ en: 'JLT, Dubai' })
+    expect((await area({ en: '', ar: 'أبراج بحيرات جميرا' })).areaLabel).toEqual({
+      en: '',
+      ar: 'أبراج بحيرات جميرا',
+    })
+    expect((await area({ en: '  ' })).areaLabel).toBeNull()
     expect(branchLimit({ branches: 3 })).toBe(3)
     expect(branchLimit({})).toBeNull()
   })
