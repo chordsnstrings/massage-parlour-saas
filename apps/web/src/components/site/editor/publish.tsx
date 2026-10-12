@@ -1,5 +1,6 @@
 'use client'
 import { createUsePuck, type Data, type Field, useGetPuck } from '@puckeditor/core'
+import { type HtmlDesignContent, htmlContentLeftovers, htmlContentSlots, htmlDesignDocOf } from '@spa/core'
 import {
   type PreflightContext,
   type PreflightIssue,
@@ -14,9 +15,12 @@ import { Sheet, SheetClose } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import type { ActionResult } from '@/lib/action'
 import { cn } from '@/lib/utils'
+import { useEditorContext } from '../fields'
+import { designContract, designKey } from '../html-crm'
 import { TRANSLATE_BATCH } from './colors'
 import { useEditorServices } from './context'
 import { scrollToBlock } from './frame-styles'
+import { designListing, leftoverLabel, REASONS } from './html-content-labels'
 
 const usePuckStore = createUsePuck()
 
@@ -35,6 +39,7 @@ type Props = {
 /**
  * Publish confirmation with preflight (PLAN §11.5): errors (images not on https) block, warnings don't. Every
  * issue has "Go to block"; safe one-click fixes apply in place (undoable), missing Arabic offers AI translation.
+ * R28 P4: an HTML design page also lists its Website content leftovers (never blocking, never sent to the server).
  */
 export function PublishSheet({
   pageTitle,
@@ -78,6 +83,28 @@ export function PublishSheet({
   const warnings = issues.length - errors.length
   const arabic = issues.filter((i) => i.fix?.kind === 'translate')
   const aiReady = !!services?.aiReady
+  const { html } = useEditorContext()
+  // What the page's HTML design still shows from the design's own spa, as the Website content field lists it.
+  const content = useMemo(() => {
+    if (!open) return null
+    const index = data.content.findIndex((b) => b.type === 'HtmlDesign')
+    const props = index >= 0 ? (data.content[index]!.props as Record<string, unknown>) : null
+    const ref = props ? htmlDesignDocOf(props) : null
+    const source = (typeof props?.html === 'string' && props.html) || (ref ? html?.docs[ref.file] : '') || ''
+    if (!props || !source) return null
+    const key = designKey(ref)
+    const designData = designContract(source, key)?.found?.literal?.data
+    const page = designListing(source, key)
+    const all = htmlContentLeftovers(designData, props.content as HtmlDesignContent | undefined, {
+      spaName: html?.spaName ?? '',
+      city: html?.city ?? '',
+      arabic: true,
+      page,
+    })
+    const ctx = { slots: htmlContentSlots(designData), ...page }
+    const first = all.slice(0, 5).map((l) => ({ ...l, label: leftoverLabel(l.path, ctx) }))
+    return { index, total: all.length, first }
+  }, [open, data, html])
 
   const where = (i: PreflightIssue) => {
     if (i.blockId === null) return 'Page settings'
@@ -97,6 +124,14 @@ export function PublishSheet({
         scrollToBlock(id)
       }, 200)
     }
+  }
+
+  const openContent = (index: number) => {
+    getPuck().dispatch({
+      type: 'setUi',
+      ui: { itemSelector: { index, zone: 'root:default-zone' }, rightSideBarVisible: true },
+    })
+    setOpen(false)
   }
 
   const setData = (next: Data) => getPuck().dispatch({ type: 'setData', data: next })
@@ -183,6 +218,31 @@ export function PublishSheet({
               ))}
             </ul>
           )}
+        </section>
+      )}
+      {content && content.total > 0 && (
+        <section
+          aria-label="Website content checks"
+          className="mb-4 rounded-xl border bg-subtle/50 p-3 text-sm"
+        >
+          <p className="font-medium">Website content: {content.total} still from the design</p>
+          <ul className="mt-2 space-y-1 text-xs text-muted">
+            {content.first.map((l) => (
+              <li key={`${l.path}:${l.reason}`} className="flex gap-2">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-label="Warning" />
+                <span className="min-w-0 break-words">
+                  <b className="font-medium text-fg">{l.label}</b>: {REASONS[l.reason]}
+                </span>
+              </li>
+            ))}
+            {content.total > 5 && <li className="ps-5.5">and {content.total - 5} more</li>}
+          </ul>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">These don’t block publishing.</p>
+            <Button size="sm" variant="secondary" onClick={() => openContent(content.index)}>
+              Open Website content
+            </Button>
+          </div>
         </section>
       )}
       <section aria-label="Preflight checks" className="mb-6">
