@@ -20,7 +20,13 @@ export const staff: Messages['staff'] = {
     off: 'หยุด',
     shiftTime: '{start}–{end}',
   },
-  status: { archived: 'เก็บถาวรแล้ว', bookable: 'รับจองได้', notBookable: 'ไม่รับจอง' },
+  status: {
+    archived: 'เก็บถาวรแล้ว',
+    bookable: 'รับจองได้',
+    notBookable: 'ไม่รับจอง',
+    // R26 (2026-10-12): needs native review.
+    onSite: 'แสดงบนเว็บไซต์',
+  },
   docs: {
     valid: 'เอกสารครบถ้วน',
     expired: '{type} หมดอายุแล้ว',
@@ -81,6 +87,11 @@ export const staff: Messages['staff'] = {
     bookableHint: 'แสดงในปฏิทินและหน้าจอง',
     active: 'ใช้งานอยู่',
     activeHint: 'พนักงานที่เก็บถาวรยังคงมีประวัติอยู่',
+    // R26 (2026-10-12): needs native review.
+    showOnSite: 'แสดงบนเว็บไซต์',
+    showOnSiteHint: 'ชื่อ รูปภาพ และประวัติสั้นๆ จะแสดงในส่วนทีมงานบนเว็บไซต์ของคุณ',
+    bioEn: 'ประวัติสั้นสำหรับเว็บไซต์ (ภาษาอังกฤษ)',
+    bioAr: 'ประวัติสั้นสำหรับเว็บไซต์ (ภาษาอาหรับ ไม่บังคับ)',
     archive: 'เก็บถาวร',
     archiveConfirm: 'เก็บถาวร {name} ใช่ไหม? จะไม่สามารถรับจองได้อีก',
   },
@@ -129,6 +140,8 @@ export const staff: Messages['staff'] = {
     commission: '0–100',
     amount: 'กรอกจำนวนเงิน',
     photo: 'เลือกรูปจากคลังภาพ',
+    // R26 (2026-10-12): needs native review.
+    bio: 'ไม่เกิน 120 ตัวอักษร',
     time: 'ใช้รูปแบบ HH:MM',
     branch: 'เลือกสาขา',
     date: 'เลือกวันที่',

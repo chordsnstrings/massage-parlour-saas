@@ -3,6 +3,7 @@ import { editStamp, getEditablePage, getPageLock, listPages, listSavedSections }
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { z } from 'zod'
+import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, loadSite } from '@/components/site/data'
 import type { SavedSection } from '@/components/site/editor/context'
 import { PATH_ROUTING, studioPath } from '@/lib/paths'
@@ -49,6 +50,8 @@ export default async function EditorPage({ params }: { params: Promise<{ slug: s
   if (!site) notFound()
   const slug = ctx.tenant.slug
   const { page, version } = loaded.editable
+  // R24: an HTML design page's design (its data keeps only the file reference).
+  const htmlDocs = await editorHtmlDocs(ctx.tenant.id, loaded.editable.data)
   const meta = {
     ...buildMeta({
       data,
@@ -58,8 +61,16 @@ export default async function EditorPage({ params }: { params: Promise<{ slug: s
       slug: page.slug,
       editing: true,
     }),
-    // R24: an HTML design page's design (its data keeps only the file reference).
-    htmlDocs: await editorHtmlDocs(ctx.tenant.id, loaded.editable.data),
+    htmlDocs,
+    // R26: the spa's CRM data for a contract design (merged in the canvas; no form endpoint in the editor).
+    ...(await crmFeedMeta(ctx.tenant, loaded.editable.data, {
+      locale: 'en',
+      live: false,
+      base: '',
+      slug: page.slug,
+      services: data.services,
+      htmlDocs,
+    })),
   }
   const sections: SavedSection[] = loaded.sections.map((s) => ({
     id: s.id,

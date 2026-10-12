@@ -155,6 +155,16 @@ export function platformOnlyPath(pathname: string): boolean {
   return /^\/(?:api\/(?:auth|mcp|integrations)|\.well-known)(?:\/|$)/.test(pathname)
 }
 
+/**
+ * R26: the CRM data contract endpoints of a spa's public site (`/site/{slug}/…` or `/domain/{host}/…` after the
+ * rewrite): `crm-data.json` (contract JSON) and `crm-enquiry` (booking-request POST). JSON endpoints, not pages: the
+ * proxy gives them the API headers and never looks them up as an exact HTML design.
+ */
+export function crmFeedPath(internalPath: string): 'data' | 'enquiry' | null {
+  const m = /^\/(?:site|domain)\/[^/]+\/(crm-data\.json|crm-enquiry)$/.exec(internalPath)
+  return m ? (m[1] === 'crm-enquiry' ? 'enquiry' : 'data') : null
+}
+
 /** Scheme of canonical platform URLs: APP_URL's, else http for a local root (localhost, *.localhost, an IP), else https. */
 export function canonicalScheme(root: string, appUrl = ''): 'http' | 'https' {
   if (appUrl.startsWith('https:')) return 'https'

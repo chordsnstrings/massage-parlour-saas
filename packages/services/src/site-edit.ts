@@ -6,6 +6,7 @@
 // callers audit with `siteEditAuditData`.
 import {
   dubaiParts,
+  htmlCrmContractOf,
   htmlDesignDocOf,
   htmlDesignEmbedHosts,
   htmlDesignPhoneFixes,
@@ -152,6 +153,8 @@ export type SiteEditResult =
         bytes: number
         phoneFixes: boolean
         embeds: string[]
+        /** R26: the design's CRM data contract (`window.CRM_DATA` literal / crm-endpoint meta), or null. */
+        crm: 'literal' | 'endpoint' | null
         at?: number[]
       }[]
     }
@@ -499,6 +502,7 @@ export async function runSiteEdit(
           bytes: Buffer.byteLength(w.pendingHtml.raw, 'utf8'),
           phoneFixes: htmlDesignPhoneFixes(block?.props),
           embeds: htmlDesignEmbedHosts(w.pendingHtml.raw),
+          crm: htmlCrmContractOf(w.pendingHtml.raw)?.mode ?? null,
           ...(w.pendingHtml.at ? { at: w.pendingHtml.at } : {}),
         },
       ]
@@ -748,6 +752,8 @@ export type HtmlDesignView = {
   phoneFixes: boolean
   /** Image adjustments saved with it. */
   images: number
+  /** R26: CRM data contract (operational values come live from the CRM; don't edit them in the design), or null. */
+  crm: 'literal' | 'endpoint' | null
   editing: { by: string; userId: string; until: string } | null
 }
 
@@ -777,6 +783,7 @@ export async function getHtmlDesign(
     html,
     phoneFixes: htmlDesignPhoneFixes(block.props),
     images: Array.isArray(block.props.images) ? block.props.images.length : 0,
+    crm: htmlCrmContractOf(html)?.mode ?? null,
     editing: lock ? { by: lock.holderName, userId: lock.userId, until: lock.expiresAt.toISOString() } : null,
   }
 }

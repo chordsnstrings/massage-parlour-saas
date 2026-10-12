@@ -122,7 +122,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
      `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
      for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
-     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). Studio previews live on the console
+     `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). R26: `{site}/crm-enquiry` (POST/OPTIONS) is never
+     redirected or platform-only (works on the temporary address and the own domain); a GET of `crm-data.json` 301s
+     like a page, with `Access-Control-Allow-Origin: *` on the hop. Studio previews live on the console
      (`/websites/{slug}/preview`, R23), the spa's preview + preview-share links on the app host (`/{slug}/website/preview`,
      `/website/preview?token=`), never on the temporary address.
      Pure decisions in core `hosts.ts` (`temporarySitePath`, `keepsTemporaryAddress`, `ownDomainUrl`;
@@ -423,6 +425,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     Dashboard `enquiries/` (EN+TH `enquiries` namespace; filter new/replied/closed/all + search; phone only with
     `clients.phone`; "Reply on WhatsApp" = wa.me with `siteEnquiryReplyText` in the visitor's language, marks
     replied; status moves `clients.manage`, audit `site.enquiry.status`). Nothing is emailed to the visitor.
+    R26: an HTML design's booking form → `POST {site}/crm-enquiry` (`server/crm-feed-routes.ts`: ≤ 8 KB, JSON only,
+    Origin null/same/none, honeypot, services `designEnquirySchema`, per-IP `SITE_ENQUIRY_LIMITS` + per-spa
+    `DESIGN_ENQUIRY_TENANT_LIMITS` 30/h + 150/day always on, service/staff resolved server-side) → shared
+    `server/site-enquiry.ts` `recordSiteEnquiry` (also the EnquiryForm action) with `site_enquiries.booking`
+    (`SiteEnquiryBooking`); inbox shows "Booking request · service · n min · guests · date at time · with staff",
+    search matches the service, `siteEnquiryReplyText` names service/date/time (EN + AR).
   - Presets (Library): google-reviews, instagram-feed, contact-map, contact-enquiry, video-feature, blog-latest
     (category `media` = "Video & blog"). Template defaults via `templates.ts` `extraBlocks(key)` (own id prefix
     `{key}-x-…`, so existing node ids don't shift). E2E `site-blocks.spec.ts`.
@@ -542,6 +550,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     onto same-site links at click time (window bubble listener, skipped when the design handled the click, href put
     back right after), so `/book` credits F13 sources and F16 partners (e2e `growth.spec` "R24 + F16"). An
     external referrer alone is not carried across a design page.
+  - **CRM data feed (R26, `docs/design/html-crm-contract.md`):** a design with a `window.CRM_DATA = {json}` literal
+    and/or `<meta name="crm-endpoint">` (core `htmlCrmContractOf`) gets the spa's live CRM data: core
+    `buildCrmContract` (pure: branches default first, website services = services `websiteServices` = the CRM Website
+    "On the website" rule + `image_url`, staff = services `websiteStaff` (active + `staff.show_on_site`), logo, booking
+    url) → `mergeCrmContract` (CRM wins for operational keys; empty CRM value / list keeps the design's; per-item
+    image/note/description/specialty only from the same-name item; prices never inherited) → `crmScriptJson`
+    (script-safe, memoised for the design's objects) → `spliceCrmData` (only the literal's JSON range). Web
+    `components/site/html-crm.ts` `designWithCrm` (isomorphic; parsed design by `file:sha256`, output by + CRM hash)
+    runs before `htmlDesignDocument` in the HtmlDesign block (frames: endpoint-only designs get the JSON injected) and
+    `app/site-html`. `SiteMeta.crm` from `components/site/crm-feed.ts` `crmFeedMeta` (`{}` unless the page has a
+    contract design; one withTenant `crmFeedFacts`): PublicSite + site-html (`live`: form endpoint on the request
+    host, `server/origin.ts` `siteOriginFrom`), draft-preview, share link, Studio editor (no endpoint). Endpoints
+    `{site}/crm-data.json` + `{site}/crm-enquiry` (`server/crm-feed-routes.ts`, route files under `app/site/[slug]` and
+    `app/domain/[hostname]`): see Website enquiries. Upload message + connector `get_html_design.crm_contract`.
   - **Legacy designs (pre-R24 uploads):** R17 stored `fixHtmlDesign(raw)` (viewport + fluid widths baked into the html);
     `htmlDesignBakedFixes` (no switch value and inline html, or `bakedFixes: true` kept after the switch was used):
     the row switch says "old upload: re-upload to show exactly" and Off's message says to upload the original again.
@@ -718,7 +740,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   page, `passesBotCheck(token, action)` in the action (siteverify + `clientIp()`); both skip when keys are unset or on
   a custom domain without `TURNSTILE_CUSTOM_DOMAINS=on`. Used by `bookOnline` (booking page + widget iframe, action
   `booking`), `signupAction` (`apply`, after the IP limit, before the login is created), `sendEnquiryAction`
-  (`contact`) and the website enquiry form `sendSiteEnquiryAction` (`enquiry`, F15). Honeypots + per-IP limits stay. e2e runs with Cloudflare's always-pass test keys (playwright.config);
+  (`contact`) and the website enquiry form `sendSiteEnquiryAction` (`enquiry`, F15). Honeypots + per-IP limits stay. R26: the HTML design endpoint `{site}/crm-enquiry` has no Turnstile (the design runs sandboxed and can't
+  show the widget): honeypot, per-IP + per-spa limits, the Origin check, the JSON content type and server-side id
+  resolution stand in. e2e runs with Cloudflare's always-pass test keys (playwright.config);
   `online.spec` also covers a blocked script → refused. CSP (F10) allows `challenges.cloudflare.com` (script + frame) on
   marketing/app/site/domain pages, not the admin console.
 - Keys from the console (owner, 2026-10-09): console Company page → "Bot check (Cloudflare Turnstile)" card
@@ -779,6 +803,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `/files` from next.config — never both (R24: a second policy would undo a delegation). The direct HTML design page
   and the design shell (`permissionsPolicy({ design: true })`) leave the motion sensors undeclared (browser default =
   the design may use them, as when opened directly); preview pages keep them off for their frames.
+- **R26 contract endpoints** (`{site}/crm-data.json`, `{site}/crm-enquiry`; core `crmFeedPath`): proxied but
+  rewritten with `apiSecurityHeaders` (`API_CSP`, XFO DENY, Permissions-Policy, HSTS as the site) instead of the page
+  headers; no nonce, no exact-design lookup; CORS `*` set by the route (also on the R20 / F23 301 of crm-data.json).
 - **Not proxied** (`next.config.ts` headers): every path gets nosniff, `Referrer-Policy: strict-origin-when-cross-origin`;
   `/api/*` + `/.well-known/*` get `API_CSP` (`default-src 'none'; frame-ancestors 'none'; …`) +
   `X-Frame-Options: DENY`; `/files/*` keeps its own sandbox CSP (`app/files/serve.ts`) + XFO SAMEORIGIN; HSTS (no

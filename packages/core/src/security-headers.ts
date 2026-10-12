@@ -170,6 +170,25 @@ export function pageSecurityHeaders(o: PageHeaderOptions): Record<string, string
 export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 /**
+ * R26: the JSON endpoints of a spa's public site that pass the proxy (`{site}/crm-data.json`, `{site}/crm-enquiry`):
+ * the API policy instead of the page headers (no nonce, no COOP), HSTS as on the site's pages.
+ */
+export function apiSecurityHeaders(o: {
+  https: boolean
+  surface: 'site' | 'domain'
+}): Record<string, string> {
+  const h: Record<string, string> = {
+    'content-security-policy': API_CSP,
+    'x-frame-options': 'DENY',
+    'permissions-policy': PERMISSIONS_POLICY,
+  }
+  if (o.https)
+    h['strict-transport-security'] =
+      o.surface === 'domain' ? 'max-age=31536000' : 'max-age=31536000; includeSubDomains'
+  return h
+}
+
+/**
  * Sandbox of an uploaded HTML design (R17; iframe attribute and CSP `sandbox`): no allow-same-origin, ever (the design
  * would get the platform origin's cookies, storage and APIs). R24: + modals (alert/confirm), downloads and pointer
  * lock, so a design behaves as when opened directly.

@@ -32,6 +32,9 @@ export type StaffInput = {
   memberId: string | null
   skills: string[]
   photoUrl?: string | null
+  /** R26: on the website's team section (opt-in). */
+  showOnSite?: boolean
+  bio?: { en: string; ar?: string } | null
 }
 
 export function StaffSheet({
@@ -222,6 +225,27 @@ export function StaffSheet({
             hint={t('staff.form.activeHint')}
             defaultChecked={person?.active ?? true}
           />
+          <Toggle
+            name="showOnSite"
+            label={t('staff.form.showOnSite')}
+            hint={t('staff.form.showOnSiteHint')}
+            defaultChecked={person?.showOnSite ?? false}
+          />
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label={t('staff.form.bioEn')} name="bioEn">
+            <Input id="bioEn" name="bioEn" maxLength={120} defaultValue={person?.bio?.en ?? ''} />
+          </Field>
+          <Field label={t('staff.form.bioAr')} name="bioAr">
+            <Input
+              id="bioAr"
+              name="bioAr"
+              dir="rtl"
+              lang="ar"
+              maxLength={120}
+              defaultValue={person?.bio?.ar ?? ''}
+            />
+          </Field>
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-between">

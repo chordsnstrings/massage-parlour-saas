@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRM contract fixture</title>
+<meta name="crm-endpoint" content="crm-data.json">
+<!--
+  R26 e2e fixture (e2e/html-crm.spec.ts): a tiny design using the "Candlelight" CRM data contract. It renders
+  everything from window.CRM_DATA, or fetches <meta name="crm-endpoint"> when that is absent; the booking form posts
+  JSON to booking.form_endpoint (WhatsApp fallback without one). docs/design/html-crm-contract.md.
+-->
+<style>body{font:16px/1.5 system-ui,sans-serif;margin:24px}.chip{margin-inline-end:6px}img{width:8px;height:8px}</style>
+</head>
+<body>
+<h1 id="spa">Loading</h1>
+<p id="hours"></p>
+<p>Call <a id="phone" href="#"></a> · <a id="wa" href="[crm-whatsapp-link]">WhatsApp</a></p>
+<p><a id="address" href="[crm-maps-link]"></a></p>
+<ul id="services"></ul>
+<ul id="staff"></ul>
+<form id="book" action="[crm-booking-endpoint]">
+  <select id="svc" name="service_id"></select>
+  <select id="who" name="staff_id"><option value="">No preference</option></select>
+  <input name="name" value="Layla Test" aria-label="Name">
+  <input name="phone" value="050 123 4567" aria-label="Phone">
+  <button>Request booking</button>
+</form>
+<p id="status"></p>
+<p id="label"></p>
+<!-- TEST BUILD ONLY: the design's own data (the platform replaces this JSON with the spa's CRM data) -->
+<script>window.CRM_DATA = {"spa": {"name": "Design Spa", "short_name": "Design", "currency": "AED", "timezone": "Asia/Dubai"}, "contact": {"whatsapp_number": "+971500000001", "whatsapp_message": "Hello {spa}", "phones": [{"number": "+971500000001", "display": "050 000 0001", "label": "Design line", "whatsapp": true, "calls": true}]}, "location": {"address_line1": "1 Design Street", "address_line2": "", "city": "Dubai", "country": "UAE", "maps_url": "https://maps.example/design"}, "hours": [{"day": "mon", "open": "08:00", "close": "09:00", "closed": false}], "booking": {"url": null, "label": "Book with the design", "form_endpoint": null}, "services": [{"id": "normal-massage", "name": "Normal massage", "note": "design note", "durations": [15], "price": 999, "image": "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==", "image_alt": "Design photo"}, {"id": "design-only", "name": "Design ritual", "note": "", "durations": [], "price": 999, "image": ""}], "staff": [{"id": "staff-01", "name": "", "specialty": "", "photo": "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="}]};</script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id)
+  const digits = (s) => String(s || '').replace(/\D/g, '')
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n }
+  const meta = document.querySelector('meta[name="crm-endpoint"]').content
+  const crm = window.CRM_DATA || (await (await fetch(meta, { headers: { Accept: 'application/json' }, cache: 'no-store' })).json())
+  const spa = crm.spa || {}, contact = crm.contact || {}, loc = crm.location || {}, booking = crm.booking || {}
+  $('spa').textContent = spa.name || ''
+  $('hours').textContent = (crm.hours || []).map((h) => (h.closed ? `${h.day} closed` : `${h.day} ${h.open}-${h.close}`)).join(' · ')
+  const phones = contact.phones || []
+  const call = phones.find((p) => p.calls && !p.whatsapp) || phones.find((p) => p.calls) || {}
+  $('phone').textContent = call.display || ''
+  $('phone').href = `tel:${call.number || ''}`
+  const wa = contact.whatsapp_number || (phones.find((p) => p.whatsapp) || {}).number
+  $('wa').href = `https://wa.me/${digits(wa)}`
+  $('address').textContent = [loc.address_line1, loc.address_line2, loc.city, loc.country].filter(Boolean).join(', ')
+  $('address').href = loc.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent($('address').textContent)}`
+  $('label').textContent = booking.label || ''
+  for (const s of crm.services || []) {
+    const li = el('li', 'service')
+    li.dataset.id = s.id
+    li.append(el('b', 'name', s.name))
+    if (typeof s.price === 'number') li.append(' ', el('span', 'price', `from ${s.price} ${spa.currency || ''}`.trim()))
+    for (const m of [...(s.durations || [])].map(Number).filter((n) => n > 0).sort((a, b) => a - b)) li.append(' ', el('span', 'chip', `${m} min`))
+    if (s.note) li.append(' ', el('i', 'note', s.note))
+    if (s.image) { const img = el('img'); img.src = s.image; img.alt = s.image_alt || ''; li.append(' ', img) }
+    $('services').append(li)
+    const o = el('option', null, s.name); o.value = s.id; $('svc').append(o)
+  }
+  for (const m of crm.staff || []) {
+    const li = el('li', m.name ? 'member' : 'photo-only', m.name || '')
+    if (m.specialty) li.append(' ', el('small', 'specialty', m.specialty))
+    if (m.photo) { const img = el('img'); img.src = m.photo; img.alt = m.photo_alt || ''; li.append(img) }
+    $('staff').append(li)
+    if (m.name) { const o = el('option', null, m.name); o.value = m.id; $('who').append(o) }
+  }
+  $('book').addEventListener('submit', async (e) => {
+    e.preventDefault()
+    const action = $('book').getAttribute('action')
+    const endpoint = action && !/^\[crm-/.test(action) ? action : booking.form_endpoint || ''
+    if (!endpoint) { $('status').textContent = 'whatsapp'; return }
+    const fd = new FormData($('book'))
+    const s = (crm.services || []).find((x) => x.id === fd.get('service_id'))
+    const date = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10)
+    const body = { spa: spa.name, service_id: fd.get('service_id'), service_name: s ? s.name : '', duration_minutes: s && s.durations.length ? Number(s.durations[0]) : null, guests: 2, date, time: '18:30', staff_id: fd.get('staff_id') || null, name: fd.get('name'), phone: fd.get('phone'), notes: 'Strong pressure', source: 'website', submitted_at: new Date().toISOString() }
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+      $('status').textContent = res.ok ? 'ok' : `fail ${res.status}`
+    } catch (err) { $('status').textContent = `fail ${err}` }
+  })
+  window.__crmDone = true
+})()
+</script>
+</body>
+</html>

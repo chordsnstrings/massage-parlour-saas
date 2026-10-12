@@ -164,6 +164,7 @@ export default async function StaffPage({ params }: { params: Promise<{ tenant: 
                       ) : !p.bookable ? (
                         <Pill tone="warn">{t('staff.status.notBookable')}</Pill>
                       ) : null}
+                      {p.active && p.showOnSite && <Pill tone="ok">{t('staff.status.onSite')}</Pill>}
                       {manage &&
                         p.active &&
                         docPill(

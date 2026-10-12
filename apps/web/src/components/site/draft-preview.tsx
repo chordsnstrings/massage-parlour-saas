@@ -4,6 +4,7 @@ import { withTenant } from '@spa/db'
 import { getDraftBySlug, getPublishedPage, globalSectionsFor, PAGE_SLUG } from '@spa/services'
 import { notFound } from 'next/navigation'
 import { siteConfig } from '@/components/site/config'
+import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, loadSite, localeOf, type TenantLite } from '@/components/site/data'
 import { TEMPLATES } from '@/components/site/templates'
 import { PATH_ROUTING } from '@/lib/paths'
@@ -63,6 +64,14 @@ export async function DraftPreview({ tenant, query }: { tenant: TenantLite; quer
       editing: true,
     }),
     globals: draft?.globals ?? {},
+    // R26: the spa's CRM data in a contract design (no form endpoint in previews: WhatsApp fallback).
+    ...(await crmFeedMeta(tenant, pageData, {
+      locale: localeOf(lang),
+      live: false,
+      base: '',
+      slug: page,
+      services: data.services,
+    })),
   }
   // Covers any surrounding chrome: this route is shown full-screen and inside thumbnails.
   return (
@@ -96,6 +105,13 @@ async function renderLive(tenant: TenantLite, page: string, lang?: string) {
       editing: true,
     }),
     globals: published.globals,
+    ...(await crmFeedMeta(tenant, published.data, {
+      locale: localeOf(lang),
+      live: false,
+      base: '',
+      slug: page,
+      services: data.services,
+    })),
   }
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg" data-crm-off>

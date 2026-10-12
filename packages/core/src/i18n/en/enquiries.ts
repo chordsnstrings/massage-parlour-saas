@@ -27,4 +27,12 @@ export const enquiries = {
   emptyFilter: 'No enquiries match.',
   total: { one: '{count} enquiry', other: '{count} enquiries' },
   moved: 'Enquiry updated',
+  // R26: a booking request from the website's HTML design form (typed names never translated).
+  booking: {
+    title: 'Booking request',
+    minutes: '{n} min',
+    guests: { one: '{count} guest', other: '{count} guests' },
+    when: '{date} at {time}',
+    with: 'with {name}',
+  },
 } as const

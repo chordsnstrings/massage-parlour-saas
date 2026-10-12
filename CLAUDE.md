@@ -1,7 +1,7 @@
 # spamanagement.co — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R15 in progress (§14.8);
+Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R26 in progress (§14.8);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 
@@ -57,6 +57,10 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   design's "Phone fixes" switch is on; only invisible changes (embedded files moved to /files, `<base>` in frames,
   placeholders, compat shim, JSON-LD/canonical/t.js); the live page is the design document itself (CSP sandbox, never
   allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
+  **CRM feed for contract designs (R26, 2026-10-12):** a design with `window.CRM_DATA` / `<meta name=crm-endpoint>`
+  gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's;
+  prices never inherited; its booking form → a website enquiry (`{site}/crm-enquiry`, no automatic booking); staff only
+  with "Show on website" (`docs/design/html-crm-contract.md`).
   **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).

@@ -21,6 +21,27 @@ export function readForm(req: Request, limit: number) {
     })
 }
 
+/** R26: the body as text, aborting as soon as more than `limit` bytes have arrived (Content-Length checked first). */
+export async function readText(req: Request, limit: number): Promise<string> {
+  const declared = Number(req.headers.get('content-length') ?? '')
+  if (Number.isFinite(declared) && declared > limit) throw new TooLarge()
+  if (!req.body) return ''
+  const reader = req.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > limit) {
+      await reader.cancel().catch(() => {})
+      throw new TooLarge()
+    }
+    chunks.push(value)
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks))
+}
+
 /** Same-origin POSTs only (fetch/XHR always send Origin on POST). */
 export function sameOrigin(req: Request) {
   const origin = req.headers.get('origin')

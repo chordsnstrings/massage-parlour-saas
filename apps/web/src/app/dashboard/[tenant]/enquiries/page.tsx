@@ -117,6 +117,26 @@ export default async function EnquiriesPage({
                   header: t('enquiries.colMessage'),
                   cell: (e) => (
                     <span className="block max-w-xl">
+                      {e.booking && (
+                        <span className="mb-1 block text-sm">
+                          <span className="font-medium">{t('enquiries.booking.title')}</span>
+                          {' · '}
+                          {[
+                            e.booking.service,
+                            e.booking.durationMin
+                              ? t('enquiries.booking.minutes', { n: fmt.number(e.booking.durationMin) })
+                              : null,
+                            t('enquiries.booking.guests', { count: e.booking.guests }),
+                            t('enquiries.booking.when', {
+                              date: fmt.date(`${e.booking.date}T12:00:00+04:00`),
+                              time: e.booking.time,
+                            }),
+                            e.booking.staff ? t('enquiries.booking.with', { name: e.booking.staff }) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
                       <span className="line-clamp-4 whitespace-pre-line" dir="auto">
                         {e.message}
                       </span>

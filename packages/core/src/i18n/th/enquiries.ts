@@ -28,4 +28,12 @@ export const enquiries: Messages['enquiries'] = {
   emptyFilter: 'ไม่พบข้อความที่ตรงกัน',
   total: { other: '{count} ข้อความ' },
   moved: 'อัปเดตข้อความแล้ว',
+  // R26 (2026-10-12): needs native review.
+  booking: {
+    title: 'คำขอจอง',
+    minutes: '{n} นาที',
+    guests: { other: '{count} ท่าน' },
+    when: '{date} เวลา {time}',
+    with: 'กับ {name}',
+  },
 }

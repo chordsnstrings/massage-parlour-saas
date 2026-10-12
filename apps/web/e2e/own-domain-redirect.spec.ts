@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { addDays } from '@spa/core'
 import { domains, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import {
@@ -12,6 +13,7 @@ import {
   signUpOwner,
   site,
   testDb,
+  today,
   uniqueSlug,
 } from './helpers'
 
@@ -121,6 +123,37 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     }
     const res = await served(`http://${HOST}/`)
     expect(await res.text()).toContain('Own Domain Spa')
+  })
+
+  await test.step('R26: crm-enquiry works on the own domain and the temporary address (never 404 / redirected)', async () => {
+    const enquiry = (url: string, method = 'POST') => {
+      const u = new URL(url)
+      return ops.request.fetch(`http://127.0.0.1:${PORT}${u.pathname}${u.search}`, {
+        method,
+        headers: { host: u.host, origin: 'null', 'content-type': 'application/json' },
+        data:
+          method === 'POST'
+            ? JSON.stringify({
+                service_name: 'Massage',
+                date: addDays(today(), 2),
+                time: '18:00',
+                name: 'Own Domain Guest',
+                phone: '050 123 4567',
+              })
+            : undefined,
+        failOnStatusCode: false,
+        maxRedirects: 0,
+      })
+    }
+    expect((await enquiry(own('/crm-enquiry'), 'OPTIONS')).status()).toBe(204)
+    expect((await enquiry(own('/crm-enquiry?page='))).status()).toBe(201)
+    expect((await enquiry(`${site(slug)}/crm-enquiry?page=`)).status()).toBe(201)
+    // A design's fetch of crm-data.json on the temporary address: the 301 hop allows CORS too.
+    const data = await viaHost(ops, `${site(slug)}/crm-data.json`)
+    expect(data.status()).toBe(301)
+    expect(data.headers().location).toBe(own('/crm-data.json'))
+    expect(data.headers()['access-control-allow-origin']).toBe('*')
+    expect((await served(`http://${HOST}/crm-data.json`)).headers()['access-control-allow-origin']).toBe('*')
   })
 
   await test.step('kept on the temporary address: other methods, the widget iframe, robots.txt, API + static', async () => {

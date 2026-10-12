@@ -144,6 +144,8 @@ export default async function StaffDetailPage({
                 memberId: person.memberId,
                 skills: [...skillIds],
                 photoUrl: person.photoUrl,
+                showOnSite: person.showOnSite,
+                bio: person.bio,
               }}
             />
           ) : null
@@ -157,10 +159,15 @@ export default async function StaffDetailPage({
               actions={
                 !person.active ? (
                   <Pill>{t('staff.status.archived')}</Pill>
-                ) : person.bookable ? (
-                  <Pill tone="ok">{t('staff.status.bookable')}</Pill>
                 ) : (
-                  <Pill tone="warn">{t('staff.status.notBookable')}</Pill>
+                  <span className="flex flex-wrap gap-1.5">
+                    {person.bookable ? (
+                      <Pill tone="ok">{t('staff.status.bookable')}</Pill>
+                    ) : (
+                      <Pill tone="warn">{t('staff.status.notBookable')}</Pill>
+                    )}
+                    {person.showOnSite && <Pill tone="ok">{t('staff.status.onSite')}</Pill>}
+                  </span>
                 )
               }
             >

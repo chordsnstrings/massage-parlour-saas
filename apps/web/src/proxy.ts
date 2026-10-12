@@ -1,5 +1,7 @@
 import {
+  apiSecurityHeaders,
   canonicalScheme,
+  crmFeedPath,
   hostRoutedUrl,
   htmlDesignPageHeaders,
   newNonce,
@@ -115,6 +117,8 @@ export async function proxy(req: NextRequest) {
   url.pathname = internalPath(host, originalPath)
   const proto =
     req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
+  // R26: the HTML design data contract endpoints (`{site}/crm-data.json`, `{site}/crm-enquiry`): JSON, not pages.
+  const feed = crmFeedPath(url.pathname)
   if (safe) {
     // R20: the spa's own domain is active + primary → its temporary address ({slug}.{any platform root}, /s/{slug}) 301s
     // there, path + query kept, one hop (a renamed slug too). Not: other methods (forms/server actions started here),
@@ -124,6 +128,8 @@ export async function proxy(req: NextRequest) {
     if (own) {
       const res = NextResponse.redirect(own, 301)
       res.headers.set('cache-control', 'private, max-age=300')
+      // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+      if (feed) res.headers.set('access-control-allow-origin', '*')
       return res
     }
     // F23: a renamed spa's previous address (site or dashboard) → the same path + query under its new slug.
@@ -132,6 +138,7 @@ export async function proxy(req: NextRequest) {
       const res = NextResponse.redirect(`${proto}://${moved.host}${moved.pathname}${req.nextUrl.search}`, 301)
       // Short browser cache: the address may be taken back (or, after the cooling period, by another spa).
       res.headers.set('cache-control', 'private, max-age=300')
+      if (feed) res.headers.set('access-control-allow-origin', '*')
       return res
     }
   }
@@ -145,6 +152,16 @@ export async function proxy(req: NextRequest) {
     : url.pathname.startsWith('/domain/')
       ? 'domain'
       : null
+  // R26: the contract endpoints get the API headers (no nonce / page CSP / COOP), never the exact-design lookup;
+  // POST / OPTIONS never reach the redirects above (crm-enquiry works on the temporary address and the own domain).
+  if (feed && surface) {
+    const headers = new Headers(req.headers)
+    headers.set('x-original-path', `${originalPath}${url.search}`)
+    headers.set('x-internal-path', url.pathname)
+    const res = NextResponse.rewrite(url, { request: { headers } })
+    for (const [k, v] of Object.entries(apiSecurityHeaders({ https, surface }))) res.headers.set(k, v)
+    return res
+  }
   if (
     safe &&
     surface &&
