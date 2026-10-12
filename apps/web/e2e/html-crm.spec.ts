@@ -526,3 +526,68 @@ test("R28 P2: the editor's Website content field changes a design's words per sp
   const body = (s: string) => s.slice(s.indexOf('<body>')).replace(LITERAL, '')
   expect(body(served)).toBe(body(fixture))
 })
+
+test('R28 P3: fill the CRM from the design', async ({ page }) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const owner = await signUpOwner(page, { spa: 'Seed Design Spa' })
+  const { slug } = owner
+  const seed = await seedSpa(slug)
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await upload(page, 'Seed Design', fixture)
+  await applyAndPublish(page, slug, 'Seed Design')
+  // Right after applying, the next step is offered (non-modal); a fresh visit only has the Pages row button.
+  await expect(page.getByTestId('seed-offer')).toBeVisible()
+  await page.goto(studioUrl(slug))
+  await expect(page.getByTestId('seed-offer')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Fill the CRM from the design' }).click()
+  const sheet = page.getByRole('dialog')
+  await expect(
+    sheet.getByText(
+      'These change the CRM right away (treatments and therapists); the website shows them on its next load. Prices are never changed.',
+    ),
+  ).toBeVisible({ timeout: 30_000 })
+  const row = (name: string) => sheet.getByTestId('seed-service').filter({ hasText: name })
+  // The design's "Normal massage" pairs with the CRM's (same name), its own picture shown; "Design ritual" has none.
+  await expect(row('Normal massage')).toContainText('CRM: Normal massage')
+  await expect(row('Normal massage')).toContainText('Same name')
+  await expect(row('Normal massage').locator('img')).toHaveAttribute('src', /^data:image\/gif;base64,/)
+  await expect(row('Normal massage').getByRole('combobox')).toHaveValue('fill')
+  await expect(row('Design ritual')).toContainText('No match')
+  await expect(row('Design ritual').getByRole('combobox')).toHaveValue('skip')
+  // The design's team photo goes to Ploy (no photo yet), shown on the website.
+  await sheet.getByRole('combobox', { name: 'Therapist for Photo 1' }).selectOption({ label: 'Ploy Test' })
+  await sheet.getByRole('checkbox', { name: 'Show Photo 1 on website' }).check()
+  await sheet.getByRole('button', { name: 'Fill the CRM', exact: true }).click()
+  await expect(page.getByText(/^CRM updated: 1 treatment filled, 1 therapist photo set/)).toBeVisible({
+    timeout: 30_000,
+  })
+
+  const db = testDb()
+  const [normal] = await db.select().from(services).where(eq(services.id, seed.normal))
+  expect(normal!.imageUrl).toMatch(/^\/files\/[0-9a-f-]{36}$/)
+  // Prices and durations untouched; the skipped "Design ritual" wasn't created.
+  const prices = (rows: { durationMin: number; priceAed: string | null }[]) =>
+    rows.map((v) => `${v.durationMin}:${v.priceAed}`).sort()
+  expect(
+    prices(await db.select().from(serviceVariants).where(eq(serviceVariants.serviceId, seed.normal))),
+  ).toEqual(prices(seed.variants.filter((v) => v.serviceId === seed.normal)))
+  expect(await db.select().from(services).where(eq(services.tenantId, seed.tenantId))).toHaveLength(2)
+  const [ploy] = await db.select().from(staff).where(eq(staff.id, seed.ploy))
+  expect(ploy).toMatchObject({ photoUrl: expect.stringMatching(/^\/files\//), showOnSite: true })
+  expect(
+    (await db.select().from(auditLog).where(eq(auditLog.tenantId, seed.tenantId))).some(
+      (a) => a.action === 'site.design_seed',
+    ),
+  ).toBe(true)
+
+  // Live at once (no publish): crm-data.json carries the CRM service's new photo and the opted-in therapist.
+  const res = await viaHost(page, `${site(slug)}/crm-data.json`, { headers: { origin: 'null' } })
+  expect(res.status()).toBe(200)
+  const json = await res.json()
+  const item = json.services.find((s: { id: string }) => s.id === seed.normal)
+  expect(item.image).toContain(normal!.imageUrl)
+  expect(json.staff.map((s: { name: string }) => s.name)).toEqual(['Ploy Test'])
+})

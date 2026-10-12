@@ -347,4 +347,9 @@ export const domain = {
     'This spa reached its daily limit of {limit} MB for new HTML designs — try again tomorrow',
   templateImportNoDesign: 'An HTML design in this file has no design text — export the template again',
   templateTooLargeAsFiles: 'The template is too large once its HTML designs are files ({limit} MB max).',
+  // R28 P3: filling the CRM from a design (design-seed.ts).
+  seedDesignServiceMissing: 'The design has no service “{id}”',
+  seedDesignStaffMissing: 'The design has no team member “{id}”',
+  seedPickService: 'Pick the CRM service to fill',
+  seedPickTherapist: 'Pick the therapist for the photo',
 } as const

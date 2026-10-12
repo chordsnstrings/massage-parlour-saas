@@ -1,5 +1,6 @@
 import { domains, platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
 import {
+  designSeedPages,
   getSite,
   listChangeRequests,
   listPages,
@@ -27,6 +28,7 @@ import { templateCatalog } from '@/server/site-templates'
 import { publicSiteUrl } from '@/server/sites'
 import { WebsiteStatusBadge } from '../next-step'
 import { BlogCard, DomainCard, PagesCard, pageUnpublished, RequestsCard, TemplatesCard } from './cards'
+import { SeedOffer } from './seed-sheet'
 import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
 export const metadata: Metadata = { title: 'Website' }
@@ -54,9 +56,12 @@ export default async function SpaWebsitePage({
   const canDesign = can(ctx, 'site.design')
   const canPublish = can(ctx, 'site.publish')
   const canEdit = can(ctx, 'site.content')
+  // R28 P3 "Fill the CRM from the design" writes treatments and the team too (re-checked by the action).
+  const canSeed = canDesign && can(ctx, 'services.manage') && can(ctx, 'staff.manage')
   const [data, [progress], catalog, aiEditor, publicUrl] = await Promise.all([
     withTenant(ctx.tenant.id, async (tx) => {
       const site = await getSite(tx, ctx.tenant.id)
+      const pages = await listPages(tx, ctx.tenant.id)
       return {
         site,
         hosts: await tx.select().from(domains).orderBy(asc(domains.createdAt)),
@@ -68,7 +73,8 @@ export default async function SpaWebsitePage({
               from web_events where ts >= now() - interval '30 days'`)
             ).rows[0] as { visitors: number; booked: number })
           : null,
-        pages: await listPages(tx, ctx.tenant.id),
+        pages,
+        seedPages: canSeed && site ? await designSeedPages(tx, ctx.tenant.id, pages) : [],
         posts: await listPosts(tx),
         requests: await listChangeRequests(tx, ctx.tenant.id),
         // Undo is only offered while nothing the switch wrote has been edited or published since.
@@ -82,7 +88,7 @@ export default async function SpaWebsitePage({
     siteAiEditorStatus(platformDb(), ctx.user.id),
     publicSiteUrl(ctx.tenant),
   ])
-  const { site, pages, posts, undoBlocked, requests, hosts, glance, themeWarnings } = data
+  const { site, pages, seedPages, posts, undoBlocked, requests, hosts, glance, themeWarnings } = data
   // F32 import: AI mapping for SITE_AI_EDITOR_EMAILS accounts when ModelArk is set up (re-checked by the action).
   const importAi = canDesign && aiEditReady() && aiEditor === 'ok'
   const pending = pages.filter(pageUnpublished).length
@@ -194,6 +200,9 @@ export default async function SpaWebsitePage({
                 pages={undo.pages.length}
               />
             )}
+            {seedPages.length > 0 && (
+              <SeedOffer slug={slug} pages={seedPages.map((p) => ({ id: p.id, title: p.title.en }))} />
+            )}
             <PagesCard
               slug={slug}
               pages={pages}
@@ -201,6 +210,7 @@ export default async function SpaWebsitePage({
               canEdit={canEdit}
               canDesign={canDesign}
               importAi={importAi}
+              seedPages={seedPages.map((p) => p.id)}
             />
             <div className="grid items-start gap-[var(--ui-stack,1.5rem)] lg:grid-cols-2">
               <div className="grid min-w-0 gap-[var(--ui-stack,1.5rem)]">
