@@ -1216,13 +1216,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   kept (a picture's description is its alt page text). Only values change: an override is escaped, so no tag,
   attribute, style or script of the file changes (html-fidelity green). **Fix with P4:** a picture replacement alone
   only swaps the URL; fill / focal point / alignment come only when one of them is set — **owner note: replace-only
-  adjustments saved before no longer force "cover, centred"; check templates that relied on it**. A replaced picture
+  adjustments saved before, and empty ones (an image card in the template adjuster opened and left without changes
+  stored `{id, src}`), no longer force "cover, centred"; check templates that relied on it**. A replaced picture
   inside `<picture>` now also replaces its `<source>`s (before, the browser kept showing the original there). Ask AI
   and Write texts draft a spa's website content in EN + AR (one click drafts all of a spa's texts; drafts only, same
   2FA allow-list); the editor's Website content field gains Page texts (grouped by section, searchable) and Pictures,
   and the publish sheet a non-blocking "Website content checks" list. Content cap 192 KB (was 64 KB: EN + AR texts of
-  a BE RELAX-size page are ~60–70 KB); draft saves now check website content (shape + the spa's own public files;
-  entries the design no longer has are kept and skipped). Not in P4: `<input value>` / `og:*` texts, content copies on
+  a BE RELAX-size page are ~60–70 KB); draft saves now check website content (shape + no other spa's files; the
+  spa's own files deleted since are tolerated; entries the design no longer has are kept and skipped; the editor
+  stores a picture / video link only once it is a complete `/files/…` or https one). A text can be set in Arabic only:
+  the English page keeps the design's own words. Not in P4: `<input value>` / `og:*` texts, content copies on
   template apply / save (P5).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner

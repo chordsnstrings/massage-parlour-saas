@@ -119,9 +119,12 @@ The stored file never changes. With no content set, the output is the very same 
 - **Page texts** on every design (with or without `CRM_DATA`; without it the CRM groups are hidden and a note says
   why): searchable, grouped by section with the page title + search description first, 200 rows at a time, rows
   only while open (open by default only without CRM groups). Each unbound text is a bilingual field named by kind +
-  the design's words ("Heading: Our rituals") with a "Design" reset and the design text as hint; CRM-filled texts
-  are read-only ("Filled by the design from the CRM", "Go to field" for a `data-crm` slot). English is required: an
-  Arabic-only text keeps the design's English. Outdated entries (the design changed there) show with Remove.
+  the design's words ("Heading: Our rituals") with a "Design" reset and the design text as hint; bound texts are
+  read-only, worded by `boundBy` ("Filled by the design from the CRM" + "Go to field" for a `data-crm` slot;
+  "Filled by the design's script"). An Arabic-only text is stored as `{ar}` only, so the English page keeps the
+  design's own bytes. Outdated entries (the design changed there) show with Remove.
+- Data-slot pictures and videos are stored only once the link is a complete `/files/…` or https one (the draft-save
+  rule); a partial or invalid link stays in the field with an inline hint.
 - **Pictures:** one URL / media-library field per design picture (replace-only, `/files` or https; the template's
   framing kept), not the `HtmlImageAdjuster`; a picture's description is its `alt` page text.
 - Leftovers cover page texts and outdated entries and jump to their row. The editor's publish sheet shows them as a
@@ -267,8 +270,29 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 | P1 | `html-content.ts`, `designWithCrm` options and cache key, 3 callers, `content` prop, `cleanHtmlDesignContent`, file copy rules, the `html_content` op + `get/set_html_content`, pop-in check | 12 | You can ask Claude to "rewrite last-test's journey for Dubai and swap scene 2's picture": it becomes a draft, you preview and publish. The file is untouched |
 | P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
 | P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
-| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Building 2026-10-12:** core + render + `html_content` op + draft-save check done (A); Ask AI / Write texts / connector (B) and the editor (C) on top | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
+| P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Done 2026-10-13:** A core + render + `html_content` op + draft-save check, B Ask AI / Write texts / connector, C editor; as built: the "As built (P4)" notes in §2 (item 2), §3 and §6, review fixes below the table | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
 | P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
 | P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
 
 **Total: about 58 h.** P0–P2 already make each spa's site its own; P3–P5 complete it.
+
+**Review fixes (P4, 2026-10-13)** — after the A / B / C review, before release:
+- **Core + op:** picture URLs are swapped with replacer functions (`$&` stays text), `&` escaped in `src` / `srcset`
+  / style attributes (raw in `<style>` bodies), and `$` or character references refused in picture URLs; a text is
+  script-bound only where the design's JS writes it (`scriptTextIds`; listener / read-only ids stay editable) and
+  says by what (`boundBy` `crm` / `script`, op errors worded to match); common named references decoded, U+00A0
+  kept, a run with an unknown reference not listed; an override equal to the design text keeps the original bytes;
+  `{{placeholders}}` in an override are plain escaped text; `t.en` optional (Arabic-only entries leave the English
+  page byte-identical; the op's `en` null / left out keeps the stored English, `''` drops it).
+- **Ask AI, Write texts, connector, draft saves (planned):** the Arabic-only rule for AI (`set_html_content` and
+  Ask AI take `{id, ar}` without English); leftovers first in Write texts; a draft save refuses only other spas'
+  file ids and tolerates the spa's own files deleted since; framed pages get the title / description overrides in
+  their metadata; template content localised (its `/files` values copied) like the design's other files.
+- **Editor:** an Arabic-only edit stores `{ar}` (never the listed design text as English); bound texts are worded
+  by `boundBy`; data-slot pictures / videos are stored only as a complete `/files/…` or https link (inline hint).
+- **E2E (`html-crm.spec.ts` "R28 P4"):** the leftover list names the heading before the edit and drops it after;
+  the page title is reset with its "Design" button (canvas title back) and set again; an Arabic-only button text
+  shows on `?lang=ar` next to the English fallback of an English-only text, while the English page keeps the
+  design's words.
+- **Docs:** PLAN §14.8 owner note — empty `{id, src}` adjustments (an image card opened without changes) also lose
+  the forced cover / centred; this phase row.
