@@ -198,6 +198,7 @@ All in `packages/core/src/html-crm.ts`:
 - **`htmlDesignReport(html)`** in core: contract none / v1 / v2, slot counts and warnings, shown in `TemplateUploadSheet` and on the Studio page. It never blocks an upload.
 - **BE RELAX v2** is made once through the connector as a new template version; you sign off the look.
   - `carryHtmlContent(old, newSlots)` keeps values whose path or text `src` still exists, so spas keep their edits when they move to v2. Undo still works.
+  - **Owner decisions (2026-10-13):** **D4** spas already on BE RELAX v1 are switched to v2 **automatically** once the owner signs off the look (live at once, their edits carried by `carryHtmlContent`; undo per spa still works). **D5** applying BE RELAX v2 (a new apply or the automatic switch) also runs Write texts for its HTML pages at once: EN + AR drafts from the spa's CRM facts and leftovers (drafts only; publish as usual).
 - **Endpoint-only designs:** `crm-data.json?page=` merges the published block's `content`.
 - **Designs without CRM_DATA:** they still get page texts, pictures and placeholders. The card says "Not connected to the CRM" and offers a connector conversion into a draft.
 - **Video:** `/files/upload` gets a video kind (mp4/webm, ≤ 8 MB, under `site.design`).

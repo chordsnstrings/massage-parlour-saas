@@ -1173,7 +1173,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   block; the design's own values only on the spa's own design); **D2** a therapist without a photo is hidden on HTML
   designs until a photo is added (the design's nameless photos only via an explicit pick when filling the CRM);
   **D3** Arabic: Arabic texts show inside the design's English layout (no separate RTL rebuild); **go live phase by
-  phase** (each phase ships when its checks pass). **P0 (2026-10-12):** `@spa/core` html-crm.ts — D1, D2, area label
+  phase** (each phase ships when its checks pass). Owner 2026-10-13 for P5: **D4** BE RELAX v1 spas switch to v2
+  automatically after the look sign-off (edits carried); **D5** applying v2 also drafts every text in EN + AR (Write
+  texts, drafts only). **P0 (2026-10-12):** `@spa/core` html-crm.ts — D1, D2, area label
   from the CRM city (own design: its finer label), a treatment in two menus shows once (`collapseSameName`).
   **Fix with P0 (owner report 2026-10-12: "uploaded the html … applied on one spa and it applied a different
   design"):** the console Apply sheet over a spa with a live site defaulted to "theme only" (sample-pages box off), so
