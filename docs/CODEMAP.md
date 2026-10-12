@@ -591,6 +591,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     with the block selected + `rightSideBarWidth: 400`. Readiness: core `htmlContentLeftovers(data, content, {spaName,
     city, arabic})` + `isOwnDesign` / `UAE_CITIES` (html-crm.ts). Not a CONTENT_KEYS prop (Section's `content` slot
     shares the name): editing it needs `site.design` (super-admins).
+  - **Fill the CRM from the design (R28 P3):** core `html-crm-seed.ts` (`crmMatchScore`, `designSeedPairs`, pair ≥
+    `SEED_MATCH_MIN` 0.5) · services `catalog.ts` (`saveService` / `setServiceImage` / `setStaffPhoto` +
+    `NEW_SERVICE_DEFAULTS` / `IMAGE_URL_PATTERN`: the rules the CRM's own service + staff actions use) ·
+    `design-seed.ts`: `designSeedSource(tx, tenant, page?)` (the DRAFT design's CRM_DATA literal + `designSeedHash`),
+    `designSeedPages` (pages whose draft has the literal; cached per tenant + file + sha256), `planDesignSeed` (read
+    only; active services / therapists), `applyDesignSeed` (advisory lock per spa; only ACTIVE services are filled or
+    matched — "create" fills an active same-name one instead of a duplicate; pictures = the design's `data:` images
+    → `processImage` → media library tagged `design` + `design:{sha8}`, reused on a re-run), `designSeedThumb` (96 px
+    WebP previews made on the server). Console: `websites/[slug]/seed-actions.ts` (`seedGuard` = `site.design` +
+    `services.manage` + `staff.manage`; the apply carries the preview's hash and is refused when the draft changed) +
+    `seed-sheet.tsx` (Pages card "Fill the CRM", offer bar after applying an HTML template via `?seed=`; the offer is
+    looked up after the template switch commits). Connector `plan_design_seed` (read only; therapist names only for
+    those shown on the website). Branch `area_label` (0051, `cleanAreaLabel` ≤ 80 each; Arabic-only = `{en: '', ar}`)
+    → `crmFeedFacts` → `buildCrmContract` (`area_explicit`: the branch's own label wins over the design's).
   - **Legacy designs (pre-R24 uploads):** R17 stored `fixHtmlDesign(raw)` (viewport + fluid widths baked into the html);
     `htmlDesignBakedFixes` (no switch value and inline html, or `bakedFixes: true` kept after the switch was used):
     the row switch says "old upload: re-upload to show exactly" and Off's message says to upload the original again.

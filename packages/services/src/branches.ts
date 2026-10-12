@@ -19,10 +19,15 @@ export type BranchInput = {
   areaLabel?: { en: string; ar?: string | null } | null
 }
 
-/** Trimmed area label; null when both are blank (a blank one falls back to English, then to the address city). */
+export const AREA_LABEL_MAX = 80
+
+/**
+ * Trimmed area label (≤ 80 characters each); null when both are blank. An Arabic-only label is kept as `{en: '', ar}`:
+ * the Arabic site shows it, the English one falls back to the address city (a blank language never borrows the other).
+ */
 export function cleanAreaLabel(v: BranchInput['areaLabel']): { en: string; ar?: string } | null {
-  const en = v?.en?.trim() ?? ''
-  const ar = v?.ar?.trim() ?? ''
+  const en = v?.en?.trim().slice(0, AREA_LABEL_MAX).trim() ?? ''
+  const ar = v?.ar?.trim().slice(0, AREA_LABEL_MAX).trim() ?? ''
   if (!en && !ar) return null
   return ar ? { en, ar } : { en }
 }

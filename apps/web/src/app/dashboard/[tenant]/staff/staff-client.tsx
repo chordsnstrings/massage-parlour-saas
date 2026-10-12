@@ -57,7 +57,11 @@ export function StaffSheet({
   return (
     <Sheet
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        // A reopened sheet starts from the saved photo (the form's own fields reset with it).
+        if (next) setPhoto(person?.photoUrl ?? '')
+        setOpen(next)
+      }}
       title={person ? t('staff.form.editTitle', { name: person.displayName }) : t('staff.form.newTitle')}
       description={t('staff.form.description')}
       className="md:max-w-2xl"

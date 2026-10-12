@@ -13,6 +13,7 @@ import {
   sitePageLocks,
   sitePages,
   sites,
+  staff,
   storedFiles,
   tenants,
   user,
@@ -759,6 +760,21 @@ describe('site MCP server (/api/mcp)', () => {
         { design_id: 'ritual', name: 'Design ritual', durations: [], has_image: false, match: null },
       ])
       expect(plan.data.staff_photos).toEqual([{ design_id: 'lin', name: 'Lin' }])
+      // Therapist names only for those already on the website.
+      await inD((tx) =>
+        tx.insert(staff).values([
+          { tenantId: d.tenant!, displayName: 'Shown One', showOnSite: true },
+          { tenantId: d.tenant!, displayName: 'Private One' },
+        ]),
+      )
+      const people = await dcall('plan_design_seed', {})
+      expect(people.data.crm_staff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'Shown One', show_on_website: true }),
+          expect.objectContaining({ name: null, show_on_website: false }),
+        ]),
+      )
+      expect(JSON.stringify(people.data)).not.toContain('Private One')
       const [after] = await inD((tx) => tx.select().from(services).where(eq(services.id, crm!.id)))
       expect(after!.imageUrl).toBeNull()
     })

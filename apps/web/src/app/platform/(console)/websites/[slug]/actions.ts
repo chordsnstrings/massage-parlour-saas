@@ -78,22 +78,28 @@ export async function applyTemplateAction(
   const replaceContent = parsed.data.replaceContent === 'on' || template.htmlDesign
   // R28 P3: a design with window.CRM_DATA → the page offers "Fill the CRM from the design" next (`?seed=`).
   const seedable = template.htmlDesign && can(ctx, 'services.manage') && can(ctx, 'staff.manage')
-  let seedPage: string | undefined
   try {
-    seedPage = await withTenant(ctx.tenant.id, async (tx) => {
-      await switchTemplate(tx, ctx.tenant.id, template, {
+    await withTenant(ctx.tenant.id, (tx) =>
+      switchTemplate(tx, ctx.tenant.id, template, {
         replaceContent,
         draftTheme: template.htmlDesign,
         userId: ctx.user.id,
         // R24: an HTML design template's files are copied into the spa (its site never depends on the template).
         prepare: templateIntoSpa(tx, ctx.tenant.id, ctx.user.id),
-      })
-      if (!seedable) return undefined
-      const seeds = await designSeedPages(tx, ctx.tenant.id)
-      return (seeds.find((p) => p.slug === '') ?? seeds[0])?.id
-    })
+      }),
+    )
   } catch (e) {
     return domainFail(e)
+  }
+  // After the switch has committed (its own read): a failure here only loses the offer, never the applied template.
+  let seedPage: string | undefined
+  if (seedable) {
+    try {
+      const seeds = await withTenant(ctx.tenant.id, (tx) => designSeedPages(tx, ctx.tenant.id))
+      seedPage = (seeds.find((p) => p.slug === '') ?? seeds[0])?.id
+    } catch (e) {
+      console.error('[site.template_applied] seed offer', e)
+    }
   }
   await auditAs(ctx, 'site.template_applied', 'site', undefined, { template: template.key, replaceContent })
   revalidateStudio(slug)

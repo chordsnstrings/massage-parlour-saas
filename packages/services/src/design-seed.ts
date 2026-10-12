@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto'
 import { crmName, crmSlug, designSeedPairs, htmlCrmContractOf, htmlDesignDocOf } from '@spa/core'
 import { type Bilingual, mediaAssets, services, staff, type Tx } from '@spa/db'
-import { and, arrayContains, asc, eq, inArray } from 'drizzle-orm'
+import { and, arrayContains, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
   NEW_SERVICE_DEFAULTS,
   SERVICE_DURATION_MAX,
@@ -18,7 +18,7 @@ import {
   setStaffPhoto,
 } from './catalog'
 import { DomainError } from './errors'
-import { createAsset, MediaError, processImage, sniffImageType } from './media'
+import { createAsset, MediaError, processImage, resizeVariant, sniffImageType } from './media'
 import { HTML_DESIGN_BLOCK } from './site-edit'
 import { htmlDesignSource, spaHtmlDocReader } from './site-html-assets'
 import { getEditablePage, listPages, type PageSummary } from './sites'
@@ -123,6 +123,29 @@ function dataImage(value: unknown): string | null {
 /** Whether a design value is a picture seeding can use. */
 export const isDesignSeedImage = (value: unknown) => dataImage(value) !== null
 
+/** Width of the preview thumbnails (2× the sheet's 48 px tiles). */
+export const DESIGN_SEED_THUMB_WIDTH = 96
+
+/**
+ * A small WebP `data:` thumbnail of a design picture for the preview sheet (the design's own pictures can be
+ * megabytes each), or null when it isn't a usable picture.
+ */
+export async function designSeedThumb(value: unknown): Promise<string | null> {
+  const body = dataImage(value)
+  if (body === null) return null
+  const bytes = Buffer.from(body, 'base64')
+  if (!sniffImageType(bytes)) return null
+  try {
+    return `data:image/webp;base64,${(await resizeVariant(bytes, DESIGN_SEED_THUMB_WIDTH)).toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
+/** Fingerprint of a design's CRM_DATA: the preview carries it and the apply refuses a design that changed since. */
+export const designSeedHash = (data: Record<string, unknown>) =>
+  createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 32)
+
 // ─── Plan (read only) ────────────────────────────────────────────────────────
 
 export type DesignSeedPlan = {
@@ -223,7 +246,9 @@ const sha8 = (b: Buffer) => createHash('sha256').update(b).digest('hex').slice(0
 /**
  * Applies the super-admin's choices for a design (`designData` = its CRM_DATA): fills / creates services, sets the
  * picked therapists' photos, stores the pictures in the media library. Ids that aren't this spa's (RLS) or a design
- * id the design doesn't have refuse the whole apply. Run it in one tx (pictures are re-encoded inside it).
+ * id the design doesn't have refuse the whole apply. Only active services are filled or matched ("create" fills an
+ * active one of the same name instead of a duplicate; an archived one never blocks a create). Run it in one tx
+ * (pictures are re-encoded inside it); one apply per spa at a time (advisory lock), so two clicks never duplicate.
  */
 export async function applyDesignSeed(
   tx: Tx,
@@ -242,6 +267,7 @@ export async function applyDesignSeed(
     picturesFailed: 0,
   }
 
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`design-seed:${tenantId}`}))`)
   // Check every id first: nothing is written when one is wrong.
   for (const c of choices.services) {
     if (!own.has(c.designId)) throw new DomainError(`The design has no service “${c.designId}”`, 'invalid')
@@ -264,7 +290,7 @@ export async function applyDesignSeed(
       description: services.description,
     })
     .from(services)
-    .where(eq(services.tenantId, tenantId))
+    .where(and(eq(services.tenantId, tenantId), eq(services.active, true)))
   const crmById = new Map(crm.map((s) => [s.id, s]))
   if (serviceIds.some((id) => !crmById.has(id))) throw new DomainError('Service not found', 'not_found')
   const staffIds = [...new Set(choices.staff.map((c) => c.staffId))]
@@ -439,13 +465,13 @@ export async function designSeedPages(
 /**
  * The `window.CRM_DATA` of a page's DRAFT HTML design: the input of planDesignSeed / applyDesignSeed. `pageRef` = the
  * page id or address slug ("home" / "" = home); without one, the home page, else the first page whose design has it.
- * Null when that page isn't an HTML design with the literal.
+ * Null when that page isn't an HTML design with the literal. `hash` = designSeedHash(data).
  */
 export async function designSeedSource(
   tx: Tx,
   tenantId: string,
   pageRef?: string,
-): Promise<{ page: DesignSeedPage; data: Record<string, unknown> } | null> {
+): Promise<{ page: DesignSeedPage; data: Record<string, unknown>; hash: string } | null> {
   const all = await listPages(tx, tenantId)
   const slug = pageRef === 'home' || pageRef === '/' ? '' : pageRef?.replace(/^\//, '')
   const chosen =
@@ -459,7 +485,12 @@ export async function designSeedSource(
     const props = designBlock((await getEditablePage(tx, tenantId, p.id))?.data)
     const html = props ? await htmlDesignSource(props, read) : null
     const literal = html === null ? null : htmlCrmContractOf(html)?.literal
-    if (literal) return { page: { id: p.id, slug: p.slug, title: p.title }, data: literal.data }
+    if (literal)
+      return {
+        page: { id: p.id, slug: p.slug, title: p.title },
+        data: literal.data,
+        hash: designSeedHash(literal.data),
+      }
   }
   return null
 }

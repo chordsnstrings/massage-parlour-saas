@@ -6,7 +6,7 @@ import {
   type DesignSeedSummary,
   DomainError,
   designSeedSource,
-  isDesignSeedImage,
+  designSeedThumb,
   planDesignSeed,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -36,8 +36,10 @@ async function seedGuard(slug: string) {
 
 export type DesignSeedPreview = {
   page: { id: string; title: string }
+  /** designSeedHash of the design's CRM_DATA: sent back with the apply (a design changed since is refused). */
+  hash: string
   plan: DesignSeedPlan
-  /** The design's own pictures (its `data:` URIs) by design id, shown small in the sheet. */
+  /** Small server-made thumbnails of the design's own pictures (WebP `data:` URIs) by design id. */
   pictures: { services: Record<string, string>; staff: Record<string, string> }
 }
 
@@ -54,28 +56,36 @@ export async function designSeedPlanAction(slug: string, pageId: string): Promis
   const { ctx, error } = await seedGuard(slug)
   if (error) return fail(error)
   if (!uuid.safeParse(pageId).success) return fail('Page not found')
-  const preview = await withTenant(ctx.tenant.id, async (tx): Promise<DesignSeedPreview | null> => {
+  const read = await withTenant(ctx.tenant.id, async (tx) => {
     const src = await designSeedSource(tx, ctx.tenant.id, pageId)
-    if (!src) return null
-    const plan = await planDesignSeed(tx, ctx.tenant.id, src.data)
-    const pictures: DesignSeedPreview['pictures'] = { services: {}, staff: {} }
-    for (const s of plan.services) {
-      const image = item(src.data, 'services', s.index).image
-      if (s.hasImage && isDesignSeedImage(image)) pictures.services[s.designId] = image as string
-    }
-    for (const s of plan.staffPhotos) {
-      const photo = item(src.data, 'staff', s.index).photo
-      if (isDesignSeedImage(photo)) pictures.staff[s.designId] = photo as string
-    }
-    return { page: { id: src.page.id, title: src.page.title.en }, plan, pictures }
+    return src ? { src, plan: await planDesignSeed(tx, ctx.tenant.id, src.data) } : null
   })
-  if (!preview) return fail('This page’s design has no CRM data (window.CRM_DATA) to fill the CRM from')
+  if (!read) return fail('This page’s design has no CRM data (window.CRM_DATA) to fill the CRM from')
+  // Thumbnails after the tx (image work never holds a connection).
+  const { src, plan } = read
+  const pictures: DesignSeedPreview['pictures'] = { services: {}, staff: {} }
+  for (const s of plan.services) {
+    const thumb = s.hasImage ? await designSeedThumb(item(src.data, 'services', s.index).image) : null
+    if (thumb) pictures.services[s.designId] = thumb
+  }
+  for (const s of plan.staffPhotos) {
+    const thumb = await designSeedThumb(item(src.data, 'staff', s.index).photo)
+    if (thumb) pictures.staff[s.designId] = thumb
+  }
+  const preview: DesignSeedPreview = {
+    page: { id: src.page.id, title: src.page.title.en },
+    hash: src.hash,
+    plan,
+    pictures,
+  }
   return ok(undefined, preview as unknown as Record<string, unknown>)
 }
 
 const designId = z.string().trim().min(1).max(200)
 const seedSchema = z.object({
   page: uuid,
+  /** The preview's design fingerprint (DesignSeedPreview.hash). */
+  hash: z.string().regex(/^[0-9a-f]{32}$/),
   /** "Replace existing photos": also over photos (and descriptions) the CRM already has. */
   replace: z.boolean().default(false),
   services: z
@@ -124,12 +134,14 @@ export async function seedCrmFromDesignAction(slug: string, input: SeedCrmInput)
   if (error) return fail(error)
   const parsed = seedSchema.safeParse(input)
   if (!parsed.success) return fromZod(parsed.error, { english: true })
-  const { page, replace, services, staff } = parsed.data
-  let summary: DesignSeedSummary | null
+  const { page, hash, replace, services, staff } = parsed.data
+  let summary: DesignSeedSummary | null | 'changed'
   try {
     summary = await withTenant(ctx.tenant.id, async (tx) => {
       const src = await designSeedSource(tx, ctx.tenant.id, page)
       if (!src) return null
+      // The draft's design changed after the preview (another tab, the connector): its ids may mean other items now.
+      if (src.hash !== hash) return 'changed'
       return applyDesignSeed(
         tx,
         ctx.tenant.id,
@@ -143,6 +155,10 @@ export async function seedCrmFromDesignAction(slug: string, input: SeedCrmInput)
     throw e
   }
   if (!summary) return fail('This page’s design has no CRM data (window.CRM_DATA) to fill the CRM from')
+  if (summary === 'changed')
+    return fail(
+      'This page’s design changed since the preview: open “Fill the CRM” again to see it as it is now',
+    )
   await auditAs(ctx, page, {
     ...summary,
     replace,

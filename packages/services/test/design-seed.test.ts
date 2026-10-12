@@ -8,8 +8,10 @@ import {
   applyDesignSeed,
   type DesignSeedChoices,
   DomainError,
+  designSeedHash,
   designSeedPages,
   designSeedSource,
+  designSeedThumb,
   ensureSite,
   planDesignSeed,
   saveService,
@@ -368,6 +370,71 @@ describe('applyDesignSeed', () => {
     )
     expect(summary).toMatchObject({ servicesCreated: 1, picturesFailed: 1, assets: 0 })
   })
+
+  it('archived services are never filled or matched: "create" still creates', async () => {
+    const [old] = await inA((db) =>
+      db
+        .insert(services)
+        .values({ tenantId: a, name: { en: 'Hot stone ritual' }, active: false })
+        .returning({ id: services.id }),
+    )
+    const stone = { services: [{ id: 'stone', name: 'Hot Stone Ritual', durations: [90] }] }
+    await expect(
+      inA((db) =>
+        applyDesignSeed(
+          db,
+          a,
+          stone,
+          { services: [{ designId: 'stone', action: 'fill', serviceId: old!.id }], staff: [] },
+          { userId: null },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    const summary = await inA((db) =>
+      applyDesignSeed(
+        db,
+        a,
+        stone,
+        { services: [{ designId: 'stone', action: 'create' }], staff: [] },
+        {
+          userId: null,
+        },
+      ),
+    )
+    expect(summary).toMatchObject({ servicesCreated: 1, servicesFilled: 0 })
+    const named = await inA((db) =>
+      db.select({ active: services.active, name: services.name }).from(services),
+    )
+    expect(
+      named
+        .filter((r) => r.name.en.toLowerCase() === 'hot stone ritual')
+        .map((r) => r.active)
+        .sort(),
+    ).toEqual([false, true])
+  })
+})
+
+describe('preview helpers', () => {
+  it('thumbnails are small WebP data URIs; non-pictures give null', async () => {
+    const big = sharp({ create: { width: 1200, height: 800, channels: 3, background: '#2a6' } })
+    const src = `data:image/png;base64,${(await big.png().toBuffer()).toString('base64')}`
+    const thumb = await designSeedThumb(src)
+    expect(thumb).toMatch(/^data:image\/webp;base64,/)
+    const meta = await sharp(Buffer.from(thumb!.split(',')[1]!, 'base64')).metadata()
+    expect(meta.width).toBe(96)
+    expect(thumb!.length).toBeLessThan(src.length)
+    expect(await designSeedThumb('https://example.com/a.png')).toBeNull()
+    expect(
+      await designSeedThumb(`data:image/png;base64,${Buffer.from('nope').toString('base64')}`),
+    ).toBeNull()
+  })
+
+  it('the design fingerprint changes with the CRM_DATA', () => {
+    const one = designSeedHash({ services: [{ id: 'a', name: 'A' }] })
+    expect(one).toMatch(/^[0-9a-f]{32}$/)
+    expect(designSeedHash({ services: [{ id: 'a', name: 'A' }] })).toBe(one)
+    expect(designSeedHash({ services: [{ id: 'a', name: 'B' }] })).not.toBe(one)
+  })
 })
 
 describe('catalog rules', () => {
@@ -486,7 +553,11 @@ describe('which pages can seed', () => {
     const pages = await inA((db) => designSeedPages(db, a))
     expect(pages.map((p) => p.slug)).toEqual(['design'])
     // No page named: the home page first, else the first page that has the literal.
-    expect(await inA((db) => designSeedSource(db, a))).toEqual({ page: pages[0], data: literal })
+    expect(await inA((db) => designSeedSource(db, a))).toEqual({
+      page: pages[0],
+      data: literal,
+      hash: designSeedHash(literal),
+    })
     expect((await inA((db) => designSeedSource(db, a, pages[0]!.id)))?.data).toEqual(literal)
     expect(await inA((db) => designSeedSource(db, a, 'plain'))).toBeNull()
     expect(await inA((db) => designSeedSource(db, a, 'home'))).toBeNull()

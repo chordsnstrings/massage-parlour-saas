@@ -28,7 +28,7 @@ function MatchLabel({ match }: { match: Plan['services'][number]['match'] }) {
 /** The design's own picture (its data: URI), small; a placeholder without one. */
 function Thumb({ src, className }: { src?: string; className?: string }) {
   return src ? (
-    // biome-ignore lint/performance/noImgElement: the design's embedded picture (data: URI), shown as is
+    // biome-ignore lint/performance/noImgElement: a server-made thumbnail of the design's picture (data: URI)
     <img
       src={src}
       alt=""
@@ -102,6 +102,7 @@ export function SeedSheet({
       if (!preview) return
       const r = await seedCrmFromDesignAction(slug, {
         page: preview.page.id,
+        hash: preview.hash,
         replace,
         services: preview.plan.services.map((s) => ({
           designId: s.designId,
