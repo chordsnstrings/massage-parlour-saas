@@ -212,6 +212,39 @@ describe('buildCrmContract', () => {
     expect(c.booking).toEqual({ form_endpoint: 'https://zen.test/crm-enquiry?page=' })
   })
 
+  it('shows a treatment in two menus once (R28)', () => {
+    const src = source()
+    src.services.push(
+      {
+        id: 'u3',
+        name: { en: 'NORMAL  massage', ar: 'مساج' },
+        description: { en: 'Arabic menu' },
+        category: { en: 'Arabic Menu' },
+        imageUrl: '/files/s/3.webp',
+        variants: [
+          { durationMin: 120, priceAed: '200.00' },
+          { durationMin: 60, priceAed: null },
+        ],
+      },
+      { id: 'u4', name: { en: '' }, description: null, category: null, imageUrl: null, variants: [] },
+      { id: 'u5', name: { en: '' }, description: null, category: null, imageUrl: null, variants: [] },
+    )
+    const c = buildCrmContract(src, { locale: 'en' })
+    expect(c.services.map((s) => s.id)).toEqual(['u1', 'u2', 'u4', 'u5'])
+    expect(c.services[0]).toMatchObject({
+      name: 'Normal massage',
+      category: 'Massage',
+      description: 'Arabic menu',
+      durations: [60, 90, 120],
+      price: 200,
+      image: 'https://app.test/files/s/3.webp',
+    })
+    expect(c.services[0]!.match.names).toEqual(['normal massage'])
+    const ar = buildCrmContract(src, { locale: 'ar' })
+    expect(ar.services[0]!.match.names).toEqual(['normal massage', 'مساج عادي', 'مساج'])
+    expect(src.services[0]!.variants).toHaveLength(3) // the source is never changed
+  })
+
   it('uses the locale with English fallback, decimals, dedupes phones across branches', () => {
     const src = source()
     src.services[0]!.variants = [{ durationMin: 60, priceAed: '199.50' }]
@@ -326,18 +359,14 @@ describe('mergeCrmContract', () => {
     ])
   })
 
-  it('empty CRM values / collections keep the design', () => {
-    const crm = buildCrmContract(
-      source({
-        services: [],
-        staff: [],
-        formEndpoint: null,
-        spa: { name: 'Other Spa', logoUrl: null },
-        branches: [],
-      }),
+  const emptyCrm = (name: string) =>
+    buildCrmContract(
+      source({ services: [], staff: [], formEndpoint: null, spa: { name, logoUrl: null }, branches: [] }),
       { locale: 'en' },
     )
-    const m = mergeCrmContract(design, crm) as Json
+
+  it("empty CRM values / collections keep the design's own values on the spa's own design", () => {
+    const m = mergeCrmContract(design, emptyCrm('Be Relax Spa')) as Json // "Be Relax" names it
     expect(m.services).toBe(design.services)
     // Staff only with "Show on website": nobody → none (the design hides its team), never the design's people.
     expect(m.staff).toEqual([])
@@ -345,10 +374,56 @@ describe('mergeCrmContract', () => {
     expect(m.contact.phones).toBe(design.contact.phones)
     expect(m.contact.whatsapp_number).toBe('+971500000000')
     expect(m.location).toMatchObject(design.location)
-    expect(m.spa.logo_on_dark).toBe('data:dark')
-    expect(m.spa.short_name).toBe('Other Spa') // "Be Relax" isn't a start of "Other Spa"
+    expect(m.spa).toMatchObject({
+      logo_on_dark: 'data:dark',
+      short_name: 'Be Relax',
+      area_label: 'Al Zahiyah',
+    })
     expect(m.booking.url).toBeNull()
     expect(m.booking.form_endpoint).toBeNull() // the designer's endpoint never receives posts from the platform
+  })
+
+  it("another spa's design with an empty CRM shows nothing of that spa (R28 D1)", () => {
+    const m = mergeCrmContract(design, emptyCrm('Other Spa')) as Json
+    expect(m.services).toEqual([])
+    expect(m.staff).toEqual([])
+    expect(m.hours).toEqual([])
+    expect(m.contact.phones).toEqual([])
+    expect(m.contact.whatsapp_number).toBe('')
+    expect(m.contact.whatsapp_message).toBe('Hello {spa}') // design-owned keys stay
+    expect(m.location).toEqual({ address_line1: '', address_line2: '', city: '', country: '', maps_url: '' })
+    expect(m.spa).toMatchObject({
+      name: 'Other Spa',
+      short_name: 'Other Spa', // "Be Relax" isn't a start of "Other Spa"
+      area_label: '',
+      logo_on_dark: '',
+      logo_on_light: '',
+    })
+    expect(m.journey).toBe(design.journey)
+    // With CRM values: the CRM's area, never the design's.
+    expect(
+      (
+        mergeCrmContract(
+          design,
+          buildCrmContract(source({ spa: { name: 'Zen', logoUrl: null } }), { locale: 'en' }),
+        ) as Json
+      ).spa.area_label,
+    ).toBe('Abu Dhabi')
+  })
+
+  it('leaves out staff still without a photo (R28 D2)', () => {
+    const src = source({
+      staff: [
+        { id: 's1', name: 'Maya', bio: null, photoUrl: null }, // the design's MAYA photo
+        { id: 's2', name: 'Our therapist', bio: null, photoUrl: null },
+        { id: 's3', name: 'Lina', bio: null, photoUrl: '/files/l.webp' },
+      ],
+    })
+    const m = mergeCrmContract(design, buildCrmContract(src, { locale: 'en' })) as Json
+    expect(m.staff.map((s: Json) => s.id)).toEqual(['s1', 's3'])
+    expect(
+      (mergeCrmContract(null, buildCrmContract(src, { locale: 'en' })) as Json).staff.map((s: Json) => s.id),
+    ).toEqual(['s3'])
   })
 
   it("another spa's design: the CRM logo in both slots, the design's booking url kept", () => {

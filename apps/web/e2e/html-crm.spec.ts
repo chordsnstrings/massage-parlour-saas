@@ -101,7 +101,8 @@ async function seedSpa(slug: string) {
   const people = await db
     .insert(staff)
     .values([
-      { tenantId, displayName: 'Maya Test', sort: 1 },
+      // A photo: photo-less therapists never show on HTML designs (R28 D2).
+      { tenantId, displayName: 'Maya Test', sort: 1, photoUrl: '/files/maya-photo' },
       { tenantId, displayName: 'Ploy Test', sort: 2 },
     ])
     .returning()
@@ -223,6 +224,11 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await expect(page.locator('#staff .specialty')).toHaveText('Thai massage specialist')
     await expect(page.getByText('Ploy Test')).toHaveCount(0)
     await expect(page.locator('#staff li.photo-only')).toHaveCount(0)
+    // Switched on but no photo → left out (R28 D2: no empty frames).
+    await testDb().update(staff).set({ showOnSite: true }).where(eq(staff.id, seed.ploy))
+    await live(page, slug)
+    await expect(page.locator('#staff li.member')).toHaveCount(1)
+    await expect(page.getByText('Ploy Test')).toHaveCount(0)
   })
 
   await test.step('a price / hours change in the CRM shows on reload, without republishing', async () => {
@@ -238,12 +244,12 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await expect(page.locator('#hours')).toContainText('mon 11:00-23:00')
   })
 
-  await test.step('no website services in the CRM → the design keeps its own list', async () => {
+  await test.step("no website services in the CRM → none of the design's (another spa's design, R28 D1)", async () => {
     const db = testDb()
     await db.update(services).set({ onlineBookable: false }).where(eq(services.tenantId, seed.tenantId))
     await live(page, slug)
-    await expect(page.locator('#services').getByText('Design ritual')).toBeVisible()
-    await expect(page.locator('li[data-id="normal-massage"] .price')).toHaveText('from 999 AED')
+    await expect(page.locator('#services li')).toHaveCount(0)
+    await expect(page.getByText(/999/)).toHaveCount(0)
     await db.update(services).set({ onlineBookable: true }).where(eq(services.tenantId, seed.tenantId))
   })
 
