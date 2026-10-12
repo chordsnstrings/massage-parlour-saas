@@ -314,8 +314,10 @@ export function crmHours(hours: OpeningHours | null | undefined): CrmHour[] {
 export function crmImageUrl(src: string | null | undefined, origin: string): string {
   const s = src?.trim() ?? ''
   if (/^https:\/\/[^\s"'<>\\`]{1,2000}$/i.test(s)) return s
-  if (/^\/(?!\/)[^\s"'<>\\`]{0,2000}$/.test(s)) return `${origin.replace(/\/+$/, '')}${s}`
-  return ''
+  if (!/^\/(?!\/)[^\s"'<>\\`]{0,2000}$/.test(s)) return ''
+  let base = origin
+  while (base.endsWith('/')) base = base.slice(0, -1)
+  return `${base}${s}`
 }
 
 const firstLine = (s: string, max: number) => {

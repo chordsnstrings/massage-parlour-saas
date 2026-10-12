@@ -34,7 +34,8 @@ export async function crmContractFor(
     facts: await crmFeedFacts(tx, tenant.id),
     services: opts.services ?? (await websiteServices(tx, tenant.id)),
   }))
-  const site = (await publicSiteUrl(tenant)).replace(/\/+$/, '')
+  let site = await publicSiteUrl(tenant)
+  while (site.endsWith('/')) site = site.slice(0, -1)
   const origin = new URL(site).origin
   return buildCrmContract(
     {
