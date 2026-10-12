@@ -1,3 +1,10 @@
+import {
+  htmlContentFrom,
+  htmlContentParts,
+  htmlContentSlots,
+  htmlCrmContractOf,
+  listHtmlDesignTexts,
+} from '@spa/core'
 import type { PropSpec, SiteEditSchema } from './edit-ops'
 import { isNode, type PuckNode, walkNodes } from './tree'
 
@@ -17,6 +24,8 @@ export type TextSlot = {
   multiline: boolean
   en: string
   ar: string
+  /** Page texts of an HTML design (R28 P4): the design text's guard (`listHtmlDesignTexts` src). */
+  src?: string
 }
 export type TextDraft = { key: string; en: string; ar: string }
 
@@ -25,21 +34,35 @@ const MAX_MULTILINE = 1500
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 const isAlt = (prop: string) => prop === 'alt' || prop.endsWith('Alt')
+const HTML_DESIGN = 'HtmlDesign'
+const MAX_KEY = 200
 
-/** HTML-design pages (R17 uploads) are shown exactly as built: never rewritten. */
+/** HTML-design pages (R17 uploads) are shown exactly as built: never rewritten (R28 P4: only their website content). */
 const isHtmlPage = (data: unknown) => {
   const d = data as { root?: { props?: Record<string, unknown> }; content?: unknown } | null
-  return (
-    d?.root?.props?.htmlDesign === true ||
-    (Array.isArray(d?.content) && d.content.some((n) => isNode(n) && n.type === 'HtmlDesign'))
-  )
+  return d?.root?.props?.htmlDesign === true || htmlDesignNode(data) !== null
+}
+const htmlDesignNode = (data: unknown): PuckNode | null => {
+  const content = (data as { content?: unknown } | null)?.content
+  return (Array.isArray(content) && content.find((n) => isNode(n) && n.type === HTML_DESIGN)) || null
 }
 
-/** Every non-empty bilingual text of a page (root props + every block, slots included), in reading order. */
-export function textSlots(data: unknown, schema: SiteEditSchema, opts: { maxPerPage?: number } = {}) {
+/**
+ * Every non-empty bilingual text of a page (root props + every block, slots included), in reading order. An
+ * HTML-design page has none unless `html` (its design) is given: then its website content texts (`htmlTextSlots`,
+ * `first` keys ahead).
+ */
+export function textSlots(
+  data: unknown,
+  schema: SiteEditSchema,
+  opts: { maxPerPage?: number; html?: string; first?: ReadonlySet<string> } = {},
+): TextSlot[] {
   const max = opts.maxPerPage ?? 120
   const out: TextSlot[] = []
-  if (isHtmlPage(data)) return out
+  if (isHtmlPage(data))
+    return opts.html === undefined
+      ? out
+      : htmlTextSlots(data, opts.html, { maxPerPage: opts.maxPerPage, first: opts.first })
   const visit = (block: string, type: string, specs: Record<string, PropSpec>, props: unknown, at = '') => {
     if (!isObj(props)) return
     for (const [name, spec] of Object.entries(specs)) {
@@ -70,6 +93,61 @@ export function textSlots(data: unknown, schema: SiteEditSchema, opts: { maxPerP
     if (spec && typeof n.props.id === 'string' && n.props.id) visit(n.props.id, n.type, spec.props, n.props)
   })
   return out
+}
+
+/**
+ * R28 P4: the texts of an HTML-design page (`html` = its design) as slots, with the spa's values over the design's:
+ * the design data's text / longtext values (`{block}/content:{path}`; hidden or empty ones left out) and its page
+ * texts the CRM doesn't fill (`{block}/text:{id}`, with the design text's src guard). Pictures and tags never.
+ * `first` (Write texts' leftovers) go ahead of the rest before the cap, so late ones (a footer) still make it.
+ */
+export function htmlTextSlots(
+  data: unknown,
+  html: string,
+  opts: { maxPerPage?: number; first?: ReadonlySet<string> } = {},
+): TextSlot[] {
+  const max = opts.maxPerPage ?? 400
+  const node = htmlDesignNode(data)
+  const block = typeof node?.props.id === 'string' ? node.props.id : ''
+  const out: TextSlot[] = []
+  if (!node || !block) return out
+  const parts = htmlContentParts(node.props.content)
+  const push = (slot: TextSlot) => {
+    if (slot.key.length <= MAX_KEY && slot.en.trim()) out.push(slot)
+  }
+  for (const s of htmlContentSlots(htmlCrmContractOf(html)?.literal?.data)) {
+    const v = parts.values[s.path]
+    if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v)) continue
+    const t = v && 't' in v ? v.t : undefined
+    push({
+      key: `${block}/content:${s.path}`,
+      block,
+      type: HTML_DESIGN,
+      prop: `content:${s.path}`,
+      multiline: s.kind === 'longtext',
+      en: t?.en ?? String(s.value ?? ''),
+      ar: t?.ar ?? '',
+    })
+  }
+  for (const x of listHtmlDesignTexts(html)) {
+    if (x.bound) continue
+    const t = parts.texts[x.id]?.src === x.src ? parts.texts[x.id]?.t : undefined
+    push({
+      key: `${block}/text:${x.id}`,
+      block,
+      type: HTML_DESIGN,
+      prop: `text:${x.id}`,
+      multiline: x.kind === 'meta' || x.text.length > 160,
+      en: t?.en ?? x.text,
+      ar: t?.ar ?? '',
+      src: x.src,
+    })
+  }
+  const first = opts.first
+  const ordered = first?.size
+    ? [...out.filter((s) => first.has(s.key)), ...out.filter((s) => !first.has(s.key))]
+    : out
+  return ordered.slice(0, max)
 }
 
 /**
@@ -131,19 +209,48 @@ function leafOf(data: { root?: { props?: Record<string, unknown> } }, slot: Text
 /**
  * Writes AI drafts into a copy of `data`: only for slots the model was given (unknown keys are ignored) and only
  * where the English text is still what the model saw (an edit made meanwhile wins). Empty drafts are skipped.
+ * HTML-design slots need `html` (the page's design, else skipped): written into the block's website content where
+ * the slot and the design text are unchanged (pictures and the other parts kept).
  */
-export function fillTextSlots<T>(data: T, slots: TextSlot[], drafts: TextDraft[]) {
+export function fillTextSlots<T>(
+  data: T,
+  slots: TextSlot[],
+  drafts: TextDraft[],
+  opts: { html?: string } = {},
+) {
   const copy = structuredClone(data) as T & { root?: { props?: Record<string, unknown> } }
   const byKey = new Map(slots.map((s) => [s.key, s]))
+  const node = opts.html === undefined ? null : htmlDesignNode(copy)
+  const fresh = node
+    ? new Map(
+        htmlTextSlots(copy, opts.html ?? '', { maxPerPage: Number.POSITIVE_INFINITY }).map((s) => [s.key, s]),
+      )
+    : null
+  const parts = node ? htmlContentParts(node.props.content) : null
   const done = new Set<string>()
   let filled = 0
   let skipped = 0
+  let content = false
   for (const d of drafts) {
     const slot = byKey.get(d.key)
     if (!slot || done.has(d.key)) continue
     done.add(d.key)
     const en = plainText(String(d.en ?? ''), slot.multiline)
     const ar = plainText(String(d.ar ?? ''), slot.multiline)
+    if (slot.type === HTML_DESIGN) {
+      const now = fresh?.get(slot.key)
+      if (!en || !ar || !now || !parts || now.en !== slot.en || now.src !== slot.src) {
+        skipped++
+        continue
+      }
+      if (slot.prop.startsWith('text:')) {
+        const id = slot.prop.slice(5)
+        parts.texts[id] = { id, src: now.src ?? '', t: { en, ar } }
+      } else parts.values[slot.prop.slice(8)] = { t: { en, ar } }
+      content = true
+      filled++
+      continue
+    }
     const leaf = leafOf(copy, slot)
     if (!en || !ar || !leaf || leaf.en !== slot.en) {
       skipped++
@@ -153,5 +260,6 @@ export function fillTextSlots<T>(data: T, slots: TextSlot[], drafts: TextDraft[]
     leaf.ar = ar
     filled++
   }
+  if (node && parts && content) node.props.content = htmlContentFrom(parts)
   return { data: copy as T, filled, skipped }
 }

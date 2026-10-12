@@ -7,6 +7,7 @@ import {
   getEditablePage,
   HTML_DESIGN_DOC_KEEP_MS,
   HTML_DESIGN_DOC_PURPOSE,
+  htmlDesignContentErrors,
   htmlDesignDocFor,
   htmlDesignSource,
   inlineHtmlDesignDocs,
@@ -300,5 +301,67 @@ describe('localiseHtmlDesignAssets', () => {
     )
     const backDoc = back.content[0]!.props.doc as typeof doc
     expect(await templateHtmlDocReader(platform)(backDoc)).toBe(spaHtml)
+  })
+
+  it('R28: a template’s website content on another spa’s files gets this spa’s copies (draft saves pass); private ones dropped', async () => {
+    const [pub, priv] = await withTenant(
+      ids.other!,
+      async (db) => [
+        await putFile(db, { tenantId: ids.other!, bytes: png(51), contentType: 'image/png', isPublic: true }),
+        await putFile(db, {
+          tenantId: ids.other!,
+          bytes: png(52),
+          contentType: 'image/png',
+          isPublic: false,
+        }),
+      ],
+      app,
+    )
+    const html = '<!doctype html><html><body><img src="https://cdn.test/a.jpg"><h1>Hi</h1></body></html>'
+    const doc = await storeTemplateHtmlDoc(platform, { html })
+    const content = {
+      v: 1,
+      values: [
+        { path: 'hero.image', value: { img: `/files/${pub!.id}` } },
+        { path: 'hero.clip', value: { video: `/files/${priv!.id}` } },
+        { path: 'hero.title', value: { t: { en: 'Calm' } } },
+      ],
+      texts: [{ id: 'txt-0', src: 'Hi', t: { en: 'Hello' } }],
+      pictures: [
+        { id: 'img-0', src: 'https://cdn.test/a.jpg', img: `/files/${pub!.id}` },
+        { id: 'img-1', src: 'gone', img: `/files/${priv!.id}` },
+      ],
+    }
+    const template = {
+      key: 'html-content',
+      name: 'HTML content',
+      theme: {},
+      pages: [{ slug: '', title: { en: 'Home' }, data: page({ html: '', doc, phoneFixes: false, content }) }],
+    }
+    const { draft, errors } = await tx(async (db) => {
+      await switchTemplate(db, ids.tenant!, template, {
+        replaceContent: true,
+        prepare: async (data) =>
+          (await materializeTemplatePageData(db, { tenantId: ids.tenant!, data, fileUrl, platform })).data,
+      })
+      const home = (await listPages(db, ids.tenant!)).find((p) => p.slug === '')!
+      const draft = (await getEditablePage(db, ids.tenant!, home.id))!.data
+      return { draft, errors: await htmlDesignContentErrors(db, ids.tenant!, draft, { platform }) }
+    })
+    expect(errors).toEqual([])
+    const stored = (draft as ReturnType<typeof page>).content[0]!.props.content as typeof content
+    const copy = /^\/files\/([0-9a-f-]{36})$/.exec(stored.pictures[0]!.img)![1]!
+    expect(copy).not.toBe(pub!.id)
+    const [row] = await platform.select().from(storedFiles).where(eq(storedFiles.id, copy))
+    expect(row?.tenantId).toBe(ids.tenant)
+    expect(stored).toEqual({
+      v: 1,
+      values: [
+        { path: 'hero.image', value: { img: `/files/${copy}` } },
+        { path: 'hero.title', value: { t: { en: 'Calm' } } },
+      ],
+      texts: content.texts,
+      pictures: [{ ...content.pictures[0]!, img: `/files/${copy}` }],
+    })
   })
 })

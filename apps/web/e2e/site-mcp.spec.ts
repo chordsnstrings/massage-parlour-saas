@@ -442,6 +442,62 @@ test('Claude MCP connector: OAuth (DCR + PKCE + 2FA) → tools edit the draft �
       .poll(() => scenesFrame.locator('#pic').evaluate((el) => (el as HTMLImageElement).naturalWidth))
       .toBeGreaterThan(0)
 
+    // R28 P4: page texts and pictures of every design (this one has no window.CRM_DATA): paged, searched, drafts only.
+    await ok('add_page', { slug: 'texts', title_en: 'Texts' })
+    const lines = [1, 2, 3, 4].map((n) => `<p>Line ${n}</p>`).join('')
+    const textsHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Texts design</title><meta name="description" content="Design description"></head><body><section aria-label="Intro"><h2>Design heading</h2><p id="live">Loading</p>${lines}<img id="photo" src="data:image/png;base64,${img.toString('base64')}" width="64" height="64" alt="Design picture"></section><script>document.getElementById('live').textContent = 'Ready'</script></body></html>`
+    await ok('set_html_design', { page: 'texts', html: textsHtml })
+    const first = await ok('get_html_content', { page: 'texts', part: 'texts', limit: 3 })
+    expect(first).toMatchObject({ crmData: false, slots: [], pictures: [], textsTotal: 10 })
+    expect(first.texts.map((t: { id: string }) => t.id)).toEqual(['title', 'meta-description', 'attr-0'])
+    const next = await ok('get_html_content', { page: 'texts', part: 'texts', start: 3, limit: 3 })
+    expect(next.texts.map((t: { id: string }) => t.id)).toEqual(['txt-0', 'txt-1', 'txt-2'])
+    expect(next.texts[1]).toMatchObject({ design: 'Loading', bound: true })
+    const found = await ok('get_html_content', { page: 'texts', search: 'design heading' })
+    expect(found.textsTotal).toBe(1)
+    expect(found.texts).toEqual([
+      expect.objectContaining({
+        id: 'txt-0',
+        tag: 'h2',
+        group: 'Intro',
+        design: 'Design heading',
+        bound: false,
+      }),
+    ])
+    expect(found.pictures).toEqual([
+      { id: 'img-0', kind: 'img', design: expect.stringMatching(/^embedded image\/png, \d+ KB$/) },
+    ])
+    const bound = await tool(request, token, 'set_html_content', {
+      spa: slug,
+      page: 'texts',
+      texts: [{ id: 'txt-1', t: { en: 'Open now' } }],
+    })
+    expect(bound.isError).toBe(true)
+    expect(bound.data.error).toMatch(
+      /txt-1 is filled by the design's script — change it in the design file \(patch_html_design\)/,
+    )
+    await ok('set_html_content', {
+      page: 'texts',
+      texts: [
+        { id: 'txt-0', t: { en: 'Our rituals at {{spa_name}}' } },
+        { id: 'title', t: { en: 'Rituals', ar: 'طقوس' } },
+      ],
+      pictures: [{ id: 'img-0', img: picture }],
+    })
+    expect((await ok('get_html_design', { page: 'texts' })).html).toBe(textsHtml)
+    const changed = await ok('get_html_content', { page: 'texts', search: 'rituals' })
+    expect(changed).toMatchObject({ textsTotal: 2, set_count: 3, stale: [] })
+    expect(changed.pictures[0]).toMatchObject({ id: 'img-0', spa: picture })
+    const textsPreview = await ok('preview_link', { page: 'texts', days: 1 })
+    await page.goto(textsPreview.url)
+    const textsFrame = page.frameLocator('iframe.site-html-design')
+    await expect(textsFrame.getByRole('heading', { name: 'Our rituals at Connector Spa' })).toBeVisible()
+    await expect(textsFrame.locator('#photo')).toHaveAttribute('src', new RegExp(`${picture}$`))
+    await expect(textsFrame.locator('#photo')).toHaveAttribute('alt', 'Design picture')
+    await expect
+      .poll(() => textsFrame.locator('#photo').evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0)
+
     // Throughout: nothing was published; the live site is the old one and the new page isn't public.
     expect(await publishedCount()).toBe(1)
     await liveHome()

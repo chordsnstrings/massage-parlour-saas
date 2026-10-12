@@ -136,6 +136,67 @@ describe('sanitising a site into a template', () => {
     expect(props).toMatchObject({ url: '', poster: '', title: { en: 'Tour' } })
   })
 
+  it('keeps an HTML design’s file, image adjustments and src guards; scrubs its website content (contact details, the spa’s name → {{spa_name}}, own uploads dropped)', () => {
+    const design = {
+      html: '',
+      doc: { file: 'f', sha256: 'x' },
+      images: [{ id: 'img-0', src: 'a.jpg', replace: '/files/y' }],
+    }
+    const content = {
+      v: 1,
+      values: [
+        { path: 'about.body', value: { t: { en: 'Calm Spa: call +971 4 123 4567', ar: 'اتصل hi@calm.ae' } } },
+        { path: 'about.tags', value: { tags: { en: ['Calm Spa', 'www.calm.ae'] } } },
+        { path: 'about.image', value: { img: '/files/0b9e1f8a-1c2d-4e5f-8a9b-0c1d2e3f4a5b' } },
+        { path: 'about.video', value: { video: 'https://cdn.example/v.mp4' } },
+        { path: 'about.link', value: { t: { en: 'https://calm.ae/book' } } },
+      ],
+      texts: [
+        { id: 'txt-0', src: 'Welcome', t: { en: 'Welcome to Calm Spa', ar: 'مرحبا' } },
+        { id: 'txt-1', src: 'Mail', t: { en: 'hi@calm.ae' } },
+      ],
+      pictures: [
+        { id: 'img-1', src: 'b.jpg', img: '/files/z' },
+        { id: 'img-2', src: 'c.jpg', img: 'https://cdn.example/c.jpg' },
+      ],
+    }
+    const page = (props: Record<string, unknown>) => [
+      {
+        slug: '',
+        title: { en: 'Home' },
+        data: {
+          root: { props: { htmlDesign: true } },
+          content: [{ type: 'HtmlDesign', props: { id: 'd1', ...props } }],
+        },
+      },
+    ]
+    const propsOf = (p: ReturnType<typeof sanitizeTemplatePages>) =>
+      (p[0]!.data as { content: { props: Record<string, unknown> }[] }).content[0]!.props
+    const [home] = sanitizeTemplatePages(page({ ...design, content }), { key: 'des', tenantName: 'Calm Spa' })
+    expect(propsOf([home!])).toEqual({
+      id: 'des-htmldesign-1',
+      ...design,
+      content: {
+        v: 1,
+        values: [
+          { path: 'about.body', value: { t: { en: '{{spa_name}}: call', ar: 'اتصل' } } },
+          { path: 'about.tags', value: { tags: { en: ['{{spa_name}}'] } } },
+          { path: 'about.video', value: { video: 'https://cdn.example/v.mp4' } },
+        ],
+        texts: [{ id: 'txt-0', src: 'Welcome', t: { en: 'Welcome to {{spa_name}}', ar: 'مرحبا' } }],
+        pictures: [{ id: 'img-2', src: 'c.jpg', img: 'https://cdn.example/c.jpg' }],
+      },
+    })
+    // Nothing left: no content prop; no content: the design as it was.
+    const onlyOwn = { v: 1, pictures: [{ id: 'img-1', src: 'b.jpg', img: '/files/z' }] }
+    const bare = sanitizeTemplatePages(page({ ...design, content: onlyOwn }), { key: 'des' })
+    expect(propsOf(bare)).toEqual({ id: 'des-htmldesign-1', ...design })
+    expect(propsOf(sanitizeTemplatePages(page(design), { key: 'des' }))).toEqual({
+      id: 'des-htmldesign-1',
+      ...design,
+    })
+  })
+
   it('replaces client reviews, strips contact details and only rewrites whole words of copy', () => {
     const data = {
       root: { props: { title: { en: 'Hero' } } },

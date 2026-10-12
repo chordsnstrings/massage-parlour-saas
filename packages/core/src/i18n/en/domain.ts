@@ -347,6 +347,8 @@ export const domain = {
     'This spa reached its daily limit of {limit} MB for new HTML designs — try again tomorrow',
   templateImportNoDesign: 'An HTML design in this file has no design text — export the template again',
   templateTooLargeAsFiles: 'The template is too large once its HTML designs are files ({limit} MB max).',
+  // R28 P4: a draft save checks the HTML design's website content (the problem itself stays English: console only).
+  websiteContentInvalid: 'Website content: {problem}',
   // R28 P3: filling the CRM from a design (design-seed.ts).
   seedDesignServiceMissing: 'The design has no service “{id}”',
   seedDesignStaffMissing: 'The design has no team member “{id}”',

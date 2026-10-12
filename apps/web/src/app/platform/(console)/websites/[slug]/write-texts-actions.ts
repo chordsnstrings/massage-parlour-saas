@@ -1,22 +1,35 @@
 'use server'
 import { AiBudgetExceededError, AiDisabledError, loadSiteFacts, planSiteTexts } from '@spa/ai'
-import { dubaiParts } from '@spa/core'
-import { withTenant } from '@spa/db'
+import {
+  crmAddress,
+  dubaiParts,
+  type HtmlDesignContent,
+  htmlContentLeftovers,
+  htmlCrmContractOf,
+  htmlDesignDocOf,
+  listHtmlDesignTexts,
+} from '@spa/core'
+import { type Tx, withTenant } from '@spa/db'
 import {
   assertPagesUnlocked,
   getEditablePage,
   getSite,
+  HTML_DESIGN_BLOCK,
+  htmlDesignContentErrors,
+  htmlDesignSource,
   labelVersion,
   listPages,
   lockSite,
   PageLockedError,
   pageLocksHeldByOthers,
   saveDraft,
+  spaHtmlDocReader,
 } from '@spa/services'
 import { fillTextSlots, type TextDraft, type TextSlot, textSlots } from '@spa/services/site-kit'
 import { z } from 'zod'
 import { siteEditSchema } from '@/components/site/ai-schema'
 import { designSignature } from '@/components/site/content'
+import { designKey } from '@/components/site/html-crm'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
 import type { MemberContext } from '@/server/access'
 import { fixtureClient } from '@/server/ai-fixture'
@@ -28,7 +41,8 @@ import { revalidateStudio } from '@/server/studio'
  * R23 "Write texts" (console spa website page): the site_editor agent drafts the texts of every page in EN + AR from
  * the spa's own data. Text props only (images, links, structure and styles stay), written to the DRAFTS: published
  * versions are never touched and nothing publishes. Same gate as Studio Ask AI / Claude MCP (SITE_AI_EDITOR_EMAILS
- * super-admins with 2FA) and the same editor locks (a page open in someone else's editor is skipped).
+ * super-admins with 2FA) and the same editor locks (a page open in someone else's editor is skipped). R28 P4: an
+ * HTML-design page gets its website content written (data texts + page texts, EN + AR; its file never changes).
  */
 
 const MAX_PAGES = 12
@@ -42,7 +56,17 @@ const running = new Set<string>()
 
 const inputSchema = z.object({ notes: z.string().trim().max(400).optional() })
 
-type Job = { id: string; title: string; slug: string; slots: TextSlot[] }
+type Job = {
+  id: string
+  title: string
+  slug: string
+  slots: TextSlot[]
+  /** HTML-design page: its design document (the save re-checks it). */
+  html?: { docKey: string | null }
+  /** Slot keys whose text still names another spa, city, phone or test copy (listed first). */
+  leftovers: string[]
+}
+type DesignNode = { type?: unknown; props?: Record<string, unknown> }
 export type WriteTextsResult = {
   pages: { id: string; slug: string; title: string; filled: number }[]
   skipped: { title: string; reason: string }[]
@@ -50,6 +74,37 @@ export type WriteTextsResult = {
 
 const chunks = <T>(list: T[], size: number) =>
   Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size))
+
+/** The page's HtmlDesign block (R28 P4), if any. */
+const htmlDesignNode = (data: unknown) => {
+  const content = (data as { content?: unknown } | null)?.content
+  return Array.isArray(content)
+    ? (content as DesignNode[]).find((n) => n?.type === HTML_DESIGN_BLOCK && n.props)
+    : undefined
+}
+/** The page without its HtmlDesign website content (the only part Write texts changes there). */
+const withoutHtmlContent = (data: unknown) => {
+  const d = data as { content?: unknown } | null
+  if (!Array.isArray(d?.content)) return data
+  return {
+    ...d,
+    content: (d.content as DesignNode[]).map((n) => {
+      if (n?.type !== HTML_DESIGN_BLOCK || !n.props) return n
+      const { content: _content, ...props } = n.props
+      return { ...n, props }
+    }),
+  }
+}
+/** An HTML-design page's design source + document key (null source: missing). */
+async function designOf(tx: Tx, tenantId: string, data: unknown) {
+  const node = htmlDesignNode(data)
+  if (!node?.props) return null
+  return {
+    node,
+    source: await htmlDesignSource(node.props, spaHtmlDocReader(tx, tenantId)),
+    docKey: designKey(htmlDesignDocOf(node.props)),
+  }
+}
 
 function dubaiStamp(now = new Date()) {
   const p = dubaiParts(now)
@@ -81,7 +136,7 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
     const drafts = []
     for (const p of pages) {
       const page = await getEditablePage(tx, tenantId, p.id)
-      if (page) drafts.push({ page: p, data: page.data })
+      if (page) drafts.push({ page: p, data: page.data, design: await designOf(tx, tenantId, page.data) })
     }
     return {
       site,
@@ -100,16 +155,44 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
 
   const result: WriteTextsResult = { pages: [], skipped: [] }
   const jobs: Job[] = []
-  for (const { page, data } of loaded.drafts) {
+  const city = crmAddress(loaded.facts.branches[0]?.address ?? '').city
+  for (const { page, data, design } of loaded.drafts) {
     const title = page.slug === '' ? 'Home' : page.title.en || `/${page.slug}`
     const lock = loaded.locks.get(page.id)
     if (lock) {
       result.skipped.push({ title, reason: `open in ${lock.holderName}'s editor` })
       continue
     }
-    const slots = textSlots(data, schema)
+    const html = design?.source ?? undefined
+    const leftovers = new Set<string>()
+    if (design && html !== undefined) {
+      // R28 P4: texts that still name another spa, city, phone or test copy go first — ahead of the page's slot cap —
+      // and are named in the prompt.
+      const block = String(design.node.props?.id ?? '')
+      for (const l of htmlContentLeftovers(
+        htmlCrmContractOf(html)?.literal?.data ?? null,
+        design.node.props?.content as HtmlDesignContent | undefined,
+        {
+          spaName: loaded.facts.name,
+          city,
+          arabic: true,
+          page: { texts: listHtmlDesignTexts(html), images: [] },
+        },
+      ))
+        if (l.reason !== 'stale' && l.reason !== 'arabic')
+          leftovers.add(`${block}/${l.path.startsWith('text:') ? l.path : `content:${l.path}`}`)
+    }
+    const slots = textSlots(data, schema, { html, first: leftovers })
     if (!slots.length) result.skipped.push({ title, reason: 'no texts to write' })
-    else jobs.push({ id: page.id, title, slug: page.slug, slots })
+    else
+      jobs.push({
+        id: page.id,
+        title,
+        slug: page.slug,
+        slots,
+        ...(design ? { html: { docKey: design.docKey } } : {}),
+        leftovers: slots.filter((s) => leftovers.has(s.key)).map((s) => s.key),
+      })
   }
   const siteMap = loaded.drafts.map(({ page }) => ({ slug: page.slug, title: page.title.en || page.slug }))
   const label = `Before Write texts ${dubaiStamp()}`
@@ -131,11 +214,20 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
         await assertPagesUnlocked(tx, { tenantId, pageIds: [job.id], userId: ctx.user.id })
         const current = await getEditablePage(tx, tenantId, job.id)
         if (!current) return 'page was deleted'
-        const out = fillTextSlots(current.data, job.slots, drafts)
+        let html: string | undefined
+        if (job.html) {
+          const design = await designOf(tx, tenantId, current.data)
+          if (!design || design.source === null || design.docKey !== job.html.docKey)
+            return 'the design changed meanwhile — nothing written'
+          html = design.source
+        }
+        const out = fillTextSlots(current.data, job.slots, drafts, { html })
         if (!out.filled) return 'edited meanwhile — nothing written'
         if (
-          designSignature(out.data) !== designSignature(current.data) ||
-          JSON.stringify(out.data).length > MAX_PAGE_BYTES
+          designSignature(withoutHtmlContent(out.data)) !==
+            designSignature(withoutHtmlContent(current.data)) ||
+          JSON.stringify(out.data).length > MAX_PAGE_BYTES ||
+          (job.html && (await htmlDesignContentErrors(tx, tenantId, out.data)).length)
         )
           return 'the texts did not fit this page'
         // A hand-written working draft stays restorable from the editor's Versions.
@@ -172,6 +264,9 @@ async function run(ctx: MemberContext, slug: string, notes: string | undefined):
             page: { slug: job.slug, title: job.title },
             siteMap,
             slots,
+            ...(job.html
+              ? { htmlDesign: true, leftovers: job.leftovers.filter((k) => slots.some((s) => s.key === k)) }
+              : {}),
             client: fixtureClient(slug),
             signal,
           })

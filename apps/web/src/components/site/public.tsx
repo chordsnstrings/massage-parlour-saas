@@ -1,6 +1,13 @@
 import './site.css'
 import { type ComponentConfig, type Config, type Data, Render } from '@puckeditor/core'
-import { blogPostJsonLd, jsonLdString, normalizeGoogleMapsUrl } from '@spa/core'
+import {
+  blogPostJsonLd,
+  htmlContentParts,
+  htmlDesignDocOf,
+  jsonLdString,
+  listHtmlDesignTexts,
+  normalizeGoogleMapsUrl,
+} from '@spa/core'
 import { withTenant } from '@spa/db'
 import {
   getPublishedPage,
@@ -23,11 +30,13 @@ import { turnstileSiteKey } from '@/server/turnstile'
 import { siteConfig } from './config'
 import { crmFeedMeta } from './crm-feed'
 import { buildMeta, loadSite, localeOf } from './data'
+import { designKey } from './html-crm'
+import { htmlDesignValues } from './html-design-values'
 import { tr, ui } from './i18n'
 import { pageHref } from './links'
 import { loadPublished, siteJsonLd, type Tenant } from './published'
 import type { AdvancedProps } from './style'
-import type { Bi, SiteMeta, SitePostView } from './types'
+import type { Bi, Locale, SiteMeta, SitePostView } from './types'
 
 /** Which public site is rendering (the enquiry form posts it back; custom domains follow the Turnstile switch). */
 export type SiteKey = { slug: string } | { hostname: string }
@@ -98,6 +107,49 @@ function trackedConfig(data: Partial<Data>): Config {
   return { ...siteConfig, components }
 }
 
+// R28 P4: listed `title` / `meta-description` guards per stored design (content-addressed key; a few strings each).
+const designHeads = new Map<string, Record<string, string>>()
+
+/**
+ * The page title and search description a spa set for its HTML design (page texts `title` / `meta-description`; same
+ * id + src guard, locale pick and `{{placeholders}}` as in the design document). A framed design (Phone fixes, legacy
+ * designs, the fallback) runs in a frame, so the tab title and the search snippet come from the page's metadata.
+ */
+function htmlDesignHead(
+  data: unknown,
+  locale: Locale,
+  values: () => Record<string, string>,
+): { title?: string; description?: string } {
+  const node = ((data as { content?: PageNode[] } | null)?.content ?? []).find(
+    (n) => n?.type === 'HtmlDesign',
+  )
+  const texts = node ? htmlContentParts(node.props.content).texts : {}
+  const html = typeof node?.props.html === 'string' ? node.props.html : ''
+  if (!node || !html || (!texts.title && !texts['meta-description'])) return {}
+  const key = designKey(htmlDesignDocOf(node.props))
+  let srcs = key ? designHeads.get(key) : undefined
+  if (!srcs) {
+    srcs = {}
+    for (const x of listHtmlDesignTexts(html))
+      if (x.id === 'title' || x.id === 'meta-description') srcs[x.id] = x.src
+    if (key) {
+      if (designHeads.size >= 200) designHeads.delete(designHeads.keys().next().value ?? '')
+      designHeads.set(key, srcs)
+    }
+  }
+  const filled = values()
+  const pick = (id: 'title' | 'meta-description') => {
+    const e = texts[id]
+    if (!e || srcs[id] !== e.src) return undefined
+    const v = ((locale === 'ar' && e.t.ar?.trim()) || e.t.en?.trim() || '').replace(
+      /\{\{\s*([a-z_]+)\s*\}\}/g,
+      (m, k: string) => (Object.hasOwn(filled, k) ? filled[k]! : m),
+    )
+    return v || undefined
+  }
+  return { title: pick('title'), description: pick('meta-description') }
+}
+
 export async function publicSiteMetadata(
   tenant: Tenant | null,
   path: string[] | undefined,
@@ -114,8 +166,11 @@ export async function publicSiteMetadata(
   const locale = localeOf(lang)
   const ctx = { locale, data: loaded.data }
   const root = (loaded.published.data as { root?: { props?: { title?: Bi; description?: Bi } } }).root?.props
-  const title = tr(root?.title, ctx) || tenant.name
-  const description = tr(root?.description, ctx) || undefined
+  const head = htmlDesignHead(loaded.published.data, locale, () =>
+    htmlDesignValues(buildMeta({ data: loaded.data, theme: {}, locale, base: '', slug })),
+  )
+  const title = head.title || tr(root?.title, ctx) || tenant.name
+  const description = head.description || tr(root?.description, ctx) || undefined
   const url = sitePageUrl(seo.base, slug, locale === 'ar' && seo.arabic ? 'ar' : undefined)
   // Social card: the page's hero picture, else the spa logo.
   const hero = heroImageOf(loaded.published.data, seo.origin)

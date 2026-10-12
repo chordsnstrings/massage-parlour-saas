@@ -1,6 +1,12 @@
 // Site templates beyond the built-ins (docs/PLAN.md §11.2): template studio rows (platform table), sanitising a
 // spa's site into a template, JSON export/import, copy slots and a structural check for preset trees.
-import { MAX_HTML_UPLOAD_BYTES } from '@spa/core'
+import {
+  type HtmlContentParts,
+  type HtmlContentValue,
+  htmlContentFrom,
+  htmlContentParts,
+  MAX_HTML_UPLOAD_BYTES,
+} from '@spa/core'
 import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
@@ -63,15 +69,61 @@ const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g
 const URL_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"')]+/gi
 const PHONE_LIKE = /\+?\d[\d\s().-]{6,}\d/g
 
-/** Removes the spa's name (whole words → `{name}`), email addresses, links and phone numbers from copy. */
-function scrubText(value: string, name: RegExp | null): string {
+/**
+ * Removes the spa's name (whole words → `{name}`, or `as`), email addresses, links and phone numbers from copy.
+ */
+function scrubText(value: string, name: RegExp | null, as = '{name}'): string {
   let out = value
     .replace(EMAIL, '')
     .replace(URL_TEXT, '')
     // 9+ digits: a phone number (UAE landlines have 9), not a year range or a price.
     .replace(PHONE_LIKE, (m) => ((m.match(/\d/g)?.length ?? 0) >= 9 ? '' : m))
-  if (name) out = out.replace(name, '{name}')
+  if (name) out = out.replace(name, as)
   return out === value ? value : out.replace(/[ \t]{2,}/g, ' ').trim()
+}
+
+/** A platform file (`/files/{uuid}`): in a spa's website content, always that spa's own upload. */
+const OWN_FILE = /^\/files\//
+
+/**
+ * R28: an HTML design's website content scrubbed like copy (texts and tags; the spa's name → the design placeholder
+ * `{{spa_name}}`); the spa's own uploads (`/files` pictures and videos) dropped, so the design's own show; a text
+ * left blank is dropped too. Src guards stay.
+ */
+function scrubHtmlContent(content: unknown, name: RegExp | null): unknown {
+  if (content === undefined || content === null) return content
+  const text = (s: string) => scrubText(s, name, '{{spa_name}}')
+  const parts = htmlContentParts(content)
+  const values: Record<string, HtmlContentValue> = {}
+  for (const [path, v] of Object.entries(parts.values)) {
+    if ('t' in v) {
+      const en = typeof v.t.en === 'string' ? text(v.t.en) : ''
+      const ar = typeof v.t.ar === 'string' ? text(v.t.ar) : ''
+      if (en.trim()) values[path] = { t: ar.trim() ? { en, ar } : { en } }
+    } else if ('tags' in v) {
+      const tags = (l: unknown) =>
+        Array.isArray(l)
+          ? l
+              .map(String)
+              .map(text)
+              .filter((x) => x.trim())
+          : []
+      const en = tags(v.tags.en)
+      const ar = tags(v.tags.ar)
+      if (en.length) values[path] = { tags: ar.length ? { en, ar } : { en } }
+    } else if (!('img' in v && OWN_FILE.test(v.img)) && !('video' in v && OWN_FILE.test(v.video)))
+      values[path] = v
+  }
+  const texts: HtmlContentParts['texts'] = {}
+  for (const e of Object.values(parts.texts)) {
+    const en = e.t.en === undefined ? '' : text(e.t.en)
+    const ar = e.t.ar === undefined ? '' : text(e.t.ar)
+    if (en.trim() || ar.trim())
+      texts[e.id] = { ...e, t: { ...(en.trim() ? { en } : {}), ...(ar.trim() ? { ar } : {}) } }
+  }
+  const pictures: HtmlContentParts['pictures'] = {}
+  for (const p of Object.values(parts.pictures)) if (!OWN_FILE.test(p.img)) pictures[p.id] = p
+  return htmlContentFrom({ values, texts, pictures })
 }
 
 const isBilingual = (v: object): v is Record<string, unknown> & SiteText =>
@@ -93,6 +145,16 @@ function scrub(value: unknown, name: RegExp | null): unknown {
     return out
   }
   const obj = value as Record<string, unknown>
+  // An HTML design (R24 / R28) is carried as built: its file, image adjustments and the `src` guards of its website
+  // content are the design's own (not uploaded images), and `{name}` is no placeholder there. Its website content is
+  // the spa's: scrubbed like copy (`scrubHtmlContent`); applying the template copies the design's files into the spa.
+  if (obj.type === 'HtmlDesign' && typeof obj.props === 'object' && obj.props !== null) {
+    const props = obj.props as Record<string, unknown>
+    if (props.content === undefined) return obj
+    const { content: _content, ...rest } = props
+    const content = scrubHtmlContent(props.content, name)
+    return { ...obj, props: content === undefined ? rest : { ...rest, content } }
+  }
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(obj)) {
     if (IMAGE_KEYS.has(k) && (typeof v === 'string' || isImageValue(v))) out[k] = ''

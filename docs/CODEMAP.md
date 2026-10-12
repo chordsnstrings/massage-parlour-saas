@@ -576,19 +576,101 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `window.CRM_DATA` (story scenes, experience, booking label / picture, message templates; never operational keys).
     Core `html-content.ts`: `htmlContentSlots(data)` (every editable leaf: path `journey[welcome].title` — items by
     unique `id`, else index —, kind from key + value), `overlayHtmlContent` (copy-on-write, locale pick AR → EN, stale
-    paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors` (save time:
-    slots, kinds, ≤ 2000 chars, ≤ 64 KB, pictures `/files/{uuid}` or https only), `htmlContentFileIds`. Stored as the
-    HtmlDesign block prop `content` = `{v: 1, values: [{path, value}]}` (`htmlContentMap` / `htmlContentOf`; never an
-    object keyed by path — Puck flattens block props on "." with the `flat` package and would split such keys; no Puck
-    default; draft → publish with the page). Render:
-    `designWithCrm(…, {content, locale})` overlays before `mergeCrmContract` (output cache key + locale + content
-    hash; none → R26's key). Writes: site-edit op `html_content` (`set` / `reset` / `'all'`; checks slots against the
-    stored design and that pictures are this spa's public `stored_files`) — connector `get_html_content` /
-    `set_html_content` (drafts only; `patch_html_design` = structure).
+    paths / wrong kinds / operational keys skipped; no content → same object), `htmlContentErrors(content, slots)`
+    (save time: slots — `null` = shape only —, kinds, ≤ 2000 chars, ≤ 192 KB, page texts / pictures by id + src guard,
+    pictures `/files/{uuid}` or https without parentheses or character references — a pasted `&amp;` reads as `&`,
+    `$` allowed; core `htmlImageUrl` gives the URL the render uses), `htmlContentFileIds` (values + pictures). Stored as the
+    HtmlDesign block prop `content` = `{v: 1, values: [{path, value}], texts: [{id, src, t: {en, ar?}}], pictures:
+    [{id, src, img}]}` (`htmlContentParts` / `htmlContentFrom` / `htmlContentOf(map, keep)` / `htmlContentMap`; lists,
+    never objects keyed by path or id — Puck flattens block props on "." with the `flat` package and would split such
+    keys; no Puck default; draft → publish with the page).
+    **Page texts + pictures (P4):** core html-design.ts `listHtmlDesignTexts` (one walker `textSites`, tokenized like
+    `fillSpans`; ids positional on the raw file: `txt-n` text runs, `attr-n` alt / placeholder / aria-label / title,
+    `title` (first outside svg), `meta-description`; only runs / values without `<` or `>`; script and raw-text bodies
+    skipped, so ids survive the CRM splice; text = references decoded (numeric + the common named set, exact case;
+    a run / value holding an unknown or ambiguous one is not listed and takes no id), HTML whitespace collapsed
+    (U+00A0 kept); `src` = first 300 chars of it; `group` = nearest
+    section/header/nav/footer/main/aside/article/form/dialog by aria-label > first heading > id > "Section n"; `bound`
+    (listing only) + `boundBy`: 'crm' = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor
+    (attributes too); script-written = text runs inside an element whose text the design's JS writes (`scriptTextIds`,
+    one pass per script: `getElementById('x')` / `querySelector('#x')` (one compound: `#x.on`; never `#x span`) /
+    `$('#x')` (jQuery `.first()` / `.eq(n)` allowed) + `.textContent` / `.innerText` / `.innerHTML` / `.outerHTML` `=`
+    / `replaceChildren` / jQuery `.text(v)` / `.html(v)` / `.empty()` (text replaced; `+=`, appending nodes or writing
+    through child access never binds the element's own texts; `#x tag` / `#x > tag` binds only that tag's texts inside
+    `#x`), directly, via a variable, a helper, an id array looped with `.forEach` /
+    `.map` / `for…of`, or a holder object (`els.x.textContent`); never attributes; listener / read-only ids stay
+    editable; the CRM_DATA literal not read) and `document.title =` for the title: `boundBy` 'crm' on a contract design
+    (`CRM_DATA` literal or crm-endpoint meta), 'script' only without one; op errors "filled from the CRM — change it in
+    the CRM" / "filled by the design's script — change it in the design file (patch_html_design)") and
+    `applyHtmlTextOverrides` (first step
+    of `htmlDesignDocument`, on the html after `designWithCrm`; same id + src only, escaped (`<` `>` quotes `=`); EN
+    page `t.en`, AR page `t.ar` → `t.en`; either may be missing (Arabic-only keeps the design's English); a blank
+    value or one equal to the listed design text keeps the original bytes; `{{placeholders}}` in a value filled there
+    as plain escaped text and `{` written as `&#123;`, so no later pass links them; nothing applied → the same
+    string). The `html_content` op: page texts' `t.en` optional (null / left out keeps the stored English, '' drops
+    it), one of en / ar not blank; data values `{t}` too (no en: the stored English, else the design's, is stored with
+    the Arabic; '' = the design's English, and without Arabic the value is reset); an English text that is the design
+    text cut short ("…", ≥ 100 chars before it) is refused, the whole design text echoed (one ending with "…" itself,
+    compared whitespace-collapsed) is not. `runSiteEdit({htmlContent: {clip}})` (Ask AI only): entries whose design
+    text is longer than `clip` (the AI saw it cut) and entries that don't fit (unknown / bound ids, a cut-short copy, a
+    bad value, a foreign file) are dropped with summary notes ("<page>: not changed — …", first 5) instead of failing
+    the op; all dropped → nothing written. `htmlPictureAdjustments(images, content)`: pictures over the block's
+    `images` by id (same src → framing kept + `replace`; else a replace-only entry; none → the same array).
+    `htmlContentView(html, content, opts)`: slots + page texts (search, `start`/`limit` paging, `bound: false` filter)
+    + pictures + stale (connector, Ask AI); `clip` (default 400) cuts long design strings with "…" and marks them
+    `cut: true` + their full `length` (AI callers never translate or rewrite a cut entry).
+    `htmlContentLeftovers(…, {page})` adds unbound page texts and stale `text:` / `picture:` entries (a text counts as
+    set only with non-blank English; Arabic-only entries keep the design text checked).
+    Render: `designWithCrm(…, {content, locale})` overlays `content.values` before `mergeCrmContract` (output cache key
+    + locale + hash of `content.values` only; `hasHtmlContent` = values only, so texts / pictures-only content keeps
+    R26's no-content path and key); the HtmlDesign block and `app/site-html` pass `texts` + `locale` and
+    `htmlPictureAdjustments(images, content)` to `htmlDesignDocument` (the title override reaches the tab on exact
+    pages; framed pages: `generateMetadata` uses the title / meta-description overrides — id + src guard, locale,
+    placeholders). Cost: with page texts set, every render walks the file once more
+    (≤ 5 MB, ~0.2 s worst case; early return without texts). Writes: site-edit op `html_content` (`set` / `texts:
+    [{id, t}]` / `pictures: [{id, img}]` / `reset` (paths, `text:<id>`, `picture:<id>`) / `'all'`; checks slots and
+    ids against the stored design, refuses bound texts, the server fills every `src`; a design without CRM_DATA takes
+    texts / pictures / reset but never `set`; pictures must be this spa's public `stored_files`) — connector
+    `get_html_content` / `set_html_content` (drafts only; `patch_html_design` = structure). Draft saves: console
+    `storeDraft` runs services `htmlDesignContentErrors(tx, tenant, data)` (shape only; malformed file ids, the spa's
+    private files and other spas' files refused — platform-role read —; the spa's own files deleted since and stale
+    entries allowed; the op stays strict: only this spa's public files). Templates: apply
+    (`materializeTemplatePageData` / `localiseHtmlDesignAssets`) copies content `/files` (values img / video,
+    pictures) into the spa (uncopyable foreign ones dropped); "Save site as template" (`sanitizeTemplatePages`) keeps
+    an HtmlDesign's file, `images` and src guards and scrubs its content (`scrubHtmlContent`: emails, links, 9+ digit
+    phones out of texts / tags in EN + AR, the spa's name → `{{spa_name}}`, `/files` pictures / videos dropped, blank
+    texts dropped).
+    **Connector, Ask AI and Write texts (P4):** `get_html_content` works on every design (`htmlContentView` slots /
+    page texts / pictures, `part` / `search` / `start` / `limit`, `set_count` over all parts, the first 30 leftovers
+    with the spa's CRM city; a note instead of the old early return without CRM_DATA; `ids` (≤ 50 text ids / slot
+    paths / picture ids) returns just those with their whole design text, never cut, so a connector AI reads a `cut`
+    entry whole before translating it); `set_html_content` takes
+    `texts: [{id, t}]` / `pictures: [{id, img}]` / `reset` `text:<id>` / `picture:<id>` (drafts only; audit counts).
+    Studio Ask AI (`editor/ai-edit-actions.ts`): an HTML-design canvas → `htmlContentView(its source, its content,
+    {clip: 160, limit: 300, bound: false})` → `planSiteEdit({html})` (extra `html_content` op line + rules + a
+    `<content>` block, the block's content left out of `<page>`, 12 000 tokens; block pages: prompt unchanged); the
+    agent's `html_content` texts `{id, en, ar}` → `{id, t}`; the dry run and Apply pass `htmlContent: {clip: 160}`
+    (cut entries dropped with a note); Apply allows `html_content`. Write texts
+    (`write-texts-actions.ts`): `textSlots(data, schema, {html})` → site-kit `htmlTextSlots` (data text / longtext
+    values `{block}/content:{path}` + unbound page texts `{block}/text:{id}` with their src; ≤ 400 a page);
+    leftover keys (`htmlContentLeftovers` with `page`) first and named in the prompt (`planSiteTexts({htmlDesign,
+    leftovers})`: keep `{{…}}`, keep lengths); the save re-reads the design (other doc key → nothing written),
+    `fillTextSlots(…, {html})` writes `content` only where the slot and the design text are unchanged, compares the
+    design signature without HtmlDesign `content` and runs `htmlDesignContentErrors` before `saveDraft`.
     Editor (P2): HtmlDesign `content` field = `components/site/editor/html-content-field.tsx` (lazy, Suspense; reads
     the design via `useGetPuck().selectedItem` + `EditorContext.html.docs`, local state → `onChange` debounced 700 ms,
     flushed on unmount); `EditorContext.html` = `{docs, spaName, city}` from the Studio editor; HTML-design pages open
-    with the block selected + `rightSideBarWidth: 400`. Readiness: core `htmlContentLeftovers(data, content, {spaName,
+    with the block selected + `rightSideBarWidth: 400`. P4: local state = `htmlContentParts`, emitted with
+    `htmlContentFrom` (all three parts kept); **Page texts** on every design (no CRM_DATA → CRM groups hidden + a note;
+    searchable, grouped, title + meta first, ≤ 200 rows rendered only while open; bound texts read-only, worded by
+    `boundBy` ("from the CRM" + "Go to field" for a `data-crm` slot / "the design's script"); the guard `src` = the
+    listed text's; an Arabic-only edit stores `t: {ar}` only (English page = the design's bytes); outdated entries →
+    Remove) and **Pictures** (`ImageFieldControl` per listed image, frame dropped, `/files` or https without
+    parentheses); data-slot pictures / videos (`SlotImage` / `SlotVideo`) reach `onSet` only when `contentUrlOk`
+    (partial / invalid links stay local with a hint, so draft saves never meet them); `editor/html-content-labels.ts` = slot / page-text / leftover
+    labels (`kindLabel`, `textLabel`, `leftoverLabel`) + `designListing` (texts + images per `designKey`, last 4);
+    the editor `PublishSheet` adds a non-blocking "Website content checks" section (same leftovers with `page`, first
+    5, "Open Website content" selects the block; never sent to `publishCheckedAction`). Readiness: core `htmlContentLeftovers(data, content, {spaName,
     city, arabic})` + `isOwnDesign` / `UAE_CITIES` (html-crm.ts). Not a CONTENT_KEYS prop (Section's `content` slot
     shares the name): editing it needs `site.design` (super-admins).
   - **Fill the CRM from the design (R28 P3):** core `html-crm-seed.ts` (`crmMatchScore`, `designSeedPairs`, pair ≥
@@ -649,9 +731,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     now; `listHtmlDesignImages` ids = `img-<n>` (n-th `<img>`) /
     `bg-<n>` (n-th `background(-image)` url in `<style>` + inline styles; scripts/comments/fonts skipped).
   - Adjustments = block prop `images: HtmlImageAdjust[]` ({id, src (first 300 chars, must still match), fit, x, y,
-    align, replace}); applied by `applyHtmlImageAdjustments`: `data-spa-img` attr + `!important` rules at the end,
-    background position/size appended after the declaration, replace URL must match `HTML_IMAGE_URL` (https or
-    site path; srcset dropped). UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
+    align, replace}); applied by `applyHtmlImageAdjustments`: framed only when fit / x / y / align is set
+    (`htmlImageFramed`, R28 P4): `data-spa-img` attr + `!important` rules at the end, background position/size
+    appended after the declaration; a replacement alone only swaps the URL; replace URL must match `HTML_IMAGE_URL`
+    (https or site path; `$` allowed, character references refused (a pasted `&amp;` is read as `&`); inserted by replacer functions, `&` escaped in src / srcset /
+    style attributes, not in `<style>` bodies; srcset dropped; inside `<picture>` every `<source srcset>` takes it too); of several entries
+    with one id the last whose src still matches applies. UI `templates/html-images.tsx` (`HtmlFileField` in the upload sheet reads the file
     client-side; `HtmlImageAdjuster` with 360/1280 sandboxed preview, honours Phone fixes); saved with the upload (hidden
     `images` JSON, remapped to the moved URLs) or `saveHtmlImagesAction` ("Images" row button, `updateStudioTemplate`
     takes `pages`).

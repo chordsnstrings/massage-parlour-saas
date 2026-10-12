@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   hasHtmlContent,
+  hasHtmlPageContent,
   htmlContentErrors,
   htmlContentFileIds,
+  htmlContentFrom,
   htmlContentLeftovers,
   htmlContentOf,
+  htmlContentParts,
   htmlContentSlots,
+  htmlContentView,
+  htmlPictureAdjustments,
   overlayHtmlContent,
 } from '../src/html-content'
+import { listHtmlDesignImages, listHtmlDesignTexts } from '../src/html-design'
 
 /** Stored content from values by path (the block stores a list, see HtmlDesignContent). */
 const c = (data: Record<string, unknown>) => htmlContentOf(data as never) ?? { v: 1 as const }
@@ -205,8 +211,8 @@ describe('htmlContentErrors', () => {
     expect(errors).toHaveLength(7)
     expect(errors[0]).toBe('spa.name: not an editable part of this design')
     expect(htmlContentErrors({ v: 2 }, slots)).toEqual(['content: unknown format'])
-    expect(htmlContentErrors(c({ 'booking.label': { t: { en: 'x'.repeat(70_000) } } }), slots)).toEqual([
-      'content: more than 64 KB',
+    expect(htmlContentErrors(c({ 'booking.label': { t: { en: 'x'.repeat(200_000) } } }), slots)).toEqual([
+      'content: more than 192 KB',
     ])
   })
 
@@ -241,6 +247,31 @@ describe('htmlContentLeftovers', () => {
     ])
   })
 
+  it('a page text echoed with its design English (plus Arabic) is still checked', () => {
+    const html = '<h1>Serenity Spa Dubai</h1>'
+    const texts = listHtmlDesignTexts(html)
+    const content = {
+      v: 1 as const,
+      texts: [{ id: texts[0]!.id, src: texts[0]!.src, t: { en: 'Serenity Spa Dubai', ar: 'سيرينيتي' } }],
+    }
+    const out = htmlContentLeftovers(null, content, {
+      spaName: 'Lotus',
+      city: 'Sharjah',
+      arabic: true,
+      page: { texts, images: [] },
+    })
+    expect(out.map((o) => [o.path, o.reason])).toContainEqual([`text:${texts[0]!.id}`, 'city'])
+  })
+
+  it("an Arabic-only value keeps the design's English, so that English is still checked", () => {
+    const data = d()
+    const content = htmlContentOf({
+      'spa.experience[0].text': { t: { en: data.spa.experience[0]!.text, ar: 'مرحباً' } },
+    })
+    const out = htmlContentLeftovers(data, content, { spaName: 'last test', city: 'Dubai', arabic: true })
+    expect(out.map((o) => [o.path, o.reason])).toContainEqual(['spa.experience[0].text', 'other-spa'])
+  })
+
   it("on the spa's own design its name is fine; replaced values, English-only and stale ones", () => {
     const own = htmlContentLeftovers(d(), undefined, {
       spaName: 'Be Relax Spa',
@@ -265,5 +296,355 @@ describe('htmlContentLeftovers', () => {
       ['journey[book].title', 'arabic'],
       ['journey[gone].title', 'stale'],
     ])
+  })
+})
+
+describe('website content parts (R28 P4)', () => {
+  const FILE2 = '/files/9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d'
+  const stored = {
+    v: 1,
+    values: [{ path: 'booking.label', value: { t: { en: 'A' } } }],
+    texts: [
+      { id: 'txt-0', src: 'Old', t: { en: 'New' } },
+      { id: 'bad', src: '', t: { en: 'x' } },
+      { id: 'txt-0', src: 'Old', t: { en: 'Newer', ar: 'أحدث' } },
+    ],
+    pictures: [
+      { id: 'img-0', src: 's', img: FILE },
+      { id: 'img-x', src: 's', img: FILE },
+    ],
+  }
+  const text = { id: 'txt-0', src: 'Old', t: { en: 'Newer', ar: 'أحدث' } }
+  const picture = { id: 'img-0', src: 's', img: FILE }
+
+  it('parts / from / of(map, keep) keep values, texts and pictures; empty → undefined', () => {
+    const parts = htmlContentParts(stored)
+    expect(parts).toEqual({
+      values: { 'booking.label': { t: { en: 'A' } } },
+      texts: { 'txt-0': text },
+      pictures: { 'img-0': picture },
+    })
+    expect(htmlContentFrom(parts)).toEqual({
+      v: 1,
+      values: [{ path: 'booking.label', value: { t: { en: 'A' } } }],
+      texts: [text],
+      pictures: [picture],
+    })
+    expect(htmlContentOf({ 'journey[book].cta': { on: true } }, stored)).toEqual({
+      v: 1,
+      values: [{ path: 'journey[book].cta', value: { on: true } }],
+      texts: [text],
+      pictures: [picture],
+    })
+    expect(htmlContentOf({}, stored)).toEqual({ v: 1, texts: [text], pictures: [picture] })
+    expect(htmlContentOf({})).toBeUndefined()
+    expect(htmlContentFrom({ values: {}, texts: {}, pictures: {} })).toBeUndefined()
+    // Texts / pictures only: no CRM_DATA splice (values only), but page content.
+    expect(hasHtmlContent(htmlContentOf({}, stored))).toBe(false)
+    expect(hasHtmlPageContent(stored)).toBe(true)
+    expect(hasHtmlPageContent(c({ a: { on: true } }))).toBe(false)
+  })
+
+  it('htmlContentErrors: texts and pictures (id format, src ≤ 300, English and / or Arabic ≤ 2000 (one not blank), duplicates, list caps, URL incl. parentheses / character references refused ($ and a pasted &amp; fine), unknown parts, 192 KB)', () => {
+    const slots = htmlContentSlots(design())
+    expect(
+      htmlContentErrors(
+        {
+          v: 1,
+          texts: [text, { id: 'meta-description', src: '', t: { en: 'D' } }],
+          pictures: [picture, { id: 'bg-1', src: 'y', img: 'https://cdn.example/a.jpg' }],
+        },
+        slots,
+      ),
+    ).toEqual([])
+    expect(htmlContentErrors({ v: 1, texts: {} }, slots)).toEqual(['content: texts must be a list'])
+    expect(htmlContentErrors({ v: 1, pictures: 'x' }, slots)).toEqual(['content: pictures must be a list'])
+    expect(htmlContentErrors({ v: 1, data: {}, other: [] }, slots)).toEqual([
+      'content: unknown part "data"',
+      'content: unknown part "other"',
+    ])
+    expect(
+      htmlContentErrors(
+        {
+          v: 1,
+          texts: [
+            { id: 'txt-a', src: '', t: { en: 'x' } },
+            { id: 'txt-1', src: 'x'.repeat(301), t: { en: 'x' } },
+            { id: 'txt-2', src: '', t: { en: '  ' } },
+            { id: 'txt-3', src: '', t: { en: 'x'.repeat(2001) } },
+            { id: 'txt-4', src: '', t: { en: 'x', ar: 5 } },
+            { id: 'txt-5', src: '', t: { en: 'x' } },
+            { id: 'txt-5', src: '', t: { en: 'y' } },
+            { id: 'txt-6', src: '', t: { ar: 'مرحبا' } },
+            { id: 'txt-7', src: '', t: { en: '', ar: ' ' } },
+            { id: 'txt-8', src: '', t: {} },
+          ],
+        },
+        slots,
+      ),
+    ).toEqual([
+      'text txt-a: not a page text of a design',
+      "text txt-1: src must be the design text's first 300 characters",
+      'text txt-2: an English or Arabic text of 1 to 2000 characters',
+      'text txt-3: the English text must be at most 2000 characters',
+      'text txt-4: the Arabic text must be at most 2000 characters',
+      'text txt-5: set twice',
+      'text txt-7: an English or Arabic text of 1 to 2000 characters',
+      'text txt-8: an English or Arabic text of 1 to 2000 characters',
+    ])
+    expect(
+      htmlContentErrors(
+        {
+          v: 1,
+          pictures: [
+            { id: 'img-a', src: '', img: FILE },
+            { id: 'img-1', src: '', img: 'data:image/png;base64,AA' },
+            { id: 'img-2', src: '', img: 'http://x.test/a.jpg' },
+            { id: 'img-3', src: '', img: 'https://x.test/a(1).jpg' },
+            { id: 'img-4', src: 'x'.repeat(301), img: FILE },
+            { id: 'img-5', src: '', img: FILE },
+            { id: 'img-5', src: '', img: FILE },
+            { id: 'img-6', src: '', img: 'https://x.test/a$&.jpg' },
+            { id: 'img-7', src: '', img: 'https://x.test/a&#41;.jpg' },
+            { id: 'img-8', src: '', img: 'https://x.test/a&rpar;.jpg' },
+            { id: 'img-9', src: '', img: 'https://x.test/a.jpg?w=1&h=2' },
+            { id: 'img-10', src: '', img: 'https://x.test/a.jpg?w=1&amp;h=2' },
+            { id: 'img-11', src: '', img: 'https://x.test/a&amp;#41;.jpg' },
+          ],
+        },
+        slots,
+      ),
+    ).toEqual([
+      'picture img-a: not a picture of a design',
+      'picture img-1: a picture from the media library (/files/…) or an https link',
+      'picture img-2: a picture from the media library (/files/…) or an https link',
+      'picture img-3: a picture from the media library (/files/…) or an https link',
+      "picture img-4: src must be the design picture's first 300 characters",
+      'picture img-5: set twice',
+      'picture img-7: a picture from the media library (/files/…) or an https link',
+      'picture img-8: a picture from the media library (/files/…) or an https link',
+      'picture img-11: a picture from the media library (/files/…) or an https link',
+    ])
+    const many = (n: number, f: (i: number) => unknown) => Array.from({ length: n }, (_, i) => f(i))
+    expect(
+      htmlContentErrors(
+        { v: 1, texts: many(2001, (i) => ({ id: `txt-${i}`, src: '', t: { en: 'x' } })) },
+        slots,
+      ),
+    ).toEqual(['content: more than 2000 page texts'])
+    expect(
+      htmlContentErrors(
+        { v: 1, pictures: many(201, (i) => ({ id: `img-${i}`, src: '', img: FILE })) },
+        slots,
+      ),
+    ).toEqual(['content: more than 200 pictures'])
+    expect(
+      htmlContentErrors({ v: 1, texts: [{ id: 'txt-0', src: '', t: { en: 'x'.repeat(200_000) } }] }, slots),
+    ).toEqual(['content: more than 192 KB'])
+  })
+
+  it('shape-only mode (slots null) accepts stale paths', () => {
+    expect(
+      htmlContentErrors(
+        c({ 'journey[gone].title': { t: { en: 'x' } }, 'journey[welcome].accent': { t: { en: 'red' } } }),
+        null,
+      ),
+    ).toEqual([])
+    expect(
+      htmlContentErrors(
+        c({ a: { img: 'data:image/png;base64,AA' }, b: { t: { en: 'x'.repeat(2001) } }, d: { nope: 1 } }),
+        null,
+      ),
+    ).toEqual([
+      'a: a picture from the media library (/files/…) or an https link',
+      'b: text must be at most 2000 characters',
+      'd: invalid value',
+    ])
+  })
+
+  it('fileIds include pictures', () => {
+    expect(
+      htmlContentFileIds({
+        v: 1,
+        values: [{ path: 'a', value: { img: FILE } }],
+        pictures: [
+          { id: 'img-0', src: '', img: FILE2 },
+          { id: 'img-1', src: '', img: 'https://cdn.example/a.jpg' },
+        ],
+      }),
+    ).toEqual([FILE.slice(7), FILE2.slice(7)])
+  })
+
+  it('htmlPictureAdjustments: merge by id keeps framing; mismatched src → own entry; none → same array; http:// and data: dropped', () => {
+    const images = [
+      { id: 'img-0', src: 'a.jpg', x: 20, fit: 'contain' as const },
+      { id: 'bg-0', src: 'h.jpg', y: 10 },
+    ]
+    const frozen = JSON.stringify(images)
+    expect(htmlPictureAdjustments(images, undefined)).toBe(images)
+    expect(
+      htmlPictureAdjustments(images, {
+        v: 1,
+        pictures: [
+          { id: 'img-1', src: 'b', img: 'http://x.test/a.jpg' },
+          { id: 'img-2', src: 'c', img: 'data:image/png;base64,AA' },
+        ],
+      }),
+    ).toBe(images)
+    expect(
+      htmlPictureAdjustments(images, {
+        v: 1,
+        pictures: [
+          { id: 'img-0', src: 'a.jpg', img: FILE },
+          { id: 'bg-0', src: 'other.jpg', img: 'https://cdn.example/n.jpg' },
+          { id: 'img-3', src: 'd.jpg', img: FILE2 },
+        ],
+      }),
+    ).toEqual([
+      { id: 'img-0', src: 'a.jpg', x: 20, fit: 'contain', replace: FILE },
+      { id: 'bg-0', src: 'h.jpg', y: 10 },
+      { id: 'bg-0', src: 'other.jpg', replace: 'https://cdn.example/n.jpg' },
+      { id: 'img-3', src: 'd.jpg', replace: FILE2 },
+    ])
+    expect(JSON.stringify(images)).toBe(frozen)
+  })
+
+  it('leftovers with page: unbound untouched texts, stale text/picture, English-only text; bound skipped', () => {
+    const html =
+      '<html><head><title>Be Relax Abu Dhabi</title></head><body><h1 id="spa">Be Relax</h1><p>Call 052 510 8633</p>' +
+      '<p>Calm hands</p><p>Visit us in Abu Dhabi</p><img src="a.jpg" alt="x">' +
+      "<script>document.getElementById('spa').textContent = ''</script></body></html>"
+    const page = { texts: listHtmlDesignTexts(html), images: listHtmlDesignImages(html) }
+    const content = {
+      v: 1 as const,
+      texts: [
+        { id: 'txt-1', src: 'Call 052 510 8633', t: { en: 'Call us' } },
+        { id: 'txt-9', src: 'x', t: { en: 'gone' } },
+        { id: 'txt-2', src: 'changed', t: { en: 'y', ar: 'ي' } },
+      ],
+      pictures: [
+        { id: 'img-0', src: 'a.jpg', img: FILE },
+        { id: 'img-5', src: 'z', img: FILE },
+      ],
+    }
+    const ctx = { spaName: 'last test', city: 'Dubai', arabic: true }
+    const out = htmlContentLeftovers(design(), content, { ...ctx, page })
+    expect(out.filter((o) => /^(?:text|picture):/.test(o.path)).map((o) => [o.path, o.reason])).toEqual([
+      ['text:title', 'other-spa'],
+      ['text:txt-3', 'city'],
+      ['text:txt-1', 'arabic'],
+      ['text:txt-9', 'stale'],
+      ['text:txt-2', 'stale'],
+      ['picture:img-5', 'stale'],
+    ])
+    expect(htmlContentLeftovers(design(), content, ctx).some((o) => o.path.includes(':'))).toBe(false)
+  })
+
+  it('leftovers with page: an Arabic-only entry still has the English design text checked; one with English replaces it', () => {
+    const html =
+      '<html><head><title>Rituals</title></head><body><h1>Be Relax rituals</h1><h2>Be Relax gifts</h2><p>Calm</p></body></html>'
+    const page = { texts: listHtmlDesignTexts(html), images: [] }
+    const content = {
+      v: 1 as const,
+      texts: [
+        { id: 'txt-0', src: 'Be Relax rituals', t: { ar: 'طقوس' } },
+        { id: 'txt-1', src: 'Be Relax gifts', t: { en: 'Our gifts', ar: 'هدايا' } },
+        { id: 'txt-2', src: 'Calm', t: { en: ' ', ar: 'هدوء' } },
+      ],
+    }
+    const out = htmlContentLeftovers(design(), content, {
+      spaName: 'last test',
+      city: 'Dubai',
+      arabic: true,
+      page,
+    })
+    expect(out.filter((o) => o.path.startsWith('text:')).map((o) => [o.path, o.reason])).toEqual([
+      ['text:txt-0', 'other-spa'],
+    ])
+  })
+
+  it('htmlContentView with a clip: clipped page texts and data values are marked cut with their full length', () => {
+    const long = 'Long text '.repeat(30).trim()
+    const html = `<h1>Short</h1><p>${long}</p><script>window.CRM_DATA = {"booking":{"label":"Book","note":"${long}"}}</script>`
+    const v = htmlContentView(html, undefined, { clip: 160 })
+    expect(v.texts.map((t) => [t.id, t.cut ?? false, t.length ?? 0, t.design.length])).toEqual([
+      ['txt-0', false, 0, 5],
+      ['txt-1', true, long.length, 161],
+    ])
+    expect(v.slots.map((x) => [x.path, x.cut ?? false, x.length ?? 0])).toEqual([
+      ['booking.label', false, 0],
+      ['booking.note', true, long.length],
+    ])
+    expect(htmlContentView(html, undefined).texts.some((t) => 'cut' in t || 'length' in t)).toBe(false)
+  })
+
+  it('htmlContentView: no literal → slots [] but texts/pictures listed; search + paging + textsTotal; data: summarised; stale', () => {
+    const html =
+      '<!doctype html><html><head><title>Old</title></head><body><section aria-label="Intro"><h1 id="spa">Name</h1>' +
+      `<p>Hello there</p><p>Second text</p></section><img src="data:image/png;base64,${'A'.repeat(4000)}">` +
+      "<div style=\"background:url(https://cdn.test/bg.jpg)\"></div><script>document.getElementById('spa').textContent = 'x'</script></body></html>"
+    const content = {
+      v: 1,
+      values: [{ path: 'x', value: { t: { en: 'y' } } }],
+      texts: [
+        { id: 'txt-1', src: 'Hello there', t: { en: 'Hi', ar: 'مرحبا' } },
+        { id: 'txt-7', src: 'gone', t: { en: 'z' } },
+      ],
+      pictures: [
+        { id: 'bg-0', src: 'https://cdn.test/bg.jpg', img: FILE },
+        { id: 'img-3', src: 'q', img: FILE },
+      ],
+    }
+    const v = htmlContentView(html, content)
+    expect(v.crmData).toBe(false)
+    expect(v.slots).toEqual([])
+    expect(v.texts.map((t) => [t.id, t.bound])).toEqual([
+      ['title', false],
+      ['attr-0', false], // the section's aria-label
+      ['txt-0', true],
+      ['txt-1', false],
+      ['txt-2', false],
+    ])
+    expect(v.texts[3]).toEqual({
+      id: 'txt-1',
+      kind: 'text',
+      tag: 'p',
+      group: 'Intro',
+      design: 'Hello there',
+      bound: false,
+      spa: { en: 'Hi', ar: 'مرحبا' },
+    })
+    expect(v.textsTotal).toBe(5)
+    expect(v.pictures).toEqual([
+      { id: 'img-0', kind: 'img', design: 'embedded image/png, 3 KB' },
+      { id: 'bg-0', kind: 'bg', design: 'https://cdn.test/bg.jpg', spa: FILE },
+    ])
+    expect(v.stale).toEqual(['x', 'text:txt-7', 'picture:img-3'])
+    expect(htmlContentView(html, content, { search: 'مرحبا' }).texts.map((t) => t.id)).toEqual(['txt-1'])
+    const intro = htmlContentView(html, content, { search: 'INTRO', bound: false, start: 1, limit: 1 })
+    expect([intro.textsTotal, intro.texts.map((t) => t.id)]).toEqual([3, ['txt-1']])
+    const pics = htmlContentView(html, content, { part: 'pictures', clip: 10 })
+    expect([pics.texts, pics.textsTotal, pics.pictures[1]?.design]).toEqual([[], 0, 'https://cd…'])
+    const data = htmlContentView(
+      '<p>x</p><script>window.CRM_DATA = {"booking":{"label":"Book"},"journey":[{"id":"a","title":"T"}]}</script>',
+      c({ 'booking.label': { t: { en: 'Reserve' } } }),
+      { part: 'data', group: 'booking' },
+    )
+    expect(data).toEqual({
+      crmData: true,
+      slots: [
+        {
+          path: 'booking.label',
+          kind: 'text',
+          group: 'booking',
+          design: 'Book',
+          spa: { t: { en: 'Reserve' } },
+        },
+      ],
+      texts: [],
+      textsTotal: 0,
+      pictures: [],
+      stale: [],
+    })
   })
 })

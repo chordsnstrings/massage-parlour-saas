@@ -77,6 +77,92 @@ describe('textSlots', () => {
     }
     expect(textSlots(html, schema)).toEqual([])
   })
+
+  it('with opts.html: content text/longtext slots + unbound page texts (title/meta included), never block, bound, image or tag slots', () => {
+    const slots = textSlots(designPage(), schema, { html: design })
+    expect(slots.map((s) => s.key)).toEqual([
+      'd-1/content:journey[welcome].title',
+      'd-1/content:journey[welcome].body',
+      'd-1/text:title',
+      'd-1/text:meta-description',
+      'd-1/text:attr-0',
+      'd-1/text:txt-0',
+      'd-1/text:attr-1',
+    ])
+    // The spa's values over the design's (a hidden value and a stale page text: left out / the design's).
+    expect(slots[0]).toMatchObject({
+      type: 'HtmlDesign',
+      prop: 'content:journey[welcome].title',
+      en: 'Spa title',
+    })
+    expect(slots[0]!.ar).toBe('عنوان')
+    expect(slots[1]).toMatchObject({ multiline: true, en: designData.journey[0]!.body })
+    expect(slots.find((s) => s.key === 'd-1/text:txt-0')).toMatchObject({
+      prop: 'text:txt-0',
+      src: 'Welcome in',
+      en: 'Come in',
+      ar: 'تفضل',
+    })
+    expect(slots.find((s) => s.key === 'd-1/text:attr-1')).toMatchObject({
+      src: 'A calm room',
+      en: 'A calm room',
+    })
+    expect(slots.find((s) => s.key === 'd-1/text:meta-description')?.multiline).toBe(true)
+    expect(textSlots(designPage(), schema, { html: design, maxPerPage: 2 })).toHaveLength(2)
+    // Leftovers (`first`) go ahead before the cap: the last texts of a big page still make it.
+    const first = new Set(['d-1/text:attr-1', 'd-1/text:txt-0', 'd-1/text:gone'])
+    expect(textSlots(designPage(), schema, { html: design, maxPerPage: 3, first }).map((s) => s.key)).toEqual(
+      ['d-1/text:txt-0', 'd-1/text:attr-1', 'd-1/content:journey[welcome].title'],
+    )
+  })
+})
+
+const designData = {
+  spa: { name: 'Design Spa', tagline: 'Calm hands' },
+  journey: [
+    {
+      id: 'welcome',
+      title: 'Design title',
+      body: `Long ${'words '.repeat(20)}`,
+      tags: ['a', 'b'],
+      image: 'https://example.com/i.jpg',
+    },
+  ],
+}
+const design = `<!doctype html><html><head><title>Design Spa</title><meta name="description" content="Calm in the city"></head><body>
+<section aria-label="Story"><h2>Welcome in</h2><p id="live">Loading</p><img src="https://example.com/a.jpg" alt="A calm room"><p data-crm="spa.name">Design Spa</p></section>
+<script>window.CRM_DATA = ${JSON.stringify(designData)};</script>
+<script>document.getElementById('live').textContent = window.CRM_DATA.spa.tagline</script>
+</body></html>`
+const picture = {
+  id: 'img-0',
+  src: 'https://example.com/a.jpg',
+  img: '/files/0f0e1d2c-3b4a-4596-8778-695a4b3c2d1e',
+}
+const designPage = () => ({
+  root: { props: { htmlDesign: true, title: { en: 'Home' } } },
+  content: [
+    {
+      type: 'HtmlDesign',
+      props: {
+        id: 'd-1',
+        doc: { file: 'f', sha256: 'x', bytes: 1, chars: 1 },
+        content: {
+          v: 1,
+          values: [
+            { path: 'journey[welcome].title', value: { t: { en: 'Spa title', ar: 'عنوان' } } },
+            { path: 'spa.tagline', value: { hide: true } },
+          ],
+          texts: [
+            { id: 'txt-0', src: 'Welcome in', t: { en: 'Come in', ar: 'تفضل' } },
+            { id: 'attr-1', src: 'An old alt', t: { en: 'Stale' } },
+          ],
+          pictures: [picture],
+        },
+      },
+    },
+    { type: 'Heading', props: { id: 'h', text: { en: 'Not on an HTML page' } } },
+  ],
 })
 
 describe('fillTextSlots', () => {
@@ -123,6 +209,45 @@ describe('fillTextSlots', () => {
     expect(r).toMatchObject({ filled: 1, skipped: 1 })
     expect((r.data.content[2]!.props as { title: unknown }).title).toEqual({ en: 'Edited by hand' })
     expect(JSON.stringify(r.data)).toContain('"Who we are"')
+  })
+
+  it('with html writes values + texts (src from the design), keeps pictures; skips a changed en or a changed design text; without html skips HtmlDesign slots', () => {
+    const data = designPage()
+    const slots = textSlots(data, schema, { html: design })
+    const drafts = [
+      { key: 'd-1/content:journey[welcome].title', en: 'A <b>new</b> title', ar: 'عنوان جديد' },
+      { key: 'd-1/text:attr-1', en: 'A quiet room', ar: 'غرفة هادئة' },
+      { key: 'd-1/text:meta-description', en: 'Calm at our spa', ar: 'هدوء في مركزنا' },
+      { key: 'd-1/text:txt-1', en: 'Bound', ar: 'مرتبط' },
+    ]
+    const none = fillTextSlots(data, slots, drafts)
+    expect(none).toMatchObject({ filled: 0, skipped: 3 })
+    expect(JSON.stringify(none.data)).toBe(JSON.stringify(designPage()))
+
+    const r = fillTextSlots(data, slots, drafts, { html: design })
+    expect(r).toMatchObject({ filled: 3, skipped: 0 })
+    const content = (r.data.content[0]!.props as { content: Record<string, unknown> }).content
+    expect(content.values).toEqual([
+      { path: 'journey[welcome].title', value: { t: { en: 'A new title', ar: 'عنوان جديد' } } },
+      { path: 'spa.tagline', value: { hide: true } },
+    ])
+    expect(content.texts).toEqual([
+      { id: 'txt-0', src: 'Welcome in', t: { en: 'Come in', ar: 'تفضل' } },
+      { id: 'attr-1', src: 'A calm room', t: { en: 'A quiet room', ar: 'غرفة هادئة' } },
+      { id: 'meta-description', src: 'Calm in the city', t: { en: 'Calm at our spa', ar: 'هدوء في مركزنا' } },
+    ])
+    expect(content.pictures).toEqual([picture])
+    expect(r.data.content[1]).toEqual(data.content[1])
+    expect(JSON.stringify(data)).toBe(JSON.stringify(designPage()))
+
+    // Edited meanwhile (the value) or a changed design (the text's src): those drafts are skipped.
+    const now = designPage()
+    now.content[0]!.props.content!.values![0]!.value = { t: { en: 'Edited by hand' } }
+    const moved = design.replace('A calm room', 'A bright room')
+    const later = fillTextSlots(now, slots, drafts, { html: moved })
+    expect(later).toMatchObject({ filled: 1, skipped: 2 })
+    expect(JSON.stringify(later.data)).toContain('"Calm at our spa"')
+    expect(JSON.stringify(later.data)).not.toContain('A quiet room')
   })
 })
 

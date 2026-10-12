@@ -779,6 +779,24 @@ describe('site MCP server (/api/mcp)', () => {
       expect(after!.imageUrl).toBeNull()
     })
 
+    it('get_html_content marks long entries cut (with their length); ids returns just those, whole', async () => {
+      const long = `${'Our rituals bring calm to the city. '.repeat(14)}Book today.`
+      const data = { about: { body: long, title: 'Hi' } }
+      const html = `<!doctype html><html><body><h2>Short</h2><p>${long}</p><script>window.CRM_DATA = ${JSON.stringify(data)};</script></body></html>`
+      expect((await dcall('set_html_design', { page: 'about', html })).data.saved).toBe(true)
+      const listed = await dcall('get_html_content', { page: 'about' })
+      expect(listed.data.texts[1]).toMatchObject({ id: 'txt-1', cut: true, length: long.length })
+      expect(listed.data.texts[1].design).toBe(`${long.slice(0, 400)}…`)
+      expect(listed.data.slots).toContainEqual(
+        expect.objectContaining({ path: 'about.body', cut: true, length: long.length }),
+      )
+      const whole = await dcall('get_html_content', { page: 'about', ids: ['txt-1', 'about.body'] })
+      expect(whole.data).toMatchObject({ textsTotal: 1, pictures: [] })
+      expect(whole.data.texts).toEqual([expect.objectContaining({ id: 'txt-1', design: long })])
+      expect(whole.data.texts[0].cut).toBeUndefined()
+      expect(whole.data.slots).toEqual([expect.objectContaining({ path: 'about.body', design: long })])
+    })
+
     it('audits every design tool and never publishes', async () => {
       const rows = await platform.select().from(auditLog).where(eq(auditLog.tenantId, d.tenant!))
       for (const tool of [

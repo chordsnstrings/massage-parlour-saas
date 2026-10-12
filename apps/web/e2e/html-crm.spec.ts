@@ -4,6 +4,7 @@ import { addDays } from '@spa/core'
 import {
   auditLog,
   branches,
+  pageVersions,
   services,
   serviceVariants,
   siteEnquiries,
@@ -12,7 +13,7 @@ import {
   staff,
   tenants,
 } from '@spa/db'
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import {
   admin,
   app,
@@ -525,6 +526,137 @@ test("R28 P2: the editor's Website content field changes a design's words per sp
   const served = await (await viaHost(page, `${site(slug)}/`)).text()
   const body = (s: string) => s.slice(s.indexOf('<body>')).replace(LITERAL, '')
   expect(body(served)).toBe(body(fixture))
+})
+
+test('R28 P4: page texts, the page title and a picture per spa (draft → publish); the stored design never changes', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const variant = fixture.replace(
+    '<h1 id="spa">Loading</h1>',
+    '<h1 id="spa">Loading</h1>\n<h2>Design heading</h2>\n<img alt="Design picture" src="https://example.com/design.jpg">',
+  )
+  const owner = await signUpOwner(page, { spa: 'Page Texts Spa' })
+  const { slug } = owner
+  await seedSpa(slug)
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await upload(page, 'Texts Design', variant)
+  await applyAndPublish(page, slug, 'Texts Design')
+  const db = testDb()
+  const [t] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [home] = await db
+    .select({ id: sitePages.id })
+    .from(sitePages)
+    .where(and(eq(sitePages.tenantId, t!.id), eq(sitePages.slug, '')))
+  /** The stored design file of the published page (its sha256). */
+  const publishedDoc = async () => {
+    const [v] = await db
+      .select({ data: pageVersions.data })
+      .from(pageVersions)
+      .where(and(eq(pageVersions.pageId, home!.id), eq(pageVersions.status, 'published')))
+      .orderBy(desc(pageVersions.createdAt))
+      .limit(1)
+    const blocks = (v!.data.content ?? []) as { type: string; props: { doc?: { sha256?: string } } }[]
+    return blocks.find((b) => b.type === 'HtmlDesign')?.props.doc?.sha256
+  }
+  const sha0 = await publishedDoc()
+  expect(sha0).toMatch(/^[0-9a-f]{64}$/)
+
+  // The editor: page texts (the CRM-filled ones read-only), searchable; the page title; a picture per spa.
+  await page.goto(editorUrl(slug, home!.id))
+  const field = page.locator('[data-testid="html-content"]:visible')
+  await expect(field).toBeVisible({ timeout: 60_000 })
+  await field.getByText(/^Page texts \(\d+\)$/).click()
+  // The fixture's script writes #spa's text (the CRM name; a contract design): read-only, named as the CRM's.
+  await expect(field.getByTestId('page-text').filter({ hasText: 'Loading' })).toContainText(
+    'Filled by the design from the CRM (#spa)',
+  )
+  // Leftovers: the design's own spa name ("Design") in a heading, gone once the spa's own text is set.
+  const leftover = field.getByRole('button', { name: "Heading: Design heading: names the design's spa" })
+  await expect(leftover).toBeVisible()
+  const search = field.getByLabel('Search page texts')
+  await search.fill('Design heading')
+  await field.getByRole('textbox', { name: 'Heading: Design heading' }).fill('Our rituals')
+  await expect(leftover).toHaveCount(0)
+  await search.fill('')
+  const design = page.frameLocator('#preview-frame').first().frameLocator('iframe.site-html-design')
+  // The page title: set, then back to the design with its "Design" button, then set for good.
+  const title = field.getByRole('textbox', { name: 'Page title: CRM contract fixture' })
+  await title.fill('A title to undo')
+  // <title> is never rendered: toHaveText reads it as empty, so poll its textContent.
+  await expect.poll(() => design.locator('title').textContent(), { timeout: 30_000 }).toBe('A title to undo')
+  await field.getByRole('button', { name: 'Back to the design: Page title: CRM contract fixture' }).click()
+  await expect(title).toHaveValue('')
+  await expect
+    .poll(() => design.locator('title').textContent(), { timeout: 30_000 })
+    .toBe('CRM contract fixture')
+  await title.fill('Rituals at Page Texts Spa')
+  // An Arabic-only text: the English page keeps the design's words (nothing stored in English).
+  const button = field.getByRole('textbox', { name: 'Button: Request booking' })
+  await page.getByRole('button', { name: 'Edit Arabic' }).click()
+  await button.fill('اطلب الحجز')
+  await page.getByRole('button', { name: 'Edit English' }).click()
+  await expect(button).toHaveValue('')
+  await field.getByText(/^Pictures \(\d+\)$/).click()
+  const picture = field.getByRole('textbox', { name: 'Picture 1 URL' })
+  await picture.fill('https://example.com/p4.jpg')
+  await picture.press('Enter')
+
+  // The canvas: the new words and picture, replace-only (no framing hook added).
+  await expect(design.locator('h2')).toHaveText('Our rituals', { timeout: 30_000 })
+  await expect(design.locator('button[type="submit"]')).toHaveText('Request booking')
+  await expect(design.locator('img[alt="Design picture"]')).toHaveAttribute(
+    'src',
+    'https://example.com/p4.jpg',
+    { timeout: 30_000 },
+  )
+  await expect(design.locator('[data-spa-img]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Save draft' }).click()
+  await expect(page.getByText('Draft saved')).toBeVisible({ timeout: 30_000 })
+
+  // Live: unchanged until published.
+  const visitor = await (await browser.newContext()).newPage()
+  await live(visitor, slug)
+  await expect(visitor.locator('h2')).toHaveText('Design heading')
+  await expect(visitor).toHaveTitle('CRM contract fixture')
+  await expect(visitor.locator('img[alt="Design picture"]')).toHaveAttribute(
+    'src',
+    'https://example.com/design.jpg',
+  )
+
+  await page.goto(studioUrl(slug))
+  await page.getByRole('button', { name: 'Publish site' }).click()
+  await page.getByRole('button', { name: 'Publish now' }).click()
+  await expect(page.getByText(/^Published \d+ pages?/)).toBeVisible({ timeout: 30_000 })
+  await live(visitor, slug)
+  await expect(visitor.locator('h2')).toHaveText('Our rituals')
+  await expect(visitor).toHaveTitle('Rituals at Page Texts Spa')
+  await expect(visitor.locator('img[alt="Design picture"]')).toHaveAttribute(
+    'src',
+    'https://example.com/p4.jpg',
+  )
+  await expect(visitor.locator('style[data-spa-images]')).toHaveCount(0)
+  await expect(visitor.locator('button[type="submit"]')).toHaveText('Request booking')
+  // The Arabic page (?lang=ar): the Arabic text, and English where only English is set.
+  await visitor.goto(`${site(slug)}?lang=ar`)
+  await rendered(visitor)
+  await expect(visitor.locator('button[type="submit"]')).toHaveText('اطلب الحجز')
+  await expect(visitor.locator('h2')).toHaveText('Our rituals')
+  await expect(visitor).toHaveTitle('Rituals at Page Texts Spa')
+
+  // Only the CRM_DATA JSON and the changed values differ from the uploaded file; the stored file is the same one.
+  const served = await (await viaHost(page, `${site(slug)}/`)).text()
+  const body = (s: string) => s.slice(s.indexOf('<body>')).replace(LITERAL, '')
+  expect(
+    body(served)
+      .replace('Our rituals', 'Design heading')
+      .replace('https://example.com/p4.jpg', 'https://example.com/design.jpg'),
+  ).toBe(body(variant))
+  expect(served).toContain('<title>Rituals at Page Texts Spa</title>')
+  expect(await publishedDoc()).toBe(sha0)
 })
 
 test('R28 P3: fill the CRM from the design', async ({ page }) => {

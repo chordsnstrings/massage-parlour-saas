@@ -6,6 +6,7 @@ import {
   type HtmlDesignImage,
   type HtmlImageAdjust,
   htmlDesignDocument,
+  htmlImageFramed,
   listHtmlDesignImages,
 } from '@spa/core'
 import { ImageIcon, Monitor, RotateCcw, Smartphone } from 'lucide-react'
@@ -210,7 +211,8 @@ function ImageCard({
   const [url, setUrl] = useState(value?.replace ?? '')
   const x = value?.x ?? 50
   const y = value?.y ?? 50
-  const fit = value?.fit ?? 'cover'
+  // R28 P4: a replace-only entry is not framed (no forced fill); the buttons show what the render does.
+  const fit = value?.fit ?? (value && htmlImageFramed(value) ? 'cover' : undefined)
   const shown = value?.replace ?? image.src
   const box = useRef<HTMLDivElement>(null)
   const label = `Image ${index}`
@@ -337,7 +339,8 @@ function ImageCard({
         value={url}
         onChange={(e) => setUrl(e.currentTarget.value.trim())}
         onBlur={() => {
-          if (urlOk) onChange({ replace: url || undefined })
+          // Only a changed URL: leaving the field untouched must not add an (empty) adjustment.
+          if (urlOk && url !== (value?.replace ?? '')) onChange({ replace: url || undefined })
         }}
         className={cn('h-9', !urlOk && 'border-danger')}
       />
