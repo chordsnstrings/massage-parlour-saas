@@ -16,6 +16,7 @@ import {
   htmlDesignEmbedHosts,
   htmlDesignEmbedWarning,
   htmlDesignPhoneFixes,
+  htmlImageUrl,
   listHtmlDesignImages,
   listHtmlDesignTexts,
   withBaseHref,
@@ -516,24 +517,20 @@ describe('applyHtmlImageAdjustments: replace-only (R28 P4)', () => {
     expect(out).toContain('[data-spa-img="0"]{object-fit:cover!important;object-position:10% 50%!important}')
     expect(out).not.toContain(R)
   })
-  it('a URL with $& / $1 / $$ is refused (never a replacement pattern): every attribute stays as it was; & is escaped in src / srcset', () => {
+  it('a URL with $& / $1 / $$ is written as text (replacer functions only), quotes / backticks refused; & is escaped in src / srcset and a pasted &amp; reads as &', () => {
     const pic =
       '<body><picture><source srcset="https://cdn.test/p.webp"><img class="a" src="https://cdn.test/p.jpg" alt="x" data-k="v"></picture></body>'
-    for (const url of [
-      'https://cdn.test/$&.jpg',
-      'https://cdn.test/$1" onerror="x.jpg',
-      '/files/$$x',
-      'https://x.test/$`',
-    ])
-      expect(
-        applyHtmlImageAdjustments(pic, [{ id: 'img-0', src: 'https://cdn.test/p.jpg', replace: url }]),
-      ).toBe(pic)
-    const amp = 'https://cdn.test/n.jpg?w=1&h=2'
-    expect(
-      applyHtmlImageAdjustments(pic, [{ id: 'img-0', src: 'https://cdn.test/p.jpg', replace: amp }]),
-    ).toBe(
-      '<body><picture><source srcset="https://cdn.test/n.jpg?w=1&amp;h=2"><img class="a" src="https://cdn.test/n.jpg?w=1&amp;h=2" alt="x" data-k="v"></picture></body>',
-    )
+    const put = (url: string) =>
+      applyHtmlImageAdjustments(pic, [{ id: 'img-0', src: 'https://cdn.test/p.jpg', replace: url }])
+    const swapped = (attr: string) =>
+      `<body><picture><source srcset="${attr}"><img class="a" src="${attr}" alt="x" data-k="v"></picture></body>`
+    for (const url of ['https://cdn.test/$1" onerror="x.jpg', 'https://x.test/$`']) expect(put(url)).toBe(pic)
+    expect(put('https://cdn.test/$&$1$$.jpg')).toBe(swapped('https://cdn.test/$&amp;$1$$.jpg'))
+    expect(put('/files/$$x')).toBe(swapped('/files/$$x'))
+    const escaped = swapped('https://cdn.test/n.jpg?w=1&amp;h=2')
+    expect(put('https://cdn.test/n.jpg?w=1&h=2')).toBe(escaped)
+    expect(put('https://cdn.test/n.jpg?w=1&amp;h=2')).toBe(escaped) // saved from HTML source: not double-escaped
+    expect(put('https://cdn.test/n.jpg?w=1&AMP;h=2')).toBe(escaped)
   })
   it('bg pictures: a character reference (&#41; / &rpar;) is refused, so no CSS is added; & escaped in a style attribute, kept in a <style> body', () => {
     const page =
@@ -543,6 +540,10 @@ describe('applyHtmlImageAdjustments: replace-only (R28 P4)', () => {
       'https://cdn.test/b.jpg&#41;;position:fixed',
       'https://cdn.test/b.jpg&rpar;',
       'https://x.test/&#x29;',
+      'https://cdn.test/b.jpg&amp;#41;', // a reference once &amp; reads as &
+      'https://cdn.test/b.jpg&amp;rpar;',
+      'https://cdn.test/b.jpg&amp;amp;',
+      'https://cdn.test/b.jpg&ampx;',
     ])
       expect(
         applyHtmlImageAdjustments(page, [
@@ -561,8 +562,23 @@ describe('applyHtmlImageAdjustments: replace-only (R28 P4)', () => {
         .replace('url(https://cdn.test/s.jpg)', `url(${amp})`)
         .replace('url(https://cdn.test/a.jpg)', 'url(https://cdn.test/b.jpg?x=1&amp;y=2)'),
     )
+    // Pasted with &amp; (copied from HTML source): read as &, so the same output.
+    expect(
+      applyHtmlImageAdjustments(page, [
+        { id: 'bg-0', src: 'https://cdn.test/s.jpg', replace: 'https://cdn.test/b.jpg?x=1&amp;y=2' },
+        { id: 'bg-1', src: 'https://cdn.test/a.jpg', replace: 'https://cdn.test/b.jpg?x=1&amp;y=2' },
+      ]),
+    ).toBe(
+      page
+        .replace('url(https://cdn.test/s.jpg)', `url(${amp})`)
+        .replace('url(https://cdn.test/a.jpg)', 'url(https://cdn.test/b.jpg?x=1&amp;y=2)'),
+    )
     expect(HTML_IMAGE_URL.test(amp)).toBe(true)
-    expect(HTML_IMAGE_URL.test('https://x.test/a&amp;b.jpg')).toBe(false)
+    expect(HTML_IMAGE_URL.test('https://x.test/a&amp;b.jpg')).toBe(true)
+    expect(HTML_IMAGE_URL.test('https://x.test/$1.jpg')).toBe(true)
+    expect(htmlImageUrl('https://x.test/a&amp;b&amp;c.jpg')).toBe('https://x.test/a&b&c.jpg')
+    expect(htmlImageUrl('https://x.test/a&amp;#41;.jpg')).toBeNull()
+    expect(htmlImageUrl(undefined)).toBeNull()
   })
 })
 
@@ -657,7 +673,7 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
     })
   })
 
-  it('marks bound: data-crm / data-item / data-book-service (inherited, "crm"); text the design’s JS writes by id, document.title ("script"); the CRM_DATA literal is not read', () => {
+  it('marks bound: data-crm / data-item / data-book-service (inherited, "crm"); text the design’s JS writes by id, document.title ("crm" with a CRM contract — CRM_DATA literal or crm-endpoint meta —, else "script"); the CRM_DATA literal is not read', () => {
     const html = `<html><head><title>Design</title></head><body>
 <div data-crm="spa.name"><h1>Design Spa</h1></div>
 <ul data-item="services"><li><b>Ritual</b></li></ul>
@@ -666,19 +682,29 @@ describe('listHtmlDesignTexts (R28 P4)', () => {
 <script>document.getElementById('hours').textContent = 'x'; document.querySelector("#promo .x").textContent = 'y'; document.title = 'Live'</script>
 <script>window.CRM_DATA = {"id":"crm-only","note":"#note"}</script>
 </body></html>`
-    expect(listHtmlDesignTexts(html).map((x) => [x.text, x.bound, x.boundBy ?? '', x.binding ?? ''])).toEqual(
-      [
-        ['Design', true, 'script', 'document.title'],
-        ['Design Spa', true, 'crm', 'data-crm=spa.name'],
-        ['Ritual', true, 'crm', 'data-item=services'],
-        ['Book now', true, 'crm', 'data-book-service'],
-        ['Book', true, 'crm', 'data-book-service'],
-        ['Mon–Sun', true, 'script', '#hours'],
-        ['Free text', false, '', ''],
-        ['Promo', false, '', ''], // a descendant of #promo is written, not its own text
-        ['Literal only', false, '', ''],
-      ],
-    )
+    const rows = (h: string) =>
+      listHtmlDesignTexts(h).map((x) => [x.text, x.bound, x.boundBy ?? '', x.binding ?? ''])
+    const expected = (by: string) => [
+      ['Design', true, by, 'document.title'],
+      ['Design Spa', true, 'crm', 'data-crm=spa.name'],
+      ['Ritual', true, 'crm', 'data-item=services'],
+      ['Book now', true, 'crm', 'data-book-service'],
+      ['Book', true, 'crm', 'data-book-service'],
+      ['Mon–Sun', true, by, '#hours'],
+      ['Free text', false, '', ''],
+      ['Promo', true, by, '#promo'], // `#promo .x` is written: inside #promo, so bound (when unsure, bound)
+      ['Literal only', false, '', ''],
+    ]
+    expect(rows(html)).toEqual(expected('crm'))
+    const literal = '<script>window.CRM_DATA = {"id":"crm-only","note":"#note"}</script>'
+    expect(rows(html.replace(literal, ''))).toEqual(expected('script'))
+    expect(
+      rows(
+        html
+          .replace(literal, '')
+          .replace('<title>', '<meta name="CRM-Endpoint" content="crm-data.json"><title>'),
+      ),
+    ).toEqual(expected('crm'))
   })
 
   it('bound by script only where the script writes the text: listener / toggle / read-only ids, getAttribute and attributes stay editable; direct, variable, helper and ancestor writes bind', () => {
@@ -727,6 +753,81 @@ $('#jq').text('x')
     const t = Date.now()
     expect(listHtmlDesignTexts(big).map((x) => x.bound)).toEqual([false])
     expect(Date.now() - t).toBeLessThan(2000)
+  })
+
+  it('bound where the script writes the text in other ways: #id + descendant selector, child access, replaceChildren / append / prepend / insertAdjacentHTML, iterated id arrays, holder objects; listener-only and sibling-selector ids stay editable', () => {
+    const html = `<html><head><title>T</title></head><body>
+<p id="sel"><span>Selector child</span></p><p id="chain"><b>Chained child</b></p><ul id="kids"><li>Kid</li></ul>
+<div id="q"><i>Query child</i></div><p id="rc">Replaced</p><p id="ap">Appended</p><p id="pp">Prepended</p>
+<p id="ia">Inserted</p><p id="arr1">Array one</p><p id="arr2">Array two</p><p id="loop1">Loop one</p>
+<p id="vl">Var loop</p><p id="hold">Holder</p><p id="self">This holder</p><p id="sibling">Sibling only</p>
+<p id="listen">Listener</p><p id="unused-arr">Unused array</p><p id="opt">Optional</p>
+<script>
+document.querySelector('#sel span').textContent = 'x'
+document.getElementById('chain').firstElementChild.textContent = 'x'
+document.getElementById('kids').children[0].innerText = 'x'
+const q = document.getElementById('q'); q.querySelector('i').textContent = 'x'
+document.getElementById('rc').replaceChildren('x')
+const ap = document.getElementById('ap'); ap.append('x')
+$('#pp').prepend('x')
+document.getElementById('ia').insertAdjacentHTML('beforeend', '<b>x</b>')
+;['arr1', 'arr2'].forEach((id) => { document.getElementById(id).textContent = data[id] })
+for (const id of ['loop1']) document.getElementById(id).textContent = 'x'
+const ids = ['vl']
+ids.forEach(function (k) { const el = document.getElementById(k); if (el) el.innerHTML = 'x' })
+const els = { hold: document.getElementById('hold'), 'other': document.getElementById('listen') }
+els.hold.textContent = 'x'
+els.other.addEventListener('click', () => {})
+class W { constructor() { this.box = document.getElementById('self') } paint() { this.box.lastElementChild.textContent = 'x' } }
+document.querySelector('#sibling + p').textContent = 'x'
+;['unused-arr'].forEach((id) => document.getElementById(id).addEventListener('click', go))
+const o = document.getElementById('opt') || null
+o?.replaceChildren()
+</script></body></html>`
+    const list = listHtmlDesignTexts(html)
+    expect(list.filter((x) => x.bound).map((x) => [x.text, x.boundBy, x.binding])).toEqual(
+      [
+        ['Selector child', 'sel'],
+        ['Chained child', 'chain'],
+        ['Kid', 'kids'],
+        ['Query child', 'q'],
+        ['Replaced', 'rc'],
+        ['Appended', 'ap'],
+        ['Prepended', 'pp'],
+        ['Inserted', 'ia'],
+        ['Array one', 'arr1'],
+        ['Array two', 'arr2'],
+        ['Loop one', 'loop1'],
+        ['Var loop', 'vl'],
+        ['Holder', 'hold'],
+        ['This holder', 'self'],
+        ['Optional', 'opt'],
+      ].map(([text, id]) => [text, 'script', `#${id}`]),
+    )
+    expect(list.filter((x) => !x.bound).map((x) => x.text)).toEqual([
+      'T',
+      'Sibling only',
+      'Listener',
+      'Unused array',
+    ])
+  })
+
+  it('linear: 3000 element variables and a 1 MB script are read in one pass each', () => {
+    const vars = Array.from(
+      { length: 3000 },
+      (_, k) => `const v${k} = document.getElementById('p${k}');`,
+    ).join('\n')
+    const html = `<p id="p7">Seven</p><p id="p8">Eight</p><script>${vars}\n${'x.y = z + 1; // filler\n'.repeat(45_000)}v7.textContent = 'x'</script>`
+    expect(html.length).toBeGreaterThan(1_000_000)
+    listHtmlDesignTexts(
+      '<p id="a">x</p><script>const a = document.getElementById("a"); a.textContent = 1</script>',
+    )
+    const t = performance.now()
+    expect(listHtmlDesignTexts(html).map((x) => [x.text, x.bound])).toEqual([
+      ['Seven', true],
+      ['Eight', false],
+    ])
+    expect(performance.now() - t).toBeLessThan(150)
   })
 
   it('decodes common named references (exact case); a run or value with an unknown / ambiguous reference is not listed (no id taken)', () => {

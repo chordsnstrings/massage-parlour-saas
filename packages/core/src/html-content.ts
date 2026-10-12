@@ -325,7 +325,7 @@ export const hasHtmlPageContent = (content: unknown): boolean => {
 }
 
 const PARTS = new Set(['v', 'values', 'texts', 'pictures'])
-/** A content picture: a content URL that is also safe in an unquoted CSS `url()` (HTML_IMAGE_URL: no parentheses, `$` or character references). */
+/** A content picture: a content URL that is also safe in an unquoted CSS `url()` (HTML_IMAGE_URL: no parentheses or character references; a pasted `&amp;` reads as `&`). */
 const pictureUrlOk = (url: unknown): url is string =>
   typeof url === 'string' && contentUrlOk(url) && HTML_IMAGE_URL.test(url)
 
@@ -566,7 +566,9 @@ export function htmlContentLeftovers(
   if (!ctx.page) return out
   const texts = new Map(ctx.page.texts.map((x) => [x.id, x]))
   for (const x of ctx.page.texts) {
-    if (x.bound || parts.texts[x.id]?.src === x.src) continue
+    // Replaced only by a current entry with English: an Arabic-only one leaves the design's English on the page.
+    const e = parts.texts[x.id]
+    if (x.bound || (e?.src === x.src && String(e.t.en ?? '').trim())) continue
     const reason = leftoverReason(x.text, designNames, city)
     if (reason) out.push({ path: `text:${x.id}`, reason, text: leftoverText(x.text) })
   }
@@ -592,11 +594,26 @@ const summarise = (v: unknown, clip = 400) =>
       ? `${v.slice(0, clip)}…`
       : v
 
+/** A string `summarise` clips: `cut` + its full length (an AI caller must not translate or rewrite a cut value). */
+const cutMark = (v: unknown, clip: number) =>
+  typeof v === 'string' && !v.startsWith('data:') && v.length > clip
+    ? { cut: true as const, length: v.length }
+    : {}
+
 /** R28 P4: what a spa can change on an HTML-design page (connector get_html_content, Ask AI). */
 export type HtmlContentView = {
   /** The design has a window.CRM_DATA literal (else no data slots: its words are page texts). */
   crmData: boolean
-  slots: { path: string; kind: HtmlContentKind; group: string; design: unknown; spa?: HtmlContentValue }[]
+  /** `cut`: `design` is clipped (`length` = the full one). */
+  slots: {
+    path: string
+    kind: HtmlContentKind
+    group: string
+    design: unknown
+    cut?: true
+    length?: number
+    spa?: HtmlContentValue
+  }[]
   texts: {
     id: string
     kind: HtmlDesignTextKind
@@ -604,6 +621,9 @@ export type HtmlContentView = {
     attr?: HtmlTextAttr
     group: string
     design: string
+    /** `design` is clipped (`length` = the full one): never translate or rewrite a cut text. */
+    cut?: true
+    length?: number
     bound: boolean
     /** Bound texts: 'crm' (change it in the CRM) or 'script' (the design's script writes it). */
     boundBy?: 'crm' | 'script'
@@ -619,7 +639,8 @@ export type HtmlContentView = {
 /**
  * The design's editable parts with the spa's values: data slots (`group` = path prefix), page texts (`bound` false
  * leaves out the CRM-filled ones; `search` over text, values and group; paged by `start` / `limit`, default 200, at
- * most 500) and pictures; `part` picks one of them. Design values summarised (`clip`, default 400 characters).
+ * most 500) and pictures; `part` picks one of them. Design values summarised (`clip`, default 400 characters); a
+ * clipped text or data value is marked `cut` with its full `length`.
  */
 export function htmlContentView(
   html: string,
@@ -649,6 +670,7 @@ export function htmlContentView(
             kind: x.kind,
             group: x.group,
             design: summarise(x.value, clip),
+            ...cutMark(x.value, clip),
             ...(parts.values[x.path] ? { spa: parts.values[x.path] } : {}),
           }))
       : []
@@ -682,6 +704,7 @@ export function htmlContentView(
         ...(x.attr ? { attr: x.attr } : {}),
         group: x.group,
         design: summarise(x.text, clip) as string,
+        ...cutMark(x.text, clip),
         bound: x.bound,
         ...(x.boundBy ? { boundBy: x.boundBy } : {}),
         ...(t ? { spa: t } : {}),

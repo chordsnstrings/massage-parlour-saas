@@ -320,7 +320,7 @@ describe('website content parts (R28 P4)', () => {
     expect(hasHtmlPageContent(c({ a: { on: true } }))).toBe(false)
   })
 
-  it('htmlContentErrors: texts and pictures (id format, src ≤ 300, English and / or Arabic ≤ 2000 (one not blank), duplicates, list caps, URL incl. parentheses / $ / character references refused, unknown parts, 192 KB)', () => {
+  it('htmlContentErrors: texts and pictures (id format, src ≤ 300, English and / or Arabic ≤ 2000 (one not blank), duplicates, list caps, URL incl. parentheses / character references refused ($ and a pasted &amp; fine), unknown parts, 192 KB)', () => {
     const slots = htmlContentSlots(design())
     expect(
       htmlContentErrors(
@@ -383,6 +383,8 @@ describe('website content parts (R28 P4)', () => {
             { id: 'img-7', src: '', img: 'https://x.test/a&#41;.jpg' },
             { id: 'img-8', src: '', img: 'https://x.test/a&rpar;.jpg' },
             { id: 'img-9', src: '', img: 'https://x.test/a.jpg?w=1&h=2' },
+            { id: 'img-10', src: '', img: 'https://x.test/a.jpg?w=1&amp;h=2' },
+            { id: 'img-11', src: '', img: 'https://x.test/a&amp;#41;.jpg' },
           ],
         },
         slots,
@@ -394,9 +396,9 @@ describe('website content parts (R28 P4)', () => {
       'picture img-3: a picture from the media library (/files/…) or an https link',
       "picture img-4: src must be the design picture's first 300 characters",
       'picture img-5: set twice',
-      'picture img-6: a picture from the media library (/files/…) or an https link',
       'picture img-7: a picture from the media library (/files/…) or an https link',
       'picture img-8: a picture from the media library (/files/…) or an https link',
+      'picture img-11: a picture from the media library (/files/…) or an https link',
     ])
     const many = (n: number, f: (i: number) => unknown) => Array.from({ length: n }, (_, i) => f(i))
     expect(
@@ -511,6 +513,44 @@ describe('website content parts (R28 P4)', () => {
       ['picture:img-5', 'stale'],
     ])
     expect(htmlContentLeftovers(design(), content, ctx).some((o) => o.path.includes(':'))).toBe(false)
+  })
+
+  it('leftovers with page: an Arabic-only entry still has the English design text checked; one with English replaces it', () => {
+    const html =
+      '<html><head><title>Rituals</title></head><body><h1>Be Relax rituals</h1><h2>Be Relax gifts</h2><p>Calm</p></body></html>'
+    const page = { texts: listHtmlDesignTexts(html), images: [] }
+    const content = {
+      v: 1 as const,
+      texts: [
+        { id: 'txt-0', src: 'Be Relax rituals', t: { ar: 'طقوس' } },
+        { id: 'txt-1', src: 'Be Relax gifts', t: { en: 'Our gifts', ar: 'هدايا' } },
+        { id: 'txt-2', src: 'Calm', t: { en: ' ', ar: 'هدوء' } },
+      ],
+    }
+    const out = htmlContentLeftovers(design(), content, {
+      spaName: 'last test',
+      city: 'Dubai',
+      arabic: true,
+      page,
+    })
+    expect(out.filter((o) => o.path.startsWith('text:')).map((o) => [o.path, o.reason])).toEqual([
+      ['text:txt-0', 'other-spa'],
+    ])
+  })
+
+  it('htmlContentView with a clip: clipped page texts and data values are marked cut with their full length', () => {
+    const long = 'Long text '.repeat(30).trim()
+    const html = `<h1>Short</h1><p>${long}</p><script>window.CRM_DATA = {"booking":{"label":"Book","note":"${long}"}}</script>`
+    const v = htmlContentView(html, undefined, { clip: 160 })
+    expect(v.texts.map((t) => [t.id, t.cut ?? false, t.length ?? 0, t.design.length])).toEqual([
+      ['txt-0', false, 0, 5],
+      ['txt-1', true, long.length, 161],
+    ])
+    expect(v.slots.map((x) => [x.path, x.cut ?? false, x.length ?? 0])).toEqual([
+      ['booking.label', false, 0],
+      ['booking.note', true, long.length],
+    ])
+    expect(htmlContentView(html, undefined).texts.some((t) => 'cut' in t || 'length' in t)).toBe(false)
   })
 
   it('htmlContentView: no literal → slots [] but texts/pictures listed; search + paging + textsTotal; data: summarised; stale', () => {

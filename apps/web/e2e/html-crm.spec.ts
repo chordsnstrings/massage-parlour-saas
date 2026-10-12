@@ -570,9 +570,9 @@ test('R28 P4: page texts, the page title and a picture per spa (draft → publis
   const field = page.locator('[data-testid="html-content"]:visible')
   await expect(field).toBeVisible({ timeout: 60_000 })
   await field.getByText(/^Page texts \(\d+\)$/).click()
-  // The fixture's script writes #spa's text (the CRM name): read-only, named as the script's.
+  // The fixture's script writes #spa's text (the CRM name; a contract design): read-only, named as the CRM's.
   await expect(field.getByTestId('page-text').filter({ hasText: 'Loading' })).toContainText(
-    "Filled by the design's script",
+    'Filled by the design from the CRM (#spa)',
   )
   // Leftovers: the design's own spa name ("Design") in a heading, gone once the spa's own text is set.
   const leftover = field.getByRole('button', { name: "Heading: Design heading: names the design's spa" })

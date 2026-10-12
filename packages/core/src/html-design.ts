@@ -32,10 +32,15 @@ const ALIGN_MARGINS = { left: '0 auto 0 0', center: '0 auto', right: '0 0 0 auto
 
 export const HTML_IMAGE_ID = /^(?:img|bg)-\d{1,4}$/
 /**
- * Safe to put in a CSS `url()` and an attribute: absolute https/http or a site path, no quotes/parens/spaces, no `$`
- * and no character reference (`&#…` / `&name;`: an attribute decodes them before CSS reads the value).
+ * Safe to put in a CSS `url()` and an attribute: absolute https/http or a site path, no quotes/parens/spaces and no
+ * character reference (`&#…` / `&name;`: an attribute decodes them before CSS reads the value) once a pasted `&amp;`
+ * is read as `&` (`htmlImageUrl`). `$` is fine: URLs go in through replacer functions only.
  */
-export const HTML_IMAGE_URL = /^(?!.*&(?:#|[a-z][a-z\d]*;))(?:https?:\/\/|\/(?!\/))[^\s"'()<>\\`$]{1,2000}$/i
+export const HTML_IMAGE_URL =
+  /^(?!.*&(?:amp;(?:#|[a-z][a-z\d]*;)|(?!amp;)(?:#|[a-z][a-z\d]*;)))(?:https?:\/\/|\/(?!\/))[^\s"'()<>\\`]{1,2000}$/i
+/** A replace URL as the render uses it: a pasted `&amp;` read as `&` (attributes escape it again); null = refused. */
+export const htmlImageUrl = (url: string | undefined): string | null =>
+  url && HTML_IMAGE_URL.test(url) ? url.replace(/&amp;/gi, '&') : null
 /** A picture URL inside an attribute value (src, srcset, style): `&` escaped. */
 const attrUrl = (url: string) => url.replace(/&/g, '&amp;')
 export const MAX_HTML_IMAGES = 200
@@ -419,9 +424,10 @@ function adjustmentEdits(html: string, adjust: HtmlImageAdjust[]) {
     const n = img.id.slice(4)
     const framed = htmlImageFramed(a)
     let tag = framed ? img.tag.replace(/^<img\b/i, `<img data-spa-img="${n}"`) : img.tag
-    if (a.replace && HTML_IMAGE_URL.test(a.replace)) {
+    const replace = htmlImageUrl(a.replace)
+    if (replace) {
       // Replacer functions only: a URL's `$&` / `$1` must stay text.
-      const url = attrUrl(a.replace)
+      const url = attrUrl(replace)
       // A replaced image must not come back through srcset.
       tag = tag.replace(/\s(?:srcset|sizes)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
       tag = /\ssrc\s*=/i.test(tag)
@@ -451,11 +457,12 @@ function adjustmentEdits(html: string, adjust: HtmlImageAdjust[]) {
   for (const bg of bgs) {
     const a = pick(bg.id, bg.src)
     if (!a) continue
-    if (a.replace && HTML_IMAGE_URL.test(a.replace))
+    const replace = htmlImageUrl(a.replace)
+    if (replace)
       edits.push({
         at: bg.urlStart,
         end: bg.urlEnd,
-        text: `url(${bg.attr ? attrUrl(a.replace) : a.replace})`,
+        text: `url(${bg.attr ? attrUrl(replace) : replace})`,
       })
     if (a.fit === undefined && a.x === undefined && a.y === undefined) continue
     const contain = a.fit === 'contain'
@@ -712,8 +719,10 @@ export type HtmlDesignText = {
   group: string
   bound: boolean
   /**
-   * Who fills a bound text: 'crm' = a CRM binding (data-crm* / data-item* / data-book-service) — change it in the CRM;
-   * 'script' = the design's own script writes it ('#<id>', 'document.title') — change it in the design file.
+   * Who fills a bound text: 'crm' = a CRM binding (data-crm* / data-item* / data-book-service), or the script of a
+   * design with a CRM contract (`window.CRM_DATA` literal / crm-endpoint meta) writes it — change it in the CRM;
+   * 'script' = the script of a design without a contract writes it ('#<id>', 'document.title') — change it in the
+   * design file.
    */
   boundBy?: 'crm' | 'script'
   /** Why bound: 'data-crm=<path>' | 'data-item…' | 'data-book-service' | '#<id>' | 'document.title'. */
@@ -793,17 +802,113 @@ const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}
 /** HTML whitespace collapsed (as the page shows it); U+00A0 stays — it is the design's own character. */
 const collapse = (s: string) => s.replace(/[ \t\n\f\r]+/g, ' ').trim()
 
-/** After an element expression: its text written (`.textContent` / `.innerText` / `.innerHTML` / `.outerHTML` assigned, jQuery `.text(v)` / `.html(v)`). */
-const TEXT_WRITE = String.raw`\s*\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)|(?:text|html)\s*\(\s*[^)\s])`
-const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)${TEXT_WRITE}`)
-const ANY_WRITE = /\.\s*(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)/
+/** A JS identifier, at most 64 characters (linear on long runs of letters). */
+const JS_ID = String.raw`[A-Za-z_$][\w$]{0,63}`
+/** A one-line quoted JS string of at most 200 characters. */
+const JS_STR = String.raw`(?:'[^'\n]{0,200}'|"[^"\n]{0,200}"|\`[^\`]{0,200}\`)`
+/** Child access between an element and its text write (`.firstElementChild`, `.children[n]`, `.querySelector('…')`, jQuery `.find('…')` …). */
+const JS_CHILD = String.raw`\s*\??\.\s*(?:(?:first|last)(?:Element)?Child\b|(?:children|childNodes)\s*\[[^\]\n]{0,40}\]|querySelector(?:All)?\s*\(\s*${JS_STR}\s*\)(?:\s*\[[^\]\n]{0,40}\])?|find\s*\(\s*${JS_STR}\s*\)|(?:children|first|last)\s*\(\s*\)|eq\s*\(\s*\d{1,4}\s*\))`
 /**
- * A function whose first parameter is named: `function f(id…)`, `f = function (id…)`, `f = (id…) =>`, `f = id =>`
- * (names matched from their first character only: linear on long runs of letters).
+ * After an element expression: its text written (`.textContent` / `.innerText` / `.innerHTML` / `.outerHTML`
+ * assigned, jQuery `.text(v)` / `.html(v)`, `.replaceChildren(` / `.append(` / `.appendChild(` / `.prepend(` / `.insertAdjacentHTML(`).
  */
-const JS_FUNCTION =
-  /\bfunction\s+([A-Za-z_$][\w$]*)\s*\(\s*([A-Za-z_$][\w$]*)[^)]{0,200}\)|(?<![\w$])([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b[^(]{0,80}\(\s*([A-Za-z_$][\w$]*)[^)]{0,200}\)|\(\s*([A-Za-z_$][\w$]*)[^)]{0,200}\)\s*=>|([A-Za-z_$][\w$]*)\s*=>)/g
+const TEXT_WRITE = String.raw`\s*\??\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)|(?:text|html)\s*\(\s*[^)\s]|(?:replaceChildren|append(?:Child)?|prepend|insertAdjacent(?:HTML|Text))\s*\()`
+const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)(?:${JS_CHILD})*${TEXT_WRITE}`)
+/** The call's element (or a child of it) kept: the statement, list item or object entry ends. */
+const KEPT_AFTER_CALL = new RegExp(String.raw`^\s*\)(?:${JS_CHILD})*\s*(?:[;,\n})]|\|\||\?\?|$)`)
+const ANY_WRITE = new RegExp(TEXT_WRITE)
+/** Every text write's receiver (`el` / `els.p` / `this.p`, child access allowed in between): one pass per script. */
+const WRITE_TARGET = new RegExp(
+  String.raw`(?<![\w$])(${JS_ID})(?:\s*\??\.\s*(${JS_ID}))?(?:${JS_CHILD})*${TEXT_WRITE}`,
+  'g',
+)
+/** `.forEach(` …: an array (`['a', 'b']` / `ids` before it) iterated with a callback. */
+const ITERATE = /\.\s*(?:forEach|map|flatMap|filter|some|every|reduce)\s*\(/g
+/** `for (const id of ids)` / `for (const id of [`. */
+const FOR_OF = new RegExp(
+  String.raw`\bfor\s*\(\s*(?:const|let|var)\s+\[?\s*(${JS_ID})[^;)]{0,80}?\s+of\s+(?:(${JS_ID})\s*\)|\[)`,
+  'g',
+)
+/** A callback's first parameter (destructured `[id, v]` too) and where its body starts. */
+const CALLBACK = new RegExp(
+  String.raw`\s*(?:async\s+)?(?:function\b\s*(?:${JS_ID})?\s*\(\s*\[?\s*(${JS_ID})[^)]{0,200}\)|\(\s*\[?\s*(${JS_ID})[^)]{0,200}\)\s*=>|(${JS_ID})\s*=>)`,
+  'y',
+)
+/**
+ * Functions whose first parameter is named — `function f(id…)`, `f = function (id…)`, `f = (id…) =>`, `f = id =>` —
+ * found from their `function` / `=>` (names at most 64 characters).
+ */
+const JS_FUNCTION = /\bfunction\b|=>/g
+const FUNCTION_DECL = new RegExp(String.raw`function\s+(${JS_ID})\s*\(\s*(${JS_ID})[^)]{0,200}\)`, 'y')
+const FUNCTION_EXPR = new RegExp(String.raw`function\b[^(]{0,80}\(\s*(${JS_ID})[^)]{0,200}\)`, 'y')
+const ARROW_PARAM = new RegExp(String.raw`\(\s*(${JS_ID})(?![\w$])`, 'y')
+/** Iterated arrays checked per design (each a callback body read). */
+const MAX_ITERATED = 1000
+/** What a JS scan stops at: comments / division, strings, brackets. */
+const JS_SCAN = /[/'"`[\]]/g
+/**
+ * The id a string names: `x` / `#x`, or a selector whose first compound is `#x` (`#x.on`, `#x:hover`) at its end or
+ * before a descendant / child combinator or a comma (`#x span`, `#x > b`: the written element is inside `#x`).
+ */
+const ID_LITERAL = /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:[][^\s>+~,]{0,200})?(?:$|\s*[>,]|\s+(?![\s+~]))/
 const reText = (s: string) => s.replace(/[$]/g, '\\$')
+const isIdCode = (c: number) =>
+  (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36
+/** `at` moved back over whitespace. */
+const wsBack = (js: string, at: number) => {
+  let i = at
+  while (i > 0 && isWs(js[i - 1])) i--
+  return i
+}
+/** Start of the identifier ending at `end` (at most 64 characters, not a number), or -1. */
+function idStart(js: string, end: number) {
+  let s = end
+  while (s > 0 && end - s <= 64 && isIdCode(js.charCodeAt(s - 1))) s--
+  return s === end || end - s > 64 || /\d/.test(js[s]!) ? -1 : s
+}
+/** The name assigned what starts at `at` (`name = …`, `name = async …`; not `==` / `+=` …), or null. */
+function assignedName(js: string, at: number) {
+  let q = wsBack(js, at)
+  if (js.slice(q - 5, q) === 'async' && !isIdCode(js.charCodeAt(q - 6))) q = wsBack(js, q - 5)
+  if (js[q - 1] !== '=' || /[=!<>+\-*/%&|^?]/.test(js[q - 2] ?? '')) return null
+  const end = wsBack(js, q - 1)
+  const s = idStart(js, end)
+  return s < 0 ? null : js.slice(s, end)
+}
+/** The named functions of a script with their first parameter and where their body starts. */
+function* jsFunctions(js: string): Generator<{ names: string[]; param: string; at: number }> {
+  for (const m of js.matchAll(JS_FUNCTION)) {
+    if (m[0] === 'function') {
+      const assigned = assignedName(js, m.index)
+      FUNCTION_DECL.lastIndex = m.index
+      const decl = FUNCTION_DECL.exec(js)
+      FUNCTION_EXPR.lastIndex = m.index
+      const expr = decl ?? FUNCTION_EXPR.exec(js)
+      if (!expr) continue
+      const names = [assigned, decl?.[1]].filter((x): x is string => Boolean(x))
+      if (names.length) yield { names, param: decl ? decl[2]! : expr[1]!, at: m.index + expr[0].length }
+      continue
+    }
+    // `=>`: `(id, …) =>` (no `)` inside) or `id =>`, assigned to a name.
+    const end = wsBack(js, m.index)
+    let start = -1
+    let param = ''
+    if (js[end - 1] === ')') {
+      // The parameters' `(`: at most 200 characters back (a bounded search: linear on runs of `(`).
+      const from = Math.max(0, end - 202)
+      const k = js.slice(from, end - 1).lastIndexOf('(')
+      const open = k < 0 ? -1 : from + k
+      ARROW_PARAM.lastIndex = open
+      const p = open >= 0 && !js.slice(open + 1, end - 1).includes(')') && ARROW_PARAM.exec(js)
+      if (p) [start, param] = [open, p[1]!]
+    } else {
+      start = idStart(js, end)
+      if (start >= 0) param = js.slice(start, end)
+    }
+    const name = start >= 0 ? assignedName(js, start) : null
+    if (name) yield { names: [name], param, at: m.index + 2 }
+  }
+}
 
 /** A function body from `at` (after its parameters / arrow): a `{…}` block, else the expression up to `;` / a line end. */
 function jsBody(js: string, at: number) {
@@ -823,28 +928,74 @@ function jsBody(js: string, at: number) {
 }
 
 /**
- * Ids whose text the design's scripts write (the bound heuristic): `getElementById('x')` / `querySelector('#x')` /
- * `$('#x')` with a text write right after the call, kept in a variable that gets one, or passed first to a function
- * that writes text through that parameter (`setText('x', …)`). An id only read, or used for listeners, classes or
- * attributes, stays editable.
+ * Whether `body` writes the text of an element it finds by `p` (`getElementById(p)` / `querySelector('#' + p)` /
+ * `` $(`#${p}`) ``): right after the call, through a variable, or through a text helper (`setText(p, …)`).
+ */
+function writesThrough(body: string, p: string, helpers: Set<string>) {
+  const q = reText(p)
+  const by = String.raw`[\w$]{1,64}\s*\(\s*(?:${q}|['"]#['"]\s*\+\s*${q}|\`#\$\{\s*${q}\s*\}\`)\s*\)`
+  if (new RegExp(`${by}(?:${JS_CHILD})*${TEXT_WRITE}`).test(body)) return true
+  const kept = new RegExp(
+    String.raw`(?<![\w$.])(${JS_ID})\s*=(?!=)\s*(?:[\w$]{1,64}\s*\??\.\s*){0,4}${by}`,
+    'g',
+  )
+  for (const m of body.matchAll(kept))
+    if (new RegExp(String.raw`(?<![\w$.])${reText(m[1]!)}(?:${JS_CHILD})*${TEXT_WRITE}`).test(body))
+      return true
+  for (const m of body.matchAll(new RegExp(String.raw`(?<![\w$.])(${JS_ID})\s*\(\s*${q}\s*[,)]`, 'g')))
+    if (helpers.has(m[1]!)) return true
+  return false
+}
+
+/**
+ * Ids whose text the design's scripts write (the bound heuristic; when unsure, bound): `getElementById('x')` /
+ * `querySelector('#x')` / `querySelector('#x span')` / `$('#x')` with a text write right after the call (child
+ * access allowed in between), kept in a variable or a holder object property (`{x: …}`, `this.x = …`) that gets one,
+ * passed first to a function that writes text through that parameter (`setText('x', …)`), or listed in an array
+ * literal iterated with a write through the callback's parameter (`['x', 'y'].forEach((id) => …getElementById(id)
+ * .textContent = …)`, `for (const id of ids)`). An id only read, or used for listeners, classes or attributes, stays
+ * editable. The write receivers are collected in one pass per script and matched against the kept elements.
  */
 function scriptTextIds(scripts: string[]): Set<string> {
   const written = new Set<string>()
   const vars = new Map<string, string[]>()
+  const props = new Map<string, string[]>()
   const calls: [string, string][] = []
   const helpers = new Set<string>()
+  const receivers = new Set<string>()
+  const properties = new Set<string>()
+  const sites: { js: string; at: number; p?: string; ids: string[] }[] = []
+  const keep = (map: Map<string, string[]>, name: string, id: string) => {
+    const list = map.get(name)
+    if (list) list.push(id)
+    else map.set(name, [id])
+  }
   for (const js of scripts) {
-    for (const m of js.matchAll(JS_FUNCTION)) {
-      const name = m[1] ?? m[3]!
-      const param = m[2] ?? m[4] ?? m[5] ?? m[6]!
-      const body = jsBody(js, m.index + m[0].length)
-      const p = reText(param)
+    for (const f of jsFunctions(js)) {
+      const body = jsBody(js, f.at)
+      const p = reText(f.param)
       if (ANY_WRITE.test(body) && new RegExp(String.raw`(?:\(\s*|\+\s*|\$\{\s*)${p}\s*[)}]`).test(body))
-        helpers.add(name)
+        for (const name of f.names) helpers.add(name)
     }
+    for (const m of js.matchAll(WRITE_TARGET)) {
+      // `a.b.textContent`: `b` is a property of `a`; a receiver after a `.` is a property too.
+      if (js[wsBack(js, m.index) - 1] === '.') properties.add(m[1]!)
+      else receivers.add(m[1]!)
+      if (m[2]) properties.add(m[2])
+    }
+    /** Id literals (positions ascending), array literals by their `[` and `]`, arrays kept in a variable. */
+    const literals: { at: number; id: string }[] = []
+    const opens = new Map<number, number>()
+    const closes = new Map<number, number>()
+    const arrays = new Map<string, [number, number]>()
+    const stack: { at: number; name?: string }[] = []
     const n = js.length
     let i = 0
     while (i < n) {
+      JS_SCAN.lastIndex = i
+      const next = JS_SCAN.exec(js)
+      if (!next) break
+      i = next.index
       const c = js[i]
       if (c === '/' && js[i + 1] === '/') {
         const e = js.indexOf('\n', i)
@@ -856,34 +1007,121 @@ function scriptTextIds(scripts: string[]): Set<string> {
         i = e < 0 ? n : e + 2
         continue
       }
+      if (c === '[') stack.push({ at: i, name: assignedName(js, i) ?? undefined })
+      else if (c === ']') {
+        const open = stack.pop()
+        if (open) {
+          opens.set(open.at, i)
+          closes.set(i, open.at)
+          if (open.name) arrays.set(open.name, [open.at, i])
+        }
+      }
       if (c !== '"' && c !== "'" && c !== '`') {
         i++
         continue
       }
       let j = i + 1
       while (j < n && js[j] !== c && (c === '`' || js[j] !== '\n')) j += js[j] === '\\' ? 2 : 1
-      const id = /^#?([\w-]{1,200})$/.exec(js.slice(i + 1, j))?.[1]
-      const before = js.slice(Math.max(0, i - 200), i)
-      const call = id ? /(?<![\w$])([\w$]+)\s*\(\s*$/.exec(before) : null
-      if (id && call) {
-        const after = js.slice(j + 1, j + 200)
-        if (WRITE_AFTER_CALL.test(after)) written.add(id)
-        else if (/^\s*\)\s*(?:[;,\n}]|$)/.test(after)) {
-          const v = /(?:^|[^\w$.])([A-Za-z_$][\w$]*)\s*=(?!=)\s*(?:[\w$]+\s*\.\s*)*[\w$]+\s*\(\s*$/.exec(
-            before.slice(-120),
-          )
-          if (v) vars.set(v[1]!, [...(vars.get(v[1]!) ?? []), id])
+      const found = ID_LITERAL.exec(js.slice(i + 1, j))
+      const id = found ? (found[1] ?? found[2]!) : ''
+      if (id) {
+        literals.push({ at: i, id })
+        // The call this literal is the first argument of: `name(` right before it.
+        const open = wsBack(js, i)
+        const nameEnd = js[open - 1] === '(' ? wsBack(js, open - 1) : -1
+        const nameStart = nameEnd > 0 ? idStart(js, nameEnd) : -1
+        if (nameStart >= 0) {
+          const after = js.slice(j + 1, j + 400)
+          if (WRITE_AFTER_CALL.test(after)) written.add(id)
+          else if (KEPT_AFTER_CALL.test(after)) {
+            // Over the callee's receivers (`document.`, `this.root?.`) to what the element is kept in.
+            let q = nameStart
+            for (let k = 0; k < 6; k++) {
+              const dot = wsBack(js, q)
+              if (js[dot - 1] !== '.') break
+              const s = idStart(js, wsBack(js, js[dot - 2] === '?' ? dot - 2 : dot - 1))
+              if (s < 0) break
+              q = s
+            }
+            q = wsBack(js, q)
+            const end = wsBack(js, q - 1)
+            if (js[q - 1] === '=' && !/[=!<>+\-*/%&|^?]/.test(js[q - 2] ?? '')) {
+              const s = idStart(js, end)
+              // `el = …` a variable; `this.el = …` / `els.el = …` a holder property.
+              if (s >= 0) keep(js[wsBack(js, s) - 1] === '.' ? props : vars, js.slice(s, end), id)
+            } else if (js[q - 1] === ':') {
+              // A holder object entry `{ el: …, 'el2': … }` (a ternary's `: …` too: when unsure, bound).
+              const key = /(?:^|[^\w$])([A-Za-z_$][\w$]{0,63})$|(['"])([\w$-]{1,64})\2$/.exec(
+                js.slice(Math.max(0, end - 70), end),
+              )
+              if (key) keep(props, key[1] ?? key[3]!, id)
+            }
+          }
+          if (/^\s*[,)]/.test(after)) calls.push([js.slice(nameStart, nameEnd), id])
         }
-        if (/^\s*[,)]/.test(after)) calls.push([call[1]!, id])
       }
       i = j + 1
     }
+    // Arrays iterated with a callback (or a for…of loop): checked once every script's helpers are known (at most
+    // MAX_ITERATED, each with at most MAX_HTML_TEXTS ids).
+    const site = (at: number, p: string | undefined, [from, to]: readonly [number, number]) => {
+      if (sites.length >= MAX_ITERATED) return
+      let lo = 0
+      let hi = literals.length
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (literals[mid]!.at < from) lo = mid + 1
+        else hi = mid
+      }
+      const ids: string[] = []
+      for (let k = lo; k < literals.length && literals[k]!.at < to && ids.length < MAX_HTML_TEXTS; k++)
+        ids.push(literals[k]!.id)
+      if (ids.length) sites.push({ js, at, p, ids })
+    }
+    for (const m of js.matchAll(ITERATE)) {
+      const end = wsBack(js, m.index)
+      const open = js[end - 1] === ']' ? closes.get(end - 1) : undefined
+      const name = open === undefined ? idStart(js, end) : -1
+      const range =
+        open !== undefined
+          ? ([open, end - 1] as const)
+          : name >= 0
+            ? arrays.get(js.slice(name, end))
+            : undefined
+      if (range) site(m.index + m[0].length, undefined, range)
+    }
+    for (const m of js.matchAll(FOR_OF)) {
+      let at = m.index + m[0].length
+      let range = m[2] !== undefined ? arrays.get(m[2]) : undefined
+      if (m[2] === undefined) {
+        // `of [ … ])`: the loop body starts after the array and the `)`.
+        const close = opens.get(at - 1)
+        if (close === undefined) continue
+        range = [at - 1, close]
+        at = close + 1
+        while (at < n && isWs(js[at])) at++
+        if (js[at] !== ')') continue
+        at++
+      }
+      if (range) site(at, m[1]!, range)
+    }
   }
-  for (const [name, ids] of vars) {
-    const write = new RegExp(String.raw`(?:^|[^\w$.])${reText(name)}${TEXT_WRITE}`)
-    if (scripts.some((js) => write.test(js))) for (const id of ids) written.add(id)
-  }
+  for (const [name, ids] of vars) if (receivers.has(name)) for (const id of ids) written.add(id)
+  for (const [name, ids] of props) if (properties.has(name)) for (const id of ids) written.add(id)
   for (const [name, id] of calls) if (helpers.has(name)) written.add(id)
+  for (const s of sites) {
+    if (s.ids.every((id) => written.has(id))) continue
+    let p = s.p
+    let at = s.at
+    if (p === undefined) {
+      CALLBACK.lastIndex = at
+      const m = CALLBACK.exec(s.js)
+      if (!m) continue
+      p = m[1] ?? m[2] ?? m[3]!
+      at = CALLBACK.lastIndex
+    }
+    if (writesThrough(jsBody(s.js, at), p, helpers)) for (const id of s.ids) written.add(id)
+  }
   return written
 }
 
@@ -901,6 +1139,8 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
   const counts = new Map<string, number>()
   const scripts: string[] = []
   let docTitle = false
+  /** A CRM contract (a `window.CRM_DATA` literal or the crm-endpoint meta): what its script writes comes from the CRM. */
+  let contract = false
   let t = 0
   let a = 0
   let svg = 0
@@ -1022,6 +1262,15 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
           el,
         )
       }
+    if (name === 'meta' && listing && !contract) {
+      const kind = attrs.find((x) => x.name === 'name')
+      if (
+        kind &&
+        kind.start >= 0 &&
+        textOf(html.slice(kind.start, kind.end)).toLowerCase() === 'crm-endpoint'
+      )
+        contract = true
+    }
     if (name === 'meta' && !meta) {
       const content = attrs.find((x) => x.name === 'content')
       const kind = attrs.find((x) => x.name === 'name')
@@ -1086,7 +1335,8 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
         .split(';')[0]!
         .trim()
       const body = html.slice(end, stop)
-      if (JS_SCRIPT.test(type) && !CRM_DATA_BODY.test(body)) {
+      if (JS_SCRIPT.test(type) && CRM_DATA_BODY.test(body)) contract = true
+      else if (JS_SCRIPT.test(type)) {
         if (/\bdocument\.title\s*=(?!=)/.test(body)) docTitle = true
         scripts.push(body)
       }
@@ -1100,7 +1350,7 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
     // The script's text writes bind text runs only (inside the element written), never attributes.
     const byJs = written.size ? s.owners?.findLast((id) => written.has(id)) : undefined
     const byTitle = s.kind === 'title' && docTitle
-    s.boundBy = s.binding ? 'crm' : byJs || byTitle ? 'script' : undefined
+    s.boundBy = s.binding || ((byJs || byTitle) && contract) ? 'crm' : byJs || byTitle ? 'script' : undefined
     s.bound = s.boundBy !== undefined
     s.binding ??= byJs ? `#${byJs}` : byTitle ? 'document.title' : undefined
     const g = s.group !== undefined && s.group >= 0 ? groups[s.group]! : null
