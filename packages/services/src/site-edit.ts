@@ -293,6 +293,26 @@ const clippedCopy = (en: string | null | undefined, full: unknown) => {
   return head.length >= 100 && head.length < f.length && f.startsWith(head)
 }
 const CUT_SHORT = `the English is the design's text cut short (it ends with "…")`
+/**
+ * Ask AI saw only the first `clip` characters of a cut design text: an English built from that fragment (echoed, or
+ * edited in place) would shorten the page. A whole new text shares neither the first 40 characters nor most of the
+ * fragment's words.
+ */
+const fromFragment = (en: string, full: string, clip: number) => {
+  const s = collapse(en).replace(/…$/, '').trimEnd()
+  const f = collapse(full)
+  if (!s || s === f) return false
+  let k = 0
+  while (k < s.length && k < f.length && s[k] === f[k]) k++
+  if (k >= 40 || f.startsWith(s)) return true
+  const words = (x: string) => new Set(x.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
+  const mine = words(s)
+  const seen = words(f.slice(0, clip))
+  if (mine.size < 5) return false
+  let shared = 0
+  for (const w of mine) if (seen.has(w)) shared++
+  return shared / mine.size >= 0.6
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 /** Of these `/files` ids, the ones that are not this spa's public files. */
@@ -688,7 +708,11 @@ export async function runSiteEdit(
             const design = new Map(slots.map((x) => [x.path, x.value]))
             for (const [k, v] of Object.entries(op.set ?? {})) {
               // A cut text: a whole new English (with its Arabic) is fine; Arabic alone would translate a fragment.
-              if ('t' in v && cut(design.get(k)) && !v.t.en?.trim()) {
+              if (
+                't' in v &&
+                cut(design.get(k)) &&
+                (!v.t.en?.trim() || fromFragment(v.t.en, String(design.get(k)), lenient!.clip))
+              ) {
                 refuse(`${k}: ${CUT_VIEW}`)
                 continue
               }
@@ -732,7 +756,7 @@ export async function runSiteEdit(
                 )
                 continue
               }
-              if (cut(x.text) && !e.t.en?.trim()) {
+              if (cut(x.text) && (!e.t.en?.trim() || fromFragment(e.t.en, x.text, lenient!.clip))) {
                 refuse(`${e.id}: ${CUT_VIEW}`)
                 continue
               }

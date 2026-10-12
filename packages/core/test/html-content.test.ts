@@ -247,6 +247,22 @@ describe('htmlContentLeftovers', () => {
     ])
   })
 
+  it('a page text echoed with its design English (plus Arabic) is still checked', () => {
+    const html = '<h1>Serenity Spa Dubai</h1>'
+    const texts = listHtmlDesignTexts(html)
+    const content = {
+      v: 1 as const,
+      texts: [{ id: texts[0]!.id, src: texts[0]!.src, t: { en: 'Serenity Spa Dubai', ar: 'سيرينيتي' } }],
+    }
+    const out = htmlContentLeftovers(null, content, {
+      spaName: 'Lotus',
+      city: 'Sharjah',
+      arabic: true,
+      page: { texts, images: [] },
+    })
+    expect(out.map((o) => [o.path, o.reason])).toContainEqual([`text:${texts[0]!.id}`, 'city'])
+  })
+
   it("an Arabic-only value keeps the design's English, so that English is still checked", () => {
     const data = d()
     const content = htmlContentOf({

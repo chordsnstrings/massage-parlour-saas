@@ -581,7 +581,11 @@ export function htmlContentLeftovers(
   for (const x of ctx.page.texts) {
     // Replaced only by a current entry with English: an Arabic-only one leaves the design's English on the page.
     const e = parts.texts[x.id]
-    if (x.bound || (e?.src === x.src && String(e.t.en ?? '').trim())) continue
+    const en = String(e?.t.en ?? '')
+      .replace(/[ \t\n\f\r]+/g, ' ')
+      .trim()
+    // An English equal to the design's (echoed with an Arabic) leaves the design's text on the page: still checked.
+    if (x.bound || (e?.src === x.src && en && en !== x.text)) continue
     const reason = leftoverReason(x.text, designNames, city)
     if (reason) out.push({ path: `text:${x.id}`, reason, text: leftoverText(x.text) })
   }

@@ -730,6 +730,18 @@ describe('site edit ops layer', () => {
       expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'ask-me')))!.content?.texts).toContainEqual(
         expect.objectContaining({ id: 'txt-0', t: { en: 'A whole new paragraph.', ar: 'فقرة جديدة' } }),
       )
+      // English built from the visible fragment (echoed without "…", or edited in place) is dropped like a translation.
+      const fragment = await ask(
+        [
+          {
+            op: 'html_content',
+            page: 'ask-me',
+            texts: [{ id: 'txt-0', t: { en: long.slice(0, 160).replace('calm', 'peace'), ar: 'فقرة' } }],
+          },
+        ],
+        { clip: 160 },
+      )
+      expect(fragment.ok && fragment.summary).toEqual([`Ask: not changed — txt-0: ${cut}`])
       // Every entry dropped: nothing written, only the notes.
       const none = await ask(
         [{ op: 'html_content', page: 'ask-me', pictures: [{ id: 'img-0', img: `/files/${theirs!.id}` }] }],

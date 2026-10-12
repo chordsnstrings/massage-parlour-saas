@@ -594,8 +594,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     (listing only) + `boundBy`: 'crm' = `data-crm*` / `data-item*` / `data-book-service` on the element or an ancestor
     (attributes too); script-written = text runs inside an element whose text the design's JS writes (`scriptTextIds`,
     one pass per script: `getElementById('x')` / `querySelector('#x')` (one compound: `#x.on`; never `#x span`) /
-    `$('#x')` + `.textContent` / `.innerText` / `.innerHTML` / `.outerHTML` / `replaceChildren` / jQuery `.text(v)` /
-    `.html(v)` (text replaced; appending nodes or writing a child never binds the element's own texts), directly, via a variable, a helper, an id array looped with `.forEach` /
+    `$('#x')` (jQuery `.first()` / `.eq(n)` allowed) + `.textContent` / `.innerText` / `.innerHTML` / `.outerHTML` `=`
+    / `replaceChildren` / jQuery `.text(v)` / `.html(v)` / `.empty()` (text replaced; `+=`, appending nodes or writing
+    through child access never binds the element's own texts; `#x tag` / `#x > tag` binds only that tag's texts inside
+    `#x`), directly, via a variable, a helper, an id array looped with `.forEach` /
     `.map` / `for…of`, or a holder object (`els.x.textContent`); never attributes; listener / read-only ids stay
     editable; the CRM_DATA literal not read) and `document.title =` for the title: `boundBy` 'crm' on a contract design
     (`CRM_DATA` literal or crm-endpoint meta), 'script' only without one; op errors "filled from the CRM — change it in

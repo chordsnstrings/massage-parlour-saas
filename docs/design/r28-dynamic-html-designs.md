@@ -296,8 +296,8 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
   / style attributes (raw in `<style>` bodies), and character references refused in picture URLs (a pasted `&amp;`
   read as `&` first; `$` allowed again, core `htmlImageUrl`); a text is script-bound only where the design's JS
   replaces it (`scriptTextIds`, one pass per script, timing-tested on 1 MB scripts and long accessor chains; text
-  writes and `replaceChildren` on the element itself, looped id arrays and holder objects count; appends, writes to a
-  child or through `#id span`, listener / read-only ids stay editable — a footer whose year a script writes keeps its
+  writes, `replaceChildren` and jQuery `.empty()` refills on the element itself, `#id tag` (that tag only), looped id
+  arrays and holder objects count; `+=`, appends, writes through child access, listener / read-only ids stay editable — a footer whose year a script writes keeps its
   other texts editable and checked) and says by what (`boundBy` `crm` on a
   contract design — `CRM_DATA` literal or crm-endpoint meta — or for `data-crm*`, `script` only without a contract;
   op errors "filled from the CRM — change it in the CRM" / "filled by the design's script — change it in the design
@@ -311,7 +311,8 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
   = the design's English; an Arabic-only value whose English is still the design's stays checked for leftovers); an
   AI never translates a `cut` entry (HTML_CONTENT_RULES, get / set_html_content descriptions; a whole new English with
   its Arabic is fine): Ask AI's dry run and Apply pass `runSiteEdit({htmlContent: {clip: 160}})`, which drops a cut
-  entry without new English — and any entry that doesn't fit (unknown / bound id, cut-short copy, bad value, foreign file) — with a
+  entry without new English or with English built from the visible fragment (same first 40 characters or most of its
+  words) — and any entry that doesn't fit (unknown / bound id, cut-short copy, bad value, foreign file) — with a
   note instead of failing the op; the connector's `get_html_content` `ids` (≤ 50) returns entries whole so they can
   be read before translating; a cut-short English copy is refused, the whole design text echoed (one ending in "…"
   itself) is not; leftovers first in Write texts; a draft save refuses malformed ids, private and other spas' file

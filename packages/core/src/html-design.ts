@@ -809,11 +809,14 @@ const JS_STR = String.raw`(?:'[^'\n]{0,200}'|"[^"\n]{0,200}"|\`[^\`]{0,200}\`)`
 /**
  * After an element expression: its text replaced (`.textContent` / `.innerText` / `.innerHTML` / `.outerHTML`
  * assigned, jQuery `.text(v)` / `.html(v)`, `.replaceChildren(`). Adding nodes (`append` / `prepend` /
- * `insertAdjacentHTML` …) and writes to a child (`.firstElementChild…`, `#x span`) never bind the element: its own
- * texts stay the design's and stay editable.
+ * `insertAdjacentHTML` / `+=` …) and writes to a child (`.firstElementChild…`) never bind the element: its own
+ * texts stay the design's and stay editable. jQuery `.empty()` (cleared for a refill) binds; `#x tag` binds only that
+ * tag's texts inside `#x`.
  */
-const TEXT_WRITE = String.raw`\s*\??\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*\+?=(?!=)|(?:text|html)\s*\(\s*[^)\s]|replaceChildren\s*\()`
-const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)${TEXT_WRITE}`)
+const TEXT_WRITE = String.raw`\s*\??\.\s*(?:(?:textContent|innerText|innerHTML|outerHTML)\s*=(?!=)|(?:text|html)\s*\(\s*[^)\s]|replaceChildren\s*\(|empty\s*\(\s*\))`
+/** jQuery set filters (`.first()`, `.eq(0)`): still the element itself. */
+const JQ_FILTER = String.raw`(?:\s*\.\s*(?:first|last)\s*\(\s*\)|\s*\.\s*eq\s*\(\s*\d{1,4}\s*\)){0,3}`
+const WRITE_AFTER_CALL = new RegExp(String.raw`^\s*\)${JQ_FILTER}${TEXT_WRITE}`)
 /** The call's element kept: the statement, list item or object entry ends. */
 const KEPT_AFTER_CALL = /^\s*\)\s*(?:[;,\n})]|\|\||\?\?|$)/
 const ANY_WRITE = new RegExp(TEXT_WRITE)
@@ -821,7 +824,7 @@ const ANY_WRITE = new RegExp(TEXT_WRITE)
 const WRITE_TARGET = new RegExp(String.raw`(?<![\w$])(${JS_ID})(?:\s*\??\.\s*(${JS_ID}))?${TEXT_WRITE}`, 'g')
 /** `a.firstElementChild.textContent`: a child's text, not `a`'s (no binding). */
 const CHILD_PROP =
-  /^(?:(?:first|last)(?:Element)?Child|children|childNodes|nextElementSibling|previousElementSibling|nextSibling|previousSibling|parentNode|parentElement)$/
+  /^(?:(?:first|last)(?:Element)?Child|children|childNodes|nextElementSibling|previousElementSibling|nextSibling|previousSibling)$/
 /** `.forEach(` …: an array (`['a', 'b']` / `ids` before it) iterated with a callback. */
 const ITERATE = /\.\s*(?:forEach|map|flatMap|filter|some|every|reduce)\s*\(/g
 /** `for (const id of ids)` / `for (const id of [`. */
@@ -846,8 +849,12 @@ const ARROW_PARAM = new RegExp(String.raw`\(\s*(${JS_ID})(?![\w$])`, 'y')
 const MAX_ITERATED = 1000
 /** What a JS scan stops at: comments / division, strings, brackets. */
 const JS_SCAN = /[/'"`[\]]/g
-/** The id a string names: `x` / `#x`, or a one-compound selector on it (`#x.on`, `#x:hover`); never `#x span`. */
-const ID_LITERAL = /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:[][^\s>+~,]{0,200})?$/
+/**
+ * The id a string names: `x` / `#x`, or a one-compound selector on it (`#x.on`, `#x:not(.a, .b)`,
+ * `#x[aria-label="a b"]`); `#x tag` / `#x > tag` (a plain tag last) names `x tag`: only that tag's texts inside `#x`.
+ */
+const ID_LITERAL =
+  /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:][\w-]{1,100}(?:\([^)\n]{0,100}\))?|\[[^\]\n]{0,100}\]){0,8}$|^#([\w-]{1,200})(?:\s*>\s*|\s+)([a-z][a-z0-9]{0,15})$/i
 const reText = (s: string) => s.replace(/[$]/g, '\\$')
 const isIdCode = (c: number) =>
   (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36
@@ -1019,7 +1026,7 @@ function scriptTextIds(scripts: string[]): Set<string> {
       let j = i + 1
       while (j < n && js[j] !== c && (c === '`' || js[j] !== '\n')) j += js[j] === '\\' ? 2 : 1
       const found = ID_LITERAL.exec(js.slice(i + 1, j))
-      const id = found ? (found[1] ?? found[2]!) : ''
+      const id = found ? (found[1] ?? found[2] ?? `${found[3]} ${found[4]!.toLowerCase()}`) : ''
       if (id) {
         literals.push({ at: i, id })
         // The call this literal is the first argument of: `name(` right before it.
@@ -1344,7 +1351,9 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
   const written = scriptTextIds(scripts)
   for (const s of sites) {
     // The script's text writes bind text runs only (inside the element written), never attributes.
-    const byJs = written.size ? s.owners?.findLast((id) => written.has(id)) : undefined
+    const byJs = written.size
+      ? s.owners?.findLast((id) => written.has(id) || written.has(`${id} ${s.tag}`))
+      : undefined
     const byTitle = s.kind === 'title' && docTitle
     s.boundBy = s.binding || ((byJs || byTitle) && contract) ? 'crm' : byJs || byTitle ? 'script' : undefined
     s.bound = s.boundBy !== undefined

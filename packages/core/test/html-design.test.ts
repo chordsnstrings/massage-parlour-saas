@@ -725,7 +725,7 @@ function setText(id, value) { const el = document.getElementById(id); if (el) el
 setText('h1', 'x')
 const put = (key, html) => { document.querySelector('#' + key).innerHTML = html }
 put('h2', '<b>x</b>')
-document.getElementById('box').innerHTML += ''
+document.getElementById('box').innerHTML = ''
 const n = document.getElementById('read').textContent.length
 $('#jq').text('x')
 </script></body></html>`
@@ -755,7 +755,7 @@ $('#jq').text('x')
     expect(Date.now() - t).toBeLessThan(2000)
   })
 
-  it('bound where the script replaces the text: replaceChildren, iterated id arrays, holder objects; writes to a child (#id span, child access), appends and listener-only ids stay editable', () => {
+  it('bound where the script replaces the text: replaceChildren, iterated id arrays, holder objects, #id tag (that tag only); writes through child access, appends and listener-only ids stay editable', () => {
     const html = `<html><head><title>T</title></head><body>
 <p id="sel"><span>Selector child</span></p><p id="chain"><b>Chained child</b></p><ul id="kids"><li>Kid</li></ul>
 <div id="q"><i>Query child</i></div><p id="rc">Replaced</p><p id="ap">Appended</p><p id="pp">Prepended</p>
@@ -789,6 +789,7 @@ o?.replaceChildren()
     const list = listHtmlDesignTexts(html)
     expect(list.filter((x) => x.bound).map((x) => [x.text, x.boundBy, x.binding])).toEqual(
       [
+        ['Selector child', 'sel'],
         ['Replaced', 'rc'],
         ['Array one', 'arr1'],
         ['Array two', 'arr2'],
@@ -800,7 +801,6 @@ o?.replaceChildren()
     )
     expect(list.filter((x) => !x.bound).map((x) => x.text)).toEqual([
       'T',
-      'Selector child',
       'Chained child',
       'Kid',
       'Query child',
@@ -816,6 +816,30 @@ o?.replaceChildren()
       'Call +971 50 123 4567',
       'Privacy policy',
     ])
+  })
+
+  it('refill, set filters, tag selectors, bracketed selectors, parents bind; += appends stay editable', () => {
+    const html = `<ul id="svc"><li>Swedish massage — Serenity Spa Dubai</li></ul>
+<div id="hero"><h1>Serenity Spa</h1><p>Our story</p></div><p id="first">First</p>
+<button id="menu" aria-label="Open menu">Menu</button><p id="copy">© Serenity Spa Dubai </p>
+<section id="kid"><p>Child</p></section>
+<script>
+$('#svc').empty(); data.forEach((d) => $('#svc').append('<li>' + d + '</li>'))
+document.querySelector('#hero h1').textContent = crm.name
+$('#first').first().text('x')
+document.querySelector('#menu[aria-label="Open menu"]').textContent = 'x'
+document.getElementById('copy').innerHTML += new Date().getFullYear()
+const k = document.getElementById('kid'); k.parentElement.textContent = ''
+</script>`
+    const bound = (t: string) => listHtmlDesignTexts(html).find((x) => x.text === t)?.bound
+    expect(bound('Swedish massage — Serenity Spa Dubai')).toBe(true)
+    expect(bound('Serenity Spa')).toBe(true)
+    expect(bound('Our story')).toBe(false)
+    expect(bound('First')).toBe(true)
+    expect(bound('Menu')).toBe(true)
+    expect(bound('Open menu')).toBe(false) // attributes never
+    expect(bound('© Serenity Spa Dubai')).toBe(false)
+    expect(bound('Child')).toBe(true)
   })
 
   it('linear on long child-accessor chains', () => {
