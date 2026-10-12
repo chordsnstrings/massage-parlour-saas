@@ -498,7 +498,8 @@ export type HtmlContentLeftover = {
 }
 
 const PHONE = /(?:\+|00)?971[\s-]?\d|\b0\d{1,2}[\s-]?\d{3}[\s-]?\d{4}\b/
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/
+/** Linear: a match starts only where a run of address characters starts, each part bounded. */
+const EMAIL = /(?<![\w.+-])[\w.+-]{1,64}@[\w-]{1,63}\.[\w.]{2,63}/
 const TEST = /\b(?:test build|lorem ipsum|dolor sit|placeholder)\b/i
 
 /** Why a design-owned text still looks like the design's own spa (null = fine): other spa > city > phone > email > test. */

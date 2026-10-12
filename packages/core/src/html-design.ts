@@ -855,7 +855,8 @@ const JS_SCAN = /[/'"`[\]]/g
  */
 const ID_LITERAL =
   /^#?([\w-]{1,200})$|^#([\w-]{1,200})(?:[.:][\w-]{1,100}(?:\([^)\n]{0,100}\))?|\[[^\]\n]{0,100}\]){0,8}$|^#([\w-]{1,200})(?:\s*>\s*|\s+)([a-z][a-z0-9]{0,15})$/i
-const reText = (s: string) => s.replace(/[$]/g, '\\$')
+/** `s` as a literal inside a RegExp source. */
+const reText = (s: string) => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&')
 const isIdCode = (c: number) =>
   (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36
 /** `at` moved back over whitespace. */
