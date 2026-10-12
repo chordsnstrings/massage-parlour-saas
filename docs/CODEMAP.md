@@ -608,6 +608,20 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `get_html_content` / `set_html_content` (drafts only; `patch_html_design` = structure). Draft saves: console
     `storeDraft` runs services `htmlDesignContentErrors(tx, tenant, data)` (shape only + own public files; stale
     entries allowed).
+    **Connector, Ask AI and Write texts (P4):** `get_html_content` works on every design (`htmlContentView` slots /
+    page texts / pictures, `part` / `search` / `start` / `limit`, `set_count` over all parts, the first 30 leftovers
+    with the spa's CRM city; a note instead of the old early return without CRM_DATA); `set_html_content` takes
+    `texts: [{id, t}]` / `pictures: [{id, img}]` / `reset` `text:<id>` / `picture:<id>` (drafts only; audit counts).
+    Studio Ask AI (`editor/ai-edit-actions.ts`): an HTML-design canvas → `htmlContentView(its source, its content,
+    {clip: 160, limit: 300, bound: false})` → `planSiteEdit({html})` (extra `html_content` op line + rules + a
+    `<content>` block, the block's content left out of `<page>`, 12 000 tokens; block pages: prompt unchanged); the
+    agent's `html_content` texts `{id, en, ar}` → `{id, t}`; Apply allows `html_content`. Write texts
+    (`write-texts-actions.ts`): `textSlots(data, schema, {html})` → site-kit `htmlTextSlots` (data text / longtext
+    values `{block}/content:{path}` + unbound page texts `{block}/text:{id}` with their src; ≤ 400 a page);
+    leftover keys (`htmlContentLeftovers` with `page`) first and named in the prompt (`planSiteTexts({htmlDesign,
+    leftovers})`: keep `{{…}}`, keep lengths); the save re-reads the design (other doc key → nothing written),
+    `fillTextSlots(…, {html})` writes `content` only where the slot and the design text are unchanged, compares the
+    design signature without HtmlDesign `content` and runs `htmlDesignContentErrors` before `saveDraft`.
     Editor (P2): HtmlDesign `content` field = `components/site/editor/html-content-field.tsx` (lazy, Suspense; reads
     the design via `useGetPuck().selectedItem` + `EditorContext.html.docs`, local state → `onChange` debounced 700 ms,
     flushed on unmount); `EditorContext.html` = `{docs, spaName, city}` from the Studio editor; HTML-design pages open

@@ -1,5 +1,6 @@
 'use server'
 import { AiBudgetExceededError, AiDisabledError, AiOutputError, loadSpaContext, planSiteEdit } from '@spa/ai'
+import { htmlContentView } from '@spa/core'
 import { type ThemeTokens, withTenant } from '@spa/db'
 import {
   assertEditStamp,
@@ -7,12 +8,15 @@ import {
   editStamp,
   getEditablePage,
   getSite,
+  HTML_DESIGN_BLOCK,
+  htmlDesignSource,
   lockSite,
   restoreSiteEdit,
   runSiteEdit,
   type SiteEditDeps,
   type SiteEditResult,
   siteEditAuditData,
+  spaHtmlDocReader,
 } from '@spa/services'
 import { z } from 'zod'
 import { siteEditSchema } from '@/components/site/ai-schema'
@@ -90,11 +94,24 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
   const bad = pageError(pageId, data)
   if (bad) return fail(bad)
   if (!aiEditReady()) return fail('AI editing isn’t set up yet.')
-  const loaded = await withTenant(ctx.tenant.id, async (tx) => ({
-    page: await getEditablePage(tx, ctx.tenant.id, pageId),
-    site: await getSite(tx, ctx.tenant.id),
-    spa: await loadSpaContext(tx, ctx.tenant.id, 'content_agent'),
-  }))
+  // R28 P4: an HTML-design page's website content, read from the canvas block (also the dry run's base).
+  const design = (data as { content: { type?: unknown; props?: Record<string, unknown> }[] }).content.find(
+    (n) => n?.type === HTML_DESIGN_BLOCK,
+  )
+  const loaded = await withTenant(ctx.tenant.id, async (tx) => {
+    const html = design?.props
+      ? await htmlDesignSource(design.props, spaHtmlDocReader(tx, ctx.tenant.id))
+      : null
+    return {
+      page: await getEditablePage(tx, ctx.tenant.id, pageId),
+      site: await getSite(tx, ctx.tenant.id),
+      spa: await loadSpaContext(tx, ctx.tenant.id, 'content_agent'),
+      html:
+        html === null
+          ? undefined
+          : htmlContentView(html, design?.props?.content, { clip: 160, limit: 300, bound: false }),
+    }
+  })
   if (!loaded.page || !loaded.site) return fail('Page not found')
   const theme = normalizeTheme(loaded.site.themeDraft ?? loaded.site.theme) as unknown as Record<
     string,
@@ -110,6 +127,7 @@ export async function aiEditPlanAction(slug: string, pageId: string, input: unkn
       page: { slug: loaded.page.page.slug, title: loaded.page.page.title.en, data },
       theme,
       schema,
+      html: loaded.html,
       client: fixtureClient(slug),
     })
   } catch (e) {
@@ -168,7 +186,7 @@ export async function aiEditApplyAction(slug: string, pageId: string, input: unk
   const bad = pageError(pageId, parsed.data.data)
   if (bad) return fail(bad)
   const ops = pageOps(pageId, parsed.data.ops)
-  if (ops.some((o) => !['add', 'preset', 'move', 'remove', 'update', 'theme'].includes(o.op)))
+  if (ops.some((o) => !['add', 'preset', 'move', 'remove', 'update', 'theme', 'html_content'].includes(o.op)))
     return fail('Only changes to this page and the theme can be applied here.')
   let result: SiteEditResult
   let stamp: Awaited<ReturnType<typeof editStamp>> = null

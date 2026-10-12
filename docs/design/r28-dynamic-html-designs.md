@@ -160,6 +160,14 @@ All in `packages/core/src/html-crm.ts`:
   - the `patch_html_design` description becomes "structure only; words and pictures → set_html_content".
 - **Ask AI:** add `html_content` to the allow-list at `ai-edit-actions.ts:171`. `aiEditPlanAction` passes the slots and current values. `planSiteEdit` still never writes HTML.
 - **Write texts:** `textSlots()` returns the unbound content texts for HTML pages instead of returning early at l.42, and `fillTextSlots` writes `content`. The prompt gets the spa's CRM facts and the leftovers, so one click drafts EN + AR for that spa.
+- **As built (P4):** the connector's `get_html_content` lists every design (no CRM_DATA: page texts and pictures
+  only), paged (`start` / `limit`, `textsTotal`) and searchable, with `leftovers`; `set_html_content` takes `texts`
+  and `pictures` (the server fills the src guards and refuses bound ids). Ask AI sends an HTML-design page's content
+  view (unbound texts, clipped) as `<content>` and gets one `html_content` op back (page texts as `{id, en, ar}`); a
+  block page's prompt is byte-identical. Write texts: `textSlots(data, schema, {html})` = the design data's text /
+  longtext values + the unbound page texts (title and meta description included; tags, pictures and CRM-filled texts
+  never), leftovers first and named in the prompt with the `{{placeholder}}` and keep-the-length rules; the save
+  writes only `content` (stale slots or a changed design file skip; content checks as on draft saves). All drafts.
 
 ## 7. Contract v2 and designs without CRM_DATA (P5)
 
