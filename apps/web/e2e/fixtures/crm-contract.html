@@ -15,8 +15,8 @@
 <body>
 <h1 id="spa">Loading</h1>
 <p id="hours"></p>
-<p>Call <a id="phone" href="#"></a> · <a id="wa" href="[crm-whatsapp-link]">WhatsApp</a></p>
-<p><a id="address" href="[crm-maps-link]"></a></p>
+<p>Call <a id="phone" href="tel:">Phone</a> · <a id="wa" href="[crm-whatsapp-link]">WhatsApp</a></p>
+<p><a id="address" href="[crm-maps-link]">Address</a></p>
 <ul id="services"></ul>
 <ul id="staff"></ul>
 <form id="book" action="[crm-booking-endpoint]">
@@ -24,7 +24,7 @@
   <select id="who" name="staff_id"><option value="">No preference</option></select>
   <input name="name" value="Layla Test" aria-label="Name">
   <input name="phone" value="050 123 4567" aria-label="Phone">
-  <button>Request booking</button>
+  <button type="submit">Request booking</button>
 </form>
 <p id="status"></p>
 <p id="label"></p>
@@ -44,7 +44,7 @@
   const call = phones.find((p) => p.calls && !p.whatsapp) || phones.find((p) => p.calls) || {}
   $('phone').textContent = call.display || ''
   $('phone').href = `tel:${call.number || ''}`
-  const wa = contact.whatsapp_number || (phones.find((p) => p.whatsapp) || {}).number
+  const wa = contact.whatsapp_number || phones.find((p) => p.whatsapp)?.number
   $('wa').href = `https://wa.me/${digits(wa)}`
   $('address').textContent = [loc.address_line1, loc.address_line2, loc.city, loc.country].filter(Boolean).join(', ')
   $('address').href = loc.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent($('address').textContent)}`
@@ -75,7 +75,7 @@
     const fd = new FormData($('book'))
     const s = (crm.services || []).find((x) => x.id === fd.get('service_id'))
     const date = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10)
-    const body = { spa: spa.name, service_id: fd.get('service_id'), service_name: s ? s.name : '', duration_minutes: s && s.durations.length ? Number(s.durations[0]) : null, guests: 2, date, time: '18:30', staff_id: fd.get('staff_id') || null, name: fd.get('name'), phone: fd.get('phone'), notes: 'Strong pressure', source: 'website', submitted_at: new Date().toISOString() }
+    const body = { spa: spa.name, service_id: fd.get('service_id'), service_name: s ? s.name : '', duration_minutes: s?.durations.length ? Number(s.durations[0]) : null, guests: 2, date, time: '18:30', staff_id: fd.get('staff_id') || null, name: fd.get('name'), phone: fd.get('phone'), notes: 'Strong pressure', source: 'website', submitted_at: new Date().toISOString() }
     try {
       const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
       $('status').textContent = res.ok ? 'ok' : `fail ${res.status}`
