@@ -5,6 +5,7 @@ import {
   assertEditStamp,
   assertPagesUnlocked,
   DomainError,
+  designSeedPages,
   editStamp,
   getEditablePage,
   getSite,
@@ -75,6 +76,8 @@ export async function applyTemplateAction(
   // An HTML design's look is its page (its theme is empty): switching to it always writes its pages as drafts and
   // keeps the spa's theme (switchTemplate), so the live site doesn't change before Publish (as the connector does).
   const replaceContent = parsed.data.replaceContent === 'on' || template.htmlDesign
+  // R28 P3: a design with window.CRM_DATA → the page offers "Fill the CRM from the design" next (`?seed=`).
+  const seedable = template.htmlDesign && can(ctx, 'services.manage') && can(ctx, 'staff.manage')
   try {
     await withTenant(ctx.tenant.id, (tx) =>
       switchTemplate(tx, ctx.tenant.id, template, {
@@ -88,9 +91,19 @@ export async function applyTemplateAction(
   } catch (e) {
     return domainFail(e)
   }
+  // After the switch has committed (its own read): a failure here only loses the offer, never the applied template.
+  let seedPage: string | undefined
+  if (seedable) {
+    try {
+      const seeds = await withTenant(ctx.tenant.id, (tx) => designSeedPages(tx, ctx.tenant.id))
+      seedPage = (seeds.find((p) => p.slug === '') ?? seeds[0])?.id
+    } catch (e) {
+      console.error('[site.template_applied] seed offer', e)
+    }
+  }
   await auditAs(ctx, 'site.template_applied', 'site', undefined, { template: template.key, replaceContent })
   revalidateStudio(slug)
-  return ok(`${template.name} applied`)
+  return ok(`${template.name} applied`, seedPage ? { seedPage } : undefined)
 }
 
 /** One-click undo of the last template switch (template, theme and replaced drafts). */

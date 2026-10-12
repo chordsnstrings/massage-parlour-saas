@@ -3,7 +3,7 @@ import { createAsset, createVideoAsset, DomainError, MAX_UPLOAD_BYTES, processIm
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { getT } from '@/i18n/server'
-import { guard } from '@/server/access'
+import { guard, guardAny, IMAGE_UPLOAD_PERMISSIONS } from '@/server/access'
 import { audit } from '@/server/audit'
 import { readForm, sameOrigin, TooLarge } from '@/server/read-form'
 import { getSession } from '@/server/session'
@@ -12,7 +12,8 @@ import { getSession } from '@/server/session'
  * POST /files/upload?tenant={slug}[&kind=video] (multipart: file[, tags]) — one image per request so the browser can
  * show per-file progress. `kind=video` (F15 Video block): an MP4/WebM clip stored as uploaded (magic bytes checked,
  * ≤ 8 MB like every stored file, `site.design`). Lives under /files (not the dashboard) so proxy.ts doesn't buffer the body (10 MB cap).
- * The session, tenant membership and `site.content` are checked before the body is read, and the body is
+ * Images need `site.content` (media library) or `services.manage` / `staff.manage` (the CRM's service and therapist
+ * photo pickers, R28). The session, tenant membership and permission are checked before the body is read, and the body is
  * streamed through a byte counter (Content-Length is optional behind proxies), so nobody can push an unbounded
  * upload into memory.
  */
@@ -36,7 +37,9 @@ export async function POST(req: Request) {
   if (!tenant.success) return json(400, { ok: false, error: t('errors.file.uploadFailed') })
   const video = new URL(req.url).searchParams.get('kind') === 'video'
   // 404s for non-members. Videos only go into Video blocks, which the studio places (design).
-  const { ctx, error } = await guard(tenant.data, video ? 'site.design' : 'site.content')
+  const { ctx, error } = video
+    ? await guard(tenant.data, 'site.design')
+    : await guardAny(tenant.data, IMAGE_UPLOAD_PERMISSIONS)
   if (error) return json(403, { ok: false, error })
 
   let form: FormData

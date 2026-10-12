@@ -80,6 +80,7 @@ export default async function BranchesPage({ params }: { params: Promise<{ tenan
                     phone: b.phone,
                     whatsapp: b.whatsappE164 ? `+${b.whatsappE164}` : null,
                     cutoff: b.businessDayCutoff.slice(0, 5),
+                    areaLabel: b.areaLabel ?? null,
                   }}
                 />
                 {!b.isDefault && (multi || b.active) && (

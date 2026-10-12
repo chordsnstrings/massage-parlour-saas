@@ -1195,6 +1195,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   after typing stops. Readiness box ("still from the design": the design's spa name on another spa's site, another UAE
   city, phone / email, test copy, no Arabic yet, stale) from core `htmlContentLeftovers`. Stored content is a list
   (`{v: 1, values: [{path, value}]}`): Puck flattens props on "." and split path-keyed objects (found in P2, fixed in P1).
+  **P3 (2026-10-12):** "Fill the CRM from the design" — after applying an HTML template with `window.CRM_DATA` (or from
+  the Pages card) a sheet previews how the design's treatments pair with the CRM's (fill / create / skip), with the
+  design's own pictures and its team photos to give to therapists by click; applying writes the CRM at once (prices
+  and durations of existing treatments never change; the design file never changes). Decisions: created treatments are
+  bookable online with price on request (the website lists only bookable ones); "Replace" overwrites the English
+  description and keeps the Arabic; only active treatments are filled or matched (an archived one never blocks a
+  create); pictures land in the media library tagged `design:{sha8}` (a re-run reuses them; editing that tag only
+  makes a re-run store the picture again); the apply is refused when the draft's design changed since the preview.
+  Also: each branch has "Area shown on the website" (EN + AR, migration 0051, pre-filled from the application's
+  emirate), the staff form says a photo is needed for HTML-design sites, and CRM photo pickers can upload with
+  `services.manage` / `staff.manage`. Connector: read-only `plan_design_seed` (therapist names only for those shown on
+  the website). New TH strings need the owner's native review.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

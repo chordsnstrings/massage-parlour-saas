@@ -14,6 +14,7 @@ import { adminPath, studioPath } from '@/lib/paths'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import type { CatalogTemplate } from '@/server/site-templates'
 import { ImportSiteSheet } from './import-sheet'
+import { SeedSheet } from './seed-sheet'
 import {
   AddPageSheet,
   ApplyTemplateSheet,
@@ -207,6 +208,7 @@ export function PagesCard({
   canEdit,
   canDesign,
   importAi,
+  seedPages = [],
 }: {
   slug: string
   pages: PageSummary[]
@@ -214,9 +216,13 @@ export function PagesCard({
   canEdit: boolean
   canDesign: boolean
   importAi: boolean
+  /** R28 P3: ids of the pages whose design has window.CRM_DATA ("Fill the CRM from the design"). */
+  seedPages?: string[]
 }) {
   const pending = pages.filter(pageUnpublished).length
   const editHref = (p: PageSummary) => studioPath(slug, `/editor/${p.id}`)
+  const seed = (p: PageSummary) =>
+    seedPages.includes(p.id) && <SeedSheet slug={slug} pageId={p.id} pageTitle={p.title.en} compact />
   return (
     <Card>
       <CardHeader
@@ -264,13 +270,16 @@ export function PagesCard({
                     <span className="block truncate font-medium">{p.title.en}</span>
                     <span className="block truncate text-xs text-muted">/{p.slug}</span>
                   </span>
-                  {canEdit && (
-                    <Button variant="secondary" size="sm" asChild className="h-10 md:hidden">
-                      <Link href={editHref(p)} aria-label={`Edit ${p.title.en}`}>
-                        <PencilLine /> Edit
-                      </Link>
-                    </Button>
-                  )}
+                  <span className="flex shrink-0 flex-wrap justify-end gap-2 md:hidden">
+                    {seed(p)}
+                    {canEdit && (
+                      <Button variant="secondary" size="sm" asChild className="h-10">
+                        <Link href={editHref(p)} aria-label={`Edit ${p.title.en}`}>
+                          <PencilLine /> Edit
+                        </Link>
+                      </Button>
+                    )}
+                  </span>
                 </span>
               ),
             },
@@ -312,14 +321,18 @@ export function PagesCard({
               header: <span className="sr-only">Actions</span>,
               className: 'text-end',
               hideOnMobile: true,
-              cell: (p) =>
-                canEdit && (
-                  <Button variant="secondary" size="sm" asChild>
-                    <Link href={editHref(p)} aria-label={`Edit ${p.title.en}`}>
-                      <PencilLine /> Edit
-                    </Link>
-                  </Button>
-                ),
+              cell: (p) => (
+                <span className="inline-flex flex-wrap justify-end gap-2">
+                  {seed(p)}
+                  {canEdit && (
+                    <Button variant="secondary" size="sm" asChild>
+                      <Link href={editHref(p)} aria-label={`Edit ${p.title.en}`}>
+                        <PencilLine /> Edit
+                      </Link>
+                    </Button>
+                  )}
+                </span>
+              ),
             },
           ]}
         />

@@ -17,6 +17,7 @@ import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
 import { saveOnlineBookingAction, saveSecurityAction, saveSettingsAction } from './actions'
 import { actorLabel } from './audit/labels'
+import { AreaLabelFields } from './branches/branches-client'
 import { LogoForm } from './logo-form'
 import { SettingsTabs } from './settings-tabs'
 
@@ -107,6 +108,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
                     placeholder="https://maps.app.goo.gl/…"
                   />
                 </Field>
+                <AreaLabelFields value={branch?.areaLabel} className="gap-4 sm:col-span-2" />
                 <Field label={t('settings.profile.phone')} name="phone">
                   <Input id="phone" name="phone" type="tel" defaultValue={branch?.phone ?? ''} />
                 </Field>

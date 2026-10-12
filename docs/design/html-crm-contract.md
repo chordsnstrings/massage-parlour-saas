@@ -49,7 +49,7 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
 |---|---|---|
 | `spa.name` | tenant name | design |
 | `spa.short_name` | design's, if it is a whole-word start of the tenant name, else the tenant name | — |
-| `spa.area_label` | CRM city (the address's UAE city); on the spa's own design its finer label first ("Al Zahiyah, Abu Dhabi") | — |
+| `spa.area_label` | The default branch's "Area shown on the website" (`branches.area_label` {en, ar?}, locale then English; R28 P3, pre-filled with the application's emirate) — an explicit one always wins; else the CRM city (the address's UAE city), and on the spa's own design its finer label first ("Al Zahiyah, Abu Dhabi") | — |
 | `spa.logo_on_light` | the spa's CRM logo (`/files/{id}` on the public site origin; made for the light-only CRM) | design |
 | `spa.logo_on_dark` | the design's, when the design is this spa's own and has one; else the CRM logo (never another spa's) | — |
 | `spa.timezone` / `currency` | `Asia/Dubai` / `AED` | — |

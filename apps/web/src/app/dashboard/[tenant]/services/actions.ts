@@ -1,9 +1,15 @@
 'use server'
 import { branches, rooms, serviceCategories, services, serviceVariants, withTenant } from '@spa/db'
-import { and, count, eq, inArray, notInArray } from 'drizzle-orm'
+import {
+  IMAGE_URL_PATTERN,
+  SERVICE_DURATION_MAX,
+  SERVICE_DURATION_MIN,
+  SERVICE_PRICE_MAX,
+  saveService,
+} from '@spa/services'
+import { and, count, eq, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { IMAGE_URL_PATTERN } from '@/components/media/types'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -161,11 +167,15 @@ const serviceSchema = z
       priceAed: (d.variantPrice[i] ?? '').trim() === '' ? null : Number(d.variantPrice[i]),
     }))
     variants.forEach((v, i) => {
-      if (!Number.isInteger(v.durationMin) || v.durationMin < 10 || v.durationMin > 480)
+      if (
+        !Number.isInteger(v.durationMin) ||
+        v.durationMin < SERVICE_DURATION_MIN ||
+        v.durationMin > SERVICE_DURATION_MAX
+      )
         zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.duration' })
       else if (
         v.priceAed !== null &&
-        (!Number.isFinite(v.priceAed) || v.priceAed < 0 || v.priceAed > 100_000)
+        (!Number.isFinite(v.priceAed) || v.priceAed < 0 || v.priceAed > SERVICE_PRICE_MAX)
       )
         zctx.addIssue({ code: 'custom', path: [`variants.${i}`], message: 'services.v.price' })
     })
@@ -201,43 +211,9 @@ export async function saveServiceAction(
     // Only forms that post the field change the photo.
     ...(formData.has('imageUrl') ? { imageUrl: d.imageUrl ?? null } : {}),
   }
-  const id = await withTenant(ctx.tenant.id, async (tx) => {
-    let serviceId = d.id
-    if (serviceId) {
-      const [row] = await tx
-        .update(services)
-        .set(values)
-        .where(eq(services.id, serviceId))
-        .returning({ id: services.id })
-      if (!row) return null
-    } else {
-      const [{ n } = { n: 0 }] = await tx.select({ n: count() }).from(services)
-      const [row] = await tx
-        .insert(services)
-        .values({ tenantId: ctx.tenant.id, ...values, sort: n })
-        .returning({ id: services.id })
-      serviceId = row!.id
-    }
-    const keep = d.variants.flatMap((v) => (v.id ? [v.id] : []))
-    // Removed durations: past bookings keep their name/price snapshot (FK on delete set null).
-    await tx
-      .delete(serviceVariants)
-      .where(
-        keep.length
-          ? and(eq(serviceVariants.serviceId, serviceId), notInArray(serviceVariants.id, keep))
-          : eq(serviceVariants.serviceId, serviceId),
-      )
-    for (const [sort, v] of d.variants.entries()) {
-      const row = { durationMin: v.durationMin, priceAed: v.priceAed?.toFixed(2) ?? null, sort }
-      if (v.id)
-        await tx
-          .update(serviceVariants)
-          .set(row)
-          .where(and(eq(serviceVariants.id, v.id), eq(serviceVariants.serviceId, serviceId)))
-      else await tx.insert(serviceVariants).values({ tenantId: ctx.tenant.id, serviceId, ...row })
-    }
-    return serviceId
-  })
+  const id = await withTenant(ctx.tenant.id, (tx) =>
+    saveService(tx, ctx.tenant.id, { ...values, id: d.id, variants: d.variants }),
+  )
   if (!id) return fail('services.service.notFound')
   await record(ctx, d.id ? 'service.updated' : 'service.created', 'service', id, {
     ...values,

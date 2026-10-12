@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Sheet } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toast'
 import { resultText, useT } from '@/i18n/client'
+import { cn } from '@/lib/utils'
 import { saveBranchAction, setBranchActiveAction } from './actions'
 
 type BranchForm = {
@@ -17,6 +18,7 @@ type BranchForm = {
   phone: string | null
   whatsapp: string | null
   cutoff: string
+  areaLabel?: { en: string; ar?: string } | null
 }
 
 export function BranchSheet({ slug, branch }: { slug: string; branch?: BranchForm }) {
@@ -86,6 +88,7 @@ export function BranchSheet({ slug, branch }: { slug: string; branch?: BranchFor
             />
           </Field>
         </div>
+        <AreaLabelFields value={branch?.areaLabel} />
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label={t('settings.branches.cutoff')} name="cutoff" hint={t('settings.branches.cutoffHint')}>
             <Input id="cutoff" name="cutoff" type="time" defaultValue={branch?.cutoff ?? '05:00'} required />
@@ -97,6 +100,42 @@ export function BranchSheet({ slug, branch }: { slug: string; branch?: BranchFor
         <SubmitButton className="w-full">{t('common.save')}</SubmitButton>
       </ActionForm>
     </Sheet>
+  )
+}
+
+/** R28: the area HTML-design websites show (`spa.area_label`); empty = the city from the address. */
+export function AreaLabelFields({
+  value,
+  className,
+}: {
+  value?: { en: string; ar?: string } | null
+  className?: string
+}) {
+  const t = useT()
+  return (
+    <div className={cn('grid gap-5 sm:grid-cols-2', className)}>
+      <Field
+        label={t('settings.branches.areaLabel')}
+        name="areaLabel"
+        hint={t('settings.branches.areaLabelHint')}
+      >
+        <Input id="areaLabel" name="areaLabel" maxLength={80} defaultValue={value?.en ?? ''} />
+      </Field>
+      <Field
+        label={t('settings.branches.areaLabelAr')}
+        name="areaLabelAr"
+        hint={t('settings.branches.areaLabelArHint')}
+      >
+        <Input
+          id="areaLabelAr"
+          name="areaLabelAr"
+          dir="rtl"
+          lang="ar"
+          maxLength={80}
+          defaultValue={value?.ar ?? ''}
+        />
+      </Field>
+    </div>
   )
 }
 

@@ -167,6 +167,26 @@ export async function guard(
   return { ctx, error: null }
 }
 
+/** `guard` that passes with any one of `permissions` (the first one the member has; else the first is refused). */
+export async function guardAny(
+  slug: string,
+  permissions: readonly [Permission, ...Permission[]],
+  feature?: Feature,
+) {
+  const member = await requireMember(slug)
+  return guard(slug, permissions.find((p) => can(member, p)) ?? permissions[0], feature)
+}
+
+/**
+ * Who may upload images to and pick from the media library: the website's content editors and (R28) the CRM's
+ * service and therapist photo pickers.
+ */
+export const IMAGE_UPLOAD_PERMISSIONS = [
+  'site.content',
+  'services.manage',
+  'staff.manage',
+] as const satisfies readonly [Permission, ...Permission[]]
+
 /**
  * Website Studio (PLAN §14.4): sites are built as a bespoke service, so only a super-admin (acting on the spa, or
  * also a member of it) may change them. Spa members see a read-only view and send change requests instead.

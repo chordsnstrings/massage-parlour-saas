@@ -16,6 +16,7 @@ export function FormSheet({
   children,
   className,
   defaultOpen = false,
+  onSuccess,
 }: {
   title: string
   description?: string
@@ -28,6 +29,8 @@ export function FormSheet({
   className?: string
   /** Opens on first render (e.g. a "Publish" link from another page lands with the sheet open). */
   defaultOpen?: boolean
+  /** After a successful submit (the sheet has closed). */
+  onSuccess?: (result: Extract<ActionResult, { ok: true }>) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const t = useT()
@@ -40,7 +43,14 @@ export function FormSheet({
       trigger={trigger}
       className={className}
     >
-      <ActionForm action={action} onSuccess={() => setOpen(false)} className="space-y-5">
+      <ActionForm
+        action={action}
+        onSuccess={(r) => {
+          setOpen(false)
+          onSuccess?.(r)
+        }}
+        className="space-y-5"
+      >
         {children}
         <SubmitButton variant={submitVariant} className="w-full sm:w-auto">
           {submitLabel ?? t('ui.save')}

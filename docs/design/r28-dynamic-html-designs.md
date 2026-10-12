@@ -111,6 +111,17 @@ The stored file never changes. With no content set, the output is the very same 
   - `seed-actions.ts` `seedCrmFromDesignAction`: `studioGuard(slug,'site.design')`, then `can('services.manage')` and `can('staff.manage')`, then zod, `withTenant`, `auditAs('site.design_seed')`, a revalidate of the services, staff and website paths, and `forgetHtmlDesignRoutes`.
   - The connector gets only a read-only `plan_design_seed`.
 
+**As built (P3, 2026-10-12)** — where it differs from the plan above:
+- Preview thumbnails are 96 px WebP made on the server (`designSeedThumb`), never the design's full `data:` pictures.
+- Library tags are `['design', 'design:{sha8}']` (bytes hash, no path): the same picture twice is stored once. The tag
+  is editable in the media library; changing it only means a re-run stores that picture again (no harm).
+- The preview carries `designSeedHash(CRM_DATA)`; the apply re-reads the draft and refuses when it changed.
+- One apply per spa at a time (`pg_advisory_xact_lock`); only active services are filled or matched.
+- Created services: `NEW_SERVICE_DEFAULTS` (bookable online, so the website lists them; price on request).
+- "Replace" overwrites the photo and the English description; an Arabic description the CRM has is kept.
+- The template-apply action looks up the seed offer after the switch commits; a failure there only drops the offer.
+- Connector `plan_design_seed`: therapist names only for those with "Show on website" (others `name: null`).
+
 ## 5. Fixes for what you saw live (P0, render-time, no republish needed)
 
 All in `packages/core/src/html-crm.ts`:

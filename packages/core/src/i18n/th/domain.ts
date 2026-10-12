@@ -311,4 +311,8 @@ export const domain: Messages['errors']['domain'] = {
   htmlDesignDailyLimit: 'สปานี้ใช้โควตาดีไซน์ HTML ใหม่ครบ {limit} MB ของวันนี้แล้ว — ลองใหม่พรุ่งนี้',
   templateImportNoDesign: 'ดีไซน์ HTML ในไฟล์นี้ไม่มีเนื้อหา — ส่งออกเทมเพลตใหม่อีกครั้ง',
   templateTooLargeAsFiles: 'เทมเพลตมีขนาดใหญ่เกินไปเมื่อเก็บดีไซน์ HTML เป็นไฟล์แล้ว (สูงสุด {limit} MB)',
+  seedDesignServiceMissing: 'ดีไซน์นี้ไม่มีบริการ “{id}”',
+  seedDesignStaffMissing: 'ดีไซน์นี้ไม่มีสมาชิกทีม “{id}”',
+  seedPickService: 'เลือกบริการใน CRM ที่จะเติมข้อมูล',
+  seedPickTherapist: 'เลือกพนักงานนวดสำหรับรูปนี้',
 }

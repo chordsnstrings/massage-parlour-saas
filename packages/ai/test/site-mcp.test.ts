@@ -9,9 +9,11 @@ import {
   oauthConsent,
   pageVersions,
   platformAdmins,
+  services,
   sitePageLocks,
   sitePages,
   sites,
+  staff,
   storedFiles,
   tenants,
   user,
@@ -209,7 +211,7 @@ describe('site MCP server (/api/mcp)', () => {
       'add_page',
       'move_block',
     ])
-    for (const name of ['list_templates', 'get_html_design', 'get_html_content'])
+    for (const name of ['list_templates', 'get_html_design', 'get_html_content', 'plan_design_seed'])
       expect(hints[name]?.readOnlyHint, name).toBe(true)
   })
 
@@ -725,9 +727,67 @@ describe('site MCP server (/api/mcp)', () => {
       expect(rows.some((x) => (x.data as { ok?: boolean }).ok === false)).toBe(true)
     })
 
+    it('plan_design_seed (read only): a CRM_DATA design’s treatments paired with the CRM, nothing written', async () => {
+      const [crm] = await inD((tx) =>
+        tx
+          .insert(services)
+          .values({ tenantId: d.tenant!, name: { en: 'Normal Massage' } })
+          .returning({ id: services.id }),
+      )
+      const none = await dcall('plan_design_seed', { page: 'about' })
+      expect(none.data).toMatchObject({ services: [], note: expect.stringMatching(/window\.CRM_DATA/) })
+      const img = `data:image/png;base64,${fakePng('seed').toString('base64')}`
+      const data = {
+        services: [
+          { id: 'normal', name: 'Normal massage', durations: [60], image: img },
+          { id: 'ritual', name: 'Design ritual' },
+        ],
+        staff: [{ name: 'Lin', photo: img }, { name: 'No photo' }],
+      }
+      const html = `<!doctype html><html><body><script>window.CRM_DATA = ${JSON.stringify(data)};</script></body></html>`
+      expect((await dcall('set_html_design', { page: 'about', html })).data.saved).toBe(true)
+      // No page named: the home page, else the first page whose design has the literal.
+      const plan = await dcall('plan_design_seed', {})
+      expect(plan.data.page).toMatchObject({ slug: 'about' })
+      expect(plan.data.services).toEqual([
+        {
+          design_id: 'normal',
+          name: 'Normal massage',
+          durations: [60],
+          has_image: true,
+          match: { service_id: crm!.id, name: 'Normal Massage', score: 1 },
+        },
+        { design_id: 'ritual', name: 'Design ritual', durations: [], has_image: false, match: null },
+      ])
+      expect(plan.data.staff_photos).toEqual([{ design_id: 'lin', name: 'Lin' }])
+      // Therapist names only for those already on the website.
+      await inD((tx) =>
+        tx.insert(staff).values([
+          { tenantId: d.tenant!, displayName: 'Shown One', showOnSite: true },
+          { tenantId: d.tenant!, displayName: 'Private One' },
+        ]),
+      )
+      const people = await dcall('plan_design_seed', {})
+      expect(people.data.crm_staff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'Shown One', show_on_website: true }),
+          expect.objectContaining({ name: null, show_on_website: false }),
+        ]),
+      )
+      expect(JSON.stringify(people.data)).not.toContain('Private One')
+      const [after] = await inD((tx) => tx.select().from(services).where(eq(services.id, crm!.id)))
+      expect(after!.imageUrl).toBeNull()
+    })
+
     it('audits every design tool and never publishes', async () => {
       const rows = await platform.select().from(auditLog).where(eq(auditLog.tenantId, d.tenant!))
-      for (const tool of ['apply_template', 'set_html_design', 'patch_html_design', 'get_html_design'])
+      for (const tool of [
+        'apply_template',
+        'set_html_design',
+        'patch_html_design',
+        'get_html_design',
+        'plan_design_seed',
+      ])
         expect(
           rows.some((x) => x.action === `site.mcp.${tool}`),
           tool,

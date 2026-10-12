@@ -15,6 +15,21 @@ export type BranchInput = {
   whatsappE164?: string | null
   /** HH:MM — the business day ends here (late-night shops), e.g. 05:00. */
   businessDayCutoff: string
+  /** "Area shown on the website" (R28, HTML designs); blank = the city from the address; undefined = unchanged on update. */
+  areaLabel?: { en: string; ar?: string | null } | null
+}
+
+export const AREA_LABEL_MAX = 80
+
+/**
+ * Trimmed area label (≤ 80 characters each); null when both are blank. An Arabic-only label is kept as `{en: '', ar}`:
+ * the Arabic site shows it, the English one falls back to the address city (a blank language never borrows the other).
+ */
+export function cleanAreaLabel(v: BranchInput['areaLabel']): { en: string; ar?: string } | null {
+  const en = v?.en?.trim().slice(0, AREA_LABEL_MAX).trim() ?? ''
+  const ar = v?.ar?.trim().slice(0, AREA_LABEL_MAX).trim() ?? ''
+  if (!en && !ar) return null
+  return ar ? { en, ar } : { en }
 }
 
 /** Plan `limits.branches` (a number) → the cap, or null when the plan sets none. */
@@ -65,6 +80,7 @@ export async function createBranch(tx: Tx, tenantId: string, input: BranchInput,
       phone: input.phone?.trim() || null,
       whatsappE164: input.whatsappE164 || null,
       businessDayCutoff: input.businessDayCutoff,
+      areaLabel: cleanAreaLabel(input.areaLabel),
       openingHours: main?.hours ?? {},
       isDefault: false,
     })
@@ -85,6 +101,7 @@ export async function updateBranch(tx: Tx, branchId: string, input: BranchInput)
       phone: input.phone?.trim() || null,
       whatsappE164: input.whatsappE164 || null,
       businessDayCutoff: input.businessDayCutoff,
+      ...(input.areaLabel !== undefined && { areaLabel: cleanAreaLabel(input.areaLabel) }),
     })
     .where(eq(branches.id, branchId))
     .returning()

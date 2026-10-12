@@ -196,6 +196,7 @@ describe('spa applications', () => {
       isDefault: true,
       address: 'Marina Walk, Tower 2, Dubai',
       phone: '+971501234567',
+      areaLabel: { en: 'Dubai' }, // R28: the website's area starts as the emirate
     })
     const [owner] = await platform
       .select({ key: roles.key })

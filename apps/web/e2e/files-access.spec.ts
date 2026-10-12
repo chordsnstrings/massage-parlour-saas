@@ -5,7 +5,7 @@
 // There are no signed URLs: every request re-checks the session (Cache-Control private, no-cache; Vary Cookie).
 // Public caching, ETag/304 and resized variants are media.spec.
 import { expect, type Page, test } from '@playwright/test'
-import { storedFiles, tenants } from '@spa/db'
+import { members, roles, storedFiles, tenants, user } from '@spa/db'
 import { putFile } from '@spa/services'
 import { count, eq } from 'drizzle-orm'
 import {
@@ -33,17 +33,20 @@ const probe = (p: Page, url: string): Promise<Probe> =>
     return { status: r.status, cache: r.headers.get('cache-control'), vary: r.headers.get('vary') }
   }, url)
 
-/** Multipart POST of a tiny PNG, as the dashboard uploaders send it. */
-const upload = (p: Page, url: string) =>
-  p.evaluate(async (u) => {
-    const form = new FormData()
-    form.append(
-      'file',
-      new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' }),
-      'x.png',
-    )
-    return (await fetch(u, { method: 'POST', body: form })).status
-  }, url)
+/** Multipart POST of a tiny PNG (the signature alone unless `bytes`), as the dashboard uploaders send it. */
+const upload = (p: Page, url: string, bytes?: Buffer) =>
+  p.evaluate(
+    async ([u, b]) => {
+      const form = new FormData()
+      form.append(
+        'file',
+        new Blob([new Uint8Array(b ?? [137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' }),
+        'x.png',
+      )
+      return (await fetch(u, { method: 'POST', body: form })).status
+    },
+    [url, bytes ? [...bytes] : null] as const,
+  )
 
 const tenantId = async (slug: string) =>
   (await testDb().select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug)))[0]!.id
@@ -157,6 +160,22 @@ test('files: public for anyone, private only for the right members of that spa a
     expect(await upload(anon, `${app}/${slug}/documents/upload`)).toBe(401)
     const [stored] = await db.select({ n: count() }).from(storedFiles).where(eq(storedFiles.tenantId, spaA))
     expect(stored!.n).toBe(5)
+  })
+
+  await test.step('the CRM photo pickers: services.manage or staff.manage upload images, never videos (R28)', async () => {
+    const p = await open()
+    const email = `photos-${slug.slice(-8)}@e2e.test`
+    await createLogin(p, { name: 'Files photos', email, password: OWNER_PASSWORD })
+    const [role] = await db
+      .insert(roles)
+      .values({ tenantId: spaA, key: 'photos', name: 'Photos', permissions: ['staff.view', 'staff.manage'] })
+      .returning({ id: roles.id })
+    const [u] = await db.select({ id: user.id }).from(user).where(eq(user.email, email))
+    await db.insert(members).values({ tenantId: spaA, userId: u!.id, roleId: role!.id })
+    await p.goto(`${app}/${slug}/staff`)
+    expect(await upload(p, `/files/upload?tenant=${slug}`, PNG)).toBe(200)
+    expect(await upload(p, `/files/upload?tenant=${slug}&kind=video`)).toBe(403)
+    expect(await upload(receptionist, `/files/upload?tenant=${slug}`, PNG)).toBe(403)
   })
 
   await test.step('"Require 2FA": an owner without 2FA gets no private file of the spa until it is on', async () => {
