@@ -1,6 +1,15 @@
 // R26: the CRM feed of HTML designs (website services + staff, contract facts) and booking requests from a design's form.
 import { addDays, dubaiParts } from '@spa/core'
-import { branches, closeAllDbs, services, serviceVariants, staff, tenants, withTenant } from '@spa/db'
+import {
+  branches,
+  closeAllDbs,
+  services,
+  serviceVariants,
+  sitePages,
+  staff,
+  tenants,
+  withTenant,
+} from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -8,7 +17,11 @@ import {
   crmFeedFacts,
   DESIGN_ENQUIRY_TENANT_LIMITS,
   designEnquirySchema,
+  ensureSite,
   listSiteEnquiries,
+  liveHtmlDesignVersionIds,
+  pageVersionsData,
+  publishPage,
   siteEnquiryReplyText,
   submitSiteEnquiry,
   websiteServices,
@@ -156,9 +169,77 @@ describe('booking requests from a design form', () => {
     )
     expect(row.booking).toEqual(booking)
     expect((await tx((db) => listSiteEnquiries(db, { q: 'normal mass' }))).rows).toHaveLength(1)
+    // The typed service (no CRM id) never goes into the spa's WhatsApp message; a CRM-resolved one does.
     expect(siteEnquiryReplyText(row, 'Feed Spa')).toBe(
+      `Hi Layla, thank you for your booking request at Feed Spa on ${booking.date} at 18:30. `,
+    )
+    const named = { ...booking, serviceId: '00000000-0000-4000-8000-000000000001' }
+    expect(siteEnquiryReplyText({ ...row, booking: named }, 'Feed Spa')).toBe(
       `Hi Layla, thank you for your booking request at Feed Spa for Normal massage on ${booking.date} at 18:30. `,
     )
+    expect(siteEnquiryReplyText({ ...row, booking: named, locale: 'ar' }, 'Feed Spa')).toContain(
+      'لـ Normal massage',
+    )
+  })
+
+  it('reply text: free text that is not a name or a CRM service stays out', () => {
+    const lure = {
+      service: 'massage. URGENT: confirm at https://evil.example',
+      serviceId: null,
+      durationMin: null,
+      date: '2026-11-01',
+      time: '10:00',
+      guests: 1,
+      staff: null,
+      staffId: null,
+    }
+    const text = siteEnquiryReplyText(
+      { name: 'https://evil.example now', locale: 'en', booking: lure },
+      'Feed Spa',
+    )
+    expect(text).toBe('Hi, thank you for your booking request at Feed Spa on 2026-11-01 at 10:00. ')
+    expect(
+      siteEnquiryReplyText({ name: 'ليلى أحمد', locale: 'ar', booking: lure }, 'Feed Spa'),
+    ).not.toContain('evil')
+    expect(siteEnquiryReplyText({ name: "O'Neil-Smith", locale: 'en' }, 'Feed Spa')).toBe(
+      "Hi O'Neil-Smith, thank you for your message to Feed Spa. ",
+    )
+  })
+
+  it('live HTML design versions: only published, visible pages with an HtmlDesign block', async () => {
+    expect(await tx((db) => liveHtmlDesignVersionIds(db, tenantId))).toEqual([])
+    const design = {
+      root: { props: { htmlDesign: true } },
+      content: [{ type: 'HtmlDesign', props: { id: 'h', html: '<p>x</p>', phoneFixes: false } }],
+    }
+    await tx((db) =>
+      ensureSite(db, tenantId, {
+        key: 'zen',
+        name: 'Zen',
+        theme: { accent: '#111111' },
+        pages: [
+          { slug: '', title: { en: 'Home' }, data: { root: { props: {} }, content: [] } },
+          { slug: 'design', title: { en: 'Design' }, data: design },
+          { slug: 'hidden', title: { en: 'Hidden' }, data: design },
+        ],
+      }),
+    )
+    const pages = await tx((db) => db.select().from(sitePages))
+    const page = (slug: string) => pages.find((p) => p.slug === slug)!.id
+    // Drafts only: nothing live yet.
+    expect(await tx((db) => liveHtmlDesignVersionIds(db, tenantId))).toEqual([])
+    for (const slug of ['', 'design', 'hidden'])
+      await tx((db) => publishPage(db, { tenantId, pageId: page(slug) }))
+    await tx((db) => db.update(sitePages).set({ visible: false }).where(eq(sitePages.slug, 'hidden')))
+    const ids = await tx((db) => liveHtmlDesignVersionIds(db, tenantId))
+    expect(ids).toHaveLength(1)
+    const [v] = await tx((db) => pageVersionsData(db, ids))
+    expect(v?.data).toMatchObject({ content: [{ type: 'HtmlDesign' }] })
+    // A new publish of the design page = a new live version id (the cache key moves on).
+    await tx((db) => publishPage(db, { tenantId, pageId: page('design') }))
+    const next = await tx((db) => liveHtmlDesignVersionIds(db, tenantId))
+    expect(next).toHaveLength(1)
+    expect(next[0]).not.toBe(ids[0])
   })
 
   it('per-spa limit: 30 an hour', async () => {

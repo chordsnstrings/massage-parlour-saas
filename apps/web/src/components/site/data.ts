@@ -1,5 +1,5 @@
 import { businessDateOf, dubaiInstant, dubaiParts } from '@spa/core'
-import { branches, staff, type Tx, withTenant } from '@spa/db'
+import { branches, type Tx, withTenant } from '@spa/db'
 import {
   editingTheme,
   getSite,
@@ -9,8 +9,9 @@ import {
   siteInstagram,
   siteReviews,
   websiteServices,
+  websiteStaff,
 } from '@spa/services'
-import { and, asc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { hasFeature } from '@/server/entitlements'
 import { normalizeTheme, type SiteTheme } from './theme'
 import type { Locale, SiteData, SiteMeta } from './types'
@@ -18,18 +19,15 @@ import type { Locale, SiteData, SiteMeta } from './types'
 export type TenantLite = { id: string; slug: string; name: string }
 
 /**
- * Live data for the smart blocks (services + prices, bookable staff, main branch, blog posts; Google reviews and the
- * Instagram feed only when the plan has `marketing` — F15, PLAN §18.8).
+ * Live data for the smart blocks (services + prices, "Show on website" staff, main branch, blog posts; Google reviews
+ * and the Instagram feed only when the plan has `marketing` — F15, PLAN §18.8).
  */
 async function loadLive(tx: Tx, tenant: TenantLite, marketing: boolean): Promise<Omit<SiteData, 'pages'>> {
   const [branch] = await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1)
   // The CRM Website page's "On the website" rule (services websiteServices; R26 adds the photo).
   const serviceRows = await websiteServices(tx, tenant.id)
-  const people = await tx
-    .select({ id: staff.id, name: staff.displayName, photoUrl: staff.photoUrl, bio: staff.bio })
-    .from(staff)
-    .where(and(eq(staff.active, true), eq(staff.bookable, true)))
-    .orderBy(asc(staff.sort), asc(staff.displayName))
+  // One public-staff rule for every site (Team block, HTML designs): active with "Show on website" on (R26).
+  const people = await websiteStaff(tx)
   const posts = await listPublishedPosts(tx, 24)
   const reviews = marketing ? await siteReviews(tx, { limit: 12, minRating: 4 }) : null
   const instagram = marketing ? await siteInstagram(tx, { limit: 12 }) : null
@@ -47,7 +45,7 @@ async function loadLive(tx: Tx, tenant: TenantLite, marketing: boolean): Promise
         }
       : null,
     services: serviceRows,
-    staff: people.map((p) => ({ ...p, bio: p.bio ?? null })),
+    staff: people,
     posts: posts.map((p) => ({
       slug: p.slug,
       title: p.title,

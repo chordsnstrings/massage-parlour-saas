@@ -15,7 +15,7 @@ import {
   withinRateLimits,
 } from '@spa/services'
 import { acceptsBookings } from '@/components/booking/data'
-import { crmContractFor, crmEnquiryEndpoint } from '@/components/site/crm-feed'
+import { crmContractFor, crmEnquiryEndpoint, siteUsesCrmContract } from '@/components/site/crm-feed'
 import { localeOf } from '@/components/site/data'
 import { PATH_ROUTING } from '@/lib/paths'
 import { siteOriginFrom } from '@/server/origin'
@@ -96,10 +96,14 @@ export const crmDataHandlers = {
 const HONEYPOTS = ['company', 'website', 'url', 'hp'] as const
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** `Origin: null` (the sandboxed design), the site's own origin, or none (not a browser); anything else is refused. */
+/**
+ * `Origin: null` (the sandboxed design) or the site's own origin. Browsers always send Origin on a POST; none (a
+ * plain script) or any other origin is refused.
+ */
 function allowedOrigin(req: Request) {
   const origin = req.headers.get('origin')
-  if (origin === null || origin === 'null') return true
+  if (origin === null) return false
+  if (origin === 'null') return true
   try {
     return new URL(origin).host === (req.headers.get('host') ?? '').toLowerCase()
   } catch {
@@ -108,6 +112,10 @@ function allowedOrigin(req: Request) {
 }
 
 async function crmEnquiry(req: Request, ctx: SiteParams) {
+  // Only a site whose live HTML design uses the contract takes these (no Turnstile: the sandboxed design can't run
+  // it); every other spa's inbox stays behind the EnquiryForm's bot check.
+  const { tenant } = await siteOf(ctx)
+  if (!tenant || !(await siteUsesCrmContract(tenant))) return reply(404, { ok: false, error: 'unavailable' })
   let raw: string
   try {
     raw = await readText(req, DESIGN_ENQUIRY_MAX_BYTES)
@@ -138,8 +146,6 @@ async function crmEnquiry(req: Request, ctx: SiteParams) {
       error: 'invalid',
       fields: [...new Set(parsed.error.issues.map((i) => String(i.path[0] ?? '')))].filter(Boolean),
     })
-  const { tenant } = await siteOf(ctx)
-  if (!tenant) return reply(404, { ok: false, error: 'unavailable' })
   if (!acceptsBookings(tenant.status)) return reply(503, { ok: false, error: 'unavailable' })
   // Per IP (production, like the EnquiryForm) and per spa (always: one inbox against rotating IPs).
   const limited = () => reply(429, { ok: false, error: 'rate_limited' }, { 'retry-after': '3600' })

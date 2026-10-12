@@ -425,12 +425,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     Dashboard `enquiries/` (EN+TH `enquiries` namespace; filter new/replied/closed/all + search; phone only with
     `clients.phone`; "Reply on WhatsApp" = wa.me with `siteEnquiryReplyText` in the visitor's language, marks
     replied; status moves `clients.manage`, audit `site.enquiry.status`). Nothing is emailed to the visitor.
-    R26: an HTML design's booking form → `POST {site}/crm-enquiry` (`server/crm-feed-routes.ts`: ≤ 8 KB, JSON only,
-    Origin null/same/none, honeypot, services `designEnquirySchema`, per-IP `SITE_ENQUIRY_LIMITS` + per-spa
+    R26: an HTML design's booking form → `POST {site}/crm-enquiry` (`server/crm-feed-routes.ts`: 404 unless the
+    live site has a contract design (`crm-feed.ts` `siteUsesCrmContract`, cached by the live version ids from services
+    `liveHtmlDesignVersionIds`), ≤ 8 KB, JSON only, Origin null/same (none → 403), honeypot, services `designEnquirySchema`, per-IP `SITE_ENQUIRY_LIMITS` + per-spa
     `DESIGN_ENQUIRY_TENANT_LIMITS` 30/h + 150/day always on, service/staff resolved server-side) → shared
     `server/site-enquiry.ts` `recordSiteEnquiry` (also the EnquiryForm action) with `site_enquiries.booking`
     (`SiteEnquiryBooking`); inbox shows "Booking request · service · n min · guests · date at time · with staff",
-    search matches the service, `siteEnquiryReplyText` names service/date/time (EN + AR).
+    search matches the service, `siteEnquiryReplyText` names date/time and the service only when the CRM resolved
+    it (the visitor's typed text never goes into the spa's WhatsApp message; first name only when it reads as a name).
   - Presets (Library): google-reviews, instagram-feed, contact-map, contact-enquiry, video-feature, blog-latest
     (category `media` = "Video & blog"). Template defaults via `templates.ts` `extraBlocks(key)` (own id prefix
     `{key}-x-…`, so existing node ids don't shift). E2E `site-blocks.spec.ts`.
@@ -553,8 +555,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - **CRM data feed (R26, `docs/design/html-crm-contract.md`):** a design with a `window.CRM_DATA = {json}` literal
     and/or `<meta name="crm-endpoint">` (core `htmlCrmContractOf`) gets the spa's live CRM data: core
     `buildCrmContract` (pure: branches default first, website services = services `websiteServices` = the CRM Website
-    "On the website" rule + `image_url`, staff = services `websiteStaff` (active + `staff.show_on_site`), logo, booking
-    url) → `mergeCrmContract` (CRM wins for operational keys; empty CRM value / list keeps the design's; per-item
+    "On the website" rule + `image_url`, staff = services `websiteStaff` (active + `staff.show_on_site`; also the
+    block sites' Team data, `components/site/data.ts` loadLive), logo; no booking url) → `mergeCrmContract` (CRM wins
+    for operational keys; empty CRM value / list keeps the design's, except staff (none → []); booking url stays the
+    design's; logo on dark stays the design's when the design names this spa; per-item
     image/note/description/specialty only from the same-name item; prices never inherited) → `crmScriptJson`
     (script-safe, memoised for the design's objects) → `spliceCrmData` (only the literal's JSON range). Web
     `components/site/html-crm.ts` `designWithCrm` (isomorphic; parsed design by `file:sha256`, output by + CRM hash)
@@ -741,8 +745,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   a custom domain without `TURNSTILE_CUSTOM_DOMAINS=on`. Used by `bookOnline` (booking page + widget iframe, action
   `booking`), `signupAction` (`apply`, after the IP limit, before the login is created), `sendEnquiryAction`
   (`contact`) and the website enquiry form `sendSiteEnquiryAction` (`enquiry`, F15). Honeypots + per-IP limits stay. R26: the HTML design endpoint `{site}/crm-enquiry` has no Turnstile (the design runs sandboxed and can't
-  show the widget): honeypot, per-IP + per-spa limits, the Origin check, the JSON content type and server-side id
-  resolution stand in. e2e runs with Cloudflare's always-pass test keys (playwright.config);
+  show the widget), so it answers only for spas whose live site has a contract design (404 otherwise): honeypot,
+  per-IP + per-spa limits, the Origin check (Origin required), the JSON content type and server-side id resolution
+  stand in. e2e runs with Cloudflare's always-pass test keys (playwright.config);
   `online.spec` also covers a blocked script → refused. CSP (F10) allows `challenges.cloudflare.com` (script + frame) on
   marketing/app/site/domain pages, not the admin console.
 - Keys from the console (owner, 2026-10-09): console Company page → "Bot check (Cloudflare Turnstile)" card

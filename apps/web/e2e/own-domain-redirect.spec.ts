@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { addDays } from '@spa/core'
-import { domains, tenants } from '@spa/db'
+import { domains, pageVersions, sitePages, sites, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import {
   admin,
@@ -125,7 +125,7 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     expect(await res.text()).toContain('Own Domain Spa')
   })
 
-  await test.step('R26: crm-enquiry works on the own domain and the temporary address (never 404 / redirected)', async () => {
+  await test.step('R26: crm-enquiry works on the own domain and the temporary address (never redirected)', async () => {
     const enquiry = (url: string, method = 'POST') => {
       const u = new URL(url)
       return ops.request.fetch(`http://127.0.0.1:${PORT}${u.pathname}${u.search}`, {
@@ -146,8 +146,34 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
       })
     }
     expect((await enquiry(own('/crm-enquiry'), 'OPTIONS')).status()).toBe(204)
+    // Without a contract design on the live site: refused, not redirected.
+    const none = await enquiry(`${site(slug)}/crm-enquiry?page=`)
+    expect(none.status()).toBe(404)
+    expect(none.headers().location).toBeUndefined()
+    // A live page with a contract design (an inline design is enough here) → both hosts take requests.
+    const [s] = await db.select().from(sites).where(eq(sites.tenantId, tenant!.id))
+    const siteId = s?.id ?? (await db.insert(sites).values({ tenantId: tenant!.id }).returning())[0]!.id
+    const [designPage] = await db
+      .insert(sitePages)
+      .values({ tenantId: tenant!.id, siteId, slug: 'crm-design', title: { en: 'Design' } })
+      .returning()
+    await db.insert(pageVersions).values({
+      tenantId: tenant!.id,
+      pageId: designPage!.id,
+      status: 'published',
+      data: {
+        root: { props: { htmlDesign: true } },
+        content: [
+          {
+            type: 'HtmlDesign',
+            props: { id: 'h', html: '<script>window.CRM_DATA = {"spa":{}};</script>', phoneFixes: false },
+          },
+        ],
+      },
+    })
     expect((await enquiry(own('/crm-enquiry?page='))).status()).toBe(201)
     expect((await enquiry(`${site(slug)}/crm-enquiry?page=`)).status()).toBe(201)
+    await db.delete(sitePages).where(eq(sitePages.id, designPage!.id))
     // A design's fetch of crm-data.json on the temporary address: the 301 hop allows CORS too.
     const data = await viaHost(ops, `${site(slug)}/crm-data.json`)
     expect(data.status()).toBe(301)

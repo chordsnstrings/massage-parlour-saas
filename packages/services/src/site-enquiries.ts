@@ -219,19 +219,32 @@ export async function setSiteEnquiryStatus(
   return { from: before.status, row: row! }
 }
 
-/** First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest). */
+/** A greeting name: the visitor's first word when it reads as a name (letters, marks, ' ’ -), else nothing. */
+const greetingName = (name: string) => {
+  const first = name.trim().split(/\s+/)[0] ?? ''
+  return /^[\p{L}\p{M}'’-]{1,40}$/u.test(first) ? first : ''
+}
+
+/**
+ * First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest).
+ * The spa's own number sends it to the phone on the enquiry, which anyone can type: only names the CRM resolved
+ * (a website service) and validated values go in, never the visitor's free text (no links in the spa's name).
+ */
 export function siteEnquiryReplyText(
   e: { name: string; locale: string; booking?: SiteEnquiryBooking | null },
   spaName: string,
 ) {
-  const first = e.name.trim().split(/\s+/)[0] ?? ''
+  const first = greetingName(e.name)
+  const hi = e.locale === 'ar' ? (first ? `مرحبًا ${first}، ` : 'مرحبًا، ') : first ? `Hi ${first}, ` : 'Hi, '
   const b = e.booking
-  // R26: a booking request (Arabic copy needs native review).
-  if (b)
+  // R26: a booking request (Arabic copy needs native review); the service only when the CRM named it.
+  if (b) {
+    const service = b.serviceId ? b.service : ''
     return e.locale === 'ar'
-      ? `مرحبًا ${first}، شكرًا لطلب الحجز في ${spaName} لـ ${b.service} يوم ${b.date} الساعة ${b.time}. `
-      : `Hi ${first}, thank you for your booking request at ${spaName} for ${b.service} on ${b.date} at ${b.time}. `
+      ? `${hi}شكرًا لطلب الحجز في ${spaName}${service ? ` لـ ${service}` : ''} يوم ${b.date} الساعة ${b.time}. `
+      : `${hi}thank you for your booking request at ${spaName}${service ? ` for ${service}` : ''} on ${b.date} at ${b.time}. `
+  }
   return e.locale === 'ar'
-    ? `مرحبًا ${first}، شكرًا لرسالتك إلى ${spaName}. `
-    : `Hi ${first}, thank you for your message to ${spaName}. `
+    ? `${hi}شكرًا لرسالتك إلى ${spaName}. `
+    : `${hi}thank you for your message to ${spaName}. `
 }

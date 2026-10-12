@@ -1,8 +1,15 @@
 // R26: the CRM side of the HTML design data contract for one spa + locale (server only; docs/design/html-crm-contract.md).
 import { buildCrmContract, CRM_ENQUIRY_PATH, type CrmContract } from '@spa/core'
 import { withTenant } from '@spa/db'
-import { crmFeedFacts, fileUrl, websiteServices } from '@spa/services'
-import { acceptsBookings } from '@/components/booking/data'
+import {
+  crmFeedFacts,
+  fileUrl,
+  liveHtmlDesignVersionIds,
+  pageVersionsData,
+  websiteServices,
+} from '@spa/services'
+import { LRUCache } from 'lru-cache'
+import { spaDesignData } from '@/server/html-design-files'
 import { siteRequestOrigin } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
 import { pageUsesCrmContract } from './html-crm'
@@ -15,9 +22,9 @@ export const crmEnquiryEndpoint = (siteOrigin: string, slug: string, locale: Loc
   `${siteOrigin}/${CRM_ENQUIRY_PATH}?page=${encodeURIComponent(slug)}${locale === 'ar' ? '&lang=ar' : ''}`
 
 /**
- * One tenant transaction of public facts (branches, website staff, logo, status; the website services unless the
- * page already loaded them) → the contract. Booking url = the spa's online booking page (its public address, R20)
- * while it takes bookings and has a website service.
+ * One tenant transaction of public facts (branches, website staff, logo; the website services unless the page
+ * already loaded them) → the contract. No booking url: the design's own Book links stay (its booking form → a
+ * website enquiry, owner R26 (1)), never the automatic online booking page.
  */
 export async function crmContractFor(
   tenant: Tenant,
@@ -42,10 +49,6 @@ export async function crmContractFor(
         variants: s.variants,
       })),
       staff: facts.staff,
-      bookingUrl:
-        acceptsBookings(facts.status) && services.length
-          ? `${site}/book${opts.locale === 'ar' ? '?lang=ar' : ''}`
-          : null,
       formEndpoint: opts.formEndpoint,
       filesOrigin: origin,
     },
@@ -74,4 +77,32 @@ export async function crmFeedMeta(
   const origin = ctx.live ? await siteRequestOrigin(ctx.base) : null
   const formEndpoint = origin ? crmEnquiryEndpoint(origin, ctx.slug, ctx.locale) : null
   return { crm: await crmContractFor(tenant, { locale: ctx.locale, formEndpoint, services: ctx.services }) }
+}
+
+// Site → whether its live HTML designs use the contract, by the live version ids (immutable: no invalidation).
+const g = globalThis as unknown as { __spaCrmSites?: LRUCache<string, { uses: boolean }> }
+g.__spaCrmSites ??= new LRUCache<string, { uses: boolean }>({ max: 5000 })
+const crmSites = g.__spaCrmSites
+
+/**
+ * Whether the spa's live site has a page whose HTML design uses the contract. Only those sites take design booking
+ * requests (`{site}/crm-enquiry`, no Turnstile): every other site's enquiries stay behind the EnquiryForm's check.
+ */
+export async function siteUsesCrmContract(tenant: Tenant): Promise<boolean> {
+  return withTenant(tenant.id, async (tx) => {
+    const ids = await liveHtmlDesignVersionIds(tx, tenant.id)
+    if (!ids.length) return false
+    const key = `${tenant.id}:${ids.join(',')}`
+    const hit = crmSites.get(key)
+    if (hit) return hit.uses
+    let uses = false
+    for (const v of await pageVersionsData(tx, ids)) {
+      if (pageUsesCrmContract(await spaDesignData(tenant.id, v.data, tx))) {
+        uses = true
+        break
+      }
+    }
+    crmSites.set(key, { uses })
+    return uses
+  })
 }

@@ -1,7 +1,7 @@
 // R26: the public CRM facts an HTML design's data contract is built from (docs/design/html-crm-contract.md). Callers
 // run these inside withTenant(); only public fields are read (never staff phones, pay or e-mail, private branch data).
-import { branches, staff, type Tx, tenants } from '@spa/db'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { branches, pageVersions, staff, type Tx, tenants } from '@spa/db'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 
 export type WebsiteStaffMember = {
   id: string
@@ -45,4 +45,33 @@ export async function crmFeedFacts(tx: Tx, tenantId: string) {
     branches: open,
     staff: await websiteStaff(tx),
   }
+}
+
+/**
+ * Ids of the live versions (newest published of each visible page) whose content has an HtmlDesign block. Published
+ * versions are never rewritten, so the ids address the live content (a cache key). Only a site whose live HTML design
+ * uses the contract takes design booking requests (`{site}/crm-enquiry`).
+ */
+export async function liveHtmlDesignVersionIds(tx: Tx, tenantId: string): Promise<string[]> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    select v.id from site_pages sp
+    join sites s on s.id = sp.site_id and s.tenant_id = ${tenantId}
+    join lateral (
+      select pv.id, pv.data from page_versions pv
+      where pv.page_id = sp.id and pv.status = 'published'
+      order by pv.created_at desc limit 1
+    ) v on true
+    where sp.visible and sp.tenant_id = ${tenantId}
+      and jsonb_path_exists(v.data, '$.content[*] ? (@.type == "HtmlDesign")')
+    order by v.id`)
+  return rows.map((r) => r.id)
+}
+
+/** Page data of these versions. */
+export async function pageVersionsData(tx: Tx, ids: string[]) {
+  if (!ids.length) return []
+  return tx
+    .select({ id: pageVersions.id, data: pageVersions.data })
+    .from(pageVersions)
+    .where(inArray(pageVersions.id, ids))
 }

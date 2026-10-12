@@ -58,9 +58,10 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   placeholders, compat shim, JSON-LD/canonical/t.js); the live page is the design document itself (CSP sandbox, never
   allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
   **CRM feed for contract designs (R26, 2026-10-12):** a design with `window.CRM_DATA` / `<meta name=crm-endpoint>`
-  gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's;
-  prices never inherited; its booking form → a website enquiry (`{site}/crm-enquiry`, no automatic booking); staff only
-  with "Show on website" (`docs/design/html-crm-contract.md`).
+  gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's
+  (not staff: none opted in → none); prices never inherited; booking url stays the design's; its booking form → a
+  website enquiry (`{site}/crm-enquiry`, only sites with a live contract design, no automatic booking). Staff on any
+  website (Team block too) only with "Show on website" (`docs/design/html-crm-contract.md`).
   **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).

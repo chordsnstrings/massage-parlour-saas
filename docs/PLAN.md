@@ -1157,7 +1157,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   WhatsApp reply naming service/date/time; upload message + connector `crm_contract`. Migration 0050
   (`staff.show_on_site`, `site_enquiries.booking`). e2e `html-crm.spec.ts` (+ `own-domain-redirect` step); the real
   BE RELAX file checked locally at 1440×900 / 390×844. Owner step: upload BE RELAX in the console, apply it to the spa,
-  switch "Show on website" on for the therapists to show, publish.
+  switch "Show on website" on for the therapists to show, publish. **Review fixes (2026-10-12):** `crm-enquiry` only
+  for spas whose live site has a contract design (404 otherwise; Origin required); no CRM booking url (the design's
+  Book links / form stay: requests, never automatic bookings); nobody opted in → no staff (never the design's
+  people); logo on dark stays the design's for the spa it names; the WhatsApp reply never quotes typed text;
+  "Show on website" is the one public-staff rule (block Team sections too; migration 0050 switched it on for the
+  staff a live Team section showed: active + bookable).
   **R27 Instagram via the Claude/ChatGPT connector:** planned 2026-10-12, owner: "leave it" — not building.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner

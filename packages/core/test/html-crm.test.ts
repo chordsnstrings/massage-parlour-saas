@@ -180,7 +180,6 @@ const source = (over: Partial<CrmContractSource> = {}): CrmContractSource => ({
     },
   ],
   staff: [{ id: 's1', name: 'Maya', bio: { en: 'Thai massage\nmore', ar: '' }, photoUrl: null }],
-  bookingUrl: 'https://zen.test/book',
   formEndpoint: 'https://zen.test/crm-enquiry?page=',
   filesOrigin: 'https://app.test',
   ...over,
@@ -209,10 +208,8 @@ describe('buildCrmContract', () => {
     expect(c.services[0]).toMatchObject({ name: 'Normal massage', durations: [60, 90], price: 250 })
     expect(c.services[1]).toMatchObject({ price: null, image: 'https://app.test/files/s/2.webp' })
     expect(c.staff).toEqual([{ id: 's1', name: 'Maya', specialty: 'Thai massage', photo: '' }])
-    expect(c.booking).toEqual({
-      url: 'https://zen.test/book',
-      form_endpoint: 'https://zen.test/crm-enquiry?page=',
-    })
+    // No booking url from the CRM (owner R26 (1): booking requests, never the automatic online booking page).
+    expect(c.booking).toEqual({ form_endpoint: 'https://zen.test/crm-enquiry?page=' })
   })
 
   it('uses the locale with English fallback, decimals, dedupes phones across branches', () => {
@@ -282,7 +279,9 @@ describe('mergeCrmContract', () => {
     expect(m.spa.name).toBe('Be Relax Massage Center and Spa')
     expect(m.spa.short_name).toBe('Be Relax')
     expect(m.spa.area_label).toBe('Al Zahiyah')
-    expect(m.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
+    // The design is this spa's own ("Be Relax" names it): its dark-background logo stays; the CRM logo on light.
+    expect(m.spa.logo_on_dark).toBe('data:dark')
+    expect(m.spa.logo_on_light).toBe('https://app.test/files/logo/logo.png')
     expect(m.spa.experience).toBe(design.spa.experience)
     expect(m.journey).toBe(design.journey)
     expect(m.theme).toBe(design.theme)
@@ -296,7 +295,7 @@ describe('mergeCrmContract', () => {
     })
     expect(m.hours[0].open).toBe('11:00')
     expect(m.booking).toEqual({
-      url: 'https://zen.test/book',
+      url: null,
       label: 'Book a session',
       image: 'data:book',
       form_endpoint: 'https://zen.test/crm-enquiry?page=',
@@ -332,7 +331,6 @@ describe('mergeCrmContract', () => {
       source({
         services: [],
         staff: [],
-        bookingUrl: null,
         formEndpoint: null,
         spa: { name: 'Other Spa', logoUrl: null },
         branches: [],
@@ -341,7 +339,8 @@ describe('mergeCrmContract', () => {
     )
     const m = mergeCrmContract(design, crm) as Json
     expect(m.services).toBe(design.services)
-    expect(m.staff).toBe(design.staff)
+    // Staff only with "Show on website": nobody → none (the design hides its team), never the design's people.
+    expect(m.staff).toEqual([])
     expect(m.hours).toBe(design.hours)
     expect(m.contact.phones).toBe(design.contact.phones)
     expect(m.contact.whatsapp_number).toBe('+971500000000')
@@ -350,6 +349,22 @@ describe('mergeCrmContract', () => {
     expect(m.spa.short_name).toBe('Other Spa') // "Be Relax" isn't a start of "Other Spa"
     expect(m.booking.url).toBeNull()
     expect(m.booking.form_endpoint).toBeNull() // the designer's endpoint never receives posts from the platform
+  })
+
+  it("another spa's design: the CRM logo in both slots, the design's booking url kept", () => {
+    const other = { ...design, spa: { ...design.spa, name: 'Design Spa', short_name: 'Design' } }
+    const m = mergeCrmContract(
+      { ...other, booking: { ...design.booking, url: '#book' } },
+      buildCrmContract(source(), { locale: 'en' }),
+    ) as Json
+    expect(m.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
+    expect(m.spa.logo_on_light).toBe('https://app.test/files/logo/logo.png')
+    expect(m.spa.short_name).toBe('Be Relax Massage Center and Spa')
+    expect(m.booking.url).toBe('#book')
+    // Own design without a dark variant: the CRM logo fills it.
+    const own = { ...design, spa: { ...design.spa, logo_on_dark: '' } }
+    const m2 = mergeCrmContract(own, buildCrmContract(source(), { locale: 'en' })) as Json
+    expect(m2.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
   })
 
   it('matches services by slug id and by the Arabic name', () => {

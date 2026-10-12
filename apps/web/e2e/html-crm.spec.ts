@@ -170,7 +170,7 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
   await upload(page, 'CRM Contract', fixture)
   await applyAndPublish(page, slug, 'CRM Contract')
 
-  await test.step('live page: CRM values; the design keeps its own extras; nobody opted in → its own team', async () => {
+  await test.step('live page: CRM values; the design keeps its own extras; nobody opted in → no team', async () => {
     await live(page, slug)
     await expect(page.locator('#spa')).toHaveText('CRM Feed Spa')
     const normal = page.locator(`li[data-id="${seed.normal}"]`)
@@ -189,8 +189,8 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     await expect(page.locator('#address')).toHaveText('12 Test Road, Al Barsha, Dubai, UAE')
     await expect(page.locator('#address')).toHaveAttribute('href', PIN)
     await expect(page.locator('#label')).toHaveText('Book with the design')
-    await expect(page.locator('#staff li.photo-only')).toHaveCount(1)
-    await expect(page.locator('#staff li.member')).toHaveCount(0)
+    // Staff only with "Show on website": the design's own people never show (not even photo-only cards).
+    await expect(page.locator('#staff li')).toHaveCount(0)
   })
 
   await test.step('bytes: only the CRM_DATA JSON differs from the uploaded file', async () => {
@@ -203,7 +203,7 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(served.match(LITERAL)![0].slice(8, -9)).not.toMatch(/[<>&]/)
   })
 
-  await test.step('"Show on website" in the CRM staff screen → that person appears, the design photos go', async () => {
+  await test.step('"Show on website" in the CRM staff screen → that person appears (and only them)', async () => {
     await page.goto(`${app}/${slug}/staff/${seed.maya}`)
     await page.getByRole('button', { name: 'Edit profile' }).click()
     const sheet = page.getByRole('dialog')
@@ -294,6 +294,13 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect((await badPhone.json()).fields).toEqual(['phone'])
     expect((await postEnquiry(page, slug, bookingBody({ date: '2020-01-01' }))).status()).toBe(400)
     expect((await postEnquiry(page, slug, bookingBody(), { origin: 'http://evil.test' })).status()).toBe(403)
+    // Browsers always send Origin on a POST: none = a plain script.
+    const bare = await viaHost(page, `${site(slug)}/crm-enquiry?page=`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      data: bookingBody(),
+    })
+    expect(bare.status()).toBe(403)
     const pot = await postEnquiry(page, slug, bookingBody({ company: 'Bot Inc' }))
     expect(pot.status()).toBe(200)
     expect(await enquiries(seed.tenantId)).toHaveLength(1)
@@ -334,6 +341,10 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     const other = await ctx.newPage()
     const second = await signUpOwner(other, { spa: 'CRM Endpoint Spa' })
     const seed2 = await seedSpa(second.slug)
+    // No contract design on its live site yet: the endpoint takes nothing (its inbox stays behind Turnstile).
+    const before = await postEnquiry(page, second.slug, bookingBody())
+    expect(before.status()).toBe(404)
+    expect(await enquiries(seed2.tenantId)).toHaveLength(0)
     const endpointOnly = fixture.replace(LITERAL, '')
     await upload(page, 'CRM Endpoint', endpointOnly)
     await applyAndPublish(page, second.slug, 'CRM Endpoint')
@@ -352,6 +363,8 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
       ['Hot stone', 400],
     ])
     expect(json.staff).toEqual([])
+    // Never the automatic online booking page: the design's own Book links / form (a booking request).
+    expect(json.booking.url).toBeNull()
     expect(json.booking.form_endpoint).toBe(`${site(second.slug)}/crm-enquiry?page=`)
     expect(JSON.stringify(json)).not.toContain('match')
 
