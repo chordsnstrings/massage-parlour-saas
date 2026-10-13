@@ -476,6 +476,10 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
       const keepTheme = Boolean(a.keep_theme)
       const fileUrl = ctx.o.fileUrl
       let copied = 0
+      // Owner D5: the contract v2 HTML pages the switch wrote get Write texts (drafts; the worker's site-texts-queue
+      // runs it within minutes), queued in the switch's own transaction. The connector's own gate
+      // (SITE_AI_EDITOR_EMAILS + 2FA) already holds for this actor.
+      let texts = 0
       let plan: Awaited<ReturnType<typeof planTemplateSwitch>>
       try {
         plan = await tenantTx(ctx, spa.id, async (tx) => {
@@ -501,21 +505,6 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
               return r.data
             },
           })
-          return p
-        })
-      } catch (e) {
-        await audit(ctx, 'apply_template', spa.id, {
-          ok: false,
-          args: clip(a),
-          error: e instanceof DomainError ? e.message : 'failed',
-        })
-        throw e
-      }
-      // Owner D5: the contract v2 HTML pages the switch wrote get Write texts (drafts; the worker's site-texts-queue
-      // runs it within minutes). The connector's own gate (SITE_AI_EDITOR_EMAILS + 2FA) already holds for this actor.
-      let texts = 0
-      if (!dry)
-        texts = await tenantTx(ctx, spa.id, async (tx) => {
           const written = new Set(template.pages.map((p) => p.slug))
           const v2 = (await pageDesignReports(tx, spa.id)).filter(
             (r) => r.report.contract === 'v2' && written.has(r.slug),
@@ -527,8 +516,17 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
               pageIds: v2.map((r) => r.pageId),
               ...(v2.length === 1 && v2[0]!.sha256 ? { designSha: v2[0]!.sha256 } : {}),
             })
-          return v2.length
+          texts = v2.length
+          return p
         })
+      } catch (e) {
+        await audit(ctx, 'apply_template', spa.id, {
+          ok: false,
+          args: clip(a),
+          error: e instanceof DomainError ? e.message : 'failed',
+        })
+        throw e
+      }
       await audit(ctx, 'apply_template', spa.id, {
         ok: true,
         template: template.key,

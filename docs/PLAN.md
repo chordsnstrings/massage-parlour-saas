@@ -1255,6 +1255,21 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   (its logos come back as its website content); O5 the new Arabic defaults in `contract.l10n.ar` need the team's
   native review before sign-off. After the deploy: upload BE RELAX v2 as "Upload new version" on its row, review the
   EN + AR previews and screenshots, then Roll out.
+  **Review fixes (P5, 2026-10-13).** **Decision (integrator, 2026-10-13):** on an Arabic page of a contract v2
+  design the order is the spa's Arabic > the design's reviewed Arabic (`l10n.ar`) > the spa's English > the design's
+  English — a spa's English-only value yields to the design's Arabic on `/ar` (the spa's short name excepted), and D5
+  Write texts drafts only the Arabic of such values (`{t: {ar}}`, the stored English kept; they go right after the
+  leftovers). Rollout: all of a spa's pages on older versions switch together (one transaction, one Undo, one Write
+  texts run; counts are spas); a click goes on past spas it cannot switch until 25 are switched or ~30 s are spent,
+  and the spas it could not switch go last on the next click; the sign-off is refused when another upload came in
+  meanwhile. "Upload new version" starts from the current version's Phone fixes and picture adjustments (re-pointed by
+  picture); the rollout keeps each spa's own Phone fixes (on) and its adjustments of pictures still in the new file
+  that the new version leaves unset, and its sheet lists the differences before sign-off. D5 is queued in the apply's
+  own transaction (console apply and the connector's `apply_template`). **Owner open points (review):** O5 still
+  open (native review of the Arabic defaults); **O6** two v2 default pictures (`spa.experience_image`,
+  `booking.image`) show BE RELAX branding on bottle labels — please supply neutral photos (until then any other spa
+  applying v2 should replace them); **O3 step:** set BE RELAX's branch "Area shown on the website" to "Al Zahiyah, Abu
+  Dhabi" before the Roll out, so its first scene matches v1.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

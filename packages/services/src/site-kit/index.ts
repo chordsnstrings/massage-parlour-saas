@@ -2,6 +2,7 @@
 export * from './contrast'
 export * from './css'
 export * from './edit-ops'
+export * from './html-images'
 export * from './image'
 export * from './post-body'
 export * from './preflight'

@@ -21,6 +21,8 @@ type Result = {
   switched: { name: string; slug: string; carried: number; dropped: number }[]
   skipped: { name: string; reason: string }[]
   more: boolean
+  /** Spas this click could not switch: the next click tries the others first. */
+  later?: string[]
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
@@ -29,9 +31,12 @@ export function RolloutSheet({ id, name, label }: { id: string; name: string; la
   const router = useRouter()
   const [plan, setPlan] = useState<RolloutPlan | { error: string } | null>(null)
   const [result, setResult] = useState<Result | null>(null)
+  const [later, setLater] = useState<string[]>([])
   const load = () => {
     setPlan(null)
-    rolloutPlanAction(id).then(setPlan, () => setPlan({ error: 'Could not load the spas. Try again.' }))
+    rolloutPlanAction(id, later).then(setPlan, () =>
+      setPlan({ error: 'Could not load the spas. Try again.' }),
+    )
   }
   const ready = plan && !('error' in plan) ? plan : null
   return (
@@ -47,7 +52,9 @@ export function RolloutSheet({ id, name, label }: { id: string; name: string; la
         action={rolloutTemplateVersionAction.bind(null, id)}
         submitLabel={label}
         onSuccess={(r) => {
-          setResult((r.data as Result | undefined) ?? null)
+          const data = (r.data as Result | undefined) ?? null
+          setResult(data)
+          if (data?.later?.length) setLater((all) => [...new Set([...all, ...data.later!])])
           router.refresh()
         }}
       >
@@ -60,6 +67,9 @@ export function RolloutSheet({ id, name, label }: { id: string; name: string; la
         ) : (
           <div className="space-y-4 text-sm">
             <input type="hidden" name="sha256" value={plan.sha256} />
+            {later.map((t) => (
+              <input key={t} type="hidden" name="later" value={t} />
+            ))}
             <p className="text-muted">
               Roll out = sign-off: version {plan.version} goes live at once for these spas (their edits are
               carried; each spa can undo it on its page). New spas get version {plan.version} from now on.
@@ -69,6 +79,16 @@ export function RolloutSheet({ id, name, label }: { id: string; name: string; la
               <p className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-warning">
                 Write texts will be skipped: {plan.textsSkip}.
               </p>
+            )}
+            {plan.look.length > 0 && (
+              <section className="space-y-1.5 rounded-xl border p-3" data-testid="rollout-look">
+                <h3 className="font-medium">Phone fixes and picture adjustments</h3>
+                <ul className="list-disc space-y-0.5 ps-5 text-[13px] text-muted">
+                  {plan.look.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
             )}
             <section className="space-y-2">
               <h3 className="font-medium">
@@ -84,8 +104,13 @@ export function RolloutSheet({ id, name, label }: { id: string; name: string; la
                       <span className="font-medium">{s.name}</span>
                       <span className="text-[13px] text-muted">
                         {[
+                          s.pages > 1 ? `${s.pages} pages` : null,
                           s.own ? 'made for this spa' : null,
                           `${plural(s.kept, 'edit')} kept · ${s.notKept} not kept`,
+                          s.keepsPhoneFixes ? 'keeps its phone fixes' : null,
+                          s.keepsAdjustments
+                            ? `keeps ${plural(s.keepsAdjustments, 'picture adjustment')}`
+                            : null,
                           s.hasDraft ? 'has a draft' : null,
                         ]
                           .filter(Boolean)

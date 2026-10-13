@@ -1,5 +1,12 @@
 'use server'
-import { carryHtmlContent, crmDesignData, htmlCrmContractOf, htmlDesignBakedFixes } from '@spa/core'
+import {
+  carryHtmlContent,
+  crmDesignData,
+  type HtmlImageAdjust,
+  htmlCrmContractOf,
+  htmlDesignBakedFixes,
+  htmlDesignPhoneFixes,
+} from '@spa/core'
 import { platformDb, tenants, withTenant } from '@spa/db'
 import {
   type DesignUpgrade,
@@ -7,7 +14,9 @@ import {
   discardPendingTemplateVersion,
   getStudioTemplate,
   htmlDesignSource,
+  mergeHtmlImageAdjustments,
   type RolloutSkip,
+  repointHtmlImageAdjustments,
   SITE_EDIT_MAX_PAGE_BYTES,
   sanitizeTemplatePages,
   saveStudioTemplate,
@@ -260,8 +269,12 @@ export async function loadHtmlDesignAction(id: string): Promise<{ html: string }
 
 /* ------------------------------------------------------------------ R28 P5: template versions (owner D4 + D5) */
 
-/** Spas a click upgrades at most (each in its own transaction); "Run again for the rest". */
+/**
+ * A click switches spas (each in its own transaction, all of its pages together) until 25 are switched or the time
+ * budget is spent; spas it could not switch don't count, so later spas are never starved ("Run again for the rest").
+ */
 const ROLLOUT_BATCH = 25
+const ROLLOUT_BUDGET_MS = 30_000
 
 export type RolloutPlan = {
   version: number
@@ -269,12 +282,74 @@ export type RolloutPlan = {
   pending: boolean
   /** The version's design sha: the Roll out form sends it back (refused when it changed meanwhile). */
   sha256: string
-  spas: { name: string; slug: string; own: boolean; kept: number; notKept: number; hasDraft: boolean }[]
+  spas: {
+    name: string
+    slug: string
+    pages: number
+    own: boolean
+    kept: number
+    notKept: number
+    hasDraft: boolean
+    /** The spa has Phone fixes on and keeps them (the new version has them off). */
+    keepsPhoneFixes: boolean
+    /** Picture adjustments of the spa's own kept (pictures the new version sets none for). */
+    keepsAdjustments: number
+  }[]
   skipped: { name: string; slug: string; reason: string }[]
   /** More spas than one click upgrades. */
   more: boolean
   /** Why Write texts would be skipped for this super-admin (null: it runs). */
   textsSkip: string | null
+  /** A pending version's look settings against the current one (empty: nothing differs, or not pending). */
+  look: string[]
+}
+
+/** The HtmlDesign props of a one-page HTML template's pages (pending or current). */
+const templateProps = (pages: unknown): Record<string, unknown> | null => {
+  const node = (pages as { data?: { content?: { type?: string; props?: Record<string, unknown> }[] } }[])?.[0]
+    ?.data?.content?.[0]
+  return node?.type === HTML_DESIGN && node.props ? node.props : null
+}
+const adjustmentsOf = (props: Record<string, unknown> | null): HtmlImageAdjust[] =>
+  Array.isArray(props?.images) ? (props.images as HtmlImageAdjust[]) : []
+
+/** What a pending version's Phone fixes / picture adjustments change against the current version (console English). */
+function lookDifferences(
+  from: Record<string, unknown> | null,
+  to: Record<string, unknown> | null,
+  newHtml: string,
+  version: number,
+): string[] {
+  if (!from || !to) return []
+  const out: string[] = []
+  const was = htmlDesignPhoneFixes(from)
+  const now = to.phoneFixes === true
+  if (was !== now)
+    out.push(
+      `Phone fixes: version ${version - 1} ${was ? 'on' : 'off'} → version ${version} ${now ? 'on' : 'off'}${now ? '' : ' (spas that have them on keep them)'}.`,
+    )
+  const old = adjustmentsOf(from)
+  const still = repointHtmlImageAdjustments(old, newHtml)
+  const set = new Set(adjustmentsOf(to).map((a) => a.id))
+  const unset = still.filter((a) => !set.has(a.id)).length
+  if (old.length > still.length)
+    out.push(
+      `${old.length - still.length} adjusted ${old.length - still.length === 1 ? 'picture is' : 'pictures are'} not in version ${version}: their adjustments end.`,
+    )
+  if (unset)
+    out.push(
+      `${unset} picture ${unset === 1 ? 'adjustment' : 'adjustments'} of version ${version - 1} ${unset === 1 ? 'is' : 'are'} not set in version ${version} (each spa keeps its own).`,
+    )
+  const added = adjustmentsOf(to).filter((a) => !still.some((s) => s.id === a.id)).length
+  if (added)
+    out.push(`Version ${version} adjusts ${added} ${added === 1 ? 'picture' : 'pictures'} of its own.`)
+  return out
+}
+
+/** Spas earlier clicks of this sheet could not switch go last (they are tried once the others are done). */
+const laterLast = <T extends { tenantId: string }>(spas: T[], later: Iterable<string>) => {
+  const set = new Set(later)
+  return [...spas.filter((s) => !set.has(s.tenantId)), ...spas.filter((s) => set.has(s.tenantId))]
 }
 
 const skipReason = (reason: RolloutSkip['reason'], version: number) =>
@@ -308,6 +383,8 @@ async function rolloutTarget(id: string) {
         toSha: pending.sha256,
         toDoc: { file: pending.file, sha256: pending.sha256, bytes: pending.bytes, chars: 0 },
         fromShas: templateShas(row),
+        fromProps: templateProps(row.pages),
+        toProps: templateProps(pending.pages),
       }
     : {
         row,
@@ -316,6 +393,8 @@ async function rolloutTarget(id: string) {
         toSha: current.sha256,
         toDoc: current,
         fromShas: templateShas(row).filter((s) => s !== current.sha256),
+        fromProps: null,
+        toProps: templateProps(row.pages),
       }
 }
 
@@ -323,7 +402,11 @@ async function rolloutTarget(id: string) {
  * The Roll out sheet: each spa the click would switch (made for it, edits kept / not kept by a carry dry run, a
  * draft waiting) and the spas left as they are, with why.
  */
-export async function rolloutPlanAction(id: string): Promise<RolloutPlan | { error: string }> {
+export async function rolloutPlanAction(
+  id: string,
+  /** Spas earlier clicks of this sheet could not switch (listed last). */
+  later: string[] = [],
+): Promise<RolloutPlan | { error: string }> {
   const { user } = await requirePlatformAdmin()
   const t = await rolloutTarget(id)
   if (!t) return { error: 'This is not an uploaded HTML design' }
@@ -341,21 +424,37 @@ export async function rolloutPlanAction(id: string): Promise<RolloutPlan | { err
       d ? [[d.sha256, { file: d.file, sha256: d.sha256, bytes: d.bytes, chars: 0 }] as const] : [],
     ),
   )
+  const toAdjust = adjustmentsOf(t.toProps)
+  const toFixes = t.toProps?.phoneFixes === true
   const oldHtml = new Map<string, string | null>()
   const spas: RolloutPlan['spas'] = []
-  for (const s of found.spas.slice(0, ROLLOUT_BATCH)) {
-    if (!oldHtml.has(s.sha256)) {
-      const doc = docs.get(s.sha256)
-      oldHtml.set(s.sha256, doc ? await read(doc) : null)
+  const last = (Array.isArray(later) ? later : []).filter((x) => typeof x === 'string').slice(0, 1000)
+  for (const s of laterLast(found.spas, last).slice(0, ROLLOUT_BATCH)) {
+    let kept = 0
+    let notKept = 0
+    let keepsAdjustments = 0
+    for (const p of s.pages) {
+      if (!oldHtml.has(p.sha256)) {
+        const doc = docs.get(p.sha256)
+        oldHtml.set(p.sha256, doc ? await read(doc) : null)
+      }
+      const c = carryHtmlContent(p.content, newData, newHtml, oldHtml.get(p.sha256) ?? undefined)
+      kept += c.carried.values + c.carried.texts + c.carried.pictures
+      notKept += c.dropped.length
+      keepsAdjustments +=
+        mergeHtmlImageAdjustments(toAdjust, repointHtmlImageAdjustments(p.images, newHtml)).length -
+        toAdjust.length
     }
-    const c = carryHtmlContent(s.content, newData, newHtml, oldHtml.get(s.sha256) ?? undefined)
     spas.push({
       name: s.name,
       slug: s.slug,
+      pages: s.pages.length,
       own: s.own,
-      kept: c.carried.values + c.carried.texts + c.carried.pictures,
-      notKept: c.dropped.length,
+      kept,
+      notKept,
       hasDraft: s.hasDraft,
+      keepsPhoneFixes: !toFixes && s.pages.some((p) => p.phoneFixes),
+      keepsAdjustments,
     })
   }
   const gate = await siteTextsGate(user.id)
@@ -371,6 +470,7 @@ export async function rolloutPlanAction(id: string): Promise<RolloutPlan | { err
     })),
     more: found.spas.length > ROLLOUT_BATCH,
     textsSkip: gate.ok ? null : gate.reason,
+    look: lookDifferences(t.fromProps, t.toProps, newHtml, t.version),
   }
 }
 
@@ -444,13 +544,23 @@ export async function rolloutTemplateVersionAction(
     name: s.name,
     reason: skipReason(s.reason, target.version),
   }))
-  for (const s of found.spas.slice(0, ROLLOUT_BATCH)) {
+  // Spas this click could not switch: the sheet sends them back as `later`, so the next click tries the others first.
+  const notSwitched: string[] = []
+  const order = laterLast(
+    found.spas,
+    fd.getAll('later').filter((x): x is string => typeof x === 'string'),
+  )
+  const started = Date.now()
+  let tried = 0
+  for (const s of order) {
+    if (switched.length >= ROLLOUT_BATCH || Date.now() - started > ROLLOUT_BUDGET_MS) break
+    tried++
     let up: DesignUpgrade
     try {
       up = await withTenant(s.tenantId, (tx) =>
         upgradeHtmlDesignLive(tx, s.tenantId, {
           template,
-          pageId: s.pageId,
+          pageIds: s.pages.map((p) => p.pageId),
           fromShas: target.fromShas,
           toSha: target.toSha,
           version: target.version,
@@ -463,10 +573,12 @@ export async function rolloutTemplateVersionAction(
     } catch (e) {
       console.error('[site.template_upgraded]', s.slug, e)
       skipped.push({ name: s.name, reason: 'could not be switched — try again' })
+      notSwitched.push(s.tenantId)
       continue
     }
     if (up.status === 'skipped') {
       skipped.push({ name: s.name, reason: upgradeSkipReason(up) })
+      notSwitched.push(s.tenantId)
       continue
     }
     await audit({
@@ -477,12 +589,12 @@ export async function rolloutTemplateVersionAction(
       data: {
         template: target.row.key,
         version: target.version,
-        fromSha: s.sha256,
+        fromShas: [...new Set(s.pages.map((p) => p.sha256))],
         toSha: target.toSha,
+        pages: up.pages.map((p) => ({ pageId: p.pageId, draft: p.draft, pins: p.pins })),
         carried: up.carried,
         dropped: up.dropped.slice(0, 20),
         pins: up.pins,
-        draft: up.draft,
       },
     })
     revalidateStudio(s.slug)
@@ -494,7 +606,7 @@ export async function rolloutTemplateVersionAction(
       dropped: up.dropped.length,
     })
   }
-  const more = found.spas.length > ROLLOUT_BATCH
+  const more = tried < order.length
   await audit({
     actorUserId: user.id,
     action: 'platform.site_template.version_rolled_out',
@@ -515,6 +627,7 @@ export async function rolloutTemplateVersionAction(
       switched: switched.map(({ name, slug, carried, dropped }) => ({ name, slug, carried, dropped })),
       skipped,
       more,
+      later: notSwitched,
     },
   )
 }

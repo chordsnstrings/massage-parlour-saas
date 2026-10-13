@@ -91,6 +91,8 @@ type Spa = { slug: string; name: string }
 
 /** R28 P5: "Upload new version" of an HTML template — stored as its pending version until the Roll out. */
 function VersionSheet({ row, spas }: { row: StudioTemplateRow; spas: Spa[] }) {
+  // The current version's Phone fixes + picture adjustments are prefilled (else Roll out would drop them live).
+  const design = htmlDesignOf(row)
   return (
     <TemplateUploadSheet
       kind="version"
@@ -113,6 +115,9 @@ function VersionSheet({ row, spas }: { row: StudioTemplateRow; spas: Spa[] }) {
       <HtmlFileField
         spas={spas}
         hint="One .html file up to 5 MB, stored exactly as it is (embedded images and fonts stay in the file)."
+        current={
+          design ? { version: row.version, phoneFixes: design.phoneFixes, images: design.images } : undefined
+        }
       />
     </TemplateUploadSheet>
   )

@@ -1,14 +1,25 @@
 // R28 P5 (owner D4): a new HTML template version rolled out live — finder, upgrade, live undo + hold, D5 queue.
 import { htmlContentParts, listHtmlDesignTexts } from '@spa/core'
-import { closeAllDbs, pageVersions, sites, siteTemplates, tenants, user, withTenant } from '@spa/db'
+import {
+  closeAllDbs,
+  pageVersions,
+  sites,
+  siteTemplates,
+  storedFiles,
+  tenants,
+  user,
+  withTenant,
+} from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { and, desc, eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   acquirePageLock,
+  addPage,
   ensureSite,
   getEditablePage,
   getSite,
+  htmlDesignContentErrors,
   keepTemplateUndo,
   labelVersion,
   listPages,
@@ -33,6 +44,7 @@ import {
   templateUndoChanges,
   undoTemplateSwitch,
   updateDraftTheme,
+  upgradedProps,
   upgradeHtmlDesignLive,
 } from '../src'
 
@@ -128,11 +140,15 @@ const versions = (tenantId: string, pageId: string) =>
     .from(pageVersions)
     .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.pageId, pageId)))
     .orderBy(desc(pageVersions.createdAt))
-const upgrade = (tenantId: string, name: string, opts: { as?: string; within?: string } = {}) =>
+const upgrade = (
+  tenantId: string,
+  name: string,
+  opts: { as?: string; within?: string; pageIds?: string[] } = {},
+) =>
   tx(opts.within ?? tenantId, async (db) =>
     upgradeHtmlDesignLive(db, tenantId, {
       template: studioToSiteTemplate(signed.row),
-      pageId: (await homeIn(db, tenantId))?.id ?? ids[`${tenantId}:home`]!,
+      pageIds: opts.pageIds ?? [(await homeIn(db, tenantId))?.id ?? ids[`${tenantId}:home`]!],
       fromShas: signed.fromShas,
       toSha: signed.toSha,
       version: signed.version,
@@ -291,7 +307,11 @@ describe('live upgrade (owner D4)', () => {
     const live1 = before.find((v) => v.status === 'published')!
     const draft1 = before[0]!
     const up = await upgrade(ids.own!, 'Seaside Test Spa')
-    expect(up).toMatchObject({ status: 'switched', draft: 'carried', designSha: signed.toSha })
+    expect(up).toMatchObject({
+      status: 'switched',
+      pages: [{ pageId: home.id, draft: 'carried' }],
+      designSha: signed.toSha,
+    })
     if (up.status !== 'switched') return
     expect(up.carried).toMatchObject({ values: 1, converted: 1, pictures: 1 })
     expect(up.pins).toBeGreaterThanOrEqual(2)
@@ -349,7 +369,10 @@ describe('live upgrade (owner D4)', () => {
     await tx(ids.other!, (db) =>
       releasePageLock(db, { tenantId: ids.other!, pageId: home.id, userId: OTHER }),
     )
-    expect(await upgrade(ids.other!, 'Lotus Spa')).toMatchObject({ status: 'switched', draft: 'carried' })
+    expect(await upgrade(ids.other!, 'Lotus Spa')).toMatchObject({
+      status: 'switched',
+      pages: [{ draft: 'carried' }],
+    })
     const after = await versions(ids.other!, home.id)
     expect(after.find((v) => v.id === labelled)?.label).toBe('Before the summer')
     expect(after[0]!.label).toBeNull()
@@ -437,5 +460,156 @@ describe('live undo (+ hold) and Write texts saves', () => {
     expect(await tx(id, (db) => templateUndoChanges(db, id))).toEqual([])
     const undone = await tx(id, (db) => undoTemplateSwitch(db, id, USER))
     expect(undone.templateKey).toBe('zen')
+  })
+})
+
+describe('a spa with two pages on the old version (fix2: grouped by spa)', () => {
+  /** A spa on v1 with a second live page showing the same design (its content: `second`). */
+  async function twoPages(slug: string, name: string, second?: unknown) {
+    const id = await onV1(slug, name)
+    const home = await homeOf(id)
+    const other = await tx(id, async (db) => {
+      const live = (await getEditablePage(db, id, home.id))!.data
+      const p = await addPage(db, {
+        tenantId: id,
+        slug: 'offers',
+        title: { en: 'Offers' },
+        data: second ? withContent(live, second) : live,
+      })
+      await publishPage(db, { tenantId: id, pageId: p.id })
+      return p.id
+    })
+    return { id, pageIds: [home.id, other].sort() }
+  }
+  const liveSha = async (id: string, pageId: string) =>
+    shaOf((await versions(id, pageId)).find((v) => v.status === 'published')!.data)
+
+  it('the finder lists the spa once with both pages; one undo and one Write texts run hold both', async () => {
+    const { id, pageIds } = await twoPages('twin', 'Twin Spa')
+    const found = await spasOnTemplateVersions(platform, {
+      key: KEY,
+      fromShas: signed.fromShas,
+      toSha: signed.toSha,
+      version: 2,
+    })
+    const twin = found.spas.filter((s) => s.slug === 'twin')
+    expect(twin).toHaveLength(1)
+    expect(twin[0]!.pages.map((p) => p.pageId).sort()).toEqual(pageIds)
+    const up = await upgrade(id, 'Twin Spa', { pageIds })
+    expect(up.status).toBe('switched')
+    if (up.status !== 'switched') return
+    expect(up.pages.map((p) => p.pageId).sort()).toEqual(pageIds)
+    for (const p of pageIds) expect(await liveSha(id, p)).toBe(signed.toSha)
+    const site = await tx(id, (db) => getSite(db, id))
+    expect(site!.templateUndo!.pages.map((p) => p.pageId).sort()).toEqual(pageIds)
+    expect(site!.textRun).toMatchObject({ state: 'queued', via: 'template_upgrade' })
+    expect([...site!.textRun!.pageIds].sort()).toEqual(pageIds)
+    // Undo puts both pages back (never half on v2).
+    await tx(id, (db) => undoTemplateSwitch(db, id, USER))
+    for (const p of pageIds) expect(await liveSha(id, p)).toBe(signed.fromShas[0])
+  })
+
+  it('one page whose content does not fit (a video file as a logo) leaves the whole spa as it was', async () => {
+    const { id, pageIds } = await twoPages('halfy', 'Halfy Spa')
+    const [file] = await platform
+      .insert(storedFiles)
+      .values({ tenantId: id, contentType: 'video/mp4', size: 1, isPublic: true })
+      .returning()
+    // The second page's live content: a video file in a picture slot.
+    const bad = pageIds[1]!
+    await tx(id, async (db) => {
+      const live = (await getEditablePage(db, id, bad))!.data
+      await publishPage(db, {
+        tenantId: id,
+        pageId: bad,
+        data: withContent(live, {
+          v: 1,
+          values: [{ path: 'spa.logo_on_dark', value: { img: `/files/${file!.id}` } }],
+        }),
+      })
+    })
+    const before = await Promise.all(pageIds.map(async (p) => (await versions(id, p)).length))
+    const undoBefore = (await tx(id, (db) => getSite(db, id)))!.templateUndo
+    const up = await upgrade(id, 'Halfy Spa', { pageIds })
+    expect(up).toMatchObject({ status: 'skipped', reason: 'invalid' })
+    expect((up as { detail?: string }).detail).toMatch(/a picture from the platform's files/)
+    expect(await Promise.all(pageIds.map(async (p) => (await versions(id, p)).length))).toEqual(before)
+    for (const p of pageIds) expect(await liveSha(id, p)).toBe(signed.fromShas[0])
+    const site = await tx(id, (db) => getSite(db, id))
+    expect(site!.templateUndo).toEqual(undoBefore)
+    expect(site!.textRun).toBeNull()
+  })
+})
+
+describe('kind-aware content files (wrongKindContentFiles via htmlDesignContentErrors)', () => {
+  it('refuses an image in a clip slot and a video in a picture slot; the right kinds pass', async () => {
+    const id = ids.other!
+    const [img, vid] = await platform
+      .insert(storedFiles)
+      .values([
+        { tenantId: id, contentType: 'image/webp', size: 1, isPublic: true },
+        { tenantId: id, contentType: 'video/webm', size: 1, isPublic: true },
+      ])
+      .returning()
+    const page = (values: { path: string; value: unknown }[], pictures: unknown[] = []) => ({
+      root: { props: {} },
+      content: [{ type: 'HtmlDesign', props: { id: 'x', content: { v: 1, values, pictures } } }],
+    })
+    const errors = (data: unknown) => tx(id, (db) => htmlDesignContentErrors(db, id, data))
+    expect(
+      await errors(
+        page(
+          [
+            { path: 'journey[welcome].clip', value: { video: `/files/${img!.id}` } },
+            { path: 'spa.logo_on_dark', value: { img: `/files/${vid!.id}` } },
+          ],
+          [{ id: 'img-0', src: POOL, img: `/files/${vid!.id}` }],
+        ),
+      ),
+    ).toEqual([
+      "journey[welcome].clip: a video (MP4 / WebM) from the platform's files",
+      "spa.logo_on_dark: a picture from the platform's files",
+      "picture img-0: a picture from the platform's files",
+    ])
+    expect(
+      await errors(
+        page(
+          [
+            { path: 'journey[welcome].clip', value: { video: `/files/${vid!.id}` } },
+            { path: 'spa.logo_on_dark', value: { img: `/files/${img!.id}` } },
+          ],
+          [{ id: 'img-0', src: POOL, img: `/files/${img!.id}` }],
+        ),
+      ),
+    ).toEqual([])
+  })
+})
+
+describe('upgradedProps (fix2: a spa keeps its Phone fixes and picture framings)', () => {
+  const NEW_HTML = `<img src="https://cdn.test/hero.jpg"><img src="${POOL}">`
+  const prepared = (images: unknown[] = [], phoneFixes = false) => ({
+    type: 'HtmlDesign',
+    props: { html: '', doc: { sha256: 'n' }, images, phoneFixes },
+  })
+  it('keeps the spa’s phone fixes on and re-points its adjustments by src; the template’s own win', () => {
+    const old = { id: 'b', images: [{ id: 'img-0', src: POOL, x: 10, y: 20 }], phoneFixes: true, extra: 1 }
+    const kept = upgradedProps(old, prepared(), undefined, NEW_HTML)
+    expect(kept).toMatchObject({ id: 'b', extra: 1, phoneFixes: true, doc: { sha256: 'n' } })
+    expect(kept.images).toEqual([{ id: 'img-1', src: POOL, x: 10, y: 20 }])
+    const set = upgradedProps(
+      old,
+      prepared([{ id: 'img-1', src: POOL, fit: 'contain' }], true),
+      undefined,
+      NEW_HTML,
+    )
+    expect(set.images).toEqual([{ id: 'img-1', src: POOL, fit: 'contain' }])
+    // A picture gone from the new file drops its adjustment; phone fixes off stay off.
+    const gone = upgradedProps(
+      { images: [{ id: 'img-0', src: 'https://cdn.test/old.jpg', x: 5 }], phoneFixes: false },
+      prepared(),
+      undefined,
+      NEW_HTML,
+    )
+    expect(gone).toMatchObject({ images: [], phoneFixes: false })
   })
 })

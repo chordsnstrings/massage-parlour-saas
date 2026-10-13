@@ -229,31 +229,51 @@ All in `packages/core/src/html-crm.ts`:
 - **As built (P5, platform):**
   - **Template versions:** on the same `site_templates` row (`version`, `history`, `pending`; migration 0052). "Upload
     new version" (`/files/templates?kind=version&id=`) stores the pending one with its report — invisible to apply.
-    **Roll out = sign-off** (`signOffTemplateVersion`): pending → pages, the old sha → history. A "Replace" upload of
-    an HTML row also makes the replaced file an older version (`pushTemplateVersion`).
-  - **Who switches:** spas whose LIVE HtmlDesign file is one of the old versions' shas (`spasOnTemplateVersions`;
-    BE RELAX v1 has no `/files` references, so a spa's copy keeps the template's sha). Another live sha (patched,
-    localised, applied but never published, an earlier undo) → listed as skipped, never overwritten; ≤ 25 spas a
-    click ("Run again for the rest").
-  - **The switch** (`upgradeHtmlDesignLive`, in the spa's own transaction): never `publishPage` — its own published
-    row (`insertVersion`), so draft themes and pending renames stay unpublished; content = `carryHtmlContent` (with the
-    old file for pairing) + `htmlDesignOwnPins` (embedded logos stored as the spa's files); the working draft carried
-    (same old file) or kept, moved after the new live row; `templateUndo.live` → Undo re-publishes the previous version
-    as a new row, puts the draft back and sets `sites.template_hold` (later rollouts of that version skip the spa).
-    An editor lock, a content check that fails, or a spa already on the new file → skipped with the reason.
-  - **D5:** `sites.text_run` queue (`queueSiteTexts`, same transaction as the apply / switch) → `@spa/ai`
-    `runQueuedSiteTexts` (atomic claim; gate re-checked for the super-admin who queued it; `htmlOnly`, `onlyDefaults`,
-    `keepUndo`, `designSha`) right after the response (`after()`), the worker's `site-texts-queue` cron sweeps queued
-    (> 3 min) and stale running (> 15 min) runs. Only contract v2 pages; skipped with a reason on the card for the
-    spa's own old design (O1) or a clicker without the AI gate. System copy (`ui.*` the design translates or keeps
-    English) is never drafted; a draft losing a `{token}` is skipped.
+    **Roll out = sign-off** (`signOffTemplateVersion`, one transaction; the update only applies while the pending sha
+    is the reviewed one and the version has not moved — else "changed meanwhile"): pending → pages, the old sha →
+    history. A "Replace" upload of an HTML row also makes the replaced file an older version (`pushTemplateVersion`).
+    "Upload new version" prefills the current version's Phone fixes and picture adjustments (re-pointed at the new
+    file's pictures by `src`, services site-kit `repointHtmlImageAdjustments`).
+  - **Who switches:** spas whose LIVE HtmlDesign file is one of the old versions' shas (`spasOnTemplateVersions`, one
+    entry per spa with every visible page still on an old sha; BE RELAX v1 has no `/files` references, so a spa's copy
+    keeps the template's sha). A spa with no page on an old sha but another live sha (patched, localised, applied but
+    never published, an earlier undo) → listed as skipped, never overwritten. A click switches spas until 25 are
+    switched or ~30 s are spent; spas it cannot switch don't count and the sheet sends them back (`later`) so the next
+    click tries the others first ("Run again for the rest").
+  - **The switch** (`upgradeHtmlDesignLive`, in the spa's own transaction; all of the spa's old-version pages in a
+    savepoint, or none): never `publishPage` — its own published row per page (`insertVersion`), so draft themes and
+    pending renames stay unpublished; content = `carryHtmlContent` (with the old file for pairing) +
+    `htmlDesignOwnPins` (embedded logos stored as the spa's files); props: the spa's Phone fixes kept on, its picture
+    adjustments kept for pictures still in the new file that the new version sets none for (`upgradedProps`); each
+    working draft carried (same old file) or kept, moved after the new live row; ONE `templateUndo.live` holding every
+    page → Undo re-publishes the previous versions as new rows, puts the drafts back and sets `sites.template_hold`
+    (later rollouts of that version skip the spa). An editor lock on any page, a content check that fails on any page
+    (savepoint rolled back, nothing written), or a spa already on the new file → skipped with the reason.
+  - **D5:** `sites.text_run` queue (`queueSiteTexts`, in the apply's / switch's own transaction — console apply:
+    reads in a savepoint, a failure records a skipped line instead; connector `apply_template`: same transaction; the
+    rollout: ONE run with all switched pages) → `@spa/ai` `runQueuedSiteTexts` (atomic claim; gate re-checked for the
+    super-admin who queued it; `htmlOnly`, `onlyDefaults`, `keepUndo`, `designSha`) right after the response
+    (`after()`), the worker's `site-texts-queue` cron sweeps queued (> 3 min) and stale running (> 15 min) runs. Only
+    contract v2 pages; skipped with a reason on the card for the spa's own old design (O1) or a clicker without the AI
+    gate. System copy (`ui.*` the design translates or keeps English) is never drafted (only the Arabic of the spa's
+    own English, below); a draft losing a `{token}` is
+    skipped. **Decision (integrator, 2026-10-13):** on `/ar` of a v2 design the order is content Arabic > the design's
+    `l10n.ar` > content English > design English (contract doc §4); so a value the spa wrote in English only (leftover
+    reason `arabic`; not a field the contract keeps English) is an `arabicOnly` slot: only its Arabic is drafted, the
+    stored English kept (`{t: {en: stored, ar}}`), listed right after the leftovers — with `onlyDefaults`, and on
+    translated system copy in either mode.
   - **Feed + render:** `crm-data.json` + `locale`; `?page=` = that live page's `crm-defaults` + content, then the CRM
     (literal designs: the CRM alone); `{{crm_data_url}}` placeholder; `designWithCrm` writes `locale` into v2 data and
     `l10n.ar` on Arabic (v1 output and keys as in P4). Video: upload body cap 8 MB, `SlotVideo` upload button; a
     picture file in a video slot (or the reverse) is refused on save.
   - **Console:** report panel in the upload sheet, report in the upload message / audit, Pages card badge + line +
-    warnings + connector prompt, rollout sheet (carry dry run per spa: edits kept / not kept, made for this spa, has
-    a draft; skipped spas with reasons), live Undo bar copy.
+    warnings + connector prompt, rollout sheet (carry dry run per spa: pages, edits kept / not kept, made for this spa,
+    keeps its phone fixes / N picture adjustments, has a draft; a pending version's Phone fixes and picture-adjustment
+    differences against the current one; skipped spas with reasons), live Undo bar copy.
+  - **Owner open points (review, 2026-10-13):** O5 the Arabic defaults need native review; O6 two v2 default
+    pictures (`spa.experience_image`, `booking.image`) show BE RELAX branding on bottle labels — the owner supplies
+    neutral photos (until then any other spa applying v2 should replace them); before the Roll out set BE RELAX's
+    branch "Area shown on the website" to "Al Zahiyah, Abu Dhabi" so its first scene matches v1.
 
 ## 8. Tests
 

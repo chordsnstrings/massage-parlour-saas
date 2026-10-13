@@ -18,7 +18,7 @@ import {
   type TemplateVersionEntry,
   type Tx,
 } from '@spa/db'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { isImageValue } from './site-kit/image'
 import type { PuckNode } from './site-kit/tree'
@@ -541,25 +541,39 @@ export async function signOffTemplateVersion(
   /** Who signs it off (the caller audits it). */
   _by: string,
 ): Promise<{ row: StudioTemplateRow; fromShas: string[]; toSha: string; version: number }> {
-  const [current] = await db.select().from(siteTemplates).where(eq(siteTemplates.id, id)).for('update')
-  if (!current) throw new DomainError('Template not found', 'not_found')
-  const pending = current.pending
-  if (!pending || pending.sha256 !== expectSha)
-    throw new DomainError('This version changed meanwhile — reload the page and check it again.')
-  const entry = templateVersionEntry(current)
-  const history = (entry ? [entry, ...(current.history ?? [])] : (current.history ?? [])).slice(0, 50)
-  const [row] = await db
-    .update(siteTemplates)
-    .set({ pages: pending.pages, history, version: pending.version, pending: null })
-    .where(eq(siteTemplates.id, id))
-    .returning()
-  return {
-    row: row!,
-    fromShas: [...new Set(history.map((h) => h.sha256))].filter((s) => s !== pending.sha256),
-    toSha: pending.sha256,
-    version: pending.version,
-  }
+  // One transaction (a savepoint inside the caller's): the row lock holds until the update, and the update only
+  // applies while the pending upload is still the reviewed one and the version has not moved — an upload in between
+  // is refused, never signed off unseen.
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(siteTemplates).where(eq(siteTemplates.id, id)).for('update')
+    if (!current) throw new DomainError('Template not found', 'not_found')
+    const pending = current.pending
+    if (!pending || pending.sha256 !== expectSha) throw versionChanged()
+    const entry = templateVersionEntry(current)
+    const history = (entry ? [entry, ...(current.history ?? [])] : (current.history ?? [])).slice(0, 50)
+    const [row] = await tx
+      .update(siteTemplates)
+      .set({ pages: pending.pages, history, version: pending.version, pending: null })
+      .where(
+        and(
+          eq(siteTemplates.id, id),
+          eq(siteTemplates.version, current.version),
+          sql`${siteTemplates.pending}->>'sha256' = ${expectSha}`,
+        ),
+      )
+      .returning()
+    if (!row) throw versionChanged()
+    return {
+      row,
+      fromShas: [...new Set(history.map((h) => h.sha256))].filter((s) => s !== pending.sha256),
+      toSha: pending.sha256,
+      version: pending.version,
+    }
+  })
 }
+
+const versionChanged = () =>
+  new DomainError('This version changed meanwhile — reload the page and check it again.')
 
 /**
  * After an upload replaced an HTML template's file in place ("Replace a template with the same key"): the replaced

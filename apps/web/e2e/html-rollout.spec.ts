@@ -67,6 +67,8 @@ const liveOf = async (pageId: string) => (await versionsOf(pageId)).find((v) => 
 
 /** The template's row on /platform/templates (other specs' templates may have versions too). */
 const rowOf = (page: Page) => page.getByRole('row').filter({ hasText: NAME })
+/** The Pages card's D5 line (DataTable renders the page cell twice: the table and the hidden phone list). */
+const textRunLine = (page: Page) => page.getByTestId('write-texts-run').filter({ visible: true })
 
 async function useZenThenApply(page: Page, slug: string) {
   await page.goto(studioUrl(slug))
@@ -172,6 +174,9 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
       .getByRole('button', { name: `Upload new version of ${NAME}` })
       .click()
     const sheet = page.getByRole('dialog')
+    // The current version's Phone fixes (off) and picture adjustments are prefilled.
+    await expect(sheet.getByTestId('version-prefill')).toContainText('From version 1: Phone fixes off')
+    await expect(sheet.getByRole('checkbox', { name: /Phone fixes/ })).not.toBeChecked()
     await sheet
       .getByLabel('HTML file')
       .setInputFiles({ name: 'v2.html', mimeType: 'text/html', buffer: Buffer.from(v2) })
@@ -250,7 +255,7 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
 
   await test.step('D5 on the spa’s own design: skipped (its copy is its own)', async () => {
     await page.goto(studioUrl(slug))
-    await expect(page.getByTestId('write-texts-run')).toContainText('skipped: made for this spa')
+    await expect(textRunLine(page)).toContainText('skipped: made for this spa')
     await expect(page.getByText(/Upgraded to version 2 on /)).toBeVisible()
     const [s] = await db.select({ run: sites.textRun }).from(sites).where(eq(sites.tenantId, tenantId))
     expect(s!.run).toMatchObject({ state: 'skipped', via: 'template_upgrade' })
@@ -297,7 +302,7 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
     )
     await page.goto(studioUrl(second.slug))
     await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible()
-    await expect(page.getByTestId('write-texts-run')).toContainText('Drafted texts for 1 page')
+    await expect(textRunLine(page)).toContainText('Drafted texts for 1 page')
   })
 
   await test.step('Undo: v1 re-published with the old content, the draft back; a later Roll out keeps it on v1', async () => {
@@ -319,7 +324,22 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
     await expect(sheet.getByRole('list', { name: 'Not switched' })).toContainText(
       'Seaside Test Spa — kept on version 1',
     )
+    await expect(sheet.getByText('No spa to switch')).toBeVisible()
+    // A real Roll out: the held spa is reported and stays on v1.
+    const versionsBefore = (await versionsOf(pageId)).length
+    await sheet.getByRole('button', { name: 'Roll out to 1 spa' }).click()
+    await expect(
+      page
+        .getByText(/Version 2 is live for 0 spas\. Not switched: Seaside Test Spa \(kept on version 1 /)
+        .first(),
+    ).toBeVisible({ timeout: 60_000 })
     await page.keyboard.press('Escape')
     expect(shaOf((await liveOf(pageId)).data)).toBe(sha1)
+    expect((await versionsOf(pageId)).length).toBe(versionsBefore)
+    const [held] = await db
+      .select({ hold: sites.templateHold })
+      .from(sites)
+      .where(eq(sites.tenantId, tenantId))
+    expect(held!.hold).toMatchObject({ key: KEY, version: 2 })
   })
 })

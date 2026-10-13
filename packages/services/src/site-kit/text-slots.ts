@@ -1,6 +1,7 @@
 import {
   crmContractManifest,
   crmDesignData,
+  englishOnly,
   htmlContentFrom,
   htmlContentParts,
   htmlContentSlots,
@@ -29,6 +30,11 @@ export type TextSlot = {
   ar: string
   /** Page texts of an HTML design (R28 P4): the design text's guard (`listHtmlDesignTexts` src). */
   src?: string
+  /**
+   * R28 P5 (D5): the spa wrote this English itself and it has no Arabic yet — only its Arabic is drafted; the stored
+   * English is kept as it is (an Arabic page shows the design's own Arabic until then).
+   */
+  arabicOnly?: true
 }
 export type TextDraft = { key: string; en: string; ar: string }
 
@@ -105,7 +111,9 @@ export function textSlots(
  * `first` (Write texts' leftovers) go ahead of the rest before the cap, so late ones (a footer) still make it.
  * R28 P5: a contract v2 design's system copy (`ui.*` texts it translates itself or keeps English) is never a slot;
  * `onlyDefaults` (D5 after a template apply / upgrade) leaves out what the spa already wrote (a value or page text
- * with English), except leftovers (`first`).
+ * with English), except leftovers (`first`). What the spa wrote in English only (core leftover reason `arabic`; not
+ * a field the contract keeps English) is an `arabicOnly` slot instead — on system copy too, in either mode — listed
+ * right after `first`.
  */
 export function htmlTextSlots(
   data: unknown,
@@ -125,28 +133,34 @@ export function htmlTextSlots(
   const manifest = crmContractManifest(designData)
   const own = (key: string, en: string | undefined) =>
     opts.onlyDefaults === true && !!en?.trim() && !opts.first?.has(key)
+  const englishOnlyOwn = (t: { en?: string; ar?: string } | undefined) => !!t?.en?.trim() && !t.ar?.trim()
   for (const s of htmlContentSlots(designData)) {
     const v = parts.values[s.path]
-    if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v) || systemCopy(manifest, s.path))
-      continue
+    if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v)) continue
+    const key = `${block}/content:${s.path}`
     const t = v && 't' in v ? v.t : undefined
-    if (own(`${block}/content:${s.path}`, t?.en)) continue
+    const sys = systemCopy(manifest, s.path)
+    const arabicOnly = englishOnlyOwn(t) && !englishOnly(manifest, s.path) && (sys || own(key, t?.en))
+    if (!arabicOnly && (sys || own(key, t?.en))) continue
     push({
-      key: `${block}/content:${s.path}`,
+      key,
       block,
       type: HTML_DESIGN,
       prop: `content:${s.path}`,
       multiline: s.kind === 'longtext',
       en: t?.en ?? String(s.value ?? ''),
       ar: t?.ar ?? '',
+      ...(arabicOnly ? { arabicOnly: true as const } : {}),
     })
   }
   for (const x of listHtmlDesignTexts(html)) {
     if (x.bound) continue
+    const key = `${block}/text:${x.id}`
     const t = parts.texts[x.id]?.src === x.src ? parts.texts[x.id]?.t : undefined
-    if (own(`${block}/text:${x.id}`, t?.en)) continue
+    const arabicOnly = own(key, t?.en) && englishOnlyOwn(t)
+    if (own(key, t?.en) && !arabicOnly) continue
     push({
-      key: `${block}/text:${x.id}`,
+      key,
       block,
       type: HTML_DESIGN,
       prop: `text:${x.id}`,
@@ -154,13 +168,16 @@ export function htmlTextSlots(
       en: t?.en ?? x.text,
       ar: t?.ar ?? '',
       src: x.src,
+      ...(arabicOnly ? { arabicOnly: true as const } : {}),
     })
   }
   const first = opts.first
-  const ordered = first?.size
-    ? [...out.filter((s) => first.has(s.key)), ...out.filter((s) => !first.has(s.key))]
-    : out
-  return ordered.slice(0, max)
+  const rank = (s: TextSlot) => (first?.has(s.key) ? 0 : s.arabicOnly ? 1 : 2)
+  return out
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i)
+    .map((x) => x.s)
+    .slice(0, max)
 }
 
 /**
@@ -256,7 +273,8 @@ export function fillTextSlots<T>(
     const slot = byKey.get(d.key)
     if (!slot || done.has(d.key)) continue
     done.add(d.key)
-    const en = plainText(String(d.en ?? ''), slot.multiline)
+    // R28 P5 (D5): an Arabic-only slot keeps the spa's stored English as it is (the draft's English is ignored).
+    const en = slot.arabicOnly ? slot.en : plainText(String(d.en ?? ''), slot.multiline)
     const ar = plainText(String(d.ar ?? ''), slot.multiline)
     // R28 P5: an HTML design fills its single-brace {tokens} itself ({time}, {name}): a draft losing one is skipped
     // (block pages' {name} is the platform's own placeholder, unchanged).
@@ -266,7 +284,15 @@ export function fillTextSlots<T>(
     }
     if (slot.type === HTML_DESIGN) {
       const now = fresh?.get(slot.key)
-      if (!en || !ar || !now || !parts || now.en !== slot.en || now.src !== slot.src) {
+      if (
+        !en.trim() ||
+        !ar ||
+        !now ||
+        !parts ||
+        now.en !== slot.en ||
+        now.src !== slot.src ||
+        (slot.arabicOnly && now.ar !== slot.ar)
+      ) {
         skipped++
         continue
       }

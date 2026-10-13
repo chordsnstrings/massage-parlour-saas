@@ -1,6 +1,6 @@
 // R28 P5: the Write texts runner shared by the console and the D5 queue (stub ModelArk client).
 import { htmlContentParts, listHtmlDesignTexts } from '@spa/core'
-import { closeAllDbs, platformAdmins, sites, tenants, user, withTenant } from '@spa/db'
+import { closeAllDbs, platformAdmins, type SiteTextRun, sites, tenants, user, withTenant } from '@spa/db'
 import { seedPlatform } from '@spa/db/seed'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import {
@@ -14,7 +14,7 @@ import {
 import { htmlTextSlots } from '@spa/services/site-kit'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createModelArkClient, runQueuedSiteTexts, runSiteTexts } from '../src'
+import { createModelArkClient, runQueuedSiteTexts, runSiteTexts, sweepSiteTexts } from '../src'
 
 process.env.SITE_AI_EDITOR_EMAILS = '*'
 const { platform, app } = testDbs()
@@ -136,8 +136,16 @@ describe('Write texts runner (R28 P5)', () => {
     const all = htmlTextSlots(data, HTML).map((s) => s.key)
     expect(all).toContain('d-1/content:booking.label')
     expect(all.some((k) => k.includes('content:ui.'))).toBe(false)
-    const only = htmlTextSlots(data, HTML, { onlyDefaults: true }).map((s) => s.key)
-    expect(only).not.toContain('d-1/content:booking.label')
+    const slots = htmlTextSlots(data, HTML, { onlyDefaults: true })
+    const only = slots.map((s) => s.key)
+    // fix2 (DECISION): the spa's English-only value is drafted in Arabic only (its English kept), ahead of the rest.
+    expect(slots[0]).toMatchObject({
+      key: 'd-1/content:booking.label',
+      en: 'Reserve',
+      ar: '',
+      arabicOnly: true,
+    })
+    expect(slots.filter((s) => s.arabicOnly)).toHaveLength(1)
     expect(only).toEqual(
       expect.arrayContaining([
         'd-1/content:journey[welcome].title',
@@ -145,11 +153,29 @@ describe('Write texts runner (R28 P5)', () => {
         `d-1/text:${H1.id}`,
       ]),
     )
-    // Leftovers still go in.
+    // Leftovers still go in (a whole rewrite).
+    const left = htmlTextSlots(data, HTML, {
+      onlyDefaults: true,
+      first: new Set(['d-1/content:booking.label']),
+    })
+    expect(left[0]!.key).toBe('d-1/content:booking.label')
+    expect(left[0]!.arabicOnly).toBeUndefined()
+    // System copy: the spa's English-only value of a translated `ui.*` text gets its Arabic (either mode); a text the
+    // contract keeps English never; one with Arabic never.
+    const withUi = structuredClone(data) as { content: { props: { content: { values: unknown[] } } }[] }
+    withUi.content[0]!.props.content.values.push(
+      { path: 'ui.form.submit', value: { t: { en: 'Ask us' } } },
+      { path: 'ui.wa.intro', value: { t: { en: 'Hi {spa}' } } },
+    )
+    for (const onlyDefaults of [false, true]) {
+      const ui = htmlTextSlots(withUi, HTML, { onlyDefaults }).filter((s) => s.prop.startsWith('content:ui.'))
+      expect(ui).toEqual([
+        expect.objectContaining({ prop: 'content:ui.form.submit', en: 'Ask us', arabicOnly: true }),
+      ])
+    }
     expect(
-      htmlTextSlots(data, HTML, { onlyDefaults: true, first: new Set(['d-1/content:booking.label']) })[0]!
-        .key,
-    ).toBe('d-1/content:booking.label')
+      htmlTextSlots(data, HTML).find((s) => s.key === 'd-1/content:booking.label')?.arabicOnly,
+    ).toBeUndefined()
   })
 
   it('a page on another design is skipped (designSha)', async () => {
@@ -169,8 +195,11 @@ describe('Write texts runner (R28 P5)', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('writes the drafts; a draft that loses a {token} is skipped', async () => {
-    const { client } = reply(DRAFTS)
+  it('writes the drafts; a draft that loses a {token} is skipped; an Arabic-only slot keeps its English', async () => {
+    const { client, fetch } = reply([
+      ...DRAFTS,
+      { key: 'd-1/content:booking.label', en: 'Book a visit', ar: 'احجز' },
+    ])
     const run = await runSiteTexts({
       tenantId,
       slug: 'texts-spa',
@@ -180,13 +209,16 @@ describe('Write texts runner (R28 P5)', () => {
       designSha: sha,
       client,
     })
-    expect(run.result.pages).toEqual([{ id: pageId, slug: '', title: 'Home', filled: 2 }])
+    expect(run.result.pages).toEqual([{ id: pageId, slug: '', title: 'Home', filled: 3 }])
+    // The model is told which slots are Arabic only.
+    const body = String((fetch.mock.calls as unknown as [string, RequestInit][])[0]![1].body)
+    expect(body).toContain('\\"arabic_only\\":true')
     const parts = htmlContentParts((await draftContent()).content[0]!.props.content)
     expect(parts.values['journey[welcome].title']).toEqual({
       t: { en: 'Unwind by the sea.', ar: 'استرخ قرب البحر.' },
     })
     expect(parts.values['journey[welcome].body']).toBeUndefined()
-    expect(parts.values['booking.label']).toEqual({ t: { en: 'Reserve' } })
+    expect(parts.values['booking.label']).toEqual({ t: { en: 'Reserve', ar: 'احجز' } })
     expect(parts.texts[H1.id]?.t).toEqual({ en: 'Arrive and rest', ar: 'تعال واسترح' })
   })
 
@@ -235,5 +267,46 @@ describe('Write texts runner (R28 P5)', () => {
     expect(fetch).not.toHaveBeenCalled()
     const site = await withTenant(tenantId, (tx) => getSite(tx, tenantId), app)
     expect(site!.textRun?.state).toBe('skipped')
+  })
+})
+
+describe('sweepSiteTexts (worker site-texts-queue)', () => {
+  it('runs queued runs older than 3 minutes and queues again runs cut off over 15 minutes ago', async () => {
+    const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+    const spa = async (slug: string, run: Record<string, unknown>) => {
+      const [t] = await platform.insert(tenants).values({ slug, name: slug }).returning()
+      await withTenant(
+        t!.id,
+        (tx) =>
+          ensureSite(tx, t!.id, {
+            key: 'v2',
+            name: 'V2',
+            theme: {},
+            pages: [{ slug: '', title: { en: 'Home' }, data: { root: { props: {} }, content: [] } }],
+          }),
+        app,
+      )
+      const textRun = { via: 'template_upgrade', actorUserId: ADMIN, pageIds: [], ...run } as SiteTextRun
+      await platform.update(sites).set({ textRun }).where(eq(sites.tenantId, t!.id))
+      return t!.id
+    }
+    const state = async (id: string) =>
+      (await platform.select({ run: sites.textRun }).from(sites).where(eq(sites.tenantId, id)))[0]!.run
+    const due = await spa('sweep-due', { state: 'queued', at: ago(4) })
+    const fresh = await spa('sweep-fresh', { state: 'queued', at: ago(1) })
+    const cut = await spa('sweep-cut', { state: 'running', at: ago(20), startedAt: ago(16) })
+    const busy = await spa('sweep-busy', { state: 'running', at: ago(6), startedAt: ago(5) })
+    // ADMIN lost 2FA above: each claimed run ends "skipped" without calling ModelArk.
+    expect(await sweepSiteTexts()).toBe(2)
+    for (const id of [due, cut])
+      expect(await state(id)).toMatchObject({
+        state: 'skipped',
+        summary: 'needs SITE_AI_EDITOR_EMAILS + 2FA',
+        finishedAt: expect.any(String),
+      })
+    expect(await state(fresh)).toMatchObject({ state: 'queued' })
+    expect(await state(busy)).toMatchObject({ state: 'running' })
+    // Nothing left that is due.
+    expect(await sweepSiteTexts()).toBe(0)
   })
 })

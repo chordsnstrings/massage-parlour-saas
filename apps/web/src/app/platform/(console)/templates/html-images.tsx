@@ -12,6 +12,7 @@ import {
   htmlImageFramed,
   listHtmlDesignImages,
 } from '@spa/core'
+import { repointHtmlImageAdjustments } from '@spa/services/site-kit'
 import { ImageIcon, Monitor, RotateCcw, Smartphone } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MediaPicker } from '@/components/media/media-picker'
@@ -34,10 +35,26 @@ const clamp = (n: number) => Math.round(Math.min(100, Math.max(0, n)))
  * listed in the adjuster, whose choices travel with the upload in the hidden `images` field. R24: a file over 5 MB is
  * refused here at once (and again on submit), and the "Phone fixes" switch (off = exact) drives the preview too.
  */
-export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
+export function HtmlFileField({
+  spas,
+  hint,
+  current,
+}: {
+  spas: Spa[]
+  hint: string
+  /**
+   * R28 P5 "Upload new version": the current version's Phone fixes and picture adjustments, prefilled (adjustments
+   * re-pointed at the new file's pictures by their src; one whose picture is gone is dropped).
+   */
+  current?: { version: number; phoneFixes: boolean; images: HtmlImageAdjust[] }
+}) {
   const [html, setHtml] = useState<string | null>(null)
   const [tooLarge, setTooLarge] = useState<string | null>(null)
-  const [phoneFixes, setPhoneFixes] = useState(false)
+  const [phoneFixes, setPhoneFixes] = useState(current?.phoneFixes ?? false)
+  const initial = useMemo(
+    () => (current && html !== null ? repointHtmlImageAdjustments(current.images, html) : []),
+    [current, html],
+  )
   return (
     <>
       <Field label="HTML file" name="file" hint={hint}>
@@ -81,9 +98,26 @@ export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
           </span>
         </span>
       </label>
+      {current && (
+        <p className="text-[13px] text-muted" data-testid="version-prefill">
+          From version {current.version}: Phone fixes {current.phoneFixes ? 'on' : 'off'}
+          {html !== null
+            ? ` · ${initial.length} of ${current.images.length} picture adjustments kept (pictures still in the new file)`
+            : current.images.length
+              ? ` · ${current.images.length} picture adjustments, kept for the pictures still in the new file`
+              : ''}
+          . Spas keep their own phone fixes and adjustments where this version sets none.
+        </p>
+      )}
       {html !== null && <DesignReportPanel html={html} />}
       {html !== null && (
-        <HtmlImageAdjuster key={html.length} html={html} initial={[]} spas={spas} phoneFixes={phoneFixes} />
+        <HtmlImageAdjuster
+          key={html.length}
+          html={html}
+          initial={initial}
+          spas={spas}
+          phoneFixes={phoneFixes}
+        />
       )}
     </>
   )

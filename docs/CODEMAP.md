@@ -688,23 +688,31 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `l10n.ar`), `crmDesignData(found)` (literal, else an endpoint design's `crm-defaults`); `htmlCrmContractOf` adds
     `defaults` (first `<script type="application/json" id="crm-defaults">` JSON object ≤ `CRM_DEFAULTS_MAX` 512 KB,
     only without a literal), `version`, `manifest`. `isOwnDesign` is false on v2; `mergeCrmContract(d, crm, {locale})`
-    on v2: no own-design fallbacks (D1 everywhere), `logo_on_dark` data first, `logo_on_light` CRM first, `locale` as
-    the last key (v2 and `design: null` only; v1 JSON unchanged — snapshot test). html-content.ts: reserved roots
-    `contract` / `locale` (never slots, overlays or leftovers); on v2 `spa.short_name` / `spa.logo_on_light` are slots;
-    `overlayHtmlContent` resolves English-only paths in English; `contractLocaleData(data, 'ar')` writes `l10n.ar`
-    into matching text / tags slots copy-on-write (same object for en / v1 / no l10n); leftovers on v2 name no spa
-    and skip system copy; `htmlContentView` reads `crmDesignData`. `carryHtmlContent(old, newData, newHtml,
-    oldHtml?)`: values by remapped path (`[n]` → the item id when the new array has ids) + same kind; page texts /
-    pictures re-pointed by id family + `src` (equal ones paired by their position in `oldHtml`, else in id order;
-    extra → `ambiguous`); a text the new file binds with `data-crm-text` to a text slot → that value (Arabic kept,
-    missing English from the design; a set value wins → `duplicate`); every drop listed (`gone` / `kind` / `bound` /
-    `ambiguous` / `duplicate`, ≤ 80 chars); output passes `htmlContentErrors`. `htmlDesignOwnPins(oldData, newData,
-    tenant, keep)`: own v1 design → v2 only; v2 slots whose v1 value differs → content (`data:image` → `files` for the
-    caller to store), never `ui.*` / contract / operational / kept paths, `short_name` only when it names the spa.
-    html-design.ts: `HtmlDesignText.path` (own or inherited `data-crm-text`; per attribute from `data-crm-attr="attr:path;
-    …"`); ids / bindings unchanged (snapshot). html-report.ts: `htmlDesignReport(html)` (contract none / v1 / v2, mode,
-    locales, slot counts by kind + `ui`, page texts total / editable / crm / script / with a path, pictures, ≤ 20
-    warnings: not-json, locale-in-data, no-ids, staff-no-photo-guard, named-spa, contact-in-defaults, fixed-title,
+    on v2: no own-design fallbacks (D1 everywhere), `short_name` = the spa's website content (any value / language),
+    else the CRM name (v1: `namesSpa`); `logo_on_dark` = the content, else the CRM logo; `logo_on_light` = the CRM
+    logo, else the content (the design's own logo defaults never show); `locale` as the last key (v2 and `design:
+    null` only; v1 JSON unchanged — snapshot test). html-content.ts: reserved roots `contract` / `locale` (never slots,
+    overlays or leftovers); on v2 `spa.short_name` / `spa.logo_on_light` are slots; `overlayHtmlContent` resolves
+    English-only paths in English and, on `/ar` of a v2 design, **content Arabic > `l10n.ar` > content English >
+    design English** (integrator decision 2026-10-13, contract doc §4; texts + tags; `spa.short_name` keeps the spa's
+    English), and records the paths it set on its output (`markHtmlContentPaths`, a WeakMap the merge reads);
+    `contractLocaleData(data, 'ar')` writes `l10n.ar` into matching text / tags slots copy-on-write (same object for
+    en / v1 / no l10n); leftovers on v2 name no spa and skip system copy; `htmlContentView` reads `crmDesignData`.
+    `carryHtmlContent(old, newData, newHtml, oldHtml?)`: values by remapped path (`[n]` → the item id when the new
+    array has ids) + same kind; page texts / pictures re-pointed by id family + `src` (equal ones paired by their
+    position in `oldHtml`, else in id order; extra → `ambiguous`); a text the new file binds with `data-crm-text` to a
+    text slot → that value (Arabic kept, missing English from the design; a set value wins → `duplicate`), never a
+    fragment (`part`: the listing's `pathPart`) nor one missing the slot's single-brace `{tokens}` (`tokens`); every
+    drop listed (`gone` / `kind` / `bound` / `ambiguous` / `duplicate` / `part` / `tokens`, ≤ 80 chars); output passes
+    `htmlContentErrors`. `htmlDesignOwnPins(oldData, newData, tenant, keep)`: own v1 design → v2 only; v2 slots whose
+    v1 value differs → content (`data:image` → `files` for the caller to store), never `ui.*` / contract /
+    operational / kept paths, `short_name` only when it names the spa; a v1 text equal to the v2 default once
+    `{city}` / `{area}` / `{spa}` are filled with the v1 design's values is not pinned. html-design.ts:
+    `HtmlDesignText.path` (own or inherited `data-crm-text`; per attribute from `data-crm-attr="attr:path; …"`),
+    `pathPart` (a run of a `data-crm-text` element with several runs or `data-crm-tpl`); ids / bindings unchanged
+    (snapshot). html-report.ts: `htmlDesignReport(html)` (contract none / v1 / v2, mode, locales, slot counts by kind
+    + `ui`, page texts total / editable / crm / script / with a path, pictures, ≤ 20 warnings: not-json,
+    locale-in-data, no-ids, staff-no-photo-guard, named-spa, contact-in-defaults, logo-in-defaults (v2), fixed-title,
     no-arabic-font, bound-no-slot, ui-kind, no-ui, defaults-too-large, embeds; never throws, ~50 ms on the 4.6 MB BE
     RELAX file) + `htmlDesignReportLine`.
     **Template versions, live rollout, D5 (P5, platform; owner D4 + D5):** `site_templates.version` / `history`
@@ -712,44 +720,60 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     the catalog reads `pages`), migration 0052; `sites.text_run` (`SiteTextRun`) / `template_hold` (`TemplateHold`);
     `TemplateUndo.live` + pages `publishedBefore` / `draftVersionId` / `draftSavedAt` (jsonb). Services
     `site-templates.ts`: `templateDocOf`, `templateShas`, `templateVersionEntry`, `setPendingTemplateVersion`,
-    `discardPendingTemplateVersion`, `signOffTemplateVersion` (pending → pages, the old one → history, refused when
-    the pending sha ≠ the reviewed one), `pushTemplateVersion` (a "Replace" upload of an HTML row: the replaced file
-    becomes an older version). `template-rollout.ts`: `spasOnTemplateVersions` (platform role: newest published
-    HtmlDesign of each visible page; `template_key` = key or live sha ∈ old shas; spas / `current` / skipped `changed`
-    (another live sha — never overwritten) · `not-live` · `held` (hold for key, ≥ version); `own` = `isOwnDesign` of
-    the old template file's data), `templateRolloutCounts` (list page), `upgradeHtmlDesignLive(tx, tenant, …)` (spa
-    tx: lock + editor lock (`locked`), live sha ∈ old shas else `already` / `not-on-version`, new file copied in
-    (`prepare`), block id + other props kept, content = `carryHtmlContent` + `htmlDesignOwnPins` (embedded logos
-    sniffed → the spa's `html_design` files `/files/{id}`), `htmlContentErrors` + `htmlDesignContentErrors` else
-    `invalid`; `insertVersion` published row (never `publishPage`: draft theme + pending rename stay), the working
-    draft carried (same old file) or kept and moved after it (unlabelled old row deleted, a labelled one stays),
-    `templateUndo.live`; D5 on a v2 design: `queueSiteTexts` unless the old design was the spa's own (`skipped`
-    "made for this spa") or the clicker has no AI gate). `sites.ts`: `insertVersion`, live branch of
+    `discardPendingTemplateVersion`, `signOffTemplateVersion` (one transaction; pending → pages, the old one →
+    history; the update is conditional on the pending sha = the reviewed one and an unchanged version, else refused
+    "changed meanwhile"), `pushTemplateVersion` (a "Replace" upload of an HTML row: the replaced file becomes an older
+    version). `template-rollout.ts`: `spasOnTemplateVersions` (platform role: newest published HtmlDesign of each
+    visible page; `template_key` = key or live sha ∈ old shas; ONE `RolloutSpa` per spa with `pages` (every page on an
+    old sha: content, images, phoneFixes, `own` = `isOwnDesign` of the old template file's data, hasDraft) /
+    `current` (spas only on the new sha) / skipped `changed` (no page on an old sha, another live sha — never
+    overwritten) · `not-live` · `held` (hold for key, ≥ version)), `templateRolloutCounts` (list page; distinct spas),
+    `upgradeHtmlDesignLive(tx, tenant, {pageIds, …})` (spa tx: lock + editor lock on every page (`locked`), pages
+    whose live sha ∈ old shas else `already` / `not-on-version`; all of them in one savepoint (`UpgradeSkipped` rolls
+    it back: nothing written): per page the new file copied in (`prepare`), `upgradedProps` (block id + other props
+    kept; the spa's Phone fixes kept on; its picture adjustments re-pointed by `src` and kept where the new version
+    sets none — site-kit `html-images.ts` `repointHtmlImageAdjustments` / `mergeHtmlImageAdjustments`), content =
+    `carryHtmlContent` + `htmlDesignOwnPins` (embedded logos sniffed → the spa's `html_design` files `/files/{id}`),
+    `htmlContentErrors` + `htmlDesignContentErrors` else `invalid`; `insertVersion` published row (never
+    `publishPage`: draft theme + pending rename stay), the working draft carried (same old file) or kept and moved
+    after it (unlabelled old row deleted, a labelled one stays); then ONE `templateUndo.live` holding every page and
+    (v2) ONE `queueSiteTexts` with the pages whose old design was not the spa's own (all own → `skipped` "made for
+    this spa"; no AI gate → skipped with the reason); result `pages[]` + totals). `sites.ts`: `insertVersion`, live branch of
     `templateUndoChanges` (published row still the upgrade's; newest = it or the carried draft with its stamp) and
     `undoTemplateSwitch` (draft dropped, `publishedBefore` re-published as a new row, the old draft back, hold set),
     `switchWrote` / `keepTemplateUndo` (a Write texts save over what a switch wrote keeps undo: no label, stamps
     moved), `queueSiteTexts` / `skipSiteTexts`, exported `latestVersion` / `preparedPages`. `html-design-report.ts`
     `pageDesignReports` (newest version's design per page, cached by tenant + file + sha). Write texts moved to
     `@spa/ai` `site-texts.ts`: `runSiteTexts` (the R23/P4 loop; `pageIds` / `htmlOnly` / `onlyDefaults` (site-kit
-    `htmlTextSlots`: the spa's own values and texts left, leftovers kept) / `keepUndo` / `designSha` / `schema` /
+    `htmlTextSlots`: the spa's own values and texts left, leftovers kept; an English-only own value — leftover
+    reason `arabic`, not an English-only contract field; on translated system copy in either mode — is an
+    `TextSlot.arabicOnly` slot right after the leftovers: the prompt marks it `arabic_only`, `fillTextSlots` keeps the
+    stored English and writes only the Arabic) / `keepUndo` / `designSha` / `schema` /
     `signature` / `client`; never audits), `runQueuedSiteTexts` (atomic claim `queued → running` on `text_run`, gate
     re-checked for the queuing super-admin (SITE_AI_EDITOR_EMAILS + 2FA) + ModelArk or a client, audit
     `site.ai_texts_written`, `done` / `failed` / `skipped` + summary), `sweepSiteTexts` (worker `site-texts-queue`
     every 2 min: queued > 3 min, running > 15 min requeued, ≤ 3 a tick), `siteTextsRunning` (globalThis set). System
-    copy (`systemCopy`) is never a Write texts slot; a draft losing a single-brace `{token}` of the design's English
+    copy (`systemCopy`) is never a Write texts slot (only `arabicOnly` for the spa's own English); a draft losing a single-brace `{token}` of the design's English
     is skipped (HTML slots only). Web: `server/site-texts-queue.ts` (`siteTextsGate`, `runQueuedTextsAfter` =
     `after()`); console `files/templates?kind=version&id=` (pending version + report, audit `version_uploaded`),
     `kind=html` reply / audit carry `report`; templates page: per HTML row "Upload new version", pending line + Preview
-    (`/templates/{id}/preview?version=pending`, EN / AR) + Roll out (`rollout-sheet.tsx`: `rolloutPlanAction` carry
-    dry run per spa, `rolloutTemplateVersionAction` = sign-off + ≤ 25 spas a click, each in its own `withTenant`,
-    audits `site.template_upgraded` / `version_signed_off` / `version_rolled_out`, then `after()` Write texts) +
-    Discard; `HtmlFileField` shows `htmlDesignReport` (`DesignReportPanel`). Spa website page: Pages card badge "CRM
+    (`/templates/{id}/preview?version=pending`, EN / AR) + Roll out (`rollout-sheet.tsx`: `rolloutPlanAction(id,
+    later)` carry dry run per spa (pages, kept / not kept, keeps phone fixes / picture adjustments) + `look` (a pending
+    version's Phone fixes / adjustment differences), `rolloutTemplateVersionAction` = sign-off + spas until 25 are
+    switched or `ROLLOUT_BUDGET_MS` 30 s (skips don't count; returned `later` tenant ids go last on the sheet's next
+    click), each spa in its own `withTenant`, audits `site.template_upgraded` (pages) / `version_signed_off` /
+    `version_rolled_out`, then `after()` Write texts) + Discard; `HtmlFileField` shows `htmlDesignReport`
+    (`DesignReportPanel`) and, in "Upload new version" (`current`), prefills the current version's Phone fixes and
+    adjustments re-pointed at the chosen file (`version-prefill` line). Spa website page: Pages card badge "CRM
     contract v2" / "CRM contract" / "Not connected to the CRM" + report line + warnings (+ a connector prompt to
-    convert), the D5 run line; Undo bar for `live`; `applyTemplateAction` queues D5 for the v2 pages it wrote
-    (`after()`); connector `apply_template` queues it too (worker sweep). Video: `/files/upload?kind=video` body cap
-    8 MB + 64 KB and the video 413 text; `SlotVideo` "Upload video"; draft saves / the op refuse a picture file in a
-    video slot and a video in a picture (`wrongKindContentFiles`). Tests: services `template-rollout.test.ts`, ai
-    `site-texts.test.ts`, e2e `html-rollout.spec.ts` (fixtures `r28-v1.html` / `r28-v2.html`, excluded from Biome).
+    convert), the D5 run line; Undo bar for `live`; `applyTemplateAction` queues D5 for the v2 pages it wrote in the
+    switch's own transaction (`queueAppliedTexts`: reads in a savepoint, a failure → skipped line; `after()`);
+    connector `apply_template` queues it in its switch transaction too (worker sweep). Video: `/files/upload?kind=video`
+    body cap 8 MB + 64 KB and the video 413 text; `SlotVideo` "Upload video"; draft saves / the op refuse a picture
+    file in a video slot and a video in a picture (`wrongKindContentFiles`). Tests: services `template-rollout.test.ts`
+    (+ two-page spa: one undo / one run, all-or-nothing, `wrongKindContentFiles`, `upgradedProps`), ai
+    `site-texts.test.ts` (+ `arabicOnly`, `sweepSiteTexts`), e2e `html-rollout.spec.ts` (fixtures `r28-v1.html` /
+    `r28-v2.html`, excluded from Biome; D5 line read `filter({ visible: true })`: DataTable renders the page cell twice).
   - **Fill the CRM from the design (R28 P3):** core `html-crm-seed.ts` (`crmMatchScore`, `designSeedPairs`, pair ≥
     `SEED_MATCH_MIN` 0.5) · services `catalog.ts` (`saveService` / `setServiceImage` / `setStaffPhoto` +
     `NEW_SERVICE_DEFAULTS` / `IMAGE_URL_PATTERN`: the rules the CRM's own service + staff actions use) ·
