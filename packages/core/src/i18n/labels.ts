@@ -19,10 +19,14 @@ export function enumLabel<E extends EnumName>(
   return t.maybe(`enums.${name}.${value}`) ?? String(value)
 }
 
-/** F13: "Online · Instagram" for an online booking with a recorded website source, else just the channel. */
+/**
+ * F13: "Website · Instagram" for an online booking with a recorded website source, else just the channel (also for
+ * a staff-made Website booking: its `website` attribution would only repeat the channel).
+ */
 export function bookingSourceLabel(t: Translator, source: string, attribution?: string | null) {
   const channel = enumLabel(t, 'bookingSource', source)
-  return attribution ? `${channel} · ${enumLabel(t, 'bookingAttribution', attribution)}` : channel
+  const via = enumLabel(t, 'bookingAttribution', attribution)
+  return via && via !== channel ? `${channel} · ${via}` : channel
 }
 
 /** `permissionLabel(t, 'clients.phone')` → "See phone numbers". */

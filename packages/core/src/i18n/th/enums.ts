@@ -13,7 +13,8 @@ export const enums: Messages['enums'] = {
   },
   bookingSource: {
     walk_in: 'วอล์กอิน',
-    online: 'ออนไลน์',
+    // 2026-10-13 (Website source): needs native review.
+    online: 'เว็บไซต์',
     whatsapp: 'WhatsApp',
     instagram: 'Instagram',
     phone: 'โทรศัพท์',
@@ -32,6 +33,8 @@ export const enums: Messages['enums'] = {
     campaign: 'ลิงก์แคมเปญ',
     referral: 'เว็บไซต์อื่น',
     direct: 'เข้าตรง',
+    // 2026-10-13: needs native review.
+    website: 'เว็บไซต์',
     unknown: 'ไม่ได้บันทึก',
   },
   rotationStatus: { available: 'ว่าง', busy: 'ไม่ว่าง', break: 'พัก', off: 'หยุด' },

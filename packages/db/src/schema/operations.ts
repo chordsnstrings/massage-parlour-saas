@@ -298,7 +298,10 @@ export const bookingSource = pgEnum('booking_source', [
   'ai_agent',
   'gbp',
 ])
-/** F13: an online booking's first-touch website source (core BOOKING_ATTRIBUTIONS, public/t.js entry). */
+/**
+ * F13: an online booking's first-touch website source (core BOOKING_ATTRIBUTIONS, public/t.js entry); `website` = a
+ * staff-made Website booking (Enquiries → Make booking or the Website source), not a public booking-page entry.
+ */
 export const bookingAttribution = pgEnum('booking_attribution', [
   'instagram',
   'gbp',
@@ -311,6 +314,7 @@ export const bookingAttribution = pgEnum('booking_attribution', [
   'campaign',
   'referral',
   'direct',
+  'website',
 ])
 
 /**
@@ -344,7 +348,7 @@ export const bookings = pgTable(
     clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
     refCode: text('ref_code').notNull(),
     source: bookingSource('source').notNull(),
-    /** Where an online booker came from (?src=ig|gbp|qr, utm, referrer, direct); null for staff-made bookings. */
+    /** Where an online booker came from (?src=ig|gbp|qr, utm, referrer, direct); staff-made: `website` or null. */
     attribution: bookingAttribution('attribution'),
     /** F16: the partner whose poster / link the online booker came through (null = none). */
     partnerId: uuid('partner_id').references(() => bookingPartners.id, { onDelete: 'set null' }),

@@ -9,6 +9,13 @@ import { type SQL, sql } from 'drizzle-orm'
  */
 export type KpiRange = { branchId?: string; from: string; to: string }
 
+/**
+ * F13 website-source key of an online booking (`b` = the bookings table or its alias): its attribution, else
+ * 'website' when staff made it (the Website source; owner 2026-10-13), else 'unknown' (public, booked before F13).
+ */
+export const onlineSourceSql = (b: SQL) =>
+  sql`coalesce(${b}.attribution::text, case when ${b}.created_by is not null then 'website' else 'unknown' end)`
+
 export type BookingStatusKey =
   | 'pending'
   | 'confirmed'
@@ -28,7 +35,10 @@ export type Kpis = {
   bookings: number
   byStatus: Partial<Record<BookingStatusKey, number>>
   bySource: { source: string; count: number }[]
-  /** F13: non-cancelled online bookings by website source (bookings.attribution; 'unknown' = booked before F13). */
+  /**
+   * F13: non-cancelled online bookings by website source (bookings.attribution; 'unknown' = booked before F13;
+   * 'website' = staff-made Website booking, also one saved without an attribution).
+   */
   byAttribution: { source: string; count: number }[]
   newClients: number
   /** no-shows ÷ bookings that reached their time (completed, in progress or no-show); null when none. */
@@ -93,7 +103,7 @@ export async function kpis(tx: Tx, range: KpiRange): Promise<Kpis> {
   )
   const attributionRows = await rows<{ source: string; n: number }>(
     tx,
-    sql`select coalesce(b.attribution::text, 'unknown') as source, count(*)::int as n from bookings b
+    sql`select ${onlineSourceSql(sql`b`)} as source, count(*)::int as n from bookings b
       where ${bDates} ${bBranch} and b.source = 'online' and b.status <> 'cancelled' group by 1 order by 2 desc, 1`,
   )
   const [fresh] = await rows<{ n: number }>(

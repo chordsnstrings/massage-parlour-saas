@@ -106,7 +106,7 @@ test('F16 QR posters: reception + partner poster, a booking through the partner 
   await page.goto(`${dashboard}/posters`)
   await expect(row.getByRole('cell').nth(1)).toHaveText('1')
   await page.goto(`${dashboard}/bookings/${booking!.id}`)
-  await expect(page.getByText('Online · QR code · Atlantis concierge')).toBeVisible()
+  await expect(page.getByText('Website · QR code · Atlantis concierge')).toBeVisible()
 
   // Paused: the link still books, without the partner.
   await page.goto(`${dashboard}/posters`)
