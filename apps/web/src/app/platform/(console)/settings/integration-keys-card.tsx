@@ -117,7 +117,7 @@ export async function IntegrationKeysCards() {
   const google = googleConfig(env) !== null
   const metaOn = metaConfig(env) !== null
   const facebookOn = facebookAppConfig(env) !== null
-  // Only one of the two Facebook keys: the other falls back to the Instagram one (a mixed pair Meta rejects).
+  // Only one of the two App 2 keys (no fallback to App 1's: the Facebook dialog rejects them).
   const facebookHalf = ['META_FB_APP_ID', 'META_FB_APP_SECRET'].filter((k) => env[k]?.trim()).length === 1
   const clientId = env.GOOGLE_CLIENT_ID?.trim()
   const oddClientId = clientId && !clientId.endsWith('.apps.googleusercontent.com')

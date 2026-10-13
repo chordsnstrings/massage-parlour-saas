@@ -368,8 +368,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   (plain ids; secrets `*_enc` + `*_last4`). **Never read `process.env.GOOGLE_*` / `META_*` directly:** services
   `integration-settings.ts` `integrationEnv()` = env with each saved console key on top (key by key, 30 s cache,
   `invalidateIntegrationEnv()` on save), passed to the pure `googleConfig(env)` / `metaConfig(env)` (Instagram app) /
-  `facebookAppConfig(env)` (Facebook Login: `META_FB_APP_*`, else `META_APP_*`) / `facebookConfigId(env)`; service
-  functions with an optional env default to it. `metaSigningSecrets(env)`: webhook / deauthorize / data-deletion accept
+  `facebookAppConfig(env)` (Facebook Login, App 2: `META_FB_APP_*` only, both required, no `META_APP_*` fallback, R29) /
+  `facebookConfigId(env)`; service functions with an optional env default to it. `metaSigningSecrets(env)`: webhook / deauthorize / data-deletion accept
   either app's HMAC. Facebook Page connect is ready only when `metaConfig` and `facebookAppConfig` both resolve (spa
   card, connect action, callback, health row `META_FB`). Redirect URIs: canonical domain only (R29; old platform
   domains redirect). Two Meta apps (R29): App 1 = Instagram API with Instagram Login (`META_APP_*` + verify token),

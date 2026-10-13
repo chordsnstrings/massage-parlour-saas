@@ -40,6 +40,8 @@ process.env.BETTER_AUTH_SECRET ??= 'test-secret-test-secret-test-secret'
 const { platform, app } = testDbs()
 const env = { META_APP_ID: 'app-1', META_APP_SECRET: 'shh-secret', META_WEBHOOK_VERIFY_TOKEN: 'verify-me' }
 const base = { platform, app, env, sleep: async () => {} }
+/** App 2 (Facebook Login for Business) keys on top: Facebook Page token checks need them (no fallback, R29). */
+const FB_ENV = { ...env, META_FB_APP_ID: 'fb-app-2', META_FB_APP_SECRET: 'fb-secret-2' }
 const IG = '17841400000000077'
 const IG_FB = '17841400000000088'
 const PAGE = '1029384756'
@@ -483,7 +485,7 @@ describe('Facebook Page (Facebook Login for Business)', () => {
     const f = fakeFetch((url) =>
       url.includes('/debug_token') ? json({ data: { is_valid: false } }) : json({}, 404),
     )
-    expect(await checkFacebookPageTokens({ ...base, fetch: f.fetch })).toEqual({
+    expect(await checkFacebookPageTokens({ ...base, env: FB_ENV, fetch: f.fetch })).toEqual({
       checked: 1,
       expired: 1,
       failed: 0,

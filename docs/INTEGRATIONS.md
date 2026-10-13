@@ -106,9 +106,11 @@ How it behaves:
   - **autopilot** sends them directly;
   - flagged conversations are always handed to a human.
 - Replies are only sent within Meta's 24-hour messaging window.
-- The console overview's Facebook Page connect row is green only with App 1's keys too (the Page-linked account's DMs,
-  comments and publishing run through the shared webhook). Only one of the two App 2 keys is a warning ("Facebook keys
-  incomplete"): set both or neither (an empty pair falls back to App 1's, which the Facebook dialog rejects).
+- Facebook Page connect needs both App 2 keys (`META_FB_APP_ID` + `META_FB_APP_SECRET`); without them it stays
+  "Facebook not configured" and the spa card shows no Connect Facebook (no fallback to App 1's keys, which the Facebook
+  dialog rejects). The console overview's Facebook Page connect row is green only with App 1's keys too (the
+  Page-linked account's DMs, comments and publishing run through the shared webhook). Only one of the two App 2 keys is
+  a warning ("Facebook keys incomplete").
 
 ## 2. Google Business Profile (reviews, posts)
 

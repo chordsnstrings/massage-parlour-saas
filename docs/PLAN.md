@@ -855,8 +855,8 @@ new hosts. Steps and undo: deploy/droplet/README.md "Move to spamanagement.co" (
   can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
 - Shared/stored/sent addresses use the canonical domain (`canonicalUrls()`): a spa's site address (`publicSiteUrl`,
   GBP booking link, campaign and WhatsApp links), invites, preview share links, public file URLs for Instagram.
-- OAuth (Meta, Google) runs entirely on the domain it starts on — session and nonce cookies are per host — so each
-  platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: Meta
+- Old/extra platform domains' pages 308 to the canonical domain (R29), so OAuth (Meta, Google) only starts there:
+  register only the canonical callbacks (`canonicalUrls()`). No visitor → canonical `APP_URL`: Meta
   webhooks/deauthorize/data-deletion, worker jobs; the spa CNAME target is `CF_CNAME_TARGET` (unset = the `APP_URL` host).
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
@@ -1282,7 +1282,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   fixes below — + the APIs to enable) and a
   **Meta (Instagram & Facebook)** card (Instagram app ID, Instagram app secret, Webhook verify token, optional Facebook
   Login for Business config id; follow-up: optional **Facebook App ID / secret** for Facebook Page connect, since with
-  Instagram Login the Instagram app ID differs from the Facebook App ID; unset = the Instagram values; lists the
+  Instagram Login the Instagram app ID differs from the Facebook App ID; both required for Facebook Page connect, no
+  fallback to the Instagram values since R29; lists the
   redirect, webhook, deauthorize and data-deletion URLs). Stored in `platform_settings` like the Resend / Turnstile keys
   (secrets sealed, write-only, last 4 shown), super-admin + 2FA saves audited by key name only. **Each key: console
   value, else env** — one resolver `integrationEnv()` (services `integration-settings.ts`, 30 s cache, invalidated on
@@ -1328,7 +1329,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      redirect, deauthorize, data deletion, webhook + verify token → Instagram app ID/secret, verify token), App 2
      Facebook (Facebook Login for Business → Settings: Valid OAuth Redirect URIs, same deauthorize/deletion/webhook,
      configuration token type User access token → Facebook App ID/secret, config ID); both: App Domains, Strict
-     Mode + Enforce HTTPS on, JS SDK off; trailing-slash hint.
+     Mode + Enforce HTTPS on, JS SDK off; trailing-slash hint. Facebook Page connect needs App 2's own pair (no
+     fallback to App 1's keys: services `facebookAppConfig` + core config-health; "Facebook not configured" without it).
   3. **One spa per account, race-proof:** cross-tenant partial unique indexes (migration 0056
      `meta_one_spa_per_account`, with a no-op-in-production clean-up of dev/test duplicates) + advisory lock on the
      Instagram account id around re-check + save (Instagram Login vs Facebook Page); unique violation → "in use".

@@ -50,14 +50,14 @@ export const missingMetaEnv = (env: Record<string, string | undefined>) =>
 export type FacebookAppConfig = { appId: string; appSecret: string }
 
 /**
- * The Facebook app behind Facebook Page connect (F19, Facebook Login for Business: dialog, code exchange, long-lived
- * token, debug_token): META_FB_APP_ID / META_FB_APP_SECRET (App settings → Basic) when set, else META_APP_ID /
- * META_APP_SECRET (one app for both logins). With Instagram API with Instagram Login, META_APP_* are the Instagram app
- * ID/secret, which the Facebook dialog does not accept. Null while either is missing. `env`: the resolved record.
+ * The Facebook app behind Facebook Page connect (F19, App 2 = Facebook Login for Business: dialog, code exchange,
+ * long-lived token, debug_token): META_FB_APP_ID / META_FB_APP_SECRET (App 2 → App settings → Basic) only. No fallback
+ * to META_APP_* (R29): those are App 1's Instagram app ID/secret, which the Facebook dialog rejects. Null while either is
+ * missing. `env`: the resolved record.
  */
 export function facebookAppConfig(env: Record<string, string | undefined>): FacebookAppConfig | null {
-  const appId = env.META_FB_APP_ID?.trim() || env.META_APP_ID?.trim()
-  const appSecret = env.META_FB_APP_SECRET?.trim() || env.META_APP_SECRET?.trim()
+  const appId = env.META_FB_APP_ID?.trim()
+  const appSecret = env.META_FB_APP_SECRET?.trim()
   return appId && appSecret ? { appId, appSecret } : null
 }
 
