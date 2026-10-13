@@ -33,7 +33,13 @@ hours[]{day mon…sun, open HH:MM, close HH:MM, closed}     (close ≤ open = pa
 booking{url, label, form_endpoint, image, image_alt}
 services[]{id, name, category, note, description, durations[], price, image, image_alt}
 staff[]{id, name, specialty, photo, photo_alt}
+locale                             'en' | 'ar' — written by the platform (v2 designs and crm-data.json only; never in the file)
+contract{version: 2, locales[], fields{}, l10n{ar{}}}   contract v2 manifest (§9); read-only for the platform
+ui{…}                              v2: every interface string of the design (§9), editable per spa like any content
 ```
+
+`contract` and `locale` are reserved roots in every version: never website content, never overlaid, never leftovers.
+On v2, `spa.short_name` and `spa.logo_on_light` are website content too (§9); the merge rules of §3 still decide.
 
 ## 3. Field sources and precedence
 
@@ -79,8 +85,16 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
 - **endpoint-only designs**: the live page is byte for byte the stored file and fetches `crm-data.json` itself;
   frames (which have no site URL to fetch from) get one `<script>window.CRM_DATA=…;</script>` before the design's
   first script.
+- **endpoint designs with defaults (R28 P5):** the first `<script type="application/json" id="crm-defaults">{…}</script>`
+  (a JSON object of at most 512 KB; ignored when the design also has a literal) is the design's own data: the slots a
+  spa edits, the base the frames inject (defaults + the spa's content + the CRM), and the base of
+  `crm-data.json?page=` (§5). The live page stays byte for byte and fetches `{{crm_data_url}}`.
+- **contract v2** (§9): the merged JSON carries `locale` (last key); on Arabic pages the design's reviewed
+  `contract.l10n.ar` texts go in first, then the spa's content (content Arabic > l10n > content English > design
+  English; fields declared `locales: ['en']` always English). v1 designs get exactly the R26 / P4 JSON.
 - Per request, no stale cache: content-addressed caches only (parsed design by `file:sha256`, output by
-  `file:sha256 | mode | hash(CRM JSON)`); a CRM change makes a new key.
+  `file:sha256 | mode | hash(CRM JSON)`, plus `| locale` for v2 designs or content, plus a hash of the content
+  values when there is content); a CRM change makes a new key.
 - Template apply, "Save site as template", JSON export and the connector read the **stored** design (the design's
   own defaults).
 - `{{placeholders}}` in CRM text are filled like any design text (JS-string-safe inside the script).
@@ -93,7 +107,12 @@ redirected; a GET of `crm-data.json` on the temporary address 301s to the own do
 `crm-enquiry` is a reserved page slug.
 
 - **`GET|HEAD {site}/crm-data.json`** (+ OPTIONS): the CRM-only contract (§3 without a design; empty lists stay
-  empty; `?lang=ar`). Public fields only. `Access-Control-Allow-Origin: *`, `Cache-Control: no-store`,
+  empty; `?lang=ar`) with `locale` (`en` / `ar`, R28 P5). Public fields only. **`?page={slug}`** (R28 P5): the
+  newest published version of that visible page — an endpoint design's `crm-defaults` (Arabic: its `l10n.ar` first)
+  with the page's website content over it, merged with the CRM, `booking.form_endpoint` for that page; a literal
+  design (it never fetches) or a page without defaults gives the CRM-only reply; an unknown, hidden or invalid page
+  too (still 200). Designs fetch it through the placeholder **`{{crm_data_url}}`** =
+  `{site}/crm-data.json?page={slug}` (+ `&lang=ar` on Arabic pages). `Access-Control-Allow-Origin: *`, `Cache-Control: no-store`,
   `x-robots-tag: noindex`; 120/min per IP; 404 for an unknown site.
 - **`POST {site}/crm-enquiry`** (+ OPTIONS preflight: 204, `*`, `POST, OPTIONS`, `content-type, accept`, 600 s).
   Only for a spa whose live site has a contract design (the newest published version of a visible page, cached by
@@ -131,6 +150,9 @@ redirected; a GET of `crm-data.json` on the temporary address 301s to the own do
 - No contract → the very same string (html-fidelity / html-upload unchanged).
 - literal → only the JSON range differs (e2e `html-crm.spec.ts` compares the page from `<body>` with the literal cut
   out); endpoint-only live page → byte for byte.
+- v1 (R28 P5): the same JSON, keys and cache keys as before (core snapshot test); no `locale`.
+- v2, English, no CRM and no content → the very same string; a v2 Arabic preview → only the literal range changes
+  (the l10n texts and `locale: 'ar'`). The design sets `<html lang>` itself; no RTL (owner D3).
 - Path routing limit: a relative `crm-data.json` from `/s/{slug}` (no trailing slash) resolves to `/s/crm-data.json`
   and misses; production uses host routing, and the literal form (recommended) needs no fetch.
 
@@ -144,3 +166,46 @@ every website: block sites' Team sections follow the same switch (migration 0050
 Team section showed then: active + bookable). Book links: keep your own target (`#book`, the form) in the literal —
 the CRM never sets `booking.url`. Two logos: `logo_on_dark` is kept for the spa the design names; the CRM logo fills
 `logo_on_light`.
+
+## 9. Contract v2 (R28 P5, authoring rules)
+
+A v2 design is one file every spa can use: nothing a visitor reads is fixed in it. Core: `crmContractManifest`,
+`contractField`, `englishOnly`, `systemCopy`, `crmDesignData` (html-crm.ts), `contractLocaleData`, `carryHtmlContent`,
+`htmlDesignOwnPins` (html-content.ts), `htmlDesignReport` (html-report.ts: the upload / Studio report, never blocks).
+
+- **Neutral defaults:** `spa.name` and `spa.short_name` `"Your Spa"`; logos `""`; `contact.whatsapp_number` `""`,
+  `contact.phones` `[]`; `location` all `""`; `hours` `[]`; `staff` `[]`; no real spa's name, phone, address or
+  alt text anywhere (the report warns: `named-spa`, `contact-in-defaults`). A v2 design is never a spa's "own
+  design": an empty CRM value shows nothing (D1); a spa's own look (logos, short name, texts) is its website content.
+- **Ids on every repeatable item** (`{id: "welcome", …}`, unique, `[A-Za-z0-9_-]`): edits follow the item, not its
+  position (`no-ids` otherwise).
+- **`ui{}`:** every interface string the script writes (labels, buttons, form messages, aria labels, the WhatsApp
+  summary), snake_case keys grouped by area (`ui.form.submit`, `ui.hours.days.mon`). Avoid key names ending in or
+  containing `image|photo|logo|still|picture|poster|clip|video` and ending in `accent|colour` — they read as pictures,
+  videos or colours (`ui-kind`).
+- **Markup strings:** `data-crm-text="ui.nav.book"` — the script sets the element's `textContent` from that path (a
+  missing key keeps the markup text, `''` empties it); `data-crm-attr="aria-label:ui.aria.menu_open;
+  placeholder:ui.form.phone_hint"` for attributes (alt / placeholder / aria-label / title, `;`-separated). Keep the
+  English text in the markup so the page looks the same before the script runs. The platform lists these texts with
+  their `path` (a stored page text there becomes that value when a spa moves to the design); a path that is no slot
+  is reported (`bound-no-slot`).
+- **Tokens:** `{time}`, `{name}`, `{city}` (single braces) are filled by the design's script and must stay in every
+  translation; `{{spa_name}}`-style placeholders (double braces) are filled by the platform.
+- **`contract{}`:** `{version: 2, locales: ["en", "ar"], fields: {pattern: {label?, group?, hint?, locales?}}, l10n:
+  {ar: {concrete path: string | string[]}}}`. Field patterns: `journey[].clip` (any item), `ui.wa.*` (any
+  descendant); exact pattern first, then the longest `.*` prefix. `locales: ["en"]` = English on every page (messages
+  the spa's staff read, e.g. `ui.wa.*`, `contact.whatsapp_message`). `l10n.ar` = reviewed Arabic defaults (≤ 2000
+  entries of ≤ 2000 chars); `ui.*` paths that are English-only or have reviewed Arabic are "system copy": Write texts
+  never drafts them and readiness doesn't list them.
+- **`locale`:** written by the platform (`en` / `ar`), never in the file (`locale-in-data`). The design sets only
+  `document.documentElement.lang`, never `dir` (owner D3: Arabic texts in the design's own layout); add Arabic
+  `@font-face` aliases with an Arabic `unicode-range` (`U+0600-06FF, U+0750-077F, U+0870-08FF, U+FB50-FDFF,
+  U+FE70-FEFF`) or a Google Fonts family named "… Arabic" (`no-arabic-font`).
+- **Team cards:** the first element of the `data-crm-list="staff"` template carries `data-if="photo"`
+  (`staff-no-photo-guard`).
+- **Videos:** `clip: null` / `clipMobile: null` on an item declare video slots (a spa uploads an MP4 / WebM ≤ 8 MB or
+  pastes an https link).
+- **Title:** `<title>{{spa_name}}</title>`; the script never sets `document.title` (`fixed-title`).
+- **Endpoint form:** `<script type="application/json" id="crm-defaults">{…}</script>` (≤ 512 KB) + `<meta
+  name="crm-endpoint" content="{{crm_data_url}}">`; the script fetches the meta's URL (it returns the defaults with
+  the spa's content and the CRM). The literal form (`window.CRM_DATA = {…}`) needs no fetch and is recommended.

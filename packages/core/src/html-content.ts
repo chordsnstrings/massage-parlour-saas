@@ -3,7 +3,19 @@
 // design-owned VALUES of the design's `window.CRM_DATA` (story scenes, experience, booking label / picture, message
 // templates …) before the CRM merge. Operational keys (name, phones, address, hours, services, staff …) are the CRM's
 // and never content; layout, CSS and scripts are never touched (R24).
-import { type CrmLocale, crmImageUrl, crmName, htmlCrmContractOf, isOwnDesign, UAE_CITIES } from './html-crm'
+import {
+  type CrmLocale,
+  crmContractManifest,
+  crmContractVersion,
+  crmDesignData,
+  crmImageUrl,
+  crmName,
+  englishOnly,
+  htmlCrmContractOf,
+  isOwnDesign,
+  systemCopy,
+  UAE_CITIES,
+} from './html-crm'
 import {
   HTML_IMAGE_ID,
   HTML_IMAGE_SRC_MAX,
@@ -129,7 +141,14 @@ const OPERATIONAL = [
   'services',
   'staff',
 ] as const
-const isOperational = (plain: string) => OPERATIONAL.some((p) => plain === p || plain.startsWith(`${p}.`))
+/** R28 P5: on contract v2 these are content (a spa's own short name / light logo), the merge still decides. */
+const V2_CONTENT = new Set(['spa.short_name', 'spa.logo_on_light'])
+const isOperational = (plain: string, v2: boolean) =>
+  OPERATIONAL.some((p) => (plain === p || plain.startsWith(`${p}.`)) && !(v2 && V2_CONTENT.has(p)))
+/** Roots the platform owns in every version (the design's manifest, the page locale): never slots, overlays or leftovers. */
+const RESERVED = ['contract', 'locale'] as const
+const isReserved = (plain: string) => RESERVED.some((p) => plain === p || plain.startsWith(`${p}.`))
+const isPlatform = (plain: string, v2: boolean) => isReserved(plain) || isOperational(plain, v2)
 
 const KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 const ITEM_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -171,11 +190,15 @@ function itemIds(list: unknown[]): string[] {
   return ids.every(Boolean) && new Set(ids).size === ids.length ? ids : list.map((_, i) => String(i))
 }
 
-/** Every editable value of a design's `window.CRM_DATA` (operational keys left out), in document order. */
+/**
+ * Every editable value of a design's `window.CRM_DATA` (operational keys and the reserved `contract` / `locale` roots
+ * left out; contract v2 read from the data), in document order.
+ */
 export function htmlContentSlots(data: Record<string, unknown> | null | undefined): HtmlContentSlot[] {
   const out: HtmlContentSlot[] = []
+  const v2 = crmContractVersion(data) === 2
   const walk = (v: unknown, path: string, plain: string, group: string, key: string) => {
-    if (out.length >= MAX_SLOTS || (plain && isOperational(plain))) return
+    if (out.length >= MAX_SLOTS || (plain && isPlatform(plain, v2))) return
     if (Array.isArray(v) && !isStrings(v)) {
       const ids = itemIds(v)
       v.forEach((x, i) => {
@@ -295,7 +318,7 @@ function setAt(node: unknown, segs: Seg[], i: number, v: HtmlContentValue, value
 /**
  * The design's data with a spa's content over it (copy-on-write: untouched subtrees keep their identity, so the
  * serializer's memo still hits; no content → the very same object). Paths that no longer exist in the design, wrong
- * kinds and operational keys are skipped.
+ * kinds, operational keys and the reserved roots are skipped; a v2 field declared English-only always shows English.
  */
 export function overlayHtmlContent(
   data: Record<string, unknown>,
@@ -303,13 +326,46 @@ export function overlayHtmlContent(
   opts: { locale: CrmLocale; filesOrigin?: string },
 ): Record<string, unknown> {
   const entries = Object.entries(htmlContentMap(content))
+  if (!entries.length) return data
+  const manifest = crmContractManifest(data)
   let root = data
   for (const [path, v] of entries) {
     const segs = parsePath(path)
-    if (!segs || isOperational(segs.map((s) => s.key).join('.'))) continue
-    const value = resolve(v, opts.locale, opts.filesOrigin ?? '')
+    if (!segs || isPlatform(segs.map((s) => s.key).join('.'), manifest !== null)) continue
+    const locale = opts.locale === 'ar' && englishOnly(manifest, path) ? 'en' : opts.locale
+    const value = resolve(v, locale, opts.filesOrigin ?? '')
     if (value === undefined) continue
     const next = setAt(root, segs, 0, v, value)
+    if (next) root = next as Record<string, unknown>
+  }
+  return root
+}
+
+/**
+ * R28 P5: a v2 design's data in a locale — on `ar`, each reviewed Arabic default of `contract.l10n.ar` written into
+ * its slot (string → text / longtext, string[] → tags; operational, reserved and English-only paths skipped), copy on
+ * write (the input is never mutated). Other locales, v1 or no l10n → the very same object. The spa's content goes over
+ * it afterwards (content `t.ar` > l10n > content `t.en` > the design's English).
+ */
+export function contractLocaleData(
+  data: Record<string, unknown>,
+  locale: CrmLocale,
+): Record<string, unknown> {
+  if (locale !== 'ar') return data
+  const manifest = crmContractManifest(data)
+  const entries = manifest ? Object.entries(manifest.l10n.ar) : []
+  if (!entries.length) return data
+  const slots = new Map(htmlContentSlots(data).map((x) => [x.path, x]))
+  let root = data
+  for (const [path, v] of entries) {
+    const slot = slots.get(path)
+    if (!slot || englishOnly(manifest, path)) continue
+    const fits =
+      typeof v === 'string' ? slot.kind === 'text' || slot.kind === 'longtext' : slot.kind === 'tags'
+    const segs = fits ? parsePath(path) : null
+    if (!segs) continue
+    const value: HtmlContentValue = typeof v === 'string' ? { t: { en: v } } : { tags: { en: v } }
+    const next = setAt(root, segs, 0, value, v)
     if (next) root = next as Record<string, unknown>
   }
   return root
@@ -545,8 +601,11 @@ export function htmlContentLeftovers(
   const parts = htmlContentParts(content)
   const set = parts.values
   const own = isOwnDesign(data, ctx.spaName)
+  const manifest = crmContractManifest(data)
   const spa = isObj(data?.spa) ? data.spa : {}
-  const designNames = own ? [] : [spa.name, spa.short_name].map(crmName).filter((n) => n.length >= 3)
+  // A v2 design names no spa (neutral defaults; R28 P5).
+  const designNames =
+    own || manifest ? [] : [spa.name, spa.short_name].map(crmName).filter((n) => n.length >= 3)
   const city = crmName(ctx.city)
   const out: HtmlContentLeftover[] = []
   /** A set value whose English is still the design's (an Arabic-only edit keeps it): its English is checked too. */
@@ -561,7 +620,8 @@ export function htmlContentLeftovers(
   for (const slot of slots) {
     if (
       (set[slot.path] && !designEnglish(set[slot.path], slot.value)) ||
-      !['text', 'longtext', 'tags'].includes(slot.kind)
+      !['text', 'longtext', 'tags'].includes(slot.kind) ||
+      systemCopy(manifest, slot.path)
     )
       continue
     const raw = Array.isArray(slot.value) ? slot.value.join(' · ') : String(slot.value ?? '')
@@ -570,11 +630,11 @@ export function htmlContentLeftovers(
     if (reason) out.push({ path: slot.path, reason, text: leftoverText(raw) })
   }
   const paths = new Set(slots.map((s) => s.path))
-  const englishOnly = (t: unknown) =>
+  const englishOnlyText = (t: unknown) =>
     ctx.arabic && isObj(t) && String(t.en ?? '').trim() !== '' && !String(t.ar ?? '').trim()
   for (const [path, v] of Object.entries(set)) {
     if (!paths.has(path)) out.push({ path, reason: 'stale', text: '' })
-    else if (isObj(v) && 't' in v && englishOnly(v.t))
+    else if (isObj(v) && 't' in v && englishOnlyText(v.t) && !englishOnly(manifest, path))
       out.push({ path, reason: 'arabic', text: String(v.t.en) })
   }
   if (!ctx.page) return out
@@ -592,7 +652,7 @@ export function htmlContentLeftovers(
   }
   for (const e of Object.values(parts.texts)) {
     if (texts.get(e.id)?.src !== e.src) out.push({ path: `text:${e.id}`, reason: 'stale', text: '' })
-    else if (englishOnly(e.t))
+    else if (englishOnlyText(e.t))
       out.push({ path: `text:${e.id}`, reason: 'arabic', text: leftoverText(e.t.en ?? '') })
   }
   const images = new Map(ctx.page.images.map((x) => [x.id, x]))
@@ -620,7 +680,7 @@ const cutMark = (v: unknown, clip: number) =>
 
 /** R28 P4: what a spa can change on an HTML-design page (connector get_html_content, Ask AI). */
 export type HtmlContentView = {
-  /** The design has a window.CRM_DATA literal (else no data slots: its words are page texts). */
+  /** The design has its own data — a window.CRM_DATA literal or `crm-defaults` (else no data slots: its words are page texts). */
   crmData: boolean
   /** `cut`: `design` is clipped (`length` = the full one). */
   slots: {
@@ -677,8 +737,8 @@ export function htmlContentView(
   const clip = opts.clip ?? 400
   const group = opts.group ?? ''
   const parts = htmlContentParts(content)
-  const literal = htmlCrmContractOf(html)?.literal
-  const allSlots = htmlContentSlots(literal?.data)
+  const data = crmDesignData(htmlCrmContractOf(html))
+  const allSlots = htmlContentSlots(data)
   const slots =
     part === 'all' || part === 'data'
       ? allSlots
@@ -711,7 +771,7 @@ export function htmlContentView(
   const textIds = new Map(listed.map((x) => [x.id, x.src]))
   const imageIds = new Map(images.map((x) => [x.id, x.src.slice(0, HTML_IMAGE_SRC_MAX)]))
   return {
-    crmData: Boolean(literal),
+    crmData: Boolean(data),
     slots,
     texts: texts.slice(start, start + limit).map((x) => {
       const t = current(x)?.t
@@ -751,4 +811,299 @@ export function htmlContentView(
         .map((p) => `picture:${p.id}`),
     ],
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// R28 P5: a spa's content on a new version of its design (template rollout, owner D4)
+// ---------------------------------------------------------------------------------------------------------------
+
+export type HtmlContentCarryDrop = {
+  /** A data value (`key` = its path), a page text (text id) or a picture (picture id) of the old file. */
+  part: 'value' | 'text' | 'picture'
+  key: string
+  /**
+   * `gone`: the new file has no such slot / text / picture; `kind`: the slot takes another kind of value (or the value
+   * no longer fits it); `bound`: the text is filled from the CRM or the design's script there; `ambiguous`: more
+   * edits than matching texts / pictures; `duplicate`: a value already sets the slot the text became.
+   */
+  reason: 'gone' | 'kind' | 'bound' | 'ambiguous' | 'duplicate'
+  /** ≤ 80 chars of the old value / text / picture src. */
+  text?: string
+}
+export type HtmlContentCarry = {
+  content: HtmlDesignContent | undefined
+  carried: { values: number; texts: number; pictures: number; converted: number }
+  dropped: HtmlContentCarryDrop[]
+}
+
+const carryText = (s: unknown) => {
+  const t = String(s ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t.length > 80 ? `${t.slice(0, 79)}…` : t
+}
+const valueText = (v: unknown): string =>
+  !isObj(v)
+    ? ''
+    : isObj(v.t)
+      ? String(v.t.en ?? v.t.ar ?? '')
+      : isObj(v.tags)
+        ? (isStrings(v.tags.en) ? v.tags.en : []).join(' · ')
+        : String(v.img ?? v.video ?? '')
+
+/** A stored path on another version of the data: `[n]` → the item id now at n when that array has unique ids; null = gone. */
+function remapPath(path: string, data: unknown): string | null {
+  const segs = parsePath(path)
+  if (!segs) return null
+  let node: unknown = data
+  const out: string[] = []
+  for (const seg of segs) {
+    if (!isObj(node) || !Object.hasOwn(node, seg.key)) return null
+    let child: unknown = node[seg.key]
+    let part = seg.key
+    for (const sel of seg.items) {
+      if (!Array.isArray(child) || isStrings(child)) return null
+      const ids = itemIds(child)
+      let at = ids.indexOf(sel)
+      if (at < 0 && /^\d{1,4}$/.test(sel) && Number(sel) < ids.length) at = Number(sel)
+      if (at < 0) return null
+      part += `[${ids[at]}]`
+      child = child[at]
+    }
+    out.push(part)
+    node = child
+  }
+  return out.join('.')
+}
+
+/** The id family of a page text / picture id (`txt` / `attr` / `title` / `meta-description` / `img` / `bg`). */
+const idPrefix = (id: string) => /^(txt|attr|img|bg)-\d+$/.exec(id)?.[1] ?? id
+const idNumber = (id: string) => Number(/\d+$/.exec(id)?.[0] ?? 0)
+const srcKeyOf = (id: string, src: string) => `${idPrefix(id)}\u0000${src}`
+
+/**
+ * Old entries paired with the new file's items of the same id family and `src`: by the entry's rank among the old
+ * file's items of that family + src when the old file is known (`ranks`; entries it doesn't list are gone), else in
+ * id order; each new item is taken once.
+ */
+function pairBySrc<O extends { id: string; src: string }, N extends { id: string }>(
+  old: O[],
+  fresh: N[],
+  srcOf: (n: N) => string,
+  ranks: Map<string, number> | null,
+): { pairs: [O, N][]; gone: O[]; ambiguous: O[] } {
+  const byKey = new Map<string, N[]>()
+  for (const n of fresh) {
+    const k = srcKeyOf(n.id, srcOf(n))
+    const list = byKey.get(k)
+    if (list) list.push(n)
+    else byKey.set(k, [n])
+  }
+  const groups = new Map<string, O[]>()
+  for (const o of old) {
+    const k = srcKeyOf(o.id, o.src)
+    const list = groups.get(k)
+    if (list) list.push(o)
+    else groups.set(k, [o])
+  }
+  const out = { pairs: [] as [O, N][], gone: [] as O[], ambiguous: [] as O[] }
+  for (const [k, list] of groups) {
+    const candidates = byKey.get(k) ?? []
+    if (!candidates.length) {
+      out.gone.push(...list)
+      continue
+    }
+    if (ranks) {
+      for (const o of list) {
+        const r = ranks.get(`${o.id}\u0000${o.src}`)
+        if (r === undefined) out.gone.push(o)
+        else if (r < candidates.length) out.pairs.push([o, candidates[r]!])
+        else out.ambiguous.push(o)
+      }
+      continue
+    }
+    const sorted = [...list].sort((a, b) => idNumber(a.id) - idNumber(b.id))
+    sorted.forEach((o, i) => {
+      if (i < candidates.length) out.pairs.push([o, candidates[i]!])
+      else out.ambiguous.push(o)
+    })
+  }
+  return out
+}
+
+/** Each listed item's rank among the items of its id family + src, in document order (key: `id \0 src`). */
+function srcRanks<T extends { id: string }>(items: T[], srcOf: (x: T) => string): Map<string, number> {
+  const seen = new Map<string, number>()
+  const ranks = new Map<string, number>()
+  for (const x of items) {
+    const k = srcKeyOf(x.id, srcOf(x))
+    const r = seen.get(k) ?? 0
+    seen.set(k, r + 1)
+    ranks.set(`${x.id}\u0000${srcOf(x)}`, r)
+  }
+  return ranks
+}
+
+/**
+ * A spa's content on a new design file (pure): data values whose slot path still exists with the same kind (`[n]`
+ * item selectors become the item's id when the new array has unique ids), page texts and pictures re-pointed at the
+ * new file's texts / pictures with the same id family and `src` (several equal ones paired in id order; `oldHtml`,
+ * when given, pairs them by their position in the old file instead), and page texts the new file binds to a text slot
+ * (`data-crm-text`) turned into that value (the Arabic kept, a missing English filled from the design). Everything
+ * else is listed in `dropped`. The result passes `htmlContentErrors(content, htmlContentSlots(newData))`.
+ */
+export function carryHtmlContent(
+  oldContent: unknown,
+  newData: Record<string, unknown> | null,
+  newHtml: string,
+  oldHtml?: string,
+): HtmlContentCarry {
+  const parts = htmlContentParts(oldContent)
+  const slots = new Map(htmlContentSlots(newData).map((x) => [x.path, x]))
+  const values: Record<string, HtmlContentValue> = {}
+  const texts: Record<string, HtmlContentText> = {}
+  const pictures: Record<string, HtmlContentPicture> = {}
+  const carried = { values: 0, texts: 0, pictures: 0, converted: 0 }
+  const dropped: HtmlContentCarryDrop[] = []
+  const fits = (path: string, value: HtmlContentValue, slot: HtmlContentSlot) =>
+    htmlContentErrors({ v: 1, values: [{ path, value }] }, [slot]).length === 0
+
+  for (const [path, value] of Object.entries(parts.values)) {
+    const to = newData ? remapPath(path, newData) : null
+    const slot = to ? slots.get(to) : undefined
+    const text = carryText(valueText(value))
+    if (!to || !slot) dropped.push({ part: 'value', key: path, reason: 'gone', text })
+    else if (!fits(to, value, slot)) dropped.push({ part: 'value', key: path, reason: 'kind', text })
+    else {
+      values[to] = value
+      carried.values++
+    }
+  }
+
+  const textOf = (e: HtmlContentText) => carryText(e.t.en?.trim() ? e.t.en : (e.t.ar ?? e.src))
+  const t = pairBySrc(
+    Object.values(parts.texts),
+    listHtmlDesignTexts(newHtml),
+    (x) => x.src,
+    oldHtml === undefined ? null : srcRanks(listHtmlDesignTexts(oldHtml), (x) => x.src),
+  )
+  for (const e of t.gone) dropped.push({ part: 'text', key: e.id, reason: 'gone', text: textOf(e) })
+  for (const e of t.ambiguous) dropped.push({ part: 'text', key: e.id, reason: 'ambiguous', text: textOf(e) })
+  for (const [e, n] of t.pairs) {
+    const drop = (reason: HtmlContentCarryDrop['reason']) =>
+      dropped.push({ part: 'text', key: e.id, reason, text: textOf(e) })
+    if (!n.bound) {
+      const entry = { id: n.id, src: e.src, t: e.t }
+      if (textErrors([entry]).length) drop('kind')
+      else {
+        texts[n.id] = entry
+        carried.texts++
+      }
+      continue
+    }
+    const slot = n.path ? slots.get(n.path) : undefined
+    if (!n.path || !slot || (slot.kind !== 'text' && slot.kind !== 'longtext')) {
+      drop('bound')
+      continue
+    }
+    if (values[n.path]) {
+      drop('duplicate')
+      continue
+    }
+    const ar = e.t.ar?.trim() ? e.t.ar : undefined
+    const value: HtmlContentValue = {
+      t: { en: e.t.en?.trim() ? e.t.en : String(slot.value ?? ''), ...(ar ? { ar } : {}) },
+    }
+    if (!fits(n.path, value, slot)) drop('kind')
+    else {
+      values[n.path] = value
+      carried.converted++
+    }
+  }
+
+  const imageSrc = (x: HtmlDesignImage) => x.src.slice(0, HTML_IMAGE_SRC_MAX)
+  const p = pairBySrc(
+    Object.values(parts.pictures),
+    listHtmlDesignImages(newHtml),
+    imageSrc,
+    oldHtml === undefined ? null : srcRanks(listHtmlDesignImages(oldHtml), imageSrc),
+  )
+  for (const e of p.gone) dropped.push({ part: 'picture', key: e.id, reason: 'gone', text: carryText(e.src) })
+  for (const e of p.ambiguous)
+    dropped.push({ part: 'picture', key: e.id, reason: 'ambiguous', text: carryText(e.src) })
+  for (const [e, n] of p.pairs) {
+    const entry = { id: n.id, src: e.src, img: e.img }
+    if (pictureErrors([entry]).length)
+      dropped.push({ part: 'picture', key: e.id, reason: 'kind', text: carryText(e.src) })
+    else {
+      pictures[n.id] = entry
+      carried.pictures++
+    }
+  }
+  return { content: htmlContentFrom({ values, texts, pictures }), carried, dropped }
+}
+
+export type HtmlDesignOwnPins = { values: HtmlContentEntry[]; files: { path: string; dataUrl: string }[] }
+
+/** The old data's value for a new slot path: items by the same id when the old array has it, else the same position. */
+function atSamePosition(oldData: unknown, newData: unknown, path: string): unknown {
+  const segs = parsePath(path)
+  if (!segs) return undefined
+  let o: unknown = oldData
+  let n: unknown = newData
+  for (const seg of segs) {
+    if (!isObj(n) || !isObj(o) || !Object.hasOwn(o, seg.key)) return undefined
+    n = n[seg.key]
+    o = o[seg.key]
+    for (const sel of seg.items) {
+      if (!Array.isArray(n) || !Array.isArray(o)) return undefined
+      const at = itemIds(n).indexOf(sel)
+      if (at < 0) return undefined
+      const same = itemIds(o).indexOf(sel)
+      n = n[at]
+      o = o[same >= 0 ? same : at]
+    }
+  }
+  return o
+}
+
+/**
+ * A spa's own v1 look on a neutral v2 design (R28 P5 rollout): only when `oldData` was made for the spa
+ * (`isOwnDesign`) and `newData` is contract v2. Every v2 slot whose v1 value (same item id, else the same position)
+ * differs becomes a content value — texts / focus / colours `{t: {en}}`, tags, switches, https / `/files` pictures
+ * `{img}`; an embedded `data:image/*` picture goes to `files` (the caller stores it and writes `{img: '/files/{id}'}`).
+ * `spa.short_name` only when the old one names the spa. Never operational, reserved, `ui.*` or `contract` paths, nor
+ * a path `keep` (the carried content) already sets.
+ */
+export function htmlDesignOwnPins(
+  oldData: Record<string, unknown> | null,
+  newData: Record<string, unknown> | null,
+  tenantName: string,
+  keep?: unknown,
+): HtmlDesignOwnPins {
+  const out: HtmlDesignOwnPins = { values: [], files: [] }
+  if (!oldData || !newData || crmContractVersion(newData) !== 2 || !isOwnDesign(oldData, tenantName))
+    return out
+  const kept = new Set(Object.keys(htmlContentMap(keep)))
+  for (const slot of htmlContentSlots(newData)) {
+    const root = slot.path.split(/[.[]/)[0]
+    if (kept.has(slot.path) || root === 'ui' || root === 'contract') continue
+    const old = atSamePosition(oldData, newData, slot.path)
+    if (old === undefined || JSON.stringify(old) === JSON.stringify(slot.value)) continue
+    if (slot.path === 'spa.short_name' && !isOwnDesign({ spa: { short_name: old } }, tenantName)) continue
+    let value: HtmlContentValue | null = null
+    if (slot.kind === 'image' || slot.kind === 'video') {
+      if (typeof old !== 'string') continue
+      if (slot.kind === 'image' && /^data:image\/[a-z0-9.+-]+[;,]/i.test(old)) {
+        out.files.push({ path: slot.path, dataUrl: old })
+        continue
+      }
+      if (contentUrlOk(old)) value = slot.kind === 'image' ? { img: old } : { video: old }
+    } else if (slot.kind === 'tags') value = isStrings(old) ? { tags: { en: old } } : null
+    else if (slot.kind === 'bool') value = typeof old === 'boolean' ? { on: old } : null
+    else value = typeof old === 'string' ? { t: { en: old } } : null
+    if (value && htmlContentErrors({ v: 1, values: [{ path: slot.path, value }] }, [slot]).length === 0)
+      out.values.push({ path: slot.path, value })
+  }
+  return out
 }

@@ -727,6 +727,11 @@ export type HtmlDesignText = {
   boundBy?: 'crm' | 'script'
   /** Why bound: 'data-crm=<path>' | 'data-item…' | 'data-book-service' | '#<id>' | 'document.title'. */
   binding?: string
+  /**
+   * R28 P5 (contract v2): the CRM_DATA slot path the design writes here — a text run's own or inherited
+   * `data-crm-text`, an attribute's `data-crm-attr="aria-label:ui.aria.menu; placeholder:ui.form.hint"` entry.
+   */
+  path?: string
 }
 /**
  * A stored page text (content.texts entry): what the render applies. Either language may be missing or blank (an
@@ -795,8 +800,29 @@ type TextSite = {
   heading?: boolean
   bound?: boolean
   boundBy?: 'crm' | 'script'
+  path?: string
 }
-type OpenElement = { name: string; id?: string; binding?: string }
+/** Listing only: `textPath` = own or inherited `data-crm-text`; `attrPaths` = own `data-crm-attr` (attribute → path). */
+type OpenElement = {
+  name: string
+  id?: string
+  binding?: string
+  textPath?: string
+  attrPaths?: Map<string, string>
+}
+
+/** `data-crm-attr="aria-label:ui.aria.menu_open; placeholder:ui.form.phone_hint"` (page-text attributes only). */
+function crmAttrPaths(value: string): Map<string, string> | undefined {
+  const out = new Map<string, string>()
+  for (const part of value.split(';')) {
+    const colon = part.indexOf(':')
+    if (colon < 0) continue
+    const attr = part.slice(0, colon).trim().toLowerCase()
+    const path = part.slice(colon + 1).trim()
+    if (TEXT_ATTRS.has(attr) && path && !out.has(attr)) out.set(attr, path)
+  }
+  return out.size ? out : undefined
+}
 
 const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 /** HTML whitespace collapsed (as the page shows it); U+00A0 stays — it is the design's own character. */
@@ -1159,6 +1185,13 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
     if (listing) {
       if (site.kind === 'text') s.owners = stack.flatMap((e) => (e.id ? [e.id] : []))
       s.binding = owner?.binding
+      const path =
+        site.kind === 'text'
+          ? owner?.textPath
+          : site.kind === 'attr' && site.attr
+            ? owner?.attrPaths?.get(site.attr)
+            : undefined
+      if (path) s.path = path
       s.group = site.kind === 'title' || site.kind === 'meta' ? -1 : (openGroups.at(-1) ?? -1)
       s.heading = site.kind === 'text' && stack.some((e) => HEADINGS.has(e.name))
     }
@@ -1230,6 +1263,13 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
       const value = own && own.start >= 0 ? textOf(html.slice(own.start, own.end)) : ''
       el.id = id || undefined
       el.binding = own ? (value ? `${own.name}=${value}` : own.name) : stack.at(-1)?.binding
+      const textPath = attrValue(
+        html,
+        attrs.find((x) => x.name === 'data-crm-text'),
+      ).trim()
+      el.textPath = textPath || stack.at(-1)?.textPath
+      const attrPaths = attrs.find((x) => x.name === 'data-crm-attr')
+      if (attrPaths && attrPaths.start >= 0) el.attrPaths = crmAttrPaths(attrValue(html, attrPaths))
       if (TEXT_GROUPS.has(name)) {
         const c = (counts.get(name) ?? 0) + 1
         counts.set(name, c)
@@ -1388,6 +1428,7 @@ export function listHtmlDesignTexts(html: string): HtmlDesignText[] {
     bound: Boolean(s.bound),
     ...(s.boundBy ? { boundBy: s.boundBy } : {}),
     ...(s.binding ? { binding: s.binding } : {}),
+    ...(s.path ? { path: s.path } : {}),
   }))
 }
 

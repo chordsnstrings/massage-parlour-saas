@@ -673,6 +673,32 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     5, "Open Website content" selects the block; never sent to `publishCheckedAction`). Readiness: core `htmlContentLeftovers(data, content, {spaName,
     city, arabic})` + `isOwnDesign` / `UAE_CITIES` (html-crm.ts). Not a CONTENT_KEYS prop (Section's `content` slot
     shares the name): editing it needs `site.design` (super-admins).
+    **Contract v2 (P5, core; authoring rules: `docs/design/html-crm-contract.md` §9):** html-crm.ts
+    `crmContractManifest(data)` (the data's `contract{version ≥ 2, locales, fields, l10n.ar}`, invalid parts dropped,
+    memoised per contract object; null = v1), `crmContractVersion`, `contractField(m, path)` (exact pattern
+    `journey[].clip` first, then the longest `.*` prefix), `englishOnly`, `systemCopy` (`ui.*` English-only or with
+    `l10n.ar`), `crmDesignData(found)` (literal, else an endpoint design's `crm-defaults`); `htmlCrmContractOf` adds
+    `defaults` (first `<script type="application/json" id="crm-defaults">` JSON object ≤ `CRM_DEFAULTS_MAX` 512 KB,
+    only without a literal), `version`, `manifest`. `isOwnDesign` is false on v2; `mergeCrmContract(d, crm, {locale})`
+    on v2: no own-design fallbacks (D1 everywhere), `logo_on_dark` data first, `logo_on_light` CRM first, `locale` as
+    the last key (v2 and `design: null` only; v1 JSON unchanged — snapshot test). html-content.ts: reserved roots
+    `contract` / `locale` (never slots, overlays or leftovers); on v2 `spa.short_name` / `spa.logo_on_light` are slots;
+    `overlayHtmlContent` resolves English-only paths in English; `contractLocaleData(data, 'ar')` writes `l10n.ar`
+    into matching text / tags slots copy-on-write (same object for en / v1 / no l10n); leftovers on v2 name no spa
+    and skip system copy; `htmlContentView` reads `crmDesignData`. `carryHtmlContent(old, newData, newHtml,
+    oldHtml?)`: values by remapped path (`[n]` → the item id when the new array has ids) + same kind; page texts /
+    pictures re-pointed by id family + `src` (equal ones paired by their position in `oldHtml`, else in id order;
+    extra → `ambiguous`); a text the new file binds with `data-crm-text` to a text slot → that value (Arabic kept,
+    missing English from the design; a set value wins → `duplicate`); every drop listed (`gone` / `kind` / `bound` /
+    `ambiguous` / `duplicate`, ≤ 80 chars); output passes `htmlContentErrors`. `htmlDesignOwnPins(oldData, newData,
+    tenant, keep)`: own v1 design → v2 only; v2 slots whose v1 value differs → content (`data:image` → `files` for the
+    caller to store), never `ui.*` / contract / operational / kept paths, `short_name` only when it names the spa.
+    html-design.ts: `HtmlDesignText.path` (own or inherited `data-crm-text`; per attribute from `data-crm-attr="attr:path;
+    …"`); ids / bindings unchanged (snapshot). html-report.ts: `htmlDesignReport(html)` (contract none / v1 / v2, mode,
+    locales, slot counts by kind + `ui`, page texts total / editable / crm / script / with a path, pictures, ≤ 20
+    warnings: not-json, locale-in-data, no-ids, staff-no-photo-guard, named-spa, contact-in-defaults, fixed-title,
+    no-arabic-font, bound-no-slot, ui-kind, no-ui, defaults-too-large, embeds; never throws, ~50 ms on the 4.6 MB BE
+    RELAX file) + `htmlDesignReportLine`.
   - **Fill the CRM from the design (R28 P3):** core `html-crm-seed.ts` (`crmMatchScore`, `designSeedPairs`, pair ≥
     `SEED_MATCH_MIN` 0.5) · services `catalog.ts` (`saveService` / `setServiceImage` / `setStaffPhoto` +
     `NEW_SERVICE_DEFAULTS` / `IMAGE_URL_PATTERN`: the rules the CRM's own service + staff actions use) ·

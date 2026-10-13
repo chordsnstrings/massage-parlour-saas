@@ -1,9 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { crmFeedPath } from '../src/hosts'
 import {
   buildCrmContract,
+  CRM_DEFAULTS_MAX,
   type CrmContractSource,
+  contractField,
   crmAddress,
+  crmContractManifest,
+  crmContractVersion,
+  crmDesignData,
   crmHours,
   crmImageUrl,
   crmJsonMemo,
@@ -11,9 +17,12 @@ import {
   crmScriptJson,
   crmSlug,
   cyrb53,
+  englishOnly,
   htmlCrmContractOf,
+  isOwnDesign,
   mergeCrmContract,
   spliceCrmData,
+  systemCopy,
   uaePhoneDisplay,
 } from '../src/html-crm'
 import { apiSecurityHeaders } from '../src/security-headers'
@@ -478,6 +487,25 @@ describe('mergeCrmContract', () => {
     expect(byAr.services[0].note).toBe('ar note')
   })
 
+  it('v1 designs merge exactly as before P5 (snapshot)', () => {
+    const fixtureLiteral = htmlCrmContractOf(
+      readFileSync(new URL('../../../apps/web/e2e/fixtures/crm-contract.html', import.meta.url), 'utf8'),
+    )!.literal!.data
+    const other = buildCrmContract(
+      source({ spa: { name: 'Seaside Test Spa', logoUrl: null }, branches: [], services: [], staff: [] }),
+      { locale: 'ar' },
+    )
+    const crm = buildCrmContract(source(), { locale: 'en' })
+    const out = [
+      mergeCrmContract(design, crm),
+      mergeCrmContract(design, other),
+      mergeCrmContract(null, crm),
+      mergeCrmContract(fixtureLiteral, crm),
+      mergeCrmContract(fixtureLiteral, other),
+    ].map((m) => JSON.stringify(m))
+    expect(out).toMatchSnapshot()
+  })
+
   it('without a design gives the CRM alone (empty lists stay empty)', () => {
     const m = mergeCrmContract(null, buildCrmContract(source({ staff: [] }), { locale: 'en' })) as Json
     expect(m.staff).toEqual([])
@@ -529,5 +557,156 @@ describe('crmScriptJson + splice', () => {
     expect(spliceCrmData(ep, epFound, '{}', { inject: false })).toBe(ep)
     const framed = spliceCrmData(ep, epFound, '{"a":1}', { inject: true })
     expect(framed).toContain('<script>window.CRM_DATA={"a":1};</script><script>render()')
+  })
+})
+
+describe('contract v2 (R28 P5)', () => {
+  const manifest = {
+    version: 2,
+    locales: ['en', 'ar', 'fr'],
+    fields: {
+      'ui.wa.*': { locales: ['en'], group: 'WhatsApp message to the spa' },
+      'journey[].clip': { label: 'Video (desktop)', bogus: 1 },
+      'ui.*': { group: 'Interface texts' },
+      'bad key!': { label: 'x' },
+      'ui.nav.book': 'not an object',
+    },
+    l10n: { ar: { 'ui.nav.book': 'احجز', 'journey[welcome].tags': ['هدوء'], 'ui.n': 3, 'ui.x': [1] } },
+  }
+  const v2 = (spa: Record<string, unknown> = {}) => ({
+    contract: manifest,
+    spa: { name: 'Your Spa', short_name: 'Your Spa', logo_on_dark: '', logo_on_light: '', ...spa },
+    contact: { whatsapp_number: '+971500000009', phones: [{ number: '+971500000009', label: 'Design' }] },
+    location: { address_line1: 'Design street', city: 'Dubai' },
+    hours: [{ day: 'mon', open: '09:00', close: '10:00', closed: false }],
+    services: [{ id: 'x', name: 'Design treatment' }],
+    ui: { nav: { book: 'Book' } },
+  })
+  const empty = () =>
+    buildCrmContract(
+      source({
+        spa: { name: 'Be Relax Massage Center and Spa', logoUrl: null },
+        branches: [],
+        services: [],
+        staff: [],
+      }),
+      { locale: 'en' },
+    )
+
+  it('parses the manifest (invalid parts dropped) and reads junk as v1', () => {
+    const m = crmContractManifest({ contract: manifest })!
+    expect(m.version).toBe(2)
+    expect(m.locales).toEqual(['en', 'ar'])
+    expect(Object.keys(m.fields)).toEqual(['ui.wa.*', 'journey[].clip', 'ui.*'])
+    expect(m.fields['journey[].clip']).toEqual({ label: 'Video (desktop)' })
+    expect(m.l10n.ar).toEqual({ 'ui.nav.book': 'احجز', 'journey[welcome].tags': ['هدوء'] })
+    expect(crmContractManifest({ contract: { version: 7 } })).toEqual({
+      version: 2,
+      locales: ['en'],
+      fields: {},
+      l10n: { ar: {} },
+    })
+    for (const junk of [
+      null,
+      'x',
+      {},
+      { contract: [] },
+      { contract: { version: 1 } },
+      { contract: { version: '2' } },
+    ])
+      expect(crmContractVersion(junk)).toBe(1)
+    expect(crmContractVersion({ contract: manifest })).toBe(2)
+  })
+
+  it('looks fields up by exact pattern, then the longest .* prefix', () => {
+    const m = crmContractManifest({ contract: manifest })
+    expect(contractField(m, 'journey[welcome].clip')?.label).toBe('Video (desktop)')
+    expect(contractField(m, 'ui.wa.intro')?.group).toBe('WhatsApp message to the spa')
+    expect(contractField(m, 'ui.nav.book')?.group).toBe('Interface texts')
+    expect(contractField(m, 'ui')).toBeNull()
+    expect(contractField(null, 'ui.nav.book')).toBeNull()
+    expect(englishOnly(m, 'ui.wa.intro')).toBe(true)
+    expect(englishOnly(m, 'ui.nav.book')).toBe(false)
+    expect(systemCopy(m, 'ui.wa.intro')).toBe(true) // English-only
+    expect(systemCopy(m, 'ui.nav.book')).toBe(true) // reviewed Arabic
+    expect(systemCopy(m, 'ui.nav.journey')).toBe(false) // no Arabic yet: Write texts drafts it
+    expect(systemCopy(m, 'journey[welcome].tags')).toBe(false) // not ui.*
+    expect(systemCopy(null, 'ui.nav.book')).toBe(false)
+  })
+
+  it('finds crm-defaults only without a literal (≤ 512 KB) and reads its version', () => {
+    const defaults = (body: string) =>
+      `<html><head><meta name="crm-endpoint" content="{{crm_data_url}}"><script type="application/json" id="crm-defaults">\n${body}\n</script></head><body><script>run()</script></body></html>`
+    const json = JSON.stringify(v2())
+    const html = defaults(json)
+    const found = htmlCrmContractOf(html)!
+    expect(found.mode).toBe('endpoint')
+    expect(found.literal).toBeNull()
+    expect(html.slice(found.defaults!.start, found.defaults!.end)).toBe(json)
+    expect(found.version).toBe(2)
+    expect(found.manifest?.locales).toEqual(['en', 'ar'])
+    expect(crmDesignData(found)).toEqual(v2())
+    expect(
+      htmlCrmContractOf(defaults(JSON.stringify({ a: 'x'.repeat(CRM_DEFAULTS_MAX) })))!.defaults,
+    ).toBeNull()
+    expect(htmlCrmContractOf(defaults('[1]'))!.defaults).toBeNull()
+    expect(htmlCrmContractOf(defaults(JSON.stringify({ spa: {} })))!.version).toBe(1)
+    const both = htmlCrmContractOf(
+      `${defaults(json)}<script>window.CRM_DATA = ${JSON.stringify({ spa: { name: 'L' } })};</script>`,
+    )!
+    expect(both.mode).toBe('literal')
+    expect(both.defaults).toBeNull()
+    expect(both.version).toBe(1)
+    expect(crmDesignData(both)).toEqual({ spa: { name: 'L' } })
+    // A JS-typed or id-less JSON script is not the defaults.
+    expect(htmlCrmContractOf(html.replace('id="crm-defaults"', 'id="other"'))!.defaults).toBeNull()
+  })
+
+  it('a v2 design is never the spa’s own, even when it names the tenant (D1 empties apply)', () => {
+    const d = v2({ name: 'Be Relax', short_name: 'Be Relax' })
+    expect(isOwnDesign(d, 'Be Relax Massage Center and Spa')).toBe(false)
+    const m = mergeCrmContract(d, empty()) as Json
+    expect(m.contact.phones).toEqual([])
+    expect(m.contact.whatsapp_number).toBe('')
+    expect(m.location).toEqual({ address_line1: '', address_line2: '', city: '', country: '', maps_url: '' })
+    expect(m.hours).toEqual([])
+    expect(m.services).toEqual([])
+    expect(m.spa.short_name).toBe('Be Relax') // still a whole-word start of the tenant name
+    expect(m.ui).toBe(d.ui)
+    expect(m.contract).toBe(d.contract)
+  })
+
+  it('v2 logos and short name: dark = the data first, light = the CRM first', () => {
+    const crm = buildCrmContract(source(), { locale: 'en' })
+    const own = v2({
+      logo_on_dark: 'https://cdn.test/dark.png',
+      logo_on_light: 'https://cdn.test/light.png',
+      short_name: 'Be Relax',
+    })
+    const m = mergeCrmContract(own, crm) as Json
+    expect(m.spa.logo_on_dark).toBe('https://cdn.test/dark.png')
+    expect(m.spa.logo_on_light).toBe('https://app.test/files/logo/logo.png')
+    expect(m.spa.short_name).toBe('Be Relax')
+    const noCrmLogo = mergeCrmContract(own, empty()) as Json
+    expect(noCrmLogo.spa.logo_on_light).toBe('https://cdn.test/light.png')
+    const neutral = mergeCrmContract(v2(), crm) as Json
+    expect(neutral.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
+    expect(neutral.spa.short_name).toBe('Be Relax Massage Center and Spa') // "Your Spa" never names it
+  })
+
+  it('writes the locale last for v2 designs and the CRM alone, never for v1', () => {
+    const crm = buildCrmContract(source(), { locale: 'ar' })
+    const d = { ...v2(), locale: 'fr' }
+    const m = mergeCrmContract(d, crm, { locale: 'ar' }) as Json
+    expect(m.locale).toBe('ar')
+    expect(Object.keys(mergeCrmContract(v2(), crm, { locale: 'en' })).at(-1)).toBe('locale')
+    expect((mergeCrmContract(null, crm, { locale: 'ar' }) as Json).locale).toBe('ar')
+    const v1 = { spa: { name: 'Old', short_name: 'Be Relax' }, journey: [{ id: 'welcome' }] }
+    expect('locale' in mergeCrmContract(v1, crm, { locale: 'ar' })).toBe(false)
+    expect(JSON.stringify(mergeCrmContract(v1, crm, { locale: 'ar' }))).toBe(
+      JSON.stringify(mergeCrmContract(v1, crm)),
+    )
+    expect((mergeCrmContract({ ...v1, locale: 'xx' }, crm, { locale: 'ar' }) as Json).locale).toBe('xx') // v1: as before
+    expect((mergeCrmContract(d, crm) as Json).locale).toBe('fr') // no platform locale given: the data's
   })
 })

@@ -25,7 +25,119 @@ export type HtmlCrmContract = {
   endpoint: string | null
   /** Where an injected `<script>window.CRM_DATA=…</script>` goes (frames of an endpoint-only design). */
   inject: number
+  /**
+   * R28 P5: an endpoint design's own data — the first `<script type="application/json" id="crm-defaults">` whose
+   * body is a JSON object of at most CRM_DEFAULTS_MAX chars (its JSON range + value); null with a literal.
+   */
+  defaults: { start: number; end: number; data: Record<string, unknown> } | null
+  /** R28 P5: 2 = the design's data declares `contract{version: 2, …}` (docs §9), else 1. */
+  version: 1 | 2
+  manifest: CrmContractManifest | null
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// R28 P5: contract v2 (the design's `contract{}` manifest)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The largest `crm-defaults` body read (UTF-16 chars); a larger one is ignored. */
+export const CRM_DEFAULTS_MAX = 512 * 1024
+export type CrmContractField = { label?: string; group?: string; hint?: string; locales?: CrmLocale[] }
+export type CrmContractManifest = {
+  version: 2
+  /** Default ['en']. */
+  locales: CrmLocale[]
+  /** Keys: slot path patterns — `[]` = any item ('journey[].clip'), trailing `.*` = any descendant ('ui.wa.*'). */
+  fields: Record<string, CrmContractField>
+  /** Reviewed Arabic defaults by CONCRETE slot path ('ui.form.submit', 'journey[welcome].tags'): string | string[]. */
+  l10n: { ar: Record<string, string | string[]> }
+}
+
+const L10N_MAX = 2000
+const L10N_TEXT_MAX = 2000
+const FIELD_PATH = /^[A-Za-z0-9_.[\]*-]{1,400}$/
+const localesOf = (v: unknown): CrmLocale[] =>
+  Array.isArray(v) ? [...new Set(v.filter((l): l is CrmLocale => l === 'en' || l === 'ar'))] : []
+const manifests = new WeakMap<object, CrmContractManifest | null>()
+
+/**
+ * The design data's `contract{}` (v2 manifest), or null (v1: none, or a version below 2). Never throws; invalid parts
+ * are dropped (≤ 2000 l10n entries, each ≤ 2000 chars; version ≥ 2 is read as 2). Memoised per contract object (design
+ * data is never mutated).
+ */
+export function crmContractManifest(data: unknown): CrmContractManifest | null {
+  const c = isPlainObject(data) ? data.contract : undefined
+  if (!isPlainObject(c)) return null
+  const hit = manifests.get(c)
+  if (hit !== undefined) return hit
+  let out: CrmContractManifest | null = null
+  if (typeof c.version === 'number' && c.version >= 2) {
+    const fields: Record<string, CrmContractField> = {}
+    for (const [k, v] of Object.entries(isPlainObject(c.fields) ? c.fields : {})) {
+      if (!FIELD_PATH.test(k) || !isPlainObject(v)) continue
+      const f: CrmContractField = {}
+      for (const key of ['label', 'group', 'hint'] as const) {
+        const x = v[key]
+        if (typeof x === 'string' && x.trim() && x.length <= 200) f[key] = x
+      }
+      if (Array.isArray(v.locales)) f.locales = localesOf(v.locales)
+      fields[k] = f
+    }
+    const ar: Record<string, string | string[]> = {}
+    const l10n = isPlainObject(c.l10n) && isPlainObject(c.l10n.ar) ? c.l10n.ar : {}
+    let n = 0
+    for (const [k, v] of Object.entries(l10n)) {
+      if (n >= L10N_MAX) break
+      if (k.length > 400) continue
+      if (typeof v === 'string' && v.length <= L10N_TEXT_MAX) ar[k] = v
+      else if (
+        Array.isArray(v) &&
+        v.length <= 50 &&
+        v.every((x) => typeof x === 'string' && x.length <= L10N_TEXT_MAX)
+      )
+        ar[k] = [...(v as string[])]
+      else continue
+      n++
+    }
+    const locales = localesOf(c.locales)
+    out = { version: 2, locales: locales.length ? locales : ['en'], fields, l10n: { ar } }
+  }
+  manifests.set(c, out)
+  return out
+}
+
+/** 2 = the data declares a v2 manifest, else 1. */
+export const crmContractVersion = (data: unknown): 1 | 2 => (crmContractManifest(data) ? 2 : 1)
+
+/** A manifest field for a concrete slot path: exact pattern first ('journey[welcome].clip' → 'journey[].clip'), then the longest `.*` prefix. */
+export function contractField(m: CrmContractManifest | null, path: string): CrmContractField | null {
+  if (!m) return null
+  const pattern = path.replace(/\[[^\]]*\]/g, '[]')
+  const exact = (k: string) => (Object.hasOwn(m.fields, k) ? m.fields[k]! : null)
+  const hit = exact(path) ?? exact(pattern)
+  if (hit) return hit
+  const parts = pattern.split('.')
+  for (let k = parts.length - 1; k >= 1; k--) {
+    const prefix = exact(`${parts.slice(0, k).join('.')}.*`)
+    if (prefix) return prefix
+  }
+  return null
+}
+
+/** The field is declared for some locales and Arabic isn't one of them (it always shows its English). */
+export const englishOnly = (m: CrmContractManifest | null, path: string): boolean => {
+  const locales = contractField(m, path)?.locales
+  return Boolean(locales && !locales.includes('ar'))
+}
+
+/** `ui.*` system copy: English-only, or covered by l10n.ar. Write texts never writes it; leftovers / the report skip it. */
+export const systemCopy = (m: CrmContractManifest | null, path: string): boolean =>
+  m !== null &&
+  (path.startsWith('ui.') || path.startsWith('ui[')) &&
+  (englishOnly(m, path) || Object.hasOwn(m.l10n.ar, path))
+
+/** The design's own data: the literal's, else an endpoint design's `crm-defaults`. */
+export const crmDesignData = (c: HtmlCrmContract | null | undefined): Record<string, unknown> | null =>
+  c?.literal?.data ?? c?.defaults?.data ?? null
 
 /** Raw-text elements: their bodies are never tags (same set as the placeholder tokenizer). */
 const RAW_TEXT = new Set([
@@ -52,6 +164,21 @@ const attrDecode = (s: string) =>
 const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** A `crm-defaults` body: a JSON object (whitespace around it) of at most CRM_DEFAULTS_MAX chars. */
+function defaultsIn(html: string, from: number, to: number): HtmlCrmContract['defaults'] {
+  let start = from
+  let end = to
+  while (start < end && isWs(html[start])) start++
+  while (end > start && isWs(html[end - 1])) end--
+  if (end - start > CRM_DEFAULTS_MAX || html[start] !== '{' || html[end - 1] !== '}') return null
+  try {
+    const data: unknown = JSON.parse(html.slice(start, end))
+    return isPlainObject(data) ? { start, end, data } : null
+  } catch {
+    return null
+  }
+}
 
 /** `window.CRM_DATA = {json};` as the whole body of a script (leading/trailing whitespace, one optional `;`). */
 function literalIn(html: string, from: number, to: number): HtmlCrmContract['literal'] {
@@ -84,6 +211,7 @@ function literalIn(html: string, from: number, to: number): HtmlCrmContract['lit
 export function htmlCrmContractOf(html: string): HtmlCrmContract | null {
   if (!html.includes('CRM_DATA') && !/crm-endpoint/i.test(html)) return null
   let literal: HtmlCrmContract['literal'] = null
+  let defaults: HtmlCrmContract['defaults'] = null
   let endpoint: string | null = null
   let firstScript = -1
   let headOpen = -1
@@ -135,15 +263,22 @@ export function htmlCrmContractOf(html: string): HtmlCrmContract | null {
       const type = val('type').toLowerCase().split(';')[0]!.trim()
       if (!literal && JS_TYPE.test(type) && !attrs.some((a) => a.name === 'src'))
         literal = literalIn(html, end, stop)
+      else if (!defaults && type === 'application/json' && val('id') === 'crm-defaults')
+        defaults = defaultsIn(html, end, stop)
     }
     i = stop
   }
   if (!literal && endpoint === null) return null
+  const own = literal ? null : defaults
+  const manifest = crmContractManifest(literal?.data ?? own?.data)
   return {
     mode: literal ? 'literal' : 'endpoint',
     literal,
     endpoint,
     inject: firstScript >= 0 ? firstScript : headOpen >= 0 ? headOpen : htmlOpen >= 0 ? htmlOpen : 0,
+    defaults: own,
+    version: manifest ? 2 : 1,
+    manifest,
   }
 }
 
@@ -451,8 +586,12 @@ function namesSpa(part: unknown, name: string) {
   return s !== '' && (full === s || full.startsWith(`${s} `))
 }
 
-/** Whether a design was made for the spa `name` (its own `spa.name` or `spa.short_name` names it). */
+/**
+ * Whether a design was made for the spa `name` (its own `spa.name` or `spa.short_name` names it). A contract v2
+ * design never is (R28 P5: its defaults are neutral; a spa's own look is its website content).
+ */
 export function isOwnDesign(design: Record<string, unknown> | null | undefined, name: string): boolean {
+  if (crmContractVersion(design) === 2) return false
   const spa = obj(obj(design).spa)
   return namesSpa(spa.name, name) || namesSpa(spa.short_name, name)
 }
@@ -468,9 +607,17 @@ export function isOwnDesign(design: Record<string, unknown> | null | undefined, 
  * after that are left out (R28 D2: no empty frames; the therapist select follows). Everything else (booking url,
  * journey, experience, story texts, message templates, booking label/image, unknown keys) is the design's, kept by
  * reference (the serializer memoises it). `design` null = the CRM alone.
+ * R28 P5, contract v2 (`contract{version: 2}`): never the spa's "own design" (D1 applies everywhere); `logo_on_dark`
+ * = the data's (the spa's website content) first, then the CRM's; `logo_on_light` = the CRM's, then the data's;
+ * `opts.locale` is written as `locale` (last key) for v2 designs and the CRM alone, never for v1 (byte-for-byte R26).
  */
-export function mergeCrmContract(design: Record<string, unknown> | null, crm: CrmContract) {
+export function mergeCrmContract(
+  design: Record<string, unknown> | null,
+  crm: CrmContract,
+  opts: { locale?: CrmLocale } = {},
+) {
   const d = obj(design)
+  const v2 = crmContractVersion(d) === 2
   const dSpa = obj(d.spa)
   const dContact = obj(d.contact)
   const dLoc = obj(d.location)
@@ -482,7 +629,7 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
   const name = crm.spa.name || str(dSpa.name)
   // The design was made for this spa (its name or short name names the tenant): its logo for dark backgrounds is this
   // spa's own variant, which the CRM (one logo, made for the light-only CRM) doesn't have. Another spa's never shows.
-  const ownDesign = namesSpa(dSpa.name, name) || namesSpa(dSpa.short_name, name)
+  const ownDesign = !v2 && (namesSpa(dSpa.name, name) || namesSpa(dSpa.short_name, name))
   // The design's own value when the CRM has none — only on this spa's own design (R28 D1).
   const own = <T>(v: T, empty: T): T => (ownDesign ? v : empty)
   const spa = {
@@ -494,8 +641,8 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
     area_label: crm.spa.area_explicit
       ? crm.spa.area_label
       : (ownDesign && str(dSpa.area_label)) || crm.spa.area_label,
-    logo_on_dark: (ownDesign && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
-    logo_on_light: crm.spa.logo_on_light || own(str(dSpa.logo_on_light), ''),
+    logo_on_dark: ((ownDesign || v2) && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
+    logo_on_light: crm.spa.logo_on_light || (v2 ? str(dSpa.logo_on_light) : own(str(dSpa.logo_on_light), '')),
     timezone: crm.spa.timezone,
     currency: crm.spa.currency,
   }
@@ -573,6 +720,7 @@ export function mergeCrmContract(design: Record<string, unknown> | null, crm: Cr
     booking,
     services,
     staff,
+    ...(opts.locale && (design === null || v2) ? { locale: opts.locale } : {}),
   }
 }
 
