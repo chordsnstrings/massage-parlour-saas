@@ -1277,6 +1277,46 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Arabic defaults + new TH strings. The owner sent two neutral photos (2026-10-13): BE RELAX **v2.1** = v2 with those as
   spa.experience_image (4:5 crop) and booking.image (2:3) + new EN/AR alt texts (AR alts need review); upload v2.1, not v2.
   Be Relax itself keeps its branded photos (its own v1 look is pinned as website content on the switch).
+- **R29 Google + Meta app keys in the console (owner, 2026-10-13: "Yes, build it"):** Company (Settings) page gets a
+  **Google** card (Client ID, Client secret; lists the OAuth redirect URI per platform domain + the APIs to enable) and a
+  **Meta (Instagram & Facebook)** card (Instagram app ID, Instagram app secret, Webhook verify token, optional Facebook
+  Login for Business config id; follow-up: optional **Facebook App ID / secret** for Facebook Page connect, since with
+  Instagram Login the Instagram app ID differs from the Facebook App ID; unset = the Instagram values; lists the
+  redirect, webhook, deauthorize and data-deletion URLs). Stored in `platform_settings` like the Resend / Turnstile keys
+  (secrets sealed, write-only, last 4 shown), super-admin + 2FA saves audited by key name only. **Each key: console
+  value, else env** — one resolver `integrationEnv()` (services `integration-settings.ts`, 30 s cache, invalidated on
+  save; the worker within 30 s) used by every reader (web, worker, overview health rows). Spa "Instagram & Google"
+  cards work after a console save, no redeploy. Facebook Page connect is "configured" only with the Instagram keys too;
+  a half Facebook pair shows "incomplete". Migrations 0053 + 0055. e2e `integration-keys.spec.ts`.
+- **R30 Weekly SEO check + Draft fixes (owner, 2026-10-13: "Only the new part … No duplicate suggest button"):** worker
+  `seo-check` Mondays 06:00 Dubai for spas with the AI studio **SEO** switch (`seo_agent`) on, the `ai` feature and a
+  published site: pure `seoCheck` (core) over the live pages (EN + AR) → missing / too long title (> 60), missing / short
+  (< 50) / long (> 160) description, duplicates, images without alt, pages missing from the sitemap → tenant table
+  `seo_checks` (RLS, latest 8 per site; migration 0054). Console Websites → spa **SEO check** card: findings, **Check
+  now** (audited `site.seo_checked`), **Draft fixes** = Write texts with `scope: 'seo'` (titles + descriptions only,
+  same SITE_AI_EDITOR_EMAILS + 2FA gate, drafts only, never publishes). Spa AI studio: one summary line under the SEO
+  card (EN + TH; TH needs review). `generateSeo` stays unused (no suggest button). e2e `seo-check.spec.ts`.
+- **Enquiries → Make booking (owner, 2026-10-13: "Inbox button only"):** the HTML design's booking form still creates a
+  website enquiry (R26); each Booking request row gets **Make booking** (`calendar.manage`) → the calendar's New booking
+  sheet prefilled (client matched by phone or new, service, length, date + time, therapist only while active + bookable
+  + not on leave, notes "Website booking request · N guests", source WhatsApp) → the normal save (reservations, normal
+  conflicts) links it back (`booking` jsonb `bookingId/bookedAt/bookedBy`, row lock, audit `site.enquiry.booked`, no
+  migration) → row shows **Booked** → calendar; Reply on WhatsApp sends the confirmation (service, date, time). A
+  cancelled booking reopens the request. **After-midnight fix:** a small-hours time offered under the chosen night
+  (Be Relax 11:00–02:00) is the next calendar day (core `afterMidnight`, main-branch hours; no hours set → before the
+  business-day cutoff); crm-enquiry stores `afterMidnight` + `calendarDate`, older rows computed. e2e
+  `enquiry-booking.spec.ts`. New TH strings (enquiries/calendar/domain) + AR reply texts need native review.
+- **Lazy loading for BE RELAX (owner, 2026-10-13: "make sure that lazy load is on"):** live page measured: 1.6 MB HTML
+  (93 % embedded pictures, no-cache), every picture at first visit. R24 kept (platform never alters a design): our own
+  file **BE RELAX v2.2** hosts its built-in pictures + Arabic fonts as immutable static files
+  (`apps/web/public/designs/be-relax/{sha256-16}.{ext}`, CORS `*`; never rename or delete one), lazy images below the
+  first screen, scene stills on approach + ordered preload, team photos as the section nears, in-page jumps load the
+  destination first. Measured: first load 3.48 MB → 0.57 MB, load event 3.0 s → 0.6 s, 0 % visual diff (88 shots).
+  Roll-out keeps no duplicate pin when the new version hosts the same bytes. Owner steps: after the deploy, upload v2.2 as a
+  new version of the BE RELAX template → Preview EN + AR → Roll out (Be Relax moves from its v1 "Test Build" upload) →
+  optionally reset Website content `spa.experience_image(_alt)` + `booking.image(_alt)` for v2's new photos → Publish.
+  Known gaps: a CSP-sandboxed design page gets no browser-cache reuse in Chromium (opaque origin), so repeat visits
+  download 0.9 MB again; Arabic pages show the fallback font ~0.3 s.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

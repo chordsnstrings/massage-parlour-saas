@@ -79,14 +79,17 @@ How it behaves:
    - *My Business Account Management API*
    - *My Business Business Information API*
    - *Google My Business API* (v4: reviews and local posts)
+   - *My Business Place Actions API* (the Book button, F17)
+   - *Google Search Console API* (sitemap submit, F17)
 
    Request access via the GBP API contact form if the quota is 0.
 2. **OAuth consent screen:**
-   - External, scope `https://www.googleapis.com/auth/business.manage`
+   - External, scopes `https://www.googleapis.com/auth/business.manage` + `https://www.googleapis.com/auth/webmasters`
    - add test users until verified
 3. **Credentials → OAuth client (Web):**
-   - redirect URI `{APP_URL}/api/integrations/google/callback`
-4. Env:
+   - redirect URI `{APP_URL}/api/integrations/google/callback` (the console card lists one per platform domain)
+4. Keys: console **Settings (Company) → Google** card (R29; secret write-only, last 4 shown; a console value wins over
+   env, key by key; web picks a save up at once, the worker within 30 s) — or env:
 
 | Var | Value |
 |---|---|
@@ -99,7 +102,7 @@ The spa owner (or a Manager on the profile) connects from *Settings → Instagra
 - Replies to 1–3★ reviews always wait for approval.
 - Approved AI-studio posts get *Post to Google* (STANDARD local post, Book button → `{site}/book?src=gbp`; photo only
   when it has a public https URL).
-- Without the env vars the card shows "Not configured yet" and reviews are pasted in by hand (manual fallback).
+- Without the keys (console or env) the card shows "Not configured yet" and reviews are pasted in by hand (manual fallback).
 
 ## 3. Custom domains
 
