@@ -62,8 +62,61 @@ function contactIn(s: string): string[] {
   for (const m of s.matchAll(EMAIL)) out.push(m[0])
   return out
 }
-const ARABIC_FACE = /@font-face\s*\{[^}]*unicode-range\s*:[^;}]*U\+0?6[0-9a-f]{2}/i
-const ARABIC_GOOGLE = /fonts\.googleapis\.com\/css2?\?[^"'\s>]*family=[^"'\s>&]*Arabic/i
+/** An Arabic code point range (U+06xx) in a `unicode-range` value. */
+const ARABIC_RANGE = /U\+0?6[0-9a-f]{2}/i
+/** Characters read per Google Fonts link / `unicode-range` value (each found with indexOf: linear). */
+const SCAN_MAX = 4000
+
+/**
+ * Whether an `@font-face` block declares an Arabic `unicode-range`. Blocks end at their '}' or the next @font-face
+ * (never overlapping); inside one, each `unicode-range` value is read up to its ';' / '}' (at most SCAN_MAX).
+ */
+function arabicFace(html: string) {
+  const lower = html.toLowerCase()
+  // indexOf results are kept while still ahead (-1 = none left), so every search moves forward only: linear.
+  const ahead = (cache: { at: number }, needle: string, from: number) => {
+    if (cache.at !== -1 && cache.at < from) cache.at = lower.indexOf(needle, from)
+    return cache.at
+  }
+  const range = { at: -2 }
+  const close = { at: -2 }
+  const colon = { at: -2 }
+  const semi = { at: -2 }
+  for (let i = lower.indexOf('@font-face'); i >= 0; ) {
+    const next = lower.indexOf('@font-face', i + 10)
+    const c = ahead(close, '}', i)
+    const stop = Math.min(c < 0 ? lower.length : c, next < 0 ? lower.length : next)
+    for (
+      let j = ahead(range, 'unicode-range', i);
+      j >= 0 && j < stop;
+      j = ahead(range, 'unicode-range', j + 13)
+    ) {
+      const k = ahead(colon, ':', j + 13)
+      if (k < 0 || k >= stop || lower.slice(j + 13, k).trim()) continue
+      // A unicode-range value is short: at most 400 characters read.
+      const end = Math.min(stop, k + 401)
+      const e = ahead(semi, ';', k)
+      if (ARABIC_RANGE.test(lower.slice(k + 1, e >= 0 && e < end ? e : end))) return true
+    }
+    i = next
+  }
+  return false
+}
+
+/** Whether a Google Fonts stylesheet link asks for an Arabic family. */
+function arabicGoogle(html: string) {
+  const lower = html.toLowerCase()
+  const host = 'fonts.googleapis.com/css'
+  // Each link ends at a quote, space, '>' or the next link (never overlapping: linear).
+  for (let i = lower.indexOf(host); i >= 0; ) {
+    const next = lower.indexOf(host, i + host.length)
+    const url = lower.slice(i, Math.min(next < 0 ? lower.length : next, i + SCAN_MAX)).split(/["'\s>]/, 1)[0]!
+    for (const part of url.slice(url.indexOf('?') + 1).split('&'))
+      if (part.startsWith('family=') && part.includes('arabic')) return true
+    i = next
+  }
+  return false
+}
 const DEFAULTS_SCRIPT = /<script\b[^>]*\bid\s*=\s*["']?crm-defaults\b[^>]*>([\s\S]*?)<\/script/i
 const STAFF_LIST = /\bdata-crm-list\s*=\s*(["']?)staff\1(?=[\s>/])/i
 
@@ -196,7 +249,7 @@ function report(html: string): HtmlDesignReport {
       `The page title is fixed text ("${clip(title?.text || 'document.title')}"); use {{spa_name}}.`,
       'title',
     )
-  if (v2 && manifest?.locales.includes('ar') && !ARABIC_FACE.test(html) && !ARABIC_GOOGLE.test(html))
+  if (v2 && manifest?.locales.includes('ar') && !arabicFace(html) && !arabicGoogle(html))
     warn('no-arabic-font', "Arabic texts fall back to the visitor's system font.")
   if (v2) {
     const seen = new Set<string>()

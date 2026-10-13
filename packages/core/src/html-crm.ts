@@ -111,7 +111,8 @@ export const crmContractVersion = (data: unknown): 1 | 2 => (crmContractManifest
 /** A manifest field for a concrete slot path: exact pattern first ('journey[welcome].clip' → 'journey[].clip'), then the longest `.*` prefix. */
 export function contractField(m: CrmContractManifest | null, path: string): CrmContractField | null {
   if (!m) return null
-  const pattern = path.replace(/\[[^\]]*\]/g, '[]')
+  // Linear: an index ends at the next ']' and never spans another '['.
+  const pattern = path.replace(/\[[^[\]]*\]/g, '[]')
   const exact = (k: string) => (Object.hasOwn(m.fields, k) ? m.fields[k]! : null)
   const hit = exact(path) ?? exact(pattern)
   if (hit) return hit

@@ -178,4 +178,25 @@ describe('htmlDesignReport (R28 P5)', () => {
     expect(r.contract).toBe('v2')
     expect(r.texts.total).toBe(303)
   })
+
+  it('font checks stay linear on long runs (@font-face{ / unicode-range: / Google links without ends)', () => {
+    const v2 = '<script>window.CRM_DATA = {"contract":{"version":2,"locales":["en","ar"]},"ui":{}}</script>'
+    for (const css of [
+      '@font-face{'.repeat(100_000),
+      `@font-face{${'unicode-range:'.repeat(70_000)}`,
+      'fonts.googleapis.com/css?'.repeat(40_000),
+      `fonts.googleapis.com/css?${'family='.repeat(140_000)}`,
+    ]) {
+      const t = performance.now()
+      htmlDesignReport(`<html><body><style>${css}</style>${v2}</body></html>`)
+      expect(performance.now() - t).toBeLessThan(500)
+    }
+    // An Arabic unicode-range after a long embedded font source still counts.
+    const face = `@font-face{font-family:A;src:url(data:font/woff2;base64,${'A'.repeat(20_000)});unicode-range:U+0600-06FF}`
+    expect(
+      htmlDesignReport(`<html><head><style>${face}</style></head><body>${v2}</body></html>`).warnings.map(
+        (w) => w.code,
+      ),
+    ).not.toContain('no-arabic-font')
+  })
 })
