@@ -565,6 +565,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     maps them to srcset at runtime, rewriting `https://spamanagement.co/designs/` → `/designs/` when served over http(s)
     (every host serves `/designs/*`: the proxy matcher skips the extensions; frames resolve it through their `<base>`).
     A sandboxed page's preconnects are never used (its requests open their own connections), so v2.3 has none.
+    v2.5 (file only; contract doc §8 "No delay on a reload"): `contract.inline` = `spa.logo_on_dark` +
+    `journey[welcome].image` (default → the 1600w copy), Latin fonts inline, `rel=expect` render-block marker after the
+    page script, the 2400w original after load only where srcset would pick it (Chromium 141: sizes × DPR > 1600),
+    Arabic faces `url(/designs/…)` first (apex fallback) on the page's one connection.
   - **Exact by default (R24 owner rule):** `props.phoneFixes` (NO default in Puck props: absent = stored before R24 = on,
     `@spa/core htmlDesignPhoneFixes`; every writer stores a boolean). Off = only invisible additions: compat shim first in
     <head> (`HTML_DESIGN_COMPAT_SHIM`: in-memory localStorage/sessionStorage + cookie jar, only where access throws),
