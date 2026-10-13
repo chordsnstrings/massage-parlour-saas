@@ -191,13 +191,13 @@ export async function IntegrationKeysCards() {
         <CardBody className="space-y-5">
           <ActionForm action={saveMetaKeysAction} className="grid gap-5 sm:grid-cols-2">
             <Field
-              label="App ID"
+              label="Instagram app ID"
               name="META_APP_ID"
               hint={
                 <SourceNote
                   k="META_APP_ID"
                   ctx={ctx}
-                  missing="developers.facebook.com → your app → App settings → Basic."
+                  missing="Instagram → API setup with Instagram login → Business login settings → Instagram app ID (not the Facebook App ID under App settings → Basic)."
                 />
               }
             >
@@ -210,13 +210,13 @@ export async function IntegrationKeysCards() {
               />
             </Field>
             <Field
-              label="App secret"
+              label="Instagram app secret"
               name="META_APP_SECRET"
               hint={
                 <SourceNote
                   k="META_APP_SECRET"
                   ctx={ctx}
-                  missing="App settings → Basic → App secret (also checks webhook signatures)."
+                  missing="Same place → Instagram app secret (also checks webhook signatures)."
                 />
               }
             >
@@ -262,7 +262,7 @@ export async function IntegrationKeysCards() {
             <RemoveBox
               k="META_APP_SECRET"
               ctx={ctx}
-              label="Remove the stored app secret (fall back to env)"
+              label="Remove the stored Instagram app secret (fall back to env)"
             />
             <RemoveBox
               k="META_WEBHOOK_VERIFY_TOKEN"
