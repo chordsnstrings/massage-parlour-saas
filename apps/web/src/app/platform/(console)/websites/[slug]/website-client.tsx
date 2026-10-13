@@ -1,5 +1,5 @@
 'use client'
-import { ArrowRight, FilePlus2, History, Paintbrush, Rocket, Sparkles, Undo2 } from 'lucide-react'
+import { ArrowRight, FilePlus2, History, Paintbrush, Rocket, ScanSearch, Sparkles, Undo2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useOptimistic, useState, useTransition } from 'react'
 import { ScaledFrame } from '@/components/site/scaled-frame'
@@ -22,6 +22,7 @@ import {
   setPageVisibleAction,
   undoTemplateAction,
 } from './actions'
+import { checkSeoAction } from './seo-actions'
 import { resolveChangeAction } from './studio-actions'
 import { type WriteTextsResult, writeTextsAction } from './write-texts-actions'
 
@@ -604,5 +605,54 @@ export function ResolveRequestSheet({ slug, id }: { slug: string; id: string }) 
         <Textarea id="response" name="response" maxLength={2000} />
       </Field>
     </FormSheet>
+  )
+}
+
+/**
+ * R30 SEO check card buttons: "Check now" (re-reads the live site) and, for SITE_AI_EDITOR_EMAILS super-admins when
+ * the latest check found titles or descriptions to fix, "Draft fixes" (Write texts on the search fields; drafts only).
+ */
+export function SeoCheckActions({ slug, fix, ready }: { slug: string; fix: boolean; ready: boolean }) {
+  const [checking, startCheck] = useTransition()
+  const [fixing, startFix] = useTransition()
+  const [done, setDone] = useState<string | null>(null)
+  const check = () =>
+    startCheck(async () => {
+      const r = await checkSeoAction(slug)
+      if (r?.ok) toast.success(r.message ?? 'Search check done')
+      else if (r) toast.error(r.error)
+    })
+  const draft = () =>
+    startFix(async () => {
+      setDone(null)
+      const r = await writeTextsAction(slug, { scope: 'seo' })
+      if (r?.ok) setDone(r.message ?? '')
+      else if (r) toast.error(r.error)
+    })
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <span className="flex flex-wrap justify-end gap-2">
+        <Button variant="secondary" size="sm" className="h-10" onClick={check} pending={checking}>
+          <ScanSearch /> Check now
+        </Button>
+        {fix && (
+          <Button
+            size="sm"
+            className="h-10"
+            onClick={draft}
+            pending={fixing}
+            disabled={!ready}
+            title={ready ? undefined : 'AI writing isn’t set up yet (AI models).'}
+          >
+            <Sparkles /> Draft fixes
+          </Button>
+        )}
+      </span>
+      {done && (
+        <p role="status" className="max-w-sm text-end text-[13px] text-muted">
+          {done}
+        </p>
+      )}
+    </div>
   )
 }

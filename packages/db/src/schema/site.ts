@@ -84,6 +84,8 @@ export type SiteTextRun = {
   actorUserId: string
   pageIds: string[]
   designSha?: string
+  /** R30: only the search fields (Draft fixes; site-kit `TextScope`). */
+  scope?: 'seo'
   at: string
   startedAt?: string
   finishedAt?: string
@@ -252,6 +254,13 @@ export type SiteEnquiryBooking = {
   guests: number
   staff: string | null
   staffId: string | null
+  /** `date` is the night the visitor chose; a small-hours time is on `calendarDate` (core afterMidnight; 2026-10-13). */
+  afterMidnight?: boolean
+  calendarDate?: string
+  /** "Make booking" (Inbox → Enquiries): the booking made from this request, when and by whom. */
+  bookingId?: string
+  bookedAt?: string
+  bookedBy?: string | null
 }
 
 export const siteEnquiries = pgTable(
@@ -369,4 +378,37 @@ export const siteChangeRequests = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index('site_change_requests_status').on(t.status, t.createdAt), ...tenantPolicies()],
+)
+
+/** R30: one finding of a search check (@spa/core `seoCheck`; `detail` is console English). */
+export type SeoCheckFinding = {
+  code: string
+  severity: 'high' | 'medium'
+  /** '/' or '/{slug}'. */
+  path: string
+  locale: 'en' | 'ar'
+  detail: string
+}
+export type SeoCheckCounts = { high: number; medium: number }
+
+export const seoCheckTrigger = pgEnum('seo_check_trigger', ['weekly', 'manual'])
+
+/**
+ * R30 (owner 2026-10-13): the weekly search check of a spa's live site (worker `seo-check`, or "Check now" in the
+ * console). The latest 8 per site are kept (`runSeoCheck` deletes older ones in the same transaction).
+ */
+export const seoChecks = pgTable(
+  'seo_checks',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+    findings: jsonb('findings').$type<SeoCheckFinding[]>().notNull().default([]),
+    counts: jsonb('counts').$type<SeoCheckCounts>().notNull().default({ high: 0, medium: 0 }),
+    trigger: seoCheckTrigger('trigger').notNull(),
+  },
+  (t) => [index('seo_checks_site_checked').on(t.siteId, t.checkedAt), ...tenantPolicies()],
 )

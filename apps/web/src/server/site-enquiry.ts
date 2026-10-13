@@ -31,10 +31,10 @@ export async function recordSiteEnquiry(
     notify({
       tenantId: tenant.id,
       kind: 'enquiry.site',
-      // A booking request reads the same in any language: "{service} · {date} {time}".
+      // A booking request reads the same in any language: "{service} · {date} {time}" (small hours: the next day).
       params: {
         name: enquiry.name,
-        message: (b ? `${b.service} · ${b.date} ${b.time}` : enquiry.message)
+        message: (b ? `${b.service} · ${b.calendarDate ?? b.date} ${b.time}` : enquiry.message)
           .replace(/\s+/g, ' ')
           .slice(0, 120),
       },

@@ -119,6 +119,7 @@ export const calendar: Messages['calendar'] = {
     newClient: 'ลูกค้าใหม่',
     searchInstead: 'ค้นหาแทน',
     addServicesFirst: 'เพิ่มบริการก่อน',
+    chooseService: 'เลือกบริการ',
     anyTherapist: 'ใครก็ได้ (อัตโนมัติ)',
     automatic: 'อัตโนมัติ',
     submit: 'สร้างการจอง',

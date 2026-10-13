@@ -33,6 +33,16 @@ export const enquiries = {
     minutes: '{n} min',
     guests: { one: '{count} guest', other: '{count} guests' },
     when: '{date} at {time}',
+    /** The form offers the small hours under the chosen day (2026-10-13). */
+    night: '{date} night · {time} (after midnight, {calendarDate})',
     with: 'with {name}',
+  },
+  // "Make booking" (owner 2026-10-13): opens the calendar's New booking prefilled from the request.
+  make: {
+    button: 'Make booking',
+    label: 'Make a booking for {name}',
+    booked: 'Booked',
+    bookedLabel: 'Open the booking for {name} in the calendar',
+    note: 'Website booking request',
   },
 } as const

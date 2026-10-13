@@ -93,6 +93,21 @@ export type CalendarData = {
   calendarBase: string
   /** Booking whose sheet opens on load (`?open=` from the Week view). */
   openBooking: string | null
+  /** "Make booking" from a website booking request (`?enquiry=`): New booking opens on load, prefilled. */
+  enquiry: EnquiryPrefill | null
+}
+
+/** New booking prefilled from a website booking request (Inbox → Enquiries, owner 2026-10-13). */
+export type EnquiryPrefill = {
+  id: string
+  /** Grid minutes on `date` (the business date the request's time falls on). */
+  startMin: number
+  variantId: string | null
+  staffId?: string
+  /** This spa's client with the request's phone, else a new client with its name (+ phone when visible). */
+  client: { id: string; name: string; phone: string | null; blocked: boolean } | null
+  newClient: { name: string; phone: string; phoneHint: string | null } | null
+  notes: string
 }
 
 /** Calendar range in the URL (`?range=`); Day is the default. */

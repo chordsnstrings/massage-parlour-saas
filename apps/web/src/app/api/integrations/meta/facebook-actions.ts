@@ -4,11 +4,13 @@ import {
   chooseFacebookPage,
   DomainError,
   disconnectFacebook,
+  facebookAppConfig,
   facebookAuthorizeUrl,
   facebookConfigId,
   facebookLoginClient,
   facebookPageTenants,
   instagramAccountTenants,
+  integrationEnv,
   MetaApiError,
   metaConfig,
   metaUrls,
@@ -35,9 +37,10 @@ const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/settings
 export async function connectFacebookAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.manage', 'marketing')
   if (error) return fail(error)
-  const cfg = metaConfig()
+  const env = await integrationEnv()
+  const cfg = facebookAppConfig(env)
   const secret = process.env.BETTER_AUTH_SECRET
-  if (!cfg || !secret) return fail('settings.integrations.fb.notices.not_configured')
+  if (!cfg || !metaConfig(env) || !secret) return fail('settings.integrations.fb.notices.not_configured')
   const nonce = newNonce()
   const state = signState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
   const redirectUri = metaUrls((await requestUrls()).api('')).facebookCallback
@@ -49,7 +52,7 @@ export async function connectFacebookAction(slug: string): Promise<ActionResult>
     maxAge: 600,
   })
   return ok(undefined, {
-    url: facebookAuthorizeUrl({ appId: cfg.appId, redirectUri, state, configId: facebookConfigId() }),
+    url: facebookAuthorizeUrl({ appId: cfg.appId, redirectUri, state, configId: facebookConfigId(env) }),
   })
 }
 
@@ -69,7 +72,7 @@ export async function chooseFacebookPageAction(
   if (error) return fail(error)
   const parsed = ChoosePage.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
-  const cfg = metaConfig()
+  const cfg = facebookAppConfig(await integrationEnv())
   if (!cfg) return fail('settings.integrations.fb.notices.not_configured')
   const tenantId = ctx.tenant.id
   try {

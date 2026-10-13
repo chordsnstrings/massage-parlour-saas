@@ -8,7 +8,13 @@ import {
   subscriptions,
   tenants,
 } from '@spa/db'
-import { aiUsageOverview, cspViolationSummary } from '@spa/services'
+import {
+  aiUsageOverview,
+  cspViolationSummary,
+  currentIntegrationKeys,
+  integrationKeySources,
+  resolveIntegrationEnv,
+} from '@spa/services'
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { Badge, statusTone } from '@/components/ui/badge'
@@ -113,7 +119,12 @@ export default async function PlatformOverview() {
   registerEmailSettings()
   const mail = await resolveEmailConfig()
   // F9: the bot check row shows where each Turnstile key comes from (console / env / missing).
-  const checks = configChecks(process.env, { turnstile: await currentTurnstile() })
+  // R29: Google + Meta keys resolved console over env, key by key (the worker's heartbeat flags resolve the same way).
+  const appKeys = await currentIntegrationKeys().catch(() => null)
+  const checks = configChecks(resolveIntegrationEnv(appKeys), {
+    turnstile: await currentTurnstile(),
+    keySources: integrationKeySources(appKeys),
+  })
   // F10: CSP violations browsers reported in the last 7 days (api/csp-report).
   const csp = await cspViolationSummary(db, 7)
   // F11: the restore drill's least-privilege role (created by compose service db-roles); pg_roles is world-readable.

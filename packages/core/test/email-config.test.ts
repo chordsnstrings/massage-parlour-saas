@@ -134,6 +134,47 @@ describe('config health (G9)', () => {
     expect(configFlags(env)).toMatchObject({ backups: true, RESEND_API_KEY: false, SENTRY_DSN: true })
   })
 
+  it('Google + Meta rows read the resolved record and say where the keys come from (R29)', () => {
+    const env = { GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'console-secret', META_APP_ID: 'app' }
+    const sources = {
+      GOOGLE_CLIENT_ID: 'env',
+      GOOGLE_CLIENT_SECRET: 'console',
+      META_APP_ID: 'console',
+    } as const
+    const byKey = Object.fromEntries(configChecks(env, { keySources: sources }).map((c) => [c.key, c]))
+    expect(byKey.GOOGLE).toMatchObject({ ok: true, detail: 'from env + console' })
+    expect(byKey.META).toMatchObject({ ok: false, detail: 'from console' })
+    expect(JSON.stringify(byKey)).not.toContain('console-secret')
+    expect(configChecks(env).find((c) => c.key === 'GOOGLE')?.detail).toBeUndefined()
+  })
+
+  it('Facebook Page connect row: its own Facebook App keys, else the Instagram ones; needs the Instagram keys', () => {
+    const ig = { META_APP_ID: 'ig', META_APP_SECRET: 's', META_WEBHOOK_VERIFY_TOKEN: 'v' }
+    const fb = (env: Record<string, string>, keySources?: Record<string, 'console' | 'env'>) =>
+      configChecks(env, { keySources }).find((c) => c.key === 'META_FB')
+    expect(fb({ META_APP_ID: 'app' })).toMatchObject({ ok: false, detail: undefined })
+    expect(fb(ig)).toMatchObject({ ok: true, detail: 'same app as Instagram (META_APP_*)' })
+    expect(
+      fb(
+        { ...ig, META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' },
+        { META_FB_APP_ID: 'console', META_FB_APP_SECRET: 'env' },
+      ),
+    ).toMatchObject({ ok: true, detail: 'own Facebook app, from console + env' })
+    // Half a Facebook pair would mix the Facebook App ID with the Instagram secret.
+    expect(fb({ ...ig, META_FB_APP_ID: 'fb' })).toMatchObject({
+      ok: false,
+      detail: 'incomplete: set both Facebook App ID and secret',
+    })
+    expect(fb({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({
+      ok: false,
+      detail: 'needs the Instagram keys too (META_* row)',
+    })
+    expect(configFlags({ ...ig, META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({
+      META_FB: true,
+    })
+    expect(configFlags({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({ META_FB: false })
+  })
+
   it('a partial R2 set counts as missing (no silent S3 fallback)', () => {
     const s3 = { S3_ENDPOINT: 'e', S3_BUCKET: 'b', S3_ACCESS_KEY_ID: 'i', S3_SECRET_ACCESS_KEY: 's' }
     expect(backupBucketSource({ ...s3, R2_BUCKET: 'b' })).toBeNull()

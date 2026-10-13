@@ -20,6 +20,7 @@ import { automationOnSql } from './automations'
 import { findOrCreateClient } from './clients'
 import { entitledSql } from './entitlements'
 import { DomainError } from './errors'
+import { integrationEnv } from './integration-settings'
 import {
   appOrigin,
   type ContainerParams,
@@ -511,7 +512,7 @@ export async function loadAgentTurn(item: InboundItem, o: SocialOpts = {}) {
 
 /** Best effort: show the customer's @username instead of an opaque id. */
 export async function fillParticipant(tenantId: string, conversationId: string, o: SocialOpts = {}) {
-  if (!metaConfig(o.env)) return
+  if (!metaConfig(o.env ?? (await integrationEnv()))) return
   const state = await withTenant(
     tenantId,
     async (tx) => {
@@ -636,7 +637,7 @@ export function replyBlocker(
     token: string | null
   },
   now: Date,
-  env?: Record<string, string | undefined>,
+  env: Record<string, string | undefined>,
 ) {
   if (!metaConfig(env)) return "Instagram isn't set up on this server yet (sandbox) — saved here only."
   if (!s.account || !s.token)
@@ -681,7 +682,7 @@ export async function deliverReply(
   let error = replyBlocker(
     { channel: conv.channel, lastCustomerMsgAt: conv.lastCustomerMsgAt, account, token },
     now,
-    opts.env,
+    opts.env ?? (await integrationEnv()),
   )
   let externalId: string | null = null
   let expired = false
@@ -801,6 +802,7 @@ export async function sendPrivateReply(
   o: SocialOpts = {},
 ): Promise<PrivateReplyResult> {
   const now = nowOf(o)
+  const env = o.env ?? (await integrationEnv())
   const body = text.trim()
   if (!body) throw new DomainError('Write a message first')
   const tooLong = dmTooLong(body)
@@ -825,8 +827,7 @@ export async function sendPrivateReply(
       if (state.status === 'expired')
         throw new DomainError('Instagram only allows a private reply within 7 days of the comment.')
       const sender = await getInstagramSender(tx)
-      if (!metaConfig(o.env))
-        return { ok: false as const, error: "Instagram isn't set up on this server yet." }
+      if (!metaConfig(env)) return { ok: false as const, error: "Instagram isn't set up on this server yet." }
       if (!sender)
         return { ok: false as const, error: "Instagram isn't connected — connect it in Settings first." }
       if (sender.row.tokenExpiresAt && sender.row.tokenExpiresAt <= now)
@@ -1236,6 +1237,7 @@ export async function publishInstagramPost(
   o: SocialOpts & { recordBlockers?: boolean; maxPolls?: number } = {},
 ): Promise<PublishResult> {
   const now = nowOf(o)
+  const env = o.env ?? (await integrationEnv())
   const sleep = o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
   const claim = await withTenant(
     tenantId,
@@ -1255,7 +1257,7 @@ export async function publishInstagramPost(
       }
       if (post.platform !== 'instagram') return fail('Only Instagram posts can be published here.', false)
       const sender = await getInstagramSender(tx)
-      if (!metaConfig(o.env))
+      if (!metaConfig(env))
         return fail("Instagram isn't set up on this server yet — copy the caption instead.", false)
       if (!sender) return fail("Instagram isn't connected — connect it in Settings first.", false)
       if (post.status !== 'scheduled' && post.status !== 'failed')
@@ -1393,7 +1395,8 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
     processing: 0,
     byTenant: {} as Record<string, { published: number; failed: number }>,
   }
-  if (!metaConfig(o.env)) return result
+  const env = o.env ?? (await integrationEnv())
+  if (!metaConfig(env)) return result
   // Spas with the Instagram automation switched off (B3) keep their scheduled posts until it is back on.
   const switchedOn = platformOf(o)
     .select({ id: tenants.id })
@@ -1426,7 +1429,7 @@ export async function publishDueInstagramPosts(o: SocialOpts = {}) {
     .limit(25)
   for (const p of due) {
     result.attempted++
-    const r = await publishInstagramPost(p.tenantId, p.id, { ...o, recordBlockers: true })
+    const r = await publishInstagramPost(p.tenantId, p.id, { ...o, env, recordBlockers: true })
     const per = result.byTenant[p.tenantId] ?? { published: 0, failed: 0 }
     result.byTenant[p.tenantId] = per
     if (r.ok) {
@@ -1450,7 +1453,7 @@ const DAY = 86_400_000
  */
 export async function refreshInstagramTokens(o: SocialOpts = {}) {
   const result = { refreshed: 0, expired: 0, failed: 0 }
-  if (!metaConfig(o.env)) return result
+  if (!metaConfig(o.env ?? (await integrationEnv()))) return result
   const now = nowOf(o)
   const accounts = await platformOf(o)
     .select({ id: socialAccounts.id, tenantId: socialAccounts.tenantId })

@@ -29,16 +29,41 @@ const STATE_TTL_MS = 10 * 60_000
 export const META_ENV = ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN'] as const
 export type MetaConfig = { appId: string; appSecret: string; verifyToken: string }
 
-/** The Meta app settings, or null while any of META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN is missing. */
-export function metaConfig(env: Record<string, string | undefined> = process.env): MetaConfig | null {
+/**
+ * The Meta app settings, or null while any of META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN is missing.
+ * `env`: the resolved record (`integrationEnv()`: console keys over env, R29) — never process.env directly.
+ */
+export function metaConfig(env: Record<string, string | undefined>): MetaConfig | null {
   const appId = env.META_APP_ID?.trim()
   const appSecret = env.META_APP_SECRET?.trim()
   const verifyToken = env.META_WEBHOOK_VERIFY_TOKEN?.trim()
   return appId && appSecret && verifyToken ? { appId, appSecret, verifyToken } : null
 }
 
-export const missingMetaEnv = (env: Record<string, string | undefined> = process.env) =>
+export const missingMetaEnv = (env: Record<string, string | undefined>) =>
   META_ENV.filter((k) => !env[k]?.trim())
+
+export type FacebookAppConfig = { appId: string; appSecret: string }
+
+/**
+ * The Facebook app behind Facebook Page connect (F19, Facebook Login for Business: dialog, code exchange, long-lived
+ * token, debug_token): META_FB_APP_ID / META_FB_APP_SECRET (App settings → Basic) when set, else META_APP_ID /
+ * META_APP_SECRET (one app for both logins). With Instagram API with Instagram Login, META_APP_* are the Instagram app
+ * ID/secret, which the Facebook dialog does not accept. Null while either is missing. `env`: the resolved record.
+ */
+export function facebookAppConfig(env: Record<string, string | undefined>): FacebookAppConfig | null {
+  const appId = env.META_FB_APP_ID?.trim() || env.META_APP_ID?.trim()
+  const appSecret = env.META_FB_APP_SECRET?.trim() || env.META_APP_SECRET?.trim()
+  return appId && appSecret ? { appId, appSecret } : null
+}
+
+/**
+ * Secrets that may sign what Meta sends to the shared webhook / deauthorize / data-deletion URLs: the Instagram app
+ * secret, plus the Facebook app secret when it is a separate one (Page-linked events, Facebook Login callbacks).
+ */
+export const metaSigningSecrets = (env: Record<string, string | undefined>) => [
+  ...new Set([env.META_APP_SECRET?.trim(), env.META_FB_APP_SECRET?.trim()].filter((v): v is string => !!v)),
+]
 
 /** Origin of the dashboard app (API routes live at `{origin}/api/...` in both routing modes). */
 export const appOrigin = (env: Record<string, string | undefined> = process.env) =>
@@ -115,28 +140,38 @@ export function constantTimeEqual(a: string | null | undefined, b: string | null
   return timingSafeEqual(h(a), h(b))
 }
 
-/** Checks `X-Hub-Signature-256: sha256=<hex>` against an HMAC-SHA256 of the raw body with the app secret. */
+/**
+ * Checks `X-Hub-Signature-256: sha256=<hex>` against an HMAC-SHA256 of the raw body with the app secret (or any of
+ * `metaSigningSecrets()`).
+ */
 export function verifyMetaSignature(
   rawBody: string | Buffer,
   header: string | null | undefined,
-  appSecret: string,
+  appSecret: string | readonly string[],
 ) {
-  if (!header || !appSecret) return false
+  const secrets = (typeof appSecret === 'string' ? [appSecret] : appSecret).filter(Boolean)
+  if (!header || !secrets.length) return false
   const m = /^sha256=([0-9a-f]{64})$/i.exec(header.trim())
   if (!m?.[1]) return false
-  return safeEqual(Buffer.from(m[1].toLowerCase(), 'hex'), hmac(appSecret, rawBody.toString()))
+  const sig = Buffer.from(m[1].toLowerCase(), 'hex')
+  return secrets.some((s) => safeEqual(sig, hmac(s, rawBody.toString())))
 }
 
 /** Test/helper: the header Meta would send for `rawBody`. */
 export const metaSignature = (rawBody: string, appSecret: string) =>
   `sha256=${createHmac('sha256', appSecret).update(rawBody).digest('hex')}`
 
-/** Meta `signed_request` (deauthorize / data-deletion callbacks): `sig.payload`, HMAC-SHA256 of the payload. */
-export function parseSignedRequest(signed: string | null | undefined, appSecret: string) {
-  if (!signed) return null
+/**
+ * Meta `signed_request` (deauthorize / data-deletion callbacks): `sig.payload`, HMAC-SHA256 of the payload with the
+ * app secret (or any of `metaSigningSecrets()`: the Instagram and the Facebook app send to the same URLs).
+ */
+export function parseSignedRequest(signed: string | null | undefined, appSecret: string | readonly string[]) {
+  const secrets = (typeof appSecret === 'string' ? [appSecret] : appSecret).filter(Boolean)
+  if (!signed || !secrets.length) return null
   const [sig, payload] = signed.split('.')
   if (!sig || !payload) return null
-  if (!safeEqual(Buffer.from(sig, 'base64url'), hmac(appSecret, payload))) return null
+  const mac = Buffer.from(sig, 'base64url')
+  if (!secrets.some((s) => safeEqual(mac, hmac(s, payload)))) return null
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<string, unknown>
     return data.algorithm && String(data.algorithm).toUpperCase() !== 'HMAC-SHA256' ? null : data
@@ -528,8 +563,8 @@ export function facebookAuthorizeUrl(opts: {
   return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${q.toString()}`
 }
 
-/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use. */
-export const facebookConfigId = (env: Record<string, string | undefined> = process.env) =>
+/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use (resolved record, R29). */
+export const facebookConfigId = (env: Record<string, string | undefined>) =>
   env.META_FB_CONFIG_ID?.trim() || null
 
 export type FacebookPageChoice = {

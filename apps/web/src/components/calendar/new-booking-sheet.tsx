@@ -39,9 +39,11 @@ export function NewBookingSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const t = useT()
+  // Enquiries → "Make booking": prefilled from the website booking request; staff check it and save as usual.
+  const pre = draft?.enquiry
   const [done, setDone] = useState<Done | null>(null)
-  const [mode, setMode] = useState<'search' | 'new'>('search')
-  const [client, setClient] = useState<ClientHit | null>(null)
+  const [mode, setMode] = useState<'search' | 'new'>(pre?.newClient ? 'new' : 'search')
+  const [client, setClient] = useState<ClientHit | null>(pre?.client ?? null)
   const [startMin] = useState(() => draft?.startMin ?? defaultStart(data))
   const [coarse, setCoarse] = useState(false)
   useEffect(() => {
@@ -112,6 +114,7 @@ export function NewBookingSheet({
             >
               <input type="hidden" name="branchId" value={data.branchId} />
               <input type="hidden" name="date" value={data.date} />
+              {pre && <input type="hidden" name="enquiryId" value={pre.id} />}
 
               {mode === 'search' ? (
                 <ClientSearch
@@ -137,7 +140,13 @@ export function NewBookingSheet({
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label={t('calendar.fields.name')} name="clientName">
-                      <Input id="clientName" name="clientName" autoComplete="off" autoFocus />
+                      <Input
+                        id="clientName"
+                        name="clientName"
+                        autoComplete="off"
+                        autoFocus
+                        defaultValue={pre?.newClient?.name}
+                      />
                     </Field>
                     <Field label={t('calendar.fields.mobile')} name="clientPhone">
                       <Input
@@ -145,7 +154,8 @@ export function NewBookingSheet({
                         name="clientPhone"
                         type="tel"
                         inputMode="tel"
-                        placeholder="050 123 4567"
+                        placeholder={pre?.newClient?.phoneHint ?? '050 123 4567'}
+                        defaultValue={pre?.newClient?.phone}
                       />
                     </Field>
                   </div>
@@ -153,9 +163,16 @@ export function NewBookingSheet({
               )}
 
               <Field label={t('calendar.fields.service')} name="variantId">
-                <Select id="variantId" name="variantId" defaultValue={data.variants[0]?.id}>
+                <Select
+                  id="variantId"
+                  name="variantId"
+                  defaultValue={pre ? (pre.variantId ?? '') : data.variants[0]?.id}
+                >
                   {data.variants.length === 0 && (
                     <option value="">{t('calendar.create.addServicesFirst')}</option>
+                  )}
+                  {pre && !pre.variantId && data.variants.length > 0 && (
+                    <option value="">{t('calendar.create.chooseService')}</option>
                   )}
                   {data.variants.map((v) => (
                     <option key={v.id} value={v.id}>
@@ -177,7 +194,8 @@ export function NewBookingSheet({
                   />
                 </Field>
                 <Field label={t('calendar.fields.source')} name="source">
-                  <Select id="source" name="source" defaultValue="phone">
+                  {/* A request is answered on WhatsApp; "online" stays the public booking page's (F13 reports). */}
+                  <Select id="source" name="source" defaultValue={pre ? 'whatsapp' : 'phone'}>
                     {SOURCES.map((v) => (
                       <option key={v} value={v}>
                         {enumLabel(t, 'bookingSource', v)}
@@ -208,7 +226,7 @@ export function NewBookingSheet({
               </div>
 
               <Field label={t('calendar.fields.notes')} name="notes" hint={t('calendar.fields.notesHint')}>
-                <Textarea id="notes" name="notes" rows={2} className="min-h-16" />
+                <Textarea id="notes" name="notes" rows={2} className="min-h-16" defaultValue={pre?.notes} />
               </Field>
 
               <SubmitButton size="lg" className="w-full">

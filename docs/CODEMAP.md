@@ -345,9 +345,27 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Marketing pages use `marketingMetadata(key, …)` (`components/marketing/seo.ts`, `MARKETING_PAGES` = sitemap list +
   OG headlines); the marketing layout sets `metadataBase` (canonical domain) and the Organization/WebSite/
   SoftwareApplication JSON-LD. OG images: `app/og/[page]/route.tsx` (`next/og`, default font).
+- **Weekly SEO check (R30):** core `seo-check.ts` `seoCheck` (pure, linear scans; high = missing title / description /
+  not in sitemap, medium = length, duplicates, missing alt; Arabic findings only where the AR page has its own text;
+  HTML designs: page texts over the file's `<title>` / meta description; framed designs: page metadata) + shared
+  `siteIndexable` (`seo.ts`, also sitemap.xml). Services `seo-check.ts` `runSeoCheck(tx, tenantId, trigger)` /
+  `latestSeoCheck` → `seo_checks` (RLS, latest 8 per site). Worker `seo-check` (Mon 06:00 Dubai; `seo_agent` on +
+  `entitledSql('ai')` + published site; per-spa errors logged). Console `websites/[slug]` SEO card + `seo-actions.ts`
+  (Check now, Draft fixes = Write texts `scope: 'seo'`: `textSlots`/`htmlTextSlots` search fields only incl. root
+  title/description where an HTML design falls back to them, `SiteTextRun.scope`). Spa AI studio summary line
+  (`ai.seoCheck*` keys).
 
 ## Google + Meta integrations (F17–F19, Premium)
 
+- **Keys (R29):** console Company page cards (`settings/integration-keys-card.tsx`, saves `saveGoogleKeysAction` /
+  `saveMetaKeysAction` in `(console)/actions.ts`, super-admin + 2FA, audit key names only) → `platform_settings`
+  (plain ids; secrets `*_enc` + `*_last4`). **Never read `process.env.GOOGLE_*` / `META_*` directly:** services
+  `integration-settings.ts` `integrationEnv()` = env with each saved console key on top (key by key, 30 s cache,
+  `invalidateIntegrationEnv()` on save), passed to the pure `googleConfig(env)` / `metaConfig(env)` (Instagram app) /
+  `facebookAppConfig(env)` (Facebook Login: `META_FB_APP_*`, else `META_APP_*`) / `facebookConfigId(env)`; service
+  functions with an optional env default to it. `metaSigningSecrets(env)`: webhook / deauthorize / data-deletion accept
+  either app's HMAC. Facebook Page connect is ready only when `metaConfig` and `facebookAppConfig` both resolve (spa
+  card, connect action, callback, health row `META_FB`). Redirect URIs per platform domain: web `allPlatformUrls()`.
 - **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
   business.manage + webmasters; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
   `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via
@@ -435,6 +453,17 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     (`SiteEnquiryBooking`); inbox shows "Booking request · service · n min · guests · date at time · with staff",
     search matches the service, `siteEnquiryReplyText` names date/time and the service only when the CRM resolved
     it (the visitor's typed text never goes into the spa's WhatsApp message; first name only when it reads as a name).
+    **Make booking (2026-10-13):** a Booking-request row (`calendar.manage`) links `/calendar?enquiry={id}`; `loadCalendar`
+    builds the `EnquiryPrefill` (client by phone E.164 or new, active service + offered length, therapist only if in
+    `day.staff` with a column and not on leave, date = business date of `calendarDate` + time under the branch cutoff,
+    source whatsapp, notes) and CalendarView opens New booking once (param dropped). `createBookingAction` takes
+    optional `enquiryId`: re-checks `clients.view`, `lockSiteEnquiryForBooking` (FOR UPDATE; refuses plain messages,
+    other spas, a live booking), booking + `linkSiteEnquiryBooking` (`booking.bookingId/bookedAt/bookedBy`) in one tx,
+    audit `site.enquiry.booked`; a cancelled booking reopens it (`siteEnquiryBookings`). Row → "Booked" link;
+    `siteEnquiryReplyText(e, spa, { hours, booked })` = confirmation text. After midnight: core
+    `afterMidnight(date, time, hours, cutoff?)` (hours past midnight and time before close → next day; no hours →
+    before the cutoff), services `websiteHours(tx)` → `{ openingHours, cutoff }` (main branch), `enquiryNight`;
+    crm-enquiry stores `afterMidnight` + `calendarDate` (`date` = the night chosen). e2e `enquiry-booking.spec.ts`.
   - Presets (Library): google-reviews, instagram-feed, contact-map, contact-enquiry, video-feature, blog-latest
     (category `media` = "Video & blog"). Template defaults via `templates.ts` `extraBlocks(key)` (own id prefix
     `{key}-x-…`, so existing node ids don't shift). E2E `site-blocks.spec.ts`.
@@ -498,6 +527,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     scripts and styles stay exactly where they are (no script-visible change: an image read while parsing is loaded).
     Upload / connector results list embedded third-party frames / players (`htmlDesignEmbedHosts`, warning
     `htmlDesignEmbedWarning`; see Residual).
+  - **Hosted design files (2026-10-13, BE RELAX v2.2):** our own designs keep built-in pictures + fonts as static files
+    `apps/web/public/designs/{design}/{sha256-16}.{ext}` linked by absolute `https://spamanagement.co/designs/…` URLs
+    (next.config headers for `/designs/:design/:file(ext)`: immutable, CORS `*`, CORP cross-origin; 404 uncached).
+    **Never rename or delete one** (published designs link them). The platform still never moves a design's data: URIs
+    (R24); template roll-out skips an own-look pin when the new version hosts the same bytes (`hostsSamePicture`).
+    Measured gap: a CSP-sandboxed design page (opaque origin) gets no browser-cache reuse in Chromium.
   - **Exact by default (R24 owner rule):** `props.phoneFixes` (NO default in Puck props: absent = stored before R24 = on,
     `@spa/core htmlDesignPhoneFixes`; every writer stores a boolean). Off = only invisible additions: compat shim first in
     <head> (`HTML_DESIGN_COMPAT_SHIM`: in-memory localStorage/sessionStorage + cookie jar, only where access throws),

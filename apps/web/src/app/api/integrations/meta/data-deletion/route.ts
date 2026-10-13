@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto'
-import { forgetInstagramUser, metaConfig, metaUrls, parseSignedRequest } from '@spa/services'
+import {
+  forgetInstagramUser,
+  integrationEnv,
+  metaSigningSecrets,
+  metaUrls,
+  parseSignedRequest,
+} from '@spa/services'
 import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -12,10 +18,11 @@ const confirmation = (userId: string) =>
  * confirmation code Meta shows to the person. Spa customer conversations belong to the spa and stay with it.
  */
 export async function POST(req: NextRequest) {
-  const cfg = metaConfig()
-  if (!cfg) return new Response('Instagram is not configured', { status: 503 })
+  // Signed by the Instagram app, or the Facebook app (Facebook Page connect) when that is a separate one.
+  const secrets = metaSigningSecrets(await integrationEnv())
+  if (!secrets.length) return new Response('Instagram is not configured', { status: 503 })
   const form = await req.formData().catch(() => null)
-  const data = parseSignedRequest(String(form?.get('signed_request') ?? ''), cfg.appSecret)
+  const data = parseSignedRequest(String(form?.get('signed_request') ?? ''), secrets)
   const userId = data?.user_id
   if (!data || (typeof userId !== 'string' && typeof userId !== 'number'))
     return new Response('Invalid request', { status: 400 })

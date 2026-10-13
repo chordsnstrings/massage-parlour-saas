@@ -192,7 +192,9 @@ the address — a custom domain without one is added with `sites.add` and must t
 
 ## Meta: Instagram + Facebook Page (F18, F19)
 
-One Meta app (`META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`) with two products:
+One Meta app with two products (keys in the console, Settings → Meta, or env). Instagram Login uses the **Instagram
+app ID/secret** (`META_APP_ID` / `META_APP_SECRET`, + `META_WEBHOOK_VERIFY_TOKEN`); Facebook Login uses the **Facebook
+App ID/secret** (App settings → Basic: `META_FB_APP_ID` / `META_FB_APP_SECRET`; unset = `META_APP_*`):
 1. **Instagram API with Instagram Login** (existing): redirect `https://app.<domain>/api/integrations/meta/callback`,
    webhook `…/api/integrations/meta/webhook` (fields `messages`, `comments`), deauthorize + data-deletion URLs (the
    Instagram card lists them). Permissions for app review: `instagram_business_basic`,
@@ -207,7 +209,8 @@ One Meta app (`META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`) w
    `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`. Also subscribe the app's
    **Instagram** webhook object to `comments` (Facebook Login path) so comments on a Page-linked account reach the
    inbox; the app is installed on the chosen Page (`subscribed_apps`, field `feed`) automatically.
-   Deauthorize / data-deletion callbacks are the same URLs as Instagram's (they also clear Page tokens).
+   Deauthorize / data-deletion callbacks are the same URLs as Instagram's (they also clear Page tokens). The webhook,
+   deauthorize and data-deletion URLs accept either app's signature (Instagram app secret or Facebook App secret).
 
 Until app review passes, only people with a role on the Meta app (admins, developers, testers) can connect. Page
 tokens don't expire, but Meta's data access lapses 90 days after the person last signed in: the card warns 14 days

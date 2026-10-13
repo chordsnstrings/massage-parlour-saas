@@ -56,7 +56,7 @@ export default defineConfig({
       // Prompt-based site editing (Studio Ask AI, Write texts, Claude / ChatGPT MCP) is limited to these accounts
       // (owners of fixed e2e slugs).
       SITE_AI_EDITOR_EMAILS:
-        'owner-ai-editor@e2e.test,owner-mcp-editor@e2e.test,owner-gpt-editor@e2e.test,owner-texts-editor@e2e.test,owner-rollout-editor@e2e.test',
+        'owner-ai-editor@e2e.test,owner-mcp-editor@e2e.test,owner-gpt-editor@e2e.test,owner-texts-editor@e2e.test,owner-rollout-editor@e2e.test,owner-seo-editor@e2e.test',
       // A second platform domain (resolves to loopback): links and sign-in must follow whichever domain is used.
       EXTRA_ROOT_DOMAINS: `alt.localhost:${PORT}`,
       RESEND_API_KEY: '',

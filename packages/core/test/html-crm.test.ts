@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { crmFeedPath } from '../src/hosts'
 import { overlayHtmlContent } from '../src/html-content'
 import {
+  afterMidnight,
   buildCrmContract,
   CRM_DEFAULTS_MAX,
   type CrmContractSource,
@@ -132,6 +133,59 @@ describe('helpers', () => {
     expect(rows[1]).toEqual({ day: 'tue', open: '11:00', close: '02:00', closed: false })
     expect(rows[2]!.close).toBe('24:00')
     expect(rows[6]).toEqual({ day: 'sun', open: '', close: '', closed: true })
+  })
+
+  it('after midnight: small hours of a day open past midnight are on the next calendar day', () => {
+    // 2026-10-16 is a Friday (Dubai).
+    const late = { fri: [{ open: '11:00', close: '02:00' }], sat: [{ open: '10:00', close: '22:00' }] }
+    expect(afterMidnight('2026-10-16', '00:30', late)).toEqual({
+      afterMidnight: true,
+      calendarDate: '2026-10-17',
+    })
+    expect(afterMidnight('2026-10-16', '00:00', late).afterMidnight).toBe(true) // exactly midnight
+    expect(afterMidnight('2026-10-16', '01:59', late).afterMidnight).toBe(true)
+    expect(afterMidnight('2026-10-16', '02:00', late).afterMidnight).toBe(false) // closed from 02:00
+    expect(afterMidnight('2026-10-16', '10:30', late).afterMidnight).toBe(false) // before opening
+    expect(afterMidnight('2026-10-16', '23:30', late)).toEqual({
+      afterMidnight: false,
+      calendarDate: '2026-10-16',
+    })
+    // Same-day hours: 10:00–22:00, until 24:00, closing exactly at midnight.
+    expect(afterMidnight('2026-10-17', '00:30', late).afterMidnight).toBe(false)
+    const midnight = { fri: [{ open: '10:00', close: '24:00' }], sat: [{ open: '10:00', close: '00:00' }] }
+    expect(afterMidnight('2026-10-16', '00:00', midnight).afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-17', '00:00', midnight).afterMidnight).toBe(false)
+    // The day's first open – last close (as the feed shows it).
+    const split = {
+      fri: [
+        { open: '20:00', close: '01:00' },
+        { open: '10:00', close: '14:00' },
+      ],
+    }
+    expect(afterMidnight('2026-10-16', '00:15', split).afterMidnight).toBe(true)
+    // Closed that weekday, hours not set up, a bad time: the date as sent.
+    expect(afterMidnight('2026-10-18', '00:30', late)).toEqual({
+      afterMidnight: false,
+      calendarDate: '2026-10-18',
+    })
+    expect(afterMidnight('2026-10-16', '00:30', {}).afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '00:30', null).afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '0:30', late).afterMidnight).toBe(false)
+    // Month and year ends roll over (2026-12-31 is a Thursday).
+    const thu = { thu: [{ open: '11:00', close: '02:00' }] }
+    expect(afterMidnight('2026-12-31', '01:00', thu).calendarDate).toBe('2027-01-01')
+    // Hours not set up (the design shows its own): before the branch cutoff is the next day, as the calendar reads it.
+    expect(afterMidnight('2026-10-16', '00:30', {}, '05:00')).toEqual({
+      afterMidnight: true,
+      calendarDate: '2026-10-17',
+    })
+    expect(afterMidnight('2026-10-16', '00:00', null, '05:00:00').afterMidnight).toBe(true)
+    expect(afterMidnight('2026-10-16', '05:00', {}, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '23:30', {}, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '00:30', {}, '00:00').afterMidnight).toBe(false)
+    // Set-up hours win over the cutoff: same-day hours and closed weekdays keep the date.
+    expect(afterMidnight('2026-10-17', '00:30', late, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-18', '00:30', late, '05:00').afterMidnight).toBe(false)
   })
 
   it('makes images absolute or drops them', () => {

@@ -46,6 +46,7 @@ import {
   htmlTextSlots,
   type SiteEditSchema,
   type TextDraft,
+  type TextScope,
   type TextSlot,
   textSlots,
 } from '@spa/services/site-kit'
@@ -105,6 +106,13 @@ const htmlDesignNode = (data: unknown) => {
     ? (content as DesignNode[]).find((n) => n?.type === HTML_DESIGN_BLOCK && n.props)
     : undefined
 }
+/** R30: Draft fixes may also write a page's root title / description (an HTML design's fallback head). */
+const withoutSeoRoot = (data: unknown) => {
+  const d = data as { root?: { props?: Record<string, unknown> } } | null
+  if (!d?.root?.props) return data
+  const { title: _title, description: _description, ...props } = d.root.props
+  return { ...d, root: { ...d.root, props } }
+}
 /** The page without its HtmlDesign website content (the only part Write texts changes there). */
 const withoutHtmlContent = (data: unknown) => {
   const d = data as { content?: unknown } | null
@@ -141,6 +149,7 @@ function dubaiStamp(now = new Date()) {
  * `siteEditSchema()`; without it, or with `htmlOnly`, only HTML-design pages run). `onlyDefaults` leaves what the
  * spa already wrote; `designSha` skips a page whose draft uses another design file; `keepUndo` keeps a template switch's
  * undo available (no "Before Write texts" label over the switch's own draft, `keepTemplateUndo` after the save).
+ * R30: `scope: 'seo'` (Draft fixes after the search check) writes only the search fields (site-kit `TextScope`).
  * Never audits or revalidates (the callers do).
  */
 export async function runSiteTexts(opts: {
@@ -153,6 +162,7 @@ export async function runSiteTexts(opts: {
   onlyDefaults?: boolean
   keepUndo?: boolean
   designSha?: string
+  scope?: TextScope
   schema?: SiteEditSchema
   /** Block pages' design check (web: designSignature); default JSON.stringify. */
   signature?: (data: unknown) => string
@@ -223,8 +233,8 @@ export async function runSiteTexts(opts: {
     const slots = design
       ? html === undefined
         ? []
-        : htmlTextSlots(data, html, { first: leftovers, onlyDefaults: opts.onlyDefaults })
-      : textSlots(data, opts.schema!, { first: leftovers })
+        : htmlTextSlots(data, html, { first: leftovers, onlyDefaults: opts.onlyDefaults, scope: opts.scope })
+      : textSlots(data, opts.schema!, { first: leftovers, scope: opts.scope })
     if (!slots.length) result.skipped.push({ title, reason: 'no texts to write' })
     else
       jobs.push({
@@ -262,10 +272,12 @@ export async function runSiteTexts(opts: {
             return 'the design changed meanwhile — nothing written'
           html = design.source
         }
-        const out = fillTextSlots(current.data, job.slots, drafts, { html })
+        const out = fillTextSlots(current.data, job.slots, drafts, { html, scope: opts.scope })
         if (!out.filled) return 'edited meanwhile — nothing written'
+        const shape = (d: unknown) =>
+          signature(withoutHtmlContent(opts.scope === 'seo' ? withoutSeoRoot(d) : d))
         if (
-          signature(withoutHtmlContent(out.data)) !== signature(withoutHtmlContent(current.data)) ||
+          shape(out.data) !== shape(current.data) ||
           JSON.stringify(out.data).length > MAX_PAGE_BYTES ||
           (job.html && (await htmlDesignContentErrors(tx, tenantId, out.data)).length)
         )
@@ -311,6 +323,7 @@ export async function runSiteTexts(opts: {
             ...(job.html
               ? { htmlDesign: true, leftovers: job.leftovers.filter((k) => slots.some((s) => s.key === k)) }
               : {}),
+            ...(opts.scope === 'seo' ? { seo: true } : {}),
             client: opts.client,
             signal,
           })
@@ -401,6 +414,7 @@ export async function runQueuedSiteTexts(
       onlyDefaults: true,
       keepUndo: true,
       designSha: run.designSha,
+      scope: run.scope,
       client: opts.client,
     })
     await platformDb()

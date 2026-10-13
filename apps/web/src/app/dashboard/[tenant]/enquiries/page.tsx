@@ -2,10 +2,14 @@ import { whatsappLink } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import { withTenant } from '@spa/db'
 import {
+  enquiryNight,
   listSiteEnquiries,
   SITE_ENQUIRY_STATUSES,
+  type SiteEnquiry,
   type SiteEnquiryFilter,
+  siteEnquiryBookings,
   siteEnquiryReplyText,
+  websiteHours,
 } from '@spa/services'
 import { Inbox, Search } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -44,8 +48,26 @@ export default async function EnquiriesPage({
   const q = typeof sp.q === 'string' ? sp.q.slice(0, 80) : ''
   const seePhone = can(ctx, 'clients.phone')
   const canManage = can(ctx, 'clients.manage')
+  // "Make booking" with New booking's permission; the bookings made from requests, the hours that date them.
+  const canBook = can(ctx, 'calendar.manage')
   const { t, fmt } = await getI18n()
-  const list = await withTenant(ctx.tenant.id, (tx) => listSiteEnquiries(tx, { status, q }))
+  const { list, hours, made } = await withTenant(ctx.tenant.id, async (tx) => {
+    const list = await listSiteEnquiries(tx, { status, q })
+    return { list, hours: await websiteHours(tx), made: await siteEnquiryBookings(tx, list.rows) }
+  })
+  /** The booking made from this request while it isn't cancelled. */
+  const bookedAs = (e: SiteEnquiry) => {
+    const k = e.booking?.bookingId ? made.get(e.booking.bookingId) : undefined
+    return k && k.status !== 'cancelled' ? k : null
+  }
+  const calendar = appPath(`/${ctx.tenant.slug}/calendar`)
+  /** That booking's day in the calendar, its sheet open. */
+  const bookedLink = (e: SiteEnquiry) => {
+    const k = bookedAs(e)
+    if (!k || !can(ctx, 'calendar.view')) return null
+    return `${calendar}?${new URLSearchParams({ date: k.businessDate, branch: k.branchId, open: k.id })}`
+  }
+  const day = (d: string) => fmt.weekdayDate(`${d}T12:00:00+04:00`)
   const base = appPath(`/${ctx.tenant.slug}/enquiries`)
   const href = (s: string) => `${base}?status=${s}${q ? `&q=${encodeURIComponent(q)}` : ''}`
   const count = (s: (typeof FILTERS)[number]) =>
@@ -127,10 +149,16 @@ export default async function EnquiriesPage({
                               ? t('enquiries.booking.minutes', { n: fmt.number(e.booking.durationMin) })
                               : null,
                             t('enquiries.booking.guests', { count: e.booking.guests }),
-                            t('enquiries.booking.when', {
-                              date: fmt.date(`${e.booking.date}T12:00:00+04:00`),
-                              time: e.booking.time,
-                            }),
+                            enquiryNight(e.booking, hours).afterMidnight
+                              ? t('enquiries.booking.night', {
+                                  date: day(e.booking.date),
+                                  time: e.booking.time,
+                                  calendarDate: day(enquiryNight(e.booking, hours).calendarDate),
+                                })
+                              : t('enquiries.booking.when', {
+                                  date: fmt.date(`${e.booking.date}T12:00:00+04:00`),
+                                  time: e.booking.time,
+                                }),
                             e.booking.staff ? t('enquiries.booking.with', { name: e.booking.staff }) : null,
                           ]
                             .filter(Boolean)
@@ -175,8 +203,16 @@ export default async function EnquiriesPage({
                       status={e.status}
                       canManage={canManage}
                       replyHref={
-                        seePhone ? whatsappLink(e.phone, siteEnquiryReplyText(e, ctx.tenant.name)) : null
+                        seePhone
+                          ? whatsappLink(
+                              e.phone,
+                              siteEnquiryReplyText(e, ctx.tenant.name, { hours, booked: bookedAs(e) }),
+                            )
+                          : null
                       }
+                      bookHref={canBook && e.booking && !bookedAs(e) ? `${calendar}?enquiry=${e.id}` : null}
+                      booked={bookedAs(e) !== null}
+                      bookedHref={bookedLink(e)}
                     />
                   ),
                 },

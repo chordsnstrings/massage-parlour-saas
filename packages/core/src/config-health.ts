@@ -35,16 +35,50 @@ function encryptionKey(env: Env): { ok: boolean; detail?: string } {
   return bytes === 32 ? { ok: true } : { ok: false, detail: 'not 32 bytes base64' }
 }
 
+/** R29: where a Google / Meta key comes from (console, server env, or nowhere). */
+export type KeySource = 'console' | 'env' | null
+
+/** "from console" / "from env" / "from console + env" for the keys that are set. */
+const sourceDetail = (sources: Record<string, KeySource> | undefined, keys: string[]) => {
+  const found = [...new Set(keys.map((k) => sources?.[k]).filter(Boolean))]
+  return found.length ? `from ${found.join(' + ')}` : undefined
+}
+
+/**
+ * Facebook Page connect (F19): its own Facebook App ID/secret when set, else the Instagram ones (services
+ * `facebookAppConfig`, same fallback key by key); the hint says which. Needs the Instagram keys too (the Page-linked
+ * account's DMs, comments and publishing run through them), and only one of the two Facebook keys is a warning:
+ * the pair would mix the Facebook App ID with the Instagram secret.
+ */
+function facebookApp(env: Env, sources: Record<string, KeySource> | undefined) {
+  const id = env.META_FB_APP_ID?.trim() || env.META_APP_ID?.trim()
+  const secret = env.META_FB_APP_SECRET?.trim() || env.META_APP_SECRET?.trim()
+  const own = ['META_FB_APP_ID', 'META_FB_APP_SECRET'].filter((k) => env[k]?.trim())
+  const instagram = set(env, 'META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN')
+  const detail =
+    own.length === 1
+      ? 'incomplete: set both Facebook App ID and secret'
+      : !instagram && id && secret
+        ? 'needs the Instagram keys too (META_* row)'
+        : own.length
+          ? ['own Facebook app', sourceDetail(sources, own)].filter(Boolean).join(', ')
+          : id && secret
+            ? 'same app as Instagram (META_APP_*)'
+            : undefined
+  return { ok: Boolean(id && secret) && own.length !== 1 && instagram, detail }
+}
+
 /** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */
 const WEB_ONLY = new Set(['TURNSTILE'])
 
 /**
  * Every production setting except the Resend key (shown on its own with its source). `turnstile`: the console-aware
- * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags).
+ * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags). Google + Meta
+ * keys (R29): pass the resolved record (`integrationEnv()`) as `env`; `keySources` adds where they come from.
  */
 export function configChecks(
   env: Env = process.env,
-  opts: { turnstile?: ResolvedTurnstile } = {},
+  opts: { turnstile?: ResolvedTurnstile; keySources?: Record<string, KeySource> } = {},
 ): ConfigCheck[] {
   const backup = backupBucketSource(env)
   const turnstile = opts.turnstile ?? resolveTurnstile(null, env)
@@ -102,13 +136,22 @@ export function configChecks(
       label: 'META_* (Instagram)',
       ok: set(env, 'META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN'),
       required: false,
+      detail: sourceDetail(opts.keySources, ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN']),
       effect: 'Spas cannot connect Instagram.',
+    },
+    {
+      key: 'META_FB',
+      label: 'META_FB_APP_* (Facebook Page connect)',
+      ...facebookApp(env, opts.keySources),
+      required: false,
+      effect: 'Spas cannot connect a Facebook Page.',
     },
     {
       key: 'GOOGLE',
       label: 'GOOGLE_* (sign-in, Business Profile)',
       ok: set(env, 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
       required: false,
+      detail: sourceDetail(opts.keySources, ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']),
       effect: 'No Google sign-in or Business Profile reviews.',
     },
     {

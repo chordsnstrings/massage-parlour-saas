@@ -34,6 +34,16 @@ export const enquiries: Messages['enquiries'] = {
     minutes: '{n} นาที',
     guests: { other: '{count} ท่าน' },
     when: '{date} เวลา {time}',
+    // 2026-10-13: needs native review.
+    night: 'คืน {date} · {time} (หลังเที่ยงคืน, {calendarDate})',
     with: 'กับ {name}',
+  },
+  // "Make booking" (2026-10-13): needs native review.
+  make: {
+    button: 'สร้างการจอง',
+    label: 'สร้างการจองให้ {name}',
+    booked: 'จองแล้ว',
+    bookedLabel: 'เปิดการจองของ {name} ในปฏิทิน',
+    note: 'คำขอจองจากเว็บไซต์',
   },
 }

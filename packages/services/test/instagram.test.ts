@@ -135,6 +135,10 @@ describe('meta helpers', () => {
     expect(verifyMetaSignature(body, null, 'shh-secret')).toBe(false)
     expect(verifyMetaSignature(body, 'sha256=xyz', 'shh-secret')).toBe(false)
     expect(verifyMetaSignature(body, good, '')).toBe(false)
+    // The Instagram app or the separate Facebook app (shared webhook URL): either secret may sign.
+    expect(verifyMetaSignature(body, good, ['ig-secret', 'shh-secret'])).toBe(true)
+    expect(verifyMetaSignature(body, good, ['ig-secret', 'fb-secret'])).toBe(false)
+    expect(verifyMetaSignature(body, good, [])).toBe(false)
   })
 
   it('signs OAuth state and rejects tampering, other secrets and expiry', () => {
@@ -230,6 +234,14 @@ describe('meta helpers', () => {
     expect(parseSignedRequest(`${sig}.${payload}`, 'shh-secret')).toMatchObject({ user_id: IG })
     expect(parseSignedRequest(`${sig}.${payload}`, 'nope')).toBeNull()
     expect(parseSignedRequest('x', 'shh-secret')).toBeNull()
+    expect(parseSignedRequest(`${sig}.${payload}`, ['ig-secret', 'shh-secret'])).toMatchObject({
+      user_id: IG,
+    })
+    expect(parseSignedRequest(`${sig}.${payload}`, ['ig-secret'])).toBeNull()
+    // No secret configured never accepts (an empty key would otherwise verify anyone's HMAC).
+    const unkeyed = createHmac('sha256', '').update(payload).digest('base64url')
+    expect(parseSignedRequest(`${unkeyed}.${payload}`, [''])).toBeNull()
+    expect(parseSignedRequest(`${unkeyed}.${payload}`, '')).toBeNull()
   })
 
   it('enforces the 24-hour window and DM byte limit', () => {

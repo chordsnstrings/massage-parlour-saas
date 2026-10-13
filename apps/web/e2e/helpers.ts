@@ -378,7 +378,7 @@ export async function signInStudioOnAdmin(page: Page, email: string, password = 
 
 /**
  * Studio super-admin whose email counts for SITE_AI_EDITOR_EMAILS (prompt site editing: Studio Ask AI, Write texts,
- * Claude MCP): the allow-list only matches verified emails. Listed in playwright.config.ts: slugs `ai-editor`,
+ * Claude MCP): the allow-list only matches verified emails. Listed in playwright.config.ts: slugs `ai-editor`, `seo-editor`,
  * `mcp-editor`, `texts-editor`.
  */
 export async function makeSiteAiEditor(slug: string) {

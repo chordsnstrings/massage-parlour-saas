@@ -4,6 +4,7 @@
 // under path routing; the proxy rewrites them here with the API headers (never redirected for POST / OPTIONS).
 // Designs run sandboxed (opaque origin): their requests carry `Origin: null`.
 import {
+  afterMidnight,
   clientIpFrom,
   contractLocaleData,
   type HtmlDesignContent,
@@ -21,6 +22,7 @@ import {
   PAGE_SLUG,
   RESERVED_SLUGS,
   SITE_ENQUIRY_LIMITS,
+  websiteHours,
   websiteServices,
   websiteStaff,
   withinRateLimits,
@@ -234,7 +236,7 @@ async function crmEnquiry(req: Request, ctx: SiteParams) {
   const page = q.get('page') ?? ''
   const d = parsed.data
   // Names from the CRM, never the client's: a website service / an opted-in staff member, else the typed text.
-  const { service, person } = await withTenant(tenant.id, async (tx) => {
+  const { service, person, night } = await withTenant(tenant.id, async (tx) => {
     const svc =
       d.service_id && UUID.test(d.service_id)
         ? (await websiteServices(tx, tenant.id)).find((s) => s.id === d.service_id)
@@ -243,7 +245,14 @@ async function crmEnquiry(req: Request, ctx: SiteParams) {
       d.staff_id && UUID.test(d.staff_id)
         ? (await websiteStaff(tx)).find((s) => s.id === d.staff_id)
         : undefined
-    return { service: svc, person: who }
+    // The form offers the small hours under the chosen day and sends that day: the hours the feed shows date them
+    // (not set up: the main branch's business-day cutoff).
+    const hours = await websiteHours(tx)
+    return {
+      service: svc,
+      person: who,
+      night: afterMidnight(d.date, d.time, hours.openingHours, hours.cutoff),
+    }
   })
   const serviceName = service
     ? (locale === 'ar' && service.name.ar?.trim()) || service.name.en
@@ -265,6 +274,8 @@ async function crmEnquiry(req: Request, ctx: SiteParams) {
         guests: d.guests,
         staff: person?.name ?? null,
         staffId: person?.id ?? null,
+        afterMidnight: night.afterMidnight,
+        calendarDate: night.calendarDate,
       },
     },
     clientIpFrom(req.headers),

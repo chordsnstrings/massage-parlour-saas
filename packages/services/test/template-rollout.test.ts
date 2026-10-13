@@ -1,4 +1,5 @@
 // R28 P5 (owner D4): a new HTML template version rolled out live — finder, upgrade, live undo + hold, D5 queue.
+import { createHash } from 'node:crypto'
 import { htmlContentParts, listHtmlDesignTexts } from '@spa/core'
 import {
   closeAllDbs,
@@ -57,6 +58,9 @@ const PNG = Buffer.concat([
   Buffer.alloc(64, 7),
 ])
 const LOGO = `data:image/png;base64,${PNG.toString('base64')}`
+// v1 embeds this light logo; v2 links the same bytes as a hosted design file (BE RELAX v2.2): no pin for it.
+const LIGHT = Buffer.concat([PNG, Buffer.alloc(8, 9)])
+const HOSTED_LIGHT = `https://spamanagement.co/designs/seaside/${createHash('sha256').update(LIGHT).digest('hex').slice(0, 16)}.png`
 const POOL = 'https://cdn.test/pool.jpg'
 
 const doc = (title: string, body: string, data: unknown) =>
@@ -72,7 +76,7 @@ const V1 = doc('Seaside', '<nav><a href="#t">Treatments</a></nav><h1>Arrive slow
     short_name: 'Seaside',
     area_label: '',
     logo_on_dark: LOGO,
-    logo_on_light: '',
+    logo_on_light: `data:image/png;base64,${LIGHT.toString('base64')}`,
     timezone: 'Asia/Dubai',
   },
   journey: [{ id: 'welcome', title: 'Slow down.', body: 'Calm by the sea', tags: [] }],
@@ -92,8 +96,8 @@ const V2 = doc(
       name: 'Your Spa',
       short_name: 'Your Spa',
       area_label: '',
-      logo_on_dark: '',
-      logo_on_light: '',
+      logo_on_dark: 'https://spamanagement.co/designs/seaside/0000000000000000.png', // hosted, other bytes: still pinned
+      logo_on_light: HOSTED_LIGHT,
       timezone: 'Asia/Dubai',
     },
     journey: [{ id: 'welcome', title: 'Slow down.', body: 'Calm by the sea', tags: [], clip: null }],
@@ -329,6 +333,7 @@ describe('live upgrade (owner D4)', () => {
     expect(values['ui.nav.treatments']).toEqual({ t: { en: 'Rituals' } })
     expect(values['spa.short_name']).toEqual({ t: { en: 'Seaside' } })
     expect((values['spa.logo_on_dark'] as { img: string }).img).toMatch(/^\/files\/[0-9a-f-]{36}$/)
+    expect(values['spa.logo_on_light']).toBeUndefined() // the new version hosts the same picture
     expect(htmlContentParts(node(after[0]!.data).content).values['journey[welcome].title']).toEqual({
       t: { en: 'Draft title' },
     })

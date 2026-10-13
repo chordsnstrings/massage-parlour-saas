@@ -332,6 +332,13 @@ export function platformJsonLd(input: PlatformJsonLdInput): Json {
   }
 }
 
+/**
+ * Whether a spa site is in search: not suspended and something published. Otherwise its pages say noindex and
+ * sitemap.xml lists nothing (web server/seo.ts; the R30 search check reads the same rule).
+ */
+export const siteIndexable = (tenantStatus: string, livePages: number) =>
+  tenantStatus !== 'suspended' && livePages > 0
+
 export type RobotsRules = { disallow?: string[]; sitemaps?: string[]; disallowAll?: boolean }
 
 /** robots.txt for every crawler: everything allowed except `disallow` (or nothing, with `disallowAll`). */

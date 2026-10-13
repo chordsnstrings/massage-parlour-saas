@@ -1,7 +1,9 @@
 'use client'
 // F15 Inbox → Enquiries row actions: "Reply on WhatsApp" opens a click-to-send wa.me link (the spa sends it from its
-// own WhatsApp) and marks the enquiry replied; Mark replied / Close / Reopen.
-import { Check, MessageCircle, RotateCcw, X } from 'lucide-react'
+// own WhatsApp) and marks the enquiry replied; Mark replied / Close / Reopen. A booking request: "Make booking" opens
+// the calendar's New booking prefilled; once booked, "Booked" links to the booking (owner 2026-10-13).
+import { CalendarCheck, CalendarPlus, Check, MessageCircle, RotateCcw, X } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useT } from '@/i18n/client'
@@ -15,6 +17,9 @@ export function EnquiryActions({
   status,
   replyHref,
   canManage,
+  bookHref = null,
+  booked = false,
+  bookedHref = null,
 }: {
   slug: string
   id: string
@@ -23,6 +28,11 @@ export function EnquiryActions({
   /** wa.me link with the start of the reply (null without phone access). */
   replyHref: string | null
   canManage: boolean
+  /** The calendar's New booking prefilled from this booking request (null: not one, booked, or no permission). */
+  bookHref?: string | null
+  booked?: boolean
+  /** The booking in the calendar (null without calendar access). */
+  bookedHref?: string | null
 }) {
   const t = useT()
   const router = useRouter()
@@ -35,6 +45,29 @@ export function EnquiryActions({
     )
   return (
     <span className="flex flex-wrap justify-end gap-2">
+      {bookHref && (
+        <Button size="sm" variant="secondary" asChild>
+          <Link href={bookHref} aria-label={t('enquiries.make.label', { name })} data-enquiry-book="">
+            <CalendarPlus /> {t('enquiries.make.button')}
+          </Link>
+        </Button>
+      )}
+      {booked &&
+        (bookedHref ? (
+          <Button size="sm" variant="ghost" asChild>
+            <Link
+              href={bookedHref}
+              aria-label={t('enquiries.make.bookedLabel', { name })}
+              data-enquiry-booked=""
+            >
+              <CalendarCheck /> {t('enquiries.make.booked')}
+            </Link>
+          </Button>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-sm" data-enquiry-booked="">
+            <CalendarCheck className="size-4" /> {t('enquiries.make.booked')}
+          </span>
+        ))}
       {replyHref && (
         <Button size="sm" asChild>
           <a
