@@ -254,6 +254,13 @@ export type SiteEnquiryBooking = {
   guests: number
   staff: string | null
   staffId: string | null
+  /** `date` is the night the visitor chose; a small-hours time is on `calendarDate` (core afterMidnight; 2026-10-13). */
+  afterMidnight?: boolean
+  calendarDate?: string
+  /** "Make booking" (Inbox → Enquiries): the booking made from this request, when and by whom. */
+  bookingId?: string
+  bookedAt?: string
+  bookedBy?: string | null
 }
 
 export const siteEnquiries = pgTable(

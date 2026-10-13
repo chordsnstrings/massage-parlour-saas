@@ -38,6 +38,7 @@ export default async function CalendarPage({
           view: one(sp.view),
           cancelled: one(sp.cancelled),
           open: one(sp.open),
+          enquiry: one(sp.enquiry),
         })
       : null
   if (span) return <SpanView data={span} />

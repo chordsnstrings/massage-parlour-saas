@@ -1,10 +1,19 @@
 // F15 enquiry form: leads from a spa's website (EnquiryForm block) → the spa's dashboard (Inbox → Enquiries), answered
 // by WhatsApp click-to-send (never emailed). Callers run these inside withTenant(); bot check, rate limit,
 // permission and audit stay in the caller.
-import { addDays, dubaiParts, toE164 } from '@spa/core'
-import { type SiteEnquiryBooking, siteEnquiries, type Tx } from '@spa/db'
-import { and, desc, eq, ilike, or, type SQL, sql } from 'drizzle-orm'
+import { addDays, afterMidnight, dubaiParts, type OpeningHours, toE164 } from '@spa/core'
+import {
+  bookingItems,
+  bookings,
+  type SiteEnquiryBooking,
+  services,
+  serviceVariants,
+  siteEnquiries,
+  type Tx,
+} from '@spa/db'
+import { and, asc, desc, eq, ilike, inArray, isNotNull, or, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
+import { DomainError } from './errors'
 
 export const SITE_ENQUIRY_STATUSES = ['new', 'replied', 'closed'] as const
 export type SiteEnquiryStatus = (typeof SITE_ENQUIRY_STATUSES)[number]
@@ -219,6 +228,88 @@ export async function setSiteEnquiryStatus(
   return { from: before.status, row: row! }
 }
 
+/** The night a booking request is for, and its time's calendar date: stored since 2026-10-13, else computed. */
+export function enquiryNight(b: SiteEnquiryBooking, hours: OpeningHours | null | undefined) {
+  return typeof b.afterMidnight === 'boolean' && b.calendarDate
+    ? { afterMidnight: b.afterMidnight, calendarDate: b.calendarDate }
+    : afterMidnight(b.date, b.time, hours)
+}
+
+const notRequest = () => new DomainError('Booking request not found', 'not_found')
+
+/**
+ * "Make booking" (owner 2026-10-13): locks one of this spa's booking requests (RLS) while its booking is created in
+ * the same transaction. Refused when not found (another spa's included), not a booking request, or already booked
+ * (a booking that isn't cancelled).
+ */
+export async function lockSiteEnquiryForBooking(tx: Tx, id: string) {
+  const [row] = await tx.select().from(siteEnquiries).where(eq(siteEnquiries.id, id)).for('update')
+  if (!row?.booking) throw notRequest()
+  const linked = row.booking.bookingId
+  if (linked) {
+    const [b] = await tx.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, linked))
+    if (b && b.status !== 'cancelled') throw new DomainError('Booking request already booked')
+  }
+  return { ...row, booking: row.booking }
+}
+
+/** Records the booking made from a booking request in its `booking` jsonb (no column): which, when, by whom. */
+export async function linkSiteEnquiryBooking(tx: Tx, id: string, bookingId: string, userId: string | null) {
+  const [b] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, bookingId))
+  if (!b) throw new DomainError('Booking not found', 'not_found')
+  const link = { bookingId, bookedAt: new Date().toISOString(), bookedBy: userId }
+  const [row] = await tx
+    .update(siteEnquiries)
+    .set({ booking: sql`${siteEnquiries.booking} || ${JSON.stringify(link)}::jsonb`, updatedAt: new Date() })
+    .where(and(eq(siteEnquiries.id, id), isNotNull(siteEnquiries.booking)))
+    .returning()
+  if (!row) throw notRequest()
+  return row
+}
+
+/** A booking made from a booking request, as the inbox shows it (Dubai date + time of its start). */
+export type SiteEnquiryBooked = {
+  id: string
+  status: (typeof bookings.$inferSelect)['status']
+  branchId: string
+  businessDate: string
+  date: string
+  time: string
+  service: { en: string; ar?: string }
+}
+
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+/** The bookings these requests were booked as, by booking id (another spa's never: RLS). */
+export async function siteEnquiryBookings(tx: Tx, rows: Pick<SiteEnquiry, 'booking'>[]) {
+  const ids = [...new Set(rows.flatMap((r) => (r.booking?.bookingId ? [r.booking.bookingId] : [])))]
+  const out = new Map<string, SiteEnquiryBooked>()
+  if (!ids.length) return out
+  const found = await tx.select().from(bookings).where(inArray(bookings.id, ids))
+  const items = await tx
+    .select({ bookingId: bookingItems.bookingId, item: bookingItems.serviceName, name: services.name })
+    .from(bookingItems)
+    .leftJoin(serviceVariants, eq(serviceVariants.id, bookingItems.serviceVariantId))
+    .leftJoin(services, eq(services.id, serviceVariants.serviceId))
+    .where(inArray(bookingItems.bookingId, ids))
+    .orderBy(asc(bookingItems.startsAt))
+  for (const r of found) {
+    const { date, minutes } = dubaiParts(r.startsAt)
+    const first = items.find((i) => i.bookingId === r.id)
+    out.set(r.id, {
+      id: r.id,
+      status: r.status,
+      branchId: r.branchId,
+      businessDate: r.businessDate,
+      date,
+      time: hhmm(minutes),
+      service: first?.name ?? { en: first?.item ?? '' },
+    })
+  }
+  return out
+}
+
 /** A greeting name: the visitor's first word when it reads as a name (letters, marks, ' ’ -), else nothing. */
 const greetingName = (name: string) => {
   const first = name.trim().split(/\s+/)[0] ?? ''
@@ -228,23 +319,43 @@ const greetingName = (name: string) => {
 /**
  * First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest).
  * The spa's own number sends it to the phone on the enquiry, which anyone can type: only names the CRM resolved
- * (a website service) and validated values go in, never the visitor's free text (no links in the spa's name).
+ * (a website service, the booked service) and validated values go in, never the visitor's free text (no links in the
+ * spa's name). `hours` (main branch) dates small-hours requests stored before 2026-10-13; `booked` (the booking made
+ * from the request, not cancelled) turns it into the confirmation.
  */
 export function siteEnquiryReplyText(
   e: { name: string; locale: string; booking?: SiteEnquiryBooking | null },
   spaName: string,
+  opts: { hours?: OpeningHours | null; booked?: SiteEnquiryBooked | null } = {},
 ) {
   const first = greetingName(e.name)
-  const hi = e.locale === 'ar' ? (first ? `مرحبًا ${first}، ` : 'مرحبًا، ') : first ? `Hi ${first}, ` : 'Hi, '
+  const ar = e.locale === 'ar'
+  const hi = ar ? (first ? `مرحبًا ${first}، ` : 'مرحبًا، ') : first ? `Hi ${first}, ` : 'Hi, '
+  // Arabic copy needs native review. The small hours: "on the night of {night} at {time} (after midnight, {date})".
+  const when = (night: string, time: string, date: string) =>
+    night !== date
+      ? ar
+        ? `ليلة ${night} الساعة ${time} (بعد منتصف الليل، ${date})`
+        : `on the night of ${night} at ${time} (after midnight, ${date})`
+      : ar
+        ? `يوم ${date} الساعة ${time}`
+        : `on ${date} at ${time}`
   const b = e.booking
-  // R26: a booking request (Arabic copy needs native review); the service only when the CRM named it.
+  const k = opts.booked
+  if (b && k) {
+    const service = (ar && k.service.ar?.trim()) || k.service.en
+    const at = when(k.businessDate, k.time, k.date)
+    return ar
+      ? `${hi}تم تأكيد حجزك في ${spaName}${service ? ` لـ ${service}` : ''} ${at}. `
+      : `${hi}your booking at ${spaName} is confirmed${service ? ` for ${service}` : ''} ${at}. `
+  }
+  // R26: a booking request; the service only when the CRM named it.
   if (b) {
     const service = b.serviceId ? b.service : ''
-    return e.locale === 'ar'
-      ? `${hi}شكرًا لطلب الحجز في ${spaName}${service ? ` لـ ${service}` : ''} يوم ${b.date} الساعة ${b.time}. `
-      : `${hi}thank you for your booking request at ${spaName}${service ? ` for ${service}` : ''} on ${b.date} at ${b.time}. `
+    const at = when(b.date, b.time, enquiryNight(b, opts.hours).calendarDate)
+    return ar
+      ? `${hi}شكرًا لطلب الحجز في ${spaName}${service ? ` لـ ${service}` : ''} ${at}. `
+      : `${hi}thank you for your booking request at ${spaName}${service ? ` for ${service}` : ''} ${at}. `
   }
-  return e.locale === 'ar'
-    ? `${hi}شكرًا لرسالتك إلى ${spaName}. `
-    : `${hi}thank you for your message to ${spaName}. `
+  return ar ? `${hi}شكرًا لرسالتك إلى ${spaName}. ` : `${hi}thank you for your message to ${spaName}. `
 }

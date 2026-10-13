@@ -21,22 +21,33 @@ import {
   type Tx,
   withTenant,
 } from '@spa/db'
-import { equipmentStatus, loadCalendarRange, loadDay, rotationFor } from '@spa/services'
+import {
+  enquiryNight,
+  equipmentStatus,
+  getSiteEnquiry,
+  loadCalendarRange,
+  loadDay,
+  rotationFor,
+  siteEnquiryBookings,
+  websiteHours,
+} from '@spa/services'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import type {
   BookingStatus,
   CalendarData,
   CalItem,
+  EnquiryPrefill,
   RotationRow,
   SpanData,
   SpanItem,
 } from '@/components/calendar/types'
-import { getI18n } from '@/i18n/server'
+import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext } from '@/server/access'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ACTIVE: BookingStatus[] = ['pending', 'confirmed', 'checked_in', 'in_service']
 
 const toMin = (hhmm: string) => {
@@ -55,6 +66,65 @@ export async function allowedBranches(tx: Tx, ctx: MemberContext) {
   return rows.filter((b) => ctx.member!.branchIds.includes(b.id))
 }
 
+/**
+ * "Make booking" (owner 2026-10-13): New booking prefilled from one of this spa's website booking requests (RLS; not
+ * one already booked). Its time is on the request's calendar date (the small hours after the chosen night: core
+ * afterMidnight), which this branch's cutoff puts on a business date; the booking action works it out as for any
+ * booking. The service only while active (the requested length when offered), the client by phone, else a new one.
+ */
+async function enquiryPrefill(tx: Tx, ctx: MemberContext, id: string, cutoff: string) {
+  if (!UUID.test(id)) return null
+  const e = await getSiteEnquiry(tx, id)
+  const b = e?.booking
+  if (!e || !b || !/^\d{2}:\d{2}$/.test(b.time)) return null
+  const booked = b.bookingId ? (await siteEnquiryBookings(tx, [e])).get(b.bookingId) : undefined
+  if (booked && booked.status !== 'cancelled') return null
+  const start = dubaiInstant(enquiryNight(b, await websiteHours(tx)).calendarDate, toMin(b.time))
+  const date = businessDateOf(start, cutoff)
+  const variants =
+    b.serviceId && UUID.test(b.serviceId)
+      ? await tx
+          .select({ id: serviceVariants.id, durationMin: serviceVariants.durationMin })
+          .from(serviceVariants)
+          .innerJoin(services, eq(services.id, serviceVariants.serviceId))
+          .where(
+            and(eq(services.id, b.serviceId), eq(services.active, true), eq(serviceVariants.active, true)),
+          )
+          .orderBy(asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+      : []
+  const seePhone = can(ctx, 'clients.phone')
+  const digits = e.phone.replace(/\D/g, '')
+  const [client] = await tx
+    .select({ id: clients.id, name: clients.name, phone: clients.phoneE164, blocked: clients.blocklisted })
+    .from(clients)
+    .where(eq(clients.phoneE164, digits))
+    .limit(1)
+  const t = await getT()
+  const head = [
+    t('enquiries.make.note'),
+    b.guests > 1 ? t('enquiries.booking.guests', { count: b.guests }) : null,
+  ].filter(Boolean)
+  const prefill: EnquiryPrefill = {
+    id: e.id,
+    startMin: Math.round((start.getTime() - dubaiInstant(date, 0).getTime()) / 60_000),
+    variantId: (variants.find((v) => v.durationMin === b.durationMin) ?? variants[0])?.id ?? null,
+    client: client
+      ? {
+          id: client.id,
+          name: client.name,
+          phone: client.phone ? (seePhone ? `+${client.phone}` : maskPhone(client.phone)) : null,
+          blocked: client.blocked,
+        }
+      : null,
+    // Without phone access the number stays on the server: the booking action takes it from the request.
+    newClient: client
+      ? null
+      : { name: e.name, phone: seePhone ? e.phone : '', phoneHint: seePhone ? null : maskPhone(digits) },
+    notes: [head.join(' · '), e.message].filter(Boolean).join('\n').slice(0, 1000),
+  }
+  return { date, prefill, staffId: b.staffId }
+}
+
 /** The staff profile linked to the signed-in member (therapists see only their own bookings). */
 export async function ownStaffId(tx: Tx, ctx: MemberContext) {
   if (!ctx.member) return null
@@ -64,7 +134,7 @@ export async function ownStaffId(tx: Tx, ctx: MemberContext) {
 
 export async function loadCalendar(
   ctx: MemberContext,
-  q: { date?: string; branch?: string; view?: string; cancelled?: string; open?: string },
+  q: { date?: string; branch?: string; view?: string; cancelled?: string; open?: string; enquiry?: string },
 ): Promise<CalendarData | null> {
   const canManage = can(ctx, 'calendar.manage')
   const seePhone = can(ctx, 'clients.phone')
@@ -77,7 +147,12 @@ export async function loadCalendar(
     const cutoffMin = toMin(cutoff)
     const now = new Date()
     const today = businessDateOf(now, cutoff)
-    const date = q.date && DATE.test(q.date) ? q.date : today
+    // Enquiries → "Make booking" (same permissions as the inbox + New booking): the request's day.
+    const fromEnquiry =
+      q.enquiry && canManage && can(ctx, 'clients.view')
+        ? await enquiryPrefill(tx, ctx, q.enquiry, cutoff)
+        : null
+    const date = fromEnquiry?.date ?? (q.date && DATE.test(q.date) ? q.date : today)
     const dayStart = dubaiInstant(date, 0).getTime()
     const rel = (d: Date) => Math.round((d.getTime() - dayStart) / 60_000)
 
@@ -244,6 +319,13 @@ export async function loadCalendar(
       bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
       openBooking: items.some((i) => i.bookingId === q.open) ? q.open! : null,
+      // The requested therapist while bookable here, else "any".
+      enquiry: fromEnquiry
+        ? {
+            ...fromEnquiry.prefill,
+            staffId: staffCols.some((c) => c.id === fromEnquiry.staffId) ? fromEnquiry.staffId! : undefined,
+          }
+        : null,
     }
   })
 }

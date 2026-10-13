@@ -48,6 +48,17 @@ export async function crmFeedFacts(tx: Tx, tenantId: string) {
   }
 }
 
+/** Opening hours of the main branch (default first, as `crmFeedFacts` orders them): the hours a design's form offers. */
+export async function websiteHours(tx: Tx) {
+  const [main] = await tx
+    .select({ openingHours: branches.openingHours })
+    .from(branches)
+    .where(eq(branches.active, true))
+    .orderBy(desc(branches.isDefault), asc(branches.createdAt))
+    .limit(1)
+  return main?.openingHours ?? null
+}
+
 /**
  * Ids of the live versions (newest published of each visible page) whose content has an HtmlDesign block. Published
  * versions are never rewritten, so the ids address the live content (a cache key). Only a site whose live HTML design

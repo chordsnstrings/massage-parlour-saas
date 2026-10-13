@@ -2,7 +2,7 @@
 // data from `window.CRM_DATA` (an inline `<script>window.CRM_DATA = {…}</script>` JSON literal) or fetches it from
 // `<meta name="crm-endpoint" content="crm-data.json">` (the "Candlelight" contract) gets the operational values live
 // from the spa's CRM: only that JSON changes, every other byte of the design stays as built (R24 hard rule).
-import type { OpeningHours, Weekday } from './booking'
+import { addDays, dubaiInstant, dubaiParts, type OpeningHours, type Weekday } from './booking'
 import { attributesOf, tagEnd } from './html-design'
 import { branchMapsHref } from './maps'
 import { toE164 } from './whatsapp'
@@ -449,6 +449,25 @@ export function crmHours(hours: OpeningHours | null | undefined): CrmHour[] {
       ? { day, open: iv[0]!.open, close: iv[iv.length - 1]!.close, closed: false }
       : { day, open: '', close: '', closed: true }
   })
+}
+
+/**
+ * A design's booking form offers the small hours under the chosen day ("00:30 (after midnight)" for 11:00–02:00) and
+ * sends that day's date (owner 2026-10-13). The date's hours as the CRM feed shows them (`crmHours`: first open – last
+ * close of its weekday, Dubai): when they run past midnight (close <= open) and the time is before both the close and
+ * the open, the visit is on the next calendar day. Closed days, hours not set up and same-day hours keep the date.
+ */
+export function afterMidnight(
+  date: string,
+  time: string,
+  hours: OpeningHours | null | undefined,
+): { afterMidnight: boolean; calendarDate: string } {
+  const weekday = dubaiParts(dubaiInstant(date, 12 * 60)).weekday
+  const day = crmHours(hours).find((h) => h.day === weekday)
+  const t = HHMM.test(time) ? minutes(time) : -1
+  const after =
+    !!day && !day.closed && minutes(day.close) <= minutes(day.open) && t >= 0 && t < minutes(day.close)
+  return { afterMidnight: after, calendarDate: after ? addDays(date, 1) : date }
 }
 
 /** An image the page may load: https URLs as they are, site paths (`/files/…`) made absolute; else ''. */

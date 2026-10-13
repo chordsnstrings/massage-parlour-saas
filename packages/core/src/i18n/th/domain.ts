@@ -15,6 +15,9 @@ export const domain: Messages['errors']['domain'] = {
     saleStatus: { open: 'ค้างชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิกแล้ว', refunded: 'คืนเงินแล้ว' },
   },
   bookingNotFound: 'ไม่พบการจอง',
+  // 2026-10-13: needs native review.
+  bookingRequestNotFound: 'ไม่พบคำขอจองนี้',
+  bookingRequestBooked: 'คำขอจองนี้จองแล้ว',
   bookingCheckedOutReopen: 'การจองนี้ชำระเงินแล้ว — ยกเลิกหรือคืนเงินรายการขายก่อน',
   completeFirst: 'ทำเครื่องหมายการจองว่าเสร็จสิ้นก่อน',
   commissionRange: 'กรอกค่าคอมมิชชันระหว่าง 0 ถึง 100,000 AED',
