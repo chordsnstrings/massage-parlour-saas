@@ -5,7 +5,7 @@ import { pageVersions, sitePages, sites, siteTemplates, tenants } from '@spa/db'
 import { and, desc, eq } from 'drizzle-orm'
 import {
   admin,
-  makeStudio,
+  makeSiteAiEditor,
   mockAiReply,
   PORT,
   signInStudioOnAdmin,
@@ -94,7 +94,8 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
   // The design's own spa ("Seaside Test Spa"); its owner is a listed AI editor (SITE_AI_EDITOR_EMAILS).
   const owner = await signUpOwner(page, { slug: 'rollout-editor', spa: 'Seaside Test Spa' })
   const { slug } = owner
-  await makeStudio(slug)
+  // A listed AI editor counts only with a verified email (makeSiteAiEditor = makeStudio + verified).
+  await makeSiteAiEditor(slug)
   await signInStudioOnAdmin(page, owner.email)
   const db = testDb()
 
@@ -328,11 +329,9 @@ test('R28 P5: a new HTML template version rolls out live (edits carried, undo + 
     // A real Roll out: the held spa is reported and stays on v1.
     const versionsBefore = (await versionsOf(pageId)).length
     await sheet.getByRole('button', { name: 'Roll out to 1 spa' }).click()
-    await expect(
-      page
-        .getByText(/Version 2 is live for 0 spas\. Not switched: Seaside Test Spa \(kept on version 1 /)
-        .first(),
-    ).toBeVisible({ timeout: 60_000 })
+    const result = page.getByRole('dialog', { name: 'Version 2 rolled out' })
+    await expect(result).toBeVisible({ timeout: 60_000 })
+    await expect(result).toContainText('Seaside Test Spa — kept on version 1 (its upgrade was undone)')
     await page.keyboard.press('Escape')
     expect(shaOf((await liveOf(pageId)).data)).toBe(sha1)
     expect((await versionsOf(pageId)).length).toBe(versionsBefore)
