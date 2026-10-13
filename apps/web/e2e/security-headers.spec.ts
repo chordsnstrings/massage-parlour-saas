@@ -155,6 +155,25 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
   // R24: the shell leaves the motion sensors to the hosting page's delegation; the rest stays off.
   expect(shell['permissions-policy']).not.toContain('accelerometer')
   expect(shell['permissions-policy']).toContain('camera=()')
+  // BE RELAX v2.2: the design's hosted pictures + Arabic fonts (public/designs) on every host, own domains too: cached
+  // for good, CORS for the sandboxed (opaque-origin) design page, never a page (no proxy, no CSP); a miss isn't cached.
+  for (const host of ['', 'app.', 'admin.', `${slug}.`]
+    .map((h) => `http://${h}localhost:${PORT}`)
+    .concat('http://www.csp-headers-test.ae')) {
+    for (const file of ['3427efdf7896718d.woff2', '998d1a1a386836e2.webp']) {
+      const res = await viaHost(page, `${host}/designs/be-relax/${file}`)
+      const h = res.headers()
+      expect(res.status(), `${host} ${file}`).toBe(200)
+      expect(h['content-type']).toBe(file.endsWith('.woff2') ? 'font/woff2' : 'image/webp')
+      expect(h['cache-control']).toBe('public, max-age=31536000, immutable')
+      expect(h['access-control-allow-origin']).toBe('*')
+      expect(h['cross-origin-resource-policy']).toBe('cross-origin')
+      expect(h['content-security-policy']).toBeUndefined()
+    }
+  }
+  const miss = await viaHost(page, `http://${slug}.localhost:${PORT}/designs/be-relax/0000000000000000.webp`)
+  expect(miss.status()).toBe(404)
+  expect(miss.headers()['cache-control']).not.toContain('immutable')
 })
 
 test('F10: an injected script without the nonce never runs; the page itself still works', async ({
