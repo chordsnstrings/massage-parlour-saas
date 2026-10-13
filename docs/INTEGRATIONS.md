@@ -170,7 +170,8 @@ first, then consent) and picks the location; the card shows "Connected as {email
   (connections made before `openid email`: possibly the same account), and never for a connection whose account is
   unknown.
 - Reviews sync every 2 hours (worker job `gbp-reviews-sync`) and on *Sync now* — read only: they feed the Website
-  "Google reviews" block and the card's count + rating. **Review replies are dropped for now** (owner 2026-10-13,
+  "Google reviews" block, the card's count + rating, the Marketing page's "Reviews synced" stat + average and
+  Performance "reviews by source". **Review replies are dropped for now** (owner 2026-10-13,
   `REVIEW_REPLIES_LIVE = false` in `packages/core/src/switches.ts`): no AI drafts, no autopilot, no posting; the
   dashboard Reviews page shows "Coming soon" and the review agent can't be switched on. (Dormant code path when it is
   turned back on: new reviews get an AI draft when the review agent is on, autopilot posts 4–5★ replies, 1–3★ wait.)

@@ -7,8 +7,14 @@
  * (dashboard actions refuse, `draftReviewReply` throws, the Google sync skips AI drafts + autopilot, `postGbpReply`
  * refuses, AI-draft notices skip replies), the AI-studio review agent shows "Coming soon" and can't be switched on (a
  * stored "on" is ignored), and the dashboard Reviews page shows a "Coming soon" panel. Reading Google reviews stays
- * (sync every 2 h, the 30-day rule, the Website "Google reviews" block, the Google card's count + rating).
- * Turning it back on also needs the copy restored: settings `integrations.description` + `gbp.sub/untilThen/features`,
- * `ai.shortcutReviews`, `notifications.ai.drafts.body`, plans.ts `reviews` row, marketing content.ts, privacy page.
+ * (sync every 2 h, the 30-day rule, the Website "Google reviews" block, the Google card's count + rating, the Marketing
+ * "Reviews synced" stat, Performance reviews by source).
+ * Before turning it back on: (1) a migration `update ai_agent_settings set enabled = false where agent_key =
+ * 'review_agent'` so every spa opts in again — a stored "on" + autopilot is only ignored meanwhile (spas can't open
+ * Configure to switch it off), and reviews imported while off stay reply_status 'none' after the draft cutoff, so the
+ * first sync would otherwise draft and auto-post 4–5★ replies to the whole backlog; (2) restore the copy: settings
+ * `integrations.description` + `gbp.sub/untilThen/features`, `ai.shortcutReviews`, `notifications.ai.drafts.body`,
+ * `plan.feature.marketing.text`, `automations.items.googleReviews.desc`, plans.ts `reviews` row, marketing
+ * content.ts, privacy page.
  */
 export const REVIEW_REPLIES_LIVE = false as boolean

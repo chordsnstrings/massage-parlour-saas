@@ -55,7 +55,7 @@ export const automations = {
     },
     googleReviews: {
       name: 'Google reviews sync',
-      desc: 'Pulls new Google reviews and drafts replies',
+      desc: 'Pulls new Google reviews for your website and the Google card',
       schedule: 'Every 2 h',
     },
     weeklyInsights: {

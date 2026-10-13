@@ -1394,15 +1394,20 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   "Coming soon" without Configure and saving it switched on is refused. The menu keeps Reviews at the same place
   (Premium gate unchanged); its page shows only a "Coming soon" panel (title + one sentence; the hand-paste "Add
   review" is hidden with the list). **Reading stays:** Google sync + the 30-day rule, the Website "Google reviews" block
-  (`siteReviews`), the Google card's count + rating. Copy without the reply promise: Settings → Instagram & Google
+  (`siteReviews`), the Google card's count + rating, the Marketing "Reviews synced" stat + average, Performance
+  "reviews by source". Copy without the reply promise: Settings → Instagram & Google
   (intro; Google card sub / until-then / features, no autopilot line, no "Review replies" link), AI studio shortcut
-  "Reviews · coming soon", plan row "Review requests (AI review replies coming soon)" (pricing + plan cards), marketing
+  "Reviews · coming soon", Premium upsell `plan.feature.marketing.text` "…and review requests (review replies coming
+  soon)", Automations Google reviews sync description (no "drafts replies"), plan row "Review requests (AI review replies coming soon)" (pricing + plan cards), marketing
   Features line, privacy draft (no Google review replies or autopilot; Meta replies to messages/comments stay; still
   pending owner approval), INTEGRATIONS.md §2 (`business.manage` justification + demo video without a reply). The
-  reply code stays dormant behind the switch; turning it back on = flip it + restore the copy listed in switches.ts.
+  reply code stays dormant behind the switch; turning it back on = first a migration switching every stored
+  `review_agent` off (else the first sync drafts + auto-posts 4–5★ replies to the whole backlog), then flip it + restore
+  the copy listed in switches.ts.
   New/changed TH strings (flagged for native review): `reviews.soonTitle|soonText`, `ai.comingSoon|shortcutReviews`,
   `errors.domain.reviewRepliesComingSoon`, `settings.integrations.description`,
-  `settings.integrations.gbp.sub|untilThen|features.reviews`, `notifications.ai.drafts.body`.
+  `settings.integrations.gbp.sub|untilThen|features.reviews`, `notifications.ai.drafts.body`,
+  `plan.feature.marketing.text`, `automations.items.googleReviews.desc`.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

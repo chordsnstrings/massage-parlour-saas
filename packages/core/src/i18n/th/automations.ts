@@ -55,7 +55,7 @@ export const automations: Messages['automations'] = {
     },
     googleReviews: {
       name: 'ซิงก์รีวิว Google',
-      desc: 'ดึงรีวิว Google ใหม่และร่างคำตอบ',
+      desc: 'ดึงรีวิว Google ใหม่สำหรับเว็บไซต์และการ์ด Google',
       schedule: 'ทุก 2 ชม.',
     },
     weeklyInsights: {

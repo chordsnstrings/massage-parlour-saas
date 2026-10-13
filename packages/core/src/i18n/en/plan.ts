@@ -17,7 +17,7 @@ export const plan = {
     },
     marketing: {
       name: 'Marketing tools',
-      text: 'Campaigns with win-back and birthday drafts, quiet-slot offers, Google Business and Instagram posting, review requests and replies.',
+      text: 'Campaigns with win-back and birthday drafts, quiet-slot offers, Google Business and Instagram posting, and review requests (review replies coming soon).',
     },
     multiBranch: {
       name: 'More branches',

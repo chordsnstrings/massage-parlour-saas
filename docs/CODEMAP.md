@@ -423,7 +423,9 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `ai/actions.ts` (`draftReplyAction`, `saveAgentAction` review_agent on), `ai/reviews/actions.ts`
   (`saveReviewReplyAction`), `ai/reviews/page.tsx` (`ReviewsComingSoon` panel), `ai/page.tsx` (review agent card),
   `integrations/gbp-card.tsx` (no autopilot line / replies link), google `syncGoogleReviewsAction` + worker
-  `syncAllGbpReviews` (no drafter). Reading reviews is untouched. Tests: services `gbp.test.ts` ("replies dropped"),
+  `syncAllGbpReviews` (no drafter). Reading reviews is untouched (Website block, Google card, Marketing "Reviews
+  synced" stat, Performance by source). Re-enabling: migration `review_agent` enabled=false first (stored on +
+  autopilot is only ignored; the backlog would be auto-replied), then flip + restore the copy listed in switches.ts. Tests: services `gbp.test.ts` ("replies dropped"),
   `notifications.test.ts`, ai `agents.test.ts` ("review agent"), worker `gbp-reviews.test.ts`, e2e `gbp.spec.ts`.
 - **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
   business.manage + webmasters + openid email; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
