@@ -39,11 +39,28 @@ export type TextSlot = {
 export type TextDraft = { key: string; en: string; ar: string }
 /**
  * R30 "Draft fixes" (after the search check): `seo` = the search fields only — a block page's root title +
- * description (also while still empty: written new), an HTML design's page title, meta description and image alt
- * texts (only those it already has: page texts are never added).
+ * description (also while still empty: written new); an HTML design's page title and meta description (also when
+ * blank in the file; never added to a design without them) and, where the live page falls back to them, the page's
+ * root title / description (a framed design without its own; an exact design without a `<title>`: the title only).
+ * Alt texts never: the design's own are not what a search check flags.
  */
 export type TextScope = 'seo'
 const SEO_ROOT_PROPS = ['title', 'description']
+
+/** A root title / description as a search slot (empty: written new); a legacy plain-string value is left alone. */
+function seoRootSlot(props: unknown, prop: string, multiline: boolean): TextSlot | null {
+  const v = isObj(props) ? props[prop] : undefined
+  if (v !== undefined && v !== '' && !isObj(v)) return null
+  return {
+    key: `root/${prop}`,
+    block: 'root',
+    type: 'root',
+    prop,
+    multiline,
+    en: isObj(v) && typeof v.en === 'string' ? v.en : '',
+    ar: isObj(v) && typeof v.ar === 'string' ? v.ar : '',
+  }
+}
 
 const MAX_LINE = 200
 const MAX_MULTILINE = 1500
@@ -83,18 +100,8 @@ export function textSlots(
     const props = (data as { root?: { props?: unknown } } | null)?.root?.props
     for (const prop of SEO_ROOT_PROPS) {
       const spec = schema.root[prop]
-      const v = isObj(props) ? props[prop] : undefined
-      // A legacy plain-string value is left alone.
-      if (spec?.kind !== 'bi' || (v !== undefined && v !== '' && !isObj(v))) continue
-      out.push({
-        key: `root/${prop}`,
-        block: 'root',
-        type: 'root',
-        prop,
-        multiline: spec.multiline === true,
-        en: isObj(v) && typeof v.en === 'string' ? v.en : '',
-        ar: isObj(v) && typeof v.ar === 'string' ? v.ar : '',
-      })
+      const slot = spec?.kind === 'bi' ? seoRootSlot(props, prop, spec.multiline === true) : null
+      if (slot) out.push(slot)
     }
     return out
   }
@@ -153,8 +160,10 @@ export function htmlTextSlots(
   const out: TextSlot[] = []
   if (!node || !block) return out
   const parts = htmlContentParts(node.props.content)
+  // R30: a blank page title / meta description of the file is a search slot too (written new).
   const push = (slot: TextSlot) => {
-    if (slot.key.length <= MAX_KEY && slot.en.trim()) out.push(slot)
+    if (slot.key.length <= MAX_KEY && (slot.en.trim() || (seo && slot.prop.startsWith('text:'))))
+      out.push(slot)
   }
   const designData = crmDesignData(htmlCrmContractOf(html))
   const manifest = crmContractManifest(designData)
@@ -185,8 +194,9 @@ export function htmlTextSlots(
       ...(arabicOnly ? { arabicOnly: true as const } : {}),
     })
   }
-  for (const x of listHtmlDesignTexts(html)) {
-    if (x.bound || (seo && x.kind !== 'title' && x.kind !== 'meta' && x.attr !== 'alt')) continue
+  const listed = listHtmlDesignTexts(html)
+  for (const x of listed) {
+    if (x.bound || (seo && x.kind !== 'title' && x.kind !== 'meta')) continue
     const key = `${block}/text:${x.id}`
     const t = parts.texts[x.id]?.src === x.src ? parts.texts[x.id]?.t : undefined
     const arabicOnly = own(key, t?.en) && englishOnlyOwn(t)
@@ -202,6 +212,18 @@ export function htmlTextSlots(
       src: x.src,
       ...(arabicOnly ? { arabicOnly: true as const } : {}),
     })
+  }
+  if (seo) {
+    // The live head falls back to the page's root title / description (core seoCheck headOf, site-html route).
+    const exact = node.props.phoneFixes === false
+    const has = (id: string) => out.some((s) => s.prop === `text:${id}`)
+    const props = (data as { root?: { props?: unknown } } | null)?.root?.props
+    const add = (prop: string, multiline: boolean) => {
+      const slot = seoRootSlot(props, prop, multiline)
+      if (slot) out.push(slot)
+    }
+    if (!has('title') && (!exact || !listed.some((x) => x.id === 'title'))) add('title', false)
+    if (!has('meta-description') && !exact) add('description', true)
   }
   const first = opts.first
   const rank = (s: TextSlot) => (first?.has(s.key) ? 0 : s.arabicOnly ? 1 : 2)
@@ -280,20 +302,22 @@ function leafOf(data: { root?: { props?: Record<string, unknown> } }, slot: Text
  * Writes AI drafts into a copy of `data`: only for slots the model was given (unknown keys are ignored) and only
  * where the English text is still what the model saw (an edit made meanwhile wins). Empty drafts are skipped.
  * HTML-design slots need `html` (the page's design, else skipped): written into the block's website content where
- * the slot and the design text are unchanged (pictures and the other parts kept).
+ * the slot and the design text are unchanged (pictures and the other parts kept). `scope`: the slots' (R30).
  */
 export function fillTextSlots<T>(
   data: T,
   slots: TextSlot[],
   drafts: TextDraft[],
-  opts: { html?: string } = {},
+  opts: { html?: string; scope?: TextScope } = {},
 ) {
   const copy = structuredClone(data) as T & { root?: { props?: Record<string, unknown> } }
   const byKey = new Map(slots.map((s) => [s.key, s]))
   const node = opts.html === undefined ? null : htmlDesignNode(copy)
   const fresh = node
     ? new Map(
-        htmlTextSlots(copy, opts.html ?? '', { maxPerPage: Number.POSITIVE_INFINITY }).map((s) => [s.key, s]),
+        htmlTextSlots(copy, opts.html ?? '', { maxPerPage: Number.POSITIVE_INFINITY, scope: opts.scope }).map(
+          (s) => [s.key, s],
+        ),
       )
     : null
   const parts = node ? htmlContentParts(node.props.content) : null

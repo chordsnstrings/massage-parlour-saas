@@ -168,6 +168,10 @@ describe('seo check (R30)', () => {
     expect(htmlImagesWithoutAlt(src)).toBe(4)
     expect(htmlImagesWithoutAlt('<img src="x.jpg"')).toBe(1)
     expect(htmlImagesWithoutAlt('<script><img src=x>')).toBe(0)
+    // Only a letter starts a tag: `5<10` is text, the picture after it still counts.
+    expect(htmlImagesWithoutAlt('<p>Open 5<10 km <img src=a.jpg></p><p>a<-b <:x <img src=b.jpg alt=B>')).toBe(
+      1,
+    )
   })
 
   it('HTML designs: the spa’s page texts over the design’s own title / description (src guard), {{spa_name}} filled', () => {

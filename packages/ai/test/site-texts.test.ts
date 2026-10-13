@@ -11,7 +11,7 @@ import {
   queueSiteTexts,
   storeSpaHtmlDoc,
 } from '@spa/services'
-import { htmlTextSlots, type SiteEditSchema, textSlots } from '@spa/services/site-kit'
+import { fillTextSlots, htmlTextSlots, type SiteEditSchema, textSlots } from '@spa/services/site-kit'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createModelArkClient, runQueuedSiteTexts, runSiteTexts, sweepSiteTexts } from '../src'
@@ -368,7 +368,7 @@ describe('Draft fixes scope (R30): only the search fields', () => {
     )
   })
 
-  it('slots: a block page’s title + description (also when missing); a design’s title, meta and alt texts', async () => {
+  it('slots: a block page’s title + description (also when missing); a design’s title + meta, never alts', async () => {
     const home = await draftOf(ids.home!)
     expect(textSlots(home, schema, { scope: 'seo' }).map((s) => [s.key, s.en])).toEqual([
       ['root/title', 'Home'],
@@ -380,9 +380,66 @@ describe('Draft fixes scope (R30): only the search fields', () => {
     expect(htmlTextSlots(offers, SEO_HTML, { scope: 'seo' }).map((s) => s.key)).toEqual([
       'o-1/text:title',
       'o-1/text:meta-description',
-      `o-1/text:${ALT.id}`,
     ])
-    expect(htmlTextSlots(offers, SEO_HTML).map((s) => s.key)).toContain(`o-1/text:${H.id}`)
+    expect(htmlTextSlots(offers, SEO_HTML).map((s) => s.key)).toEqual(
+      expect.arrayContaining([`o-1/text:${H.id}`, `o-1/text:${ALT.id}`]),
+    )
+  })
+
+  it('slots: an HTML design without its own head texts falls back to the page’s root title / description', () => {
+    const page = (phoneFixes?: false) => ({
+      root: { props: { htmlDesign: true, title: { en: 'Offers' }, description: { en: '' } } },
+      content: [
+        {
+          type: 'HtmlDesign',
+          props: { id: 'd-1', html: '', ...(phoneFixes === false ? { phoneFixes } : {}) },
+        },
+      ],
+    })
+    const bare = '<!doctype html><html><head></head><body><h1>Hi</h1></body></html>'
+    const keys = (data: unknown, html: string) =>
+      htmlTextSlots(data, html, { scope: 'seo' }).map((s) => [s.key, s.en, s.multiline])
+    // Framed (Phone fixes on): the page's metadata is the live head.
+    expect(keys(page(), bare)).toEqual([
+      ['root/title', 'Offers', false],
+      ['root/description', '', true],
+    ])
+    // Exact: the file's own head; the route only adds the page title to a file without a <title>.
+    expect(keys(page(false), bare)).toEqual([['root/title', 'Offers', false]])
+    const blank =
+      '<!doctype html><html><head><title> </title><meta name="description" content=""></head></html>'
+    expect(keys(page(false), blank)).toEqual([
+      ['d-1/text:title', '', false],
+      ['d-1/text:meta-description', '', true],
+    ])
+    // Both are written: the root description new, the blank meta as the spa's page text.
+    const data = page(false)
+    const slots = [
+      ...htmlTextSlots(page(), bare, { scope: 'seo' }),
+      ...htmlTextSlots(data, blank, { scope: 'seo' }),
+    ]
+    const description = { en: 'Seasonal massage offers in Dubai Marina, every day.', ar: 'عروض التدليك' }
+    const out = fillTextSlots(
+      data,
+      slots.filter((s) => s.prop !== 'title'),
+      [
+        { key: 'root/description', ...description },
+        { key: 'd-1/text:meta-description', ...description },
+      ],
+      { html: blank, scope: 'seo' },
+    )
+    expect(out.filled).toBe(2)
+    expect(out.data.root.props.description).toEqual(description)
+    expect(
+      htmlContentParts((out.data.content[0]!.props as { content?: unknown }).content).texts[
+        'meta-description'
+      ]?.t,
+    ).toEqual(description)
+    // Without the scope the blank meta is no slot: nothing written there.
+    expect(
+      fillTextSlots(data, slots, [{ key: 'd-1/text:meta-description', ...description }], { html: blank })
+        .filled,
+    ).toBe(0)
   })
 
   it('runSiteTexts with scope seo: search rules in the prompt, only those fields written (drafts)', async () => {

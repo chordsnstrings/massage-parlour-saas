@@ -61,6 +61,7 @@ export const ai = {
   seoCheckLastOne: 'Last search check {date}: 1 thing to improve — our team drafts the fix for you.',
   seoCheckGood: 'Last search check {date}: all good.',
   seoCheckFirst: 'The first search check runs on Monday.',
+  seoCheckNotLive: 'The weekly search check starts once your website is published.',
   // Try the receptionist
   tryTitle: 'Try your AI receptionist',
   tryMeta: 'Try the AI receptionist',

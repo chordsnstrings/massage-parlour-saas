@@ -1,5 +1,5 @@
 import { aiAgentSettings, aiUsage, brandProfiles, withTenant } from '@spa/db'
-import { getSite, latestSeoCheck } from '@spa/services'
+import { getSite, latestSeoCheck, listPublishedPages } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
 import { ArrowRight, Image as ImageIcon, MessageCircle, Search, Sparkles, Star, Timer } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -41,7 +41,7 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
   // PLAN §18.8: the AI studio is part of Premium (`ai`); ai/content + ai/reviews gate themselves (`marketing`).
   if (!(await hasFeature(ctx.tenant.id, 'ai'))) return <PlanUpsell ctx={ctx} feature="ai" />
   const slug = ctx.tenant.slug
-  const { settings, spent, brand, seoCheck } = await withTenant(ctx.tenant.id, async (tx) => ({
+  const { settings, spent, brand, seo } = await withTenant(ctx.tenant.id, async (tx) => ({
     settings: await tx.select().from(aiAgentSettings),
     spent: Number(
       (
@@ -52,17 +52,21 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
       )[0]?.v ?? 0,
     ),
     brand: (await tx.select().from(brandProfiles))[0],
-    // R30: the weekly search check (shown under the SEO card).
-    seoCheck: await getSite(tx, ctx.tenant.id).then((site) => (site ? latestSeoCheck(tx, site.id) : null)),
+    // R30: the weekly search check (shown under the SEO card); it only runs on a live (published) website.
+    seo: await getSite(tx, ctx.tenant.id).then(async (site) => ({
+      check: site ? await latestSeoCheck(tx, site.id) : null,
+      live: site ? (await listPublishedPages(tx, ctx.tenant.id)).length > 0 : false,
+    })),
   }))
   const budget = Number(ctx.tenant.aiBudgetUsd)
   const manage = can(ctx, 'ai.manage')
   const { t, fmt } = await getI18n()
   const usd = (v: number) => fmt.number(Math.round(v * 100) / 100)
   const seoLine = (on: boolean) => {
-    if (!seoCheck) return on ? t('ai.seoCheckFirst') : null
-    const n = seoCheck.counts.high + seoCheck.counts.medium
-    const date = fmt.date(seoCheck.checkedAt)
+    const check = seo.check
+    if (!check) return on ? t(seo.live ? 'ai.seoCheckFirst' : 'ai.seoCheckNotLive') : null
+    const n = check.counts.high + check.counts.medium
+    const date = fmt.date(check.checkedAt)
     if (!n) return t('ai.seoCheckGood', { date })
     return n === 1 ? t('ai.seoCheckLastOne', { date }) : t('ai.seoCheckLast', { date, n: fmt.number(n) })
   }

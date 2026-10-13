@@ -187,12 +187,14 @@ export function htmlImagesWithoutAlt(html: string): number {
       i = close < 0 ? len : close + 3
       continue
     }
-    let j = lt + 1
-    while (j < len && nameChar(html.charCodeAt(j))) j++
-    if (j === lt + 1) {
-      i = lt + 1 // `</…`, `<!…`, a stray `<`
+    // A tag starts with an ASCII letter (as in the HTML tokenizer): `5<10`, `</…`, `<!…` or a stray `<` is text.
+    const c = html.charCodeAt(lt + 1) | 32
+    if (c < 97 || c > 122) {
+      i = lt + 1
       continue
     }
+    let j = lt + 2
+    while (j < len && nameChar(html.charCodeAt(j))) j++
     const name = html.slice(lt + 1, j).toLowerCase()
     const end = tagEnd(html, j)
     if (name === 'img') {

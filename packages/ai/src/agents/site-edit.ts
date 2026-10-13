@@ -403,14 +403,13 @@ This page is an uploaded design (block HtmlDesign):
 - Keys listed as LEFTOVERS still name another spa, city, phone or test copy: rewrite them for this spa from FACTS.
 - Slots with "arabic_only": true were written by the spa in English: return their "en" exactly as given and write only "ar", a natural Arabic version of that English.`
 
-/** R30 Draft fixes: the slots are the page's search fields (root title / description, a design's title, meta, alts). */
+/** R30 Draft fixes: the slots are the page's search fields (root title / description, a design's title and meta description). */
 const SEO_TEXTS_RULES = `
 These slots are what search engines show for this page (after a search check):
 - A slot with an empty "en" is missing: write it new for this page.
 - The page title (field "title", block root or HtmlDesign text:title): at most 60 characters, naming what the page is about and the spa.
 - The description (field "description" or text:meta-description): 50 to 160 characters, one or two plain sentences about this page.
-- Every page's title and description must differ from the other pages in the SITE MAP.
-- Alt texts (attr alt): describe what the picture shows in at most 125 characters.`
+- Every page's title and description must differ from the other pages in the SITE MAP.`
 
 /**
  * R23 "Write texts": new EN + AR copy for a page's text slots (`textSlots`, @spa/services/site-kit) from the spa's
