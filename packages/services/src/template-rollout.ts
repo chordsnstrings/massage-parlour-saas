@@ -3,6 +3,7 @@
 // carried by core `carryHtmlContent`, a spa's own v1 look pinned as its content), their drafts carried after them, and
 // one undo per spa for all of them (`templateUndo.live`, which sets `template_hold`). Finder: platform role
 // (cross-tenant reads only); the upgrade: inside the spa's own tenant transaction, all of its pages or none.
+import { createHash } from 'node:crypto'
 import {
   carryHtmlContent,
   crmContractVersion,
@@ -306,8 +307,20 @@ function dataUrlBytes(url: string): Buffer | null {
 }
 
 /**
+ * The new version links this very picture as a hosted design file (`/designs/{design}/{sha256-16}.{ext}`, BE RELAX
+ * v2.2: the old version's embedded bytes, content-addressed): nothing to pin, the design's own copy shows it.
+ */
+function hostsSamePicture(url: unknown, bytes: Buffer): boolean {
+  const m =
+    typeof url === 'string'
+      ? /^https:\/\/[^/?#]+\/designs\/[a-z0-9-]+\/([0-9a-f]{16})\.[a-z0-9]+$/.exec(url)
+      : null
+  return !!m && createHash('sha256').update(bytes).digest('hex').slice(0, 16) === m[1]
+}
+
+/**
  * A block's website content on the new file: carried (core `carryHtmlContent`), then the spa's own v1 look pinned
- * (`htmlDesignOwnPins`; embedded pictures stored as this spa's files).
+ * (`htmlDesignOwnPins`; embedded pictures stored as this spa's files, unless the new version hosts the same bytes).
  */
 async function carriedContent(
   tx: Tx,
@@ -328,12 +341,13 @@ async function carriedContent(
   const parts = htmlContentParts(carry.content)
   for (const v of pins.values) if (!(v.path in parts.values)) parts.values[v.path] = v.value
   const sink = tenantHtmlAssetSink(tx, input.tenantId, input.userId)
+  const fresh = new Map(htmlContentSlots(input.newData).map((x) => [x.path, x.value]))
   let stored = 0
   for (const f of pins.files) {
     if (f.path in parts.values) continue
     const bytes = dataUrlBytes(f.dataUrl)
     const type = bytes ? sniffImageType(new Uint8Array(bytes)) : null
-    if (!bytes || !type) continue
+    if (!bytes || !type || hostsSamePicture(fresh.get(f.path), bytes)) continue
     const id = await sink(htmlDesignAsset(bytes, type))
     parts.values[f.path] = { img: `/files/${id}` }
     stored++

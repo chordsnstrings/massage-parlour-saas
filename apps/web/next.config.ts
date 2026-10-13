@@ -39,6 +39,18 @@ const config: NextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         ],
       },
+      // Built-in pictures + fonts of the platform's own HTML designs (public/designs/{design}/{sha256-16}.{ext}, BE
+      // RELAX v2.2): content-addressed, so cached for good; CORS because the design page is sandboxed (opaque origin,
+      // fonts need it) and is served on spa hosts and own domains. Never rename or delete one: published designs link
+      // them by URL. File paths only (the proxy matcher skips these extensions), never a spa page; a 404 stays no-store.
+      {
+        source: '/designs/:design/:file(.+\\.(?:webp|avif|png|jpe?g|svg|woff2?))',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+        ],
+      },
       // The HTML design shell (app/api/html-design/frame) sends its own sandbox CSP and Permissions-Policy.
       {
         source: '/api/:path((?!html-design/frame$).*)',
