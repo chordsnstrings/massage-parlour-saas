@@ -96,7 +96,7 @@ const V2 = doc(
       name: 'Your Spa',
       short_name: 'Your Spa',
       area_label: '',
-      logo_on_dark: '',
+      logo_on_dark: 'https://spamanagement.co/designs/seaside/0000000000000000.png', // hosted, other bytes: still pinned
       logo_on_light: HOSTED_LIGHT,
       timezone: 'Asia/Dubai',
     },
