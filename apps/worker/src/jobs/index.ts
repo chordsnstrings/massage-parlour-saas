@@ -5,7 +5,7 @@ import { billingTransitions } from './billing'
 import { finishAllCampaigns } from './campaigns'
 import { verifyCustomDomains } from './domains'
 import { dailyDigest, documentExpiryReminders, weeklyInsights } from './engage'
-import { syncAllGbpReviews, syncGbpSite } from './gbp'
+import { purgeGoogleReviews, syncAllGbpReviews, syncGbpSite } from './gbp'
 import { heartbeat } from './heartbeat'
 import {
   publishScheduledInstagramPosts,
@@ -60,6 +60,8 @@ export const jobs: JobDef[] = [
   { name: 'instagram-token-refresh', cron: '40 3 * * *', handler: () => refreshInstagramAccessTokens() },
   { name: 'gbp-reviews-sync', cron: '15 */2 * * *', handler: () => syncAllGbpReviews() },
   { name: 'gbp-site-sync', cron: '*/10 * * * *', handler: () => syncGbpSite() },
+  // R29: Google review content at most 30 days unless Google returns it again (Business Profile API policy).
+  { name: 'gbp-reviews-purge', cron: '55 4 * * *', handler: () => purgeGoogleReviews() },
   { name: 'campaigns-housekeeping', cron: '15 * * * *', handler: () => finishAllCampaigns() },
   { name: 'outbox-auto-assign', cron: '* * * * *', handler: () => autoAssignOutbox() },
   // F15: review-request / birthday / win-back drafts (each switch off by default; Premium marketing).

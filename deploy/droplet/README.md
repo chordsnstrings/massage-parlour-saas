@@ -173,13 +173,26 @@ Owner steps in that project (console.cloud.google.com → APIs & Services):
 1. **Enable the APIs**: My Business Account Management API, My Business Business Information API, Google My Business
    API (v4: reviews + local posts), **My Business Place Actions API** (the "Book" button) and **Google Search Console
    API**. A missing one shows on the spa's card as "this Google API isn't enabled for the platform yet" (the stored
-   code is `api_disabled`). Business Profile APIs need Google's access approval (the GBP API access form) before they
-   answer with real quota.
-2. **OAuth consent screen → scopes**: `https://www.googleapis.com/auth/business.manage` and
-   `https://www.googleapis.com/auth/webmasters` (both sensitive: Google verifies the app before external users see no
-   warning). The connect flow asks for both; spas connected before F17 see "Reconnect Google and allow Search Console
-   access" until they reconnect once.
-3. **Authorized redirect URIs**: `https://app.spamanagement.co/api/integrations/google/callback`.
+   code is `api_disabled`). Business Profile APIs start with **quota 0**: spas can sign in, but choosing a location
+   fails until Google approves the *Application for Basic API Access* (GBP API contact form) — it needs a Business
+   Profile verified and active for 60+ days with a website, and `ask@spamanagement.co` added to it as a **Manager**.
+   Keep a **separate Cloud project** for development/test.
+2. **Google Auth Platform (OAuth consent screen)**, in this order (R29, details in docs/INTEGRATIONS.md §2):
+   - **Branding**: support email `ask@spamanagement.co`; home `https://spamanagement.co`, privacy
+     `https://spamanagement.co/privacy`, terms `https://spamanagement.co/terms`; authorised domain `spamanagement.co`
+     verified in Search Console via a DNS TXT record (Namecheap → Advanced DNS).
+   - **Audience**: External → **Publish app** (In production). **Never onboard spas while it is in Testing**: Testing
+     refresh tokens expire after 7 days and at most 100 test users can sign in — Testing only with your own account.
+   - **Data access**: `https://www.googleapis.com/auth/business.manage`, `https://www.googleapis.com/auth/webmasters`
+     (both sensitive) + `openid`, `email` (non-sensitive: which Google account connected). Spas connected before F17
+     see "Reconnect Google and allow Search Console access" until they reconnect once; before R29, no "Connected as".
+   - **Verification Center**: a justification per scope naming our calls (business.manage: reviews, review replies,
+     local posts, Place Actions "Book" link; webmasters: `sites.list`, `sites.add`, `sitemaps.submit`, `sitemaps.get`)
+     and an unlisted YouTube demo video. Published but unverified = lifetime cap of 100 users.
+3. **Clients → OAuth client (Web application)**: the one authorised redirect URI
+   `https://app.spamanagement.co/api/integrations/google/callback`; Authorised JavaScript origins **empty**. **Never
+   replace this client** — spas' refresh tokens are bound to it (a new client = every spa reconnects); rotate only its
+   secret (add the new one, save it in the console, then disable the old).
 
 What spas get (Premium): Settings → Instagram & Google → Google card → **Book button on Google** (adds/updates/removes
 the location's APPOINTMENT link → `https://<site>/book?src=google`; the `gbp-site-sync` worker job re-points it within
@@ -434,8 +447,8 @@ The secrets file needs these keys:
   `RESEND_API_KEY` (password reset + email verification fail loudly in production without it; it can also be set later in the console → Settings → Email)
 - first boot writes the optional and recommended keys above into `/opt/spa/.env` too (empty when unset); later
   changes go through the secrets overlay ("Secrets without SSH")
-- super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (link or Google
-  sign-in), and the console asks every super-admin to set up 2FA (authenticator app) before it opens. See
+- super-admins: a `PLATFORM_ADMIN_EMAILS` address is promoted only once its email is verified (the email link, or
+  another super-admin's "Mark email verified"; Google sign-in to the platform is not built), and the console asks every super-admin to set up 2FA (authenticator app) before it opens. See
   "Super-admins" below for the addresses compose appends and how a new one gets its login.
 
 Follow the boot from the droplet's console: `tail -f /var/log/spa-bootstrap.log`.

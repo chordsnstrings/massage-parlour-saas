@@ -23,6 +23,9 @@ async function seedGoogle(slug: string) {
       title: 'Serenity Spa Marina',
       address: 'Marina Walk, Dubai',
       lastSyncAt: new Date().toISOString(),
+      // R29: the Google account from the connect's ID token
+      googleSub: '1001',
+      googleEmail: 'owner@serenity.example',
     },
   })
   const day = (n: number) => new Date(Date.now() - n * 86_400_000)
@@ -80,6 +83,7 @@ test('Google Business Profile: not-configured card, synced reviews, filters, app
   await seedGoogle(slug)
   await page.reload()
   await expect(card.getByText('Serenity Spa Marina')).toBeVisible()
+  await expect(card.getByTestId('gbp-account')).toHaveText('Connected as owner@serenity.example')
   await card.getByRole('link', { name: 'Review replies' }).click()
 
   await expect(page.getByRole('heading', { name: 'Google reviews' })).toBeVisible()

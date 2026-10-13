@@ -254,7 +254,10 @@ export const settings = {
       sync: 'Sync now',
       reviewReplies: 'Review replies',
       changeLocation: 'Change location',
-      disconnectConfirm: 'Disconnect Google Business Profile? Reviews already imported stay here.',
+      // R29 (new strings, flagged for native TH review)
+      disconnectConfirm:
+        'Disconnect Google Business Profile? Reviews imported from Google are deleted after 30 days; reviews you added by hand stay.',
+      connectedAs: 'Connected as {email}',
       notices: {
         connected: 'Google Business Profile is connected again.',
         choose: 'Signed in with Google. Now choose the location this spa manages.',
@@ -377,8 +380,9 @@ export const settings = {
           'this Google API isn’t enabled for the platform yet. The platform team needs to enable it in Google Cloud.',
         scope: 'permission missing. Reconnect Google and allow every requested access.',
         auth: 'sign-in expired or was revoked. Reconnect Google Business Profile.',
+        // R29 (changed, flagged for native TH review)
         client_config:
-          'the server’s Google sign-in settings were rejected. The platform team needs to check them.',
+          'the platform’s Google setup needs fixing (Google rejected its sign-in settings). If this spa then asks you to reconnect Google, please do.',
         permission: 'this Google account has no access to it.',
         not_found: 'Google could not find the location or site any more.',
         quota: 'too many requests right now. It is retried later.',

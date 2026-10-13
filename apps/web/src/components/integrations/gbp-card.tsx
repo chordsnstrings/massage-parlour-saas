@@ -151,6 +151,12 @@ export async function GbpCard({
           <Notice tone="error" text={conn.lastError ?? t('settings.integrations.gbp.expired')} />
         )}
 
+        {conn?.googleEmail && (
+          <p className="text-[13px] text-muted" data-testid="gbp-account">
+            {t('settings.integrations.gbp.connectedAs', { email: conn.googleEmail })}
+          </p>
+        )}
+
         {conn?.status === 'pending_location' &&
           (!configured || !manage ? (
             <p className="text-sm text-muted">{t('settings.integrations.gbp.pendingLocation')}</p>

@@ -1,8 +1,8 @@
 // Google Business Profile connection of one spa: its social_accounts row (platform 'gbp'), encrypted tokens with
 // refresh on expiry, location choice, disconnect and local posts. Google calls happen outside tenant transactions.
-import { type Db, socialAccounts, socialPosts, type Tx, withTenant } from '@spa/db'
-import { and, desc, eq } from 'drizzle-orm'
-import { DomainError } from './errors'
+import { type Db, platformDb, socialAccounts, socialPosts, type Tx, withTenant } from '@spa/db'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { DomainError, pgCode, pgConstraint } from './errors'
 import { integrationEnv } from './integration-settings'
 import {
   buildLocalPost,
@@ -20,14 +20,56 @@ export type GbpAccountRow = typeof socialAccounts.$inferSelect
 /** `external_id` of the row until a location is chosen. */
 export const GBP_PENDING_ID = 'pending'
 
-/** Options shared by the Google-calling service functions (tests pass `db`, `fetch`, `now`, `env`). */
+/** Options shared by the Google-calling service functions (tests pass `db`, `platform`, `fetch`, `now`, `env`). */
 export type GbpOpts = {
   tenantId: string
   db?: Db
+  /** Platform role for the cross-tenant lookups (shared Google account, location already taken). */
+  platform?: Db
   fetch?: typeof fetch
   now?: Date
   env?: Record<string, string | undefined>
 }
+
+/** R29: meta keys of the signed-in Google account (`sub` + email from the ID token), kept across location changes. */
+const ACCOUNT_KEYS = ['googleSub', 'googleEmail'] as const
+const accountMeta = (m: Record<string, string> | null | undefined): Record<string, string> =>
+  Object.fromEntries(ACCOUNT_KEYS.flatMap((k) => (m?.[k] ? [[k, m[k]]] : [])))
+
+/** Rows that hold a chosen location (0057 social_accounts_gbp_location: one spa per location). */
+const LOCATION_HELD = ['connected', 'error']
+
+/** Spas whose Google connection holds this location (platform lookup across tenants). */
+export async function gbpLocationTenants(locationName: string, o: { platform?: Db } = {}) {
+  const rows = await (o.platform ?? platformDb())
+    .select({ tenantId: socialAccounts.tenantId })
+    .from(socialAccounts)
+    .where(
+      and(
+        eq(socialAccounts.platform, 'gbp'),
+        eq(socialAccounts.externalId, locationName),
+        inArray(socialAccounts.status, LOCATION_HELD),
+      ),
+    )
+  return [...new Set(rows.map((r) => r.tenantId))]
+}
+
+/** Spas with a Google connection (any state: choosing a location, connected, needs reconnect) of this Google account. */
+export async function gbpGoogleAccountTenants(sub: string, o: { platform?: Db } = {}) {
+  const rows = await (o.platform ?? platformDb())
+    .select({ tenantId: socialAccounts.tenantId })
+    .from(socialAccounts)
+    .where(and(eq(socialAccounts.platform, 'gbp'), sql`${socialAccounts.meta} ->> 'googleSub' = ${sub}`))
+  return [...new Set(rows.map((r) => r.tenantId))]
+}
+
+/** R29: the location is already another spa's (the check before saving, or the unique index on a race). */
+export const gbpLocationInUse = () =>
+  new DomainError('This Business Profile is already connected to another spa.', 'invalid', {
+    key: 'errors.domain.gbpLocationInUse',
+  })
+const isLocationIndexViolation = (e: unknown) =>
+  pgCode(e) === '23505' && pgConstraint(e) === 'social_accounts_gbp_location'
 
 /** The stored Google sign-in can't be used any more — someone has to reconnect. */
 export class GbpAuthError extends Error {
@@ -61,6 +103,8 @@ export type GbpConnection = {
   lastSyncAt: Date | null
   lastError: string | null
   connectedAt: Date
+  /** R29: "Connected as {email}" (null for connections made before the ID token was requested). */
+  googleEmail: string | null
 }
 
 /** Token-free view of the connection for the dashboard. */
@@ -80,6 +124,7 @@ export function gbpConnectionView(row: GbpAccountRow | null): GbpConnection | nu
     lastSyncAt: synced && !Number.isNaN(synced.getTime()) ? synced : null,
     lastError: m.lastError || null,
     connectedAt: row.createdAt,
+    googleEmail: m.googleEmail || null,
   }
 }
 
@@ -124,29 +169,31 @@ export async function setGbpSyncState(
 
 /**
  * Stores the tokens of a fresh OAuth grant (encrypted). One Google connection per spa: a reconnect keeps the chosen
- * location (and the old refresh token when Google doesn't send a new one).
+ * location (and the old refresh token when Google doesn't send a new one). R29: the grant's Google account (ID token)
+ * replaces the stored one; without an ID token it is cleared, so a disconnect never revokes on a stale guess.
  */
 export async function saveGbpTokens(tx: Tx, tenantId: string, tokens: GoogleTokens, now = new Date()) {
-  const existing = await getGbpAccount(tx, tenantId)
-  const refreshTokenEnc = tokens.refreshToken
-    ? encryptSecret(tokens.refreshToken)
-    : (existing?.refreshTokenEnc ?? null)
+  const refreshTokenEnc = tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null
   const values = {
     tokenEnc: encryptSecret(tokens.accessToken),
     tokenExpiresAt: new Date(now.getTime() + tokens.expiresIn * 1000),
-    refreshTokenEnc,
     scopes: tokens.scopes,
   }
-  if (existing) {
-    const hasLocation = existing.externalId !== GBP_PENDING_ID
-    const meta = { ...(existing.meta ?? {}) }
-    delete meta.lastError
+  const account = tokens.account
+    ? accountMeta({ googleSub: tokens.account.sub, googleEmail: tokens.account.email ?? '' })
+    : {}
+  const meta = sql`(${socialAccounts.meta} - array['lastError', 'googleSub', 'googleEmail']::text[]) || ${JSON.stringify(account)}::jsonb`
+  const existing = await getGbpAccount(tx, tenantId)
+  if (existing && existing.externalId !== GBP_PENDING_ID) {
+    // The row (with its location) exists: a plain update by id has nothing to race on.
     await tx
       .update(socialAccounts)
-      .set({ ...values, meta, status: hasLocation ? 'connected' : 'pending_location' })
+      .set({ ...values, ...(refreshTokenEnc ? { refreshTokenEnc } : {}), meta, status: 'connected' })
       .where(eq(socialAccounts.id, existing.id))
-    return { id: existing.id, needsLocation: !hasLocation }
+    return { id: existing.id, needsLocation: false }
   }
+  // R29: first connect (or again before a location was chosen) is one atomic upsert on the per-tenant key, so two
+  // concurrent first callbacks end on the same row instead of one failing on social_accounts_unique.
   const [row] = await tx
     .insert(socialAccounts)
     .values({
@@ -154,8 +201,18 @@ export async function saveGbpTokens(tx: Tx, tenantId: string, tokens: GoogleToke
       platform: 'gbp',
       externalId: GBP_PENDING_ID,
       status: 'pending_location',
-      meta: {},
+      meta: account,
+      refreshTokenEnc,
       ...values,
+    })
+    .onConflictDoUpdate({
+      target: [socialAccounts.tenantId, socialAccounts.platform, socialAccounts.externalId],
+      set: {
+        ...values,
+        refreshTokenEnc: sql`coalesce(excluded.refresh_token_enc, ${socialAccounts.refreshTokenEnc})`,
+        meta,
+        status: 'pending_location',
+      },
     })
     .returning({ id: socialAccounts.id })
   return { id: row!.id, needsLocation: true }
@@ -166,52 +223,78 @@ const LOCATION_RE = /^locations\/[\w-]{1,64}$/
 
 /**
  * Points the connection at one location (`external_id` = location name). `meta.importedAt` is the cutoff for AI drafts
- * and autopilot: reviews written on Google before it are history, whether or not the first import succeeds.
+ * and autopilot: reviews written on Google before it are history, whether or not the first import succeeds. R29: one
+ * spa per location — throws `gbpLocationInUse()` when another spa holds it (checked first; the unique index catches a
+ * race).
  */
 export async function chooseGbpLocation(
   tx: Tx,
   tenantId: string,
   loc: { accountName: string; locationName: string; title: string; address?: string },
   now = new Date(),
+  o: { platform?: Db } = {},
 ) {
   if (!ACCOUNT_RE.test(loc.accountName) || !LOCATION_RE.test(loc.locationName))
     throw new DomainError('That location is not valid.')
   const row = await getGbpAccount(tx, tenantId)
   if (!row) throw new DomainError('Connect Google Business Profile first.', 'not_found')
-  await tx
-    .update(socialAccounts)
-    .set({
-      externalId: loc.locationName,
-      username: loc.title.slice(0, 200),
-      status: 'connected',
-      meta: {
-        accountName: loc.accountName,
-        locationName: loc.locationName,
-        title: loc.title.slice(0, 200),
-        address: (loc.address ?? '').slice(0, 300),
-        importedAt: now.toISOString(),
-      },
-    })
-    .where(eq(socialAccounts.id, row.id))
+  if ((await gbpLocationTenants(loc.locationName, o)).some((id) => id !== tenantId)) throw gbpLocationInUse()
+  try {
+    await tx
+      .update(socialAccounts)
+      .set({
+        externalId: loc.locationName,
+        username: loc.title.slice(0, 200),
+        status: 'connected',
+        meta: {
+          ...accountMeta(row.meta),
+          accountName: loc.accountName,
+          locationName: loc.locationName,
+          title: loc.title.slice(0, 200),
+          address: (loc.address ?? '').slice(0, 300),
+          importedAt: now.toISOString(),
+        },
+      })
+      .where(eq(socialAccounts.id, row.id))
+  } catch (e) {
+    if (isLocationIndexViolation(e)) throw gbpLocationInUse()
+    throw e
+  }
 }
 
-/** Back to the location picker (tokens kept). */
+/** Back to the location picker (tokens and the signed-in Google account kept). */
 export async function resetGbpLocation(tx: Tx, tenantId: string) {
   const row = await getGbpAccount(tx, tenantId)
   if (!row) return false
   await tx
     .update(socialAccounts)
-    .set({ externalId: GBP_PENDING_ID, username: null, status: 'pending_location', meta: {} })
+    .set({
+      externalId: GBP_PENDING_ID,
+      username: null,
+      status: 'pending_location',
+      meta: accountMeta(row.meta),
+    })
     .where(eq(socialAccounts.id, row.id))
   return true
 }
 
-/** Deletes the connection (reviews stay) after a best-effort revoke at Google. */
+/**
+ * Deletes the connection (reviews stay; Google-sourced ones expire after 30 days, reviews.ts) after a best-effort revoke
+ * at Google. R29: Google's revoke removes the whole grant of that Google account for our project, which would also cut
+ * off every other spa connected with the same account (an owner of two spas, a shared manager account). So it revokes
+ * only when no other spa has a Google connection of this account (`meta.googleSub`, platform lookup). With no known
+ * account (connections made before `openid email` was requested) it never revokes, only deletes here: the grant then
+ * stays in that Google account's third-party access list until its owner removes it (or Google expires it unused).
+ */
 export async function disconnectGbp(opts: GbpOpts) {
   const row = await withTenant(opts.tenantId, (tx) => getGbpAccount(tx, opts.tenantId), opts.db)
   if (!row) return false
+  const sub = row.meta?.googleSub
   const sealed = row.refreshTokenEnc ?? row.tokenEnc
-  if (sealed) {
+  // Unknown account (no sub): never revoke — it may be shared with another spa, and we can't tell.
+  const revoke =
+    Boolean(sealed && sub) && !(await gbpGoogleAccountTenants(sub!, opts)).some((id) => id !== opts.tenantId)
+  if (sealed && revoke) {
     try {
       await revokeGoogleToken(decryptSecret(sealed), opts.fetch)
     } catch {

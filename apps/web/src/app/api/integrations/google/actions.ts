@@ -96,9 +96,15 @@ export async function chooseLocationAction(
     return fail(gbpErrorMessage(e))
   }
   if (!match) return fail('That location is not available for this Google account.')
-  await withTenant(ctx.tenant.id, (tx) =>
-    chooseGbpLocation(tx, ctx.tenant.id, { accountName, locationName, ...match }),
-  )
+  try {
+    await withTenant(ctx.tenant.id, (tx) =>
+      chooseGbpLocation(tx, ctx.tenant.id, { accountName, locationName, ...match }),
+    )
+  } catch (e) {
+    // R29: one spa per Business Profile location ("already connected to another spa", EN/TH).
+    if (e instanceof DomainError) return failDomain(e)
+    throw e
+  }
   await audit({
     tenantId: ctx.tenant.id,
     actorUserId: ctx.user.id,

@@ -1356,6 +1356,27 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      Instagram testers → App Review per permission with screen recordings → publish; Tech Provider Access Verification
      retired 2026-10-09), droplet README Meta + EXTRA_ROOT_DOMAINS, CODEMAP, CLAUDE.md gotcha.
   Changed TH strings (two redirect URI labels shortened) need native review.
+- **R29 Google setup fixes (owner 2026-10-13 "fix all"; items 1, 2, 5–10, one PR after the Meta fixes):**
+  1. **Shared Google account:** `openid email` scopes; `sub` + email from the code exchange's ID token stored on the
+     gbp row; card "Connected as {email}"; disconnect revokes at Google only when no other spa has the same `sub`
+     (unknown `sub` = never revoke, local delete only).
+  2. **One spa per location:** cross-tenant unique index `social_accounts_gbp_location` (migration 0057
+     `google_one_spa_per_location`; connected|error rows, not 'pending') + pre-check → "This Business Profile is
+     already connected to another spa." (EN/TH) on the location step.
+  5. **Docs:** INTEGRATIONS.md §2 + droplet README "Google": publish (never onboard spas in Testing), Branding /
+     Audience / Data access / Verification Center (per-scope justification, demo video, 100-user cap), separate dev
+     project, never replace the OAuth client (rotate the secret), GBP Basic API Access application, one redirect URI,
+     no JS origins; stale "Google sign-ins arrive verified" fixed (Google sign-in is not built).
+  6. **Client replaced:** `unauthorized_client` (a refresh token of another client) → spa flagged for reconnect;
+     `invalid_client` / `deleted_client` → platform setup text, nobody flagged, no "no need to reconnect".
+  7. **Callback race:** `saveGbpTokens` first connect = one atomic upsert (concurrency test).
+  8. **Review content ≤ 30 days** (GBP API policy "Content storage"): `reviews.synced_at` (migration 0058), complete
+     syncs delete vanished reviews, daily `gbp-reviews-purge` (04:55) deletes API reviews not refreshed for 29 days;
+     hand-pasted reviews untouched. Fewer rows only lower counts (card/reviews stats, site Reviews block, performance).
+  9. **Privacy policy** Google wording (Business Profile + Search Console uses, email, 30 days, shared-account
+     disconnect) — **pending owner approval before release**.
+  10. **Account chooser:** `prompt=select_account consent`.
+  New/changed TH strings (`settings.integrations.gbp.connectedAs|disconnectConfirm`, `errors.domain.gbpLocationInUse`, `settings.integrations.google.errors.client_config`) need native review.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
@@ -1730,8 +1751,9 @@ others till end — finish everything"), built after the Premium/Standard plans 
 - Turnstile site + secret keys: console Company → "Bot check" or env (F9/F10) — README "Bot check on public forms".
 - Resend API key: console Settings → Email — README "Staff email (Resend)".
 - Make sure ask@spamanagement.co receives mail (mailbox/forwarding) — §18.4.
-- Google Cloud: enable My Business Place Actions API + Google Search Console API, add the `webmasters` scope to the
-  consent screen, register the canonical OAuth callback (old domains redirect, R29); spas connected before F17 reconnect — README "Google".
+- Google Cloud: enable My Business Place Actions API + Google Search Console API, add the `webmasters`, `openid` and
+  `email` scopes to the consent screen, publish it (never onboard spas in Testing) and verify, apply for GBP Basic API
+  Access, register the canonical OAuth callback (old domains redirect, R29); spas connected before F17 reconnect — README "Google".
 - Search Console: add `sc-domain:spamanagement.co` and submit the marketing sitemap — README "Google".
 - Meta: two apps (R29: App 1 Instagram Login, App 2 Facebook Login for Business + configuration `META_FB_CONFIG_ID`),
   app review for the permissions, redirect URIs, Instagram webhook fields `messages` + `comments` in both apps, then a

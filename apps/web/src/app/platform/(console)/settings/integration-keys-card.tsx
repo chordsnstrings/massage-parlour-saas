@@ -198,7 +198,9 @@ export async function IntegrationKeysCards() {
             />
             <p className="text-[13px] text-muted">
               Enable in the same Google Cloud project: {GOOGLE_APIS.join(', ')}. OAuth consent screen:
-              External, scopes business.manage and webmasters.
+              External and published (In production; never onboard spas while it is in Testing), scopes
+              business.manage, webmasters, openid and email; JavaScript origins empty. Keep this OAuth client:
+              spas&apos; refresh tokens belong to it, so rotate only its secret.
             </p>
           </div>
         </CardBody>

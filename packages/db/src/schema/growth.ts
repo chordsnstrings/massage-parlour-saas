@@ -50,9 +50,18 @@ export const reviews = pgTable(
     repliedAt: ts('replied_at'),
     /** Why posting the reply to Google failed (set with reply_status `failed`). */
     replyError: text('reply_error'),
+    /**
+     * R29: last sync in which the Google API returned this review (null = pasted by hand). Business Profile API policy:
+     * content is stored "for no more than 30 calendar days" — the daily purge deletes rows not refreshed for 30 days.
+     */
+    syncedAt: ts('synced_at'),
     createdAt: createdAt(),
   },
-  (t) => [unique('reviews_external').on(t.tenantId, t.source, t.externalId), ...tenantPolicies()],
+  (t) => [
+    unique('reviews_external').on(t.tenantId, t.source, t.externalId),
+    index('reviews_synced_at').on(t.syncedAt).where(sql`${t.syncedAt} is not null`),
+    ...tenantPolicies(),
+  ],
 )
 
 // ── Segments & click-to-send campaigns ───────────────────────────────────────
@@ -218,6 +227,13 @@ export const socialAccounts = pgTable(
     uniqueIndex('social_accounts_fb_ig_connected')
       .on(sql`(${t.meta} ->> 'igUserId')`)
       .where(sql`${t.platform} not in ('gbp', 'instagram') and ${t.status} = 'connected'`),
+    // R29: one spa per Business Profile location. A chosen location stays with its spa while it needs a reconnect
+    // ('error'), so that reconnect (back to 'connected') can never collide; 'pending' = no location chosen yet.
+    uniqueIndex('social_accounts_gbp_location')
+      .on(t.externalId)
+      .where(
+        sql`${t.platform} = 'gbp' and ${t.status} in ('connected', 'error') and ${t.externalId} <> 'pending'`,
+      ),
     ...tenantPolicies(),
   ],
 )

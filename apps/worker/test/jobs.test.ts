@@ -19,6 +19,7 @@ describe('job schedule', () => {
       'client-drafts': '25 * * * *',
       'site-texts-queue': '*/2 * * * *',
       'seo-check': '0 6 * * 1',
+      'gbp-reviews-purge': '55 4 * * *',
     })
     expect(new Set(jobs.map((j) => j.name)).size).toBe(jobs.length)
   })

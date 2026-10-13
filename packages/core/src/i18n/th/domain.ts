@@ -127,6 +127,8 @@ export const domain: Messages['errors']['domain'] = {
   gbpConnect: 'เชื่อมต่อ Google Business Profile ก่อน',
   gbpChooseLocation: 'เลือกสถานที่ใน Google Business Profile ก่อน',
   gbpLocationInvalid: 'สถานที่นี้ไม่ถูกต้อง',
+  // R29 (new, flagged for native TH review)
+  gbpLocationInUse: 'Business Profile นี้เชื่อมต่อกับสปาอื่นอยู่แล้ว',
   fileEmpty: 'ไฟล์ว่างเปล่า',
   fileTooLarge: 'ไฟล์ต้องมีขนาดไม่เกิน 8 MB',
   chooseTemplate: 'เลือกเทมเพลตก่อน',

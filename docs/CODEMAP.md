@@ -197,7 +197,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     Auth session hook + `getSession` refuse disabled logins). `provisionTenant` without `subscription` = old trial path. An email listed in `PLATFORM_ADMIN_EMAILS` becomes a
     platform admin only once **verified** (G2: `grantListedPlatformAdmins` in `@spa/db` — used by provision, seed and
     `requirePlatformAdmin`; never demotes). Sign-up sends a verification email (`emailVerification.sendOnSignUp`,
-    sign-in not gated; Google sign-ins arrive verified). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
+    sign-in not gated; Google sign-in to the platform is not built — the Google OAuth client only connects Business
+    Profile). `sendStaffEmail` throws in production without `RESEND_API_KEY`.
   - **Super-admin join** (owner, 2026-10-09): listed emails never apply (`submitApplication` + `signupAction` refuse
     them, before any login is created); they join on the admin host `platform/(auth)/join` (Better Auth sign-up, no
     spa; `assertAdminJoinAllowed` = neutral refusal; per-IP limit; callback = console). Unverified listed login →
@@ -389,8 +390,33 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   pre-check (skips webhook subscription for an account in use). Tests: services `instagram.test.ts` ("one spa per
   Instagram account / Facebook Page", incl. a lock-held concurrent connect); test fixtures must give each spa its own
   IG id (e2e `instagram.spec.ts` `IG` / `IG_F19`).
+- **Google setup fixes (R29, owner 2026-10-13 "fix all")** — services `gbp.ts` / `reviews.ts`, tests `gbp.test.ts`
+  ("R29 Google setup fixes" + "review content ≤ 30 days"):
+  - **Google account:** `GOOGLE_SCOPES` adds `openid email`; `exchangeGoogleCode` reads `sub` + `email` from the
+    token endpoint's ID token (`googleIdTokenAccount`, no signature check — straight from Google over TLS) →
+    `GoogleTokens.account` → `saveGbpTokens` stores `meta.googleSub|googleEmail` (no ID token = cleared), kept by
+    `chooseGbpLocation` / `resetGbpLocation`; card "Connected as {email}" (`gbpConnectionView.googleEmail`).
+  - **Disconnect:** Google's revoke kills the whole grant of that account for our project, so `disconnectGbp` revokes
+    only when `gbpGoogleAccountTenants(sub)` (platform lookup, any gbp row) finds no other spa; unknown sub = never.
+  - **One spa per location:** unique index `social_accounts_gbp_location` (external_id) where gbp + status
+    connected|error + not 'pending' (0057; 'error' keeps the location so its reconnect can't collide);
+    `chooseGbpLocation` pre-checks `gbpLocationTenants` and maps the violation → `gbpLocationInUse()` DomainError
+    (`errors.domain.gbpLocationInUse`); `chooseLocationAction` → `failDomain`.
+  - **Callback race:** `saveGbpTokens` = update by id when a location row exists, else one
+    `insert … on conflict (tenant, platform, external_id) do update` (refresh token `coalesce(excluded, old)`).
+  - **Token errors:** `isClientConfig` = invalid_client | deleted_client (platform setup, nobody flagged; text "the
+    platform's Google setup needs fixing", never "no need to reconnect"); `isOtherClientToken` = unauthorized_client
+    (refresh token of a replaced client) ⊂ `isAuth` → the spa is flagged for reconnect like invalid_grant.
+  - **Review content ≤ 30 days:** `reviews.synced_at` (0058; null = hand-pasted, backfilled now() for API rows) set on
+    every sync for what Google returns; a complete sync (`listGbpReviews().complete`, no error, not fewer than
+    `totalReviewCount`) deletes the location's vanished API reviews (`removed`); worker `gbp-reviews-purge` →
+    `purgeStaleGoogleReviews` deletes API reviews not refreshed for 29 days (platform lookup of spas, delete per
+    `withTenant`). No FK points at `reviews`; with fewer rows `reviewStats` (card, reviews page), the site Reviews
+    block, AI-draft notifications and performance "reviews by source" (by `created_at`; a re-imported review counts
+    as new again) simply count less.
+  - Authorize: `prompt=select_account consent` (+ offline, include_granted_scopes, PKCE S256, signed state).
 - **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
-  business.manage + webmasters; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
+  business.manage + webmasters + openid email; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
   `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via
   `settings.integrations.google.errors.*`; Place Actions `list|create|update|deleteBookLink`, `findOurBookLink`;
   Search Console `listScSites|addScSite|submitScSitemap|getScSitemap`, `scPropertyCandidates`/`pickScProperty`).
@@ -1422,6 +1448,7 @@ integrations note,
 | `instagram-token-refresh` (+ Facebook Page token check `checkFacebookPageTokens`, F19) | 03:40 |
 | `gbp-reviews-sync` | every 2 h at :15 |
 | `gbp-site-sync` (F17: `syncGbpBookActions` re-points Book buttons whose address changed, 6 h retry; `submitDueSitemaps` sends sitemaps queued by a publish ≥ 2 min ago; Premium live spas) | every 10 min |
+| `gbp-reviews-purge` (R29: `purgeStaleGoogleReviews`, Google-API reviews not refreshed for 29 days, every spa; hand-pasted ones stay) | 04:55 |
 | `campaigns-housekeeping` | hourly at :15 |
 | `outbox-auto-assign` (F28; spas with the default-off switch on; logged only when it assigned something) | every minute |
 | `client-drafts` (F15 review / birthday / win-back drafts; default-off switches, Premium) | hourly at :25 |

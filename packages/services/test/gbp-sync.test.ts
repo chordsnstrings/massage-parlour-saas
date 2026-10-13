@@ -73,11 +73,13 @@ async function connect(scopes = ['https://www.googleapis.com/auth/business.manag
     ),
   )
   await tx((db) =>
-    chooseGbpLocation(db, ids.tenant!, {
-      accountName: 'accounts/111',
-      locationName: 'locations/222',
-      title: 'Serenity Spa',
-    }),
+    chooseGbpLocation(
+      db,
+      ids.tenant!,
+      { accountName: 'accounts/111', locationName: 'locations/222', title: 'Serenity Spa' },
+      undefined,
+      { platform },
+    ),
   )
 }
 const row = () => tx((db) => getGbpAccount(db, ids.tenant!))

@@ -8,7 +8,11 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 export const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/business.manage'
 /** Search Console (F17b): sites.list/add + sitemaps.submit. Requested with the Business Profile scope on connect. */
 export const SEARCH_CONSOLE_SCOPE = 'https://www.googleapis.com/auth/webmasters'
-export const GOOGLE_SCOPES = [GOOGLE_SCOPE, SEARCH_CONSOLE_SCOPE] as const
+/**
+ * R29: `openid email` (non-sensitive) add an ID token to the code exchange: the Google account id (`sub`) decides
+ * whether a disconnect may revoke the grant (other spas can share the account), the email shows "Connected as".
+ */
+export const GOOGLE_SCOPES = [GOOGLE_SCOPE, SEARCH_CONSOLE_SCOPE, 'openid', 'email'] as const
 export const GOOGLE_ENDPOINTS = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
   token: 'https://oauth2.googleapis.com/token',
@@ -121,7 +125,8 @@ export function googleAuthorizeUrl(opts: {
     response_type: 'code',
     scope: GOOGLE_SCOPES.join(' '),
     access_type: 'offline',
-    prompt: 'consent',
+    // R29: the account chooser first (people often have several Google accounts), then consent (a refresh token).
+    prompt: 'select_account consent',
     include_granted_scopes: 'true',
     state: opts.state,
     code_challenge: opts.codeChallenge,
@@ -145,22 +150,43 @@ export class GoogleApiError extends Error {
     super(message)
     this.name = 'GoogleApiError'
   }
-  /** The server's own OAuth client was rejected (wrong or rotated GOOGLE_CLIENT_SECRET) — not the spa's grant. */
+  /**
+   * The server's own OAuth client was rejected — every spa is affected and the platform's Google setup needs fixing:
+   * `invalid_client` = "the client_id or client_secret is invalid" (Google OpenID Connect reference, token endpoint
+   * errors; RFC 6749 §5.2 "Client authentication failed"), `deleted_client` = "The OAuth client being used to make the
+   * request has been deleted" (Google, OAuth 2.0 for web server apps). Not the spa's grant: never flagged per spa.
+   */
   get isClientConfig() {
-    return this.reason === 'invalid_client' || this.reason === 'unauthorized_client'
+    return this.reason === 'invalid_client' || this.reason === 'deleted_client'
   }
-  /** The token is unusable (expired, revoked or invalid) — refresh or reconnect. */
+  /**
+   * R29: the refresh token belongs to another OAuth client (the platform's client was replaced — refresh tokens are
+   * bound to the client that obtained them). RFC 6749 §5.2 files a token "issued to another client" under
+   * `invalid_grant`; Google answers a refresh with a valid client but another client's token `unauthorized_client`
+   * ("Unauthorized"). Its documented meaning, "not authorized to use this authorization Grant Type", can't apply to our
+   * web client's refresh_token grant, so here it means: this spa reconnects, like invalid_grant.
+   */
+  get isOtherClientToken() {
+    return this.reason === 'unauthorized_client'
+  }
+  /** The token is unusable (expired, revoked, invalid or another client's) — refresh or reconnect. */
   get isAuth() {
     if (this.isClientConfig) return false
-    return this.status === 401 || this.reason === 'invalid_grant' || this.reason === 'UNAUTHENTICATED'
+    return (
+      this.status === 401 ||
+      this.reason === 'invalid_grant' ||
+      this.reason === 'UNAUTHENTICATED' ||
+      this.isOtherClientToken
+    )
   }
 }
 
 /** Plain-language explanation of a Google failure for staff (never includes tokens). */
 export function describeGoogleError(e: unknown): string {
   if (e instanceof GoogleApiError) {
+    // R29: no "no need to reconnect" — when the platform has to replace its Google client, every spa reconnects.
     if (e.isClientConfig)
-      return "Google rejected this server's sign-in settings. The platform team needs to check the Google client ID and secret — no need to reconnect."
+      return "Google rejected the platform's Google sign-in settings, so the platform's Google setup needs fixing. If this spa then asks you to reconnect Google, please do."
     if (e.isAuth)
       return 'Google sign-in expired or was revoked. Reconnect Google Business Profile in Settings.'
     if (e.status === 403 || e.status === 429)
@@ -232,9 +258,42 @@ export type GoogleTokens = {
   refreshToken: string | null
   expiresIn: number
   scopes: string[]
+  /** R29: the signed-in Google account, from the code exchange's ID token (`openid email`); null without one. */
+  account?: GoogleAccountId | null
 }
 
-type TokenResponse = { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string }
+/** The Google account behind a grant: `sub` is unique and never changes; the email can change over time. */
+export type GoogleAccountId = { sub: string; email: string | null }
+
+type TokenResponse = {
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+  scope?: string
+  id_token?: string
+}
+
+/**
+ * The `sub` + `email` claims of an ID token, or null. No signature check: the token comes straight from Google's token
+ * endpoint over TLS in our own server-side code exchange — "since you are communicating directly with Google over an
+ * intermediary-free HTTPS channel … you can be confident that the token you receive really comes from Google and is
+ * valid" (Google, OpenID Connect, "Obtain user information from the ID token"). Never for an ID token that arrives
+ * any other way (a browser, a webhook).
+ */
+export function googleIdTokenAccount(idToken: string | null | undefined): GoogleAccountId | null {
+  const payload = idToken?.split('.')[1]
+  if (!payload) return null
+  try {
+    const c = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+      sub?: unknown
+      email?: unknown
+    }
+    if (typeof c.sub !== 'string' || !/^[\w-]{1,255}$/.test(c.sub)) return null
+    return { sub: c.sub, email: typeof c.email === 'string' && c.email ? c.email.slice(0, 320) : null }
+  } catch {
+    return null
+  }
+}
 
 function toTokens(r: TokenResponse): GoogleTokens {
   if (!r.access_token) throw new GoogleApiError('no access token returned', 502)
@@ -243,6 +302,7 @@ function toTokens(r: TokenResponse): GoogleTokens {
     refreshToken: r.refresh_token ?? null,
     expiresIn: Number(r.expires_in ?? 3600),
     scopes: (r.scope ?? GOOGLE_SCOPE).split(' ').filter(Boolean),
+    account: googleIdTokenAccount(r.id_token),
   }
 }
 
@@ -286,7 +346,11 @@ export async function refreshGoogleToken(opts: { cfg: GoogleConfig; refreshToken
   )
 }
 
-/** Best-effort revocation on disconnect (Google revokes the whole grant for either token). */
+/**
+ * Best-effort revocation on disconnect. Google: "Revocation removes all OAuth 2.0 scopes previously granted to a
+ * project, invalidating any issued access or refresh tokens" — the whole grant of that Google account, so other spas
+ * connected with the same account would lose theirs too (gbp.ts disconnectGbp checks that first).
+ */
 export async function revokeGoogleToken(token: string, fetchFn: FetchFn = fetch) {
   try {
     await call(fetchFn, GOOGLE_ENDPOINTS.revoke, {
@@ -410,12 +474,15 @@ export type ReviewsPage = {
   totalReviewCount?: number
 }
 
-/** All reviews of `accounts/{a}/locations/{l}` (newest first, 50 per page, at most 20 pages). */
+/**
+ * All reviews of `accounts/{a}/locations/{l}` (newest first, 50 per page, at most 20 pages). `complete`: every page
+ * was fetched (false when the page cap cut the list short) — only then may a missing review count as gone (R29).
+ */
 export async function listGbpReviews(
   accessToken: string,
   parent: string,
   fetchFn: FetchFn = fetch,
-): Promise<Omit<ReviewsPage, 'nextPageToken'>> {
+): Promise<Omit<ReviewsPage, 'nextPageToken'> & { complete: boolean }> {
   const reviews: GoogleReview[] = []
   let meta: Pick<ReviewsPage, 'averageRating' | 'totalReviewCount'> = {}
   let pageToken: string | undefined
@@ -430,7 +497,7 @@ export async function listGbpReviews(
     pageToken = r?.nextPageToken
     if (!pageToken) break
   }
-  return { reviews, ...meta }
+  return { reviews, ...meta, complete: !pageToken }
 }
 
 /** Creates or replaces the owner reply on a review (`accounts/…/locations/…/reviews/…`). */

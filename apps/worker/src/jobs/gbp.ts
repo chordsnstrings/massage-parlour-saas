@@ -5,6 +5,7 @@ import {
   GBP_PENDING_ID,
   googleConfig,
   integrationEnv,
+  purgeStaleGoogleReviews,
   submitDueSitemaps,
   syncGbpBookActions,
   syncGbpReviews,
@@ -44,10 +45,11 @@ export async function syncAllGbpReviews() {
       if (res.ok) {
         synced++
         await recordRun(tenantId, 'gbp-reviews-sync', 'ok', { count: res.created, posted: res.posted })
-        if (res.created || res.posted || res.failed)
+        if (res.created || res.posted || res.failed || res.removed)
           log('info', 'gbp reviews synced', {
             tenant: slug,
             created: res.created,
+            removed: res.removed,
             drafted: res.drafted,
             posted: res.posted,
             failed: res.failed,
@@ -65,6 +67,16 @@ export async function syncAllGbpReviews() {
     }
   }
   return { tenants: connected.length, synced }
+}
+
+/**
+ * Daily (R29): Business Profile API content is kept at most 30 days — deletes Google-API reviews that no sync has
+ * returned for that long, in every spa (disconnected, suspended or without Google keys too). Hand-pasted reviews stay.
+ */
+export async function purgeGoogleReviews() {
+  const res = await purgeStaleGoogleReviews()
+  if (res.deleted) log('info', 'stale google reviews purged', res)
+  return res
 }
 
 /**

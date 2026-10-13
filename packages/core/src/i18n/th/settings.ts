@@ -248,7 +248,10 @@ export const settings: Messages['settings'] = {
       sync: 'ซิงก์ตอนนี้',
       reviewReplies: 'ตอบรีวิว',
       changeLocation: 'เปลี่ยนสถานที่',
-      disconnectConfirm: 'ยกเลิกการเชื่อมต่อ Google Business Profile หรือไม่? รีวิวที่นำเข้าแล้วยังอยู่ที่นี่',
+      // R29 (new strings, flagged for native TH review)
+      disconnectConfirm:
+        'ยกเลิกการเชื่อมต่อ Google Business Profile หรือไม่? รีวิวที่นำเข้าจาก Google จะถูกลบหลัง 30 วัน ส่วนรีวิวที่คุณเพิ่มเองยังอยู่',
+      connectedAs: 'เชื่อมต่อในชื่อ {email}',
       notices: {
         connected: 'เชื่อมต่อ Google Business Profile อีกครั้งแล้ว',
         choose: 'เข้าสู่ระบบด้วย Google แล้ว ต่อไปเลือกสถานที่ที่สปานี้ดูแล',
@@ -367,7 +370,9 @@ export const settings: Messages['settings'] = {
         api_disabled: 'แพลตฟอร์มยังไม่ได้เปิดใช้ Google API นี้ ทีมแพลตฟอร์มต้องเปิดใน Google Cloud',
         scope: 'ไม่มีสิทธิ์ที่จำเป็น เชื่อมต่อ Google ใหม่และอนุญาตทุกสิทธิ์ที่ขอ',
         auth: 'การลงชื่อเข้าใช้หมดอายุหรือถูกเพิกถอน เชื่อมต่อ Google Business Profile ใหม่',
-        client_config: 'Google ปฏิเสธการตั้งค่าการลงชื่อเข้าใช้ของเซิร์ฟเวอร์ ทีมแพลตฟอร์มต้องตรวจสอบ',
+        // R29 (changed, flagged for native TH review)
+        client_config:
+          'การตั้งค่า Google ของแพลตฟอร์มต้องได้รับการแก้ไข (Google ปฏิเสธการตั้งค่าการลงชื่อเข้าใช้) หากสปานี้ขอให้เชื่อมต่อ Google ใหม่ภายหลัง โปรดเชื่อมต่อใหม่',
         permission: 'บัญชี Google นี้ไม่มีสิทธิ์เข้าถึง',
         not_found: 'Google ไม่พบสถานที่หรือเว็บไซต์นี้แล้ว',
         quota: 'มีคำขอมากเกินไปในขณะนี้ ระบบจะลองใหม่ภายหลัง',

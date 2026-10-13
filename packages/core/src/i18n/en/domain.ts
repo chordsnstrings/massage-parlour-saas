@@ -136,6 +136,8 @@ export const domain = {
   gbpConnect: 'Connect Google Business Profile first.',
   gbpChooseLocation: 'Choose your Google Business Profile location first.',
   gbpLocationInvalid: 'That location is not valid.',
+  // R29 (new, flagged for native TH review)
+  gbpLocationInUse: 'This Business Profile is already connected to another spa.',
   // Files
   fileEmpty: 'The file is empty',
   fileTooLarge: 'Files can be up to 8 MB',

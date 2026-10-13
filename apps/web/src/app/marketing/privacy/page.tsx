@@ -53,10 +53,11 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2>Instagram, Facebook (Meta) and Google Business Profile</h2>
+      {/* R29 Google wording: OWNER MUST APPROVE before release (owner 2026-10-13). */}
+      <h2>Instagram, Facebook (Meta) and Google</h2>
       <p>
-        A spa can connect its own Instagram professional account or Google Business Profile. When it does, we
-        use the access it grants only to:
+        A spa can connect its own Instagram professional account, Facebook Page or Google account. When it
+        does, we use the access it grants only to:
       </p>
       <ul>
         <li>read messages, comments and reviews so the spa can see them and reply;</li>
@@ -64,12 +65,33 @@ export default function PrivacyPage() {
         <li>publish replies and posts that the spa has approved;</li>
         <li>show basic insights about the spa’s own account.</li>
       </ul>
+      <p>With a Google account, that means:</p>
+      <ul>
+        <li>
+          <strong>Google Business Profile</strong>: we list the locations the account manages so the spa can
+          choose its own, read that location’s reviews, post replies the spa approves (or that its autopilot
+          setting allows, for 4–5★ reviews only), publish local posts the spa approves, and set the location’s
+          “Book” link to the spa’s booking page.
+        </li>
+        <li>
+          <strong>Google Search Console</strong>: we list the properties the account can access, add the spa’s
+          website address as a property, and submit and check its sitemap. We do not read search performance
+          data.
+        </li>
+        <li>We receive the account’s email address only to show which Google account is connected.</li>
+        <li>
+          Review content from Google is kept for at most 30 days unless Google returns it again when we sync;
+          a review removed from Google is deleted at the next full sync.
+        </li>
+      </ul>
       <p>
         We do not sell this data, use it for advertising, or share it with anyone other than the service
         providers listed below. Access tokens are stored encrypted. A spa can disconnect at any time in its
         settings, or revoke access directly in Instagram/Facebook settings or its Google account; we then stop
-        using the token and delete it. Our use of data received from Google APIs follows the Google API
-        Services User Data Policy, including the Limited Use requirements.
+        using the token and delete it. If the same Google account is connected to more than one spa,
+        disconnecting one spa leaves the others connected; to remove our access from that Google account
+        completely, revoke it in the Google account’s settings. Our use of data received from Google APIs
+        follows the Google API Services User Data Policy, including the Limited Use requirements.
       </p>
 
       <h2>AI processing</h2>
@@ -114,7 +136,8 @@ export default function PrivacyPage() {
       <p>
         DigitalOcean (hosting), Cloudflare (network and security), BytePlus ModelArk (AI), an email provider
         for account emails (such as sign-in and password reset), and Stripe if a spa chooses to pay a platform
-        invoice by card. Meta and Google receive only what a spa chooses to publish or reply through them.
+        invoice by card. Meta and Google receive only what a spa publishes or sets up through them (replies,
+        posts, its Google “Book” link and its website’s sitemap).
       </p>
 
       <h2>Cookies and analytics</h2>

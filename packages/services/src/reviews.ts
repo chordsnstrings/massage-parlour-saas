@@ -1,7 +1,8 @@
 // Google reviews: sync from Business Profile (upsert by review name), AI drafts for new reviews, autopilot for 4–5★,
-// posting approved replies, and summary stats. 1–3★ replies always wait for a person.
-import { aiAgentSettings, reviews, type Tx, withTenant } from '@spa/db'
-import { and, desc, eq, gte, inArray, isNull, like, sql } from 'drizzle-orm'
+// posting approved replies, and summary stats. 1–3★ replies always wait for a person. R29: API content is kept at
+// most 30 days unless Google returns it again (synced_at; complete syncs drop vanished reviews, a daily purge the rest).
+import { aiAgentSettings, type Db, platformDb, reviews, type Tx, withTenant } from '@spa/db'
+import { and, desc, eq, gte, inArray, isNotNull, isNull, like, lt, notInArray, sql } from 'drizzle-orm'
 import {
   GBP_PENDING_ID,
   type GbpAccountRow,
@@ -53,8 +54,9 @@ const likePrefix = (s: string) => `${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
  * Inserts new Google reviews and refreshes changed ones. A reply found on Google marks the review `posted` (a missing
  * one never downgrades ours: the list can lag right after a reply is posted), except over a different reply a person
  * approved here or whose post failed — that one is still to be posted. `created` counts new reviews without a reply.
+ * R29: every review Google returned gets `synced_at = now` (the 30-day storage clock restarts).
  */
-export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: MappedReview[]) {
+export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: MappedReview[], now = new Date()) {
   let created = 0
   let updated = 0
   if (!items.length) return { created, updated }
@@ -88,12 +90,27 @@ export async function upsertGoogleReviews(tx: Tx, tenantId: string, items: Mappe
           replyText: r.replyText,
           replyStatus: r.replyText ? ('posted' as const) : ('none' as const),
           repliedAt: r.repliedAt,
+          syncedAt: now,
         })),
       )
       .onConflictDoNothing()
       .returning({ replyText: reviews.replyText })
     created += rows.filter((r) => !r.replyText).length
   }
+  for (let i = 0; i < items.length; i += 500)
+    await tx
+      .update(reviews)
+      .set({ syncedAt: now })
+      .where(
+        and(
+          eq(reviews.tenantId, tenantId),
+          eq(reviews.source, 'google'),
+          inArray(
+            reviews.externalId,
+            items.slice(i, i + 500).map((r) => r.externalId),
+          ),
+        ),
+      )
   for (const r of items) {
     const ex = byExt.get(r.externalId)
     if (!ex) continue
@@ -129,11 +146,65 @@ export type SyncResult =
       fetched: number
       created: number
       updated: number
+      /** R29: reviews Google no longer returns (complete syncs only), deleted here. */
+      removed: number
       drafted: number
       posted: number
       failed: number
     }
   | { ok: false; error: string }
+
+/**
+ * R29: deletes this location's Google-API reviews that a complete sync didn't return (removed on Google). Hand-pasted
+ * reviews (synced_at null) and other locations' reviews (the 30-day purge) are left alone.
+ */
+async function dropVanishedReviews(tx: Tx, tenantId: string, parent: string, seen: string[]) {
+  const rows = await tx
+    .delete(reviews)
+    .where(
+      and(
+        eq(reviews.tenantId, tenantId),
+        eq(reviews.source, 'google'),
+        isNotNull(reviews.syncedAt),
+        like(reviews.externalId, likePrefix(`${parent}/reviews/`)),
+        seen.length ? notInArray(reviews.externalId, seen) : undefined,
+      ),
+    )
+    .returning({ id: reviews.id })
+  return rows.length
+}
+
+/** Business Profile API policy: content stored "for no more than 30 calendar days". */
+export const GOOGLE_REVIEW_MAX_DAYS = 30
+
+/**
+ * R29, daily worker job: deletes Google-API reviews no sync has returned for 29 days — with one run a day nothing is
+ * kept past 30 (also covers disconnected spas and earlier locations). Platform lookup of the spas concerned, then
+ * each spa's delete in its own tenant transaction. Hand-pasted reviews (synced_at null) are never touched.
+ */
+export async function purgeStaleGoogleReviews(o: { platform?: Db; app?: Db; now?: Date } = {}) {
+  const now = o.now ?? new Date()
+  const cutoff = new Date(now.getTime() - (GOOGLE_REVIEW_MAX_DAYS - 1) * 86_400_000)
+  const stale = and(isNotNull(reviews.syncedAt), lt(reviews.syncedAt, cutoff))
+  const spas = await (o.platform ?? platformDb())
+    .selectDistinct({ tenantId: reviews.tenantId })
+    .from(reviews)
+    .where(stale)
+  let deleted = 0
+  for (const { tenantId } of spas) {
+    const rows = await withTenant(
+      tenantId,
+      (tx) =>
+        tx
+          .delete(reviews)
+          .where(and(eq(reviews.tenantId, tenantId), stale))
+          .returning({ id: reviews.id }),
+      o.app,
+    )
+    deleted += rows.length
+  }
+  return { spas: spas.length, deleted }
+}
 
 /**
  * Pulls every review of the connected location, upserts them and — when the review agent is on — drafts replies for
@@ -149,6 +220,8 @@ export async function syncGbpReviews(
   let mapped: MappedReview[]
   let parent: string
   let cutoff: Date
+  /** Every review name Google returned, when the list is complete (R29); null = don't delete anything. */
+  let seen: string[] | null
   try {
     const res = await withGbpToken(opts, async (token, account) => ({
       parent: gbpParent(account),
@@ -157,14 +230,21 @@ export async function syncGbpReviews(
     }))
     ;({ parent, cutoff } = res)
     mapped = res.list.reviews.map(mapGoogleReview).filter((r): r is MappedReview => r !== null)
+    // Complete = every page fetched without error, and no fewer reviews than Google's own total says it has.
+    const total = res.list.totalReviewCount
+    const complete = res.list.complete && !(typeof total === 'number' && total > res.list.reviews.length)
+    seen = complete ? res.list.reviews.map((r) => r.name).filter(Boolean) : null
   } catch (e) {
     const error = gbpErrorMessage(e)
     await setGbpSyncState(opts, { lastError: error }).catch(() => {})
     return { ok: false, error }
   }
-  const { created, updated } = await withTenant(
+  const { created, updated, removed } = await withTenant(
     opts.tenantId,
-    (tx) => upsertGoogleReviews(tx, opts.tenantId, mapped),
+    async (tx) => ({
+      ...(await upsertGoogleReviews(tx, opts.tenantId, mapped, now)),
+      removed: seen ? await dropVanishedReviews(tx, opts.tenantId, parent, seen) : 0,
+    }),
     opts.db,
   )
   await setGbpSyncState(opts, { lastSyncAt: now, lastError: null })
@@ -226,7 +306,7 @@ export async function syncGbpReviews(
       else failed++
     }
   }
-  return { ok: true, fetched: mapped.length, created, updated, drafted, posted, failed }
+  return { ok: true, fetched: mapped.length, created, updated, removed, drafted, posted, failed }
 }
 
 /** Posts an approved (or previously failed) reply to Google; the review ends `posted` or `failed` with the reason. */
