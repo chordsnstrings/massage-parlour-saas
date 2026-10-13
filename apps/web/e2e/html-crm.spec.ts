@@ -11,10 +11,13 @@ import {
   sitePages,
   sites,
   staff,
+  storedFiles,
   tenants,
 } from '@spa/db'
+import { signPreviewToken } from '@spa/services'
 import { and, desc, eq } from 'drizzle-orm'
 import {
+  AUTH_SECRET,
   admin,
   app,
   editorUrl,
@@ -836,5 +839,169 @@ test('R28 P5: crm-data.json has the locale; ?page= serves an endpoint design its
     await live(page, slug)
     await expect(page.locator('#label')).toHaveText('Book with the spa')
     await expect(page.locator('#spa')).toHaveText('Defaults Feed Spa')
+  })
+})
+
+test('contract.inline: the first-screen pictures a design names come inside CRM_DATA (live page + share link); a logo change shows at once', async ({
+  page,
+}) => {
+  // Owner 2026-10-13 "i don't want to see delay when i reload the website": the sandboxed design document reuses
+  // nothing from the browser cache, so its first screen's pictures travel inside the page.
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const literal = fixture.match(LITERAL)![0]
+  const DESIGNS = '/designs/be-relax'
+  const parsed = JSON.parse(literal.slice('<script>window.CRM_DATA = '.length, -';</script>'.length))
+  const data = {
+    ...parsed,
+    // v2's neutral logo slots (a spa's own logos are its Website content).
+    spa: { ...parsed.spa, logo_on_dark: '', logo_on_light: '' },
+    contract: {
+      version: 2,
+      locales: ['en'],
+      fields: {},
+      l10n: { ar: {} },
+      inline: [
+        'spa.logo_on_light',
+        'journey[welcome].image',
+        'journey[abs].image',
+        'journey[far].image',
+        'journey[big].image',
+      ],
+    },
+    journey: [] as { id: string; title: string; image: string }[],
+  }
+  const owner = await signUpOwner(page, { spa: 'Inline Pictures Spa' })
+  const { slug } = owner
+  // Absolute on this spa's own platform address (http in e2e): ours, so inlined.
+  const own = `${site(slug)}${DESIGNS}/27ce3821959802c9.webp`
+  data.journey = [
+    // The 1600w welcome still (58 KB): inlined.
+    { id: 'welcome', title: 'Welcome', image: `${DESIGNS}/4d56333a0e00bb38.webp` },
+    { id: 'abs', title: 'Own host', image: own },
+    // Not ours (never read) / over 80 KB / not declared: all stay links.
+    { id: 'far', title: 'Far', image: `https://evil.example${DESIGNS}/4d56333a0e00bb38.webp` },
+    { id: 'big', title: 'Big', image: `${DESIGNS}/998d1a1a386836e2.webp` },
+    { id: 'moroccan', title: 'Bath', image: `${DESIGNS}/c4e79f1703476507.webp` },
+  ]
+  const design = fixture.replace(literal, `<script>window.CRM_DATA = ${JSON.stringify(data)};</script>`)
+  const { tenantId } = await seedSpa(slug)
+  const db = testDb()
+  const picture = (file: string) => readFile(new URL(`../public${DESIGNS}/${file}`, import.meta.url))
+  // A logo as the spa's own public file, shown through its Website content (the CRM logo URL is absolute https on
+  // the spa's site, which e2e's http addresses don't make: crmImageUrl drops it; core tests cover that path).
+  const logo = async (file: string) => {
+    const bytes = await picture(file)
+    const [row] = await db
+      .insert(storedFiles)
+      .values({
+        tenantId,
+        contentType: 'image/webp',
+        size: bytes.length,
+        bytes,
+        isPublic: true,
+        purpose: 'media',
+      })
+      .returning({ id: storedFiles.id })
+    return { id: row!.id, b64: bytes.toString('base64') }
+  }
+  const publishLogo = async (id: string) => {
+    const [home] = await db
+      .select({ id: sitePages.id })
+      .from(sitePages)
+      .where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.slug, '')))
+    const [published] = await db
+      .select()
+      .from(pageVersions)
+      .where(and(eq(pageVersions.pageId, home!.id), eq(pageVersions.status, 'published')))
+      .orderBy(desc(pageVersions.createdAt))
+      .limit(1)
+    const pageData = published!.data as { content: { type: string; props: Record<string, unknown> }[] }
+    const content = {
+      v: 1,
+      values: [
+        { path: 'spa.logo_on_light', value: { img: `/files/${id}` } },
+        { path: 'spa.logo_on_dark', value: { img: `/files/${id}` } },
+      ],
+    }
+    await db.insert(pageVersions).values({
+      tenantId,
+      pageId: home!.id,
+      status: 'published',
+      data: {
+        ...pageData,
+        content: pageData.content.map((n) =>
+          n.type === 'HtmlDesign' ? { ...n, props: { ...n.props, content } } : n,
+        ),
+      },
+    })
+  }
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await upload(page, 'CRM Inline', design)
+  await applyAndPublish(page, slug, 'CRM Inline')
+  const first = await logo('c4e79f1703476507.webp')
+  await publishLogo(first.id)
+
+  const b64 = async (file: string) => (await picture(file)).toString('base64')
+  const welcome = await b64('4d56333a0e00bb38.webp')
+  const liveData = async () => {
+    const html = await (await viaHost(page, site(slug))).text()
+    const m = html.match(LITERAL)
+    expect(m).toBeTruthy()
+    return JSON.parse(m![0].slice('<script>window.CRM_DATA = '.length, -';</script>'.length))
+  }
+
+  await test.step('live page: data: URIs for the declared platform pictures only, originals recorded', async () => {
+    // A read past the render's 300 ms deadline stays a link that once and is inlined from the next load on.
+    await expect.poll(async () => Object.keys((await liveData()).inline_originals ?? {}).length).toBe(3)
+    const got = await liveData()
+    expect(got.spa.logo_on_light).toBe(`data:image/webp;base64,${first.b64}`)
+    // Not declared: the same logo stays a link there.
+    expect(got.spa.logo_on_dark).toBe(`/files/${first.id}`)
+    const image = (id: string) => got.journey.find((j: { id: string }) => j.id === id).image
+    expect(image('welcome')).toBe(`data:image/webp;base64,${welcome}`)
+    expect(image('abs')).toBe(`data:image/webp;base64,${await b64('27ce3821959802c9.webp')}`)
+    expect(image('far')).toBe(`https://evil.example${DESIGNS}/4d56333a0e00bb38.webp`)
+    expect(image('big')).toBe(`${DESIGNS}/998d1a1a386836e2.webp`)
+    expect(image('moroccan')).toBe(`${DESIGNS}/c4e79f1703476507.webp`)
+    expect(got.inline_originals).toEqual({
+      'spa.logo_on_light': `/files/${first.id}`,
+      'journey[welcome].image': `${DESIGNS}/4d56333a0e00bb38.webp`,
+      'journey[abs].image': own,
+    })
+  })
+
+  await test.step('a new logo shows on the next load (no stale cache)', async () => {
+    const second = await logo('e75ea082f84ff839.webp')
+    await publishLogo(second.id)
+    await expect
+      .poll(async () => (await liveData()).inline_originals?.['spa.logo_on_light'])
+      .toBe(`/files/${second.id}`)
+    const got = await liveData()
+    expect(got.spa.logo_on_light).toBe(`data:image/webp;base64,${second.b64}`)
+    expect(got.inline_originals['spa.logo_on_light']).toBe(`/files/${second.id}`)
+  })
+
+  await test.step('the live page still renders the design', async () => {
+    await live(page, slug)
+    await expect(page.locator('#spa')).toHaveText('Inline Pictures Spa')
+  })
+
+  await test.step('share link: the same pictures inline', async () => {
+    const [home] = await db
+      .select({ id: sitePages.id })
+      .from(sitePages)
+      .where(and(eq(sitePages.tenantId, tenantId), eq(sitePages.slug, '')))
+    const token = signPreviewToken(
+      { tenantId, pageId: home!.id, expiresAt: new Date(Date.now() + 3600_000) },
+      AUTH_SECRET,
+    )
+    const res = await viaHost(page, `${app}/website/preview?token=${encodeURIComponent(token)}`)
+    expect(res.status()).toBe(200)
+    const text = await res.text()
+    // (The design travels in the page's RSC payload, maybe split across chunks: a short prefix is enough.)
+    expect(text).toContain(`data:image/webp;base64,${welcome.slice(0, 120)}`)
+    expect(text).toContain('inline_originals')
   })
 })

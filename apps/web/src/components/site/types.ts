@@ -1,4 +1,4 @@
-import type { CrmContract, OpeningHours } from '@spa/core'
+import type { CrmContract, CrmInline, OpeningHours } from '@spa/core'
 import type { SiteTheme } from './theme'
 
 export type Locale = 'en' | 'ar'
@@ -97,6 +97,11 @@ export type SiteMeta = {
    * a design that uses it (`window.CRM_DATA` / crm-endpoint); the HtmlDesign block merges it into the design's data.
    */
   crm?: CrmContract
+  /**
+   * contract.inline (owner 2026-10-13): the server's plans of first-screen pictures as data: URIs, by designKey
+   * ('' = inline legacy design) — the live page and share links only (server/crm-inline.ts pageCrmInline).
+   */
+  crmInline?: Record<string, CrmInline>
 }
 
 /** A published post on its own page (`{site}/blog/{slug}`). */

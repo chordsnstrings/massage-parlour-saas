@@ -1338,6 +1338,17 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   0.16–0.27 MB less before load; srcset re-picked on rotate/resize (larger only). Be Relax's 414 px WebP logos are
   already live (dark = Website content `spa.logo_on_dark`; light = the spa's CRM logo, which always wins over content
   `spa.logo_on_light`). Owner steps: after the deploy, new version of BE RELAX with v2.3 → Preview EN + AR → Roll out.
+- **First-screen pictures inside the page — `contract.inline` (owner 2026-10-13 23:20 Dubai, after reload recordings:
+  "i don't want to see delay when i reload the website"):** the live design document runs under a CSP sandbox
+  (opaque origin, R24), so Chromium reuses nothing from its cache on a reload: the logo, the welcome picture and the
+  fonts download again and pop in after the text. A contract design may declare `contract.inline` (CRM_DATA paths);
+  on the live page (+ its frames) and share links, after the CRM merge and the content, each declared value that is
+  this spa's own public `/files` picture or a static `/designs` file (read server-side, never fetched; raster only)
+  ≤ 80 KB (page total ≤ 240 KB) becomes a `data:` URI inside CRM_DATA, with `inline_originals` {path: url}. R24 kept:
+  only values inside window.CRM_DATA change (an allowed invisible change, CLAUDE.md); never in the Studio editor.
+  Process-wide picture cache ≤ 32 MB; a new CRM logo shows on the next load. Design side: BE RELAX v2.5 declares the
+  logos + welcome still, points the welcome default at the 1600w copy (58 KB) and inlines its Latin fonts.
+  Contract doc §10; CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test).
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
      bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when

@@ -10,6 +10,7 @@ import { notFound } from 'next/navigation'
 import { siteConfig } from '@/components/site/config'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, loadSite, localeOf } from '@/components/site/data'
+import { pageCrmInline } from '@/server/crm-inline'
 import { spaDesignData } from '@/server/html-design-files'
 import { publicSiteUrl } from '@/server/sites'
 
@@ -56,6 +57,14 @@ export default async function SharedDraftPreview({ searchParams }: Props) {
   if (!draft) notFound()
   const { site, data } = await loadSite(tenant, { published: false })
   const locale = localeOf(lang)
+  // R26: the spa's CRM data in a contract design (no form endpoint: nothing is stored from a preview).
+  const feed = await crmFeedMeta(tenant, draft.data, {
+    locale,
+    live: false,
+    base: '',
+    slug: draft.page.slug,
+    services: data.services,
+  })
   const meta = {
     ...buildMeta({
       data,
@@ -66,14 +75,9 @@ export default async function SharedDraftPreview({ searchParams }: Props) {
       slug: draft.page.slug,
     }),
     globals: draft.globals,
-    // R26: the spa's CRM data in a contract design (no form endpoint: nothing is stored from a preview).
-    ...(await crmFeedMeta(tenant, draft.data, {
-      locale,
-      live: false,
-      base: '',
-      slug: draft.page.slug,
-      services: data.services,
-    })),
+    ...feed,
+    // contract.inline: its first-screen pictures inside the page, as on the live site (owner 2026-10-13).
+    ...(feed.crm ? await pageCrmInline(tenant, draft.data, feed.crm, { locale }) : {}),
   }
   const other = locale === 'ar' ? 'en' : 'ar'
   return (

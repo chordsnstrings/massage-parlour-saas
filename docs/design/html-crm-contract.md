@@ -100,6 +100,8 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
 - Per request, no stale cache: content-addressed caches only (parsed design by `file:sha256`, output by
   `file:sha256 | mode | hash(CRM JSON)`, plus `| locale` for v2 designs or content, plus a hash of the content
   values when there is content); a CRM change makes a new key.
+- **`contract.inline` (§10, owner 2026-10-13):** the first-screen pictures a design names come as `data:` URIs inside
+  the JSON on the live page and share links (+ `inline_originals`); the output key adds a hash of that plan.
 - Template apply, "Save site as template", JSON export and the connector read the **stored** design (the design's
   own defaults).
 - `{{placeholders}}` in CRM text are filled like any design text (JS-string-safe inside the script).
@@ -220,3 +222,38 @@ A v2 design is one file every spa can use: nothing a visitor reads is fixed in i
 - **Endpoint form:** `<script type="application/json" id="crm-defaults">{…}</script>` (≤ 512 KB) + `<meta
   name="crm-endpoint" content="{{crm_data_url}}">`; the script fetches the meta's URL (it returns the defaults with
   the spa's content and the CRM). The literal form (`window.CRM_DATA = {…}`) needs no fetch and is recommended.
+
+## 10. `contract.inline`: first-screen pictures inside the page (owner 2026-10-13)
+
+Owner (2026-10-13, after screen recordings of reloads): "i don't want to see delay when i reload the website". The
+live page is the design document under a CSP sandbox (opaque origin, R24: never allow-same-origin), so the browser
+keys every subresource by a per-document nonce: nothing is reused from its cache on a reload and every first-screen
+picture downloads again and pops in after the text. The only way to have no visible delay is to deliver those
+pictures inside the HTML.
+
+- **Declare:** `contract.inline: ["spa.logo_on_dark", "spa.logo_on_light", "journey[welcome].image"]` — CRM_DATA
+  paths (item id `journey[welcome]` or index `journey[0]`; ≤ 16, ≤ 200 chars each; v1 or v2). Only pictures the
+  first screen shows; everything below it stays lazy (`loading="lazy"` / the design's own lazy loading).
+- **What the platform does** (live page `/site-html`, the live page's frames, share links `/website/preview?token=`;
+  never the Studio editor or console previews): after the CRM merge and the spa's content, each declared value that
+  is a platform picture — this spa's own public `/files/{uuid}` (relative, or absolute on a platform host / this
+  spa's own domain) or a static design file `/designs/{design}/{name}.{webp|png|jpg|jpeg|avif}` (relative or
+  absolute on our hosts) — is read server-side (the spa's tenant transaction for /files; `public/designs` on disk;
+  **never fetched from a URL**: other hosts are left as they are), sniffed (PNG / JPEG / WebP / AVIF / GIF only, never
+  SVG) and, when ≤ 80 KB with the page's running total ≤ 240 KB (raw bytes, per occurrence, in declared order: one
+  that would pass the total is skipped), replaced by `data:{type};base64,…`. `inline_originals` (last key) records
+  `{path: original url}` for each one, so a design can upgrade to a sharper `srcset` after load.
+- **Anything else stays as it is:** another spa's file, private files, design documents, template files (an
+  uploaded template's own `/files/{id}/{name}`), unknown hosts, query strings (`?w=480`), larger pictures, read errors, reads not done within 300 ms
+  (the render never waits longer: a late read keeps going and serves the next load).
+- **R24 / R26:** the design document never changes; only values inside `window.CRM_DATA` do (endpoint-only designs'
+  live page fetches `crm-data.json`, which is not inlined — the fetch itself is a round trip; use the literal form).
+- **Caches:** pictures in a process-wide LRU (≤ 32 MB; file ids keyed per spa, misses remembered 60 s, read errors
+  30 s; one spa's file rows of a render read in one tenant transaction, bucket objects downloaded after it with a 5 s
+  limit, so a slow bucket never holds a db connection); the output
+  cache key adds a hash of the plan (paths + urls), and the plan is made from the request's merged data, so a new CRM
+  logo (a new file id) shows on the next load. Code: `@spa/core` html-crm-inline.ts, `@spa/services` crmInlineFiles / crmInlineFileBytes,
+  web `server/crm-inline.ts` (`crmInlinePlan`, `pageCrmInline`), `designWithCrm(…, {inline})`.
+- **Authoring:** point the first screen's default picture at a small copy (BE RELAX v2.5: the 1600w welcome still
+  `4d56333a0e00bb38.webp`, 58 KB, instead of the 2400w 197 KB one) so it fits the cap; inline Latin fonts in the
+  design file itself (the platform never touches fonts).

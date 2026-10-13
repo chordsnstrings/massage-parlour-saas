@@ -67,11 +67,13 @@ export const HtmlDesign: ComponentConfig<Props> = {
     const meta = puck.metadata as SiteMeta
     const ref = htmlDesignDocOf({ doc })
     // R26 + R28: a design with the CRM data contract gets the spa's website content and live CRM data (only its
-    // window.CRM_DATA JSON changes).
-    const source = designWithCrm(html || (ref && meta.htmlDocs?.[ref.file]) || '', designKey(ref), meta.crm, {
+    // window.CRM_DATA JSON changes); contract.inline pictures as data: URIs where the server planned them.
+    const key = designKey(ref)
+    const source = designWithCrm(html || (ref && meta.htmlDocs?.[ref.file]) || '', key, meta.crm, {
       inject: true,
       content,
       locale: meta.locale,
+      inline: meta.crmInline?.[key ?? ''],
     })
     return (
       <HtmlDesignFrame

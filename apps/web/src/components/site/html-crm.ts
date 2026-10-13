@@ -2,10 +2,13 @@
 // Isomorphic: the server (live page, previews) and the Studio editor's canvas (client) both call it right before
 // htmlDesignDocument. A design without the contract comes back as the very same string.
 import {
+  applyCrmInline,
   type CrmContract,
+  type CrmInline,
   type CrmJsonMemo,
   type CrmLocale,
   contractLocaleData,
+  crmInlineKey,
   crmJsonMemo,
   crmScriptJson,
   cyrb53,
@@ -85,32 +88,65 @@ export function designContract(html: string, key: string | null): Parsed | null 
  * (R28 P5): `locale` written into the data (the frame's script sets `lang`), and on `ar` the design's reviewed Arabic
  * defaults (`contract.l10n.ar`) applied before the content. Only `content.values` count here (and in the output key):
  * page texts and pictures (R28 P4) are applied by htmlDesignDocument afterwards, so texts-only content keeps the
- * no-content path and key.
+ * no-content path and key. `inline` (contract.inline): its pictures replace their urls last (part of the key).
  */
 export function designWithCrm(
   html: string,
   key: string | null,
   crm: CrmContract | null | undefined,
-  opts: { inject: boolean; content?: HtmlDesignContent | null; locale?: CrmLocale },
+  opts: CrmOpts,
 ): string {
-  const content = hasHtmlContent(opts.content) ? opts.content : null
+  const p = prepare(html, key, crm, opts)
+  if (!p) return html
+  const inline = crmInlineKey(opts.inline)
+  const outKey = p.outKey ? `${p.outKey}${inline ? `|in:${cyrb53(inline)}` : ''}` : null
+  const hit = outKey ? outputs.get(outKey) : undefined
+  if (hit !== undefined) return hit
+  const base = merged(p, crm)
+  const data = base && opts.inline ? applyCrmInline(base, opts.inline) : base
+  const json = crmScriptJson(data, p.parsed.memo, {
+    transient: opts.inline ? new Set(Object.values(opts.inline).map((x) => x.data)) : undefined,
+  })
+  const out = spliceCrmData(html, p.found, json, opts)
+  if (outKey) outputs.set(outKey, out, out.length * 2)
+  return out
+}
+
+type CrmOpts = {
+  inject: boolean
+  content?: HtmlDesignContent | null
+  locale?: CrmLocale
+  /**
+   * contract.inline (owner 2026-10-13 "no delay when I reload"): the server's plan of first-screen pictures as data:
+   * URIs (server/crm-inline.ts) — the live page and share links only, never the Studio editor.
+   */
+  inline?: CrmInline | null
+}
+
+/** What a render merges (+ its output cache key), or null when `html` comes back unchanged. */
+function prepare(html: string, key: string | null, crm: CrmContract | null | undefined, opts: CrmOpts) {
+  const content = opts.content && hasHtmlContent(opts.content) ? opts.content : null
   const locale = opts.locale ?? 'en'
-  if (!crm && !content && locale !== 'ar') return html
+  if (!crm && !content && locale !== 'ar') return null
   const parsed = designContract(html, key)
-  if (!parsed?.found) return html
+  if (!parsed?.found) return null
   const found = parsed.found
   const v2 = found.version === 2
-  if (!crm && !content && !v2) return html
+  if (!crm && !content && !v2) return null
   const base = found.literal?.data ?? (opts.inject ? (found.defaults?.data ?? null) : null)
-  if (!found.literal && (!opts.inject || (!crm && !base))) return html
+  if (!found.literal && (!opts.inject || (!crm && !base))) return null
   const loc = v2 || (content && base) ? `|${locale}` : ''
   const outKey = key
     ? `${key}|${found.literal ? 'l' : 'i'}|${crm ? cyrb53(JSON.stringify(crm)) : '-'}${loc}${
         content && base ? `|${cyrb53(JSON.stringify(content.values))}` : ''
       }`
     : null
-  const hit = outKey ? outputs.get(outKey) : undefined
-  if (hit !== undefined) return hit
+  return { parsed, found, v2, base, content, locale, outKey }
+}
+
+/** The render's data: the design's (Arabic defaults on `ar`, v2), the spa's content over it, then the CRM. */
+function merged(p: NonNullable<ReturnType<typeof prepare>>, crm: CrmContract | null | undefined) {
+  const { parsed, v2, base, content, locale } = p
   // Copy-on-write: untouched subtrees keep their identity, so the serialiser's memo still hits.
   let local = base
   if (base && v2 && locale === 'ar') {
@@ -118,11 +154,21 @@ export function designWithCrm(
     local = parsed.ar
   }
   const own = local && content ? overlayHtmlContent(local, content, { locale }) : local
-  const data = crm ? mergeCrmContract(own, crm, v2 ? { locale } : {}) : own && v2 ? { ...own, locale } : own
-  const json = crmScriptJson(data, parsed.memo)
-  const out = spliceCrmData(html, found, json, opts)
-  if (outKey) outputs.set(outKey, out, out.length * 2)
-  return out
+  return crm ? mergeCrmContract(own, crm, v2 ? { locale } : {}) : own && v2 ? { ...own, locale } : own
+}
+
+/**
+ * The data a render puts into `window.CRM_DATA` before contract.inline, or null when it leaves `html` as it is
+ * (server/crm-inline.ts plans the inline pictures from it; not cached).
+ */
+export function designCrmData(
+  html: string,
+  key: string | null,
+  crm: CrmContract | null | undefined,
+  opts: CrmOpts,
+): Record<string, unknown> | null {
+  const p = prepare(html, key, crm, opts)
+  return p ? merged(p, crm) : null
 }
 
 /** Whether a page's data has an HtmlDesign block whose design uses the contract (`htmlDocs`: the editor's designs). */

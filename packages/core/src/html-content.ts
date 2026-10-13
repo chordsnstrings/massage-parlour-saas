@@ -147,7 +147,7 @@ const V2_CONTENT = new Set(['spa.short_name', 'spa.logo_on_light'])
 const isOperational = (plain: string, v2: boolean) =>
   OPERATIONAL.some((p) => (plain === p || plain.startsWith(`${p}.`)) && !(v2 && V2_CONTENT.has(p)))
 /** Roots the platform owns in every version (the design's manifest, the page locale): never slots, overlays or leftovers. */
-const RESERVED = ['contract', 'locale'] as const
+const RESERVED = ['contract', 'locale', 'inline_originals'] as const
 const isReserved = (plain: string) => RESERVED.some((p) => plain === p || plain.startsWith(`${p}.`))
 const isPlatform = (plain: string, v2: boolean) => isReserved(plain) || isOperational(plain, v2)
 
