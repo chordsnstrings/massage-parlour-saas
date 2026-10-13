@@ -1,4 +1,10 @@
-import { constantTimeEqual, ingestInstagramWebhook, metaConfig, verifyMetaSignature } from '@spa/services'
+import {
+  constantTimeEqual,
+  ingestInstagramWebhook,
+  integrationEnv,
+  metaConfig,
+  verifyMetaSignature,
+} from '@spa/services'
 import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -8,7 +14,7 @@ const text = (body: string, status: number) =>
 
 /** Meta's subscription check: echo hub.challenge when the verify token matches. */
 export async function GET(req: NextRequest) {
-  const cfg = metaConfig()
+  const cfg = metaConfig(await integrationEnv())
   if (!cfg) return text('Instagram is not configured', 503)
   const q = req.nextUrl.searchParams
   if (q.get('hub.mode') === 'subscribe' && constantTimeEqual(q.get('hub.verify_token'), cfg.verifyToken))
@@ -22,7 +28,7 @@ export async function GET(req: NextRequest) {
  * process, no pg-boss or owner role here).
  */
 export async function POST(req: NextRequest) {
-  const cfg = metaConfig()
+  const cfg = metaConfig(await integrationEnv())
   if (!cfg) return text('Instagram is not configured', 503)
   const raw = await req.text()
   if (!verifyMetaSignature(raw, req.headers.get('x-hub-signature-256'), cfg.appSecret))

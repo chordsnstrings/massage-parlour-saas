@@ -5,6 +5,7 @@ import {
   getGbpAccount,
   getInstagramSender,
   instagramPublishPlan,
+  integrationEnv,
   isProcessing,
   isPublishing,
   mediaKind,
@@ -94,7 +95,7 @@ export default async function ContentPage({ params }: { params: Promise<{ tenant
     }
   })
   // Why "Publish to Instagram" can't run for a post (null = ready).
-  const accountBlocker = !metaConfig()
+  const accountBlocker = !metaConfig(await integrationEnv())
     ? t('marketing.blockNotConfigured')
     : !ig
       ? t('marketing.blockConnect')

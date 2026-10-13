@@ -4,6 +4,7 @@ import {
   type InboxFilter,
   inboxCounts,
   instagramStatus,
+  integrationEnv,
   listInbox,
   metaConfig,
 } from '@spa/services'
@@ -53,7 +54,7 @@ export default async function InboxPage({
     thread: selected ? await getThread(tx, selected) : null,
     account: await instagramStatus(tx),
   }))
-  const configured = metaConfig() !== null
+  const configured = metaConfig(await integrationEnv()) !== null
   const connected = account?.status === 'connected'
   const canSettings = can(ctx, 'ai.manage') || can(ctx, 'settings.manage')
   const settingsHref = appPath(`/${slug}/settings/integrations`)

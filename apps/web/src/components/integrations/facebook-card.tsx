@@ -5,6 +5,7 @@ import {
   type FacebookPageChoice,
   facebookView,
   getFacebookAccount,
+  integrationEnv,
   MetaApiError,
   metaConfig,
   metaUrls,
@@ -47,7 +48,7 @@ export async function FacebookCard({
 }) {
   const slug = ctx.tenant.slug
   const { t, fmt } = await getI18n()
-  const configured = metaConfig() !== null && Boolean(process.env.BETTER_AUTH_SECRET)
+  const configured = metaConfig(await integrationEnv()) !== null && Boolean(process.env.BETTER_AUTH_SECRET)
   const premium = await hasFeature(ctx.tenant.id, 'marketing')
   const manage = can(ctx, 'ai.manage')
   const view = facebookView(await withTenant(ctx.tenant.id, (tx) => getFacebookAccount(tx)))

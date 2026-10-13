@@ -29,15 +29,18 @@ const STATE_TTL_MS = 10 * 60_000
 export const META_ENV = ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN'] as const
 export type MetaConfig = { appId: string; appSecret: string; verifyToken: string }
 
-/** The Meta app settings, or null while any of META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN is missing. */
-export function metaConfig(env: Record<string, string | undefined> = process.env): MetaConfig | null {
+/**
+ * The Meta app settings, or null while any of META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN is missing.
+ * `env`: the resolved record (`integrationEnv()`: console keys over env, R29) — never process.env directly.
+ */
+export function metaConfig(env: Record<string, string | undefined>): MetaConfig | null {
   const appId = env.META_APP_ID?.trim()
   const appSecret = env.META_APP_SECRET?.trim()
   const verifyToken = env.META_WEBHOOK_VERIFY_TOKEN?.trim()
   return appId && appSecret && verifyToken ? { appId, appSecret, verifyToken } : null
 }
 
-export const missingMetaEnv = (env: Record<string, string | undefined> = process.env) =>
+export const missingMetaEnv = (env: Record<string, string | undefined>) =>
   META_ENV.filter((k) => !env[k]?.trim())
 
 /** Origin of the dashboard app (API routes live at `{origin}/api/...` in both routing modes). */
@@ -528,8 +531,8 @@ export function facebookAuthorizeUrl(opts: {
   return `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${q.toString()}`
 }
 
-/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use. */
-export const facebookConfigId = (env: Record<string, string | undefined> = process.env) =>
+/** `META_FB_CONFIG_ID` (optional): the Facebook Login for Business configuration to use (resolved record, R29). */
+export const facebookConfigId = (env: Record<string, string | undefined>) =>
   env.META_FB_CONFIG_ID?.trim() || null
 
 export type FacebookPageChoice = {

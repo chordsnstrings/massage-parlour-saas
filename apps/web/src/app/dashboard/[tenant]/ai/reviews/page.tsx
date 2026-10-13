@@ -1,5 +1,12 @@
 import { reviews, withTenant } from '@spa/db'
-import { gbpConnectionView, getGbpAccount, googleConfig, isLocationReview, reviewStats } from '@spa/services'
+import {
+  gbpConnectionView,
+  getGbpAccount,
+  googleConfig,
+  integrationEnv,
+  isLocationReview,
+  reviewStats,
+} from '@spa/services'
 import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm'
 import { AlertCircle, ArrowLeft, Plus, Star } from 'lucide-react'
 import type { Metadata } from 'next'
@@ -85,6 +92,7 @@ export default async function ReviewsPage({
       .limit(100),
   }))
   const connected = Boolean(conn?.hasLocation)
+  const googleReady = googleConfig(await integrationEnv()) !== null
   // Replies go through the API only for the connected location's reviews; older locations' reviews are history.
   const parent = conn?.hasLocation ? `${conn.accountName}/${conn.locationName}` : null
   // Reconnecting happens on the integrations card, which needs ai.manage.
@@ -118,7 +126,7 @@ export default async function ReviewsPage({
         }
         actions={
           <>
-            {connected && googleConfig() && <SyncGoogleButton slug={slug} variant="primary" />}
+            {connected && googleReady && <SyncGoogleButton slug={slug} variant="primary" />}
             <FormSheet
               title={t('reviews.addTitle')}
               action={addReviewAction.bind(null, slug)}

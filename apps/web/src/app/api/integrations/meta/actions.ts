@@ -1,6 +1,14 @@
 'use server'
 import { withTenant } from '@spa/db'
-import { authorizeUrl, disconnectInstagram, metaConfig, metaUrls, newNonce, signState } from '@spa/services'
+import {
+  authorizeUrl,
+  disconnectInstagram,
+  integrationEnv,
+  metaConfig,
+  metaUrls,
+  newNonce,
+  signState,
+} from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { type ActionResult, fail, ok } from '@/lib/action'
@@ -13,7 +21,7 @@ import { NONCE_COOKIE, NONCE_PATH } from './oauth'
 export async function connectInstagramAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.manage')
   if (error) return fail(error)
-  const cfg = metaConfig()
+  const cfg = metaConfig(await integrationEnv())
   const secret = process.env.BETTER_AUTH_SECRET
   if (!cfg || !secret) return fail("Instagram isn't configured on this server yet.")
   const nonce = newNonce()

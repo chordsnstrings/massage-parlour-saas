@@ -13,6 +13,7 @@ import {
   googleBookingUrl,
   googleConfig,
   googleRedirectUri,
+  integrationEnv,
   listGbpLocations,
   newGoogleNonce,
   publicSiteBase,
@@ -44,7 +45,7 @@ const revalidate = (slug: string) => {
 export async function connectGoogleAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.manage')
   if (error) return fail(error)
-  const cfg = googleConfig()
+  const cfg = googleConfig(await integrationEnv())
   const secret = process.env.BETTER_AUTH_SECRET
   if (!cfg || !secret) return fail("Google sign-in isn't configured on this server yet.")
   const nonce = newGoogleNonce()

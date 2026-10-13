@@ -2,6 +2,7 @@ import { readFile, statfs, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { configFlags, sendStaffEmail } from '@spa/core'
 import { createDb, type Db, listedAdminEmails, platformJobRuns } from '@spa/db'
+import { integrationEnv } from '@spa/services'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { log } from '../log'
 
@@ -82,7 +83,12 @@ export async function heartbeat(env: Env = process.env, now = new Date()) {
   await db.insert(platformJobRuns).values({
     job: 'worker-heartbeat',
     status: disk && disk.usedPct > DISK_ALERT_PCT ? 'failed' : 'ok',
-    details: { disk, deploy, config: configFlags(env), release: env.APP_RELEASE ?? null },
+    details: {
+      disk,
+      deploy,
+      config: configFlags(await integrationEnv(env)),
+      release: env.APP_RELEASE ?? null,
+    },
     startedAt: now,
   })
   await db

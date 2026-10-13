@@ -73,6 +73,17 @@ export const requestUrls = async () => builders(await requestDomain())
 /** URL builders for the canonical domain: for addresses that are shared, stored or sent to others. */
 export const canonicalUrls = () => builders(canonicalDomain())
 
+/**
+ * URL builders for every configured platform domain, canonical first: what must be registered once per domain with
+ * an outside service (R29: OAuth redirect URIs, since a sign-in stays on the domain it starts on).
+ */
+export const allPlatformUrls = () =>
+  platformRoots().map((root, i) =>
+    i === 0
+      ? canonicalUrls()
+      : builders((sub?: string) => `${isLocal(root) ? 'http' : 'https'}://${sub ? `${sub}.` : ''}${root}`),
+  )
+
 export const appUrl = async (path = '/') => (await requestUrls()).app(path)
 export const adminUrl = async (path = '/') => (await requestUrls()).admin(path)
 export const marketingUrl = async () => (await requestUrls()).marketing()

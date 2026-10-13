@@ -3,6 +3,7 @@
 import { type Db, socialAccounts, socialPosts, type Tx, withTenant } from '@spa/db'
 import { and, desc, eq } from 'drizzle-orm'
 import { DomainError } from './errors'
+import { integrationEnv } from './integration-settings'
 import {
   buildLocalPost,
   createGbpLocalPost,
@@ -259,7 +260,7 @@ export async function gbpAccessToken(opts: GbpOpts & { force?: boolean }) {
     await setGbpSyncState(opts, { lastError: RECONNECT, needsReconnect: true })
     throw new GbpAuthError()
   }
-  const cfg = googleConfig(opts.env)
+  const cfg = googleConfig(opts.env ?? (await integrationEnv()))
   if (!cfg)
     throw new GbpAuthError("Google isn't configured on this server yet, so the sign-in can't be renewed.")
   let tokens: GoogleTokens

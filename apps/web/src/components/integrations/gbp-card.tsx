@@ -8,6 +8,7 @@ import {
   getGbpAccount,
   googleBookingUrl,
   googleConfig,
+  integrationEnv,
   listGbpAccounts,
   listGbpLocations,
   reviewStats,
@@ -82,7 +83,7 @@ export async function GbpCard({
 }) {
   const slug = ctx.tenant.slug
   const { t, fmt } = await getI18n()
-  const configured = Boolean(googleConfig() && process.env.BETTER_AUTH_SECRET)
+  const configured = Boolean(googleConfig(await integrationEnv()) && process.env.BETTER_AUTH_SECRET)
   const manage = can(ctx, 'ai.manage')
   /** Sync now and the reviews page need ai.approve (settings.manage alone can open this card). */
   const approve = can(ctx, 'ai.approve')

@@ -5,6 +5,7 @@ import {
   GoogleApiError,
   googleConfig,
   googleRedirectUri,
+  integrationEnv,
   sameSecret,
   saveGbpTokens,
   verifyGoogleState,
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
   if (!session || session.user.id !== state.userId) return back('forbidden')
   const ctx = await requireMember(tenant.slug)
   if (!can(ctx, 'ai.manage') || !isWritable(ctx.tenant)) return back('forbidden')
-  const cfg = googleConfig()
+  const cfg = googleConfig(await integrationEnv())
   if (!cfg) return back('not_configured')
   const code = q.get('code')
   if (q.get('error') || !code) return back('denied')

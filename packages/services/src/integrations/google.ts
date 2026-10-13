@@ -29,8 +29,11 @@ type FetchFn = typeof fetch
 export const GOOGLE_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as const
 export type GoogleConfig = { clientId: string; clientSecret: string }
 
-/** The OAuth client, or null while GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are missing. */
-export function googleConfig(env: Env = process.env): GoogleConfig | null {
+/**
+ * The OAuth client, or null while GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are missing. `env`: the resolved record
+ * (`integrationEnv()`: console keys over env, R29) — never process.env directly.
+ */
+export function googleConfig(env: Env): GoogleConfig | null {
   const clientId = env.GOOGLE_CLIENT_ID?.trim()
   const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim()
   return clientId && clientSecret ? { clientId, clientSecret } : null

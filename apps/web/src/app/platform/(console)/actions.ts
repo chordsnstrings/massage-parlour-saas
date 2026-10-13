@@ -20,6 +20,8 @@ import {
   deleteTenant,
   encryptSecret,
   generateBillingSchedule,
+  type IntegrationKey,
+  invalidateIntegrationEnv,
   isLegacyPlan,
   MIN_AUTO_PURGE_DAYS,
   markListedAdminVerified,
@@ -32,6 +34,7 @@ import {
   restorePlan,
   resumeTenant,
   saveEmailSettings,
+  saveIntegrationKeys,
   saveTurnstileSettings,
   setFeatureTier,
   setInvoicePaid,
@@ -636,6 +639,75 @@ export async function saveTurnstileSettingsAction(_p: ActionResult, fd: FormData
   revalidatePath('/platform/settings')
   revalidatePath('/platform')
   return ok('Bot check settings saved')
+}
+
+/** A key copied from Google / Meta: trimmed, bounded, no spaces inside (the verify token may have any). Blank = null. */
+const appKey = (max: number, spaces = false) =>
+  z
+    .string()
+    .trim()
+    .max(max, `At most ${max} characters`)
+    .refine((v) => spaces || !/\s/.test(v), 'No spaces — copy the value again')
+    .optional()
+    .transform((v) => v || null)
+/** Write-only secret: blank = keep, the "Remove" box = clear. */
+const secretInput = (value: string | null, clear: boolean) => (clear ? null : (value ?? undefined))
+
+/**
+ * R29 Google + Meta app keys from the console: each wins over its env variable on its own. Plain ids blank = remove
+ * (env decides); secrets are sealed like the Resend key and never logged or audited — the audit names only the keys
+ * that were set or removed. The web cache is dropped at once; the worker picks the change up within 30 s.
+ */
+async function storeAppKeys(
+  userId: string,
+  what: 'google' | 'meta',
+  input: Partial<Record<IntegrationKey, string | null>>,
+): Promise<ActionResult> {
+  const changed = await saveIntegrationKeys(platformDb(), input, userId)
+  invalidateIntegrationEnv()
+  await audit({ actorUserId: userId, action: `platform.integrations.${what}.updated`, data: changed })
+  revalidatePath('/platform/settings')
+  revalidatePath('/platform')
+  return ok(what === 'google' ? 'Google keys saved' : 'Meta keys saved')
+}
+
+export async function saveGoogleKeysAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      GOOGLE_CLIENT_ID: appKey(200),
+      GOOGLE_CLIENT_SECRET: appKey(200),
+      clear_GOOGLE_CLIENT_SECRET: bool,
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  return storeAppKeys(user.id, 'google', {
+    GOOGLE_CLIENT_ID: d.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: secretInput(d.GOOGLE_CLIENT_SECRET, d.clear_GOOGLE_CLIENT_SECRET),
+  })
+}
+
+export async function saveMetaKeysAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await admin()
+  const parsed = z
+    .object({
+      META_APP_ID: appKey(64),
+      META_APP_SECRET: appKey(200),
+      META_WEBHOOK_VERIFY_TOKEN: appKey(200, true),
+      META_FB_CONFIG_ID: appKey(64),
+      clear_META_APP_SECRET: bool,
+      clear_META_WEBHOOK_VERIFY_TOKEN: bool,
+    })
+    .safeParse(formObject(fd))
+  if (!parsed.success) return fromZod(parsed.error)
+  const d = parsed.data
+  return storeAppKeys(user.id, 'meta', {
+    META_APP_ID: d.META_APP_ID,
+    META_APP_SECRET: secretInput(d.META_APP_SECRET, d.clear_META_APP_SECRET),
+    META_WEBHOOK_VERIFY_TOKEN: secretInput(d.META_WEBHOOK_VERIFY_TOKEN, d.clear_META_WEBHOOK_VERIFY_TOKEN),
+    META_FB_CONFIG_ID: d.META_FB_CONFIG_ID,
+  })
 }
 
 /** Sends a test email to the signed-in super-admin with the effective settings (console first, then env). */

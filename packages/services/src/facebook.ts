@@ -6,6 +6,7 @@
 import { type Db, platformDb, socialAccounts, type Tx, tenants, withTenant } from '@spa/db'
 import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 import { DomainError } from './errors'
+import { integrationEnv } from './integration-settings'
 import {
   type FacebookPageChoice,
   type FacebookTokenInfo,
@@ -257,7 +258,7 @@ export async function checkFacebookPageTokens(
   } = {},
 ) {
   const result = { checked: 0, expired: 0, failed: 0 }
-  const cfg = metaConfig(o.env)
+  const cfg = metaConfig(o.env ?? (await integrationEnv()))
   if (!cfg) return result
   const rows = await (o.platform ?? platformDb())
     .select({ id: socialAccounts.id, tenantId: socialAccounts.tenantId })
