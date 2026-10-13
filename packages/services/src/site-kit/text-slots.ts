@@ -140,7 +140,12 @@ export function htmlTextSlots(
     const key = `${block}/content:${s.path}`
     const t = v && 't' in v ? v.t : undefined
     const sys = systemCopy(manifest, s.path)
-    const arabicOnly = englishOnlyOwn(t) && !englishOnly(manifest, s.path) && (sys || own(key, t?.en))
+    // A name (spa.short_name) is never translated: the spa's English one stays on /ar too.
+    const arabicOnly =
+      s.path !== 'spa.short_name' &&
+      englishOnlyOwn(t) &&
+      !englishOnly(manifest, s.path) &&
+      (sys || own(key, t?.en))
     if (!arabicOnly && (sys || own(key, t?.en))) continue
     push({
       key,

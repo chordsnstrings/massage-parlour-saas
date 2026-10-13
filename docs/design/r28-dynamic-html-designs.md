@@ -243,8 +243,9 @@ All in `packages/core/src/html-crm.ts`:
   - **The switch** (`upgradeHtmlDesignLive`, in the spa's own transaction; all of the spa's old-version pages in a
     savepoint, or none): never `publishPage` — its own published row per page (`insertVersion`), so draft themes and
     pending renames stay unpublished; content = `carryHtmlContent` (with the old file for pairing) +
-    `htmlDesignOwnPins` (embedded logos stored as the spa's files); props: the spa's Phone fixes kept on, its picture
-    adjustments kept for pictures still in the new file that the new version sets none for (`upgradedProps`); each
+    `htmlDesignOwnPins` (embedded logos stored as the spa's files); props: the spa's own Phone fixes kept on, its own picture
+    adjustments kept for pictures still in the new file that the new version sets none for; settings equal to the old
+    version's (only inherited) follow the new version (`upgradedProps(…, fromProps)`); each
     working draft carried (same old file) or kept, moved after the new live row; ONE `templateUndo.live` holding every
     page → Undo re-publishes the previous versions as new rows, puts the drafts back and sets `sites.template_hold`
     (later rollouts of that version skip the spa). An editor lock on any page, a content check that fails on any page

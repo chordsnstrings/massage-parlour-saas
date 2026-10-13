@@ -346,27 +346,44 @@ async function carriedContent(
   }
 }
 
+/** An adjustment compared by value (key order ignored). */
+const adjustKey = (a: HtmlImageAdjust) =>
+  JSON.stringify(Object.entries(a as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : 1)))
+
 /**
- * A block's props on the new file: block id, its other props and the spa's content kept; the spa's Phone fixes kept
- * on (the new version can only turn them on) and its picture adjustments kept for every picture still in the new
- * file (re-pointed by `src`) that the new version sets none for.
+ * A block's props on the new file: block id, its other props and the spa's content kept. Phone fixes and picture
+ * adjustments the spa only inherited from the old version (`fromProps`, equal to it) follow the new version; the
+ * spa's own (different from the old version, or no old version known) are kept: Phone fixes on, adjustments for every
+ * picture still in the new file (re-pointed by `src`) that the new version sets none for.
  */
 export const upgradedProps = (
   oldProps: Record<string, unknown>,
   prepared: Node,
   content: unknown,
   newHtml: string,
+  fromProps?: Record<string, unknown> | null,
 ) => {
   const { content: _old, ...rest } = oldProps
   const p = prepared.props ?? {}
-  const own = Array.isArray(oldProps.images) ? (oldProps.images as HtmlImageAdjust[]) : []
+  const inherited = new Set(
+    fromProps && Array.isArray(fromProps.images)
+      ? (fromProps.images as HtmlImageAdjust[]).map(adjustKey)
+      : [],
+  )
+  const own = (Array.isArray(oldProps.images) ? (oldProps.images as HtmlImageAdjust[]) : []).filter(
+    (a) => !inherited.has(adjustKey(a)),
+  )
+  const ownPhoneFixes =
+    !fromProps || htmlDesignPhoneFixes(oldProps) !== htmlDesignPhoneFixes(fromProps)
+      ? htmlDesignPhoneFixes(oldProps)
+      : false
   const template = Array.isArray(p.images) ? (p.images as HtmlImageAdjust[]) : []
   return {
     ...rest,
     html: typeof p.html === 'string' ? p.html : '',
     doc: p.doc,
     images: mergeHtmlImageAdjustments(template, repointHtmlImageAdjustments(own, newHtml)),
-    phoneFixes: p.phoneFixes === true || htmlDesignPhoneFixes(oldProps),
+    phoneFixes: p.phoneFixes === true || ownPhoneFixes,
     ...(content ? { content } : {}),
   }
 }
@@ -388,6 +405,8 @@ class UpgradeSkipped extends Error {
 
 type UpgradeInput = {
   template: SiteTemplate
+  /** The old version's block props (Phone fixes / adjustments a spa only inherited follow the new version); null = unknown. */
+  fromProps?: Record<string, unknown> | null
   /** The spa's pages to switch (every one still live on an old version is switched, or none). */
   pageIds: string[]
   fromShas: string[]
@@ -484,7 +503,7 @@ async function switchPages(
         newData,
         read,
       })
-      return { ...c, props: upgradedProps(props, newNode, c.content, newHtml) }
+      return { ...c, props: upgradedProps(props, newNode, c.content, newHtml, input.fromProps) }
     }
 
     const up = await carryInto(t.oldNode.props)

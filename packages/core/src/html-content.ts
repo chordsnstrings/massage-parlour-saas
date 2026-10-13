@@ -657,7 +657,13 @@ export function htmlContentLeftovers(
     ctx.arabic && isObj(t) && String(t.en ?? '').trim() !== '' && !String(t.ar ?? '').trim()
   for (const [path, v] of Object.entries(set)) {
     if (!paths.has(path)) out.push({ path, reason: 'stale', text: '' })
-    else if (isObj(v) && 't' in v && englishOnlyText(v.t) && !englishOnly(manifest, path))
+    else if (
+      isObj(v) &&
+      't' in v &&
+      englishOnlyText(v.t) &&
+      !englishOnly(manifest, path) &&
+      path !== 'spa.short_name'
+    )
       out.push({ path, reason: 'arabic', text: String(v.t.en) })
   }
   if (!ctx.page) return out

@@ -612,4 +612,35 @@ describe('upgradedProps (fix2: a spa keeps its Phone fixes and picture framings)
     )
     expect(gone).toMatchObject({ images: [], phoneFixes: false })
   })
+
+  it('settings only inherited from the old version follow the new one; the spa’s own stay', () => {
+    const fromProps = { images: [{ id: 'img-0', src: POOL, x: 10, y: 20 }], phoneFixes: true }
+    // Same as the old version (inherited): the new version has Phone fixes off and no framing → both end.
+    const inherited = upgradedProps(
+      { y: 0, ...fromProps, id: 'b' },
+      prepared(),
+      undefined,
+      NEW_HTML,
+      fromProps,
+    )
+    expect(inherited).toMatchObject({ phoneFixes: false, images: [] })
+    // Key order does not make an inherited adjustment the spa's own.
+    const reordered = upgradedProps(
+      { images: [{ y: 20, x: 10, src: POOL, id: 'img-0' }], phoneFixes: true },
+      prepared(),
+      undefined,
+      NEW_HTML,
+      fromProps,
+    )
+    expect(reordered).toMatchObject({ phoneFixes: false, images: [] })
+    // The spa changed them itself (different from the old version): kept.
+    const own = upgradedProps(
+      { images: [{ id: 'img-0', src: POOL, x: 40, y: 20 }], phoneFixes: true },
+      prepared(),
+      undefined,
+      NEW_HTML,
+      { images: fromProps.images, phoneFixes: false },
+    )
+    expect(own).toMatchObject({ phoneFixes: true, images: [{ id: 'img-1', src: POOL, x: 40, y: 20 }] })
+  })
 })

@@ -731,8 +731,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `upgradeHtmlDesignLive(tx, tenant, {pageIds, …})` (spa tx: lock + editor lock on every page (`locked`), pages
     whose live sha ∈ old shas else `already` / `not-on-version`; all of them in one savepoint (`UpgradeSkipped` rolls
     it back: nothing written): per page the new file copied in (`prepare`), `upgradedProps` (block id + other props
-    kept; the spa's Phone fixes kept on; its picture adjustments re-pointed by `src` and kept where the new version
-    sets none — site-kit `html-images.ts` `repointHtmlImageAdjustments` / `mergeHtmlImageAdjustments`), content =
+    kept; Phone fixes / adjustments equal to the old version's (`fromProps`, only inherited) follow the new version,
+    the spa's own are kept: Phone fixes on, adjustments re-pointed by `src` and kept where the new version sets none — site-kit `html-images.ts` `repointHtmlImageAdjustments` / `mergeHtmlImageAdjustments`), content =
     `carryHtmlContent` + `htmlDesignOwnPins` (embedded logos sniffed → the spa's `html_design` files `/files/{id}`),
     `htmlContentErrors` + `htmlDesignContentErrors` else `invalid`; `insertVersion` published row (never
     `publishPage`: draft theme + pending rename stay), the working draft carried (same old file) or kept and moved

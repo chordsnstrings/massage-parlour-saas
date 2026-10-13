@@ -1264,7 +1264,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   and the spas it could not switch go last on the next click; the sign-off is refused when another upload came in
   meanwhile. "Upload new version" starts from the current version's Phone fixes and picture adjustments (re-pointed by
   picture); the rollout keeps each spa's own Phone fixes (on) and its adjustments of pictures still in the new file
-  that the new version leaves unset, and its sheet lists the differences before sign-off. D5 is queued in the apply's
+  that the new version leaves unset (settings a spa only inherited from the old version follow the new one; a spa's
+  short name is never machine-translated by Write texts), and its sheet lists the differences before sign-off. D5 is queued in the apply's
   own transaction (console apply and the connector's `apply_template`). **Owner open points (review):** O5 still
   open (native review of the Arabic defaults); **O6** two v2 default pictures (`spa.experience_image`,
   `booking.image`) show BE RELAX branding on bottle labels — please supply neutral photos (until then any other spa

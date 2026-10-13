@@ -142,6 +142,8 @@ export const domain = {
   homeAlwaysVisible: 'The home page is always visible',
   noTemplateUndo: 'There is no template change to undo',
   undoUnavailable: 'Undo is no longer available: {changed} changed since the switch. Your edits are kept.',
+  undoVersionGone: 'Undo is no longer available: the previous version is gone.',
+  templateVersionChanged: 'This version changed meanwhile — reload the page and check it again.',
   slugFormat: 'Use lowercase letters, numbers and dashes',
   pageTooLarge: 'This page is too large to save.',
   pageTitleLength: 'Page titles need 1–80 characters',

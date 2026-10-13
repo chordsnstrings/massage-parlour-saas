@@ -326,7 +326,7 @@ function lookDifferences(
   const now = to.phoneFixes === true
   if (was !== now)
     out.push(
-      `Phone fixes: version ${version - 1} ${was ? 'on' : 'off'} → version ${version} ${now ? 'on' : 'off'}${now ? '' : ' (spas that have them on keep them)'}.`,
+      `Phone fixes: version ${version - 1} ${was ? 'on' : 'off'} → version ${version} ${now ? 'on' : 'off'}${now ? '' : ' (only spas that switched them on themselves keep them)'}.`,
     )
   const old = adjustmentsOf(from)
   const still = repointHtmlImageAdjustments(old, newHtml)
@@ -560,6 +560,7 @@ export async function rolloutTemplateVersionAction(
       up = await withTenant(s.tenantId, (tx) =>
         upgradeHtmlDesignLive(tx, s.tenantId, {
           template,
+          fromProps: target.fromProps,
           pageIds: s.pages.map((p) => p.pageId),
           fromShas: target.fromShas,
           toSha: target.toSha,
