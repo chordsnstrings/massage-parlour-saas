@@ -4,7 +4,7 @@
 // browser cache on a reload). Bytes are read here, never fetched from a URL: this spa's own public /files (its
 // tenant transaction) and the static public/designs files. Process-wide cache ≤ 32 MB; a render waits ≤ 300 ms for
 // reads (a late one fills the cache for the next load).
-import { readFile as readFs, stat } from 'node:fs/promises'
+import { open } from 'node:fs/promises'
 import path from 'node:path'
 import {
   type CrmContract,
@@ -35,9 +35,17 @@ async function readDesignFile(design: string, name: string, max: number): Promis
     const file = path.join(root, design, name)
     // core already allows only [a-z0-9-] / [A-Za-z0-9_-].ext names: this keeps it inside public/designs regardless.
     if (!file.startsWith(`${root}${path.sep}`)) return null
-    const info = await stat(file).catch(() => null)
-    if (!info) continue
-    return info.isFile() && info.size <= max ? readFs(file) : null
+    // One open file handle for the check and the read, so the file checked is the file read.
+    const handle = await open(file, 'r').catch(() => null)
+    if (!handle) continue
+    try {
+      const info = await handle.stat()
+      if (!info.isFile() || info.size > max) return null
+      const bytes = await handle.readFile()
+      return bytes.length <= max ? bytes : null
+    } finally {
+      await handle.close()
+    }
   }
   return null
 }
