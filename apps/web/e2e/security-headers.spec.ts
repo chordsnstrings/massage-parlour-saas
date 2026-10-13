@@ -160,7 +160,8 @@ test('F10: every surface sends a nonce CSP and the standard headers; APIs and th
   for (const host of ['', 'app.', 'admin.', `${slug}.`]
     .map((h) => `http://${h}localhost:${PORT}`)
     .concat('http://www.csp-headers-test.ae')) {
-    for (const file of ['3427efdf7896718d.woff2', '998d1a1a386836e2.webp']) {
+    // (+ v2.3's smaller copy of the first still, which v2.3 loads from the page's own host)
+    for (const file of ['3427efdf7896718d.woff2', '998d1a1a386836e2.webp', '4d56333a0e00bb38.webp']) {
       const res = await viaHost(page, `${host}/designs/be-relax/${file}`)
       const h = res.headers()
       expect(res.status(), `${host} ${file}`).toBe(200)

@@ -11,17 +11,26 @@ const g = globalThis as unknown as { __spaDb?: Map<string, { db: Db; pool: pg.Po
 if (!g.__spaDb) g.__spaDb = new Map()
 const cache = g.__spaDb
 
+/**
+ * Idle connections stay open 10 minutes (pg's default closes them after 10 s, so the first request after a quiet
+ * minute paid ~100 ms to reconnect: BE RELAX v2.3 measurement). Same number of connections as before: the pools'
+ * `max` (web 10 + 10, worker 4 + 4, pg-boss 3) stays under the droplet's max_connections=60. keepAlive: TCP
+ * keep-alive on the held sockets.
+ */
+export const POOL_IDLE_MS = 10 * 60_000
+
 /** One pooled client per connection string (survives dev hot reloads). */
 /**
  * Managed Postgres (DigitalOcean) needs TLS: set DATABASE_CA_CERT to the cluster CA (PEM) to verify it.
  * The sslmode query param is dropped then, because node-postgres would otherwise override the CA config.
  */
-function poolConfig(url: string, max: number): pg.PoolConfig {
+export function poolConfig(url: string, max: number): pg.PoolConfig {
+  const base = { max, idleTimeoutMillis: POOL_IDLE_MS, keepAlive: true }
   const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n')
-  if (!ca) return { connectionString: url, max }
+  if (!ca) return { connectionString: url, ...base }
   const u = new URL(url)
   u.searchParams.delete('sslmode')
-  return { connectionString: u.toString(), max, ssl: { ca, rejectUnauthorized: true } }
+  return { connectionString: u.toString(), ...base, ssl: { ca, rejectUnauthorized: true } }
 }
 
 const defaultMax = () => Number(process.env.DB_POOL_MAX ?? 10)
