@@ -1274,7 +1274,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   **P6 (2026-10-13, done):** all unit tests and the full e2e suite (135 passed, 2 skipped by design) on the production
   build of the live release cca4874. R28 is complete; the owner's steps: set Be Relax's branch area label, upload BE
   RELAX v2 as a new version of its template, preview EN + AR, Roll out (= sign-off). Open: O5 native review of the v2
-  Arabic defaults + new TH strings; two neutral photos for the v2 defaults (spa.experience_image, booking.image).
+  Arabic defaults + new TH strings. The owner sent two neutral photos (2026-10-13): BE RELAX **v2.1** = v2 with those as
+  spa.experience_image (4:5 crop) and booking.image (2:3) + new EN/AR alt texts (AR alts need review); upload v2.1, not v2.
+  Be Relax itself keeps its branded photos (its own v1 look is pinned as website content on the switch).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
