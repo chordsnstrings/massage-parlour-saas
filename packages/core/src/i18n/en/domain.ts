@@ -361,4 +361,6 @@ export const domain = {
   seedDesignStaffMissing: 'The design has no team member “{id}”',
   seedPickService: 'Pick the CRM service to fill',
   seedPickTherapist: 'Pick the therapist for the photo',
+  // Owner 2026-10-13: review replies dropped for now (services reviewRepliesComingSoon).
+  reviewRepliesComingSoon: 'Replying to reviews is coming soon',
 } as const

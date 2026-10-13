@@ -1,6 +1,9 @@
 // `reviews` namespace (EN source). Only the reviews screens edit this file; mirror every key in th/reviews.ts.
 export const reviews = {
   title: 'Google reviews',
+  // Owner 2026-10-13: replies dropped for now — the page shows only this panel (REVIEW_REPLIES_LIVE).
+  soonTitle: 'Reviews — coming soon',
+  soonText: "Soon you'll see your Google reviews here and reply to them in one place. Nothing to set up yet.",
   descConnected:
     'Synced from {name} every two hours. Draft a reply with AI, approve it, then post it to Google.',
   yourProfile: 'your Google Business Profile',

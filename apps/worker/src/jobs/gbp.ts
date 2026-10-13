@@ -1,4 +1,5 @@
 import { draftReviewReply } from '@spa/ai'
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { platformDb, socialAccounts, tenants } from '@spa/db'
 import {
   automationOnSql,
@@ -16,7 +17,8 @@ import { LIVE_STATUSES, recordRun } from './runs'
 
 /**
  * Every 2 hours: pull Google reviews for each spa with a connected Business Profile location. New reviews get an AI
- * draft when the review agent is on; autopilot posts 4–5★ replies, 1–3★ wait for approval in the dashboard.
+ * draft when the review agent is on; autopilot posts 4–5★ replies, 1–3★ wait for approval in the dashboard. While
+ * review replies are dropped (owner 2026-10-13, REVIEW_REPLIES_LIVE off) it only reads: no drafts, no autopilot.
  */
 export async function syncAllGbpReviews() {
   const env = await integrationEnv()
@@ -40,7 +42,7 @@ export async function syncAllGbpReviews() {
       const res = await syncGbpReviews({
         tenantId,
         env,
-        draft: (reviewId) => draftReviewReply({ tenantId, reviewId }),
+        draft: REVIEW_REPLIES_LIVE ? (reviewId) => draftReviewReply({ tenantId, reviewId }) : undefined,
       })
       if (res.ok) {
         synced++

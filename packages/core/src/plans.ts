@@ -17,7 +17,7 @@ export type PlanCode = (typeof PLAN_CODES)[keyof typeof PLAN_CODES]
 /**
  * Gated feature keys. `ai` = AI receptionist, Instagram inbox + DM replies / booking from chat, AI insights, receipt
  * scan, AI tools (Meta MCP). `marketing` = campaigns (win-back / birthday drafts), Google Business + Instagram posting,
- * review requests + replies, quiet-slot offers. `multiBranch` = more than one active branch.
+ * review requests (+ review replies once REVIEW_REPLIES_LIVE is back on, switches.ts), quiet-slot offers. `multiBranch` = more than one active branch.
  */
 export const FEATURES = ['ai', 'marketing', 'multiBranch'] as const
 export type Feature = (typeof FEATURES)[number]
@@ -133,7 +133,8 @@ export const PLAN_FEATURES: readonly PlanFeatureRow[] = [
   { key: 'receipts', label: 'Receipt scanning for expenses', feature: 'ai' },
   { key: 'campaigns', label: 'Campaigns: win-back, birthday and quiet-slot offers', feature: 'marketing' },
   { key: 'posting', label: 'Google Business and Instagram posting', feature: 'marketing' },
-  { key: 'reviews', label: 'Review requests and AI review replies', feature: 'marketing' },
+  // Owner 2026-10-13: review replies dropped for now (switches.ts REVIEW_REPLIES_LIVE).
+  { key: 'reviews', label: 'Review requests (AI review replies coming soon)', feature: 'marketing' },
   { key: 'branches', label: 'More than one branch', feature: 'multiBranch' },
 ]
 

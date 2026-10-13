@@ -48,7 +48,8 @@ export const notifications = {
           one: '{count} AI draft waiting for approval',
           other: '{count} AI drafts waiting for approval',
         },
-        body: 'Instagram posts: {posts} · Review replies: {replies}',
+        // Owner 2026-10-13: review replies dropped for now (was '… · Review replies: {replies}')
+        body: 'Instagram posts: {posts}',
       },
       budget_warning: {
         title: 'AI budget {percent}% used',

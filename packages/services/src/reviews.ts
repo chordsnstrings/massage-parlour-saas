@@ -1,8 +1,11 @@
 // Google reviews: sync from Business Profile (upsert by review name), AI drafts for new reviews, autopilot for 4–5★,
 // posting approved replies, and summary stats. 1–3★ replies always wait for a person. R29: API content is kept at
 // most 30 days unless Google returns it again (synced_at; complete syncs drop vanished reviews, a daily purge the rest).
+// Owner 2026-10-13: replies are dropped for now (@spa/core REVIEW_REPLIES_LIVE): sync reads reviews only, posting refuses.
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { aiAgentSettings, type Db, platformDb, reviews, type Tx, withTenant } from '@spa/db'
 import { and, desc, eq, gte, inArray, isNotNull, isNull, like, lt, notInArray, sql } from 'drizzle-orm'
+import { DomainError } from './errors'
 import {
   GBP_PENDING_ID,
   type GbpAccountRow,
@@ -19,6 +22,9 @@ import { listGbpReviews, type MappedReview, mapGoogleReview, putGbpReply } from 
 export const AUTO_POST_MIN_RATING = 4
 /** Google's limit for a reply. */
 export const REPLY_MAX_BYTES = 4096
+
+/** Every reply path refuses with this while REVIEW_REPLIES_LIVE is off (owner 2026-10-13). */
+export const reviewRepliesComingSoon = () => new DomainError('Replying to reviews is coming soon')
 
 export const canAutoPost = (rating: number, mode: 'approve' | 'autopilot') =>
   mode === 'autopilot' && rating >= AUTO_POST_MIN_RATING
@@ -214,7 +220,12 @@ export async function purgeStaleGoogleReviews(o: { platform?: Db; app?: Db; now?
  * `draftReviewReply` from @spa/ai).
  */
 export async function syncGbpReviews(
-  opts: GbpOpts & { draft?: (reviewId: string) => Promise<unknown>; maxDrafts?: number },
+  opts: GbpOpts & {
+    draft?: (reviewId: string) => Promise<unknown>
+    maxDrafts?: number
+    /** Tests only: run the (dormant) draft + autopilot path although REVIEW_REPLIES_LIVE is off. */
+    repliesLive?: boolean
+  },
 ): Promise<SyncResult> {
   const now = opts.now ?? new Date()
   let mapped: MappedReview[]
@@ -248,6 +259,9 @@ export async function syncGbpReviews(
     opts.db,
   )
   await setGbpSyncState(opts, { lastSyncAt: now, lastError: null })
+  // Replies dropped (owner 2026-10-13): no AI drafts, no autopilot — a review agent left on is ignored.
+  if (!(opts.repliesLive ?? REVIEW_REPLIES_LIVE))
+    return { ok: true, fetched: mapped.length, created, updated, removed, drafted: 0, posted: 0, failed: 0 }
 
   let drafted = 0
   let posted = 0
@@ -311,8 +325,10 @@ export async function syncGbpReviews(
 
 /** Posts an approved (or previously failed) reply to Google; the review ends `posted` or `failed` with the reason. */
 export async function postGbpReply(
-  opts: GbpOpts & { reviewId: string },
+  opts: GbpOpts & { reviewId: string /** Tests only (see syncGbpReviews). */; repliesLive?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(opts.repliesLive ?? REVIEW_REPLIES_LIVE))
+    return { ok: false, error: reviewRepliesComingSoon().message }
   const now = opts.now ?? new Date()
   const { review, parent } = await withTenant(
     opts.tenantId,

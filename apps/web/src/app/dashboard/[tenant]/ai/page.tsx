@@ -1,3 +1,4 @@
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { aiAgentSettings, aiUsage, brandProfiles, withTenant } from '@spa/db'
 import { getSite, latestSeoCheck, listPublishedPages } from '@spa/services'
 import { and, eq, gte, sql } from 'drizzle-orm'
@@ -122,22 +123,28 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
         </Grid>
         <Grid cols="g3">
           {AGENTS.map((a) => {
-            const s = settings.find((x) => x.agentKey === a.key)
+            // Review replies are dropped for now (owner 2026-10-13): "Coming soon", no settings; a stored "on" is ignored.
+            const soon = a.key === 'review_agent' && !REVIEW_REPLIES_LIVE
+            const s = soon ? undefined : settings.find((x) => x.agentKey === a.key)
             const name = t(`ai.agent.${a.key}.name`)
             const text = t(`ai.agent.${a.key}.text`)
             return (
-              <Card key={a.key} as="article" className="flex h-full flex-col">
+              <Card key={a.key} as="article" className="flex h-full flex-col" data-testid={`agent-${a.key}`}>
                 <div className="flex items-start justify-between gap-3">
                   <span className="crm-ricon" aria-hidden>
                     <a.icon className="size-[18px]" strokeWidth={1.5} />
                   </span>
-                  <Pill tone={s?.enabled ? 'ok' : 'neutral'} dot>
-                    {s?.enabled
-                      ? s.mode === 'autopilot'
-                        ? t('ai.statusAutopilot')
-                        : t('ai.statusApproval')
-                      : t('ai.statusOff')}
-                  </Pill>
+                  {soon ? (
+                    <Pill tone="info">{t('ai.comingSoon')}</Pill>
+                  ) : (
+                    <Pill tone={s?.enabled ? 'ok' : 'neutral'} dot>
+                      {s?.enabled
+                        ? s.mode === 'autopilot'
+                          ? t('ai.statusAutopilot')
+                          : t('ai.statusApproval')
+                        : t('ai.statusOff')}
+                    </Pill>
+                  )}
                 </div>
                 <h3 className="mt-3 font-semibold">{name}</h3>
                 <p className="crm-muted mt-1 flex-1 text-sm">{text}</p>
@@ -146,7 +153,7 @@ export default async function AiStudio({ params }: { params: Promise<{ tenant: s
                     {seoLine(s?.enabled === true)}
                   </p>
                 )}
-                {manage && (
+                {manage && !soon && (
                   <div className="mt-4">
                     <FormSheet
                       title={name}

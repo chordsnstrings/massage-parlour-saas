@@ -416,6 +416,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     block, AI-draft notifications and performance "reviews by source" (by `created_at`; a re-imported review counts
     as new again) simply count less.
   - Authorize: `prompt=select_account consent` (+ offline, include_granted_scopes, PKCE S256, signed state).
+- **Review replies off (owner 2026-10-13, PLAN §14.8):** `REVIEW_REPLIES_LIVE` in `packages/core/src/switches.ts` (the
+  one product switch; services `reviewRepliesComingSoon()` = the DomainError every reply path returns). Checked in:
+  `syncGbpReviews` (returns after the upsert: no drafts/autopilot) + `postGbpReply` (refuses) — both take
+  `repliesLive` for tests only; `@spa/ai` `draftReviewReply` (throws); `aiDraftNotices` (3rd arg, tests only); web
+  `ai/actions.ts` (`draftReplyAction`, `saveAgentAction` review_agent on), `ai/reviews/actions.ts`
+  (`saveReviewReplyAction`), `ai/reviews/page.tsx` (`ReviewsComingSoon` panel), `ai/page.tsx` (review agent card),
+  `integrations/gbp-card.tsx` (no autopilot line / replies link), google `syncGoogleReviewsAction` + worker
+  `syncAllGbpReviews` (no drafter). Reading reviews is untouched. Tests: services `gbp.test.ts` ("replies dropped"),
+  `notifications.test.ts`, ai `agents.test.ts` ("review agent"), worker `gbp-reviews.test.ts`, e2e `gbp.spec.ts`.
 - **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
   business.manage + webmasters + openid email; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
   `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via

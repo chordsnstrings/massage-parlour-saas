@@ -58,7 +58,7 @@ export const AREAS: Area[] = [
     tint: 'plum',
     features: [
       'AI writes Instagram captions and images; scheduled posts publish themselves',
-      'Google reviews synced automatically, with AI-written replies to approve',
+      'Google reviews synced automatically, ready to show on your website (AI replies coming soon)',
       'AI site writer drafts your website copy in English and Arabic',
       'Weekly insights and a morning digest sent to your phone',
       'Website analytics without cookies: which sections and sources bring bookings',

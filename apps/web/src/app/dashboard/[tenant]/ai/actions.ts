@@ -1,11 +1,18 @@
 'use server'
 import { draftInstagramPost, draftReviewReply, runDmTurn } from '@spa/ai'
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { aiAgentSettings, brandProfiles, reviews, socialPosts, withTenant } from '@spa/db'
-import { fileIdFromUrl, persistRemoteAsset, postImageUrl, saveRemoteImage } from '@spa/services'
+import {
+  fileIdFromUrl,
+  persistRemoteAsset,
+  postImageUrl,
+  reviewRepliesComingSoon,
+  saveRemoteImage,
+} from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { canonicalUrls } from '@/server/origin'
@@ -32,6 +39,9 @@ export async function saveAgentAction(slug: string, _p: ActionResult, fd: FormDa
   const parsed = settingsSchema.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const d = parsed.data
+  // Review replies are dropped for now (owner 2026-10-13): the review agent can't be switched on.
+  if (d.agentKey === 'review_agent' && d.enabled && !REVIEW_REPLIES_LIVE)
+    return failDomain(reviewRepliesComingSoon())
   await withTenant(ctx.tenant.id, (tx) =>
     tx
       .insert(aiAgentSettings)
@@ -247,6 +257,7 @@ export async function addReviewAction(slug: string, _p: ActionResult, fd: FormDa
 export async function draftReplyAction(slug: string, reviewId: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
+  if (!REVIEW_REPLIES_LIVE) return failDomain(reviewRepliesComingSoon())
   try {
     await draftReviewReply({ tenantId: ctx.tenant.id, reviewId })
   } catch (e) {

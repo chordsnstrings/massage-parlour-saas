@@ -138,10 +138,12 @@ How it behaves:
      `openid`, `email` (the last two are non-sensitive: they identify the signed-in Google account — "Connected as",
      and disconnect revokes only when no other spa uses that account).
    - **Verification Center:** submit for verification with a justification per scope naming the calls we make —
-     `business.manage`: list accounts/locations, read reviews, post review replies, create local posts, Place Actions
-     (the Book link); `webmasters`: `sites.list`, `sites.add`, `sitemaps.submit`, `sitemaps.get` (no search analytics) —
-     plus an **unlisted YouTube demo video** of the connect flow (account chooser + consent screen with the app name,
-     the location picker, a reply, the Book button, the sitemap submit). A published but unverified app shows the
+     `business.manage`: list accounts/locations, read reviews (shown on the spa's website + count/rating in its
+     dashboard), create local posts, Place Actions (the Book link) — **no review replies** (dropped for now, owner
+     2026-10-13; `REVIEW_REPLIES_LIVE` in @spa/core); `webmasters`: `sites.list`, `sites.add`, `sitemaps.submit`,
+     `sitemaps.get` (no search analytics) — plus an **unlisted YouTube demo video** of the connect flow (account
+     chooser + consent screen with the app name, the location picker, a local post with the Book button, the sitemap
+     submit). A published but unverified app shows the
      "unverified app" screen and has a **lifetime cap of 100 users**.
 4. **Clients → OAuth client (Web application):**
    - the one authorised redirect URI `https://app.spamanagement.co/api/integrations/google/callback` (canonical
@@ -167,8 +169,11 @@ first, then consent) and picks the location; the card shows "Connected as {email
   our project) is called only when no other spa is connected with the same Google account or with an unknown one
   (connections made before `openid email`: possibly the same account), and never for a connection whose account is
   unknown.
-- Reviews sync every 2 hours (worker job `gbp-reviews-sync`) and on *Sync now*; new reviews get an AI draft when the
-  review agent is on, autopilot posts 4–5★ replies.
+- Reviews sync every 2 hours (worker job `gbp-reviews-sync`) and on *Sync now* — read only: they feed the Website
+  "Google reviews" block and the card's count + rating. **Review replies are dropped for now** (owner 2026-10-13,
+  `REVIEW_REPLIES_LIVE = false` in `packages/core/src/switches.ts`): no AI drafts, no autopilot, no posting; the
+  dashboard Reviews page shows "Coming soon" and the review agent can't be switched on. (Dormant code path when it is
+  turned back on: new reviews get an AI draft when the review agent is on, autopilot posts 4–5★ replies, 1–3★ wait.)
 - **Review content ≤ 30 days** (Business Profile API policy, "Content storage": stored temporarily "for no more than 30
   calendar days"): every sync refreshes `reviews.synced_at` of the reviews Google returns; a complete sync (all pages,
   no error, not fewer than Google's own total) deletes the location's reviews Google no longer returns; the daily
@@ -177,10 +182,10 @@ first, then consent) and picks the location; the card shows "Connected as {email
 - Token errors (RFC 6749 §5.2 + Google): `invalid_grant` / `unauthorized_client` (a token issued to another — replaced —
   client) → that spa is flagged *Reconnect*; `invalid_client` / `deleted_client` (wrong/missing secret, deleted client)
   → nobody is flagged, staff see "the platform's Google setup needs fixing".
-- Replies to 1–3★ reviews always wait for approval.
 - Approved AI-studio posts get *Post to Google* (STANDARD local post, Book button → `{site}/book?src=gbp`; photo only
   when it has a public https URL).
-- Without the keys (console or env) the card shows "Not configured yet" and reviews are pasted in by hand (manual fallback).
+- Without the keys (console or env) the card shows "Not configured yet". (The hand-paste fallback lives on the Reviews
+  page, hidden while replies are dropped; hand-pasted reviews already stored stay and still feed the website block.)
 
 ## 3. Custom domains
 

@@ -1384,6 +1384,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      `locationSyncedAt`) and clear them in the daily purge after 29 days unrefreshed (keep the location name).
   10. **Account chooser:** `prompt=select_account consent`.
   New/changed TH strings (`settings.integrations.gbp.connectedAs|disconnectConfirm`, `errors.domain.gbpLocationInUse`, `settings.integrations.google.errors.client_config`) need native review.
+- **Review replies dropped for now, Reviews section shows "Coming soon" (owner 2026-10-13: "drop replying on reviews
+  option no need to be there and the current section in the spa dashboard keep it but write/mention that coming
+  soon"; joins the R29 Google fixes PR):** ONE product switch `REVIEW_REPLIES_LIVE = false` (`@spa/core`
+  `switches.ts`; not a plan feature, not a console flag). While off: the dashboard reply actions (Draft with AI,
+  save / approve / post) and `draftReviewReply` refuse with `errors.domain.reviewRepliesComingSoon`; `syncGbpReviews`
+  (worker every 2 h + Sync now) only imports — no AI drafts, no autopilot, even with the review agent stored on;
+  `postGbpReply` refuses; the daily AI-draft notice counts Instagram posts only; AI studio's review agent card shows
+  "Coming soon" without Configure and saving it switched on is refused. The menu keeps Reviews at the same place
+  (Premium gate unchanged); its page shows only a "Coming soon" panel (title + one sentence; the hand-paste "Add
+  review" is hidden with the list). **Reading stays:** Google sync + the 30-day rule, the Website "Google reviews" block
+  (`siteReviews`), the Google card's count + rating. Copy without the reply promise: Settings → Instagram & Google
+  (intro; Google card sub / until-then / features, no autopilot line, no "Review replies" link), AI studio shortcut
+  "Reviews · coming soon", plan row "Review requests (AI review replies coming soon)" (pricing + plan cards), marketing
+  Features line, privacy draft (no Google review replies or autopilot; Meta replies to messages/comments stay; still
+  pending owner approval), INTEGRATIONS.md §2 (`business.manage` justification + demo video without a reply). The
+  reply code stays dormant behind the switch; turning it back on = flip it + restore the copy listed in switches.ts.
+  New/changed TH strings (flagged for native review): `reviews.soonTitle|soonText`, `ai.comingSoon|shortcutReviews`,
+  `errors.domain.reviewRepliesComingSoon`, `settings.integrations.description`,
+  `settings.integrations.gbp.sub|untilThen|features.reviews`, `notifications.ai.drafts.body`.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

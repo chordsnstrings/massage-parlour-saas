@@ -3,6 +3,9 @@ import type { Messages } from '../types'
 
 export const reviews: Messages['reviews'] = {
   title: 'รีวิว Google',
+  // Owner 2026-10-13 (new strings, flagged for native TH review)
+  soonTitle: 'รีวิว — เร็วๆ นี้',
+  soonText: 'อีกไม่นานคุณจะเห็นรีวิว Google ของคุณที่นี่ และตอบกลับได้ในที่เดียว ตอนนี้ยังไม่ต้องตั้งค่าอะไร',
   descConnected: 'ซิงก์จาก {name} ทุกสองชั่วโมง ให้ AI ร่างคำตอบ อนุมัติ แล้วโพสต์ลง Google',
   yourProfile: 'Google Business Profile ของคุณ',
   descManual: 'ระหว่างที่ยังไม่ได้เชื่อม Google Business Profile ให้วางรีวิวใหม่ที่นี่ — AI จะร่างคำตอบให้คุณคัดลอกไปใส่ใน Google',

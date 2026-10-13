@@ -5,7 +5,7 @@ import { app, screenshotAt, signUpOwner, testDb } from './helpers'
 
 const LOC = 'accounts/111/locations/222'
 
-/** A connected Google location whose stored token is fake (posting must fail gracefully, without calling Google). */
+/** A connected Google location whose stored token is fake (nothing may call Google). */
 async function seedGoogle(slug: string) {
   const db = testDb()
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
@@ -68,7 +68,7 @@ async function seedGoogle(slug: string) {
   ])
 }
 
-test('Google Business Profile: not-configured card, synced reviews, filters, approve and a failed post', async ({
+test('Google Business Profile: not-configured card, synced reviews read only, Reviews section "Coming soon"', async ({
   page,
 }) => {
   const { slug } = await signUpOwner(page, { plan: 'premium' })
@@ -79,81 +79,47 @@ test('Google Business Profile: not-configured card, synced reviews, filters, app
   await expect(card.getByText('Not configured yet')).toBeVisible()
   await expect(card.getByText('GOOGLE_CLIENT_ID')).toBeVisible()
   await expect(card.getByRole('button', { name: 'Connect Google' })).toHaveCount(0)
+  // Owner 2026-10-13: review replies dropped for now — the card promises none.
+  await expect(card.getByText('Replying to Google reviews from the dashboard is coming soon.')).toBeVisible()
+  await expect(card.getByText(/approved replies|draft reply|paste new reviews/)).toHaveCount(0)
 
   await seedGoogle(slug)
   await page.reload()
   await expect(card.getByText('Serenity Spa Marina')).toBeVisible()
   await expect(card.getByTestId('gbp-account')).toHaveText('Connected as owner@serenity.example')
-  await card.getByRole('link', { name: 'Review replies' }).click()
+  // Synced reviews are still read: count + average (5 + 4 + 2 + 5) / 4 on the card.
+  await expect(card.locator('dd').filter({ hasText: '4.0' })).toBeVisible()
+  await expect(card.getByRole('link', { name: 'Review replies' })).toHaveCount(0)
+  await screenshotAt(page, 'gbp-card')
 
+  // The Reviews section stays in the menu, its page shows only "Coming soon".
+  await expect(page.locator(`a[href$="/${slug}/ai/reviews"]`)).not.toHaveCount(0)
+  await page.goto(`${app}/${slug}/ai/reviews`)
   await expect(page.getByRole('heading', { name: 'Google reviews' })).toBeVisible()
-  await expect(page.getByText('Synced from Serenity Spa Marina')).toBeVisible()
-  await expect(page.getByTestId('review')).toHaveCount(4)
-  await expect(page.getByText('Response rate')).toBeVisible()
-  await expect(page.getByText('4.0', { exact: true })).toBeVisible() // (5 + 4 + 2 + 5) / 4
-  await expect(page.getByText('تجربة رائعة وخدمة ممتازة')).toHaveAttribute('dir', 'auto')
+  const soon = page.getByTestId('reviews-coming-soon')
+  await expect(soon).toContainText('Reviews — coming soon')
+  await expect(soon).toContainText("Soon you'll see your Google reviews here and reply to them in one place.")
+  await expect(page.getByTestId('review')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Draft with AI' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Add review' })).toHaveCount(0)
   await screenshotAt(page, 'gbp')
 
-  // Filters
-  await page.getByRole('link', { name: '5 stars' }).click()
-  await expect(page).toHaveURL(/rating=5/)
-  await expect(page.getByTestId('review')).toHaveCount(2)
-  await page.getByRole('link', { name: 'Posted' }).click()
-  await expect(page).toHaveURL(/rating=5&status=posted/)
-  await expect(page.getByText('No reviews match these filters')).toBeVisible()
-  await page.getByRole('link', { name: 'All ratings' }).click()
-  await expect(page).toHaveURL(/reviews\?status=posted$/)
-  await expect(page.getByTestId('review')).toHaveCount(1)
-  await expect(page.getByTestId('review').first()).toContainText('Sam R.')
-  await page.getByRole('link', { name: 'Any status' }).click()
-  await expect(page).toHaveURL(/\/ai\/reviews$/)
-  await page.getByRole('link', { name: '2 stars' }).click()
-  await expect(page).toHaveURL(/reviews\?rating=2$/)
-  await expect(page.getByTestId('review')).toHaveCount(1)
+  // AI studio: the review agent says "Coming soon" and can't be configured; the others still can.
+  await page.goto(`${app}/${slug}/ai`)
+  const agent = page.getByTestId('agent-review_agent')
+  await expect(agent.getByText('Coming soon')).toBeVisible()
+  await expect(agent.getByRole('button', { name: 'Configure' })).toHaveCount(0)
+  await expect(page.getByTestId('agent-dm_agent').getByRole('button', { name: 'Configure' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Reviews · coming soon' })).toBeVisible()
 
-  const review = page.getByTestId('review').filter({ hasText: 'too cold' })
-  await expect(review.getByText('Needs reply')).toBeVisible()
-
-  // AI draft — the AI may be unavailable in tests; either outcome is handled.
-  await review.getByRole('button', { name: 'Draft with AI' }).click()
-  const drafted = page.getByText('Reply drafted')
-  await expect(drafted.or(page.getByText(/AI service is busy|AI budget|switched off/))).toBeVisible({
-    timeout: 60_000,
-  })
-  if (await drafted.isVisible()) {
-    await expect(review.getByText('Draft', { exact: true })).toBeVisible()
-    await expect(review.getByLabel('Reply')).not.toHaveValue('')
-  }
-
-  await review
-    .getByLabel('Reply')
-    .fill("Thank you Omar — we're sorry the room felt cold. Please message us so we can make it right.")
-  await review.getByRole('button', { name: 'Approve' }).click()
-  await expect(page.getByText('Reply approved')).toBeVisible()
-  await expect(review.getByText('Approved', { exact: true })).toBeVisible()
-
-  // Posting with the fake token fails gracefully with a visible reason.
-  await review.getByRole('button', { name: 'Post reply' }).click()
-  await expect(review.getByRole('alert')).toContainText("Couldn't post to Google")
-  await expect(review.getByRole('alert')).toContainText('Reconnect')
-  await expect(review.getByText('Failed', { exact: true })).toBeVisible()
-  await expect(review.getByLabel('Reply')).toHaveValue(/we're sorry the room felt cold/)
-  await expect(page.getByRole('link', { name: 'Reconnect' })).toBeVisible()
-
-  // The failed post flagged the connection itself (the card badge depends on whether Google env is configured).
+  // Nothing touched the stored reviews or the connection.
   const db = testDb()
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
   const [acct] = await db.select().from(socialAccounts).where(eq(socialAccounts.tenantId, tenant!.id))
-  expect(acct!.status).toBe('error')
-  expect(acct!.meta.lastError).toMatch(/Reconnect Google Business Profile/)
-  const [failed] = await db
+  expect(acct!.status).toBe('connected')
+  const [open] = await db
     .select()
     .from(reviews)
     .where(and(eq(reviews.tenantId, tenant!.id), eq(reviews.externalId, `${LOC}/reviews/r3`)))
-  expect(failed).toMatchObject({ replyStatus: 'failed', replyError: expect.stringMatching(/Reconnect/) })
-
-  await page.goto(`${app}/${slug}/settings/integrations`)
-  await expect(card.getByText('Reconnect needed').or(card.getByText('Not configured yet'))).toBeVisible()
-  await expect(card.getByText(/Reconnect Google Business Profile/)).toBeVisible()
-  await screenshotAt(page, 'gbp-card')
+  expect(open).toMatchObject({ replyStatus: 'none', replyText: null })
 })

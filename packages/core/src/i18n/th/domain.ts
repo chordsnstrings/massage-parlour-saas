@@ -324,4 +324,6 @@ export const domain: Messages['errors']['domain'] = {
   seedDesignStaffMissing: 'ดีไซน์นี้ไม่มีสมาชิกทีม “{id}”',
   seedPickService: 'เลือกบริการใน CRM ที่จะเติมข้อมูล',
   seedPickTherapist: 'เลือกพนักงานนวดสำหรับรูปนี้',
+  // Owner 2026-10-13 (new string, flagged for native TH review)
+  reviewRepliesComingSoon: 'การตอบรีวิวจะเปิดให้ใช้เร็วๆ นี้',
 }

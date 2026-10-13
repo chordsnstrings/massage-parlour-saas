@@ -15,7 +15,7 @@ import {
 import { seedPlatform } from '@spa/db/seed'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createModelArkClient, runDmTurn, truncateBytes } from '../src'
+import { createModelArkClient, draftReviewReply, runDmTurn, truncateBytes } from '../src'
 
 const { platform, app } = testDbs()
 const ids = {} as Record<string, string>
@@ -145,5 +145,16 @@ describe('DM agent', () => {
     expect(new TextEncoder().encode(truncateBytes('مرحبا '.repeat(400), 1000)).length).toBeLessThanOrEqual(
       1000,
     )
+  })
+})
+
+describe('review agent', () => {
+  it('drafts nothing while review replies are dropped (owner 2026-10-13), before any AI call', async () => {
+    const fetchFn = vi.fn()
+    const client = createModelArkClient({ apiKey: 'test', fetch: fetchFn as unknown as typeof fetch })
+    await expect(
+      draftReviewReply({ tenantId: ids.tenant!, reviewId: crypto.randomUUID(), client }),
+    ).rejects.toThrow('Replying to reviews is coming soon')
+    expect(fetchFn).not.toHaveBeenCalled()
   })
 })

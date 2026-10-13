@@ -37,7 +37,8 @@ export const notifications: Messages['notifications'] = {
     ai: {
       drafts: {
         title: { other: 'ร่างจาก AI {count} รายการรอการอนุมัติ' },
-        body: 'โพสต์ Instagram: {posts} · คำตอบรีวิว: {replies}',
+        // Owner 2026-10-13 (changed, flagged for native TH review)
+        body: 'โพสต์ Instagram: {posts}',
       },
       budget_warning: {
         title: 'ใช้งบ AI ไปแล้ว {percent}%',

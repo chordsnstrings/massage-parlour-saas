@@ -1,10 +1,11 @@
 'use server'
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { reviews, withTenant } from '@spa/db'
-import { postGbpReply } from '@spa/services'
+import { postGbpReply, reviewRepliesComingSoon } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
 
@@ -22,7 +23,10 @@ const MESSAGES = {
   post: 'reviews.replyPosted',
 } as const
 
-/** Saves a review reply; `post` also publishes it to Google (the review ends `posted` or `failed` with the reason). */
+/**
+ * Saves a review reply; `post` also publishes it to Google (the review ends `posted` or `failed` with the reason).
+ * Refuses every intent while review replies are dropped (owner 2026-10-13, REVIEW_REPLIES_LIVE).
+ */
 export async function saveReviewReplyAction(
   slug: string,
   _p: ActionResult,
@@ -30,6 +34,7 @@ export async function saveReviewReplyAction(
 ): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
+  if (!REVIEW_REPLIES_LIVE) return failDomain(reviewRepliesComingSoon())
   const parsed = schema.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
   const { reviewId, reply, intent, posted } = parsed.data

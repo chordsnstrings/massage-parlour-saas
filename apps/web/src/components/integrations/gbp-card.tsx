@@ -1,3 +1,4 @@
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { withTenant } from '@spa/db'
 import {
   type GbpLocation,
@@ -138,7 +139,11 @@ export async function GbpCard({
           </div>
         ) : !conn ? (
           <ul className="space-y-2.5 text-sm text-muted">
-            {(['reviews', 'autopilot', 'posts'] as const).map((k) => (
+            {/* Review replies dropped for now (owner 2026-10-13): no autopilot promise. */}
+            {(REVIEW_REPLIES_LIVE
+              ? (['reviews', 'autopilot', 'posts'] as const)
+              : (['reviews', 'posts'] as const)
+            ).map((k) => (
               <li key={k} className="flex gap-2.5">
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
                 {t(`settings.integrations.gbp.features.${k}`)}
@@ -260,7 +265,7 @@ export async function GbpCard({
           />
         )}
         {conn?.status === 'connected' && configured && approve && <SyncGoogleButton slug={slug} />}
-        {approve && (
+        {approve && REVIEW_REPLIES_LIVE && (
           <Link href={reviewsHref} className={cn(buttonVariants({ variant: 'ghost' }), 'h-11 sm:h-10')}>
             {t('settings.integrations.gbp.reviewReplies')}
           </Link>

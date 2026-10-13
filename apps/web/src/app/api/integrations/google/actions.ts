@@ -1,5 +1,6 @@
 'use server'
 import { draftReviewReply } from '@spa/ai'
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { withTenant } from '@spa/db'
 import {
   chooseGbpLocation,
@@ -169,7 +170,10 @@ export async function disconnectGoogleAction(slug: string): Promise<ActionResult
   return ok('Google Business Profile disconnected')
 }
 
-/** "Sync now": unanswered new reviews get AI drafts (at most 5 here; the 2-hourly job drafts the rest). */
+/**
+ * "Sync now": unanswered new reviews get AI drafts (at most 5 here; the 2-hourly job drafts the rest) — none while
+ * review replies are dropped (owner 2026-10-13, REVIEW_REPLIES_LIVE): then it only imports.
+ */
 export async function syncGoogleReviewsAction(slug: string): Promise<ActionResult> {
   const { ctx, error } = await guard(slug, 'ai.approve', 'marketing')
   if (error) return fail(error)
@@ -177,7 +181,7 @@ export async function syncGoogleReviewsAction(slug: string): Promise<ActionResul
   const res = await syncGbpReviews({
     tenantId,
     maxDrafts: 5,
-    draft: (reviewId) => draftReviewReply({ tenantId, reviewId }),
+    draft: REVIEW_REPLIES_LIVE ? (reviewId) => draftReviewReply({ tenantId, reviewId }) : undefined,
   })
   revalidate(slug)
   if (!res.ok) return fail(res.error)

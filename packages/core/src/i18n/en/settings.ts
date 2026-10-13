@@ -215,7 +215,7 @@ export const settings = {
   integrations: {
     title: 'Instagram & Google',
     description:
-      'Connect your accounts so the AI agents can answer DMs and comments, publish posts and reply to Google reviews — always within the rules you set in AI studio.',
+      'Connect your accounts so the AI agents can answer DMs and comments and publish posts — always within the rules you set in AI studio.',
     status: {
       notConfigured: 'Not configured yet',
       notConfiguredShort: 'Not configured',
@@ -228,13 +228,13 @@ export const settings = {
     disconnect: 'Disconnect',
     gbp: {
       title: 'Google Business Profile',
-      sub: 'Sync Google reviews, post approved replies and share offers with a Book button.',
+      // Owner 2026-10-13: review replies dropped for now (sub, untilThen, features.reviews changed)
+      sub: 'Sync Google reviews and share offers with a Book button.',
       notConfigured:
         'Google sign-in isn’t set up on this server yet. The platform administrator adds GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET once Google approves API access.',
-      untilThen:
-        'Until then, paste new reviews into Review replies — the AI drafts a reply you can copy into Google.',
+      untilThen: 'Replying to Google reviews from the dashboard is coming soon.',
       features: {
-        reviews: 'Reviews arrive every two hours, with an AI draft reply when the review agent is on.',
+        reviews: 'Reviews arrive every two hours and can show on your website.',
         autopilot: 'Autopilot answers 4–5★ reviews; 1–3★ always wait for your approval.',
         posts: 'Approved AI-studio posts can go to Google with a Book button to your booking page.',
       },

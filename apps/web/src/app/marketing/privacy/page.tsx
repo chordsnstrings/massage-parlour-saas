@@ -53,16 +53,24 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      {/* R29 Google wording: OWNER MUST APPROVE before release (owner 2026-10-13). */}
+      {/* R29 Google wording: OWNER MUST APPROVE before release (owner 2026-10-13). Review replies dropped for now
+          (owner 2026-10-13, @spa/core REVIEW_REPLIES_LIVE): no Google review replies or autopilot are promised. */}
       <h2>Instagram, Facebook (Meta) and Google</h2>
       <p>
         A spa can connect its own Instagram professional account, Facebook Page or Google account. When it
         does, we use the access it grants only to:
       </p>
       <ul>
-        <li>read messages, comments and reviews so the spa can see them and reply;</li>
-        <li>draft replies and posts (with AI) for the spa to review;</li>
-        <li>publish replies and posts that the spa has approved, or that its autopilot setting allows;</li>
+        <li>read messages and comments so the spa can see them and reply;</li>
+        <li>
+          read the spa’s Google reviews to show them on its website, and its review count and average rating
+          in its dashboard;
+        </li>
+        <li>draft replies to messages and comments, and posts (with AI), for the spa to review;</li>
+        <li>
+          publish replies to Instagram and Facebook messages and comments, and posts, that the spa has
+          approved or that its autopilot setting allows;
+        </li>
         <li>
           set up the spa’s booking link and website listing (its Google “Book” link and Search Console
           sitemap);
@@ -73,9 +81,9 @@ export default function PrivacyPage() {
       <ul>
         <li>
           <strong>Google Business Profile</strong>: we list the locations the account manages so the spa can
-          choose its own, read that location’s reviews, post replies the spa approves (or that its autopilot
-          setting allows, for 4–5★ reviews only), publish local posts the spa approves, and set the location’s
-          “Book” link to the spa’s booking page.
+          choose its own, read that location’s reviews (to show them on the spa’s website, and its review
+          count and average rating in the spa’s dashboard), publish local posts the spa approves, and set the
+          location’s “Book” link to the spa’s booking page. We do not post replies to reviews.
         </li>
         <li>
           <strong>Google Search Console</strong>: we list the properties the account can access, add the spa’s
@@ -146,8 +154,9 @@ export default function PrivacyPage() {
       <p>
         DigitalOcean (hosting), Cloudflare (network and security), BytePlus ModelArk (AI), an email provider
         for account emails (such as sign-in and password reset), and Stripe if a spa chooses to pay a platform
-        invoice by card. Meta and Google receive only what a spa publishes or sets up through them (replies,
-        posts, its Google “Book” link, and its website address and sitemap in Search Console).
+        invoice by card. Meta and Google receive only what a spa publishes or sets up through them (replies
+        and posts on Instagram and Facebook, local posts and its “Book” link on Google, and its website
+        address and sitemap in Search Console).
       </p>
 
       <h2>Cookies and analytics</h2>

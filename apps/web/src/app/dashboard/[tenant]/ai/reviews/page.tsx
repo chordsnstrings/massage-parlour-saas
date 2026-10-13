@@ -1,3 +1,4 @@
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { reviews, withTenant } from '@spa/db'
 import {
   gbpConnectionView,
@@ -38,6 +39,35 @@ const stars = (n: number, label: string) => (
   </span>
 )
 
+const BackToStudio = ({ slug, label }: { slug: string; label: string }) => (
+  <Link
+    href={appPath(`/${slug}/ai`)}
+    className="crm-muted mb-4 inline-flex items-center gap-1.5 text-sm transition-colors hover:text-fg"
+  >
+    <ArrowLeft className="size-4 rtl:rotate-180" strokeWidth={1.5} /> {label}
+  </Link>
+)
+
+/** Owner 2026-10-13: review replies are dropped for now; the section stays in the menu with this panel. */
+async function ReviewsComingSoon({ slug }: { slug: string }) {
+  const t = await getT()
+  return (
+    <>
+      <BackToStudio slug={slug} label={t('ai.studio')} />
+      <PageHeader title={t('reviews.title')} />
+      <PageBody>
+        <Card data-testid="reviews-coming-soon">
+          <EmptyState
+            icon={<Star className="size-5" />}
+            title={t('reviews.soonTitle')}
+            description={t('reviews.soonText')}
+          />
+        </Card>
+      </PageBody>
+    </>
+  )
+}
+
 const STATUS_TONE: Record<string, Tone> = {
   none: 'warn',
   draft: 'neutral',
@@ -64,6 +94,7 @@ export default async function ReviewsPage({
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'ai.approve')) notFound()
   const slug = ctx.tenant.slug
+  if (!REVIEW_REPLIES_LIVE) return <ReviewsComingSoon slug={slug} />
   const sp = await searchParams
   const rating = typeof sp.rating === 'string' && /^[1-5]$/.test(sp.rating) ? Number(sp.rating) : null
   const status =
@@ -111,12 +142,7 @@ export default async function ReviewsPage({
   const starsLabel = (n: number) => t('reviews.stars', { count: n })
   return (
     <>
-      <Link
-        href={appPath(`/${slug}/ai`)}
-        className="crm-muted mb-4 inline-flex items-center gap-1.5 text-sm transition-colors hover:text-fg"
-      >
-        <ArrowLeft className="size-4 rtl:rotate-180" strokeWidth={1.5} /> {t('ai.studio')}
-      </Link>
+      <BackToStudio slug={slug} label={t('ai.studio')} />
       <PageHeader
         title={t('reviews.title')}
         description={

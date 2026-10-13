@@ -340,8 +340,11 @@ describe('producers', () => {
   })
 
   it('AI drafts + billing + documents', async () => {
-    const [ai] = await tx((db) => aiDraftNotices(db, scope()))
+    const [ai] = await tx((db) => aiDraftNotices(db, scope(), true))
     expect(ai).toMatchObject({ params: { count: 2, posts: 1, replies: 1 }, url: '/notif/ai/content' })
+    // Owner 2026-10-13: review replies are dropped for now — a drafted reply is not counted.
+    const [off] = await tx((db) => aiDraftNotices(db, scope()))
+    expect(off).toMatchObject({ params: { count: 1, posts: 1, replies: 0 }, url: '/notif/ai/content' })
     const billing = await tx((db) => billingNotices(db, scope()))
     expect(billing.map((b) => b.dedupeKey).sort()).toEqual(
       [`billing.overdue:${ids.invoice}`, `billing.reminder:${ids.reminder}`].sort(),

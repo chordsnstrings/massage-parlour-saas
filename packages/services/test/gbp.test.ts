@@ -1,3 +1,4 @@
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { aiAgentSettings, reviews, socialAccounts, socialPosts, tenants, withTenant } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { eq } from 'drizzle-orm'
@@ -667,7 +668,15 @@ describe('reviews sync + replies', () => {
           .where(eq(reviews.id, reviewId)),
       )
     }
-    const res = await syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, draft })
+    const res = await syncGbpReviews({
+      tenantId: ids.tenant!,
+      db: app,
+      fetch: f.fn,
+      now: NOW,
+      env,
+      draft,
+      repliesLive: true,
+    })
     expect(res).toMatchObject({ ok: true, fetched: 3, created: 2, drafted: 2, posted: 1, failed: 0 })
     expect(f.calls[0]!.headers.get('authorization')).toBe('Bearer at-1')
 
@@ -684,7 +693,15 @@ describe('reviews sync + replies', () => {
     expect(acct!.meta.lastSyncAt).toBe(NOW.toISOString())
 
     // second sync: nothing new, nothing re-drafted
-    const again = await syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, draft })
+    const again = await syncGbpReviews({
+      tenantId: ids.tenant!,
+      db: app,
+      fetch: f.fn,
+      now: NOW,
+      env,
+      draft,
+      repliesLive: true,
+    })
     expect(again).toMatchObject({ ok: true, created: 0, drafted: 0 })
     expect(drafted).toHaveLength(2)
 
@@ -732,7 +749,16 @@ describe('reviews sync + replies', () => {
       )
     }
     const sync = (d: (id: string) => Promise<unknown>, maxDrafts?: number) =>
-      syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, draft: d, maxDrafts })
+      syncGbpReviews({
+        tenantId: ids.tenant!,
+        db: app,
+        fetch: f.fn,
+        now: NOW,
+        env,
+        draft: d,
+        maxDrafts,
+        repliesLive: true,
+      })
 
     // AI unavailable: everything inserted, nothing drafted
     const busy = await sync(async () => {
@@ -808,7 +834,15 @@ describe('reviews sync + replies', () => {
     )
     const ok = mockFetch({ 'PUT https://mybusiness.googleapis.com/v4/': { comment: 'Sorry about that' } })
     expect(
-      await postGbpReply({ tenantId: ids.tenant!, db: app, fetch: ok.fn, now: NOW, env, reviewId: r!.id }),
+      await postGbpReply({
+        tenantId: ids.tenant!,
+        db: app,
+        fetch: ok.fn,
+        now: NOW,
+        env,
+        reviewId: r!.id,
+        repliesLive: true,
+      }),
     ).toEqual({
       ok: false,
       error: 'Approve the reply before posting it.',
@@ -828,6 +862,7 @@ describe('reviews sync + replies', () => {
       now: NOW,
       env,
       reviewId: r!.id,
+      repliesLive: true,
     })
     expect(bad.ok).toBe(false)
     let [row] = await tx((db) => db.select().from(reviews).where(eq(reviews.id, r!.id)))
@@ -835,7 +870,15 @@ describe('reviews sync + replies', () => {
     expect(row!.replyError).toMatch(/403.*permission/i)
 
     expect(
-      await postGbpReply({ tenantId: ids.tenant!, db: app, fetch: ok.fn, now: NOW, env, reviewId: r!.id }),
+      await postGbpReply({
+        tenantId: ids.tenant!,
+        db: app,
+        fetch: ok.fn,
+        now: NOW,
+        env,
+        reviewId: r!.id,
+        repliesLive: true,
+      }),
     ).toEqual({ ok: true })
     ;[row] = await tx((db) => db.select().from(reviews).where(eq(reviews.id, r!.id)))
     expect(row).toMatchObject({ replyStatus: 'posted', replyError: null })
@@ -876,7 +919,15 @@ describe('reviews sync + replies', () => {
           )
     }) as typeof fetch
     expect(
-      await postGbpReply({ tenantId: ids.tenant!, db: app, fetch: fetchFn, now: NOW, env, reviewId: r!.id }),
+      await postGbpReply({
+        tenantId: ids.tenant!,
+        db: app,
+        fetch: fetchFn,
+        now: NOW,
+        env,
+        reviewId: r!.id,
+        repliesLive: true,
+      }),
     ).toEqual({ ok: true })
     expect(puts).toBe(2)
     expect(calls.filter((c) => c.includes('oauth2'))).toHaveLength(1)
@@ -896,7 +947,16 @@ describe('reviews sync + replies', () => {
         .returning(),
     )
     expect(
-      (await postGbpReply({ tenantId: ids.tenant!, db: app, now: NOW, env, reviewId: manual!.id })).ok,
+      (
+        await postGbpReply({
+          tenantId: ids.tenant!,
+          db: app,
+          now: NOW,
+          env,
+          reviewId: manual!.id,
+          repliesLive: true,
+        })
+      ).ok,
     ).toBe(false)
     const [elsewhere] = await tx((db) =>
       db
@@ -919,6 +979,7 @@ describe('reviews sync + replies', () => {
         now: NOW,
         env,
         reviewId: elsewhere!.id,
+        repliesLive: true,
       }),
     ).toEqual({ ok: false, error: expect.stringMatching(/no longer connected/) })
     expect(none.calls).toHaveLength(0)
@@ -944,9 +1005,56 @@ describe('reviews sync + replies', () => {
       now: NOW,
       env,
       reviewId: r!.id,
+      repliesLive: true,
     })
     expect(res).toEqual({ ok: false, error: expect.stringMatching(/Reconnect/) })
     expect(f.calls).toHaveLength(0)
+  })
+
+  it('replies dropped (owner 2026-10-13): by default the sync only imports and posting refuses', async () => {
+    expect(REVIEW_REPLIES_LIVE).toBe(false)
+    // Review agent left on autopilot from before: ignored.
+    await tx((db) =>
+      db
+        .insert(aiAgentSettings)
+        .values({ tenantId: ids.tenant!, agentKey: 'review_agent', enabled: true, mode: 'autopilot' })
+        .onConflictDoUpdate({
+          target: [aiAgentSettings.tenantId, aiAgentSettings.agentKey],
+          set: { enabled: true, mode: 'autopilot' },
+        }),
+    )
+    const f = mockFetch({
+      [`GET https://mybusiness.googleapis.com/v4/${LOC}/reviews`]: {
+        reviews: [
+          {
+            name: `${LOC}/reviews/n`,
+            reviewer: { displayName: 'Nora' },
+            starRating: 'FIVE',
+            comment: 'Lovely',
+            createTime: '2026-10-05T10:00:00Z',
+          },
+        ],
+        totalReviewCount: 1,
+      },
+      'PUT https://mybusiness.googleapis.com/v4/': { comment: 'ok', updateTime: '2026-10-06T08:01:00Z' },
+    })
+    const drafted: string[] = []
+    const draft = async (reviewId: string) => {
+      drafted.push(reviewId)
+    }
+    const res = await syncGbpReviews({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, draft })
+    expect(res).toMatchObject({ ok: true, fetched: 1, created: 1, drafted: 0, posted: 0, failed: 0 })
+    expect(drafted).toEqual([])
+
+    const [r] = await tx((db) =>
+      db.update(reviews).set({ replyText: 'Thank you Nora!', replyStatus: 'approved' }).returning(),
+    )
+    expect(
+      await postGbpReply({ tenantId: ids.tenant!, db: app, fetch: f.fn, now: NOW, env, reviewId: r!.id }),
+    ).toEqual({ ok: false, error: 'Replying to reviews is coming soon' })
+    expect(f.calls.filter((c) => c.method === 'PUT')).toHaveLength(0)
+    const [after] = await tx((db) => db.select().from(reviews))
+    expect(after).toMatchObject({ replyStatus: 'approved', replyError: null })
   })
 })
 

@@ -10,7 +10,8 @@ export const ai: Messages['ai'] = {
   shortcuts: 'ทางลัด',
   shortcutChat: 'แชตกับพนักงานต้อนรับ AI',
   shortcutPosts: 'ร่างโพสต์ Instagram',
-  shortcutReviews: 'ตอบรีวิว',
+  // Owner 2026-10-13 (changed / new, flagged for native TH review)
+  shortcutReviews: 'รีวิว · เร็วๆ นี้',
   month: 'เดือนนี้',
   monthSub: 'การใช้ AI เทียบกับงบของแพ็กเกจ',
   usd: 'USD {v}',
@@ -41,6 +42,7 @@ export const ai: Messages['ai'] = {
   statusAutopilot: 'อัตโนมัติ',
   statusApproval: 'รออนุมัติ',
   statusOff: 'ปิด',
+  comingSoon: 'เร็วๆ นี้', // new, flagged for native TH review
   configure: 'ตั้งค่า',
   switchedOn: 'เปิดใช้งาน',
   mode: 'โหมด',

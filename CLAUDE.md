@@ -90,6 +90,7 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - Super-admin console + editor chrome: minimal Swedish modern, airy well-padded 12-col grid, one accent,
   micro-animations via `motion`, fully responsive 360 px → wide desktop (PLAN.md §12). Tenant sites fully responsive too.
 - Legal/compliance is the operator's responsibility — don't add legal features beyond what PLAN.md lists.
+- **Review replies dropped for now** (owner 2026-10-13): `REVIEW_REPLIES_LIVE = false` (@spa/core switches.ts) — no drafts/approve/post/autopilot; dashboard Reviews keeps its menu place with a "Coming soon" panel; Google reviews are still synced (website block, card stats, 30-day rule). PLAN §14.8.
 
 ## Stack pins
 Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities for RTL) · `@puckeditor/core` ^0.23 (not `@measured/puck`)

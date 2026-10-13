@@ -1,5 +1,6 @@
 // Notification producers that scan tenant data (worker jobs, PLAN §14.7 B2). Each returns the notifications to
 // send; dedupe keys make re-runs harmless: per booking / invoice / reminder, or per day for daily summaries.
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -103,16 +104,22 @@ export async function documentExpiryNotices(tx: Tx, s: Scope): Promise<NewNotifi
   ]
 }
 
-/** AI drafts waiting for a human: Instagram posts pending approval + drafted review replies, once a day. */
-export async function aiDraftNotices(tx: Tx, s: Scope): Promise<NewNotification[]> {
+/**
+ * AI drafts waiting for a human: Instagram posts pending approval + drafted review replies, once a day. Review replies
+ * count only while REVIEW_REPLIES_LIVE is on (owner 2026-10-13: dropped for now); `repliesLive` = tests only.
+ */
+export async function aiDraftNotices(
+  tx: Tx,
+  s: Scope,
+  repliesLive = REVIEW_REPLIES_LIVE,
+): Promise<NewNotification[]> {
   const [p] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(socialPosts)
     .where(eq(socialPosts.status, 'pending_approval'))
-  const [r] = await tx
-    .select({ n: sql<number>`count(*)::int` })
-    .from(reviews)
-    .where(eq(reviews.replyStatus, 'draft'))
+  const [r] = repliesLive
+    ? await tx.select({ n: sql<number>`count(*)::int` }).from(reviews).where(eq(reviews.replyStatus, 'draft'))
+    : []
   const posts = Number(p?.n ?? 0)
   const replies = Number(r?.n ?? 0)
   if (posts + replies === 0) return []

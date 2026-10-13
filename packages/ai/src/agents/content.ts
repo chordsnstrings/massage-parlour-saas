@@ -1,4 +1,6 @@
+import { REVIEW_REPLIES_LIVE } from '@spa/core'
 import { aiRuns, mediaAssets, reviews, socialPosts, withTenant } from '@spa/db'
+import { reviewRepliesComingSoon } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { runChat, runImage } from '../gateway'
@@ -100,12 +102,13 @@ ${SAFETY}`,
 
 const ReplySchema = z.object({ reply: z.string().min(5).max(900) })
 
-/** Drafts a reply to a Google review (stored as a draft for approval). */
+/** Drafts a reply to a Google review (stored as a draft for approval). Refuses while replies are dropped (2026-10-13). */
 export async function draftReviewReply(opts: {
   tenantId: string
   reviewId: string
   client?: ModelArkClient
 }) {
+  if (!REVIEW_REPLIES_LIVE) throw reviewRepliesComingSoon()
   const ctx = await withTenant(opts.tenantId, (tx) => loadSpaContext(tx, opts.tenantId, 'review_agent'))
   const [review] = await withTenant(opts.tenantId, (tx) =>
     tx.select().from(reviews).where(eq(reviews.id, opts.reviewId)),

@@ -209,8 +209,7 @@ export const settings: Messages['settings'] = {
   },
   integrations: {
     title: 'Instagram และ Google',
-    description:
-      'เชื่อมต่อบัญชีเพื่อให้ AI ตอบ DM และคอมเมนต์ โพสต์คอนเทนต์ และตอบรีวิว Google — ภายใต้กฎที่คุณตั้งไว้ใน AI studio เสมอ',
+    description: 'เชื่อมต่อบัญชีเพื่อให้ AI ตอบ DM และคอมเมนต์ และโพสต์คอนเทนต์ — ภายใต้กฎที่คุณตั้งไว้ใน AI studio เสมอ',
     status: {
       notConfigured: 'ยังไม่ได้ตั้งค่า',
       notConfiguredShort: 'ไม่ได้ตั้งค่า',
@@ -223,12 +222,13 @@ export const settings: Messages['settings'] = {
     disconnect: 'ยกเลิกการเชื่อมต่อ',
     gbp: {
       title: 'Google Business Profile',
-      sub: 'ซิงก์รีวิว Google โพสต์คำตอบที่อนุมัติแล้ว และแชร์โปรโมชันพร้อมปุ่มจอง',
+      // Owner 2026-10-13 (sub, untilThen, features.reviews changed, flagged for native TH review)
+      sub: 'ซิงก์รีวิว Google และแชร์โปรโมชันพร้อมปุ่มจอง',
       notConfigured:
         'เซิร์ฟเวอร์นี้ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google ผู้ดูแลแพลตฟอร์มจะเพิ่ม GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET เมื่อ Google อนุมัติการใช้ API',
-      untilThen: 'ระหว่างนี้ วางรีวิวใหม่ในหน้าตอบรีวิว — AI จะร่างคำตอบให้คุณคัดลอกไปใส่ใน Google',
+      untilThen: 'การตอบรีวิว Google จากแดชบอร์ดจะเปิดให้ใช้เร็วๆ นี้',
       features: {
-        reviews: 'รีวิวเข้ามาทุกสองชั่วโมง พร้อมร่างคำตอบจาก AI เมื่อเปิดใช้เอเจนต์รีวิว',
+        reviews: 'รีวิวเข้ามาทุกสองชั่วโมง และแสดงบนเว็บไซต์ของคุณได้',
         autopilot: 'โหมดอัตโนมัติตอบรีวิว 4–5★ ส่วน 1–3★ จะรอการอนุมัติจากคุณเสมอ',
         posts: 'โพสต์จาก AI studio ที่อนุมัติแล้วส่งไป Google ได้ พร้อมปุ่มจองที่ลิงก์ไปหน้าการจอง',
       },
