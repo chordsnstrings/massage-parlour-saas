@@ -250,7 +250,7 @@ keys every subresource by a per-document nonce: nothing is reused from its cache
 picture downloads again and pops in after the text. The only way to have no visible delay is to deliver those
 pictures inside the HTML.
 
-- **Declare:** `contract.inline: ["spa.logo_on_dark", "spa.logo_on_light", "journey[welcome].image"]` — CRM_DATA
+- **Declare:** `contract.inline: ["spa.logo_on_dark", "journey[welcome].image"]` — CRM_DATA
   paths (item id `journey[welcome]` or index `journey[0]`; ≤ 16, ≤ 200 chars each; v1 or v2). Only pictures the
   first screen shows; everything below it stays lazy (`loading="lazy"` / the design's own lazy loading).
 - **What the platform does** (live page `/site-html`, the live page's frames, share links `/website/preview?token=`;
@@ -275,4 +275,5 @@ pictures inside the HTML.
   web `server/crm-inline.ts` (`crmInlinePlan`, `pageCrmInline`), `designWithCrm(…, {inline})`.
 - **Authoring:** point the first screen's default picture at a small copy (BE RELAX v2.5: the 1600w welcome still
   `4d56333a0e00bb38.webp`, 58 KB, instead of the 2400w 197 KB one) so it fits the cap; inline Latin fonts in the
-  design file itself (the platform never touches fonts).
+  design file itself (the platform never touches fonts). The full design-side checklist (render-blocking marker,
+  sync decode, sharper swap after `decode()`, one-locale fonts from the page host) is §8 "No delay on a reload".

@@ -1347,7 +1347,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   ≤ 80 KB (page total ≤ 240 KB) becomes a `data:` URI inside CRM_DATA, with `inline_originals` {path: url}. R24 kept:
   only values inside window.CRM_DATA change (an allowed invisible change, CLAUDE.md); never in the Studio editor.
   Process-wide picture cache ≤ 32 MB; a new CRM logo shows on the next load. Design side: BE RELAX v2.5 declares the
-  logos + welcome still, points the welcome default at the 1600w copy (58 KB) and inlines its Latin fonts.
+  dark logo + welcome still (the light logo is never on the first screen), points the welcome default at the 1600w copy (58 KB) and inlines its Latin fonts.
   Contract doc §10; CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test).
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
