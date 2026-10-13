@@ -29,7 +29,7 @@ export const ai = {
     },
     seo_agent: {
       name: 'SEO',
-      text: 'Writes page titles and descriptions so people nearby find your website.',
+      text: 'Checks your website every week for what Google shows — page titles, descriptions and photo texts — and our team drafts the fixes.',
     },
     slot_filler: {
       name: 'Slot filler',
@@ -56,6 +56,11 @@ export const ai = {
   alwaysPh: 'Mention our sea view',
   neverPh: 'Use slang',
   saveVoice: 'Save voice',
+  // R30: the SEO card's line about the weekly search check.
+  seoCheckLast: 'Last search check {date}: {n} things to improve — our team drafts the fixes for you.',
+  seoCheckLastOne: 'Last search check {date}: 1 thing to improve — our team drafts the fix for you.',
+  seoCheckGood: 'Last search check {date}: all good.',
+  seoCheckFirst: 'The first search check runs on Monday.',
   // Try the receptionist
   tryTitle: 'Try your AI receptionist',
   tryMeta: 'Try the AI receptionist',

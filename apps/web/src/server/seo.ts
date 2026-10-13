@@ -1,4 +1,4 @@
-import { robotsTxt, type SitemapEntry, sitemapXml } from '@spa/core'
+import { robotsTxt, type SitemapEntry, siteIndexable, sitemapXml } from '@spa/core'
 import { sites, socialAccounts, tenants, withTenant } from '@spa/db'
 import { fileUrl, listPublishedPages, listPublishedPosts } from '@spa/services'
 import { imageSrc, walkNodes } from '@spa/services/site-kit'
@@ -75,7 +75,7 @@ export const siteSeo = cache(async (tenant: SiteTenant) => {
     pages: facts.pages.map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })),
     posts: facts.posts.map((p) => ({ slug: p.slug, arabic: Boolean(p.title.ar), updatedAt: p.updatedAt })),
     /** Suspended spas and sites with nothing published stay out of search (pages say noindex; empty sitemap). */
-    indexable: tenant.status !== 'suspended' && facts.pages.length > 0,
+    indexable: siteIndexable(tenant.status, facts.pages.length),
   }
 })
 

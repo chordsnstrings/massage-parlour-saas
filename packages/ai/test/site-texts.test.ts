@@ -11,7 +11,7 @@ import {
   queueSiteTexts,
   storeSpaHtmlDoc,
 } from '@spa/services'
-import { htmlTextSlots } from '@spa/services/site-kit'
+import { htmlTextSlots, type SiteEditSchema, textSlots } from '@spa/services/site-kit'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createModelArkClient, runQueuedSiteTexts, runSiteTexts, sweepSiteTexts } from '../src'
@@ -308,5 +308,153 @@ describe('sweepSiteTexts (worker site-texts-queue)', () => {
     expect(await state(busy)).toMatchObject({ state: 'running' })
     // Nothing left that is due.
     expect(await sweepSiteTexts()).toBe(0)
+  })
+})
+
+describe('Draft fixes scope (R30): only the search fields', () => {
+  const SEO_HTML =
+    '<!doctype html><html><head><title>Old Spa</title><meta name="description" content="Old description."></head><body><h1>Welcome</h1><img src="a.jpg" alt="Old stones"><img src="b.jpg"></body></html>'
+  const schema: SiteEditSchema = {
+    blocks: { Heading: { label: 'Heading', props: { text: { kind: 'bi' } }, defaults: {} } },
+    root: { title: { kind: 'bi' }, description: { kind: 'bi', multiline: true } },
+    theme: {},
+    presets: [],
+  }
+  const ALT = listHtmlDesignTexts(SEO_HTML).find((x) => x.attr === 'alt')!
+  const H = listHtmlDesignTexts(SEO_HTML).find((x) => x.text === 'Welcome')!
+  let seoTenant: string
+  const ids = {} as Record<string, string>
+  const draftOf = (id: string) =>
+    withTenant(seoTenant, async (tx) => (await getEditablePage(tx, seoTenant, id))!.data, app)
+
+  beforeAll(async () => {
+    await platform.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, ADMIN))
+    const [t] = await platform
+      .insert(tenants)
+      .values({ slug: 'seo-texts', name: 'Seo Texts Spa', aiBudgetUsd: '5' })
+      .returning()
+    seoTenant = t!.id
+    await withTenant(
+      seoTenant,
+      async (tx) => {
+        const doc = await storeSpaHtmlDoc(tx, { tenantId: seoTenant, html: SEO_HTML })
+        await ensureSite(tx, seoTenant, {
+          key: 'seo',
+          name: 'Seo',
+          theme: {},
+          pages: [
+            // No search description at all yet: Draft fixes writes it new.
+            {
+              slug: '',
+              title: { en: 'Home' },
+              data: {
+                root: { props: { title: { en: 'Home' } } },
+                content: [{ type: 'Heading', props: { id: 'h-1', text: { en: 'Slow down' } } }],
+              },
+            },
+            {
+              slug: 'offers',
+              title: { en: 'Offers' },
+              data: {
+                root: { props: { htmlDesign: true } },
+                content: [{ type: 'HtmlDesign', props: { id: 'o-1', html: '', doc, images: [] } }],
+              },
+            },
+          ],
+        })
+        for (const p of await listPages(tx, seoTenant)) ids[p.slug || 'home'] = p.id
+      },
+      app,
+    )
+  })
+
+  it('slots: a block page’s title + description (also when missing); a design’s title, meta and alt texts', async () => {
+    const home = await draftOf(ids.home!)
+    expect(textSlots(home, schema, { scope: 'seo' }).map((s) => [s.key, s.en])).toEqual([
+      ['root/title', 'Home'],
+      ['root/description', ''],
+    ])
+    // Without the scope: every text, never an empty one.
+    expect(textSlots(home, schema).map((s) => s.key)).toEqual(['root/title', 'h-1/text'])
+    const offers = await draftOf(ids.offers!)
+    expect(htmlTextSlots(offers, SEO_HTML, { scope: 'seo' }).map((s) => s.key)).toEqual([
+      'o-1/text:title',
+      'o-1/text:meta-description',
+      `o-1/text:${ALT.id}`,
+    ])
+    expect(htmlTextSlots(offers, SEO_HTML).map((s) => s.key)).toContain(`o-1/text:${H.id}`)
+  })
+
+  it('runSiteTexts with scope seo: search rules in the prompt, only those fields written (drafts)', async () => {
+    const { client, fetch } = reply([
+      { key: 'root/title', en: 'Massage in Dubai · Seo Texts Spa', ar: 'تدليك في دبي' },
+      {
+        key: 'root/description',
+        en: 'Thai and Swedish massage in Dubai Marina, open daily until midnight.',
+        ar: 'تدليك تايلندي وسويدي في دبي مارينا، مفتوح يوميا حتى منتصف الليل.',
+      },
+      // Not a search field: ignored.
+      { key: 'h-1/text', en: 'Changed', ar: 'تغير' },
+      { key: 'o-1/text:title', en: 'Offers · Seo Texts Spa', ar: 'العروض' },
+      { key: `o-1/text:${H.id}`, en: 'Changed', ar: 'تغير' },
+    ])
+    const run = await runSiteTexts({
+      tenantId: seoTenant,
+      slug: 'seo-texts',
+      userId: ADMIN,
+      scope: 'seo',
+      schema,
+      // The web passes designSignature (texts are content); here: the block types only.
+      signature: (d) => JSON.stringify((d as { content: { type: string }[] }).content.map((n) => n.type)),
+      client,
+    })
+    expect(run.result.skipped).toEqual([])
+    expect(run.result.pages.map((p) => [p.slug, p.filled])).toEqual([
+      ['', 2],
+      ['offers', 1],
+    ])
+    const bodies = (fetch.mock.calls as unknown as [string, RequestInit][]).map((c) => String(c[1].body))
+    expect(bodies.every((b) => b.includes('what search engines show'))).toBe(true)
+    expect(bodies.some((b) => b.includes('h-1/text'))).toBe(false)
+    const home = (await draftOf(ids.home!)) as {
+      root: { props: Record<string, { en: string; ar: string }> }
+      content: { props: { text: { en: string } } }[]
+    }
+    expect(home.root.props.description).toEqual({
+      en: 'Thai and Swedish massage in Dubai Marina, open daily until midnight.',
+      ar: 'تدليك تايلندي وسويدي في دبي مارينا، مفتوح يوميا حتى منتصف الليل.',
+    })
+    expect(home.content[0]!.props.text.en).toBe('Slow down')
+    const texts = htmlContentParts(
+      ((await draftOf(ids.offers!)) as { content: { props: { content?: unknown } }[] }).content[0]!.props
+        .content,
+    ).texts
+    expect(Object.keys(texts)).toEqual(['title'])
+    expect(texts.title!.t).toEqual({ en: 'Offers · Seo Texts Spa', ar: 'العروض' })
+  })
+
+  it('a queued run carries the scope through to the run', async () => {
+    await withTenant(
+      seoTenant,
+      (tx) =>
+        queueSiteTexts(tx, seoTenant, {
+          via: 'template_apply',
+          actorUserId: ADMIN,
+          pageIds: [ids.offers!],
+          scope: 'seo',
+        }),
+      app,
+    )
+    const { client, fetch } = reply([
+      {
+        key: 'o-1/text:meta-description',
+        en: 'Seasonal offers on massages at Seo Texts Spa in Dubai.',
+        ar: 'عروض',
+      },
+    ])
+    expect(await runQueuedSiteTexts(seoTenant, { client })).toMatchObject({ state: 'done', scope: 'seo' })
+    const body = String((fetch.mock.calls as unknown as [string, RequestInit][])[0]![1].body)
+    expect(body).toContain('what search engines show')
+    expect(body).not.toContain(`text:${H.id}`)
   })
 })

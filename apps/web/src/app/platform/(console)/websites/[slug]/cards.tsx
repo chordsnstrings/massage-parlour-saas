@@ -1,7 +1,7 @@
 // R23 console spa website page: the server-rendered cards (English, components/ui). Client sheets: website-client.tsx.
-import { type HtmlDesignReport, htmlDesignReportLine } from '@spa/core'
-import type { SiteTextRun } from '@spa/db'
-import type { ChangeRequestRow, listPosts, PageSummary } from '@spa/services'
+import { type HtmlDesignReport, htmlDesignReportLine, seoFixable } from '@spa/core'
+import type { SeoCheckFinding, SiteTextRun } from '@spa/db'
+import type { ChangeRequestRow, listPosts, PageSummary, SeoCheckRow } from '@spa/services'
 import { ExternalLink, FileText, Globe, MessageSquare, Newspaper, PencilLine, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { PAGE_TEMPLATES } from '@/components/site/presets'
@@ -22,6 +22,7 @@ import {
   AddPageSheet,
   ApplyTemplateSheet,
   ResolveRequestSheet,
+  SeoCheckActions,
   UseTemplateButton,
   VisibilityToggle,
 } from './website-client'
@@ -565,6 +566,96 @@ export function DomainCard({ host, domains }: { host: string; domains: Domain[] 
           </li>
         ))}
       </ul>
+    </Card>
+  )
+}
+
+const SEO_WHAT: Record<string, string> = {
+  title_missing: 'No page title',
+  title_long: 'Title too long',
+  title_duplicate: 'Same title as another page',
+  description_missing: 'No search description',
+  description_short: 'Description too short',
+  description_long: 'Description too long',
+  description_duplicate: 'Same description as another page',
+  image_alt_missing: 'Images without alt text',
+  not_in_sitemap: 'Not in sitemap.xml',
+}
+
+/**
+ * R30: the latest search check of the live site — weekly (Mondays 06:00 Dubai) while the spa's SEO switch in the AI
+ * studio is on, or "Check now". Findings grouped by page; "Draft fixes" = Write texts on the search fields only
+ * (SITE_AI_EDITOR_EMAILS super-admins; the action re-checks).
+ */
+export function SeoCheckCard({
+  slug,
+  check,
+  weekly,
+  canFix,
+  ready,
+}: {
+  slug: string
+  check: SeoCheckRow | null
+  /** The spa's SEO switch is on and its plan has `ai` (the weekly job runs). */
+  weekly: boolean
+  canFix: boolean
+  ready: boolean
+}) {
+  const pages = new Map<string, SeoCheckFinding[]>()
+  for (const f of check?.findings ?? []) pages.set(f.path, [...(pages.get(f.path) ?? []), f])
+  const total = check ? check.counts.high + check.counts.medium : 0
+  const fixable = (check?.findings ?? []).some((f) => seoFixable(f.code))
+  const schedule = weekly
+    ? 'Checks the live site every Monday at 06:00 (Dubai).'
+    : 'Weekly once the spa switches on SEO in its AI studio (Premium); Check now any time.'
+  return (
+    <Card data-testid="seo-check">
+      <CardHeader
+        title="SEO check"
+        description={
+          check
+            ? `Last check ${formatDateTime(check.checkedAt)} (${check.trigger === 'weekly' ? 'weekly' : 'Check now'}). ${schedule}`
+            : `No check yet. ${schedule}`
+        }
+        action={<SeoCheckActions slug={slug} fix={canFix && fixable} ready={ready} />}
+      />
+      {check && (
+        <CardBody className="space-y-4">
+          <p className="flex flex-wrap items-center gap-2 text-sm" data-testid="seo-counts">
+            {total ? (
+              <>
+                <Badge tone="danger">{check.counts.high} high</Badge>
+                <Badge tone="warning">{check.counts.medium} medium</Badge>
+                <span className="text-muted">{total === 1 ? '1 thing' : `${total} things`} to improve</span>
+              </>
+            ) : (
+              <Badge tone="success">All good</Badge>
+            )}
+          </p>
+          {pages.size > 0 && (
+            <ul aria-label="SEO findings" className="divide-y rounded-xl border">
+              {[...pages].map(([path, list]) => (
+                <li key={path} className="space-y-1.5 px-4 py-3">
+                  <p className="font-mono text-[13px] font-medium">{path}</p>
+                  <ul className="space-y-1">
+                    {list.map((f) => (
+                      <li key={`${f.code}:${f.locale}`} className="flex items-start gap-2 text-sm">
+                        <Badge tone={f.severity === 'high' ? 'danger' : 'warning'} className="shrink-0">
+                          {f.locale === 'ar' ? 'Arabic' : 'English'}
+                        </Badge>
+                        <span className="min-w-0">
+                          <span className="font-medium">{SEO_WHAT[f.code] ?? f.code}</span>{' '}
+                          <span className="text-muted">— {f.detail}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      )}
     </Card>
   )
 }

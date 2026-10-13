@@ -1,7 +1,8 @@
-import { domains, platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
+import { aiAgentSettings, domains, platformDb, siteAiEditorStatus, withTenant } from '@spa/db'
 import {
   designSeedPages,
   getSite,
+  latestSeoCheck,
   listChangeRequests,
   listPages,
   listPosts,
@@ -9,7 +10,7 @@ import {
   templateUndoChanges,
   websiteOverview,
 } from '@spa/services'
-import { asc, sql } from 'drizzle-orm'
+import { asc, eq, sql } from 'drizzle-orm'
 import { ArrowLeft, ArrowRight, ArrowUpRight, Eye } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -23,12 +24,21 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { adminPath, studioPath } from '@/lib/paths'
 import { formatDateTime } from '@/lib/utils'
 import { can, isStudio, requireMember } from '@/server/access'
+import { hasFeature } from '@/server/entitlements'
 import { aiEditReady } from '@/server/site-ai-gate'
 import { themeDraftWarnings } from '@/server/site-preflight'
 import { templateCatalog } from '@/server/site-templates'
 import { publicSiteUrl } from '@/server/sites'
 import { WebsiteStatusBadge } from '../next-step'
-import { BlogCard, DomainCard, PagesCard, pageUnpublished, RequestsCard, TemplatesCard } from './cards'
+import {
+  BlogCard,
+  DomainCard,
+  PagesCard,
+  pageUnpublished,
+  RequestsCard,
+  SeoCheckCard,
+  TemplatesCard,
+} from './cards'
 import { SeedOffer } from './seed-sheet'
 import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
@@ -59,7 +69,7 @@ export default async function SpaWebsitePage({
   const canEdit = can(ctx, 'site.content')
   // R28 P3 "Fill the CRM from the design" writes treatments and the team too (re-checked by the action).
   const canSeed = canDesign && can(ctx, 'services.manage') && can(ctx, 'staff.manage')
-  const [data, [progress], catalog, aiEditor, publicUrl] = await Promise.all([
+  const [data, [progress], catalog, aiEditor, publicUrl, aiPlan] = await Promise.all([
     withTenant(ctx.tenant.id, async (tx) => {
       const site = await getSite(tx, ctx.tenant.id)
       const pages = await listPages(tx, ctx.tenant.id)
@@ -84,15 +94,25 @@ export default async function SpaWebsitePage({
         undoBlocked: (await templateUndoChanges(tx, ctx.tenant.id, site)).length > 0,
         // A waiting draft theme goes live on every page with "Publish site": its contrast there.
         themeWarnings: site?.themeDraft ? await themeDraftWarnings(tx, ctx.tenant.id, { drafts: true }) : [],
+        // R30: the latest search check + the spa's SEO switch (AI studio) that runs it weekly.
+        seoCheck: site ? await latestSeoCheck(tx, site.id) : null,
+        seoSwitch:
+          (
+            await tx
+              .select({ on: aiAgentSettings.enabled })
+              .from(aiAgentSettings)
+              .where(eq(aiAgentSettings.agentKey, 'seo_agent'))
+          )[0]?.on === true,
       }
     }),
     websiteOverview(platformDb(), { tenantId: ctx.tenant.id }),
     templateCatalog(),
     siteAiEditorStatus(platformDb(), ctx.user.id),
     publicSiteUrl(ctx.tenant),
+    hasFeature(ctx.tenant.id, 'ai'),
   ])
   const { site, pages, seedPages, reports: designReports, posts, undoBlocked, requests, hosts, glance } = data
-  const { themeWarnings } = data
+  const { themeWarnings, seoCheck, seoSwitch } = data
   // F32 import: AI mapping for SITE_AI_EDITOR_EMAILS accounts when ModelArk is set up (re-checked by the action).
   const importAi = canDesign && aiEditReady() && aiEditor === 'ok'
   const pending = pages.filter(pageUnpublished).length
@@ -260,6 +280,15 @@ export default async function SpaWebsitePage({
                 {requestsCard}
               </div>
               <div className="grid min-w-0 gap-[var(--ui-stack,1.5rem)]">
+                {hasLive && (
+                  <SeoCheckCard
+                    slug={slug}
+                    check={seoCheck}
+                    weekly={seoSwitch && aiPlan}
+                    canFix={writeTexts}
+                    ready={aiEditReady()}
+                  />
+                )}
                 <BlogCard slug={slug} posts={posts} canEdit={canEdit} />
                 {glance && (
                   <Card>

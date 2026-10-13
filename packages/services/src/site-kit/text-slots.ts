@@ -37,6 +37,13 @@ export type TextSlot = {
   arabicOnly?: true
 }
 export type TextDraft = { key: string; en: string; ar: string }
+/**
+ * R30 "Draft fixes" (after the search check): `seo` = the search fields only — a block page's root title +
+ * description (also while still empty: written new), an HTML design's page title, meta description and image alt
+ * texts (only those it already has: page texts are never added).
+ */
+export type TextScope = 'seo'
+const SEO_ROOT_PROPS = ['title', 'description']
 
 const MAX_LINE = 200
 const MAX_MULTILINE = 1500
@@ -64,14 +71,33 @@ const htmlDesignNode = (data: unknown): PuckNode | null => {
 export function textSlots(
   data: unknown,
   schema: SiteEditSchema,
-  opts: { maxPerPage?: number; html?: string; first?: ReadonlySet<string> } = {},
+  opts: { maxPerPage?: number; html?: string; first?: ReadonlySet<string>; scope?: TextScope } = {},
 ): TextSlot[] {
   const max = opts.maxPerPage ?? 120
   const out: TextSlot[] = []
   if (isHtmlPage(data))
     return opts.html === undefined
       ? out
-      : htmlTextSlots(data, opts.html, { maxPerPage: opts.maxPerPage, first: opts.first })
+      : htmlTextSlots(data, opts.html, { maxPerPage: opts.maxPerPage, first: opts.first, scope: opts.scope })
+  if (opts.scope === 'seo') {
+    const props = (data as { root?: { props?: unknown } } | null)?.root?.props
+    for (const prop of SEO_ROOT_PROPS) {
+      const spec = schema.root[prop]
+      const v = isObj(props) ? props[prop] : undefined
+      // A legacy plain-string value is left alone.
+      if (spec?.kind !== 'bi' || (v !== undefined && v !== '' && !isObj(v))) continue
+      out.push({
+        key: `root/${prop}`,
+        block: 'root',
+        type: 'root',
+        prop,
+        multiline: spec.multiline === true,
+        en: isObj(v) && typeof v.en === 'string' ? v.en : '',
+        ar: isObj(v) && typeof v.ar === 'string' ? v.ar : '',
+      })
+    }
+    return out
+  }
   const visit = (block: string, type: string, specs: Record<string, PropSpec>, props: unknown, at = '') => {
     if (!isObj(props)) return
     for (const [name, spec] of Object.entries(specs)) {
@@ -118,9 +144,10 @@ export function textSlots(
 export function htmlTextSlots(
   data: unknown,
   html: string,
-  opts: { maxPerPage?: number; first?: ReadonlySet<string>; onlyDefaults?: boolean } = {},
+  opts: { maxPerPage?: number; first?: ReadonlySet<string>; onlyDefaults?: boolean; scope?: TextScope } = {},
 ): TextSlot[] {
   const max = opts.maxPerPage ?? 400
+  const seo = opts.scope === 'seo'
   const node = htmlDesignNode(data)
   const block = typeof node?.props.id === 'string' ? node.props.id : ''
   const out: TextSlot[] = []
@@ -134,7 +161,7 @@ export function htmlTextSlots(
   const own = (key: string, en: string | undefined) =>
     opts.onlyDefaults === true && !!en?.trim() && !opts.first?.has(key)
   const englishOnlyOwn = (t: { en?: string; ar?: string } | undefined) => !!t?.en?.trim() && !t.ar?.trim()
-  for (const s of htmlContentSlots(designData)) {
+  for (const s of seo ? [] : htmlContentSlots(designData)) {
     const v = parts.values[s.path]
     if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v)) continue
     const key = `${block}/content:${s.path}`
@@ -159,7 +186,7 @@ export function htmlTextSlots(
     })
   }
   for (const x of listHtmlDesignTexts(html)) {
-    if (x.bound) continue
+    if (x.bound || (seo && x.kind !== 'title' && x.kind !== 'meta' && x.attr !== 'alt')) continue
     const key = `${block}/text:${x.id}`
     const t = parts.texts[x.id]?.src === x.src ? parts.texts[x.id]?.t : undefined
     const arabicOnly = own(key, t?.en) && englishOnlyOwn(t)
@@ -308,6 +335,13 @@ export function fillTextSlots<T>(
       content = true
       filled++
       continue
+    }
+    // R30: a block page's search title / description that is still missing gets its field (Draft fixes).
+    if (slot.block === 'root' && slot.en === '' && SEO_ROOT_PROPS.includes(slot.prop)) {
+      copy.root ??= {}
+      copy.root.props ??= {}
+      const props = copy.root.props
+      if (props[slot.prop] === undefined || props[slot.prop] === '') props[slot.prop] = { en: '' }
     }
     const leaf = leafOf(copy, slot)
     if (!en || !ar || !leaf || leaf.en !== slot.en) {

@@ -18,6 +18,7 @@ describe('job schedule', () => {
       'outbox-auto-assign': '* * * * *',
       'client-drafts': '25 * * * *',
       'site-texts-queue': '*/2 * * * *',
+      'seo-check': '0 6 * * 1',
     })
     expect(new Set(jobs.map((j) => j.name)).size).toBe(jobs.length)
   })
