@@ -732,6 +732,11 @@ export type HtmlDesignText = {
    * `data-crm-text`, an attribute's `data-crm-attr="aria-label:ui.aria.menu; placeholder:ui.form.hint"` entry.
    */
   path?: string
+  /**
+   * R28 P5: the text run is only part of what the script writes at `path` — its `data-crm-text` element holds several
+   * text runs or is a `data-crm-tpl` template (`carryHtmlContent` never turns it into the slot value).
+   */
+  pathPart?: true
 }
 /**
  * A stored page text (content.texts entry): what the render applies. Either language may be missing or blank (an
@@ -801,13 +806,20 @@ type TextSite = {
   bound?: boolean
   boundBy?: 'crm' | 'script'
   path?: string
+  textOwner?: TextOwner
 }
-/** Listing only: `textPath` = own or inherited `data-crm-text`; `attrPaths` = own `data-crm-attr` (attribute → path). */
+/** The element whose own `data-crm-text` a text run inherits: a `data-crm-tpl` template, its listed runs. */
+type TextOwner = { tpl: boolean; runs: number }
+/**
+ * Listing only: `textPath` = own or inherited `data-crm-text` (`textOwner` = that element's); `attrPaths` = own
+ * `data-crm-attr` (attribute → path).
+ */
 type OpenElement = {
   name: string
   id?: string
   binding?: string
   textPath?: string
+  textOwner?: TextOwner
   attrPaths?: Map<string, string>
 }
 
@@ -1192,6 +1204,10 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
             ? owner?.attrPaths?.get(site.attr)
             : undefined
       if (path) s.path = path
+      if (path && site.kind === 'text' && owner?.textOwner) {
+        s.textOwner = owner.textOwner
+        owner.textOwner.runs++
+      }
       s.group = site.kind === 'title' || site.kind === 'meta' ? -1 : (openGroups.at(-1) ?? -1)
       s.heading = site.kind === 'text' && stack.some((e) => HEADINGS.has(e.name))
     }
@@ -1268,6 +1284,9 @@ function textSites(html: string, listing: boolean): { sites: TextSite[]; groups:
         attrs.find((x) => x.name === 'data-crm-text'),
       ).trim()
       el.textPath = textPath || stack.at(-1)?.textPath
+      el.textOwner = textPath
+        ? { tpl: attrs.some((x) => x.name === 'data-crm-tpl'), runs: 0 }
+        : stack.at(-1)?.textOwner
       const attrPaths = attrs.find((x) => x.name === 'data-crm-attr')
       if (attrPaths && attrPaths.start >= 0) el.attrPaths = crmAttrPaths(attrValue(html, attrPaths))
       if (TEXT_GROUPS.has(name)) {
@@ -1429,6 +1448,7 @@ export function listHtmlDesignTexts(html: string): HtmlDesignText[] {
     ...(s.boundBy ? { boundBy: s.boundBy } : {}),
     ...(s.binding ? { binding: s.binding } : {}),
     ...(s.path ? { path: s.path } : {}),
+    ...(s.textOwner && (s.textOwner.tpl || s.textOwner.runs > 1) ? { pathPart: true as const } : {}),
   }))
 }
 

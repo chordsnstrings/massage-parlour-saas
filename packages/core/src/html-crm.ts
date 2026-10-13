@@ -579,6 +579,18 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const digitsOf = (v: unknown) => str(v).replace(/\D/g, '')
 
+/**
+ * R28 P5: the content paths `overlayHtmlContent` set on its output (keyed by that output object). The v2 merge takes
+ * `spa.short_name` / `spa.logo_on_dark` / `spa.logo_on_light` from a spa's website content only, never from the
+ * design's own defaults (owner D1).
+ */
+const contentPaths = new WeakMap<object, ReadonlySet<string>>()
+/** Records which paths a spa's website content set on `data` (an overlay's output; earlier marks of `from` kept). */
+export function markHtmlContentPaths(data: object, paths: Iterable<string>, from?: object): void {
+  contentPaths.set(data, new Set([...(from ? (contentPaths.get(from) ?? []) : []), ...paths]))
+}
+const contentSet = (data: object, path: string) => contentPaths.get(data)?.has(path) === true
+
 /** Whether `part` names the spa `name`: the same name, or a whole-word start of it (`Be Relax` of `Be Relax Spa`). */
 function namesSpa(part: unknown, name: string) {
   const s = crmName(part)
@@ -607,9 +619,11 @@ export function isOwnDesign(design: Record<string, unknown> | null | undefined, 
  * after that are left out (R28 D2: no empty frames; the therapist select follows). Everything else (booking url,
  * journey, experience, story texts, message templates, booking label/image, unknown keys) is the design's, kept by
  * reference (the serializer memoises it). `design` null = the CRM alone.
- * R28 P5, contract v2 (`contract{version: 2}`): never the spa's "own design" (D1 applies everywhere); `logo_on_dark`
- * = the data's (the spa's website content) first, then the CRM's; `logo_on_light` = the CRM's, then the data's;
- * `opts.locale` is written as `locale` (last key) for v2 designs and the CRM alone, never for v1 (byte-for-byte R26).
+ * R28 P5, contract v2 (`contract{version: 2}`): never the spa's "own design" (D1 applies everywhere); the design's
+ * own short name and logos never show — `short_name` = the spa's website content (any value, any locale), else the
+ * CRM name; `logo_on_dark` = the content's, else the CRM's; `logo_on_light` = the CRM's, else the content's (content =
+ * what `overlayHtmlContent` set on `design`); `opts.locale` is written as `locale` (last key) for v2 designs and the
+ * CRM alone, never for v1 (byte-for-byte R26).
  */
 export function mergeCrmContract(
   design: Record<string, unknown> | null,
@@ -632,17 +646,23 @@ export function mergeCrmContract(
   const ownDesign = !v2 && (namesSpa(dSpa.name, name) || namesSpa(dSpa.short_name, name))
   // The design's own value when the CRM has none — only on this spa's own design (R28 D1).
   const own = <T>(v: T, empty: T): T => (ownDesign ? v : empty)
+  // v2: a spa's website content only (never the design's defaults).
+  const set = (key: string) => (v2 && contentSet(d, `spa.${key}`) ? str(dSpa[key]) : '')
   const spa = {
     ...dSpa,
     name,
-    short_name: namesSpa(dSpa.short_name, name) ? str(dSpa.short_name) : name,
+    short_name: v2
+      ? set('short_name') || name
+      : namesSpa(dSpa.short_name, name)
+        ? str(dSpa.short_name)
+        : name,
     // The branch's own area label always wins; else own design: its finer label ("Al Zahiyah, Abu Dhabi") over the
     // CRM city; another spa's: never its area.
     area_label: crm.spa.area_explicit
       ? crm.spa.area_label
       : (ownDesign && str(dSpa.area_label)) || crm.spa.area_label,
-    logo_on_dark: ((ownDesign || v2) && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
-    logo_on_light: crm.spa.logo_on_light || (v2 ? str(dSpa.logo_on_light) : own(str(dSpa.logo_on_light), '')),
+    logo_on_dark: (v2 ? set('logo_on_dark') : ownDesign && str(dSpa.logo_on_dark)) || crm.spa.logo_on_dark,
+    logo_on_light: crm.spa.logo_on_light || (v2 ? set('logo_on_light') : own(str(dSpa.logo_on_light), '')),
     timezone: crm.spa.timezone,
     currency: crm.spa.currency,
   }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { crmFeedPath } from '../src/hosts'
+import { overlayHtmlContent } from '../src/html-content'
 import {
   buildCrmContract,
   CRM_DEFAULTS_MAX,
@@ -671,27 +672,49 @@ describe('contract v2 (R28 P5)', () => {
     expect(m.location).toEqual({ address_line1: '', address_line2: '', city: '', country: '', maps_url: '' })
     expect(m.hours).toEqual([])
     expect(m.services).toEqual([])
-    expect(m.spa.short_name).toBe('Be Relax') // still a whole-word start of the tenant name
+    // The design's own short name never shows on v2 (a spa's website content only), even when it names the tenant.
+    expect(m.spa.short_name).toBe('Be Relax Massage Center and Spa')
     expect(m.ui).toBe(d.ui)
     expect(m.contract).toBe(d.contract)
   })
 
-  it('v2 logos and short name: dark = the data first, light = the CRM first', () => {
+  it('v2 logos and short name: the spa’s website content or the CRM, never the design’s own defaults', () => {
     const crm = buildCrmContract(source(), { locale: 'en' })
-    const own = v2({
-      logo_on_dark: 'https://cdn.test/dark.png',
-      logo_on_light: 'https://cdn.test/light.png',
+    const design = v2({
+      logo_on_dark: 'https://cdn.test/demo-dark.png',
+      logo_on_light: 'https://cdn.test/demo-light.png',
       short_name: 'Be Relax',
     })
-    const m = mergeCrmContract(own, crm) as Json
-    expect(m.spa.logo_on_dark).toBe('https://cdn.test/dark.png')
+    const m = mergeCrmContract(design, crm) as Json
+    expect(m.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
     expect(m.spa.logo_on_light).toBe('https://app.test/files/logo/logo.png')
-    expect(m.spa.short_name).toBe('Be Relax')
-    const noCrmLogo = mergeCrmContract(own, empty()) as Json
-    expect(noCrmLogo.spa.logo_on_light).toBe('https://cdn.test/light.png')
-    const neutral = mergeCrmContract(v2(), crm) as Json
-    expect(neutral.spa.logo_on_dark).toBe('https://app.test/files/logo/logo.png')
-    expect(neutral.spa.short_name).toBe('Be Relax Massage Center and Spa') // "Your Spa" never names it
+    expect(m.spa.short_name).toBe('Be Relax Massage Center and Spa')
+    const bare = mergeCrmContract(design, empty()) as Json
+    expect([bare.spa.logo_on_dark, bare.spa.logo_on_light]).toEqual(['', ''])
+    // Website content: dark = the content's first, light = the CRM's first; any short name, in the page locale.
+    const content = {
+      v: 1 as const,
+      values: [
+        { path: 'spa.logo_on_dark', value: { img: 'https://cdn.test/dark.png' } },
+        { path: 'spa.logo_on_light', value: { img: 'https://cdn.test/light.png' } },
+        { path: 'spa.short_name', value: { t: { en: 'Noor Spa', ar: 'نور' } } },
+      ],
+    }
+    const own = overlayHtmlContent(design, content, { locale: 'en' })
+    const withCrm = mergeCrmContract(own, crm) as Json
+    expect(withCrm.spa.logo_on_dark).toBe('https://cdn.test/dark.png')
+    expect(withCrm.spa.logo_on_light).toBe('https://app.test/files/logo/logo.png')
+    expect(withCrm.spa.short_name).toBe('Noor Spa') // not a start of the tenant name: still the spa's choice
+    expect((mergeCrmContract(own, empty()) as Json).spa.logo_on_light).toBe('https://cdn.test/light.png')
+    const ar = overlayHtmlContent(design, content, { locale: 'ar' })
+    expect((mergeCrmContract(ar, crm, { locale: 'ar' }) as Json).spa.short_name).toBe('نور')
+    // A hidden short name → the CRM name.
+    const hidden = overlayHtmlContent(
+      design,
+      { v: 1, values: [{ path: 'spa.short_name', value: { hide: true } }] },
+      { locale: 'en' },
+    )
+    expect((mergeCrmContract(hidden, crm) as Json).spa.short_name).toBe('Be Relax Massage Center and Spa')
   })
 
   it('writes the locale last for v2 designs and the CRM alone, never for v1', () => {

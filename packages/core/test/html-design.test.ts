@@ -938,6 +938,12 @@ describe('listHtmlDesignTexts: v2 slot paths (R28 P5)', () => {
     ])
     expect(list[0]!.binding).toBe('data-crm-attr=aria-label:ui.nav.sections; bogus:x; title: ; ALT : ui.x')
     expect(list[1]!.binding).toBe('data-crm-text=ui.nav.journey')
+    // Runs that are only part of what the script writes: several runs in one element, or a data-crm-tpl template.
+    expect(list.filter((x) => x.pathPart).map((x) => x.text)).toEqual(['Journey', 'now'])
+    const tpl = listHtmlDesignTexts(
+      '<p data-crm-text="ui.hours.note" data-crm-tpl>Open</p><p data-crm-text="ui.a">One</p><p data-crm-text="ui.a">Two</p>',
+    )
+    expect(tpl.map((x) => x.pathPart ?? false)).toEqual([true, false, false])
   })
 })
 

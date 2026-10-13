@@ -54,10 +54,10 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
 | Key | From the CRM | When the CRM has no value (own design only) |
 |---|---|---|
 | `spa.name` | tenant name | design |
-| `spa.short_name` | design's, if it is a whole-word start of the tenant name, else the tenant name | — |
+| `spa.short_name` | v1: design's, if it is a whole-word start of the tenant name, else the tenant name. v2: the spa's website content (any value, in the page locale), else the tenant name — never the design's default | — |
 | `spa.area_label` | The default branch's "Area shown on the website" (`branches.area_label` {en, ar?}, locale then English; R28 P3, pre-filled with the application's emirate) — an explicit one always wins; else the CRM city (the address's UAE city), and on the spa's own design its finer label first ("Al Zahiyah, Abu Dhabi") | — |
-| `spa.logo_on_light` | the spa's CRM logo (`/files/{id}` on the public site origin; made for the light-only CRM) | design |
-| `spa.logo_on_dark` | the design's, when the design is this spa's own and has one; else the CRM logo (never another spa's) | — |
+| `spa.logo_on_light` | the spa's CRM logo (`/files/{id}` on the public site origin; made for the light-only CRM) | design (v2: the spa's website content only) |
+| `spa.logo_on_dark` | v1: the design's, when the design is this spa's own and has one; else the CRM logo (never another spa's). v2: the spa's website content, else the CRM logo — never the design's default (report `logo-in-defaults`) | — |
 | `spa.timezone` / `currency` | `Asia/Dubai` / `AED` | — |
 | `contact.whatsapp_number` | default branch WhatsApp, else the first active branch's, `+E164` | design |
 | `contact.phones[]` | all active branches, default first: the phone (`calls`, `whatsapp` when the same number) and a different WhatsApp number (`calls: false`); deduped; `display` 05X XXX XXXX / 0A XXX XXXX / +CC…; `label` = the design's label for the same number, else the branch name (several branches) | design list when no branch has a number |
@@ -90,8 +90,13 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
   spa edits, the base the frames inject (defaults + the spa's content + the CRM), and the base of
   `crm-data.json?page=` (§5). The live page stays byte for byte and fetches `{{crm_data_url}}`.
 - **contract v2** (§9): the merged JSON carries `locale` (last key); on Arabic pages the design's reviewed
-  `contract.l10n.ar` texts go in first, then the spa's content (content Arabic > l10n > content English > design
-  English; fields declared `locales: ['en']` always English). v1 designs get exactly the R26 / P4 JSON.
+  `contract.l10n.ar` texts go in first (`contractLocaleData`), then the spa's content (`overlayHtmlContent`).
+  **Arabic precedence (integrator decision, 2026-10-13):** content Arabic > the design's `l10n.ar` > content
+  English > design English, per path, for texts and tags alike: a value a spa set in English only yields to the
+  design's reviewed Arabic on `/ar` (where `l10n.ar` has no entry for that path, its English shows); D5 Write texts
+  then drafts the missing Arabic only (`{t: {ar}}`, the stored English kept; the `arabic` leftovers first). Fields
+  declared `locales: ['en']` always show English; `spa.short_name` is a name, so a spa's English one stays. v1
+  designs get exactly the R26 / P4 JSON.
 - Per request, no stale cache: content-addressed caches only (parsed design by `file:sha256`, output by
   `file:sha256 | mode | hash(CRM JSON)`, plus `| locale` for v2 designs or content, plus a hash of the content
   values when there is content); a CRM change makes a new key.
@@ -175,8 +180,11 @@ A v2 design is one file every spa can use: nothing a visitor reads is fixed in i
 
 - **Neutral defaults:** `spa.name` and `spa.short_name` `"Your Spa"`; logos `""`; `contact.whatsapp_number` `""`,
   `contact.phones` `[]`; `location` all `""`; `hours` `[]`; `staff` `[]`; no real spa's name, phone, address or
-  alt text anywhere (the report warns: `named-spa`, `contact-in-defaults`). A v2 design is never a spa's "own
-  design": an empty CRM value shows nothing (D1); a spa's own look (logos, short name, texts) is its website content.
+  alt text anywhere (the report warns: `named-spa`, `contact-in-defaults`, `logo-in-defaults`). A v2 design is never
+  a spa's "own design": an empty CRM value shows nothing (D1); a spa's own look (logos, short name, texts) is its
+  website content — the merge never shows the design's own `short_name` / `logo_on_dark` / `logo_on_light` (§3).
+  On a spa's move from its own v1 design (D4), its v1 texts are pinned as content unless the v2 default says the same
+  once `{city}` / `{area}` / `{spa}` are filled with the v1 design's values (that default keeps its reviewed Arabic).
 - **Ids on every repeatable item** (`{id: "welcome", …}`, unique, `[A-Za-z0-9_-]`): edits follow the item, not its
   position (`no-ids` otherwise).
 - **`ui{}`:** every interface string the script writes (labels, buttons, form messages, aria labels, the WhatsApp
@@ -187,15 +195,18 @@ A v2 design is one file every spa can use: nothing a visitor reads is fixed in i
   missing key keeps the markup text, `''` empties it); `data-crm-attr="aria-label:ui.aria.menu_open;
   placeholder:ui.form.phone_hint"` for attributes (alt / placeholder / aria-label / title, `;`-separated). Keep the
   English text in the markup so the page looks the same before the script runs. The platform lists these texts with
-  their `path` (a stored page text there becomes that value when a spa moves to the design); a path that is no slot
-  is reported (`bound-no-slot`).
+  their `path` (a stored page text there becomes that value when a spa moves to the design — not when it is only
+  part of what the script writes: an element with several text runs or `data-crm-tpl` (its text a template with
+  `{days}` / `{hours}`) → dropped `part`; nor when the slot's text has `{tokens}` the old text lacks → `tokens`); a
+  path that is no slot is reported (`bound-no-slot`).
 - **Tokens:** `{time}`, `{name}`, `{city}` (single braces) are filled by the design's script and must stay in every
   translation; `{{spa_name}}`-style placeholders (double braces) are filled by the platform.
 - **`contract{}`:** `{version: 2, locales: ["en", "ar"], fields: {pattern: {label?, group?, hint?, locales?}}, l10n:
   {ar: {concrete path: string | string[]}}}`. Field patterns: `journey[].clip` (any item), `ui.wa.*` (any
   descendant); exact pattern first, then the longest `.*` prefix. `locales: ["en"]` = English on every page (messages
   the spa's staff read, e.g. `ui.wa.*`, `contact.whatsapp_message`). `l10n.ar` = reviewed Arabic defaults (≤ 2000
-  entries of ≤ 2000 chars); `ui.*` paths that are English-only or have reviewed Arabic are "system copy": Write texts
+  entries of ≤ 2000 chars; on `/ar` they also beat a spa's English-only value for the same path, §4); `ui.*` paths
+  that are English-only or have reviewed Arabic are "system copy": Write texts
   never drafts them and readiness doesn't list them.
 - **`locale`:** written by the platform (`en` / `ar`), never in the file (`locale-in-data`). The design sets only
   `document.documentElement.lang`, never `dir` (owner D3: Arabic texts in the design's own layout); add Arabic

@@ -18,6 +18,7 @@ export type HtmlDesignWarningCode =
   | 'staff-no-photo-guard'
   | 'named-spa'
   | 'contact-in-defaults'
+  | 'logo-in-defaults'
   | 'fixed-title'
   | 'no-arabic-font'
   | 'bound-no-slot'
@@ -174,6 +175,17 @@ function report(html: string): HtmlDesignReport {
           .slice(0, 3)
           .map((x) => clip(x, 40))
           .join(', ')}${list.length > 3 ? ` and ${list.length - 3} more` : ''}).`,
+      )
+    const logos = v2
+      ? (['logo_on_dark', 'logo_on_light'] as const).filter(
+          (k) => typeof spa[k] === 'string' && (spa[k] as string).trim() !== '',
+        )
+      : []
+    if (logos.length)
+      warn(
+        'logo-in-defaults',
+        `The design's defaults carry a logo (spa.${logos.join(', spa.')}); spas never see it: each shows its CRM or website-content logo.`,
+        `spa.${logos[0]}`,
       )
   }
   const title = texts.find((x) => x.id === 'title')

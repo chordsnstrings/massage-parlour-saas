@@ -761,14 +761,30 @@ describe('contract v2 content (R28 P5)', () => {
     expect(ar.spa.name).toBe('Your Spa') // operational
     expect(ar.spa.experience).toBe(d.spa.experience) // untouched subtrees keep their identity
     expect(d.ui.nav.book).toBe('Book')
-    // Precedence: content Arabic > l10n > content English > the design's English.
+    // Precedence (integrator decision 2026-10-13): content Arabic > l10n > content English > the design's English.
     const content = c({
-      'ui.nav.book': { t: { en: 'Reserve' } },
+      'ui.nav.book': { t: { en: 'Reserve' } }, // English only: the reviewed Arabic shows
       'journey[welcome].title': { t: { en: 'Rest', ar: 'استرح' } },
+      'journey[welcome].tags': { tags: { en: ['Quiet'] } }, // tags too
+      'journey[welcome].body': { t: { en: 'Massage in {city}.' } }, // no l10n: the content's English
+      'ui.wa.intro': { t: { en: 'Hi {spa}' } }, // English-only field
     })
-    const page = overlayHtmlContent(ar, content, { locale: 'ar' }) as ReturnType<typeof v2>
-    expect(page.ui.nav.book).toBe('Reserve')
+    type D = ReturnType<typeof v2>
+    const page = overlayHtmlContent(ar, content, { locale: 'ar' }) as D
+    expect(page.ui.nav.book).toBe('احجز')
     expect(page.journey[0]!.title).toBe('استرح')
+    expect(page.journey[0]!.tags).toEqual(['هدوء'])
+    expect(page.journey[0]!.body).toBe('Massage in {city}.')
+    expect(page.ui.wa.intro).toBe('Hi {spa}')
+    // The same without contractLocaleData first; English pages show the content's English.
+    expect((overlayHtmlContent(d, content, { locale: 'ar' }) as D).ui.nav.book).toBe('احجز')
+    expect((overlayHtmlContent(d, content, { locale: 'en' }) as D).ui.nav.book).toBe('Reserve')
+    // The short name is a name: a spa's English one stays on Arabic pages.
+    const named = { ...v2(), contract: { ...v2().contract, l10n: { ar: { 'spa.short_name': 'سبا' } } } }
+    const short = c({ 'spa.short_name': { t: { en: 'Lotus' } } })
+    expect(
+      (overlayHtmlContent(contractLocaleData(named, 'ar'), short, { locale: 'ar' }) as D).spa.short_name,
+    ).toBe('Lotus')
   })
 
   it('leftovers skip system copy and name no spa on v2', () => {
@@ -879,10 +895,61 @@ describe('contract v2 content (R28 P5)', () => {
         dropped: [],
       })
     })
+
+    it('never converts a fragment (data-crm-tpl or several runs) nor a text missing the slot’s {tokens}', () => {
+      const oldH = '<p>Open</p><p>Hello there</p><a>Book</a><a>Call</a><a>Go</a>'
+      const newH = `<p data-crm-text="ui.hours.form_note" data-crm-tpl>Open <span data-crm="operating-days"></span>, <span data-crm="working-hours"></span></p>
+<p data-crm-text="ui.nav.hello">Hello there <b>friend</b></p><a data-crm-text="ui.cta.book">Book</a>
+<a data-crm-text="ui.cta.call">Call</a><a data-crm-text="ui.nav.book">Go</a>`
+      const data = v2() as ReturnType<typeof v2> & Record<string, Record<string, unknown>>
+      Object.assign(data.ui, {
+        hours: { form_note: 'Open {days}, {hours}' },
+        cta: { book: 'Book for {time}', call: 'Call {phone}' },
+      })
+      Object.assign(data.ui.nav, { hello: 'Hello there friend' })
+      const texts = listHtmlDesignTexts(oldH).map((x, i) => ({
+        id: x.id,
+        src: x.src,
+        t: [
+          { en: 'We are open' },
+          { en: 'Hi' },
+          { en: 'Reserve for {time}', ar: 'احجز' }, // the Arabic lost {time}
+          { en: 'Ring us' },
+          { en: 'Go now', ar: 'اذهب' },
+        ][i]!,
+      }))
+      const r = carryHtmlContent({ v: 1, texts }, data, newH, oldH)
+      expect(r.dropped.map((x) => [x.text, x.reason])).toEqual([
+        ['We are open', 'part'],
+        ['Hi', 'part'],
+        ['Reserve for {time}', 'tokens'],
+        ['Ring us', 'tokens'],
+      ])
+      expect(htmlContentParts(r.content).values).toEqual({
+        'ui.nav.book': { t: { en: 'Go now', ar: 'اذهب' } },
+      })
+      expect(r.carried.converted).toBe(1)
+    })
   })
 
   describe('htmlDesignOwnPins', () => {
     const tenant = 'Be Relax Massage Center and Spa LLC'
+    it('skips a text the v2 default says once its {city} / {area} / {spa} are filled with the old design’s values', () => {
+      const old = design()
+      old.journey[0]!.title = 'Slow down at Be Relax.'
+      const fresh = v2()
+      fresh.journey[0]!.body =
+        'Massage, Moroccan bath and jacuzzi in the heart of {city}, with a team that looks after every detail.'
+      fresh.journey[0]!.title = 'Slow down at {spa}.'
+      const paths = (o: ReturnType<typeof design>) =>
+        htmlDesignOwnPins(o, fresh, tenant).values.map((v) => v.path)
+      expect(paths(old)).not.toContain('journey[welcome].body')
+      expect(paths(old)).not.toContain('journey[welcome].title')
+      old.location.city = 'Dubai' // another city: the old text differs from what the v2 default says
+      old.journey[0]!.title = 'Slow down at {spa} today.'
+      expect(paths(old)).toEqual(expect.arrayContaining(['journey[welcome].body', 'journey[welcome].title']))
+    })
+
     it('pins the spa’s own v1 look onto v2 (files for embedded pictures), carried values win', () => {
       const old = design()
       old.journey[0]!.title = 'Be relaxed.'

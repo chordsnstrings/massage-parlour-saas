@@ -104,6 +104,18 @@ describe('htmlDesignReport (R28 P5)', () => {
     expect(
       codes(page({ ...d, hours: [{ day: 'mon' }], contact: { ...d.contact, phones: [{ number: '+971' }] } })),
     ).toEqual(['contact-in-defaults'])
+    // A demo spa's logo left in the defaults (never shown on v2: the CRM's or the spa's website content).
+    const logo = htmlDesignReport(
+      page({ ...d, spa: { ...d.spa, logo_on_dark: 'data:image/png;base64,AAAA' } }),
+    )
+    expect(logo.warnings).toEqual([
+      {
+        code: 'logo-in-defaults',
+        message:
+          "The design's defaults carry a logo (spa.logo_on_dark); spas never see it: each shows its CRM or website-content logo.",
+        path: 'spa.logo_on_dark',
+      },
+    ])
     expect(codes(page(d, { title: 'Be Relax Spa' }))).toEqual(['fixed-title'])
     expect(codes(page(d, { body: '<script>document.title = "x"</script>' }))).toEqual(['fixed-title'])
     expect(codes(page(d, { font: '' }))).toEqual(['no-arabic-font'])
@@ -141,6 +153,7 @@ describe('htmlDesignReport (R28 P5)', () => {
     expect(endpoint.warnings.map((w) => w.code)).toEqual(['defaults-too-large'])
     const v1 = htmlDesignReport(fixture('crm-contract.html'))
     expect(v1.warnings.map((w) => w.code)).toContain('named-spa' satisfies HtmlDesignWarningCode)
+    expect(v1.warnings.map((w) => w.code)).not.toContain('logo-in-defaults') // v1: its logos are its own
   })
 
   it('never throws and stays fast on a 5 MB design', () => {
