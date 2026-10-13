@@ -9,10 +9,12 @@ import { app, mockAiReply, screenshotAt, signUpOwner, testDb } from './helpers'
 process.env.BETTER_AUTH_SECRET ??= 'e2e-secret-e2e-secret-e2e-secret-e2e'
 
 const IG = '17841400000000042'
+/** The second test's spa: its own account (R29: one spa per Instagram account; the first test's spa keeps IG). */
+const IG_F19 = '17841400000000043'
 
-const webhook = (entry: Record<string, unknown>) => ({
+const webhook = (entry: Record<string, unknown>, id = IG) => ({
   object: 'instagram',
-  entry: [{ id: IG, time: Math.floor(Date.now() / 1000), ...entry }],
+  entry: [{ id, time: Math.floor(Date.now() / 1000), ...entry }],
 })
 
 test('Instagram: not-configured card, inbox with an AI draft, take over and reply', async ({ page }) => {
@@ -147,11 +149,11 @@ test('F18/F19: Facebook card, carousel format and a private reply drafted by AI'
   await db.insert(socialAccounts).values({
     tenantId,
     platform: 'instagram',
-    externalId: IG,
+    externalId: IG_F19,
     username: 'serenity.spa',
     tokenEnc: encryptSecret('IGQfake-token-for-e2e'),
     tokenExpiresAt: new Date(Date.now() + 50 * 86_400_000),
-    meta: { igUserId: IG, tokenIssuedAt: new Date().toISOString(), webhooks: 'subscribed' },
+    meta: { igUserId: IG_F19, tokenIssuedAt: new Date().toISOString(), webhooks: 'subscribed' },
     status: 'connected',
   })
 
@@ -184,18 +186,21 @@ test('F18/F19: Facebook card, carousel format and a private reply drafted by AI'
 
   // Inbox: a comment gets the private-reply box; the AI fills it, staff sends (not configured → not sent).
   await ingestInstagramWebhook(
-    webhook({
-      changes: [
-        {
-          field: 'comments',
-          value: {
-            id: `pc-${slug}`,
-            text: 'How much is the hot stone?',
-            from: { id: '778', username: 'mira.dxb' },
+    webhook(
+      {
+        changes: [
+          {
+            field: 'comments',
+            value: {
+              id: `pc-${slug}`,
+              text: 'How much is the hot stone?',
+              from: { id: '778', username: 'mira.dxb' },
+            },
           },
-        },
-      ],
-    }),
+        ],
+      },
+      IG_F19,
+    ),
     { platform: db, app: appDb },
   )
   await mockAiReply(slug, {

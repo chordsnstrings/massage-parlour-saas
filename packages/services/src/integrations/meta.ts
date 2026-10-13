@@ -5,7 +5,11 @@
 // Never log or return access tokens: errors are sanitised before they leave this module.
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
-export const GRAPH_VERSION = 'v21.0'
+/**
+ * Every Graph call (both hosts) and the Facebook Login dialog. v25.0 (2026-02-18) is available until 2028-07-29; R29
+ * moved off v21.0 (retires 2027-01-21) after checking the v22–v25 changelogs for the endpoints used here (docs/INTEGRATIONS.md).
+ */
+export const GRAPH_VERSION = 'v25.0'
 const GRAPH = 'https://graph.instagram.com'
 const FB_GRAPH = 'https://graph.facebook.com'
 const OAUTH_AUTHORIZE = 'https://www.instagram.com/oauth/authorize'
@@ -116,6 +120,12 @@ export function verifyState(state: string | null | undefined, secret: string, no
   }
 }
 
+/**
+ * The state payload when the signature matches, even after it expired (R29: an expired connect link still names its
+ * spa, so the callback can return there with a notice). Never trust it for anything else: use verifyState.
+ */
+export const signedState = (state: string | null | undefined, secret: string) => verifyState(state, secret, 0)
+
 export function authorizeUrl(opts: { appId: string; redirectUri: string; state: string }) {
   const q = new URLSearchParams({
     client_id: opts.appId,
@@ -220,6 +230,8 @@ const when = (v: unknown, fallback: Date) => {
 /**
  * Flattens an Instagram webhook body into the events we act on: customer DMs and comments.
  * Echoes of our own messages, deletions, reads, reactions and our own comment replies are skipped.
+ * Both setups send `object: 'instagram'` with `entry.id` = the Instagram professional account (Instagram Login, and a
+ * Facebook Page-linked account, R29); other objects (`page`: the connected Page's feed / Messenger events) give none.
  */
 export function parseInstagramWebhook(body: unknown, now = new Date()): InstagramEvent[] {
   const root = obj(body)
@@ -545,6 +557,9 @@ export const FACEBOOK_SCOPES = [
   'instagram_content_publish',
 ] as const
 
+/** Page webhook fields set when a Page is connected (see subscribePage). */
+export const FB_PAGE_FIELDS = ['feed', 'messages'] as const
+
 /** The Facebook Login dialog: a Login for Business configuration when one is set, else the scope list above. */
 export function facebookAuthorizeUrl(opts: {
   appId: string
@@ -669,13 +684,30 @@ export function facebookLoginClient(fetchImpl: FetchFn = fetch) {
         scopes: arr(d.scopes).map(String),
       }
     },
-    /** Installs the app on the Page (Page webhooks; also lets Instagram comment webhooks reach us via the Page). */
+    /**
+     * Installs the app on the Page (R29): the Instagram webhooks of the linked account (comments, messages — subscribed
+     * in the Facebook app's dashboard, Webhooks → Instagram; Meta doesn't take Instagram fields here) are only sent
+     * for Pages that have the app installed. `feed` = the Page's own posts/comments; `messages` = the messaging
+     * install Instagram DMs through a Page need (Messenger Platform). If Meta refuses `messages` (permission), the
+     * Page is still installed with `feed` alone. Returns the fields that were set.
+     */
     async subscribePage(o: { pageId: string; pageToken: string }) {
-      const q = new URLSearchParams({ subscribed_fields: 'feed' })
-      await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps?${q}`), {
-        method: 'POST',
-        token: o.pageToken,
-      })
+      const subscribe = (fields: readonly string[]) =>
+        request(
+          fetchImpl,
+          graph(
+            `/${encodeURIComponent(o.pageId)}/subscribed_apps?${new URLSearchParams({ subscribed_fields: fields.join(',') })}`,
+          ),
+          { method: 'POST', token: o.pageToken },
+        )
+      try {
+        await subscribe(FB_PAGE_FIELDS)
+        return [...FB_PAGE_FIELDS]
+      } catch (e) {
+        if (!(e instanceof MetaApiError) || e.status === 0) throw e
+        await subscribe(['feed'])
+        return ['feed']
+      }
     },
     async unsubscribePage(o: { pageId: string; pageToken: string }) {
       await request(fetchImpl, graph(`/${encodeURIComponent(o.pageId)}/subscribed_apps`), {

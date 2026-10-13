@@ -67,13 +67,16 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
     for (const [from, to] of [
       [`${site(old)}/book?src=qr&lang=ar`, `${site(next)}/book?src=qr&lang=ar`],
       [home(old), home(next)],
-      [`${altSite(old)}/sitemap.xml`, `${altSite(next)}/sitemap.xml`],
     ]) {
       const res = await viaHost(ops, from!)
       expect(res.status(), from).toBe(301)
       // Next sends a same-host Location relative (path routing): compare it resolved.
       expect(new URL(res.headers().location!, from).href).toBe(to)
     }
+    // The old platform domain (R29): 308 to the canonical domain, already on the current slug (host routing).
+    const fromAlt = await viaHost(ops, `${altSite(old)}/sitemap.xml`)
+    expect(fromAlt.status()).toBe(308)
+    expect(fromAlt.headers().location).toBe(`${site(PATH ? old : next)}/sitemap.xml`)
     // The new address serves the site.
     expect((await viaHost(ops, home(next))).status()).toBe(200)
   })
@@ -81,13 +84,16 @@ test('F23: renaming a spa slug redirects the old site and dashboard addresses (3
   await test.step('old dashboard paths → 301 (both domains), the owner lands on the new dashboard', async () => {
     for (const [from, to] of [
       [`${app}/${old}/calendar?date=2026-10-10`, `${app}/${next}/calendar?date=2026-10-10`],
-      [`${altApp}/${old}`, `${altApp}/${next}`],
       [`${app}/${old}/app.webmanifest`, `${app}/${next}/app.webmanifest`],
     ]) {
       const res = await viaHost(ops, from!)
       expect(res.status(), from).toBe(301)
       expect(new URL(res.headers().location!, from).href).toBe(to)
     }
+    // The old platform domain (R29): 308 to the same path on the canonical domain, which then 301s as above.
+    const fromAlt = await viaHost(ops, `${altApp}/${old}`)
+    expect(fromAlt.status()).toBe(308)
+    expect(fromAlt.headers().location).toBe(`${app}/${old}`)
     await owner.goto(`${app}/${old}/clients?q=x`)
     await owner.waitForURL(`${app}/${next}/clients?q=x`)
     await expect(owner.getByRole('heading', { name: 'Clients' }).first()).toBeVisible()

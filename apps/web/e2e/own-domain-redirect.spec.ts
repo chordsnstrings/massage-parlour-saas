@@ -113,8 +113,11 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     await redirects(`${site(slug)}/book`, own('/book'), 'HEAD')
     await redirects(`${site(slug)}/voucher/abc123`, own('/voucher/abc123'))
     await redirects(`${site(slug)}/sitemap.xml`, own('/sitemap.xml'))
-    // Every platform domain (production: the old sslip.io address too).
-    await redirects(`${altSite(slug)}/about?x=1`, own('/about?x=1'))
+    // An old/extra platform domain (production: the old sslip.io address) 308s (R29): host routing straight to the
+    // own domain; path routing to the canonical /s/{slug} (which then 301s).
+    const fromAlt = await viaHost(ops, `${altSite(slug)}/about?x=1`)
+    expect(fromAlt.status()).toBe(308)
+    expect(fromAlt.headers().location).toBe(PATH ? `${site(slug)}/about?x=1` : own('/about?x=1'))
     if (!PATH) {
       // An address from the path-routing days goes straight to the own domain (one hop) …
       await redirects(`${base}/s/${slug}/book?src=qr`, own('/book?src=qr'))

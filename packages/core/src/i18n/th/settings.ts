@@ -291,7 +291,8 @@ export const settings: Messages['settings'] = {
       metaHelp:
         'สำหรับ Meta app ของแพลตฟอร์ม (Instagram API with Instagram Login) สมัครรับ webhook สำหรับ messages และ comments โดย verify token คือ META_WEBHOOK_VERIFY_TOKEN ของเซิร์ฟเวอร์',
       webhookUrl: 'Webhook callback URL',
-      redirectUri: 'OAuth redirect URI (เพิ่มหนึ่งรายการต่อโดเมนของแพลตฟอร์ม)',
+      // R29 (shortened: old platform domains redirect to the canonical one; flagged for native TH review)
+      redirectUri: 'OAuth redirect URI',
       deauthorizeUrl: 'Deauthorize callback URL',
       deletionUrl: 'Data deletion request URL',
       disconnectTitle: 'ยกเลิกการเชื่อมต่อ Instagram หรือไม่?',
@@ -428,7 +429,8 @@ export const settings: Messages['settings'] = {
       uses: 'ใช้สำหรับโพสต์และความคิดเห็นบนเพจ Facebook (เครื่องมือ AI) และเมื่อไม่ได้เชื่อมต่อ Instagram โดยตรง ใช้สำหรับการโพสต์ลง Instagram และการตอบกลับแบบส่วนตัว',
       connect: 'เชื่อมต่อ Facebook',
       reconnect: 'เชื่อมต่อ Facebook ใหม่',
-      redirectUri: 'Redirect URI ของการเข้าสู่ระบบด้วย Facebook (เพิ่มหนึ่งรายการต่อโดเมนของแพลตฟอร์ม)',
+      // R29 (shortened, flagged for native TH review)
+      redirectUri: 'Redirect URI ของการเข้าสู่ระบบด้วย Facebook',
       disconnectTitle: 'ยกเลิกการเชื่อมต่อเพจ Facebook หรือไม่',
       disconnectBody: '{page} จะหยุดทำงานกับสปานี้ เครื่องมือของเพจจะปิด โพสต์ที่เผยแพร่แล้วยังอยู่บน Facebook',
       notConnected: 'ยังไม่ได้เชื่อมต่อ Facebook',

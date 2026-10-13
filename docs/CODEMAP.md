@@ -174,6 +174,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      `canonicalUrls().site()` only where the free address itself is meant (Domains page, rename, applications,
      `/files` origins). Platform domains = `ROOT_DOMAIN` (canonical, spamanagement.co) + `EXTRA_ROOT_DOMAINS`
      (production: the old `134-209-145-162.sslip.io`); droplet `APP_URL`/`ADMIN_URL`/`ROUTING` come from site.env.
+     R29: GET/HEAD pages on an extra domain 308 to the same surface on the canonical root (`proxy.ts` +
+     core `extraRootAddress`/`canonicalAddressUrl`; a spa's free address → own domain / current slug, one hop);
+     POSTs, platform-only paths (`/api/auth|mcp|integrations`, `/.well-known`), `/api`, `/files` stay served there.
+     OAuth redirect URIs (Google, Meta) are therefore built from `canonicalUrls()` only (connect actions, callbacks'
+     code exchange, console + spa cards). e2e `path-redirects.spec.ts` (R29 test), `platform-domains.spec.ts`; the e2e
+     server binds `-H 0.0.0.0` (production-like) since Next relativizes a Location naming its own listen address.
    - `lib/paths.ts`: `appPath`/`adminPath` for path mode.
 
 ## Web routes (`apps/web/src/app`)
@@ -365,7 +371,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `facebookAppConfig(env)` (Facebook Login: `META_FB_APP_*`, else `META_APP_*`) / `facebookConfigId(env)`; service
   functions with an optional env default to it. `metaSigningSecrets(env)`: webhook / deauthorize / data-deletion accept
   either app's HMAC. Facebook Page connect is ready only when `metaConfig` and `facebookAppConfig` both resolve (spa
-  card, connect action, callback, health row `META_FB`). Redirect URIs per platform domain: web `allPlatformUrls()`.
+  card, connect action, callback, health row `META_FB`). Redirect URIs: canonical domain only (R29; old platform
+  domains redirect). Two Meta apps (R29): App 1 = Instagram API with Instagram Login (`META_APP_*` + verify token),
+  App 2 = Facebook Login for Business (`META_FB_APP_*`, `META_FB_CONFIG_ID`): an app holds one Instagram setup; the
+  console Meta card lists what goes where (`meta-app-1` / `meta-app-2`). Graph `GRAPH_VERSION = 'v25.0'` (R29).
+- **OAuth state + cookies (R29):** nonce cookie per flow **and spa** — `nonceCookie('ig'|'fb', tenantId)` =
+  `{ig|fb}_oauth_nonce_{tenantId}` (path `/api/integrations/meta`), Google `gbpCookie(tenantId)` = `gbp_oauth_{tenantId}`
+  — read from the signed state's tenant, so two spas connecting in one browser don't collide. An expired but genuinely
+  signed state (`signedState` / `signedGoogleState` = verify ignoring expiry) returns to that spa's integrations page
+  with `?ig|fb|gbp=state`; only a bad signature goes to the dashboard root. e2e `oauth-state.spec.ts`.
+- **One spa per Meta account (R29):** cross-tenant partial unique indexes `social_accounts_meta_connected`
+  (platform, external_id) where connected + instagram/facebook, and `social_accounts_fb_ig_connected`
+  ((meta->>'igUserId')) where facebook + connected (migration 0056). Saves go through `social.ts`
+  `connectInstagramAccount` / `facebook.ts` `saveFacebookPage` (one tenant tx: `claimInstagramAccount` = advisory xact
+  lock `meta-ig:{igUserId}` + re-check of other spas on a fresh snapshot, then save) → `'in_use'` on the re-check
+  (`MetaAccountInUseError`) or a unique violation (`isMetaAccountInUse`). The callers' earlier check stays as a cheap
+  pre-check (skips webhook subscription for an account in use). Tests: services `instagram.test.ts` ("one spa per
+  Instagram account / Facebook Page", incl. a lock-held concurrent connect); test fixtures must give each spa its own
+  IG id (e2e `instagram.spec.ts` `IG` / `IG_F19`).
 - **HTTP clients** (no DB, fixtures in tests): `services/integrations/google.ts` (OAuth asks `GOOGLE_SCOPES` =
   business.manage + webmasters; `GoogleApiError.detail` = ErrorInfo / legacy reason; `googleErrorCode` →
   `api_disabled|scope|auth|client_config|permission|not_found|quota|network|other`, translated on the card via
@@ -374,7 +397,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `services/integrations/meta.ts`: `instagramClient(fetch, host)` (`'instagram'` = graph.instagram.com with the
   Instagram Login token, `'facebook'` = graph.facebook.com with a Page token — same paths), `createContainer`,
   `sendPrivateReply` (`/{ig}/messages` + `recipient.comment_id`); `facebookLoginClient` (code → long-lived user token,
-  `pages()` with `instagram_business_account`, `debugToken`, `subscribePage`); `facebookAuthorizeUrl` (`config_id`
+  `pages()` with `instagram_business_account`, `debugToken`, `subscribePage` = install on the Page with
+  `FB_PAGE_FIELDS` feed,messages, falling back to feed alone if Meta refuses — Instagram fields are subscribed in the
+  app dashboard, never on the Page); `parseInstagramWebhook` takes `object: 'instagram'` (entry.id = IG account, both
+  setups) and ignores `page` objects; `facebookAuthorizeUrl` (`config_id`
   when `META_FB_CONFIG_ID`, else `FACEBOOK_SCOPES`).
 - **F17** `services/gbp-sync.ts` (state in the `gbp` row's meta, merged with jsonb `||`: `bookAction|bookUri|
   bookLinkName|bookError…`, `scState|scSiteUrl|scSubmittedAt|scDueAt…`): `setGbpBookAction` / `removeGbpBookAction`,
@@ -399,7 +425,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   Instagram Login row first, else the Facebook row with `igUserId` (`via: 'facebook'`) — used by DMs/comment
   replies, publishing, private replies, profile lookups; `instagramOwners` (webhook → tenant) and the publish job
   also match Page-linked accounts; `forgetInstagramUser` also clears Page rows by `fbUserId`. Web:
-  `api/integrations/meta/facebook-actions.ts` + `facebook/callback/route.ts` (state + `fb_oauth_nonce`, ai.manage +
+  `api/integrations/meta/facebook-actions.ts` + `facebook/callback/route.ts` (state + `fb_oauth_nonce_{tenantId}`, ai.manage +
   marketing), `components/integrations/facebook-card.tsx`. Tests: services `gbp-sync.test.ts`,
   `instagram-formats.test.ts`; ai `instagram.test.ts`; e2e `instagram.spec.ts` (F18/F19 test).
 

@@ -6,9 +6,10 @@ Every integration is optional. Each feature switches itself on once its environm
 `.env.base` < overlay < `site.env`, so a hand edit there is lost).
 Until then, the UI shows a "not configured yet" state.
 
-`APP_URL` below is the app origin, without a path. Today that is `https://spamanagement-6g3mi.ondigitalocean.app`;
-later it becomes `https://app.spamanagement.co`. API routes live at `/api/...` on that origin.
-OAuth redirect URIs are built from it, so register exactly what the app shows on the integration card.
+`APP_URL` below is the app origin, without a path: `https://app.spamanagement.co` (production since 2026-10-10). API
+routes live at `/api/...` on that origin. OAuth redirect URIs are built from the canonical domain only (R29: pages on
+an old platform domain such as the former `134-209-145-162.sslip.io` 308 to the same page on spamanagement.co, so every
+sign-in and connect starts there); register exactly what the console card shows.
 
 ## 0. Token encryption
 
@@ -20,51 +21,84 @@ OAuth redirect URIs are built from it, so register exactly what the app shows on
 - If this key is missing, it is derived from `BETTER_AUTH_SECRET`.
 - Set it once and never change it; changing it invalidates every stored token.
 
-## 1. Instagram (DMs, comments, publishing)
+## 1. Instagram + Facebook (DMs, comments, publishing, Facebook Pages)
 
-Uses the **Instagram API with Instagram Login**, so no Facebook Page is needed. Each spa's Instagram must be a professional (Business or Creator) account.
+One platform, two Meta apps, for every spa (R29). A Meta app holds **one** Instagram setup — Instagram API with
+Instagram Login *or* with Facebook Login — so:
+- **App 1 — Instagram** (Instagram API with Instagram Login; no Facebook Page needed): the spa card **Connect
+  Instagram**. Keys `META_APP_ID` / `META_APP_SECRET` / `META_WEBHOOK_VERIFY_TOKEN`.
+- **App 2 — Facebook** (Facebook Login for Business): the spa card **Connect Facebook** (Premium) — the Page and its
+  linked Instagram professional account. Keys `META_FB_APP_ID` / `META_FB_APP_SECRET`, optional `META_FB_CONFIG_ID`.
 
-1. Create an app at <https://developers.facebook.com/apps> (type *Business*) and add the **Instagram** product.
-2. Under *API setup with Instagram login*:
-   - **Business login settings → OAuth redirect URI:** `{APP_URL}/api/integrations/meta/callback`
-   - **Webhooks → Callback URL:** `{APP_URL}/api/integrations/meta/webhook`
-   - **Verify token:** any random string, also set as `META_WEBHOOK_VERIFY_TOKEN`
-   - **Subscribe to:** `messages`, `comments`
-3. Permissions (Advanced Access needs App Review and Business Verification):
-   - `instagram_business_basic`
-   - `instagram_business_manage_messages`
-   - `instagram_business_manage_comments`
-   - `instagram_business_content_publish`
-4. Until approved, add the pilot spa's Instagram account as an **Instagram tester** in the app roles.
-5. Env:
+Each spa's Instagram must be a professional (Business or Creator) account. One Instagram account / Facebook Page belongs
+to **one spa** at a time (checked race-proof at connect: "already connected to another spa").
+
+Create both at <https://developers.facebook.com/apps> (type *Business*). Paste every URL exactly as the console card
+(**Settings → Meta (Instagram & Facebook)**) shows it — Strict Mode matches redirect URIs exactly (only `state` may
+vary) and the code exchange resends the same URI; check that Meta did not add a trailing slash when saving.
+
+| Where | App 1 — Instagram | App 2 — Facebook |
+|---|---|---|
+| Product / page | Instagram → API setup with Instagram login → **Business login settings** | **Facebook Login for Business → Settings** |
+| OAuth redirect URI | `{APP_URL}/api/integrations/meta/callback` | Valid OAuth Redirect URIs: `{APP_URL}/api/integrations/meta/facebook/callback` |
+| Deauthorize callback URL | `{APP_URL}/api/integrations/meta/deauthorize` | same |
+| Data deletion request URL | `{APP_URL}/api/integrations/meta/data-deletion` | same |
+| Webhooks (Instagram object) | callback `{APP_URL}/api/integrations/meta/webhook` + verify token; fields `messages`, `comments` | same URL + same verify token; fields `messages`, `comments` |
+| Configuration | — | Facebook Login for Business → Configurations: token type **User access token** (Page + Instagram permissions below); its ID → `META_FB_CONFIG_ID` |
+| App settings → Basic → App Domains | `spamanagement.co` | `spamanagement.co` |
+| Client OAuth login / Web OAuth login | — | Yes / Yes |
+| Enforce HTTPS / Strict Mode | Yes / Yes | Yes / Yes |
+| Embedded browser OAuth login / Login with the JavaScript SDK | — / No | No / No |
+| Console boxes | Instagram app ID, Instagram app secret, Webhook verify token | Facebook App ID, Facebook App secret, config ID |
+
+Keys (console values win over env, key by key):
 
 | Var | Value |
 |---|---|
-| `META_APP_ID` | Instagram app ID |
-| `META_APP_SECRET` | Instagram app secret (also verifies webhook signatures) |
-| `META_WEBHOOK_VERIFY_TOKEN` | the verify token from step 2 |
-| `META_FB_CONFIG_ID` | optional: Facebook Login for Business configuration id (deploy/droplet/README.md "Meta") |
-| `META_FB_APP_ID` | optional: **Facebook App ID** (App settings → Basic), for Facebook Page connect |
-| `META_FB_APP_SECRET` | optional: **Facebook App secret** (App settings → Basic), for Facebook Page connect |
+| `META_APP_ID` | App 1: **Instagram app ID** (Business login settings — not the App ID under App settings → Basic) |
+| `META_APP_SECRET` | App 1: Instagram app secret (also verifies its webhook / deauthorize / deletion signatures) |
+| `META_WEBHOOK_VERIFY_TOKEN` | any random string; the same in both apps' Webhooks settings |
+| `META_FB_APP_ID` | App 2: **App ID** (App settings → Basic) — the Facebook dialog rejects the Instagram app ID |
+| `META_FB_APP_SECRET` | App 2: App secret (App settings → Basic; also verifies Page-linked events) |
+| `META_FB_CONFIG_ID` | optional: App 2's configuration ID (without it the dialog asks for the scope list below) |
 
-All of them can also be entered in the console (**Settings → Meta (Instagram & Facebook)**); a console value wins over
-the env variable, key by key.
+Permissions (each needs Advanced Access through App Review):
+- App 1: `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`,
+  `instagram_business_content_publish`.
+- App 2: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
+  `pages_read_user_content`, `pages_manage_engagement`, `business_management`, `instagram_basic`,
+  `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`.
 
-Which ID goes where (one Meta app has two different ID/secret pairs):
-- **Instagram app ID / secret** (Instagram → API setup with Instagram login → Business login settings) →
-  `META_APP_ID` / `META_APP_SECRET`. Used by Instagram Login (the Instagram card's Connect and its callback).
-- **Facebook App ID / secret** (App settings → Basic) → `META_FB_APP_ID` / `META_FB_APP_SECRET`. Used by Facebook Page
-  connect (Premium, Facebook Login for Business): the Facebook dialog, the code exchange, the long-lived token and the
-  daily `debug_token` check. Leave both empty only when `META_APP_*` already are the Facebook App's (then one pair
-  serves both); with Instagram Login they are not, and the Facebook dialog rejects the Instagram app ID.
-- The webhook, deauthorize and data-deletion URLs are shared by both logins: a request signed with either secret is
-  accepted (Instagram Login events with the Instagram app secret; Page-linked events and Facebook Login callbacks
-  with the Facebook App secret). The webhook verify token is the same for both.
-- The console overview shows the Facebook Page connect row (`META_FB_APP_*`): own Facebook app, or "same app as
-  Instagram" when it falls back to `META_APP_*`. It is green only with the Instagram keys too (the Page-linked
-  account's DMs, comments and publishing run through them and the webhook); the spa Facebook card offers Connect
-  under the same rule. Only one of the two Facebook keys is a warning ("incomplete", console badge "Facebook keys
-  incomplete"): the other would fall back to the Instagram value, a mixed pair Meta rejects. Set both or neither.
+Approval path (both apps): **Business Verification** (Meta Business Suite → Security Centre) → complete app settings
+(icon, privacy policy `https://spamanagement.co/privacy`, terms, data-deletion URL, category) → add the pilot spa's
+account as an **Instagram tester** (App roles; works before review) → **App Review**, one request per permission with a
+screen recording of it in use in the spa dashboard → switch the app to **Live** (published; Meta sends webhooks only to
+published apps). Tech Provider Access Verification is no longer part of this (retired 2026-10-09).
+
+Graph API: every call (graph.instagram.com, graph.facebook.com, the Facebook dialog) uses **v25.0** (`GRAPH_VERSION`
+in `packages/services/src/integrations/meta.ts`; v25.0 is available until 2028-07-29, v21.0 retires 2027-01-21). R29
+checked the v22.0–v25.0 changelogs and the Instagram Platform changelog for the endpoints used here — `/me/accounts`
+with `instagram_business_account`, `debug_token`, Page `subscribed_apps`, `oauth/access_token` (code + `fb_exchange_token`),
+the Instagram Login authorize / token / `ig_exchange_token` / `ig_refresh_token` endpoints, `/me` profile fields, IG
+media containers (image, `REELS`, `STORIES`, `CAROUSEL` + children), `status_code`, `media_publish`, `messages` (text
+and private replies by `comment_id`), comment `replies`, `/me/subscribed_apps` — and found no breaking change for them
+(v22: Page ratings and some Insights metrics removed, legacy Instagram v1.0 / Marketing API Instagram nodes replaced
+by the Instagram Platform ones we already use; v23–v25: WhatsApp / Marketing API / Insights / webhook mTLS CA only).
+Sources: <https://developers.facebook.com/docs/graph-api/changelog/> (+ `/version22.0` … `/version25.0`),
+<https://developers.facebook.com/docs/instagram-platform/changelog/>,
+<https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login>.
+v26.0 exists (2026-07-29); move on before v25.0 retires.
+
+Webhooks through a Facebook Page (App 2): Instagram fields are subscribed in App 2's dashboard (Webhooks → Instagram:
+`messages`, `comments`) — Meta does not take Instagram fields on a Page subscription — and Meta sends them only for
+Pages that have the app installed. Choosing a Page installs the app with `POST /{page-id}/subscribed_apps?
+subscribed_fields=feed,messages` (`messages` = the messaging install Instagram DMs through a Page need; if Meta refuses
+it for lack of a permission, `feed` alone still installs the app). Events arrive as `object: "instagram"` with
+`entry.id` = the Instagram account (same parser as App 1); the Page's own `object: "page"` events are ignored.
+Sources: <https://developers.facebook.com/docs/graph-api/reference/page/subscribed_apps/>,
+<https://developers.facebook.com/docs/instagram-platform/webhooks>,
+<https://developers.facebook.com/documentation/business-messaging/messenger-platform/webhooks>. **Needs a live test once
+App 2 exists** (a DM and a comment on the Page-linked account reach the inbox).
 
 How it behaves:
 - DMs are answered by the AI receptionist according to AI studio:
@@ -72,6 +106,9 @@ How it behaves:
   - **autopilot** sends them directly;
   - flagged conversations are always handed to a human.
 - Replies are only sent within Meta's 24-hour messaging window.
+- The console overview's Facebook Page connect row is green only with App 1's keys too (the Page-linked account's DMs,
+  comments and publishing run through the shared webhook). Only one of the two App 2 keys is a warning ("Facebook keys
+  incomplete"): set both or neither (an empty pair falls back to App 1's, which the Facebook dialog rejects).
 
 ## 2. Google Business Profile (reviews, posts)
 
@@ -87,7 +124,7 @@ How it behaves:
    - External, scopes `https://www.googleapis.com/auth/business.manage` + `https://www.googleapis.com/auth/webmasters`
    - add test users until verified
 3. **Credentials → OAuth client (Web):**
-   - redirect URI `{APP_URL}/api/integrations/google/callback` (the console card lists one per platform domain)
+   - redirect URI `{APP_URL}/api/integrations/google/callback` (canonical domain only, R29)
 4. Keys: console **Settings (Company) → Google** card (R29; secret write-only, last 4 shown; a console value wins over
    env, key by key; web picks a save up at once, the worker within 30 s) — or env:
 

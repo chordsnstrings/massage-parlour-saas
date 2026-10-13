@@ -9,7 +9,7 @@ const META_SECRET = 'e2e-meta-app-secret-ABCD'
 const VERIFY = 'e2e-verify-token-9876'
 const FB_APP_ID = '5550001112'
 const FB_SECRET = 'e2e-fb-app-secret-EFGH'
-const FB_ID_LABEL = 'Facebook App ID (for Facebook Page connect; leave empty when it is the same app)'
+const FB_ID_LABEL = 'Facebook App ID (App 2)'
 // API routes answer on the bare platform host too (Node can't resolve *.localhost hosts for `request`).
 const webhook = `${base}/api/integrations/meta/webhook`
 const challenge = (token: string) =>
@@ -72,11 +72,19 @@ test('console Google + Meta keys: masked secrets, sources, spa cards and webhook
   await expect(meta.getByTestId('meta-data-deletion-url')).toContainText(
     '/api/integrations/meta/data-deletion',
   )
+  // Two apps (one Instagram setup per Meta app), canonical-domain URLs only (old platform domains redirect, R29).
+  await expect(meta.getByTestId('meta-app-1').getByTestId('meta-redirect-uris')).toContainText(
+    '/api/integrations/meta/callback',
+  )
+  await expect(meta.getByTestId('meta-app-2').getByTestId('meta-fb-redirect-uri')).toContainText(
+    '/api/integrations/meta/facebook/callback',
+  )
+  for (const card of [meta, google]) await expect(card).not.toContainText('alt.localhost')
   await meta.getByLabel('Instagram app ID', { exact: true }).fill('1234567890')
   await meta.getByLabel('Instagram app secret', { exact: true }).fill(META_SECRET)
   await meta.getByLabel('Webhook verify token', { exact: true }).fill(VERIFY)
   await meta.getByLabel(FB_ID_LABEL, { exact: true }).fill(FB_APP_ID)
-  await meta.getByLabel('Facebook App secret', { exact: true }).fill(FB_SECRET)
+  await meta.getByLabel('Facebook App secret (App 2)', { exact: true }).fill(FB_SECRET)
   await meta.getByRole('button', { name: 'Save Meta keys' }).click()
   await expect(page.getByText('Meta keys saved')).toBeVisible()
   await page.reload()

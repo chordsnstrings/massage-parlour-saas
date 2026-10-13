@@ -14,8 +14,8 @@ import { cookies } from 'next/headers'
 import { type ActionResult, fail, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { requestUrls } from '@/server/origin'
-import { NONCE_COOKIE, NONCE_PATH } from './oauth'
+import { canonicalUrls } from '@/server/origin'
+import { NONCE_PATH, nonceCookie } from './oauth'
 
 /** Starts Instagram Login: a signed, 10-minute state bound to this tenant + user and a nonce cookie. */
 export async function connectInstagramAction(slug: string): Promise<ActionResult> {
@@ -26,10 +26,10 @@ export async function connectInstagramAction(slug: string): Promise<ActionResult
   if (!cfg || !secret) return fail("Instagram isn't configured on this server yet.")
   const nonce = newNonce()
   const state = signState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
-  // The whole flow stays on the platform domain it starts on (session + nonce cookies are per host); each platform
-  // domain's callback must be registered in the Meta app (the Instagram card lists this one).
-  const redirectUri = metaUrls((await requestUrls()).api('')).callback
-  ;(await cookies()).set(NONCE_COOKIE, nonce, {
+  // R29: the canonical callback only (old platform domains redirect there, so the flow starts on it too); the
+  // callback sends the same URI with the code exchange.
+  const redirectUri = metaUrls(canonicalUrls().api('')).callback
+  ;(await cookies()).set(nonceCookie('ig', ctx.tenant.id), nonce, {
     httpOnly: true,
     sameSite: 'lax',
     secure: redirectUri.startsWith('https://'),

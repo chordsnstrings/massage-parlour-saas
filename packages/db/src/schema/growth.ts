@@ -206,7 +206,18 @@ export const socialAccounts = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [unique('social_accounts_unique').on(t.tenantId, t.platform, t.externalId), ...tenantPolicies()],
+  (t) => [
+    unique('social_accounts_unique').on(t.tenantId, t.platform, t.externalId),
+    // R29: one spa per Meta account — a connected Instagram account / Facebook Page, and the Instagram account linked
+    // to a connected Page, belong to one spa at a time (across tenants; connects also take an advisory lock).
+    uniqueIndex('social_accounts_meta_connected')
+      .on(t.platform, t.externalId)
+      .where(sql`${t.status} = 'connected' and ${t.platform} in ('instagram', 'facebook')`),
+    uniqueIndex('social_accounts_fb_ig_connected')
+      .on(sql`(${t.meta} ->> 'igUserId')`)
+      .where(sql`${t.platform} = 'facebook' and ${t.status} = 'connected'`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const postStatus = pgEnum('post_status', [

@@ -10,7 +10,7 @@ import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { can, type MemberContext } from '@/server/access'
-import { requestUrls } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { InstagramGlyph } from '../inbox/icons'
 import { InstagramConnectButton, InstagramDisconnectButton } from './instagram-card-actions'
 
@@ -36,9 +36,9 @@ export async function InstagramCard({
   const configured = metaConfig(env) !== null
   const missing = missingMetaEnv(env)
   const account = await withTenant(ctx.tenant.id, (tx) => instagramStatus(tx))
-  const urls = metaUrls()
-  // Connecting runs on the platform domain in use, so Meta needs this domain's redirect URI too.
-  const redirectUri = metaUrls((await requestUrls()).api('')).callback
+  // R29: old platform domains redirect to the canonical one, so Meta only needs the canonical URLs.
+  const urls = metaUrls(canonicalUrls().api(''))
+  const redirectUri = urls.callback
   const canManage = can(ctx, 'ai.manage')
   const noticeKey = one(searchParams.ig) ?? ''
   const known = CONNECT_NOTICES[noticeKey]

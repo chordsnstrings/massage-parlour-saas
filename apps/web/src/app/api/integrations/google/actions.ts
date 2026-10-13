@@ -32,9 +32,9 @@ import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
-import { requestUrls } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { publicSiteUrl } from '@/server/sites'
-import { GBP_COOKIE, GBP_COOKIE_PATH } from './oauth'
+import { GBP_COOKIE_PATH, gbpCookie } from './oauth'
 
 const revalidate = (slug: string) => {
   revalidatePath(`/dashboard/${slug}/settings/integrations`)
@@ -51,9 +51,9 @@ export async function connectGoogleAction(slug: string): Promise<ActionResult> {
   const nonce = newGoogleNonce()
   const { verifier, challenge } = createPkce()
   const state = signGoogleState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
-  // Stays on the platform domain the flow starts on (cookies are per host); register each domain's callback with Google.
-  const redirectUri = googleRedirectUri((await requestUrls()).api(''))
-  ;(await cookies()).set(GBP_COOKIE, `${nonce}.${verifier}`, {
+  // R29: the canonical callback only (old platform domains redirect there); the callback reuses it for the exchange.
+  const redirectUri = googleRedirectUri(canonicalUrls().api(''))
+  ;(await cookies()).set(gbpCookie(ctx.tenant.id), `${nonce}.${verifier}`, {
     httpOnly: true,
     sameSite: 'lax',
     secure: redirectUri.startsWith('https://'),

@@ -1,6 +1,8 @@
 /** Shared by the connect action and the OAuth callback (not a route). */
-export const GBP_COOKIE = 'gbp_oauth'
 export const GBP_COOKIE_PATH = '/api/integrations/google'
+
+/** The nonce + PKCE cookie of one connect, per spa (R29: two spas' connects in one browser don't collide). */
+export const gbpCookie = (tenantId: string) => `gbp_oauth_${tenantId}`
 
 /** Messages for `?gbp=` after the OAuth round trip (shown on the integrations card). */
 export const GBP_NOTICES: Record<string, { tone: 'success' | 'error'; text: string }> = {

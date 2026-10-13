@@ -20,7 +20,7 @@ import { getI18n } from '@/i18n/server'
 import { cn } from '@/lib/utils'
 import { can, type MemberContext } from '@/server/access'
 import { hasFeature } from '@/server/entitlements'
-import { requestUrls } from '@/server/origin'
+import { canonicalUrls } from '@/server/origin'
 import { InstagramGlyph } from '../inbox/icons'
 import { ChoosePageForm, FacebookConnectButton, FacebookDisconnectButton } from './facebook-card-actions'
 
@@ -58,7 +58,7 @@ export async function FacebookCard({
   const view = facebookView(await withTenant(ctx.tenant.id, (tx) => getFacebookAccount(tx)))
   const picker =
     view?.status === 'pending_page' && configured && manage ? await loadPages(ctx.tenant.id) : null
-  const redirectUri = metaUrls((await requestUrls()).api('')).facebookCallback
+  const redirectUri = metaUrls(canonicalUrls().api('')).facebookCallback
   const noticeKey = one(searchParams.fb) ?? ''
   const tone = FB_NOTICES[noticeKey]
 

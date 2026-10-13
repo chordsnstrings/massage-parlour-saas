@@ -298,7 +298,7 @@ export const settings = {
       metaHelp:
         'For the platform’s Meta app (Instagram API with Instagram Login). Subscribe the webhook to messages and comments; the verify token is the server’s META_WEBHOOK_VERIFY_TOKEN.',
       webhookUrl: 'Webhook callback URL',
-      redirectUri: 'OAuth redirect URI (add one for each platform domain)',
+      redirectUri: 'OAuth redirect URI',
       deauthorizeUrl: 'Deauthorize callback URL',
       deletionUrl: 'Data deletion request URL',
       disconnectTitle: 'Disconnect Instagram?',
@@ -442,7 +442,7 @@ export const settings = {
       uses: 'Used for Facebook Page posts and comments (AI tools) and, when Instagram isn’t connected directly, for Instagram publishing and private replies.',
       connect: 'Connect Facebook',
       reconnect: 'Reconnect Facebook',
-      redirectUri: 'Facebook Login redirect URI (add one for each platform domain)',
+      redirectUri: 'Facebook Login redirect URI',
       disconnectTitle: 'Disconnect the Facebook Page?',
       disconnectBody:
         '{page} stops working with this spa: Page tools turn off. Posts already published stay on Facebook.',

@@ -16,7 +16,9 @@ import {
   applyAgentOutcome,
   authorizeUrl,
   claimDraft,
+  claimInstagramAccount,
   clipBytes,
+  connectInstagramAccount,
   constantTimeEqual,
   decryptSecret,
   deliverReply,
@@ -26,6 +28,7 @@ import {
   forgetInstagramUser,
   getThread,
   ingestInstagramWebhook,
+  isMetaAccountInUse,
   listInbox,
   markConversationRead,
   metaConfig,
@@ -37,8 +40,10 @@ import {
   publishDueInstagramPosts,
   publishInstagramPost,
   refreshInstagramTokens,
+  saveFacebookPage,
   saveInstagramConnection,
   scrubSecrets,
+  signedState,
   signState,
   TAKEN_OVER_NOTE,
   verifyMetaSignature,
@@ -155,6 +160,10 @@ describe('meta helpers', () => {
     expect(verifyState(`${payload}.`, 'secret', now)).toBeNull()
     expect(verifyState('garbage', 'secret', now)).toBeNull()
     expect(verifyState(null, 'secret', now)).toBeNull()
+    // R29: an expired but genuine state still names its spa (the callback returns there); forgeries never do.
+    expect(signedState(state, 'secret')).toMatchObject({ t: 't-1', u: 'u-1', n: 'n-1' })
+    expect(signedState(state, 'other')).toBeNull()
+    expect(signedState(`${forged}.${sig}`, 'secret')).toBeNull()
   })
 
   it('builds the Instagram Login authorize URL', () => {
@@ -165,6 +174,22 @@ describe('meta helpers', () => {
     )
     expect(url.searchParams.get('response_type')).toBe('code')
     expect(url.searchParams.get('redirect_uri')).toBe('https://x.test/cb')
+  })
+
+  it('ignores Page events (feed, Messenger) a connected Facebook Page sends to the shared webhook', () => {
+    const page = (entry: Record<string, unknown>) => parseInstagramWebhook({ object: 'page', entry: [entry] })
+    expect(
+      page({ id: '1029', time: 1, changes: [{ field: 'feed', value: { item: 'comment', message: 'hi' } }] }),
+    ).toEqual([])
+    expect(
+      page({
+        id: '1029',
+        time: 1,
+        messaging: [{ sender: { id: '1' }, recipient: { id: '1029' }, message: { mid: 'm', text: 'hi' } }],
+      }),
+    ).toEqual([])
+    expect(parseInstagramWebhook({ object: 'instagram', entry: [{ id: IG, standby: [{}] }] })).toEqual([])
+    expect(parseInstagramWebhook('nope')).toEqual([])
   })
 
   it('parses DMs and comments, skipping echoes, reads and own replies', () => {
@@ -310,7 +335,7 @@ describe('ingest and replies', () => {
     })
     expect(r.ok).toBe(true)
     expect(f.calls).toHaveLength(1)
-    expect(f.calls[0]!.url).toBe(`https://graph.instagram.com/v21.0/${IG}/messages`)
+    expect(f.calls[0]!.url).toBe(`https://graph.instagram.com/v25.0/${IG}/messages`)
     expect(new Headers(f.calls[0]!.init?.headers).get('authorization')).toBe('Bearer IGAAtoken-original')
     expect(JSON.parse(String(f.calls[0]!.init?.body))).toEqual({
       recipient: { id: CUSTOMER },
@@ -351,7 +376,7 @@ describe('ingest and replies', () => {
       fetch: bad.fetch,
     })
     expect(failed.ok).toBe(false)
-    expect(bad.calls[0]!.url).toBe('https://graph.instagram.com/v21.0/c-1/replies')
+    expect(bad.calls[0]!.url).toBe('https://graph.instagram.com/v25.0/c-1/replies')
     if (!failed.ok) expect(failed.error).not.toContain('IGAAtoken')
     const [acct] = await withTenant(ids.a!, (tx) => tx.select().from(socialAccounts), app)
     expect(acct!.status).toBe('expired')
@@ -679,5 +704,109 @@ describe('races, ordering and billing status', () => {
     const [acct] = await withTenant(ids.b!, (tx) => tx.select().from(socialAccounts), app)
     expect(acct).toMatchObject({ status: 'disconnected', tokenEnc: null, meta: {}, username: null })
     expect(await forgetInstagramUser('no-such-user', base)).toBe(0)
+  })
+})
+
+// R29: one spa per Meta account, race-proof (advisory lock + cross-tenant partial unique indexes).
+describe('one spa per Instagram account / Facebook Page', () => {
+  const conn = (igUserId: string, token = 'IGAAtoken-r29') => ({
+    igUserId,
+    username: `acct.${igUserId.slice(-3)}`,
+    accessToken: token,
+    expiresIn: 5_184_000,
+    scopes: [],
+    webhooks: 'subscribed' as const,
+  })
+  const page = (id: string, igId: string | null) => ({
+    page: {
+      id,
+      name: `Page ${id}`,
+      accessToken: `EAApage-${id}`,
+      tasks: [],
+      instagram: igId ? { id: igId, username: `fb.${igId.slice(-3)}` } : null,
+    },
+    info: null,
+    webhooks: 'subscribed' as const,
+  })
+  const spa = async (slug: string) =>
+    (await platform.insert(tenants).values({ slug, name: slug }).returning())[0]!.id
+  const connected = async (igUserId: string) =>
+    (await platform.select().from(socialAccounts).where(eq(socialAccounts.externalId, igUserId))).filter(
+      (r) => r.status === 'connected',
+    )
+
+  it('refuses an account another spa has; the owner can reconnect it', async () => {
+    expect(await connectInstagramAccount(ids.b!, conn(IG), base)).toBe('in_use')
+    expect(await connectInstagramAccount(ids.a!, conn(IG, 'IGAAtoken-original'), base)).toBe('connected')
+    expect((await connected(IG)).map((r) => r.tenantId)).toEqual([ids.a])
+  })
+
+  it('two spas connecting the same account at once: exactly one wins', async () => {
+    const [c, d] = [await spa('r29-race-c'), await spa('r29-race-d')]
+    const X = '17841400000000901'
+    const results = await Promise.all([
+      connectInstagramAccount(c, conn(X), base),
+      connectInstagramAccount(d, conn(X), base),
+    ])
+    expect([...results].sort()).toEqual(['connected', 'in_use'])
+    expect(await connected(X)).toHaveLength(1)
+  })
+
+  it('Instagram Login in one spa vs a Facebook Page linked to the same account in another, at once', async () => {
+    const [e, f] = [await spa('r29-cross-e'), await spa('r29-cross-f')]
+    const Y = '17841400000000902'
+    // Spa e holds the lock and is mid-save; spa f's Page connect starts meanwhile and must wait, then see e's row.
+    let other: Promise<'saved' | 'in_use'> | undefined
+    await withTenant(
+      e,
+      async (tx) => {
+        await claimInstagramAccount(tx, e, Y, base)
+        other = saveFacebookPage(f, page('9000001', Y), base)
+        await new Promise((r) => setTimeout(r, 300))
+        await saveInstagramConnection(tx, e, conn(Y))
+      },
+      app,
+    )
+    expect(await other).toBe('in_use')
+    const holders = (await platform.select().from(socialAccounts)).filter(
+      (r) => r.status === 'connected' && (r.externalId === Y || r.meta.igUserId === Y),
+    )
+    expect(holders.map((r) => r.tenantId)).toEqual([e])
+    // And the other way round: a Page holds the account, an Instagram Login connect elsewhere is refused.
+    const Z = '17841400000000904'
+    expect(await saveFacebookPage(f, page('9000006', Z), base)).toBe('saved')
+    expect(await connectInstagramAccount(e, conn(Z), base)).toBe('in_use')
+  })
+
+  it('one Page per spa, and the indexes catch what slips past a check', async () => {
+    const [g, h] = [await spa('r29-page-g'), await spa('r29-page-h')]
+    const results = await Promise.all([
+      saveFacebookPage(g, page('9000002', null), base),
+      saveFacebookPage(h, page('9000002', null), base),
+    ])
+    expect([...results].sort()).toEqual(['in_use', 'saved'])
+    // A direct write past the checks (e.g. a reconnect elsewhere) hits the unique index → "in use".
+    const i = await spa('r29-page-i')
+    const err = await platform
+      .insert(socialAccounts)
+      .values({ tenantId: i, platform: 'facebook', externalId: '9000002', status: 'connected' })
+      .catch((e: unknown) => e)
+    expect(isMetaAccountInUse(err)).toBe(true)
+    // Two connected Pages linked to the same Instagram account → the igUserId index.
+    const linked = {
+      platform: 'facebook' as const,
+      status: 'connected',
+      meta: { igUserId: '17841400000000903' },
+    }
+    await platform.insert(socialAccounts).values({ tenantId: g, externalId: '9000004', ...linked })
+    const err2 = await platform
+      .insert(socialAccounts)
+      .values({ tenantId: h, externalId: '9000005', ...linked })
+      .catch((e: unknown) => e)
+    expect(isMetaAccountInUse(err2)).toBe(true)
+    // Disconnected and pending rows never count.
+    await platform
+      .insert(socialAccounts)
+      .values({ tenantId: i, platform: 'facebook', externalId: '9000002', status: 'disconnected' })
   })
 })

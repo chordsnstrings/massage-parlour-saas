@@ -22,6 +22,7 @@ import {
   publishGbpLocalPost,
   reviewStats,
   saveGbpTokens,
+  signedGoogleState,
   signGoogleState,
   starRatingToNumber,
   syncGbpReviews,
@@ -116,6 +117,9 @@ describe('OAuth state + PKCE', () => {
     expect(verifyGoogleState(`${payload}.${sig}x`, 'secret', now)).toBeNull()
     expect(verifyGoogleState(s, 'secret', now + 11 * 60_000)).toBeNull()
     expect(verifyGoogleState(null, 'secret', now)).toBeNull()
+    // R29: expired but genuine → still names its spa (the callback returns there with a notice); forgeries never do.
+    expect(signedGoogleState(s, 'secret')).toMatchObject(input)
+    expect(signedGoogleState(`${forged}.${sig}`, 'secret')).toBeNull()
   })
   it('uses the RFC 7636 S256 challenge and builds an offline consent URL', () => {
     expect(pkceChallenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe(
