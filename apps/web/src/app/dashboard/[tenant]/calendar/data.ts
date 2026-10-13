@@ -319,11 +319,16 @@ export async function loadCalendar(
       bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
       openBooking: items.some((i) => i.bookingId === q.open) ? q.open! : null,
-      // The requested therapist while bookable here, else "any".
+      // The requested therapist while active + bookable here (not the columns kept for old bookings) and not on
+      // leave that day, else "any".
       enquiry: fromEnquiry
         ? {
             ...fromEnquiry.prefill,
-            staffId: staffCols.some((c) => c.id === fromEnquiry.staffId) ? fromEnquiry.staffId! : undefined,
+            staffId:
+              day.staff.some((s) => s.id === fromEnquiry.staffId) &&
+              staffCols.some((c) => c.id === fromEnquiry.staffId && !c.onLeave)
+                ? fromEnquiry.staffId!
+                : undefined,
           }
         : null,
     }

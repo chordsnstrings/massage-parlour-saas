@@ -48,15 +48,18 @@ export async function crmFeedFacts(tx: Tx, tenantId: string) {
   }
 }
 
-/** Opening hours of the main branch (default first, as `crmFeedFacts` orders them): the hours a design's form offers. */
+/**
+ * Opening hours of the main branch (default first, as `crmFeedFacts` orders them): the hours a design's form offers;
+ * with its business-day cutoff ('HH:MM'), which dates small-hours requests while the hours aren't set up.
+ */
 export async function websiteHours(tx: Tx) {
   const [main] = await tx
-    .select({ openingHours: branches.openingHours })
+    .select({ openingHours: branches.openingHours, cutoff: branches.businessDayCutoff })
     .from(branches)
     .where(eq(branches.active, true))
     .orderBy(desc(branches.isDefault), asc(branches.createdAt))
     .limit(1)
-  return main?.openingHours ?? null
+  return { openingHours: main?.openingHours ?? null, cutoff: main?.cutoff.slice(0, 5) ?? null }
 }
 
 /**

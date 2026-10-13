@@ -128,14 +128,11 @@ const bookingSchema = z
     clientId: optionalId,
     clientName: z.string().trim().max(120).optional(),
     clientPhone: z.string().trim().max(30).optional(),
-    // "online" only for a website booking request (Enquiries → Make booking).
-    source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram', 'online']),
+    source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram']),
     notes: z.string().trim().max(1000).optional(),
     enquiryId: optionalId,
   })
   .superRefine((v, c) => {
-    if (v.source === 'online' && !v.enquiryId)
-      c.addIssue({ code: 'custom', path: ['source'], message: 'errors.checkFields' })
     if (v.clientId) return
     if (!v.clientName)
       c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })

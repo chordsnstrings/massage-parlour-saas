@@ -455,18 +455,24 @@ export function crmHours(hours: OpeningHours | null | undefined): CrmHour[] {
  * A design's booking form offers the small hours under the chosen day ("00:30 (after midnight)" for 11:00–02:00) and
  * sends that day's date (owner 2026-10-13). The date's hours as the CRM feed shows them (`crmHours`: first open – last
  * close of its weekday, Dubai): when they run past midnight (close <= open) and the time is before both the close and
- * the open, the visit is on the next calendar day. Closed days, hours not set up and same-day hours keep the date.
+ * the open, the visit is on the next calendar day. Closed days and same-day hours keep the date. Hours not set up (the
+ * design then shows its own): a time before the branch's business-day `cutoff` is the next calendar day, as the
+ * calendar reads a time; without a cutoff the date is kept.
  */
 export function afterMidnight(
   date: string,
   time: string,
   hours: OpeningHours | null | undefined,
+  cutoff?: string | null,
 ): { afterMidnight: boolean; calendarDate: string } {
   const weekday = dubaiParts(dubaiInstant(date, 12 * 60)).weekday
-  const day = crmHours(hours).find((h) => h.day === weekday)
+  const rows = crmHours(hours)
+  const day = rows.find((h) => h.day === weekday)
   const t = HHMM.test(time) ? minutes(time) : -1
-  const after =
-    !!day && !day.closed && minutes(day.close) <= minutes(day.open) && t >= 0 && t < minutes(day.close)
+  const cut = cutoff && HHMM.test(cutoff.slice(0, 5)) ? minutes(cutoff.slice(0, 5)) : 0
+  const after = rows.length
+    ? !!day && !day.closed && minutes(day.close) <= minutes(day.open) && t >= 0 && t < minutes(day.close)
+    : t >= 0 && t < cut
   return { afterMidnight: after, calendarDate: after ? addDays(date, 1) : date }
 }
 

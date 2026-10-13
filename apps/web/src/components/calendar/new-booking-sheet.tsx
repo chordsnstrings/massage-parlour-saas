@@ -194,8 +194,9 @@ export function NewBookingSheet({
                   />
                 </Field>
                 <Field label={t('calendar.fields.source')} name="source">
-                  <Select id="source" name="source" defaultValue={pre ? 'online' : 'phone'}>
-                    {(pre ? [...SOURCES, 'online' as const] : SOURCES).map((v) => (
+                  {/* A request is answered on WhatsApp; "online" stays the public booking page's (F13 reports). */}
+                  <Select id="source" name="source" defaultValue={pre ? 'whatsapp' : 'phone'}>
+                    {SOURCES.map((v) => (
                       <option key={v} value={v}>
                         {enumLabel(t, 'bookingSource', v)}
                       </option>

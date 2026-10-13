@@ -174,6 +174,18 @@ describe('helpers', () => {
     // Month and year ends roll over (2026-12-31 is a Thursday).
     const thu = { thu: [{ open: '11:00', close: '02:00' }] }
     expect(afterMidnight('2026-12-31', '01:00', thu).calendarDate).toBe('2027-01-01')
+    // Hours not set up (the design shows its own): before the branch cutoff is the next day, as the calendar reads it.
+    expect(afterMidnight('2026-10-16', '00:30', {}, '05:00')).toEqual({
+      afterMidnight: true,
+      calendarDate: '2026-10-17',
+    })
+    expect(afterMidnight('2026-10-16', '00:00', null, '05:00:00').afterMidnight).toBe(true)
+    expect(afterMidnight('2026-10-16', '05:00', {}, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '23:30', {}, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-16', '00:30', {}, '00:00').afterMidnight).toBe(false)
+    // Set-up hours win over the cutoff: same-day hours and closed weekdays keep the date.
+    expect(afterMidnight('2026-10-17', '00:30', late, '05:00').afterMidnight).toBe(false)
+    expect(afterMidnight('2026-10-18', '00:30', late, '05:00').afterMidnight).toBe(false)
   })
 
   it('makes images absolute or drops them', () => {

@@ -321,12 +321,19 @@ describe('booking a booking request', () => {
 
   it('the main branch hours date small-hours requests; stored flags win', async () => {
     await tx((db) => db.update(branches).set({ openingHours: late }).where(eq(branches.name, 'Main')))
-    expect(await tx((db) => websiteHours(db))).toEqual(late)
-    expect(await other((db) => websiteHours(db))).toEqual({})
-    expect(enquiryNight(request, late)).toEqual({ afterMidnight: true, calendarDate: '2026-10-17' })
+    expect(await tx((db) => websiteHours(db))).toEqual({ openingHours: late, cutoff: '05:00' })
+    const unset = await other((db) => websiteHours(db))
+    expect(unset).toEqual({ openingHours: {}, cutoff: '05:00' })
+    expect(enquiryNight(request, { openingHours: late })).toEqual({
+      afterMidnight: true,
+      calendarDate: '2026-10-17',
+    })
     expect(enquiryNight(request, null)).toEqual({ afterMidnight: false, calendarDate: '2026-10-16' })
+    // Hours not set up (the design shows its own): the branch cutoff dates the small hours.
+    expect(enquiryNight(request, unset)).toEqual({ afterMidnight: true, calendarDate: '2026-10-17' })
+    expect(enquiryNight({ ...request, time: '19:00' }, unset).afterMidnight).toBe(false)
     const stored = { ...request, afterMidnight: false, calendarDate: '2026-10-16' }
-    expect(enquiryNight(stored, late).afterMidnight).toBe(false)
+    expect(enquiryNight(stored, { openingHours: late }).afterMidnight).toBe(false)
   })
 
   it('locks and links only this spa’s booking requests; one live booking each', async () => {
@@ -378,7 +385,7 @@ describe('booking a booking request', () => {
   it('reply texts: the night in both, the booked service in the confirmation; never the typed text', () => {
     const e = { name: 'Layla', locale: 'en', booking: request }
     const night = 'on the night of 2026-10-16 at 00:30 (after midnight, 2026-10-17)'
-    expect(siteEnquiryReplyText(e, 'Feed Spa', { hours: late })).toBe(
+    expect(siteEnquiryReplyText(e, 'Feed Spa', { hours: { openingHours: late } })).toBe(
       `Hi Layla, thank you for your booking request at Feed Spa for Normal massage ${night}. `,
     )
     // Stored since 2026-10-13: the flag, whatever the hours are now.
@@ -404,9 +411,9 @@ describe('booking a booking request', () => {
     const ar = siteEnquiryReplyText({ ...e, locale: 'ar' }, 'Feed Spa', { booked })
     expect(ar).toContain('تم تأكيد حجزك في Feed Spa لـ مساج سويدي')
     expect(ar).toContain('ليلة 2026-10-16 الساعة 00:30 (بعد منتصف الليل، 2026-10-17)')
-    expect(siteEnquiryReplyText({ ...e, locale: 'ar' }, 'Feed Spa', { hours: late })).toContain(
-      'ليلة 2026-10-16',
-    )
+    expect(
+      siteEnquiryReplyText({ ...e, locale: 'ar' }, 'Feed Spa', { hours: { openingHours: late } }),
+    ).toContain('ليلة 2026-10-16')
     // A plain message never turns into a confirmation.
     expect(siteEnquiryReplyText({ name: 'Layla', locale: 'en' }, 'Feed Spa', { booked })).toBe(
       'Hi Layla, thank you for your message to Feed Spa. ',

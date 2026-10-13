@@ -245,8 +245,14 @@ async function crmEnquiry(req: Request, ctx: SiteParams) {
       d.staff_id && UUID.test(d.staff_id)
         ? (await websiteStaff(tx)).find((s) => s.id === d.staff_id)
         : undefined
-    // The form offers the small hours under the chosen day and sends that day: the hours the feed shows date them.
-    return { service: svc, person: who, night: afterMidnight(d.date, d.time, await websiteHours(tx)) }
+    // The form offers the small hours under the chosen day and sends that day: the hours the feed shows date them
+    // (not set up: the main branch's business-day cutoff).
+    const hours = await websiteHours(tx)
+    return {
+      service: svc,
+      person: who,
+      night: afterMidnight(d.date, d.time, hours.openingHours, hours.cutoff),
+    }
   })
   const serviceName = service
     ? (locale === 'ar' && service.name.ar?.trim()) || service.name.en

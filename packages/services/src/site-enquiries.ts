@@ -228,11 +228,14 @@ export async function setSiteEnquiryStatus(
   return { from: before.status, row: row! }
 }
 
+/** The main branch's opening hours + business-day cutoff (`websiteHours`): what dates a small-hours request. */
+export type EnquiryHours = { openingHours?: OpeningHours | null; cutoff?: string | null }
+
 /** The night a booking request is for, and its time's calendar date: stored since 2026-10-13, else computed. */
-export function enquiryNight(b: SiteEnquiryBooking, hours: OpeningHours | null | undefined) {
+export function enquiryNight(b: SiteEnquiryBooking, hours: EnquiryHours | null | undefined) {
   return typeof b.afterMidnight === 'boolean' && b.calendarDate
     ? { afterMidnight: b.afterMidnight, calendarDate: b.calendarDate }
-    : afterMidnight(b.date, b.time, hours)
+    : afterMidnight(b.date, b.time, hours?.openingHours, hours?.cutoff)
 }
 
 const notRequest = () => new DomainError('Booking request not found', 'not_found')
@@ -320,13 +323,13 @@ const greetingName = (name: string) => {
  * First words of the spa's WhatsApp reply, in the language the visitor wrote in (the staff member adds the rest).
  * The spa's own number sends it to the phone on the enquiry, which anyone can type: only names the CRM resolved
  * (a website service, the booked service) and validated values go in, never the visitor's free text (no links in the
- * spa's name). `hours` (main branch) dates small-hours requests stored before 2026-10-13; `booked` (the booking made
+ * spa's name). `hours` (main branch, `websiteHours`) dates small-hours requests stored before 2026-10-13; `booked` (the booking made
  * from the request, not cancelled) turns it into the confirmation.
  */
 export function siteEnquiryReplyText(
   e: { name: string; locale: string; booking?: SiteEnquiryBooking | null },
   spaName: string,
-  opts: { hours?: OpeningHours | null; booked?: SiteEnquiryBooked | null } = {},
+  opts: { hours?: EnquiryHours | null; booked?: SiteEnquiryBooked | null } = {},
 ) {
   const first = greetingName(e.name)
   const ar = e.locale === 'ar'
