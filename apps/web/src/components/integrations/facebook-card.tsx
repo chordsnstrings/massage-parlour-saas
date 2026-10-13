@@ -8,6 +8,7 @@ import {
   getFacebookAccount,
   integrationEnv,
   MetaApiError,
+  metaConfig,
   metaUrls,
   pendingFacebookPages,
 } from '@spa/services'
@@ -48,8 +49,10 @@ export async function FacebookCard({
 }) {
   const slug = ctx.tenant.slug
   const { t, fmt } = await getI18n()
+  // The Page-linked account's DMs, comments and publishing run through the Instagram keys + webhook, so both apps.
+  const env = await integrationEnv()
   const configured =
-    facebookAppConfig(await integrationEnv()) !== null && Boolean(process.env.BETTER_AUTH_SECRET)
+    metaConfig(env) !== null && facebookAppConfig(env) !== null && Boolean(process.env.BETTER_AUTH_SECRET)
   const premium = await hasFeature(ctx.tenant.id, 'marketing')
   const manage = can(ctx, 'ai.manage')
   const view = facebookView(await withTenant(ctx.tenant.id, (tx) => getFacebookAccount(tx)))

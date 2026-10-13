@@ -148,25 +148,31 @@ describe('config health (G9)', () => {
     expect(configChecks(env).find((c) => c.key === 'GOOGLE')?.detail).toBeUndefined()
   })
 
-  it('Facebook Page connect row: its own Facebook App keys, else the Instagram ones', () => {
+  it('Facebook Page connect row: its own Facebook App keys, else the Instagram ones; needs the Instagram keys', () => {
+    const ig = { META_APP_ID: 'ig', META_APP_SECRET: 's', META_WEBHOOK_VERIFY_TOKEN: 'v' }
     const fb = (env: Record<string, string>, keySources?: Record<string, 'console' | 'env'>) =>
       configChecks(env, { keySources }).find((c) => c.key === 'META_FB')
     expect(fb({ META_APP_ID: 'app' })).toMatchObject({ ok: false, detail: undefined })
-    expect(fb({ META_APP_ID: 'ig', META_APP_SECRET: 's' })).toMatchObject({
-      ok: true,
-      detail: 'same app as Instagram (META_APP_*)',
-    })
+    expect(fb(ig)).toMatchObject({ ok: true, detail: 'same app as Instagram (META_APP_*)' })
     expect(
       fb(
-        { META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 's' },
+        { ...ig, META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' },
         { META_FB_APP_ID: 'console', META_FB_APP_SECRET: 'env' },
       ),
     ).toMatchObject({ ok: true, detail: 'own Facebook app, from console + env' })
-    expect(fb({ META_FB_APP_ID: 'fb', META_APP_SECRET: 's' })).toMatchObject({
-      ok: true,
-      detail: 'only META_FB_APP_ID set (the other comes from META_APP_*)',
+    // Half a Facebook pair would mix the Facebook App ID with the Instagram secret.
+    expect(fb({ ...ig, META_FB_APP_ID: 'fb' })).toMatchObject({
+      ok: false,
+      detail: 'incomplete: set both Facebook App ID and secret',
     })
-    expect(configFlags({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 's' })).toMatchObject({ META_FB: true })
+    expect(fb({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({
+      ok: false,
+      detail: 'needs the Instagram keys too (META_* row)',
+    })
+    expect(configFlags({ ...ig, META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({
+      META_FB: true,
+    })
+    expect(configFlags({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' })).toMatchObject({ META_FB: false })
   })
 
   it('a partial R2 set counts as missing (no silent S3 fallback)', () => {

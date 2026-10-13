@@ -5,6 +5,7 @@ import {
   facebookLoginClient,
   integrationEnv,
   MetaApiError,
+  metaConfig,
   metaUrls,
   saveFacebookLogin,
   verifyState,
@@ -48,8 +49,9 @@ export async function GET(req: NextRequest) {
   const ctx = await requireMember(tenant.slug)
   if (ctx.user.id !== state.u || !can(ctx, 'ai.manage') || !isWritable(ctx.tenant)) return back('forbidden')
   if (!(await hasFeature(ctx.tenant.id, 'marketing'))) return back('forbidden')
-  const cfg = facebookAppConfig(await integrationEnv())
-  if (!cfg) return back('not_configured')
+  const env = await integrationEnv()
+  const cfg = facebookAppConfig(env)
+  if (!cfg || !metaConfig(env)) return back('not_configured')
   const code = q.get('code')
   if (q.get('error') || !code) return back('denied')
 

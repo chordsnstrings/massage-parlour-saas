@@ -61,7 +61,10 @@ Which ID goes where (one Meta app has two different ID/secret pairs):
   accepted (Instagram Login events with the Instagram app secret; Page-linked events and Facebook Login callbacks
   with the Facebook App secret). The webhook verify token is the same for both.
 - The console overview shows the Facebook Page connect row (`META_FB_APP_*`): own Facebook app, or "same app as
-  Instagram" when it falls back to `META_APP_*`.
+  Instagram" when it falls back to `META_APP_*`. It is green only with the Instagram keys too (the Page-linked
+  account's DMs, comments and publishing run through them and the webhook); the spa Facebook card offers Connect
+  under the same rule. Only one of the two Facebook keys is a warning ("incomplete", console badge "Facebook keys
+  incomplete"): the other would fall back to the Instagram value, a mixed pair Meta rejects. Set both or neither.
 
 How it behaves:
 - DMs are answered by the AI receptionist according to AI studio:

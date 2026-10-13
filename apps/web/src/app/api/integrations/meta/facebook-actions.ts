@@ -12,6 +12,7 @@ import {
   instagramAccountTenants,
   integrationEnv,
   MetaApiError,
+  metaConfig,
   metaUrls,
   newNonce,
   pendingFacebookPages,
@@ -39,7 +40,7 @@ export async function connectFacebookAction(slug: string): Promise<ActionResult>
   const env = await integrationEnv()
   const cfg = facebookAppConfig(env)
   const secret = process.env.BETTER_AUTH_SECRET
-  if (!cfg || !secret) return fail('settings.integrations.fb.notices.not_configured')
+  if (!cfg || !metaConfig(env) || !secret) return fail('settings.integrations.fb.notices.not_configured')
   const nonce = newNonce()
   const state = signState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
   const redirectUri = metaUrls((await requestUrls()).api('')).facebookCallback

@@ -46,21 +46,26 @@ const sourceDetail = (sources: Record<string, KeySource> | undefined, keys: stri
 
 /**
  * Facebook Page connect (F19): its own Facebook App ID/secret when set, else the Instagram ones (services
- * `facebookAppConfig`, same fallback key by key); the hint says which.
+ * `facebookAppConfig`, same fallback key by key); the hint says which. Needs the Instagram keys too (the Page-linked
+ * account's DMs, comments and publishing run through them), and only one of the two Facebook keys is a warning:
+ * the pair would mix the Facebook App ID with the Instagram secret.
  */
 function facebookApp(env: Env, sources: Record<string, KeySource> | undefined) {
   const id = env.META_FB_APP_ID?.trim() || env.META_APP_ID?.trim()
   const secret = env.META_FB_APP_SECRET?.trim() || env.META_APP_SECRET?.trim()
   const own = ['META_FB_APP_ID', 'META_FB_APP_SECRET'].filter((k) => env[k]?.trim())
+  const instagram = set(env, 'META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN')
   const detail =
     own.length === 1
-      ? `only ${own[0]} set (the other comes from META_APP_*)`
-      : own.length
-        ? ['own Facebook app', sourceDetail(sources, own)].filter(Boolean).join(', ')
-        : id && secret
-          ? 'same app as Instagram (META_APP_*)'
-          : undefined
-  return { ok: Boolean(id && secret), detail }
+      ? 'incomplete: set both Facebook App ID and secret'
+      : !instagram && id && secret
+        ? 'needs the Instagram keys too (META_* row)'
+        : own.length
+          ? ['own Facebook app', sourceDetail(sources, own)].filter(Boolean).join(', ')
+          : id && secret
+            ? 'same app as Instagram (META_APP_*)'
+            : undefined
+  return { ok: Boolean(id && secret) && own.length !== 1 && instagram, detail }
 }
 
 /** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */

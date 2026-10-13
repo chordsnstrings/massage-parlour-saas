@@ -96,6 +96,8 @@ export async function IntegrationKeysCards() {
   const google = googleConfig(env) !== null
   const metaOn = metaConfig(env) !== null
   const facebookOn = facebookAppConfig(env) !== null
+  // Only one of the two Facebook keys: the other falls back to the Instagram one (a mixed pair Meta rejects).
+  const facebookHalf = ['META_FB_APP_ID', 'META_FB_APP_SECRET'].filter((k) => env[k]?.trim()).length === 1
   const clientId = env.GOOGLE_CLIENT_ID?.trim()
   const oddClientId = clientId && !clientId.endsWith('.apps.googleusercontent.com')
   return (
@@ -189,8 +191,15 @@ export async function IntegrationKeysCards() {
               <Badge tone={metaOn ? 'success' : 'warning'} data-testid="meta-keys-status">
                 {metaOn ? 'configured' : 'not configured'}
               </Badge>
-              <Badge tone={facebookOn ? 'success' : 'warning'} data-testid="meta-fb-keys-status">
-                {facebookOn ? 'Facebook configured' : 'Facebook not configured'}
+              <Badge
+                tone={facebookOn && !facebookHalf ? 'success' : 'warning'}
+                data-testid="meta-fb-keys-status"
+              >
+                {facebookHalf
+                  ? 'Facebook keys incomplete'
+                  : facebookOn
+                    ? 'Facebook configured'
+                    : 'Facebook not configured'}
               </Badge>
             </div>
           }
