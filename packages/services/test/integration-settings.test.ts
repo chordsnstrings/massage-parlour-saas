@@ -165,14 +165,11 @@ describe('console Google + Meta keys (R29)', () => {
     expect(resolveIntegrationEnv(null, env)).toEqual(env)
   })
 
-  it('Facebook App ID/secret (Facebook Page connect): console over env, else the Instagram app keys', async () => {
+  it('Facebook App ID/secret (Facebook Page connect): console over env, never the Instagram app keys', async () => {
     vi.stubEnv('APP_ENCRYPTION_KEY', KEY)
     const env = { META_APP_ID: 'ig-app', META_APP_SECRET: 'ig-secret', META_FB_APP_ID: 'env-fb-app' }
-    // Nothing of its own for the secret → the Instagram one; the env Facebook App ID wins over the Instagram ID.
-    expect(facebookAppConfig(resolveIntegrationEnv(null, env))).toEqual({
-      appId: 'env-fb-app',
-      appSecret: 'ig-secret',
-    })
+    // App 2's secret missing → not configured (R29: no fallback to App 1's Instagram keys, the Facebook dialog rejects them).
+    expect(facebookAppConfig(resolveIntegrationEnv(null, env))).toBeNull()
     expect(await saveIntegrationKeys(platform, { META_FB_APP_SECRET: 'fb-secret-EFGH' }, 'u1')).toEqual({
       set: ['META_FB_APP_SECRET'],
       removed: [],
@@ -202,14 +199,15 @@ describe('console Google + Meta keys (R29)', () => {
       META_FB_APP_ID: 'console',
       META_FB_APP_SECRET: 'console',
     })
-    // Removed from the console → env, then the Instagram keys (one app for both logins).
+    // Removed from the console → env only: half a pair (the ID) is not configured.
     await saveIntegrationKeys(platform, { META_FB_APP_ID: null, META_FB_APP_SECRET: null }, 'u1')
     const back = resolveIntegrationEnv(await loadIntegrationKeys(platform), env)
-    expect(facebookAppConfig(back)).toEqual({ appId: 'env-fb-app', appSecret: 'ig-secret' })
-    expect(facebookAppConfig({ META_APP_ID: 'ig-app', META_APP_SECRET: 'ig-secret' })).toEqual({
-      appId: 'ig-app',
-      appSecret: 'ig-secret',
+    expect(facebookAppConfig(back)).toBeNull()
+    expect(facebookAppConfig({ ...back, META_FB_APP_SECRET: 'env-fb-secret' })).toEqual({
+      appId: 'env-fb-app',
+      appSecret: 'env-fb-secret',
     })
+    expect(facebookAppConfig({ META_APP_ID: 'ig-app', META_APP_SECRET: 'ig-secret' })).toBeNull()
     expect(metaSigningSecrets({ META_APP_SECRET: 'same', META_FB_APP_SECRET: ' same ' })).toEqual(['same'])
     expect(facebookAppConfig({ META_FB_APP_ID: 'fb', META_APP_ID: 'ig' })).toBeNull()
     expect(metaSigningSecrets({})).toEqual([])

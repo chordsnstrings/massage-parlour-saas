@@ -148,19 +148,20 @@ describe('config health (G9)', () => {
     expect(configChecks(env).find((c) => c.key === 'GOOGLE')?.detail).toBeUndefined()
   })
 
-  it('Facebook Page connect row: its own Facebook App keys, else the Instagram ones; needs the Instagram keys', () => {
+  it('Facebook Page connect row: only App 2 Facebook App keys; needs the Instagram keys', () => {
     const ig = { META_APP_ID: 'ig', META_APP_SECRET: 's', META_WEBHOOK_VERIFY_TOKEN: 'v' }
     const fb = (env: Record<string, string>, keySources?: Record<string, 'console' | 'env'>) =>
       configChecks(env, { keySources }).find((c) => c.key === 'META_FB')
     expect(fb({ META_APP_ID: 'app' })).toMatchObject({ ok: false, detail: undefined })
-    expect(fb(ig)).toMatchObject({ ok: true, detail: 'same app as Instagram (META_APP_*)' })
+    // No fallback to the Instagram app's keys (R29: the Facebook dialog rejects them).
+    expect(fb(ig)).toMatchObject({ ok: false, detail: undefined })
     expect(
       fb(
         { ...ig, META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 'fs' },
         { META_FB_APP_ID: 'console', META_FB_APP_SECRET: 'env' },
       ),
     ).toMatchObject({ ok: true, detail: 'own Facebook app, from console + env' })
-    // Half a Facebook pair would mix the Facebook App ID with the Instagram secret.
+    // Half a Facebook pair is a warning.
     expect(fb({ ...ig, META_FB_APP_ID: 'fb' })).toMatchObject({
       ok: false,
       detail: 'incomplete: set both Facebook App ID and secret',

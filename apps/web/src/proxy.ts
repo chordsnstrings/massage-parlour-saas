@@ -1,7 +1,9 @@
 import {
   apiSecurityHeaders,
+  canonicalAddressUrl,
   canonicalScheme,
   crmFeedPath,
+  extraRootAddress,
   hostRoutedUrl,
   htmlDesignPageHeaders,
   newNonce,
@@ -22,7 +24,10 @@ import { ownDomainTarget } from '@/server/own-domain'
 import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
-/** Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — every one serves the whole platform. */
+/**
+ * Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — an extra one keeps answering (POSTs, platform-only
+ * paths) but its pages redirect to the canonical domain (R29).
+ */
 const ROOTS = parseRoots(process.env.ROOT_DOMAIN ?? 'localhost:3000', process.env.EXTRA_ROOT_DOMAINS)
 const BARE_ROOTS = ROOTS.map((r) => r.split(':')[0]!)
 
@@ -110,6 +115,36 @@ export async function proxy(req: NextRequest) {
       `${hostRoutedUrl(old, ROOTS[0]!, canonicalScheme(ROOTS[0]!, process.env.APP_URL), current)}${req.nextUrl.search}`
     const res = NextResponse.redirect(target, safe ? 301 : 308)
     res.headers.set('cache-control', 'private, max-age=300')
+    return res
+  }
+  // R29: a page on an old/extra platform domain (EXTRA_ROOT_DOMAINS: the old sslip.io address) → the same surface,
+  // path + query on the canonical domain, 308, one hop (a spa's free address → its own domain when primary, else its
+  // current slug), so sign-ins and Meta/Google connects only ever start on the canonical domain (the only redirect URIs
+  // registered). GET/HEAD only: forms, server actions and the platform-only paths above keep working there; /api,
+  // /files, /_next and Caddy's /_status never get here, and Caddy keeps issuing the old hosts' certificates
+  // (api/domains/allowed), so the redirect is served over HTTPS.
+  const extra = safe ? extraRootAddress(host, ROOTS, { pathRouting: PATH_ROUTING }) : null
+  if (extra) {
+    const site =
+      extra.surface === 'site'
+        ? `/site/${extra.slug}${req.nextUrl.pathname === '/' ? '' : req.nextUrl.pathname}`
+        : null
+    const own = site ? await ownDomainTarget(site, req.nextUrl.search) : null
+    const current = extra.surface === 'site' ? await currentSlugFor(extra.slug) : null
+    const target =
+      own ??
+      canonicalAddressUrl(
+        extra,
+        ROOTS[0]!,
+        canonicalScheme(ROOTS[0]!, process.env.APP_URL),
+        `${req.nextUrl.pathname}${req.nextUrl.search}`,
+        current,
+      )
+    const res = NextResponse.redirect(target, 308)
+    // Short browser cache, like F23/R20: a config change (or a move back) applies within minutes.
+    res.headers.set('cache-control', 'private, max-age=300')
+    // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+    if (site && crmFeedPath(site)) res.headers.set('access-control-allow-origin', '*')
     return res
   }
   const url = req.nextUrl.clone()

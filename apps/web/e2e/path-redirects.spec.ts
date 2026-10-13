@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
-import { admin, app, base, PATH, PORT } from './helpers'
+import { admin, app, base, PATH, PORT, site } from './helpers'
 
 /** Same-host request as the browser would send it (Node can't resolve *.localhost: ask 127.0.0.1 with the Host). */
 const viaHost = (page: Page, url: string, method: 'GET' | 'HEAD' | 'POST' = 'GET') => {
@@ -78,6 +78,76 @@ test('old path-routed addresses redirect to the host-routed ones on the canonica
 
   await test.step('a browser follows an old link to the sign-in page', async () => {
     await page.goto(`${base}/app/login`)
+    await page.waitForURL(`${app}/login`)
+    await expect(page.getByLabel('Email')).toBeVisible()
+  })
+})
+
+// R29: an old/extra platform domain (EXTRA_ROOT_DOMAINS; production: the old sslip.io address) → every page 308s to the
+// same surface, path + query on the canonical domain, so sign-ins and Meta/Google connects only start there; POSTs
+// (forms, server actions), the API, OAuth discovery and Caddy's certificate check keep working on it.
+test('R29: pages on an old platform domain redirect to the canonical domain; APIs keep working', async ({
+  page,
+}) => {
+  const altHost = (sub: string) => `http://${sub}alt.localhost:${PORT}`
+  await test.step('GET/HEAD → 308, same surface, path + query kept, short cache', async () => {
+    const cases: [string, string][] = PATH
+      ? [
+          [`${alt}/pricing?x=1`, `${base}/pricing?x=1`],
+          [`${alt}/app/login?next=%2Fx`, `${app}/login?next=%2Fx`],
+          [`${wwwAlt}/admin/tenants`, `${admin}/tenants`],
+          [`${alt}/s/some-spa/book?src=qr`, `${site('some-spa')}/book?src=qr`],
+        ]
+      : [
+          [`${alt}/pricing?x=1`, `${base}/pricing?x=1`],
+          [`${wwwAlt}/`, `${base}/`],
+          [`${altHost('app.')}/login?next=%2Fx`, `${app}/login?next=%2Fx`],
+          [
+            `${altHost('app.')}/some-spa/settings/integrations?ig=connected`,
+            `${app}/some-spa/settings/integrations?ig=connected`,
+          ],
+          [`${altHost('admin.')}/tenants?q=x`, `${admin}/tenants?q=x`],
+          [`${altHost('some-spa.')}/book?src=qr&lang=ar`, `${site('some-spa')}/book?src=qr&lang=ar`],
+          [`${altHost('some-spa.')}/book/embed`, `${site('some-spa')}/book/embed`],
+        ]
+    for (const [from, to] of cases) {
+      const res = await viaHost(page, from)
+      expect(res.status(), from).toBe(308)
+      expect(res.headers().location, from).toBe(to)
+      expect(res.headers()['cache-control'], from).toBe('private, max-age=300')
+    }
+    const head = await viaHost(page, PATH ? `${alt}/admin/tenants` : `${altHost('admin.')}/tenants`, 'HEAD')
+    expect(head.status()).toBe(308)
+    expect(head.headers().location).toBe(`${admin}/tenants`)
+  })
+
+  await test.step('left alone there: POSTs, API, OAuth discovery, files', async () => {
+    const dash = PATH ? `${alt}/app` : altHost('app.')
+    const api = PATH ? alt : altHost('app.') // API routes live on the app origin (the bare domain under path routing)
+    expect((await viaHost(page, `${dash}/login`, 'POST')).headers().location).toBeUndefined()
+    for (const url of [
+      `${api}/api/auth/get-session`,
+      `${api}/api/integrations/meta/webhook?hub.mode=subscribe&hub.verify_token=x&hub.challenge=y`,
+      `${api}/.well-known/oauth-authorization-server`,
+      `${alt}/api/health`,
+      `${alt}/files/00000000-0000-0000-0000-000000000000`,
+    ])
+      expect((await viaHost(page, url)).headers().location, url).toBeUndefined()
+  })
+
+  await test.step("Caddy may still issue the old hosts' certificates (the redirect is served over HTTPS)", async () => {
+    for (const host of PATH
+      ? ['alt.localhost']
+      : ['alt.localhost', 'app.alt.localhost', 'admin.alt.localhost']) {
+      const ask = await page.request.get(`${base}/api/domains/allowed?domain=${host}`, {
+        failOnStatusCode: false,
+      })
+      expect(ask.status(), host).toBe(200)
+    }
+  })
+
+  await test.step('a browser on an old sign-in link ends on the canonical sign-in page', async () => {
+    await page.goto(`${PATH ? `${alt}/app` : altHost('app.')}/login`)
     await page.waitForURL(`${app}/login`)
     await expect(page.getByLabel('Email')).toBeVisible()
   })

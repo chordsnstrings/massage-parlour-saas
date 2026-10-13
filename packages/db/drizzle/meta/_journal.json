@@ -393,6 +393,13 @@
       "when": 1791888328638,
       "tag": "0055_r29_facebook_app_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791900104675,
+      "tag": "0056_meta_one_spa_per_account",
+      "breakpoints": true
     }
   ]
 }

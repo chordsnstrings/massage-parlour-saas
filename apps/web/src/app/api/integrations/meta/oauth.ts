@@ -1,9 +1,12 @@
 /** Shared by the connect action and the OAuth callback (not a route). */
-export const NONCE_COOKIE = 'ig_oauth_nonce'
 export const NONCE_PATH = '/api/integrations/meta'
 
-/** Facebook Login for Business (F19): its own nonce cookie, same path. */
-export const FB_NONCE_COOKIE = 'fb_oauth_nonce'
+/**
+ * The nonce cookie of one connect: per flow (Instagram Login `ig`, Facebook Login for Business `fb`, F19) and per spa
+ * (R29: a manager connecting two spas in one browser, e.g. two tabs, doesn't overwrite the first spa's nonce). The
+ * callback reads the spa from the signed state.
+ */
+export const nonceCookie = (flow: 'ig' | 'fb', tenantId: string) => `${flow}_oauth_nonce_${tenantId}`
 
 /** Notices for `?fb=` after the Facebook round trip (text: settings.integrations.fb.notices.*, EN + TH). */
 export const FB_NOTICES: Record<string, 'success' | 'error'> = {

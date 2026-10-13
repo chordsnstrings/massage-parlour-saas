@@ -8,6 +8,7 @@ import {
   integrationEnv,
   sameSecret,
   saveGbpTokens,
+  signedGoogleState,
   verifyGoogleState,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -16,9 +17,9 @@ import { cookies } from 'next/headers'
 import { type NextRequest, NextResponse } from 'next/server'
 import { can, isWritable, requireMember } from '@/server/access'
 import { audit } from '@/server/audit'
-import { requestUrls } from '@/server/origin'
+import { canonicalUrls, requestUrls } from '@/server/origin'
 import { getSession } from '@/server/session'
-import { GBP_COOKIE, GBP_COOKIE_PATH } from '../oauth'
+import { GBP_COOKIE_PATH, gbpCookie } from '../oauth'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,22 +29,25 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams
-  const jar = await cookies()
-  const [nonce, verifier] = (jar.get(GBP_COOKIE)?.value ?? '').split('.')
-  jar.set(GBP_COOKIE, '', { path: GBP_COOKIE_PATH, maxAge: 0 })
-
-  const state = verifyGoogleState(q.get('state'), process.env.BETTER_AUTH_SECRET ?? '')
-  const tenant = state
+  const secret = process.env.BETTER_AUTH_SECRET ?? ''
+  const state = verifyGoogleState(q.get('state'), secret)
+  // R29: an expired but genuine state still names its spa; only a bad signature goes to the dashboard root.
+  const signed = state ?? signedGoogleState(q.get('state'), secret)
+  const tenant = signed
     ? await platformDb().query.tenants.findFirst({
-        where: eq(tenants.id, state.tenantId),
+        where: eq(tenants.id, signed.tenantId),
         columns: { id: true, slug: true },
       })
     : undefined
   const urls = await requestUrls()
-  if (!state || !tenant) return NextResponse.redirect(urls.app('/'))
+  if (!signed || !tenant) return NextResponse.redirect(urls.app('/'))
   const back = (status: string) =>
     NextResponse.redirect(urls.app(`/${tenant.slug}/settings/integrations?gbp=${status}`))
-  if (!sameSecret(nonce, state.nonce) || !verifier) return back('state')
+  // R29: this spa's cookie (one per spa: two spas connecting in one browser don't collide).
+  const jar = await cookies()
+  const [nonce, verifier] = (jar.get(gbpCookie(tenant.id))?.value ?? '').split('.')
+  jar.set(gbpCookie(tenant.id), '', { path: GBP_COOKIE_PATH, maxAge: 0 })
+  if (!state || !sameSecret(nonce, state.nonce) || !verifier) return back('state')
 
   const session = await getSession()
   if (!session || session.user.id !== state.userId) return back('forbidden')
@@ -60,7 +64,7 @@ export async function GET(req: NextRequest) {
       cfg,
       code,
       verifier,
-      redirectUri: googleRedirectUri(urls.api('')),
+      redirectUri: googleRedirectUri(canonicalUrls().api('')), // the same URI the sign-in got
     })
     if (!tokens.scopes.includes(GOOGLE_SCOPE)) {
       status = 'scope'

@@ -15,6 +15,7 @@ import {
   MetaApiError,
 } from './integrations/meta'
 import { decryptSecret, encryptSecret } from './secrets'
+import { claimInstagramAccount, isMetaAccountInUse, MetaAccountInUseError } from './social'
 
 export const FB_PENDING_ID = 'pending'
 /** The card warns this long before Meta's data access (or a token) runs out. */
@@ -231,6 +232,36 @@ export async function facebookPageTenants(pageId: string, o: { platform?: Db } =
       ),
     )
   return [...new Set(rows.map((r) => r.tenantId))]
+}
+
+/**
+ * R29: saves the chosen Page race-proof (one spa per Page and per Instagram account) in one tenant transaction: the
+ * advisory lock on the linked Instagram account (shared with Instagram Login connects) + re-check of the other spas,
+ * then chooseFacebookPage with the pending login's Facebook user id. 'in_use' when another spa has the Page or the
+ * Instagram account connected (the re-check, or a unique index caught a race).
+ */
+export async function saveFacebookPage(
+  tenantId: string,
+  c: Omit<Parameters<typeof chooseFacebookPage>[2], 'fbUserId'>,
+  o: { platform?: Db; app?: Db; now?: Date } = {},
+): Promise<'saved' | 'in_use'> {
+  try {
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        if (c.page.instagram) await claimInstagramAccount(tx, tenantId, c.page.instagram.id, o)
+        if ((await facebookPageTenants(c.page.id, o)).some((id) => id !== tenantId))
+          throw new MetaAccountInUseError()
+        const pending = await pendingFacebookToken(tx)
+        await chooseFacebookPage(tx, tenantId, { ...c, fbUserId: pending?.row.meta.fbUserId ?? null }, o.now)
+      },
+      o.app,
+    )
+    return 'saved'
+  } catch (e) {
+    if (isMetaAccountInUse(e)) return 'in_use'
+    throw e
+  }
 }
 
 /** Lists the Pages of the pending login (DomainError when the login is gone and someone must reconnect). */

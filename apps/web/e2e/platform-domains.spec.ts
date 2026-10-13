@@ -17,9 +17,9 @@ import {
   uniqueSlug,
 } from './helpers'
 
-// The platform answers on every configured domain: getting around stays on the domain the visitor is using, while a
-// spa's own addresses (its site, invites, campaign links) always use the canonical domain.
-test('links and sign-in follow whichever platform domain is used', async ({ page }) => {
+// R29: the canonical domain serves the platform; an extra (old) platform domain redirects every page there (so sign-ins
+// and Meta/Google connects only start on the canonical domain), and a spa's own addresses always use it.
+test('links stay on the canonical domain; an old platform domain redirects there', async ({ page }) => {
   await test.step('canonical domain links to the canonical app', async () => {
     await page.goto(`${base}/features`)
     await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute('href', `${app}/login`)
@@ -92,16 +92,13 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     }
   })
 
-  await test.step('second domain: marketing pages link to the app on that domain', async () => {
-    for (const path of ['/', '/features', '/crm', '/website-builder', '/pricing', '/contact']) {
+  await test.step('second domain: its pages land on the canonical domain, links point there', async () => {
+    for (const path of ['/', '/features', '/pricing']) {
       await page.goto(`${altBase}${path}`)
+      await page.waitForURL(`${base}${path}`)
       await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute(
         'href',
-        `${altApp}/login`,
-      )
-      await expect(page.getByRole('link', { name: 'Get started', exact: true })).toHaveAttribute(
-        'href',
-        `${altApp}/signup`,
+        `${app}/login`,
       )
     }
   })
@@ -116,30 +113,26 @@ test('links and sign-in follow whichever platform domain is used', async ({ page
     expect(res.headers().location).toBe(`http://alt.localhost:${port}/features?x=1`)
   })
 
-  await test.step('second domain: apply, get accepted and land in the dashboard there', async () => {
+  await test.step('second domain: an old dashboard link → apply and sign in on the canonical domain', async () => {
     const slug = uniqueSlug('alt')
-    await page.goto(`${altApp}/signup`)
-    // A spa's address lives on the canonical domain, whichever domain it signs up on.
+    await page.goto(`${altApp}/signup?ref=old`)
+    await page.waitForURL(`${app}/signup?ref=old`)
+    // A spa's address lives on the canonical domain.
     await expect(
       page.getByText(PATH ? `localhost:${new URL(base).port}/s/` : `.localhost:${new URL(base).port}`, {
         exact: true,
       }),
     ).toBeVisible()
     await expect(page.getByText('alt.localhost')).toHaveCount(0)
-    // Apply on this domain (the waiting page stays here too), then the owner accepts.
     const email = `owner-${slug}@e2e.test`
-    await applyForSpa(page, { slug, email, name: 'Noor Haddad', spa: 'Alt Domain Spa', base: altApp })
+    await applyForSpa(page, { slug, email, name: 'Noor Haddad', spa: 'Alt Domain Spa' })
     await approveApplication(email)
-    // G23: the owner is asked to enrol 2FA first — on this domain too.
+    // G23: the owner is asked to enrol 2FA first; an old-domain dashboard link lands on the canonical one.
     await page.goto(`${altApp}/${slug}`)
-    await page.waitForURL((u) => u.href.startsWith(altApp) && enrolUrl(slug).test(u.href))
+    await page.waitForURL((u) => u.href.startsWith(app) && enrolUrl(slug).test(u.href))
     await enableTotp(`owner-${slug}@e2e.test`)
-    await page.goto(`${altApp}/${slug}`)
-    await page.waitForURL(`${altApp}/${slug}`)
-    await expect(page.getByRole('link', { name: 'Website' }).first()).toBeVisible()
-
-    // Navigation stays on this domain; the spa's free address is the canonical one.
     await page.goto(`${altApp}/${slug}/settings/domains`)
+    await page.waitForURL(`${app}/${slug}/settings/domains`)
     await expect(page.getByText(site(slug).replace(/^https?:\/\//, ''), { exact: true })).toBeVisible()
   })
 })
@@ -165,12 +158,17 @@ test('search: marketing robots + sitemap, JSON-LD and social cards; app and admi
   ]
 
   await test.step('robots.txt points at the canonical sitemap, which lists every marketing page', async () => {
-    for (const host of [base, altBase]) {
-      const robots = await (await fetchAs(`${host}/robots.txt`)).text()
-      expect(robots).toContain('User-agent: *')
-      expect(robots).toContain(`Sitemap: ${base}/sitemap.xml`)
-      if (PATH) for (const p of ['/app/', '/admin/']) expect(robots).toContain(`Disallow: ${p}`)
-    }
+    const robots = await (await fetchAs(`${base}/robots.txt`)).text()
+    expect(robots).toContain('User-agent: *')
+    expect(robots).toContain(`Sitemap: ${base}/sitemap.xml`)
+    if (PATH) for (const p of ['/app/', '/admin/']) expect(robots).toContain(`Disallow: ${p}`)
+    // The old domain's robots.txt (R29): the canonical one.
+    const alt = await page.request.get(`http://127.0.0.1:${PORT}/robots.txt`, {
+      headers: { host: new URL(altBase).host },
+      maxRedirects: 0,
+    })
+    expect(alt.status()).toBe(308)
+    expect(alt.headers().location).toBe(`${base}/robots.txt`)
     const xml = await (await fetchAs(`${base}/sitemap.xml`)).text()
     for (const p of pages) expect(xml).toContain(`<loc>${base}${p}</loc>`)
   })

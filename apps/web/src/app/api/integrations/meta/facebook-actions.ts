@@ -1,7 +1,6 @@
 'use server'
 import { withTenant } from '@spa/db'
 import {
-  chooseFacebookPage,
   DomainError,
   disconnectFacebook,
   facebookAppConfig,
@@ -16,7 +15,7 @@ import {
   metaUrls,
   newNonce,
   pendingFacebookPages,
-  pendingFacebookToken,
+  saveFacebookPage,
   signState,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -25,8 +24,8 @@ import { z } from 'zod'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
-import { requestUrls } from '@/server/origin'
-import { FB_NONCE_COOKIE, NONCE_PATH } from './oauth'
+import { canonicalUrls } from '@/server/origin'
+import { NONCE_PATH, nonceCookie } from './oauth'
 
 const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/settings/integrations`)
 
@@ -43,8 +42,9 @@ export async function connectFacebookAction(slug: string): Promise<ActionResult>
   if (!cfg || !metaConfig(env) || !secret) return fail('settings.integrations.fb.notices.not_configured')
   const nonce = newNonce()
   const state = signState({ tenantId: ctx.tenant.id, userId: ctx.user.id, nonce }, secret)
-  const redirectUri = metaUrls((await requestUrls()).api('')).facebookCallback
-  ;(await cookies()).set(FB_NONCE_COOKIE, nonce, {
+  // R29: the canonical callback only (old platform domains redirect there); the callback reuses it for the exchange.
+  const redirectUri = metaUrls(canonicalUrls().api('')).facebookCallback
+  ;(await cookies()).set(nonceCookie('fb', ctx.tenant.id), nonce, {
     httpOnly: true,
     sameSite: 'lax',
     secure: redirectUri.startsWith('https://'),
@@ -93,15 +93,9 @@ export async function chooseFacebookPageAction(
     } catch {
       webhooks = 'failed'
     }
-    await withTenant(tenantId, async (tx) => {
-      const pending = await pendingFacebookToken(tx)
-      await chooseFacebookPage(tx, tenantId, {
-        page,
-        info,
-        fbUserId: pending?.row.meta.fbUserId ?? null,
-        webhooks,
-      })
-    })
+    // R29: the lock + re-check + save in one transaction (a connect of the same account elsewhere can't slip past).
+    if ((await saveFacebookPage(tenantId, { page, info, webhooks })) === 'in_use')
+      return fail('settings.integrations.fb.notices.in_use')
     await audit({
       tenantId,
       actorUserId: ctx.user.id,

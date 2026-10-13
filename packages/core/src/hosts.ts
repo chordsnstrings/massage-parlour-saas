@@ -124,6 +124,50 @@ export function hostRoutedUrl(
   return `${scheme}://${address.surface}.${root}${`${slug ? `/${slug}` : ''}${address.rest}` || '/'}`
 }
 
+/** R29: an address on an extra platform domain (EXTRA_ROOT_DOMAINS), by surface; `slug` = a spa's free address. */
+export type ExtraRootAddress = { surface: 'marketing' | 'app' | 'admin' } | { surface: 'site'; slug: string }
+
+/**
+ * R29: the surface a request on an old/extra platform domain (EXTRA_ROOT_DOMAINS, e.g. `<ip>.sslip.io`) is for, so the
+ * proxy can send it to the canonical root (`roots[0]`): the bare root or www. (marketing), `app.`, `admin.`, `{slug}.`.
+ * Null on the canonical root, custom domains, deeper hosts and non-slug labels. Under path routing the platform is the
+ * bare root only (its paths carry the surface), so only the bare extra root (or www.) counts.
+ */
+export function extraRootAddress(
+  hostHeader: string,
+  roots: readonly string[],
+  { pathRouting }: { pathRouting: boolean },
+): ExtraRootAddress | null {
+  const matched = matchRoot(hostHeader, roots)
+  if (!matched || matched === roots[0]) return null
+  const surface = resolveSurface(hostHeader, roots)
+  if (surface.kind === 'marketing') return { surface: 'marketing' }
+  if (pathRouting) return null
+  if (surface.kind === 'app' || surface.kind === 'admin') return { surface: surface.kind }
+  return surface.kind === 'site' && checkSlug(surface.slug).ok
+    ? { surface: 'site', slug: surface.slug }
+    : null
+}
+
+/**
+ * Its URL on the canonical `root` (port kept) with the same path + query (`pathAndQuery`, e.g. '/x?y=1'): marketing →
+ * the bare root, else `app.` / `admin.` / `{slug}.` (`current` = a renamed spa's current slug, F23). The host comes from
+ * config and a validated slug only, never from other request input (no open redirect).
+ */
+export function canonicalAddressUrl(
+  address: ExtraRootAddress,
+  root: string,
+  scheme: 'http' | 'https',
+  pathAndQuery: string,
+  current?: string | null,
+): string {
+  const sub =
+    address.surface === 'marketing'
+      ? ''
+      : `${address.surface === 'site' ? current || address.slug : address.surface}.`
+  return `${scheme}://${sub}${root}${pathAndQuery || '/'}`
+}
+
 /**
  * R20: site paths a spa's temporary address keeps serving after its own domain is primary — the booking widget's iframe
  * (`/book/embed`, where snippets on the spa's other websites point) and `robots.txt` (that host still serves

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canonicalAddressUrl,
   canonicalScheme,
+  extraRootAddress,
   hostRoutedUrl,
   keepsTemporaryAddress,
   ownDomainUrl,
@@ -119,6 +121,62 @@ describe('path-routed → host-routed addresses', () => {
     expect(canonicalScheme('localhost:3000')).toBe('http')
     expect(canonicalScheme('10.0.0.5')).toBe('http')
     expect(canonicalScheme('localhost:3000', 'https://app.localhost:3000')).toBe('https')
+  })
+})
+
+// R29: pages on an extra (old) platform domain → the same surface on the canonical root (proxy.ts), so OAuth redirect URIs
+// are only ever needed for the canonical domain.
+describe('extra platform domain → canonical domain', () => {
+  const roots = parseRoots('spamanagement.co', '134-209-145-162.sslip.io')
+  const OLD = '134-209-145-162.sslip.io'
+  const HOST = { pathRouting: false }
+  const to = (host: string, pathAndQuery: string, current?: string | null, pathRouting = false) => {
+    const a = extraRootAddress(host, roots, { pathRouting })
+    return a && canonicalAddressUrl(a, roots[0]!, 'https', pathAndQuery, current)
+  }
+
+  it('maps each surface, path + query kept', () => {
+    expect(to(OLD, '/pricing?x=1')).toBe('https://spamanagement.co/pricing?x=1')
+    expect(to(`www.${OLD}`, '/')).toBe('https://spamanagement.co/')
+    expect(to(`app.${OLD}`, '/pilot/settings/integrations?ig=state')).toBe(
+      'https://app.spamanagement.co/pilot/settings/integrations?ig=state',
+    )
+    expect(to(`ADMIN.${OLD}.`, '/tenants')).toBe('https://admin.spamanagement.co/tenants')
+    expect(to(`pilot.${OLD}`, '/book?src=qr&lang=ar')).toBe(
+      'https://pilot.spamanagement.co/book?src=qr&lang=ar',
+    )
+    expect(to(`pilot.${OLD}`, '')).toBe('https://pilot.spamanagement.co/')
+    // A renamed spa goes straight to its current slug (F23).
+    expect(to(`old-name.${OLD}`, '/about', 'new-name')).toBe('https://new-name.spamanagement.co/about')
+    expect(extraRootAddress(`pilot.${OLD}`, roots, HOST)).toEqual({ surface: 'site', slug: 'pilot' })
+  })
+
+  it('leaves the canonical domain, custom domains, deep hosts and non-slugs alone', () => {
+    for (const host of [
+      'spamanagement.co',
+      'app.spamanagement.co',
+      'pilot.spamanagement.co',
+      'www.serenityspa.ae',
+      `a.b.${OLD}`,
+      `-bad.${OLD}`,
+      'sslip.io',
+    ])
+      expect(extraRootAddress(host, roots, HOST), host).toBeNull()
+    expect(extraRootAddress(OLD, parseRoots('spamanagement.co'), HOST)).toBeNull()
+  })
+
+  it('path routing: only the bare domain (its paths carry the surface)', () => {
+    expect(to(OLD, '/app/pilot?x=1', null, true)).toBe('https://spamanagement.co/app/pilot?x=1')
+    expect(to(`www.${OLD}`, '/s/pilot', null, true)).toBe('https://spamanagement.co/s/pilot')
+    expect(extraRootAddress(`app.${OLD}`, roots, { pathRouting: true })).toBeNull()
+  })
+
+  it('keeps a dev port; the most specific root wins', () => {
+    const dev = parseRoots('localhost:3100', 'alt.localhost:3100')
+    const a = extraRootAddress('app.alt.localhost:3100', dev, HOST)!
+    expect(canonicalAddressUrl(a, dev[0]!, 'http', '/login')).toBe('http://app.localhost:3100/login')
+    expect(extraRootAddress('app.localhost:3100', dev, HOST)).toBeNull()
+    expect(extraRootAddress('alt.localhost:3100', dev, HOST)).toEqual({ surface: 'marketing' })
   })
 })
 

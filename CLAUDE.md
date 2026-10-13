@@ -134,7 +134,10 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
   addresses that are shared, stored or sent (spa site/`publicSiteUrl`, invites, preview share links, public file URLs).
   Links to a spa's live site always via `publicSiteUrl` (worker: `publicSiteBase`/`spaSiteUrl`): own domain once primary,
   the temporary address 301s there (R20); `.site()` only for the free address itself (CODEMAP URLs).
-  OAuth runs on the domain it starts on (register each domain's callback); CNAME target = CF_CNAME_TARGET
+  Old/extra platform domains' pages 308 to the canonical domain (R29), so OAuth only ever starts there: register
+  only the canonical callbacks (`canonicalUrls()`). Next makes a proxy redirect's Location relative when it names its
+  own listen address, so e2e binds `-H 0.0.0.0` like production (a local dev with ROOT_DOMAIN=localhost:PORT +
+  EXTRA_ROOT_DOMAINS would loop the old-domain → bare canonical redirect); CNAME target = CF_CNAME_TARGET
   (site.env move block: customers.spamanagement.co; unset = APP_URL host); worker jobs use APP_URL.
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);

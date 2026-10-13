@@ -855,8 +855,8 @@ new hosts. Steps and undo: deploy/droplet/README.md "Move to spamanagement.co" (
   can't be host-poisoned), custom-domain validation and the on-demand TLS gate all accept every platform domain.
 - Shared/stored/sent addresses use the canonical domain (`canonicalUrls()`): a spa's site address (`publicSiteUrl`,
   GBP booking link, campaign and WhatsApp links), invites, preview share links, public file URLs for Instagram.
-- OAuth (Meta, Google) runs entirely on the domain it starts on — session and nonce cookies are per host — so each
-  platform domain's callback URL is registered with the provider. No visitor → canonical `APP_URL`: Meta
+- Old/extra platform domains' pages 308 to the canonical domain (R29), so OAuth (Meta, Google) only starts there:
+  register only the canonical callbacks (`canonicalUrls()`). No visitor → canonical `APP_URL`: Meta
   webhooks/deauthorize/data-deletion, worker jobs; the spa CNAME target is `CF_CNAME_TARGET` (unset = the `APP_URL` host).
 
 ### 14.6 Spa dashboard redesign — Be Relax CRM (decided 2026-10-08)
@@ -1278,10 +1278,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   spa.experience_image (4:5 crop) and booking.image (2:3) + new EN/AR alt texts (AR alts need review); upload v2.1, not v2.
   Be Relax itself keeps its branded photos (its own v1 look is pinned as website content on the switch).
 - **R29 Google + Meta app keys in the console (owner, 2026-10-13: "Yes, build it"):** Company (Settings) page gets a
-  **Google** card (Client ID, Client secret; lists the OAuth redirect URI per platform domain + the APIs to enable) and a
+  **Google** card (Client ID, Client secret; lists the OAuth redirect URI — canonical domain only since the Meta setup
+  fixes below — + the APIs to enable) and a
   **Meta (Instagram & Facebook)** card (Instagram app ID, Instagram app secret, Webhook verify token, optional Facebook
   Login for Business config id; follow-up: optional **Facebook App ID / secret** for Facebook Page connect, since with
-  Instagram Login the Instagram app ID differs from the Facebook App ID; unset = the Instagram values; lists the
+  Instagram Login the Instagram app ID differs from the Facebook App ID; both required for Facebook Page connect, no
+  fallback to the Instagram values since R29; lists the
   redirect, webhook, deauthorize and data-deletion URLs). Stored in `platform_settings` like the Resend / Turnstile keys
   (secrets sealed, write-only, last 4 shown), super-admin + 2FA saves audited by key name only. **Each key: console
   value, else env** — one resolver `integrationEnv()` (services `integration-settings.ts`, 30 s cache, invalidated on
@@ -1317,6 +1319,33 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   optionally reset Website content `spa.experience_image(_alt)` + `booking.image(_alt)` for v2's new photos → Publish.
   Known gaps: a CSP-sandboxed design page gets no browser-cache reuse in Chromium (opaque origin), so repeat visits
   download 0.9 MB again; Arabic pages show the fallback font ~0.3 s.
+- **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
+  1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
+     bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when
+     primary / current slug, one hop; short cache). POSTs, `/api/*` (OAuth callbacks, webhook, `/api/domains/allowed`),
+     `/files`, `/.well-known`, `/_status` stay; certificates still issued. Redirect URIs: canonical only (connect
+     actions + callbacks use `canonicalUrls()`; console + spa cards list one URL; `allPlatformUrls` dropped).
+  2. **Console Meta card:** two apps explained, what goes where — App 1 Instagram (Business login settings: OAuth
+     redirect, deauthorize, data deletion, webhook + verify token → Instagram app ID/secret, verify token), App 2
+     Facebook (Facebook Login for Business → Settings: Valid OAuth Redirect URIs, same deauthorize/deletion/webhook,
+     configuration token type User access token → Facebook App ID/secret, config ID); both: App Domains, Strict
+     Mode + Enforce HTTPS on, JS SDK off; trailing-slash hint. Facebook Page connect needs App 2's own pair (no
+     fallback to App 1's keys: services `facebookAppConfig` + core config-health; "Facebook not configured" without it).
+  3. **One spa per account, race-proof:** cross-tenant partial unique indexes (migration 0056
+     `meta_one_spa_per_account`, with a no-op-in-production clean-up of dev/test duplicates) + advisory lock on the
+     Instagram account id around re-check + save (Instagram Login vs Facebook Page); unique violation → "in use".
+  4. **Graph v21.0 → v25.0** (v21.0 retires 2027-01-21; v25.0 until 2028-07-29): v22–v25 + Instagram Platform
+     changelogs checked for every endpoint used, nothing breaking (INTEGRATIONS.md §1 lists them with sources).
+  5. **Facebook-path webhooks:** Page install `subscribed_fields=feed,messages` (fallback `feed`); Instagram fields
+     subscribed in App 2's dashboard; parser takes `object: instagram` (entry.id = IG account) and ignores `page`
+     events. Live test still due once App 2 exists.
+  6. **Nonce + expired state:** nonce cookies per flow and spa (`ig_/fb_oauth_nonce_{tenantId}`, `gbp_oauth_{tenantId}`
+     for Google, same pattern); an expired but signed state returns to that spa's integrations page with the `state`
+     notice (only a bad signature → dashboard root).
+  7. **Docs:** INTEGRATIONS.md §1 (App 1 / App 2 table, toggles, approval path: Business Verification → app settings →
+     Instagram testers → App Review per permission with screen recordings → publish; Tech Provider Access Verification
+     retired 2026-10-09), droplet README Meta + EXTRA_ROOT_DOMAINS, CODEMAP, CLAUDE.md gotcha.
+  Changed TH strings (two redirect URI labels shortened) need native review.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
@@ -1692,10 +1721,11 @@ others till end — finish everything"), built after the Premium/Standard plans 
 - Resend API key: console Settings → Email — README "Staff email (Resend)".
 - Make sure ask@spamanagement.co receives mail (mailbox/forwarding) — §18.4.
 - Google Cloud: enable My Business Place Actions API + Google Search Console API, add the `webmasters` scope to the
-  consent screen, register each domain's OAuth callback; spas connected before F17 reconnect — README "Google".
+  consent screen, register the canonical OAuth callback (old domains redirect, R29); spas connected before F17 reconnect — README "Google".
 - Search Console: add `sc-domain:spamanagement.co` and submit the marketing sitemap — README "Google".
-- Meta: Facebook Login for Business configuration (optional `META_FB_CONFIG_ID`), app review for the new permissions,
-  redirect URI, Instagram comments webhook field — README "Meta".
+- Meta: two apps (R29: App 1 Instagram Login, App 2 Facebook Login for Business + configuration `META_FB_CONFIG_ID`),
+  app review for the permissions, redirect URIs, Instagram webhook fields `messages` + `comments` in both apps, then a
+  live DM + comment test through App 2 — README "Meta", INTEGRATIONS.md §1.
 - GitHub: if CodeQL "default setup" is on, switch to advanced so `codeql.yml` runs (a private repo needs GitHub Code
   Security); turn on Dependabot alerts. Dismiss the CodeQL alert `js/insufficient-password-hash` (restore-drill.ts,
   derived `spa_drill` password from a generated secret) as "Won't fix" — reasoning on PR #22.

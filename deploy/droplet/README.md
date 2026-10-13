@@ -192,25 +192,32 @@ the address — a custom domain without one is added with `sites.add` and must t
 
 ## Meta: Instagram + Facebook Page (F18, F19)
 
-One Meta app with two products (keys in the console, Settings → Meta, or env). Instagram Login uses the **Instagram
-app ID/secret** (`META_APP_ID` / `META_APP_SECRET`, + `META_WEBHOOK_VERIFY_TOKEN`); Facebook Login uses the **Facebook
-App ID/secret** (App settings → Basic: `META_FB_APP_ID` / `META_FB_APP_SECRET`; unset = `META_APP_*`):
-1. **Instagram API with Instagram Login** (existing): redirect `https://app.<domain>/api/integrations/meta/callback`,
-   webhook `…/api/integrations/meta/webhook` (fields `messages`, `comments`), deauthorize + data-deletion URLs (the
-   Instagram card lists them). Permissions for app review: `instagram_business_basic`,
-   `instagram_business_manage_messages`, `instagram_business_manage_comments` (comment replies **and private
-   replies**), `instagram_business_content_publish` (feed posts, **reels, stories, carousels**).
-2. **Facebook Login for Business** (F19): add the product, then **Valid OAuth Redirect URIs** =
-   `https://app.<domain>/api/integrations/meta/facebook/callback` (the Facebook card shows it).
-   Optional: create a Login for Business **configuration** (user access token, the permissions below) and set
-   `META_FB_CONFIG_ID` to its id; unset = the dialog asks for the permission list directly. Permissions for app
-   review: `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
+Two Meta apps (keys in the console, Settings → Meta, or env; R29): a Meta app holds only **one** Instagram setup
+(Instagram Login *or* Facebook Login), so App 1 serves Instagram Login and App 2 Facebook Login. Exact URL table,
+toggles and the approval path: docs/INTEGRATIONS.md §1 (the console card lists every URL with copy buttons).
+1. **App 1 — Instagram API with Instagram Login**: Instagram → API setup with Instagram login → Business login
+   settings → OAuth redirect URI `https://app.<domain>/api/integrations/meta/callback`, deauthorize + data-deletion
+   URLs, webhook `…/api/integrations/meta/webhook` (fields `messages`, `comments`) + the verify token. Keys: the
+   **Instagram app ID/secret** (`META_APP_ID` / `META_APP_SECRET`) + `META_WEBHOOK_VERIFY_TOKEN`. Permissions for app
+   review: `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`
+   (comment replies **and private replies**), `instagram_business_content_publish` (feed posts, **reels, stories,
+   carousels**).
+2. **App 2 — Facebook Login for Business** (F19): Facebook Login for Business → Settings → **Valid OAuth Redirect
+   URIs** = `https://app.<domain>/api/integrations/meta/facebook/callback` (the Facebook card shows it); the same
+   deauthorize + data-deletion URLs; Webhooks → **Instagram** object: the same callback URL + verify token, fields
+   `messages`, `comments` (Meta sends them for Pages that have the app installed: choosing a Page installs it with
+   `subscribed_apps`, fields `feed,messages`, or `feed` alone if Meta refuses `messages`). Keys: App settings → Basic
+   **App ID/secret** (`META_FB_APP_ID` / `META_FB_APP_SECRET`; the Facebook dialog rejects the Instagram app ID).
+   Optional: a Login for Business **configuration** (token type User access token, the permissions below) →
+   `META_FB_CONFIG_ID`; unset = the dialog asks for the permission list directly. Permissions for app review:
+   `pages_show_list`, `pages_read_engagement`, `pages_manage_metadata`, `pages_manage_posts`,
    `pages_read_user_content`, `pages_manage_engagement`, `business_management`, `instagram_basic`,
-   `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`. Also subscribe the app's
-   **Instagram** webhook object to `comments` (Facebook Login path) so comments on a Page-linked account reach the
-   inbox; the app is installed on the chosen Page (`subscribed_apps`, field `feed`) automatically.
-   Deauthorize / data-deletion callbacks are the same URLs as Instagram's (they also clear Page tokens). The webhook,
-   deauthorize and data-deletion URLs accept either app's signature (Instagram app secret or Facebook App secret).
+   `instagram_manage_comments`, `instagram_manage_messages`, `instagram_content_publish`.
+   The webhook, deauthorize and data-deletion URLs accept either app's signature (Instagram app secret or Facebook
+   App secret); they also clear Page tokens.
+Both apps: App Domains `spamanagement.co`, Strict Mode + Enforce HTTPS on, JavaScript SDK off; Graph API v25.0. One
+Instagram account / Page belongs to one spa (race-proof check at connect). A live DM + comment test through App 2 is
+still due once it exists.
 
 Until app review passes, only people with a role on the Meta app (admins, developers, testers) can connect. Page
 tokens don't expire, but Meta's data access lapses 90 days after the person last signed in: the card warns 14 days
@@ -277,8 +284,10 @@ which domains are ours:
 - `SITE_HOST` — the canonical domain (Caddy's main site; `ROOT_DOMAIN` derives from it). Every address that is shared
   or stored uses it (spa site links, invites, campaign links), as do worker jobs (`APP_URL`). The CNAME target shown
   to spas is `CF_CNAME_TARGET` (`customers.<SITE_HOST>`; unset = the `APP_URL` host).
-- `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — more domains that serve the whole platform (one line
-  holding all of them).
+- `EXTRA_ROOT_DOMAINS` (optional, space or comma separated) — older/extra platform domains (one line holding all of
+  them). R29: their pages (GET/HEAD) 308 to the same surface, path + query on `ROOT_DOMAIN` (a spa's free address → its
+  own domain when primary); POSTs, `/api/*`, `/files/*`, `/.well-known/*` keep working there, and their certificates
+  are still issued, so the redirect is served over HTTPS. OAuth redirect URIs are only needed for `ROOT_DOMAIN`.
 
 **TLS (no Caddyfile edit):** Caddy gets the `SITE_HOST` certificate at start; every other host (`www.`, `app.`,
 `admin.`, `{slug}.`, the extra domains, spa custom domains) gets one **on demand** on its first visit, approved by
@@ -305,9 +314,10 @@ From `134-209-145-162.sslip.io` with path routing to `spamanagement.co` with hos
    - Google Cloud → Credentials → OAuth client → Authorized redirect URIs: add
      `https://app.spamanagement.co/api/integrations/google/callback`; OAuth consent screen → Authorized domains: add
      `spamanagement.co`.
-   - Meta app → Instagram API with Instagram login → Business login settings → OAuth redirect URIs: add
-     `https://app.spamanagement.co/api/integrations/meta/callback` (+ `/api/integrations/meta/facebook/callback` for
-     Facebook Login); App domains: add `spamanagement.co`.
+   - Meta App 1 → Instagram API with Instagram login → Business login settings → OAuth redirect URIs: add
+     `https://app.spamanagement.co/api/integrations/meta/callback`; Meta App 2 → Facebook Login for Business →
+     Settings → Valid OAuth Redirect URIs: add `https://app.spamanagement.co/api/integrations/meta/facebook/callback`;
+     both apps' App domains: add `spamanagement.co` (two apps since R29, see "Meta" above).
 3. **Merge in two pushes** (the first deploy of a changed `update.sh` still runs the previous copy, which doesn't
    read site.env; the switch also needs a rollback target without it):
    1. PR 1, the updater, with the move lines in `site.env` commented out (no visible change). Wait until
@@ -390,10 +400,16 @@ is); an installed dashboard app leaves its own scope on the redirect, so reinsta
 Google/Meta connect started before the switch must be started again; push notifications (they belong to the old
 address, which keeps showing them): staff who had them on enable them again on `app.spamanagement.co` and block
 notifications for `134-209-145-162.sslip.io` in the browser's site settings (else every one arrives twice). Keep the
-old address in `EXTRA_ROOT_DOMAINS` while Meta's URLs or old links may still point at it.
+old address in `EXTRA_ROOT_DOMAINS` while old links may still point at it.
 
-Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first, register its OAuth callbacks,
-then make it `SITE_HOST` (with `APP_URL` / `ADMIN_URL` to match) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
+**Since R29 (2026-10-13)** every other page on the old address (GET/HEAD: `app.`, `admin.`, the bare domain + `www.`,
+`{slug}.`) 308s to the same path + query on spamanagement.co (a spa's free address → its own domain when primary, a
+renamed slug → the current one), so sign-ins and Google/Meta connects only start on the canonical domain and only its
+callbacks need registering. POSTs (forms, server actions), `/api/*`, `/files/*`, `/.well-known/*` and `/_status/*`
+stay as listed above.
+
+Generic rule for any later move: add the new domain to `EXTRA_ROOT_DOMAINS` first (its pages then redirect to the
+current canonical domain, R29), register its OAuth callbacks, then make it `SITE_HOST` (with `APP_URL` / `ADMIN_URL` to match) and keep the old one in `EXTRA_ROOT_DOMAINS` so links
 already sent keep working.
 
 ## Creating the droplet

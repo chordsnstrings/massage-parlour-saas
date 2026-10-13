@@ -19,7 +19,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-
 import { automationOnSql } from './automations'
 import { findOrCreateClient } from './clients'
 import { entitledSql } from './entitlements'
-import { DomainError } from './errors'
+import { DomainError, pgCode, pgConstraint } from './errors'
 import { integrationEnv } from './integration-settings'
 import {
   appOrigin,
@@ -220,6 +220,59 @@ async function instagramOwners(igUserId: string, o: SocialOpts) {
 /** Every tenant with this Instagram account connected, whatever its billing status (OAuth "already in use" check). */
 export async function instagramAccountTenants(igUserId: string, o: SocialOpts = {}) {
   return (await instagramOwners(igUserId, o)).map((r) => r.tenantId)
+}
+
+/** R29: an Instagram account or Facebook Page that another spa already has connected (one spa per Meta account). */
+export class MetaAccountInUseError extends Error {
+  constructor() {
+    super('That account is already connected to another spa.')
+    this.name = 'MetaAccountInUseError'
+  }
+}
+
+/** R29: the cross-tenant unique indexes behind "one spa per Meta account" (migration 0056). */
+const META_ACCOUNT_INDEXES = new Set(['social_accounts_meta_connected', 'social_accounts_fb_ig_connected'])
+
+/** True for the "already in use" outcomes: the re-check under the lock, or a unique index (a reconnect, a Page race). */
+export const isMetaAccountInUse = (e: unknown) =>
+  e instanceof MetaAccountInUseError ||
+  (pgCode(e) === '23505' && META_ACCOUNT_INDEXES.has(pgConstraint(e) ?? ''))
+
+/**
+ * R29: call first inside the transaction that saves a connection of this Instagram account (Instagram Login, or a
+ * Facebook Page linked to it). Holds an advisory lock on the account id until that transaction ends — both connect
+ * types take it, so an Instagram Login row in one spa and a Page row in another can't both pass — then re-checks the
+ * other spas on a fresh snapshot (committed rows only). Throws MetaAccountInUseError.
+ */
+export async function claimInstagramAccount(tx: Tx, tenantId: string, igUserId: string, o: SocialOpts = {}) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`meta-ig:${igUserId}`}, 0))`)
+  if ((await instagramAccountTenants(igUserId, o)).some((id) => id !== tenantId))
+    throw new MetaAccountInUseError()
+}
+
+/**
+ * Instagram Login callback (R29: race-proof "one spa per account"): claim + save in one tenant transaction.
+ * 'in_use' when another spa has the account connected (the re-check, or a unique index caught a race).
+ */
+export async function connectInstagramAccount(
+  tenantId: string,
+  c: Parameters<typeof saveInstagramConnection>[2],
+  o: SocialOpts = {},
+): Promise<'connected' | 'in_use'> {
+  try {
+    await withTenant(
+      tenantId,
+      async (tx) => {
+        await claimInstagramAccount(tx, tenantId, c.igUserId, o)
+        await saveInstagramConnection(tx, tenantId, c, o.now)
+      },
+      appOf(o),
+    )
+    return 'connected'
+  } catch (e) {
+    if (isMetaAccountInUse(e)) return 'in_use'
+    throw e
+  }
 }
 
 /**

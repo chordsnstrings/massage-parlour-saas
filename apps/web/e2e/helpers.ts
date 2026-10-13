@@ -37,7 +37,7 @@ export const PATH = process.env.E2E_ROUTING === 'path'
 export const base = `http://localhost:${PORT}`
 export const app = PATH ? `${base}/app` : `http://app.localhost:${PORT}`
 export const admin = PATH ? `${base}/admin` : `http://admin.localhost:${PORT}`
-/** The same platform on its second domain (EXTRA_ROOT_DOMAINS in playwright.config.ts). */
+/** The second (old) platform domain (EXTRA_ROOT_DOMAINS in playwright.config.ts): its pages redirect to the canonical one (R29). */
 export const altBase = `http://alt.localhost:${PORT}`
 export const altApp = PATH ? `${altBase}/app` : `http://app.alt.localhost:${PORT}`
 export const site = (slug: string) => (PATH ? `${base}/s/${slug}` : `http://${slug}.localhost:${PORT}`)
@@ -57,7 +57,7 @@ export const PNG = Buffer.from(
 
 /**
  * Fills and sends "Apply for your spa" (PLAN §18.3) and lands on the applicant's waiting page. Signed out: creates the
- * login too. `base` = the app origin to use (the second platform domain in platform-domains.spec).
+ * login too. `base` = the app origin to use (default: the canonical one).
  */
 export async function applyForSpa(
   page: Page,

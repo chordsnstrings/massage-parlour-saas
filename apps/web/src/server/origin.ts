@@ -9,7 +9,9 @@ import { adminPath, appPath, PATH_ROUTING } from '@/lib/paths'
  *   A Host that isn't one of ours (forged, or a spa's custom domain) falls back to the canonical domain. Request-scoped
  *   (reads headers()), so pages using it render per request and never bake a domain in at build time.
  * - canonicalUrls(): addresses that are shared, stored or sent to others (a spa's site address, invites, campaign and
- *   booking links, public file URLs) — always the canonical domain, so they outlive whichever domain staff used.
+ *   booking links, public file URLs) — always the canonical domain, so they outlive whichever domain staff used. Also
+ *   what is registered with outside services (OAuth redirect URIs): pages on an extra domain redirect to the canonical
+ *   one (R29, proxy.ts), so every sign-in and connect starts there.
  */
 
 /** Configured platform domains, canonical first. A dev port may be included. */
@@ -72,17 +74,6 @@ export const requestUrls = async () => builders(await requestDomain())
 
 /** URL builders for the canonical domain: for addresses that are shared, stored or sent to others. */
 export const canonicalUrls = () => builders(canonicalDomain())
-
-/**
- * URL builders for every configured platform domain, canonical first: what must be registered once per domain with
- * an outside service (R29: OAuth redirect URIs, since a sign-in stays on the domain it starts on).
- */
-export const allPlatformUrls = () =>
-  platformRoots().map((root, i) =>
-    i === 0
-      ? canonicalUrls()
-      : builders((sub?: string) => `${isLocal(root) ? 'http' : 'https'}://${sub ? `${sub}.` : ''}${root}`),
-  )
 
 export const appUrl = async (path = '/') => (await requestUrls()).app(path)
 export const adminUrl = async (path = '/') => (await requestUrls()).admin(path)

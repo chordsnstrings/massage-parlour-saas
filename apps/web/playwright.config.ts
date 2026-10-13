@@ -29,7 +29,10 @@ export default defineConfig({
   webServer: {
     // E2E_SERVER=start serves the existing production build (`pnpm --filter @spa/web build`, same NEXT_PUBLIC_ROUTING).
     // CI uses it: the dev server compiles every route on demand and grew past 13 GB over the full suite (OOM).
-    command: `node scripts/next.mjs ${process.env.E2E_SERVER === 'start' ? 'start' : 'dev'} -p ${PORT}`,
+    // `-H 0.0.0.0` as in production (Dockerfile HOSTNAME): Next makes a proxy redirect's Location relative when it
+    // names Next's own listen address, which would be localhost:PORT = ROOT_DOMAIN here and loop the old-domain →
+    // canonical redirect (R29).
+    command: `node scripts/next.mjs ${process.env.E2E_SERVER === 'start' ? 'start' : 'dev'} -p ${PORT} -H 0.0.0.0`,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
     timeout: 180_000,
@@ -57,7 +60,7 @@ export default defineConfig({
       // (owners of fixed e2e slugs).
       SITE_AI_EDITOR_EMAILS:
         'owner-ai-editor@e2e.test,owner-mcp-editor@e2e.test,owner-gpt-editor@e2e.test,owner-texts-editor@e2e.test,owner-rollout-editor@e2e.test,owner-seo-editor@e2e.test',
-      // A second platform domain (resolves to loopback): links and sign-in must follow whichever domain is used.
+      // A second (old) platform domain (resolves to loopback): its pages redirect to the canonical one (R29).
       EXTRA_ROOT_DOMAINS: `alt.localhost:${PORT}`,
       RESEND_API_KEY: '',
       // The suite signs up dozens of owners from one IP; a production build would otherwise rate-limit them.

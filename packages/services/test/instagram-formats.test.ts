@@ -40,6 +40,8 @@ process.env.BETTER_AUTH_SECRET ??= 'test-secret-test-secret-test-secret'
 const { platform, app } = testDbs()
 const env = { META_APP_ID: 'app-1', META_APP_SECRET: 'shh-secret', META_WEBHOOK_VERIFY_TOKEN: 'verify-me' }
 const base = { platform, app, env, sleep: async () => {} }
+/** App 2 (Facebook Login for Business) keys on top: Facebook Page token checks need them (no fallback, R29). */
+const FB_ENV = { ...env, META_FB_APP_ID: 'fb-app-2', META_FB_APP_SECRET: 'fb-secret-2' }
 const IG = '17841400000000077'
 const IG_FB = '17841400000000088'
 const PAGE = '1029384756'
@@ -150,7 +152,7 @@ describe('publishing reels, stories and carousels', () => {
     })
     const r = await publishInstagramPost(ids.a!, p.id, { ...base, fetch: f.fetch, now: t0, maxPolls: 2 })
     expect(r).toEqual({ ok: false, error: PROCESSING_NOTE, processing: true })
-    expect(f.calls[0]!.url).toBe(`https://graph.instagram.com/v21.0/${IG}/media`)
+    expect(f.calls[0]!.url).toBe(`https://graph.instagram.com/v25.0/${IG}/media`)
     expect(f.calls[0]!.body).toEqual({
       media_type: 'REELS',
       video_url: 'https://cdn.test/reel.mp4',
@@ -315,13 +317,36 @@ describe('Facebook Page (Facebook Login for Business)', () => {
     const withConfig = new URL(
       facebookAuthorizeUrl({ appId: 'app-1', redirectUri: 'https://app.x/cb', state: 's', configId: '987' }),
     )
-    expect(withConfig.origin + withConfig.pathname).toBe('https://www.facebook.com/v21.0/dialog/oauth')
+    expect(withConfig.origin + withConfig.pathname).toBe('https://www.facebook.com/v25.0/dialog/oauth')
     expect(withConfig.searchParams.get('config_id')).toBe('987')
     expect(withConfig.searchParams.get('scope')).toBeNull()
     const scoped = new URL(
       facebookAuthorizeUrl({ appId: 'app-1', redirectUri: 'https://app.x/cb', state: 's' }),
     )
     expect(scoped.searchParams.get('scope')).toBe(FACEBOOK_SCOPES.join(','))
+  })
+
+  it('installs the app on the Page with feed + messages, or feed alone when Meta refuses messages (R29)', async () => {
+    const ok = fakeFetch(() => json({ success: true }))
+    expect(await facebookLoginClient(ok.fetch).subscribePage({ pageId: PAGE, pageToken: 'EAApage' })).toEqual(
+      ['feed', 'messages'],
+    )
+    expect(ok.calls[0]!.url).toBe(
+      `https://graph.facebook.com/v25.0/${PAGE}/subscribed_apps?subscribed_fields=feed%2Cmessages`,
+    )
+    expect(ok.calls[0]!.method).toBe('POST')
+    const refused = fakeFetch((url) =>
+      url.includes('messages')
+        ? json({ error: { message: 'pages_messaging needed', code: 200 } }, 403)
+        : json({ success: true }),
+    )
+    expect(
+      await facebookLoginClient(refused.fetch).subscribePage({ pageId: PAGE, pageToken: 'EAApage' }),
+    ).toEqual(['feed'])
+    expect(refused.calls.map((c) => new URL(c.url).searchParams.get('subscribed_fields'))).toEqual([
+      'feed,messages',
+      'feed',
+    ])
   })
 
   it('lists Pages with their linked Instagram account and reads token expiry', async () => {
@@ -435,7 +460,7 @@ describe('Facebook Page (Facebook Login for Business)', () => {
     expect(await publishInstagramPost(ids.b!, p.id, { ...base, fetch: f.fetch, now: t0 })).toMatchObject({
       ok: true,
     })
-    expect(f.calls[0]!.url).toBe(`https://graph.facebook.com/v21.0/${IG_FB}/media`)
+    expect(f.calls[0]!.url).toBe(`https://graph.facebook.com/v25.0/${IG_FB}/media`)
 
     // Comment webhooks for the linked account land in this spa.
     const items = await ingestInstagramWebhook(
@@ -460,7 +485,7 @@ describe('Facebook Page (Facebook Login for Business)', () => {
     const f = fakeFetch((url) =>
       url.includes('/debug_token') ? json({ data: { is_valid: false } }) : json({}, 404),
     )
-    expect(await checkFacebookPageTokens({ ...base, fetch: f.fetch })).toEqual({
+    expect(await checkFacebookPageTokens({ ...base, env: FB_ENV, fetch: f.fetch })).toEqual({
       checked: 1,
       expired: 1,
       failed: 0,

@@ -89,6 +89,10 @@ export function verifyGoogleState(
   }
 }
 
+/** The state when the signature matches, even after it expired (R29: the callback returns to that spa with a notice). */
+export const signedGoogleState = (state: string | null | undefined, secret: string) =>
+  verifyGoogleState(state, secret, 0)
+
 /** Constant-time comparison of two strings (hashed first so lengths don't leak). */
 export function sameSecret(a: string | null | undefined, b: string | null | undefined) {
   if (!a || !b) return false

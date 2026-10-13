@@ -206,7 +206,20 @@ export const socialAccounts = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [unique('social_accounts_unique').on(t.tenantId, t.platform, t.externalId), ...tenantPolicies()],
+  (t) => [
+    unique('social_accounts_unique').on(t.tenantId, t.platform, t.externalId),
+    // R29: one spa per Meta account — a connected Instagram account / Facebook Page, and the Instagram account linked
+    // to a connected Page, belong to one spa at a time (across tenants; connects also take an advisory lock).
+    uniqueIndex('social_accounts_meta_connected')
+      .on(t.platform, t.externalId)
+      // Predicates never name 'facebook': that enum value comes from 0028 (ALTER TYPE … ADD VALUE), and a fresh
+      // database runs every migration in one transaction, where a value added earlier in it can't be used yet.
+      .where(sql`${t.status} = 'connected' and ${t.platform} <> 'gbp'`),
+    uniqueIndex('social_accounts_fb_ig_connected')
+      .on(sql`(${t.meta} ->> 'igUserId')`)
+      .where(sql`${t.platform} not in ('gbp', 'instagram') and ${t.status} = 'connected'`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const postStatus = pgEnum('post_status', [
