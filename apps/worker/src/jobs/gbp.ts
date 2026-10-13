@@ -4,6 +4,7 @@ import {
   automationOnSql,
   GBP_PENDING_ID,
   googleConfig,
+  integrationEnv,
   submitDueSitemaps,
   syncGbpBookActions,
   syncGbpReviews,
@@ -17,7 +18,8 @@ import { LIVE_STATUSES, recordRun } from './runs'
  * draft when the review agent is on; autopilot posts 4–5★ replies, 1–3★ wait for approval in the dashboard.
  */
 export async function syncAllGbpReviews() {
-  if (!googleConfig()) return { skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' }
+  const env = await integrationEnv()
+  if (!googleConfig(env)) return { skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' }
   const connected = await platformDb()
     .select({ tenantId: socialAccounts.tenantId, slug: tenants.slug })
     .from(socialAccounts)
@@ -36,6 +38,7 @@ export async function syncAllGbpReviews() {
     try {
       const res = await syncGbpReviews({
         tenantId,
+        env,
         draft: (reviewId) => draftReviewReply({ tenantId, reviewId }),
       })
       if (res.ok) {
@@ -70,9 +73,10 @@ export async function syncAllGbpReviews() {
  * of minutes after the last one). Premium spas only; DB reads only unless something changed.
  */
 export async function syncGbpSite() {
-  if (!googleConfig()) return { skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' }
-  const book = await syncGbpBookActions()
-  const sitemaps = await submitDueSitemaps()
+  const env = await integrationEnv()
+  if (!googleConfig(env)) return { skipped: 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set' }
+  const book = await syncGbpBookActions({ env })
+  const sitemaps = await submitDueSitemaps({ env })
   if (book.updated || book.failed || sitemaps.submitted || sitemaps.notSubmitted)
     log('info', 'gbp site sync', { ...book, ...sitemaps })
   return { book, sitemaps }

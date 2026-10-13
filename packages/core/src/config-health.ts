@@ -35,16 +35,26 @@ function encryptionKey(env: Env): { ok: boolean; detail?: string } {
   return bytes === 32 ? { ok: true } : { ok: false, detail: 'not 32 bytes base64' }
 }
 
+/** R29: where a Google / Meta key comes from (console, server env, or nowhere). */
+export type KeySource = 'console' | 'env' | null
+
+/** "from console" / "from env" / "from console + env" for the keys that are set. */
+const sourceDetail = (sources: Record<string, KeySource> | undefined, keys: string[]) => {
+  const found = [...new Set(keys.map((k) => sources?.[k]).filter(Boolean))]
+  return found.length ? `from ${found.join(' + ')}` : undefined
+}
+
 /** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */
 const WEB_ONLY = new Set(['TURNSTILE'])
 
 /**
  * Every production setting except the Resend key (shown on its own with its source). `turnstile`: the console-aware
- * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags).
+ * resolution (web console); without it the bot-check row reads env only (the worker's heartbeat flags). Google + Meta
+ * keys (R29): pass the resolved record (`integrationEnv()`) as `env`; `keySources` adds where they come from.
  */
 export function configChecks(
   env: Env = process.env,
-  opts: { turnstile?: ResolvedTurnstile } = {},
+  opts: { turnstile?: ResolvedTurnstile; keySources?: Record<string, KeySource> } = {},
 ): ConfigCheck[] {
   const backup = backupBucketSource(env)
   const turnstile = opts.turnstile ?? resolveTurnstile(null, env)
@@ -102,6 +112,7 @@ export function configChecks(
       label: 'META_* (Instagram)',
       ok: set(env, 'META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN'),
       required: false,
+      detail: sourceDetail(opts.keySources, ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN']),
       effect: 'Spas cannot connect Instagram.',
     },
     {
@@ -109,6 +120,7 @@ export function configChecks(
       label: 'GOOGLE_* (sign-in, Business Profile)',
       ok: set(env, 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
       required: false,
+      detail: sourceDetail(opts.keySources, ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']),
       effect: 'No Google sign-in or Business Profile reviews.',
     },
     {

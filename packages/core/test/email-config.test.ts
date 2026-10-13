@@ -134,6 +134,20 @@ describe('config health (G9)', () => {
     expect(configFlags(env)).toMatchObject({ backups: true, RESEND_API_KEY: false, SENTRY_DSN: true })
   })
 
+  it('Google + Meta rows read the resolved record and say where the keys come from (R29)', () => {
+    const env = { GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'console-secret', META_APP_ID: 'app' }
+    const sources = {
+      GOOGLE_CLIENT_ID: 'env',
+      GOOGLE_CLIENT_SECRET: 'console',
+      META_APP_ID: 'console',
+    } as const
+    const byKey = Object.fromEntries(configChecks(env, { keySources: sources }).map((c) => [c.key, c]))
+    expect(byKey.GOOGLE).toMatchObject({ ok: true, detail: 'from env + console' })
+    expect(byKey.META).toMatchObject({ ok: false, detail: 'from console' })
+    expect(JSON.stringify(byKey)).not.toContain('console-secret')
+    expect(configChecks(env).find((c) => c.key === 'GOOGLE')?.detail).toBeUndefined()
+  })
+
   it('a partial R2 set counts as missing (no silent S3 fallback)', () => {
     const s3 = { S3_ENDPOINT: 'e', S3_BUCKET: 'b', S3_ACCESS_KEY_ID: 'i', S3_SECRET_ACCESS_KEY: 's' }
     expect(backupBucketSource({ ...s3, R2_BUCKET: 'b' })).toBeNull()

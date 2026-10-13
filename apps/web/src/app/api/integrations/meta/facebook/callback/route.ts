@@ -2,6 +2,7 @@ import { platformDb, tenants, withTenant } from '@spa/db'
 import {
   constantTimeEqual,
   facebookLoginClient,
+  integrationEnv,
   MetaApiError,
   metaConfig,
   metaUrls,
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
   const ctx = await requireMember(tenant.slug)
   if (ctx.user.id !== state.u || !can(ctx, 'ai.manage') || !isWritable(ctx.tenant)) return back('forbidden')
   if (!(await hasFeature(ctx.tenant.id, 'marketing'))) return back('forbidden')
-  const cfg = metaConfig()
+  const cfg = metaConfig(await integrationEnv())
   if (!cfg) return back('not_configured')
   const code = q.get('code')
   if (q.get('error') || !code) return back('denied')

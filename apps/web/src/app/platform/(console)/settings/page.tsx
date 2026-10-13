@@ -24,6 +24,7 @@ import {
   sendTestEmailAction,
 } from '../actions'
 import { saveBillingRulesAction } from '../billing-actions'
+import { IntegrationKeysCards } from './integration-keys-card'
 import { SendingDomainSection } from './sending-domain'
 import { SuperAdminsCard } from './super-admins-card'
 
@@ -188,6 +189,7 @@ export default async function CompanyPage() {
             </ActionForm>
           </CardBody>
         </Card>
+        <IntegrationKeysCards />
         <Card data-testid="billing-rules">
           <CardHeader
             title="Billing rules"

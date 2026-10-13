@@ -14,7 +14,7 @@ import { recordRun } from './runs'
 
 /**
  * Every 5 minutes: publish approved Instagram posts whose scheduled time has come.
- * Spas with the Instagram automation off are skipped (B3). No-op until META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN are set.
+ * Spas with the Instagram automation off are skipped (B3). No-op until META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN are set (console or env, R29).
  */
 export async function publishScheduledInstagramPosts() {
   const r = await publishDueInstagramPosts()

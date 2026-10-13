@@ -7,6 +7,7 @@ import { and, eq, inArray, type SQL, sql } from 'drizzle-orm'
 import { entitledSql } from './entitlements'
 import { DomainError } from './errors'
 import { GBP_PENDING_ID, GbpAuthError, type GbpOpts, getGbpAccount, withGbpToken } from './gbp'
+import { integrationEnv } from './integration-settings'
 import {
   addScSite,
   createBookLink,
@@ -281,7 +282,8 @@ async function connectedLocations(o: GbpJobOpts, extra: SQL) {
  */
 export async function syncGbpBookActions(o: GbpJobOpts = {}) {
   const result = { checked: 0, updated: 0, failed: 0 }
-  if (!googleConfig(o.env)) return result
+  const env = o.env ?? (await integrationEnv())
+  if (!googleConfig(env)) return result
   const now = o.now ?? new Date()
   const rows = await connectedLocations(
     o,
@@ -289,7 +291,7 @@ export async function syncGbpBookActions(o: GbpJobOpts = {}) {
   )
   for (const r of rows) {
     result.checked++
-    const base = await withTenant(r.tenantId, (tx) => publicSiteBase(tx, r.slug, o.env), o.app)
+    const base = await withTenant(r.tenantId, (tx) => publicSiteBase(tx, r.slug, env), o.app)
     const desired = googleBookingUrl(base.url)
     const tried = iso(r.meta.bookTriedAt)
     if (!r.meta.bookError && desired === r.meta.bookUri) continue
@@ -302,7 +304,7 @@ export async function syncGbpBookActions(o: GbpJobOpts = {}) {
         db: o.app,
         fetch: o.fetch,
         now,
-        env: o.env,
+        env,
         bookingUrl: desired,
       })
       if (res.ok) result.updated++
@@ -393,7 +395,8 @@ export async function markSitemapDue(tx: Tx, tenantId: string, now = new Date())
 /** Worker (every 10 min): submits queued sitemaps of live Premium spas (debounced after the last publish). */
 export async function submitDueSitemaps(o: GbpJobOpts = {}) {
   const result = { submitted: 0, notSubmitted: 0 }
-  if (!googleConfig(o.env)) return result
+  const env = o.env ?? (await integrationEnv())
+  if (!googleConfig(env)) return result
   const now = o.now ?? new Date()
   const cutoff = new Date(now.getTime() - SITEMAP_DEBOUNCE_MS).toISOString()
   const rows = await connectedLocations(
@@ -402,13 +405,13 @@ export async function submitDueSitemaps(o: GbpJobOpts = {}) {
   )
   for (const r of rows) {
     try {
-      const base = await withTenant(r.tenantId, (tx) => publicSiteBase(tx, r.slug, o.env), o.app)
+      const base = await withTenant(r.tenantId, (tx) => publicSiteBase(tx, r.slug, env), o.app)
       const res = await submitGbpSitemap({
         tenantId: r.tenantId,
         db: o.app,
         fetch: o.fetch,
         now,
-        env: o.env,
+        env,
         siteBase: base.url,
         custom: base.custom,
       })

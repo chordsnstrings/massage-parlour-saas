@@ -1,5 +1,5 @@
 import { withTenant } from '@spa/db'
-import { instagramStatus, metaConfig, metaUrls, missingMetaEnv } from '@spa/services'
+import { instagramStatus, integrationEnv, metaConfig, metaUrls, missingMetaEnv } from '@spa/services'
 import { ChevronDown, ImageUp, MessageCircle, MessagesSquare, TriangleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { CONNECT_NOTICES } from '@/app/api/integrations/meta/oauth'
@@ -32,8 +32,9 @@ export async function InstagramCard({
 }) {
   const slug = ctx.tenant.slug
   const { t, fmt } = await getI18n()
-  const configured = metaConfig() !== null
-  const missing = missingMetaEnv()
+  const env = await integrationEnv()
+  const configured = metaConfig(env) !== null
+  const missing = missingMetaEnv(env)
   const account = await withTenant(ctx.tenant.id, (tx) => instagramStatus(tx))
   const urls = metaUrls()
   // Connecting runs on the platform domain in use, so Meta needs this domain's redirect URI too.

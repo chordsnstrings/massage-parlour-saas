@@ -15,6 +15,7 @@ import {
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { normalisePhone } from './data-io'
 import { DomainError } from './errors'
+import { integrationEnv } from './integration-settings'
 import { facebookPageClient, MetaApiError, metaConfig } from './integrations/meta'
 import { decryptSecret } from './secrets'
 import {
@@ -57,7 +58,7 @@ export async function getFacebookPageAccount(tx: Tx) {
 export async function metaAvailability(tx: Tx, env?: Record<string, string | undefined>) {
   const ig = await getInstagramAccount(tx)
   const fb = await getFacebookPageAccount(tx)
-  const configured = metaConfig(env) !== null
+  const configured = metaConfig(env ?? (await integrationEnv())) !== null
   return {
     configured,
     instagram: ig && tokenOf(ig) ? { username: ig.username, id: ig.externalId } : null,
