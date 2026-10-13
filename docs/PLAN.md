@@ -1374,6 +1374,40 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
 
+- **R31 Sales & Marketing section + AI sales agent (owner, 2026-10-13: "create agent to help me targeting the spas and
+  sell this to them … collect the data … research either if they will be interested … make videos for marketing and
+  campaigns … show in the console as marketing and sales"; answers: "start in abudhabi, WhatsApp click-to-send only,
+  anyone, cheapest").** PLANNED, not built — build starts only when the owner approves this plan.
+  - **Where:** console section **Sales & Marketing** (English, super-admin + 2FA like the rest of the console; "anyone"
+    = every super-admin; an optional console role "Sales" limited to this section can come later). Platform data
+    (platformDb, no tenant), every write audited.
+  - **Phase 1 — find + research (Abu Dhabi first):** official sources only, no page scraping: Google Places API (New)
+    Text Search + Place Details for "spa / massage / Moroccan bath …" per Abu Dhabi area (aim: stay inside Google's
+    monthly free allowance — verify the current SKUs and caps when building; store the place_id and refresh other
+    Google fields instead of keeping them, per Google's terms), then the spa's **own website** (public email,
+    WhatsApp, Instagram link, booking-system / Arabic / mobile checks). Instagram enrichment only later through the
+    official API once the Meta app is approved. Dedupe against existing spas (tenants), applications and enquiries.
+    AI research on the **cheapest** ModelArk model from `ai_model_config`: fit score 0–100 with reasons (e.g. no
+    online booking, review volume vs replies, branches, outdated site, no Arabic) + a short personal pitch and a
+    WhatsApp opener in EN and AR (AR needs native review). It estimates need, never claims interest.
+  - **Phase 2 — outreach, WhatsApp click-to-send only:** each message opens wa.me with the drafted text; a person
+    sends it from their own WhatsApp; the lead logs who/when; daily cap per sender (default 25) against bans;
+    follow-up reminders (day 3 / day 7); statuses New → Researched → Contacted → Replied → Demo → Applied → Won / Lost
+    + **Do not contact** (honoured forever, source of every contact detail recorded). Applied leads link to the
+    existing Applications → onboarding. No email tool, no SMS, no automated WhatsApp (locked rule).
+  - **Phase 3 — content (cheapest first):** posters, captions, ad copy (existing AI) + product demo videos from real
+    screen recordings with AI voice-over; AI-generated video (ModelArk Seedance) only per video on approval (paid
+    per second). Ads stay manual in Meta / Google Ads Manager (export), tracked with `?src=` on spamanagement.co
+    landing pages (existing t.js analytics).
+  - **Phase 4 — weekly autopilot:** worker job finds new Abu Dhabi spas, refreshes old ones, drafts follow-ups into an
+    approval queue — never sends anything by itself.
+  - **Sketch:** tables `sales_leads` (place_id, name, area, phone, whatsapp, email, website, instagram, rating,
+    reviews, fit_score, research jsonb, stage, owner_user_id, do_not_contact, sources jsonb, refreshed_at),
+    `sales_activities` (lead, user, kind, text, at), `sales_settings` (areas, daily cap, templates).
+  - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
+    USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
+    honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
+
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
   invoices (price ÷ 12, cents rounding on the last), `year` = one invoice (one-time annual). Plans' interval = default.
