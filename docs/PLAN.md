@@ -1319,6 +1319,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   optionally reset Website content `spa.experience_image(_alt)` + `booking.image(_alt)` for v2's new photos → Publish.
   Known gaps: a CSP-sandboxed design page gets no browser-cache reuse in Chromium (opaque origin), so repeat visits
   download 0.9 MB again; Arabic pages show the fallback font ~0.3 s.
+- **BE RELAX v2.3 first-screen speed (owner, 2026-10-13: "lazy still there"):** our design file v2.3 (same look, same
+  CRM data byte for byte; the literal moves into `<head>`, which the platform splices anywhere) requests the logo and
+  the first still from `<head>`, from the page's own host, with smaller hosted still copies in srcset (5 new files in
+  `public/designs/be-relax/`), the other theme's logo after load, later stills after the first; journey space reserved
+  (no flash of the lower headings). Platform: db pools keep idle connections 10 min (+ keepAlive probes after 60 s,
+  pool `error` logged, never a crash). Proof (full Chromium 141, sandboxed page, 5 cold loads each, vs today's live
+  page): scene picture 0.3–0.35 s sooner on 40 Mbit/90 ms, 0.5–0.53 s on 8 Mbit/130 ms; logo 0.08–0.12 s sooner;
+  0.16–0.27 MB less before load; srcset re-picked on rotate/resize (larger only). Be Relax's 414 px WebP logos are
+  already live (dark = Website content `spa.logo_on_dark`; light = the spa's CRM logo, which always wins over content
+  `spa.logo_on_light`). Owner steps: after the deploy, new version of BE RELAX with v2.3 → Preview EN + AR → Roll out.
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
      bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when
