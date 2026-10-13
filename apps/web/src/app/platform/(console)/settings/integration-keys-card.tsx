@@ -1,5 +1,6 @@
 import { platformDb } from '@spa/db'
 import {
+  facebookAppConfig,
   googleConfig,
   googleRedirectUri,
   type IntegrationKey,
@@ -94,6 +95,7 @@ export async function IntegrationKeysCards() {
   const meta = metaUrls(canonicalUrls().api(''))
   const google = googleConfig(env) !== null
   const metaOn = metaConfig(env) !== null
+  const facebookOn = facebookAppConfig(env) !== null
   const clientId = env.GOOGLE_CLIENT_ID?.trim()
   const oddClientId = clientId && !clientId.endsWith('.apps.googleusercontent.com')
   return (
@@ -181,11 +183,16 @@ export async function IntegrationKeysCards() {
       <Card data-testid="meta-keys">
         <CardHeader
           title="Meta (Instagram & Facebook)"
-          description="Instagram DMs, comments and publishing, and Facebook Pages (Premium). Values saved here win over META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN / META_FB_CONFIG_ID in the server env, key by key. Without the first three, the spa cards say Not configured."
+          description="Instagram DMs, comments and publishing, and Facebook Pages (Premium). Values saved here win over META_APP_ID / META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN / META_FB_CONFIG_ID / META_FB_APP_ID / META_FB_APP_SECRET in the server env, key by key. Without the first three, the spa cards say Not configured. Facebook Page connect uses the Facebook App ID/secret when set, else the Instagram ones."
           action={
-            <Badge tone={metaOn ? 'success' : 'warning'} data-testid="meta-keys-status">
-              {metaOn ? 'configured' : 'not configured'}
-            </Badge>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              <Badge tone={metaOn ? 'success' : 'warning'} data-testid="meta-keys-status">
+                {metaOn ? 'configured' : 'not configured'}
+              </Badge>
+              <Badge tone={facebookOn ? 'success' : 'warning'} data-testid="meta-fb-keys-status">
+                {facebookOn ? 'Facebook configured' : 'Facebook not configured'}
+              </Badge>
+            </div>
           }
         />
         <CardBody className="space-y-5">
@@ -259,6 +266,38 @@ export async function IntegrationKeysCards() {
                 defaultValue={status.plain.META_FB_CONFIG_ID ?? ''}
               />
             </Field>
+            <Field
+              label="Facebook App ID (for Facebook Page connect; leave empty when it is the same app)"
+              name="META_FB_APP_ID"
+              hint={
+                <SourceNote
+                  k="META_FB_APP_ID"
+                  ctx={ctx}
+                  missing="Optional: App settings → Basic → App ID. Empty = Facebook Login uses the Instagram app ID above."
+                />
+              }
+            >
+              <Input
+                id="META_FB_APP_ID"
+                name="META_FB_APP_ID"
+                autoComplete="off"
+                inputMode="numeric"
+                defaultValue={status.plain.META_FB_APP_ID ?? ''}
+              />
+            </Field>
+            <Field
+              label="Facebook App secret"
+              name="META_FB_APP_SECRET"
+              hint={
+                <SourceNote
+                  k="META_FB_APP_SECRET"
+                  ctx={ctx}
+                  missing="Optional: App settings → Basic → App secret. Empty = the Instagram app secret above."
+                />
+              }
+            >
+              <Input id="META_FB_APP_SECRET" name="META_FB_APP_SECRET" type="password" autoComplete="off" />
+            </Field>
             <RemoveBox
               k="META_APP_SECRET"
               ctx={ctx}
@@ -268,6 +307,11 @@ export async function IntegrationKeysCards() {
               k="META_WEBHOOK_VERIFY_TOKEN"
               ctx={ctx}
               label="Remove the stored verify token (fall back to env)"
+            />
+            <RemoveBox
+              k="META_FB_APP_SECRET"
+              ctx={ctx}
+              label="Remove the stored Facebook App secret (fall back to env)"
             />
             <div className="sm:col-span-2">
               <SubmitButton>Save Meta keys</SubmitButton>

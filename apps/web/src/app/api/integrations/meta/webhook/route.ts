@@ -3,6 +3,7 @@ import {
   ingestInstagramWebhook,
   integrationEnv,
   metaConfig,
+  metaSigningSecrets,
   verifyMetaSignature,
 } from '@spa/services'
 import type { NextRequest } from 'next/server'
@@ -28,10 +29,11 @@ export async function GET(req: NextRequest) {
  * process, no pg-boss or owner role here).
  */
 export async function POST(req: NextRequest) {
-  const cfg = metaConfig(await integrationEnv())
-  if (!cfg) return text('Instagram is not configured', 503)
+  const env = await integrationEnv()
+  if (!metaConfig(env)) return text('Instagram is not configured', 503)
   const raw = await req.text()
-  if (!verifyMetaSignature(raw, req.headers.get('x-hub-signature-256'), cfg.appSecret))
+  // The Instagram app secret, or the Facebook app's when separate (events reaching us through a connected Page).
+  if (!verifyMetaSignature(raw, req.headers.get('x-hub-signature-256'), metaSigningSecrets(env)))
     return text('Invalid signature', 403)
   let body: unknown
   try {

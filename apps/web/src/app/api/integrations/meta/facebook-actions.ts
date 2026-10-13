@@ -4,6 +4,7 @@ import {
   chooseFacebookPage,
   DomainError,
   disconnectFacebook,
+  facebookAppConfig,
   facebookAuthorizeUrl,
   facebookConfigId,
   facebookLoginClient,
@@ -11,7 +12,6 @@ import {
   instagramAccountTenants,
   integrationEnv,
   MetaApiError,
-  metaConfig,
   metaUrls,
   newNonce,
   pendingFacebookPages,
@@ -37,7 +37,7 @@ export async function connectFacebookAction(slug: string): Promise<ActionResult>
   const { ctx, error } = await guard(slug, 'ai.manage', 'marketing')
   if (error) return fail(error)
   const env = await integrationEnv()
-  const cfg = metaConfig(env)
+  const cfg = facebookAppConfig(env)
   const secret = process.env.BETTER_AUTH_SECRET
   if (!cfg || !secret) return fail('settings.integrations.fb.notices.not_configured')
   const nonce = newNonce()
@@ -71,7 +71,7 @@ export async function chooseFacebookPageAction(
   if (error) return fail(error)
   const parsed = ChoosePage.safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
-  const cfg = metaConfig(await integrationEnv())
+  const cfg = facebookAppConfig(await integrationEnv())
   if (!cfg) return fail('settings.integrations.fb.notices.not_configured')
   const tenantId = ctx.tenant.id
   try {

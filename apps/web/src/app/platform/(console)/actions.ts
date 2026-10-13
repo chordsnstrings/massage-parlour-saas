@@ -696,8 +696,11 @@ export async function saveMetaKeysAction(_p: ActionResult, fd: FormData): Promis
       META_APP_SECRET: appKey(200),
       META_WEBHOOK_VERIFY_TOKEN: appKey(200, true),
       META_FB_CONFIG_ID: appKey(64),
+      META_FB_APP_ID: appKey(64),
+      META_FB_APP_SECRET: appKey(200),
       clear_META_APP_SECRET: bool,
       clear_META_WEBHOOK_VERIFY_TOKEN: bool,
+      clear_META_FB_APP_SECRET: bool,
     })
     .safeParse(formObject(fd))
   if (!parsed.success) return fromZod(parsed.error)
@@ -707,6 +710,8 @@ export async function saveMetaKeysAction(_p: ActionResult, fd: FormData): Promis
     META_APP_SECRET: secretInput(d.META_APP_SECRET, d.clear_META_APP_SECRET),
     META_WEBHOOK_VERIFY_TOKEN: secretInput(d.META_WEBHOOK_VERIFY_TOKEN, d.clear_META_WEBHOOK_VERIFY_TOKEN),
     META_FB_CONFIG_ID: d.META_FB_CONFIG_ID,
+    META_FB_APP_ID: d.META_FB_APP_ID,
+    META_FB_APP_SECRET: secretInput(d.META_FB_APP_SECRET, d.clear_META_FB_APP_SECRET),
   })
 }
 

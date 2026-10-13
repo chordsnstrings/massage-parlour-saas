@@ -44,6 +44,25 @@ const sourceDetail = (sources: Record<string, KeySource> | undefined, keys: stri
   return found.length ? `from ${found.join(' + ')}` : undefined
 }
 
+/**
+ * Facebook Page connect (F19): its own Facebook App ID/secret when set, else the Instagram ones (services
+ * `facebookAppConfig`, same fallback key by key); the hint says which.
+ */
+function facebookApp(env: Env, sources: Record<string, KeySource> | undefined) {
+  const id = env.META_FB_APP_ID?.trim() || env.META_APP_ID?.trim()
+  const secret = env.META_FB_APP_SECRET?.trim() || env.META_APP_SECRET?.trim()
+  const own = ['META_FB_APP_ID', 'META_FB_APP_SECRET'].filter((k) => env[k]?.trim())
+  const detail =
+    own.length === 1
+      ? `only ${own[0]} set (the other comes from META_APP_*)`
+      : own.length
+        ? ['own Facebook app', sourceDetail(sources, own)].filter(Boolean).join(', ')
+        : id && secret
+          ? 'same app as Instagram (META_APP_*)'
+          : undefined
+  return { ok: Boolean(id && secret), detail }
+}
+
 /** Read by the web app only: the worker's heartbeat flags leave these out (no false "worker sees it missing"). */
 const WEB_ONLY = new Set(['TURNSTILE'])
 
@@ -114,6 +133,13 @@ export function configChecks(
       required: false,
       detail: sourceDetail(opts.keySources, ['META_APP_ID', 'META_APP_SECRET', 'META_WEBHOOK_VERIFY_TOKEN']),
       effect: 'Spas cannot connect Instagram.',
+    },
+    {
+      key: 'META_FB',
+      label: 'META_FB_APP_* (Facebook Page connect)',
+      ...facebookApp(env, opts.keySources),
+      required: false,
+      effect: 'Spas cannot connect a Facebook Page.',
     },
     {
       key: 'GOOGLE',

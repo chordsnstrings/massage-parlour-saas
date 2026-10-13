@@ -148,6 +148,27 @@ describe('config health (G9)', () => {
     expect(configChecks(env).find((c) => c.key === 'GOOGLE')?.detail).toBeUndefined()
   })
 
+  it('Facebook Page connect row: its own Facebook App keys, else the Instagram ones', () => {
+    const fb = (env: Record<string, string>, keySources?: Record<string, 'console' | 'env'>) =>
+      configChecks(env, { keySources }).find((c) => c.key === 'META_FB')
+    expect(fb({ META_APP_ID: 'app' })).toMatchObject({ ok: false, detail: undefined })
+    expect(fb({ META_APP_ID: 'ig', META_APP_SECRET: 's' })).toMatchObject({
+      ok: true,
+      detail: 'same app as Instagram (META_APP_*)',
+    })
+    expect(
+      fb(
+        { META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 's' },
+        { META_FB_APP_ID: 'console', META_FB_APP_SECRET: 'env' },
+      ),
+    ).toMatchObject({ ok: true, detail: 'own Facebook app, from console + env' })
+    expect(fb({ META_FB_APP_ID: 'fb', META_APP_SECRET: 's' })).toMatchObject({
+      ok: true,
+      detail: 'only META_FB_APP_ID set (the other comes from META_APP_*)',
+    })
+    expect(configFlags({ META_FB_APP_ID: 'fb', META_FB_APP_SECRET: 's' })).toMatchObject({ META_FB: true })
+  })
+
   it('a partial R2 set counts as missing (no silent S3 fallback)', () => {
     const s3 = { S3_ENDPOINT: 'e', S3_BUCKET: 'b', S3_ACCESS_KEY_ID: 'i', S3_SECRET_ACCESS_KEY: 's' }
     expect(backupBucketSource({ ...s3, R2_BUCKET: 'b' })).toBeNull()

@@ -110,8 +110,10 @@ export const platformSettings = pgTable(
     turnstileCustomDomains: boolean('turnstile_custom_domains'),
     /**
      * R29 Google + Meta app keys set in the console; each wins over its env variable on its own (GOOGLE_CLIENT_ID,
-     * GOOGLE_CLIENT_SECRET, META_APP_ID, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN, META_FB_CONFIG_ID). Secrets sealed
-     * like the Resend key (`*_enc`, write-only; `*_last4` for the console). Null = env decides.
+     * GOOGLE_CLIENT_SECRET, META_APP_ID, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN, META_FB_CONFIG_ID, META_FB_APP_ID,
+     * META_FB_APP_SECRET). Secrets sealed like the Resend key (`*_enc`, write-only; `*_last4` for the console). Null =
+     * env decides. `meta_fb_app_*`: the Facebook App ID/secret for Facebook Page connect when it differs from the
+     * Instagram app ID/secret in `meta_app_*` (null = the same app).
      */
     googleClientId: text('google_client_id'),
     googleClientSecretEnc: text('google_client_secret_enc'),
@@ -122,6 +124,9 @@ export const platformSettings = pgTable(
     metaWebhookVerifyTokenEnc: text('meta_webhook_verify_token_enc'),
     metaWebhookVerifyTokenLast4: text('meta_webhook_verify_token_last4'),
     metaFbConfigId: text('meta_fb_config_id'),
+    metaFbAppId: text('meta_fb_app_id'),
+    metaFbAppSecretEnc: text('meta_fb_app_secret_enc'),
+    metaFbAppSecretLast4: text('meta_fb_app_secret_last4'),
     /**
      * G12: days after a soft delete when the worker permanently purges a spa (`tenant-auto-purge`).
      * Null = off (default); the console only accepts 30 or more.

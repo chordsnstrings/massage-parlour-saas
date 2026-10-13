@@ -43,6 +43,25 @@ Uses the **Instagram API with Instagram Login**, so no Facebook Page is needed. 
 | `META_APP_ID` | Instagram app ID |
 | `META_APP_SECRET` | Instagram app secret (also verifies webhook signatures) |
 | `META_WEBHOOK_VERIFY_TOKEN` | the verify token from step 2 |
+| `META_FB_CONFIG_ID` | optional: Facebook Login for Business configuration id (deploy/droplet/README.md "Meta") |
+| `META_FB_APP_ID` | optional: **Facebook App ID** (App settings → Basic), for Facebook Page connect |
+| `META_FB_APP_SECRET` | optional: **Facebook App secret** (App settings → Basic), for Facebook Page connect |
+
+All of them can also be entered in the console (**Settings → Meta (Instagram & Facebook)**); a console value wins over
+the env variable, key by key.
+
+Which ID goes where (one Meta app has two different ID/secret pairs):
+- **Instagram app ID / secret** (Instagram → API setup with Instagram login → Business login settings) →
+  `META_APP_ID` / `META_APP_SECRET`. Used by Instagram Login (the Instagram card's Connect and its callback).
+- **Facebook App ID / secret** (App settings → Basic) → `META_FB_APP_ID` / `META_FB_APP_SECRET`. Used by Facebook Page
+  connect (Premium, Facebook Login for Business): the Facebook dialog, the code exchange, the long-lived token and the
+  daily `debug_token` check. Leave both empty only when `META_APP_*` already are the Facebook App's (then one pair
+  serves both); with Instagram Login they are not, and the Facebook dialog rejects the Instagram app ID.
+- The webhook, deauthorize and data-deletion URLs are shared by both logins: a request signed with either secret is
+  accepted (Instagram Login events with the Instagram app secret; Page-linked events and Facebook Login callbacks
+  with the Facebook App secret). The webhook verify token is the same for both.
+- The console overview shows the Facebook Page connect row (`META_FB_APP_*`): own Facebook app, or "same app as
+  Instagram" when it falls back to `META_APP_*`.
 
 How it behaves:
 - DMs are answered by the AI receptionist according to AI studio:

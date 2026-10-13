@@ -9,12 +9,18 @@ import { openEmailKey, sealEmailKey } from './email-settings'
 type Env = Record<string, string | undefined>
 
 /** Shown in the console as entered. */
-export const INTEGRATION_PLAIN_KEYS = ['GOOGLE_CLIENT_ID', 'META_APP_ID', 'META_FB_CONFIG_ID'] as const
+export const INTEGRATION_PLAIN_KEYS = [
+  'GOOGLE_CLIENT_ID',
+  'META_APP_ID',
+  'META_FB_CONFIG_ID',
+  'META_FB_APP_ID',
+] as const
 /** Write-only: sealed, only the last 4 characters are shown. */
 export const INTEGRATION_SECRET_KEYS = [
   'GOOGLE_CLIENT_SECRET',
   'META_APP_SECRET',
   'META_WEBHOOK_VERIFY_TOKEN',
+  'META_FB_APP_SECRET',
 ] as const
 export const INTEGRATION_KEYS = [...INTEGRATION_PLAIN_KEYS, ...INTEGRATION_SECRET_KEYS] as const
 export type IntegrationPlainKey = (typeof INTEGRATION_PLAIN_KEYS)[number]
@@ -28,11 +34,13 @@ const PLAIN = {
   GOOGLE_CLIENT_ID: 'googleClientId',
   META_APP_ID: 'metaAppId',
   META_FB_CONFIG_ID: 'metaFbConfigId',
+  META_FB_APP_ID: 'metaFbAppId',
 } as const
 const SECRET = {
   GOOGLE_CLIENT_SECRET: ['googleClientSecretEnc', 'googleClientSecretLast4'],
   META_APP_SECRET: ['metaAppSecretEnc', 'metaAppSecretLast4'],
   META_WEBHOOK_VERIFY_TOKEN: ['metaWebhookVerifyTokenEnc', 'metaWebhookVerifyTokenLast4'],
+  META_FB_APP_SECRET: ['metaFbAppSecretEnc', 'metaFbAppSecretLast4'],
 } as const
 
 const COLUMNS = {
@@ -45,6 +53,9 @@ const COLUMNS = {
   metaWebhookVerifyTokenEnc: platformSettings.metaWebhookVerifyTokenEnc,
   metaWebhookVerifyTokenLast4: platformSettings.metaWebhookVerifyTokenLast4,
   metaFbConfigId: platformSettings.metaFbConfigId,
+  metaFbAppId: platformSettings.metaFbAppId,
+  metaFbAppSecretEnc: platformSettings.metaFbAppSecretEnc,
+  metaFbAppSecretLast4: platformSettings.metaFbAppSecretLast4,
 }
 type Row = { [K in keyof typeof COLUMNS]: string | null }
 

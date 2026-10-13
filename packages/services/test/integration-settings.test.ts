@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   cachedIntegrationKeys,
+  facebookAppConfig,
   googleConfig,
   integrationEnv,
   integrationKeySources,
@@ -11,6 +12,7 @@ import {
   invalidateIntegrationEnv,
   loadIntegrationKeys,
   metaConfig,
+  metaSigningSecrets,
   resolveIntegrationEnv,
   saveIntegrationKeys,
 } from '../src'
@@ -24,6 +26,8 @@ const clearAll = {
   META_APP_SECRET: null,
   META_WEBHOOK_VERIFY_TOKEN: null,
   META_FB_CONFIG_ID: null,
+  META_FB_APP_ID: null,
+  META_FB_APP_SECRET: null,
 }
 
 describe('console Google + Meta keys (R29)', () => {
@@ -70,11 +74,13 @@ describe('console Google + Meta keys (R29)', () => {
         GOOGLE_CLIENT_ID: 'cid.apps.googleusercontent.com',
         META_APP_ID: '1234567890',
         META_FB_CONFIG_ID: null,
+        META_FB_APP_ID: null,
       },
       secrets: {
         GOOGLE_CLIENT_SECRET: { has: true, last4: 'WXYZ' },
         META_APP_SECRET: { has: true, last4: 'ABCD' },
         META_WEBHOOK_VERIFY_TOKEN: { has: true, last4: '9876' },
+        META_FB_APP_SECRET: { has: false, last4: null },
       },
     })
     expect(await loadIntegrationKeys(platform)).toEqual({
@@ -84,6 +90,8 @@ describe('console Google + Meta keys (R29)', () => {
       META_APP_SECRET: 'meta-secret-ABCD',
       META_WEBHOOK_VERIFY_TOKEN: 'verify me 9876',
       META_FB_CONFIG_ID: null,
+      META_FB_APP_ID: null,
+      META_FB_APP_SECRET: null,
     })
 
     // undefined = keep; the same plain value again is not a change; null removes; a string replaces.
@@ -144,6 +152,8 @@ describe('console Google + Meta keys (R29)', () => {
       META_APP_SECRET: null,
       META_WEBHOOK_VERIFY_TOKEN: 'env',
       META_FB_CONFIG_ID: null,
+      META_FB_APP_ID: null,
+      META_FB_APP_SECRET: null,
     })
     await saveIntegrationKeys(platform, { META_APP_SECRET: 'console-meta' }, 'u1')
     expect(metaConfig(resolveIntegrationEnv(await loadIntegrationKeys(platform), env))).toEqual({
@@ -153,6 +163,56 @@ describe('console Google + Meta keys (R29)', () => {
     })
     // Nothing saved → env alone.
     expect(resolveIntegrationEnv(null, env)).toEqual(env)
+  })
+
+  it('Facebook App ID/secret (Facebook Page connect): console over env, else the Instagram app keys', async () => {
+    vi.stubEnv('APP_ENCRYPTION_KEY', KEY)
+    const env = { META_APP_ID: 'ig-app', META_APP_SECRET: 'ig-secret', META_FB_APP_ID: 'env-fb-app' }
+    // Nothing of its own for the secret → the Instagram one; the env Facebook App ID wins over the Instagram ID.
+    expect(facebookAppConfig(resolveIntegrationEnv(null, env))).toEqual({
+      appId: 'env-fb-app',
+      appSecret: 'ig-secret',
+    })
+    expect(await saveIntegrationKeys(platform, { META_FB_APP_SECRET: 'fb-secret-EFGH' }, 'u1')).toEqual({
+      set: ['META_FB_APP_SECRET'],
+      removed: [],
+    })
+    expect(await saveIntegrationKeys(platform, { META_FB_APP_ID: ' console-fb-app ' }, 'u1')).toEqual({
+      set: ['META_FB_APP_ID'],
+      removed: [],
+    })
+    const saved = await loadIntegrationKeys(platform)
+    const [row] = await platform.select().from(platformSettings).where(eq(platformSettings.id, 1))
+    expect(row?.metaFbAppSecretEnc).toBeTruthy()
+    expect(row?.metaFbAppSecretEnc).not.toContain('fb-secret')
+    expect((await integrationKeysStatus(platform)).secrets.META_FB_APP_SECRET).toEqual({
+      has: true,
+      last4: 'EFGH',
+    })
+    const resolved = resolveIntegrationEnv(saved, env)
+    expect(facebookAppConfig(resolved)).toEqual({ appId: 'console-fb-app', appSecret: 'fb-secret-EFGH' })
+    // Instagram flows keep the Instagram app; the shared Meta URLs accept either app's signature.
+    expect(metaConfig({ ...resolved, META_WEBHOOK_VERIFY_TOKEN: 'v' })).toMatchObject({
+      appId: 'ig-app',
+      appSecret: 'ig-secret',
+    })
+    expect(metaSigningSecrets(resolved)).toEqual(['ig-secret', 'fb-secret-EFGH'])
+    expect(integrationKeySources(saved, env)).toMatchObject({
+      META_APP_ID: 'env',
+      META_FB_APP_ID: 'console',
+      META_FB_APP_SECRET: 'console',
+    })
+    // Removed from the console → env, then the Instagram keys (one app for both logins).
+    await saveIntegrationKeys(platform, { META_FB_APP_ID: null, META_FB_APP_SECRET: null }, 'u1')
+    const back = resolveIntegrationEnv(await loadIntegrationKeys(platform), env)
+    expect(facebookAppConfig(back)).toEqual({ appId: 'env-fb-app', appSecret: 'ig-secret' })
+    expect(facebookAppConfig({ META_APP_ID: 'ig-app', META_APP_SECRET: 'ig-secret' })).toEqual({
+      appId: 'ig-app',
+      appSecret: 'ig-secret',
+    })
+    expect(metaSigningSecrets({ META_APP_SECRET: 'same', META_FB_APP_SECRET: ' same ' })).toEqual(['same'])
+    expect(facebookAppConfig({ META_FB_APP_ID: 'fb', META_APP_ID: 'ig' })).toBeNull()
+    expect(metaSigningSecrets({})).toEqual([])
   })
 
   it('an undecryptable secret counts as unset (env fallback); the cached source re-reads after invalidate', async () => {

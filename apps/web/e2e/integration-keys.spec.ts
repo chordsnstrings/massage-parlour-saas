@@ -7,6 +7,9 @@ const GOOGLE_ID = 'e2e-r29.apps.googleusercontent.com'
 const GOOGLE_SECRET = 'GOCSPX-e2eConsoleSecret-WXYZ'
 const META_SECRET = 'e2e-meta-app-secret-ABCD'
 const VERIFY = 'e2e-verify-token-9876'
+const FB_APP_ID = '5550001112'
+const FB_SECRET = 'e2e-fb-app-secret-EFGH'
+const FB_ID_LABEL = 'Facebook App ID (for Facebook Page connect; leave empty when it is the same app)'
 // API routes answer on the bare platform host too (Node can't resolve *.localhost hosts for `request`).
 const webhook = `${base}/api/integrations/meta/webhook`
 const challenge = (token: string) =>
@@ -72,12 +75,18 @@ test('console Google + Meta keys: masked secrets, sources, spa cards and webhook
   await meta.getByLabel('Instagram app ID', { exact: true }).fill('1234567890')
   await meta.getByLabel('Instagram app secret', { exact: true }).fill(META_SECRET)
   await meta.getByLabel('Webhook verify token', { exact: true }).fill(VERIFY)
+  await meta.getByLabel(FB_ID_LABEL, { exact: true }).fill(FB_APP_ID)
+  await meta.getByLabel('Facebook App secret', { exact: true }).fill(FB_SECRET)
   await meta.getByRole('button', { name: 'Save Meta keys' }).click()
   await expect(page.getByText('Meta keys saved')).toBeVisible()
   await page.reload()
   await expect(meta.getByTestId('meta-keys-status')).toHaveText('configured')
   await expect(meta.getByTestId('source-META_APP_SECRET')).toContainText('(…ABCD)')
   await expect(meta.getByTestId('source-META_FB_CONFIG_ID')).toHaveAttribute('data-source', 'missing')
+  await expect(meta.getByTestId('meta-fb-keys-status')).toHaveText('Facebook configured')
+  await expect(meta.getByTestId('source-META_FB_APP_SECRET')).toContainText('(…EFGH)')
+  await expect(meta.getByLabel(FB_ID_LABEL, { exact: true })).toHaveValue(FB_APP_ID)
+  expect(await page.content()).not.toContain(FB_SECRET)
   expect(await page.content()).not.toContain(META_SECRET)
   expect(await page.content()).not.toContain(VERIFY)
 
@@ -93,11 +102,19 @@ test('console Google + Meta keys: masked secrets, sources, spa cards and webhook
   expect(ok.status()).toBe(200)
   expect(await ok.text()).toBe('r29-ok')
   expect((await owner.request.get(challenge('wrong'))).status()).toBe(403)
+  // Facebook Page connect sends the Facebook App ID (not the Instagram app ID) to the Facebook dialog.
+  await owner.route('https://www.facebook.com/**', (r) => r.fulfill({ contentType: 'text/html', body: 'fb' }))
+  const dialog = owner.waitForRequest((r) => r.url().startsWith('https://www.facebook.com/'))
+  await owner.getByTestId('facebook-card').getByRole('button', { name: 'Connect Facebook' }).click()
+  expect(new URL((await dialog).url()).searchParams.get('client_id')).toBe(FB_APP_ID)
+  await owner.goto(`${app}/${slug}/settings/integrations`)
 
   // Overview: the config rows say where the keys come from.
   await page.goto(`${admin}/`)
   await expect(page.getByTestId('config-GOOGLE')).toHaveAttribute('data-ok', 'true')
   await expect(page.getByTestId('config-GOOGLE')).toContainText('from console')
+  await expect(page.getByTestId('config-META_FB')).toHaveAttribute('data-ok', 'true')
+  await expect(page.getByTestId('config-META_FB')).toContainText('own Facebook app, from console')
 
   // Remove everything again so later specs see the env-only state.
   await page.goto(`${admin}/settings`)
@@ -108,11 +125,14 @@ test('console Google + Meta keys: masked secrets, sources, spa cards and webhook
   await meta.getByLabel('Instagram app ID', { exact: true }).fill('')
   await meta.getByLabel('Remove the stored Instagram app secret').check()
   await meta.getByLabel('Remove the stored verify token').check()
+  await meta.getByLabel(FB_ID_LABEL, { exact: true }).fill('')
+  await meta.getByLabel('Remove the stored Facebook App secret').check()
   await meta.getByRole('button', { name: 'Save Meta keys' }).click()
   await expect(page.getByText('Meta keys saved')).toBeVisible()
   await page.reload()
   await expect(google.getByTestId('google-keys-status')).toHaveText('not configured')
   await expect(meta.getByTestId('meta-keys-status')).toHaveText('not configured')
+  await expect(meta.getByTestId('meta-fb-keys-status')).toHaveText('Facebook not configured')
   await owner.reload()
   await expect(owner.getByTestId('gbp-card').getByText('Not configured yet')).toBeVisible()
   expect((await owner.request.get(challenge(VERIFY))).status()).toBe(503)
