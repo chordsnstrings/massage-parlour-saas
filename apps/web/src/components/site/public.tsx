@@ -23,6 +23,7 @@ import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { ScrollScenes } from '@/components/scroll-scenes'
 import { PlaceholderSite } from '@/components/site/placeholder-site'
+import { pageCrmInline } from '@/server/crm-inline'
 import { getNonce } from '@/server/nonce'
 import { absoluteImage, heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { siteData } from '@/server/sites'
@@ -266,6 +267,14 @@ export async function PublicSite({
     notFound()
   }
   const locale = localeOf(lang)
+  // R26: an HTML design with the CRM data contract (frame: Phone fixes on, legacy designs, fallback).
+  const feed = await crmFeedMeta(tenant, loaded.published.data, {
+    locale,
+    live: true,
+    base,
+    slug,
+    services: loaded.data.services,
+  })
   const meta = {
     ...buildMeta({
       data: loaded.data,
@@ -276,14 +285,9 @@ export async function PublicSite({
     }),
     globals: loaded.published.globals,
     form,
-    // R26: an HTML design with the CRM data contract (frame: Phone fixes on, legacy designs, fallback).
-    ...(await crmFeedMeta(tenant, loaded.published.data, {
-      locale,
-      live: true,
-      base,
-      slug,
-      services: loaded.data.services,
-    })),
+    ...feed,
+    // contract.inline: its first-screen pictures inside the page (owner 2026-10-13).
+    ...(feed.crm ? await pageCrmInline(tenant, loaded.published.data, feed.crm, { locale }) : {}),
   }
   const data = loaded.published.data as Partial<Data>
   const ld = await siteJsonLd(tenant, slug, loaded, meta.locale)

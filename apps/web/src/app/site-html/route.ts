@@ -12,6 +12,7 @@ import { tr } from '@/components/site/i18n'
 import { loadPublished, siteJsonLd } from '@/components/site/published'
 import type { Bi } from '@/components/site/types'
 import { PATH_ROUTING } from '@/lib/paths'
+import { crmInlinePlan } from '@/server/crm-inline'
 import {
   forgetHtmlDesignRoutes,
   HTML_ROUTE_FALLBACK,
@@ -97,12 +98,13 @@ async function render(req: Request, head: boolean) {
   })
   // R28: the spa's website content (data values in the CRM splice; page texts + pictures in the render).
   const content = block.props.content as HtmlDesignContent | undefined
+  const key = designKey(htmlDesignDocOf(block.props))
+  // contract.inline (owner 2026-10-13 "no delay when I reload"): the first-screen pictures it asks for as data: URIs
+  // in that JSON (this document reuses nothing from the browser cache on a reload).
+  const opts = { inject: false, content, locale }
+  const inline = await crmInlinePlan(tenant, block.props.html, key, crm, opts)
   let html = htmlDesignDocument(
-    designWithCrm(block.props.html, designKey(htmlDesignDocOf(block.props)), crm, {
-      inject: false,
-      content,
-      locale,
-    }),
+    designWithCrm(block.props.html, key, crm, { ...opts, inline }),
     htmlDesignValues(meta),
     false,
     htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content),
