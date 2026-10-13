@@ -1,4 +1,6 @@
 // R23 console spa website page: the server-rendered cards (English, components/ui). Client sheets: website-client.tsx.
+import { type HtmlDesignReport, htmlDesignReportLine } from '@spa/core'
+import type { SiteTextRun } from '@spa/db'
 import type { ChangeRequestRow, listPosts, PageSummary } from '@spa/services'
 import { ExternalLink, FileText, Globe, MessageSquare, Newspaper, PencilLine, Plus } from 'lucide-react'
 import Link from 'next/link'
@@ -7,6 +9,7 @@ import { ScaledFrame } from '@/components/site/scaled-frame'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
+import { CopyButton } from '@/components/ui/copy-button'
 import { Stagger, StaggerItem } from '@/components/ui/motion'
 import { EmptyState } from '@/components/ui/page'
 import { DataTable } from '@/components/ui/table'
@@ -201,6 +204,74 @@ export function RequestsCard({
 }
 
 /** Pages: status, menu visibility, full-screen editor; import + add page. */
+const CONTRACT_BADGE = {
+  v2: 'CRM contract v2',
+  v1: 'CRM contract',
+  none: 'Not connected to the CRM',
+} as const
+
+const textRunLine = (run: SiteTextRun) => {
+  const what =
+    run.via === 'template_upgrade' ? 'Write texts after the upgrade' : 'Write texts after the switch'
+  const state =
+    run.state === 'done'
+      ? (run.summary ?? 'done')
+      : run.state === 'skipped' || run.state === 'failed'
+        ? `${run.state}: ${run.summary ?? ''}`
+        : run.state
+  return `${what}: ${state}`
+}
+
+/**
+ * R28 P5: how dynamic an HTML-design page is (core `htmlDesignReport`: badge, one line, warnings), a connector prompt
+ * for a design not connected to the CRM, and the Write texts run queued by a template apply / upgrade (owner D5).
+ */
+function DesignReportNote({
+  report,
+  spa,
+  page,
+  textRun,
+}: {
+  report: HtmlDesignReport
+  spa: string
+  page: string
+  textRun?: SiteTextRun | null
+}) {
+  const prompt = `Convert ${spa}'s ${page} design to the CRM contract v2 (docs: CRM data contract §9) as a draft.`
+  return (
+    <span className="mt-1.5 block space-y-1" data-testid="design-report">
+      <Badge tone={report.contract === 'none' ? 'warning' : 'accent'}>
+        {CONTRACT_BADGE[report.contract]}
+      </Badge>
+      <span className="block whitespace-normal text-xs text-muted">{htmlDesignReportLine(report)}</span>
+      {report.warnings.length > 0 && (
+        <ul
+          aria-label="Design warnings"
+          className="list-disc space-y-0.5 ps-4 text-xs whitespace-normal text-muted"
+        >
+          {report.warnings.slice(0, 5).map((w) => (
+            <li key={`${w.code}:${w.path ?? ''}`}>{w.message}</li>
+          ))}
+        </ul>
+      )}
+      {report.contract === 'none' && (
+        <span className="flex flex-wrap items-center gap-2 text-xs whitespace-normal text-muted">
+          <span className="min-w-0 flex-1">
+            Page texts, pictures and {'{{placeholders}}'} still work. To connect it, ask Claude or ChatGPT
+            (spamanagement.co connector): &lsquo;{prompt}&rsquo;
+          </span>
+          <CopyButton value={prompt} label="Copy prompt" />
+        </span>
+      )}
+      {textRun && (
+        <span className="block text-xs whitespace-normal text-muted" data-testid="write-texts-run">
+          {textRunLine(textRun)}
+        </span>
+      )}
+    </span>
+  )
+}
+
 export function PagesCard({
   slug,
   pages,
@@ -209,6 +280,9 @@ export function PagesCard({
   canDesign,
   importAi,
   seedPages = [],
+  reports = [],
+  textRun,
+  spaName = '',
 }: {
   slug: string
   pages: PageSummary[]
@@ -218,8 +292,14 @@ export function PagesCard({
   importAi: boolean
   /** R28 P3: ids of the pages whose design has window.CRM_DATA ("Fill the CRM from the design"). */
   seedPages?: string[]
+  /** R28 P5: the HTML-design pages' design reports (pageDesignReports). */
+  reports?: { pageId: string; report: HtmlDesignReport }[]
+  /** R28 P5 (D5): the spa's Write texts run after a template apply / upgrade. */
+  textRun?: SiteTextRun | null
+  spaName?: string
 }) {
   const pending = pages.filter(pageUnpublished).length
+  const reportOf = (p: PageSummary) => reports.find((r) => r.pageId === p.id)?.report
   const editHref = (p: PageSummary) => studioPath(slug, `/editor/${p.id}`)
   const seed = (p: PageSummary) =>
     seedPages.includes(p.id) && <SeedSheet slug={slug} pageId={p.id} pageTitle={p.title.en} compact />
@@ -269,6 +349,19 @@ export function PagesCard({
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{p.title.en}</span>
                     <span className="block truncate text-xs text-muted">/{p.slug}</span>
+                    {(() => {
+                      const report = reportOf(p)
+                      return (
+                        report && (
+                          <DesignReportNote
+                            report={report}
+                            spa={spaName}
+                            page={p.slug === '' ? 'home page' : `/${p.slug}`}
+                            textRun={textRun?.pageIds.includes(p.id) ? textRun : null}
+                          />
+                        )
+                      )
+                    })()}
                   </span>
                   <span className="flex shrink-0 flex-wrap justify-end gap-2 md:hidden">
                     {seed(p)}

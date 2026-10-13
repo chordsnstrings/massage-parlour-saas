@@ -3,21 +3,36 @@
 // → a website enquiry in the CRM inbox). `{site}` = `{slug}.{platform root}`, the spa's own domain, or `/s/{slug}`
 // under path routing; the proxy rewrites them here with the API headers (never redirected for POST / OPTIONS).
 // Designs run sandboxed (opaque origin): their requests carry `Origin: null`.
-import { clientIpFrom, ipRateLimitKey, mergeCrmContract } from '@spa/core'
+import {
+  clientIpFrom,
+  contractLocaleData,
+  type HtmlDesignContent,
+  htmlDesignDocOf,
+  ipRateLimitKey,
+  mergeCrmContract,
+  overlayHtmlContent,
+} from '@spa/core'
 import { platformDb, withTenant } from '@spa/db'
 import {
   DESIGN_ENQUIRY_MAX_BYTES,
   DESIGN_ENQUIRY_TENANT_LIMITS,
   designEnquirySchema,
+  htmlDesignSource,
+  PAGE_SLUG,
+  RESERVED_SLUGS,
   SITE_ENQUIRY_LIMITS,
   websiteServices,
   websiteStaff,
   withinRateLimits,
 } from '@spa/services'
+import { sql } from 'drizzle-orm'
+import { LRUCache } from 'lru-cache'
 import { acceptsBookings } from '@/components/booking/data'
 import { crmContractFor, crmEnquiryEndpoint, siteUsesCrmContract } from '@/components/site/crm-feed'
 import { localeOf } from '@/components/site/data'
+import { designContract, designKey } from '@/components/site/html-crm'
 import { PATH_ROUTING } from '@/lib/paths'
+import { spaDocReader } from '@/server/html-design-files'
 import { siteOriginFrom } from '@/server/origin'
 import { withinIpLimit } from '@/server/rate-limit'
 import { readText, TooLarge } from '@/server/read-form'
@@ -72,18 +87,80 @@ function tooManyReads(req: Request) {
   return ++r.n > 120
 }
 
+// R28 P5: a live page's endpoint design defaults (`crm-defaults`) + its website content, by the live version id
+// (published versions are never rewritten: no invalidation).
+type LiveDesign = {
+  base: Record<string, unknown> | null
+  v2: boolean
+  content: HtmlDesignContent | undefined
+}
+const g = globalThis as unknown as { __spaCrmPageDesigns?: LRUCache<string, LiveDesign> }
+g.__spaCrmPageDesigns ??= new LRUCache<string, LiveDesign>({ max: 1000 })
+const pageDesigns = g.__spaCrmPageDesigns
+
+/** The live (newest published) HtmlDesign of a visible page: its `crm-defaults` and content; null = none. */
+async function liveDesignContent(tenant: { id: string }, page: string): Promise<LiveDesign | null> {
+  return withTenant(tenant.id, async (tx) => {
+    const { rows } = await tx.execute<{ id: string; props: Record<string, unknown> | null }>(sql`
+      select v.id, n.node->'props' as props
+      from site_pages sp
+      join sites s on s.id = sp.site_id and s.tenant_id = ${tenant.id}
+      join lateral (
+        select pv.id, pv.data from page_versions pv
+        where pv.page_id = sp.id and pv.status = 'published'
+        order by pv.created_at desc limit 1
+      ) v on true
+      join lateral (
+        select e as node from jsonb_array_elements(
+          case when jsonb_typeof(v.data->'content') = 'array' then v.data->'content' else '[]'::jsonb end
+        ) e
+        where e->>'type' = 'HtmlDesign' limit 1
+      ) n on true
+      where sp.tenant_id = ${tenant.id} and sp.visible and sp.slug = ${page}
+      limit 1`)
+    const row = rows[0]
+    if (!row?.props) return null
+    const key = `${tenant.id}:${row.id}`
+    const hit = pageDesigns.get(key)
+    if (hit) return hit
+    const html = await htmlDesignSource(row.props, spaDocReader(tx, tenant.id))
+    const found = html ? designContract(html, designKey(htmlDesignDocOf(row.props)))?.found : null
+    const live: LiveDesign = {
+      // Literal designs never fetch: their reply stays the CRM alone.
+      base: found?.literal ? null : (found?.defaults?.data ?? null),
+      v2: found?.version === 2,
+      content: row.props.content as HtmlDesignContent | undefined,
+    }
+    pageDesigns.set(key, live)
+    return live
+  })
+}
+
 async function crmData(req: Request, ctx: SiteParams, head: boolean) {
   if (tooManyReads(req)) return reply(429, { ok: false, error: 'rate_limited' }, { 'retry-after': '60' })
   const { tenant, base } = await siteOf(ctx)
   if (!tenant) return reply(404, { ok: false, error: 'not_found' })
-  const locale = localeOf(new URL(req.url).searchParams.get('lang') ?? undefined)
+  const params = new URL(req.url).searchParams
+  const locale = localeOf(params.get('lang') ?? undefined)
   const origin = siteOriginFrom(req.headers, base)
+  // R28 P5: `?page=` (an endpoint design's `{{crm_data_url}}`): that live page's design defaults with its website
+  // content, then the CRM. Unknown, hidden or invalid pages and literal designs get the CRM alone (still 200).
+  const asked = params.has('page') ? (params.get('page') ?? '') : null
+  const page = asked !== null && PAGE_SLUG.test(asked) && !RESERVED_SLUGS.has(asked) ? asked : null
+  const design = page !== null ? await liveDesignContent(tenant, page) : null
   const crm = await crmContractFor(tenant, {
     locale,
-    formEndpoint: origin ? crmEnquiryEndpoint(origin, '', locale) : null,
+    formEndpoint: origin ? crmEnquiryEndpoint(origin, design ? (page ?? '') : '', locale) : null,
   })
+  const own = design?.base
+    ? overlayHtmlContent(
+        design.v2 && locale === 'ar' ? contractLocaleData(design.base, 'ar') : design.base,
+        design.content,
+        { locale, filesOrigin: origin ? new URL(origin).origin : '' },
+      )
+    : null
   // The CRM alone (no design to merge with): empty collections stay empty.
-  const res = reply(200, mergeCrmContract(null, crm))
+  const res = reply(200, mergeCrmContract(own, crm, { locale }))
   return head ? new Response(null, { status: 200, headers: res.headers }) : res
 }
 

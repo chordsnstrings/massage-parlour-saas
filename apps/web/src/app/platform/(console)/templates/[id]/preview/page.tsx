@@ -1,6 +1,7 @@
 import '@/components/site/site.css'
 import { type Data, Render } from '@puckeditor/core'
-import { PAGE_SLUG } from '@spa/services'
+import { platformDb } from '@spa/db'
+import { getStudioTemplate, PAGE_SLUG, type TemplatePage } from '@spa/services'
 import { X } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -18,22 +19,37 @@ export const metadata: Metadata = { title: 'Template preview', robots: { index: 
 
 type Props = {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ page?: string; lang?: string }>
+  searchParams: Promise<{ page?: string; lang?: string; version?: string }>
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** R28 P5: an HTML template's version waiting for sign-off (`?version=pending`), shown like the template itself. */
+async function pendingVersion(id: string) {
+  const row = UUID.test(id) ? await getStudioTemplate(platformDb(), { id }) : null
+  return row?.pending
+    ? {
+        name: `${row.name} · version ${row.pending.version} (waiting for sign-off)`,
+        theme: row.theme,
+        pages: row.pending.pages as unknown as TemplatePage[],
+      }
+    : null
 }
 
 /** Studio preview: a template's pages rendered with a sample spa, with a small page / language switcher. */
 export default async function TemplatePreviewPage({ params, searchParams }: Props) {
   await requirePlatformAdmin()
   const { id } = await params
-  const { page = '', lang } = await searchParams
+  const { page = '', lang, version } = await searchParams
   if (!PAGE_SLUG.test(page)) notFound()
-  const template = await loadAdminTemplate(id)
+  const pending = version === 'pending'
+  const template = pending ? await pendingVersion(id) : await loadAdminTemplate(id)
   const current = template?.pages.find((p) => p.slug === page)
   if (!template || !current) notFound()
   const locale = localeOf(lang)
   const meta = buildMeta({
     data: { ...DEMO_SITE, pages: template.pages.map((p) => ({ slug: p.slug, title: p.title })) },
-    theme: template.theme,
+    theme: template.theme as Parameters<typeof buildMeta>[0]['theme'],
     locale,
     base: '',
     slug: page,
@@ -41,7 +57,11 @@ export default async function TemplatePreviewPage({ params, searchParams }: Prop
   })
   const href = (slug: string, l = locale) =>
     adminPath(
-      `/templates/${id}/preview?${new URLSearchParams({ page: slug, ...(l === 'ar' ? { lang: 'ar' } : {}) })}`,
+      `/templates/${id}/preview?${new URLSearchParams({
+        page: slug,
+        ...(l === 'ar' ? { lang: 'ar' } : {}),
+        ...(pending ? { version: 'pending' } : {}),
+      })}`,
     )
   const pill =
     'inline-flex min-h-10 items-center rounded-full px-3.5 text-sm whitespace-nowrap transition-colors'

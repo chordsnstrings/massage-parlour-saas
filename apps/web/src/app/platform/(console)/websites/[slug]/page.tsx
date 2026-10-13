@@ -5,6 +5,7 @@ import {
   listChangeRequests,
   listPages,
   listPosts,
+  pageDesignReports,
   templateUndoChanges,
   websiteOverview,
 } from '@spa/services'
@@ -75,6 +76,8 @@ export default async function SpaWebsitePage({
           : null,
         pages,
         seedPages: canSeed && site ? await designSeedPages(tx, ctx.tenant.id, pages) : [],
+        // R28 P5: how dynamic each HTML-design page is (CRM contract none / v1 / v2, warnings).
+        reports: canDesign && site ? await pageDesignReports(tx, ctx.tenant.id, pages) : [],
         posts: await listPosts(tx),
         requests: await listChangeRequests(tx, ctx.tenant.id),
         // Undo is only offered while nothing the switch wrote has been edited or published since.
@@ -88,7 +91,8 @@ export default async function SpaWebsitePage({
     siteAiEditorStatus(platformDb(), ctx.user.id),
     publicSiteUrl(ctx.tenant),
   ])
-  const { site, pages, seedPages, posts, undoBlocked, requests, hosts, glance, themeWarnings } = data
+  const { site, pages, seedPages, reports: designReports, posts, undoBlocked, requests, hosts, glance } = data
+  const { themeWarnings } = data
   // F32 import: AI mapping for SITE_AI_EDITOR_EMAILS accounts when ModelArk is set up (re-checked by the action).
   const importAi = canDesign && aiEditReady() && aiEditor === 'ok'
   const pending = pages.filter(pageUnpublished).length
@@ -198,6 +202,7 @@ export default async function SpaWebsitePage({
                 to={current?.name ?? site.templateKey}
                 at={formatDateTime(new Date(undo.at))}
                 pages={undo.pages.length}
+                live={undo.live?.version}
               />
             )}
             {seedPages.length > 0 && (
@@ -211,6 +216,9 @@ export default async function SpaWebsitePage({
               canDesign={canDesign}
               importAi={importAi}
               seedPages={seedPages.map((p) => p.id)}
+              reports={designReports}
+              textRun={site.textRun}
+              spaName={ctx.tenant.name}
             />
             <div className="grid items-start gap-[var(--ui-stack,1.5rem)] lg:grid-cols-2">
               <div className="grid min-w-0 gap-[var(--ui-stack,1.5rem)]">

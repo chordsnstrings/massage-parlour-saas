@@ -5,6 +5,7 @@ import {
   type CrmContract,
   type CrmJsonMemo,
   type CrmLocale,
+  contractLocaleData,
   crmJsonMemo,
   crmScriptJson,
   cyrb53,
@@ -44,7 +45,8 @@ class SizedCache<V> {
   }
 }
 
-type Parsed = { found: HtmlCrmContract | null; memo: CrmJsonMemo }
+/** `ar`: a v2 design's data with its Arabic defaults (`contractLocaleData`), made once per document. */
+type Parsed = { found: HtmlCrmContract | null; memo: CrmJsonMemo; ar?: Record<string, unknown> }
 const MB = 1024 * 1024
 const browser = typeof window !== 'undefined'
 // globalThis: route handlers and pages are separate bundles in one server process.
@@ -69,18 +71,21 @@ export function designContract(html: string, key: string | null): Parsed | null 
   if (hit) return hit.found ? hit : null
   const found = htmlCrmContractOf(html)
   const parsed = { found, memo: crmJsonMemo() }
-  if (key)
-    contracts.set(key, parsed, found?.literal ? (found.literal.end - found.literal.start) * 3 + 1024 : 256)
+  const range = found?.literal ?? found?.defaults
+  if (key) contracts.set(key, parsed, range ? (range.end - range.start) * 3 + 1024 : 256)
   return found ? parsed : null
 }
 
 /**
  * The design with the spa's data: `literal` designs get only their `window.CRM_DATA` JSON replaced — the design's
  * data with the spa's website content over it (R28, draft → publish with the page), then the CRM's operational keys
- * (R26); endpoint-only designs get the CRM contract injected in frames (`inject`), and are left as they are on the
- * live page (which fetches `crm-data.json`). No contract, or neither CRM data nor content values → `html` unchanged.
- * Only `content.values` count here (and in the output key): page texts and pictures (R28 P4) are applied by
- * htmlDesignDocument afterwards, so texts-only content keeps the no-content path and key.
+ * (R26); endpoint-only designs get the CRM contract injected in frames (`inject`; R28 P5: over their `crm-defaults`
+ * with the content), and are left as they are on the live page (which fetches `crm-data.json?page=`). No contract,
+ * or neither CRM data nor content values → `html` unchanged (a v1 design keeps its P4 output and key). Contract v2
+ * (R28 P5): `locale` written into the data (the frame's script sets `lang`), and on `ar` the design's reviewed Arabic
+ * defaults (`contract.l10n.ar`) applied before the content. Only `content.values` count here (and in the output key):
+ * page texts and pictures (R28 P4) are applied by htmlDesignDocument afterwards, so texts-only content keeps the
+ * no-content path and key.
  */
 export function designWithCrm(
   html: string,
@@ -89,25 +94,32 @@ export function designWithCrm(
   opts: { inject: boolean; content?: HtmlDesignContent | null; locale?: CrmLocale },
 ): string {
   const content = hasHtmlContent(opts.content) ? opts.content : null
-  if (!crm && !content) return html
+  const locale = opts.locale ?? 'en'
+  if (!crm && !content && locale !== 'ar') return html
   const parsed = designContract(html, key)
   if (!parsed?.found) return html
   const found = parsed.found
-  if (!found.literal && (!opts.inject || !crm)) return html
-  const locale = opts.locale ?? 'en'
+  const v2 = found.version === 2
+  if (!crm && !content && !v2) return html
+  const base = found.literal?.data ?? (opts.inject ? (found.defaults?.data ?? null) : null)
+  if (!found.literal && (!opts.inject || (!crm && !base))) return html
+  const loc = v2 || (content && base) ? `|${locale}` : ''
   const outKey = key
-    ? `${key}|${found.literal ? 'l' : 'i'}|${crm ? cyrb53(JSON.stringify(crm)) : '-'}${
-        content && found.literal ? `|${locale}|${cyrb53(JSON.stringify(content.values))}` : ''
+    ? `${key}|${found.literal ? 'l' : 'i'}|${crm ? cyrb53(JSON.stringify(crm)) : '-'}${loc}${
+        content && base ? `|${cyrb53(JSON.stringify(content.values))}` : ''
       }`
     : null
   const hit = outKey ? outputs.get(outKey) : undefined
   if (hit !== undefined) return hit
-  const own = found.literal
-    ? content
-      ? overlayHtmlContent(found.literal.data, content, { locale })
-      : found.literal.data
-    : null
-  const json = crmScriptJson(crm ? mergeCrmContract(own, crm) : own, parsed.memo)
+  // Copy-on-write: untouched subtrees keep their identity, so the serialiser's memo still hits.
+  let local = base
+  if (base && v2 && locale === 'ar') {
+    parsed.ar ??= contractLocaleData(base, 'ar')
+    local = parsed.ar
+  }
+  const own = local && content ? overlayHtmlContent(local, content, { locale }) : local
+  const data = crm ? mergeCrmContract(own, crm, v2 ? { locale } : {}) : own && v2 ? { ...own, locale } : own
+  const json = crmScriptJson(data, parsed.memo)
   const out = spliceCrmData(html, found, json, opts)
   if (outKey) outputs.set(outKey, out, out.length * 2)
   return out

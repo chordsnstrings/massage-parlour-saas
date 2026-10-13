@@ -1231,6 +1231,30 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   uploaded pictures dropped); texts the design's script writes are read-only, worded "from the CRM" on contract
   designs; Ask AI never writes a text it saw cut short (dropped with a note) and the connector can read such texts
   whole first. Not in P4: `<input value>` / `og:*` texts.
+  **P5 (2026-10-13, built; release with P6):** CRM contract v2 (`docs/design/html-crm-contract.md` §9: neutral
+  defaults, ids on every item, `ui{}` + `data-crm-text` / `data-crm-attr` for every script and markup string,
+  `contract{version: 2, locales, fields, l10n}`, the platform's `locale`, `data-if="photo"`, `clip` / `clipMobile`
+  video slots, endpoint designs with `crm-defaults` + `{{crm_data_url}}`). Every upload shows how dynamic the design
+  is (report: CRM contract none / v1 / v2, editable values and page texts, warnings; never blocks) — in the upload
+  sheet, the upload message and on the spa's Pages card ("Not connected to the CRM" + a connector prompt to convert
+  it). **D4 as built:** an HTML template gets "Upload new version" (waits for sign-off; preview in EN / AR); **Roll
+  out = sign-off**: the version becomes the template's and every spa LIVE on an older version switches at once (its
+  own published row; its edits carried, the spa's own v1 look — logos, short name, texts that differ — pinned as its
+  website content; its draft carried after it; draft theme / pending renames stay unpublished); a spa whose live file
+  differs (patched, localised) is never overwritten; each spa can Undo on its page (the previous version
+  re-published as a new row, its draft back) and then later rollouts of that version skip it (hold). **D5 as built:**
+  a new apply of a contract v2 design, the rollout and the connector's `apply_template` queue Write texts for its
+  pages (EN + AR drafts from CRM facts + leftovers, never over what the spa wrote, never the design's own system
+  copy, template undo kept; the web runs it right away, the worker sweeps what is left); it is skipped (with the
+  reason on the card) on a spa whose old design was its own (BE RELAX: its copy is its own — open point O1) or when
+  the clicking super-admin is not on SITE_AI_EDITOR_EMAILS with 2FA. `crm-data.json` carries `locale`; `?page=`
+  merges a live endpoint design's defaults + content. Journey clips take an uploaded MP4 / WebM (≤ 8 MB) in the
+  editor. **Owner open points (2026-10-13):** O1 D5 on the spa's own design (now skipped); O2 `ui.wa.*` and the
+  WhatsApp message stay English on `/ar` (staff read them); O3 BE RELAX's area label becomes "Abu Dhabi" on v2 unless
+  its branch "Area shown on the website" is set first; O4 v2 drops BE RELAX's therapist photos and logos from the file
+  (its logos come back as its website content); O5 the new Arabic defaults in `contract.l10n.ar` need the team's
+  native review before sign-off. After the deploy: upload BE RELAX v2 as "Upload new version" on its row, review the
+  EN + AR previews and screenshots, then Roll out.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

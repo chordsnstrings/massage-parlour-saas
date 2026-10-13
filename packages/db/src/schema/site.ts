@@ -47,8 +47,51 @@ export type TemplateUndo = {
     draft: Record<string, unknown> | null
     versionId: string
     savedAt: string
+    /** R28 P5 live upgrade: the published version the upgrade replaced (undo re-publishes its data). */
+    publishedBefore?: string
+    /** R28 P5 live upgrade: the draft the upgrade carried and moved after the published row (+ its stamp). */
+    draftVersionId?: string
+    draftSavedAt?: string
   }[]
+  /**
+   * R28 P5 (owner D4): a live upgrade to a new version of the same template (rollout = sign-off) — published at once;
+   * `pages[].versionId` = the published row it inserted. Undo re-publishes `publishedBefore` and sets `template_hold`.
+   */
+  live?: { version: number; fromSha: string; toSha: string }
 }
+
+/** R28 P5: one version of an uploaded HTML template (its design document in site_template_files). */
+export type TemplateVersionEntry = {
+  version: number
+  sha256: string
+  file: string
+  bytes: number
+  at: string
+  by: string | null
+}
+/** R28 P5: an uploaded new version waiting for its sign-off (Roll out); invisible to apply until then. */
+export type PendingTemplateVersion = TemplateVersionEntry & {
+  pages: Record<string, unknown>[]
+  report: Record<string, unknown>
+}
+/**
+ * R28 P5 (owner D5): a queued / finished Write texts run for a spa after a template apply or upgrade (drafts only).
+ * The web runs it right away (`after()`); the worker's `site-texts-queue` sweeps queued or stale runs.
+ */
+export type SiteTextRun = {
+  state: 'queued' | 'running' | 'done' | 'failed' | 'skipped'
+  via: 'template_apply' | 'template_upgrade' | 'connector_apply'
+  actorUserId: string
+  pageIds: string[]
+  designSha?: string
+  at: string
+  startedAt?: string
+  finishedAt?: string
+  /** Console English. */
+  summary?: string
+}
+/** R28 P5: the spa undid a live upgrade — rollouts of this template up to `version` skip it. */
+export type TemplateHold = { key: string; version: number; at: string; by: string | null }
 
 /**
  * @deprecated R23 (2026-10-10): the review step is gone; never read or written. Kept so a container from before R23
@@ -73,6 +116,10 @@ export const sites = pgTable(
     seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
     /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
     templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
+    /** R28 P5 (D5): the Write texts run queued by a template apply / upgrade (null = none). */
+    textRun: jsonb('text_run').$type<SiteTextRun>(),
+    /** R28 P5 (D4): set when the spa undid a live upgrade; later rollouts of that version skip the spa. */
+    templateHold: jsonb('template_hold').$type<TemplateHold>(),
     /**
      * @deprecated R23 (2026-10-10): the review step is gone; never read or written. Kept so a container from before
      * R23 can still read it during a zero-downtime deploy; drop in a later migration.
@@ -266,6 +313,11 @@ export const siteTemplates = pgTable(
     previewImageUrl: text('preview_image_url'),
     active: boolean('active').notNull().default(true),
     sort: integer('sort').notNull().default(0),
+    /** R28 P5: HTML templates — the live version's number; older design shas in `history` (newest first). */
+    version: integer('version').notNull().default(1),
+    history: jsonb('history').$type<TemplateVersionEntry[]>().notNull().default([]),
+    /** R28 P5: an uploaded version waiting for its sign-off (the Roll out); null = none. */
+    pending: jsonb('pending').$type<PendingTemplateVersion>(),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

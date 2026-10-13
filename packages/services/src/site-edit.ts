@@ -5,6 +5,7 @@
 // web app and passed in). Like every service: takes the caller's tx, no permission checks or audit rows inside —
 // callers audit with `siteEditAuditData`.
 import {
+  crmDesignData,
   dubaiParts,
   HTML_IMAGE_SRC_MAX,
   type HtmlContentValue,
@@ -27,6 +28,7 @@ import { type Db, pageVersions, platformDb, sites, storedFiles, type ThemeTokens
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { DomainError } from './errors'
+import { VIDEO_TYPES } from './media'
 import { htmlDesignDocFor, htmlDesignSource, spaHtmlDocReader, storeSpaHtmlDoc } from './site-html-assets'
 import {
   applySiteEditOps,
@@ -391,6 +393,57 @@ export async function htmlDesignContentErrors(
       opts.platform,
     )
     errors.push(...foreign.map((x) => `/files/${x} is not one of this spa's pictures`))
+    errors.push(...(await wrongKindContentFiles(tx, tenantId, n.props.content)))
+  }
+  return errors
+}
+
+const FILE_URL = /^\/files\/([0-9a-f-]{36})$/i
+/** R28 P5: the `/files` a content object uses, and what each must be (a video value → a video, else a picture). */
+function contentFileUses(content: unknown): { id: string; video: boolean; at: string }[] {
+  const parts = htmlContentParts(content)
+  const idOf = (url: unknown) =>
+    typeof url === 'string' ? FILE_URL.exec(url)?.[1]?.toLowerCase() : undefined
+  const out: { id: string; video: boolean; at: string }[] = []
+  for (const [path, v] of Object.entries(parts.values)) {
+    const id = 'img' in v ? idOf(v.img) : 'video' in v ? idOf(v.video) : undefined
+    if (id) out.push({ id, video: 'video' in v, at: path })
+  }
+  for (const [pid, p] of Object.entries(parts.pictures)) {
+    const id = idOf(p.img)
+    if (id) out.push({ id, video: false, at: `picture ${pid}` })
+  }
+  return out
+}
+
+/**
+ * R28 P5: content files of the wrong kind — a video slot needs an MP4 / WebM, a picture an image (this spa's own
+ * files; foreign ones are refused by the checks above).
+ */
+async function wrongKindContentFiles(tx: Tx, tenantId: string, content: unknown): Promise<string[]> {
+  const uses = contentFileUses(content).filter((u) => UUID.test(u.id))
+  if (!uses.length) return []
+  const rows = await tx
+    .select({ id: storedFiles.id, contentType: storedFiles.contentType })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.tenantId, tenantId),
+        inArray(
+          storedFiles.id,
+          uses.map((u) => u.id),
+        ),
+      ),
+    )
+  const types = new Map(rows.map((r) => [r.id, r.contentType]))
+  const errors: string[] = []
+  for (const u of uses) {
+    const type = types.get(u.id)
+    if (type === undefined) continue
+    if (u.video && !(VIDEO_TYPES as readonly string[]).includes(type))
+      errors.push(`${u.at}: a video (MP4 / WebM) from the platform's files`)
+    else if (!u.video && !type.startsWith('image/'))
+      errors.push(`${u.at}: a picture from the platform's files`)
   }
   return errors
 }
@@ -640,7 +693,7 @@ export async function runSiteEdit(
             throw new OpFail(
               `${at}: the design file of ${pageLabel(w)} is missing — send the whole design again`,
             )
-          const literal = htmlCrmContractOf(source)?.literal
+          const literal = crmDesignData(htmlCrmContractOf(source))
           const setCount = Object.keys(op.set ?? {}).length
           const resets = op.reset === 'all' ? null : (op.reset ?? [])
           if (
@@ -651,11 +704,11 @@ export async function runSiteEdit(
             !(resets === null || resets.length)
           )
             throw new OpFail(
-              `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA, so its words and pictures live in the file — use html_patch`,
+              `${at}: the design of ${pageLabel(w)} has no CRM_DATA or crm-defaults, so its words and pictures live in the file — use html_patch`,
             )
           if (!literal && setCount)
             throw new OpFail(
-              `${at}: the design of ${pageLabel(w)} has no window.CRM_DATA: change its page texts and pictures with texts / pictures, or the file with html_patch`,
+              `${at}: the design of ${pageLabel(w)} has no CRM_DATA or crm-defaults: change its page texts and pictures with texts / pictures, or the file with html_patch`,
             )
           const parts = htmlContentParts(block.props.content)
           let reset = resets?.length ?? 0
@@ -670,7 +723,7 @@ export async function runSiteEdit(
               else if (k.startsWith('picture:')) delete parts.pictures[k.slice(8)]
               else delete parts.values[k]
             }
-          const slots = literal ? htmlContentSlots(literal.data) : []
+          const slots = literal ? htmlContentSlots(literal) : []
           // Ask AI: an entry that doesn't fit is dropped with a note (`skipped`); elsewhere it fails the op.
           const lenient = input.htmlContent
           const skipped: string[] = []
@@ -817,6 +870,8 @@ export async function runSiteEdit(
             throw new OpFail(
               `${at}: /files/${missing[0]} is not one of this spa's pictures — add it with add_image first`,
             )
+          const wrongKind = await wrongKindContentFiles(tx, input.tenantId, next)
+          if (wrongKind.length) throw new OpFail(`${at}: ${wrongKind[0]}`)
           if (next) block.props.content = next
           else delete block.props.content
           w.changed = true

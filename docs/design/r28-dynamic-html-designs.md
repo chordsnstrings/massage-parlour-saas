@@ -226,6 +226,34 @@ All in `packages/core/src/html-crm.ts`:
 - **Endpoint-only designs:** `crm-data.json?page=` merges the published block's `content`.
 - **Designs without CRM_DATA:** they still get page texts, pictures and placeholders. The card says "Not connected to the CRM" and offers a connector conversion into a draft.
 - **Video:** `/files/upload` gets a video kind (mp4/webm, ≤ 8 MB, under `site.design`).
+- **As built (P5, platform):**
+  - **Template versions:** on the same `site_templates` row (`version`, `history`, `pending`; migration 0052). "Upload
+    new version" (`/files/templates?kind=version&id=`) stores the pending one with its report — invisible to apply.
+    **Roll out = sign-off** (`signOffTemplateVersion`): pending → pages, the old sha → history. A "Replace" upload of
+    an HTML row also makes the replaced file an older version (`pushTemplateVersion`).
+  - **Who switches:** spas whose LIVE HtmlDesign file is one of the old versions' shas (`spasOnTemplateVersions`;
+    BE RELAX v1 has no `/files` references, so a spa's copy keeps the template's sha). Another live sha (patched,
+    localised, applied but never published, an earlier undo) → listed as skipped, never overwritten; ≤ 25 spas a
+    click ("Run again for the rest").
+  - **The switch** (`upgradeHtmlDesignLive`, in the spa's own transaction): never `publishPage` — its own published
+    row (`insertVersion`), so draft themes and pending renames stay unpublished; content = `carryHtmlContent` (with the
+    old file for pairing) + `htmlDesignOwnPins` (embedded logos stored as the spa's files); the working draft carried
+    (same old file) or kept, moved after the new live row; `templateUndo.live` → Undo re-publishes the previous version
+    as a new row, puts the draft back and sets `sites.template_hold` (later rollouts of that version skip the spa).
+    An editor lock, a content check that fails, or a spa already on the new file → skipped with the reason.
+  - **D5:** `sites.text_run` queue (`queueSiteTexts`, same transaction as the apply / switch) → `@spa/ai`
+    `runQueuedSiteTexts` (atomic claim; gate re-checked for the super-admin who queued it; `htmlOnly`, `onlyDefaults`,
+    `keepUndo`, `designSha`) right after the response (`after()`), the worker's `site-texts-queue` cron sweeps queued
+    (> 3 min) and stale running (> 15 min) runs. Only contract v2 pages; skipped with a reason on the card for the
+    spa's own old design (O1) or a clicker without the AI gate. System copy (`ui.*` the design translates or keeps
+    English) is never drafted; a draft losing a `{token}` is skipped.
+  - **Feed + render:** `crm-data.json` + `locale`; `?page=` = that live page's `crm-defaults` + content, then the CRM
+    (literal designs: the CRM alone); `{{crm_data_url}}` placeholder; `designWithCrm` writes `locale` into v2 data and
+    `l10n.ar` on Arabic (v1 output and keys as in P4). Video: upload body cap 8 MB, `SlotVideo` upload button; a
+    picture file in a video slot (or the reverse) is refused on save.
+  - **Console:** report panel in the upload sheet, report in the upload message / audit, Pages card badge + line +
+    warnings + connector prompt, rollout sheet (carry dry run per spa: edits kept / not kept, made for this spa, has
+    a draft; skipped spas with reasons), live Undo bar copy.
 
 ## 8. Tests
 
@@ -286,7 +314,7 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 | P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
 | P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
 | P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Done 2026-10-13 (PR pending):** A core + render + `html_content` op + draft-save check, B Ask AI / Write texts / connector, C editor; as built: the "As built (P4)" notes in §2 (item 2), §3 and §6, review fixes below the table | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
-| P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
+| P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload. **Built 2026-10-13 (A core, B platform, C BE RELAX v2 file):** template versions + Roll out = sign-off (D4: live at once, content carried, own look pinned, per-spa undo + hold), D5 Write texts queue (web `after()` + worker sweep), report in upload / Pages card, `?page=` + locale + `{{crm_data_url}}`, video upload in the editor; as built: §7 "As built (P5, platform)" | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is; BE RELAX spas move to v2 when you click Roll out |
 | P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
 
 **Total: about 58 h.** P0–P2 already make each spa's site its own; P3–P5 complete it.

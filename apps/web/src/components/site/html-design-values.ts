@@ -11,6 +11,8 @@ export const HTML_DESIGN = 'HtmlDesign'
 /**
  * Live spa data an uploaded design can show: `{{spa_name}}`, `{{book_url}}`, … (HTML-escaped). `{{map_url}}` is the
  * branch's exact Google Maps pin when set (else an address search); `{{address}}` in page text becomes a link to it.
+ * `{{crm_data_url}}` (R28 P5): this page's CRM data feed (`crm-data.json?page=`, with its website content) for a
+ * contract v2 design that fetches it (`<meta name="crm-endpoint" content="{{crm_data_url}}">`).
  */
 export const HTML_DESIGN_PLACEHOLDERS = [
   'spa_name',
@@ -21,6 +23,7 @@ export const HTML_DESIGN_PLACEHOLDERS = [
   'address',
   'map_url',
   'site_url',
+  'crm_data_url',
 ] as const
 
 export function htmlDesignValues(meta: SiteMeta): Record<(typeof HTML_DESIGN_PLACEHOLDERS)[number], string> {
@@ -35,6 +38,7 @@ export function htmlDesignValues(meta: SiteMeta): Record<(typeof HTML_DESIGN_PLA
     address: branch?.address ?? '',
     map_url: mapHref(meta) ?? book,
     site_url: pageHref(meta, ''),
+    crm_data_url: `${meta.base}/crm-data.json?page=${encodeURIComponent(meta.slug)}${meta.locale === 'ar' ? '&lang=ar' : ''}`,
   }
 }
 

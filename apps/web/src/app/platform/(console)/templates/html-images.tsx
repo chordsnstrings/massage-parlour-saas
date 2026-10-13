@@ -4,8 +4,11 @@ import {
   HTML_IMAGE_SRC_MAX,
   HTML_IMAGE_URL,
   type HtmlDesignImage,
+  type HtmlDesignReport,
   type HtmlImageAdjust,
   htmlDesignDocument,
+  htmlDesignReport,
+  htmlDesignReportLine,
   htmlImageFramed,
   listHtmlDesignImages,
 } from '@spa/core'
@@ -78,10 +81,32 @@ export function HtmlFileField({ spas, hint }: { spas: Spa[]; hint: string }) {
           </span>
         </span>
       </label>
+      {html !== null && <DesignReportPanel html={html} />}
       {html !== null && (
         <HtmlImageAdjuster key={html.length} html={html} initial={[]} spas={spas} phoneFixes={phoneFixes} />
       )}
     </>
+  )
+}
+
+/**
+ * R28 P5: how dynamic the chosen design is (core `htmlDesignReport`: CRM contract none / v1 / v2, editable values,
+ * page texts, warnings) — informational, it never blocks the upload.
+ */
+function DesignReportPanel({ html }: { html: string }) {
+  const report: HtmlDesignReport = useMemo(() => htmlDesignReport(html), [html])
+  return (
+    <div className="space-y-1.5 rounded-xl border p-4 text-sm" data-testid="design-report-panel">
+      <p className="font-medium">{htmlDesignReportLine(report)}</p>
+      {report.warnings.length > 0 && (
+        <ul aria-label="Design warnings" className="list-disc space-y-0.5 ps-5 text-[13px] text-muted">
+          {report.warnings.slice(0, 5).map((w) => (
+            <li key={`${w.code}:${w.path ?? ''}`}>{w.message}</li>
+          ))}
+          {report.warnings.length > 5 && <li>{report.warnings.length - 5} more</li>}
+        </ul>
+      )}
+    </div>
   )
 }
 

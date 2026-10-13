@@ -66,6 +66,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   **Dynamic HTML designs (R28, owner 2026-10-12):** nothing a visitor sees may be fixed in the file — CRM (live) >
   per-spa website content (draft → publish, EN + AR; Arabic shows in the design's own layout) > design defaults;
   overlays change values only, never layout/CSS/scripts (R24 kept). Plan + phases: `docs/design/r28-dynamic-html-designs.md`.
+  D4: a new HTML template version is signed off by its Roll out (live at once, content carried, per-spa undo + hold);
+  D5: Write texts queued per switched spa (drafts, never on the spa's own design).
   **Website Studio (R23, 2026-10-10):** lives in the console (Websites → spa page `/websites/{slug}`, full-screen editor);
   super-admins publish directly, no spa review/approve; the spa CRM Website page = services + prices, a preview,
   Request a change. **Write texts** = AI drafts of every page's texts in EN + AR (`SITE_AI_EDITOR_EMAILS` + 2FA, drafts only).

@@ -1,9 +1,12 @@
 import {
+  crmContractManifest,
+  crmDesignData,
   htmlContentFrom,
   htmlContentParts,
   htmlContentSlots,
   htmlCrmContractOf,
   listHtmlDesignTexts,
+  systemCopy,
 } from '@spa/core'
 import type { PropSpec, SiteEditSchema } from './edit-ops'
 import { isNode, type PuckNode, walkNodes } from './tree'
@@ -100,11 +103,14 @@ export function textSlots(
  * the design data's text / longtext values (`{block}/content:{path}`; hidden or empty ones left out) and its page
  * texts the CRM doesn't fill (`{block}/text:{id}`, with the design text's src guard). Pictures and tags never.
  * `first` (Write texts' leftovers) go ahead of the rest before the cap, so late ones (a footer) still make it.
+ * R28 P5: a contract v2 design's system copy (`ui.*` texts it translates itself or keeps English) is never a slot;
+ * `onlyDefaults` (D5 after a template apply / upgrade) leaves out what the spa already wrote (a value or page text
+ * with English), except leftovers (`first`).
  */
 export function htmlTextSlots(
   data: unknown,
   html: string,
-  opts: { maxPerPage?: number; first?: ReadonlySet<string> } = {},
+  opts: { maxPerPage?: number; first?: ReadonlySet<string>; onlyDefaults?: boolean } = {},
 ): TextSlot[] {
   const max = opts.maxPerPage ?? 400
   const node = htmlDesignNode(data)
@@ -115,10 +121,16 @@ export function htmlTextSlots(
   const push = (slot: TextSlot) => {
     if (slot.key.length <= MAX_KEY && slot.en.trim()) out.push(slot)
   }
-  for (const s of htmlContentSlots(htmlCrmContractOf(html)?.literal?.data)) {
+  const designData = crmDesignData(htmlCrmContractOf(html))
+  const manifest = crmContractManifest(designData)
+  const own = (key: string, en: string | undefined) =>
+    opts.onlyDefaults === true && !!en?.trim() && !opts.first?.has(key)
+  for (const s of htmlContentSlots(designData)) {
     const v = parts.values[s.path]
-    if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v)) continue
+    if ((s.kind !== 'text' && s.kind !== 'longtext') || (v && 'hide' in v) || systemCopy(manifest, s.path))
+      continue
     const t = v && 't' in v ? v.t : undefined
+    if (own(`${block}/content:${s.path}`, t?.en)) continue
     push({
       key: `${block}/content:${s.path}`,
       block,
@@ -132,6 +144,7 @@ export function htmlTextSlots(
   for (const x of listHtmlDesignTexts(html)) {
     if (x.bound) continue
     const t = parts.texts[x.id]?.src === x.src ? parts.texts[x.id]?.t : undefined
+    if (own(`${block}/text:${x.id}`, t?.en)) continue
     push({
       key: `${block}/text:${x.id}`,
       block,
@@ -190,6 +203,14 @@ export function plainText(s: string, multiline: boolean) {
     .trim()
 }
 
+/** A design's single-brace `{token}` (not a `{{placeholder}}`). */
+const TOKEN = /(?<!\{)\{[a-z_]+\}(?!\})/g
+/** Whether `draft` lacks one of the single-brace tokens the slot's current English has. */
+const lostToken = (current: string, draft: string) => {
+  const tokens = current.match(TOKEN)
+  return !!tokens && tokens.some((t) => !draft.includes(t))
+}
+
 /** The bilingual leaf a slot points at in `data`, found by block id (moves since the read don't matter). */
 function leafOf(data: { root?: { props?: Record<string, unknown> } }, slot: TextSlot) {
   let cur: unknown
@@ -237,6 +258,12 @@ export function fillTextSlots<T>(
     done.add(d.key)
     const en = plainText(String(d.en ?? ''), slot.multiline)
     const ar = plainText(String(d.ar ?? ''), slot.multiline)
+    // R28 P5: an HTML design fills its single-brace {tokens} itself ({time}, {name}): a draft losing one is skipped
+    // (block pages' {name} is the platform's own placeholder, unchanged).
+    if (slot.type === HTML_DESIGN && (lostToken(slot.en, en) || lostToken(slot.en, ar))) {
+      skipped++
+      continue
+    }
     if (slot.type === HTML_DESIGN) {
       const now = fresh?.get(slot.key)
       if (!en || !ar || !now || !parts || now.en !== slot.en || now.src !== slot.src) {

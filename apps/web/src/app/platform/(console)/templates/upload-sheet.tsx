@@ -11,11 +11,13 @@ import type { ActionResult } from '@/lib/action'
 import { setHtmlPhoneFixesAction } from './actions'
 import { htmlTooLarge, jsonTooLarge, MAX_HTML_UPLOAD_BYTES, MAX_TEMPLATE_JSON_BYTES } from './upload-limits'
 
-type Kind = 'html' | 'json'
+/** `version` (R28 P5): a new version of an HTML template (`query`: `&id={templateId}`), waiting for its sign-off. */
+type Kind = 'html' | 'json' | 'version'
 
 const LIMIT: Record<Kind, [number, (bytes: number) => string]> = {
   html: [MAX_HTML_UPLOAD_BYTES, htmlTooLarge],
   json: [MAX_TEMPLATE_JSON_BYTES, jsonTooLarge],
+  version: [MAX_HTML_UPLOAD_BYTES, htmlTooLarge],
 }
 
 /** The client-side size check (also used by the file field on choose). */
@@ -26,8 +28,9 @@ export function uploadTooLarge(kind: Kind, file: File | null | undefined): strin
 
 export function TemplateUploadSheet({
   kind,
+  query = '',
   ...sheet
-}: Omit<React.ComponentProps<typeof FormSheet>, 'action'> & { kind: Kind }) {
+}: Omit<React.ComponentProps<typeof FormSheet>, 'action'> & { kind: Kind; query?: string }) {
   const router = useRouter()
   const action = async (_prev: ActionResult, fd: FormData): Promise<ActionResult> => {
     const file = fd.get('file')
@@ -35,7 +38,7 @@ export function TemplateUploadSheet({
     if (tooLarge) return { ok: false, error: tooLarge, fieldErrors: { file: tooLarge } }
     let res: Response
     try {
-      res = await fetch(`/files/templates?kind=${kind}`, { method: 'POST', body: fd })
+      res = await fetch(`/files/templates?kind=${kind}${query}`, { method: 'POST', body: fd })
     } catch {
       return { ok: false, error: 'Upload failed — check the connection and try again.' }
     }

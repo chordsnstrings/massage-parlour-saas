@@ -3,11 +3,21 @@
 import {
   type HtmlContentParts,
   type HtmlContentValue,
+  type HtmlDesignDoc,
   htmlContentFrom,
   htmlContentParts,
+  htmlDesignDocOf,
   MAX_HTML_UPLOAD_BYTES,
 } from '@spa/core'
-import { type Db, pageVersions, sitePages, siteTemplates, type Tx } from '@spa/db'
+import {
+  type Db,
+  type PendingTemplateVersion,
+  pageVersions,
+  sitePages,
+  siteTemplates,
+  type TemplateVersionEntry,
+  type Tx,
+} from '@spa/db'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { isImageValue } from './site-kit/image'
@@ -465,4 +475,106 @@ export function checkNodes(nodes: unknown[], spec: BlockSpec, path = 'content'):
     }
   })
   return problems
+}
+
+/* ------------------------------------------------------------------ HTML template versions (R28 P5, owner D4) */
+
+/** The design document of a one-page HTML-design template (its HtmlDesign block's `doc`); null for other templates. */
+export function templateDocOf(pages: unknown): HtmlDesignDoc | null {
+  if (!Array.isArray(pages) || pages.length !== 1) return null
+  const content = (pages[0] as { data?: { content?: unknown } } | null)?.data?.content
+  const node = Array.isArray(content) ? (content[0] as PuckNode | undefined) : undefined
+  return node?.type === 'HtmlDesign' ? htmlDesignDocOf(node.props) : null
+}
+
+/** The current design sha of an HTML template first, then its older versions' (newest first). */
+export const templateShas = (row: Pick<StudioTemplateRow, 'pages' | 'history'>): string[] => {
+  const current = templateDocOf(row.pages)?.sha256
+  return [...new Set([...(current ? [current] : []), ...(row.history ?? []).map((h) => h.sha256)])]
+}
+
+/** The live version of an HTML template as a history entry (null: not an HTML template). */
+export const templateVersionEntry = (
+  row: Pick<StudioTemplateRow, 'pages' | 'version' | 'updatedAt' | 'createdBy'>,
+): TemplateVersionEntry | null => {
+  const doc = templateDocOf(row.pages)
+  return doc
+    ? {
+        version: row.version,
+        sha256: doc.sha256,
+        file: doc.file,
+        bytes: doc.bytes,
+        at: row.updatedAt.toISOString(),
+        by: row.createdBy ?? null,
+      }
+    : null
+}
+
+/** Stores an uploaded new version as the template's pending one (replacing an earlier pending upload). */
+export async function setPendingTemplateVersion(db: Db | Tx, id: string, p: PendingTemplateVersion) {
+  const [row] = await db
+    .update(siteTemplates)
+    .set({ pending: p })
+    .where(eq(siteTemplates.id, id))
+    .returning({ id: siteTemplates.id })
+  if (!row) throw new DomainError('Template not found', 'not_found')
+}
+
+export async function discardPendingTemplateVersion(db: Db | Tx, id: string) {
+  const [row] = await db
+    .update(siteTemplates)
+    .set({ pending: null })
+    .where(eq(siteTemplates.id, id))
+    .returning({ id: siteTemplates.id })
+  if (!row) throw new DomainError('Template not found', 'not_found')
+}
+
+/**
+ * Sign-off of a pending version (its Roll out): its pages become the template's (what new spas get), the live
+ * version goes to `history` and the version number moves on. Refused when the pending upload is not the one the
+ * super-admin reviewed (`expectSha`). Returns the shas spas may still be on (`fromShas`) and the new one.
+ */
+export async function signOffTemplateVersion(
+  db: Db | Tx,
+  id: string,
+  expectSha: string,
+  /** Who signs it off (the caller audits it). */
+  _by: string,
+): Promise<{ row: StudioTemplateRow; fromShas: string[]; toSha: string; version: number }> {
+  const [current] = await db.select().from(siteTemplates).where(eq(siteTemplates.id, id)).for('update')
+  if (!current) throw new DomainError('Template not found', 'not_found')
+  const pending = current.pending
+  if (!pending || pending.sha256 !== expectSha)
+    throw new DomainError('This version changed meanwhile — reload the page and check it again.')
+  const entry = templateVersionEntry(current)
+  const history = (entry ? [entry, ...(current.history ?? [])] : (current.history ?? [])).slice(0, 50)
+  const [row] = await db
+    .update(siteTemplates)
+    .set({ pages: pending.pages, history, version: pending.version, pending: null })
+    .where(eq(siteTemplates.id, id))
+    .returning()
+  return {
+    row: row!,
+    fromShas: [...new Set(history.map((h) => h.sha256))].filter((s) => s !== pending.sha256),
+    toSha: pending.sha256,
+    version: pending.version,
+  }
+}
+
+/**
+ * After an upload replaced an HTML template's file in place ("Replace a template with the same key"): the replaced
+ * version (`entry`, read before the replace) goes to `history`, the number moves on and a pending upload is dropped.
+ * The same file again → unchanged.
+ */
+export async function pushTemplateVersion(db: Db | Tx, key: string, entry: TemplateVersionEntry) {
+  const [row] = await db.select().from(siteTemplates).where(eq(siteTemplates.key, key)).for('update')
+  if (!row || templateDocOf(row.pages)?.sha256 === entry.sha256) return
+  await db
+    .update(siteTemplates)
+    .set({
+      history: [entry, ...(row.history ?? []).filter((h) => h.sha256 !== entry.sha256)].slice(0, 50),
+      version: Math.max(row.version, entry.version) + 1,
+      pending: null,
+    })
+    .where(eq(siteTemplates.id, row.id))
 }

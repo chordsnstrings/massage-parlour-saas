@@ -724,3 +724,117 @@ test('R28 P3: fill the CRM from the design', async ({ page }) => {
   expect(item.image).toContain(normal!.imageUrl)
   expect(json.staff.map((s: { name: string }) => s.name)).toEqual(['Ploy Test'])
 })
+
+test('R28 P5: crm-data.json has the locale; ?page= serves an endpoint design its crm-defaults + content; a clip takes an MP4', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const literal = fixture.match(LITERAL)![0]
+  const defaults = {
+    ...JSON.parse(literal.slice('<script>window.CRM_DATA = '.length, -';</script>'.length)),
+    contract: { version: 2, locales: ['en', 'ar'], fields: {}, l10n: { ar: { 'booking.label': 'احجز' } } },
+    journey: [{ id: 'welcome', title: 'Welcome', clip: null }],
+  }
+  // Endpoint form of contract v2: no literal, its own defaults, and the page's feed via {{crm_data_url}}.
+  const design = fixture
+    .replace(
+      literal,
+      `<script type="application/json" id="crm-defaults">${JSON.stringify(defaults)}</script>`,
+    )
+    .replace(
+      '<meta name="crm-endpoint" content="crm-data.json">',
+      '<meta name="crm-endpoint" content="{{crm_data_url}}">',
+    )
+  const owner = await signUpOwner(page, { spa: 'Defaults Feed Spa' })
+  const { slug } = owner
+  await seedSpa(slug)
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  const feed = async (query = '') =>
+    (await viaHost(page, `${site(slug)}/crm-data.json${query}`, { headers: { origin: 'null' } })).json()
+
+  await test.step('without ?page=: the CRM alone, with the locale', async () => {
+    expect((await feed()).locale).toBe('en')
+    expect((await feed('?lang=ar')).locale).toBe('ar')
+  })
+
+  await upload(page, 'CRM Defaults', design)
+  await applyAndPublish(page, slug, 'CRM Defaults')
+  // A clip uploaded as the spa's video (MP4 magic bytes), then the spa's content published with it.
+  await page.goto(`${app}/${slug}`)
+  const clip = await page.evaluate(async (tenant) => {
+    const head = new Uint8Array([
+      0,
+      0,
+      0,
+      24,
+      ...new TextEncoder().encode('ftypisom'),
+      0,
+      0,
+      2,
+      0,
+      ...new TextEncoder().encode('isomiso2mp41'),
+    ])
+    const bytes = new Uint8Array(4096)
+    bytes.set(head)
+    const body = new FormData()
+    body.set('file', new File([bytes], 'clip.mp4', { type: 'video/mp4' }))
+    const res = await fetch(`/files/upload?tenant=${tenant}&kind=video`, { method: 'POST', body })
+    return ((await res.json()) as { asset: { url: string } }).asset.url
+  }, slug)
+  expect(clip).toMatch(/^\/files\/[0-9a-f-]{36}$/)
+  const db = testDb()
+  const [t] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const [home] = await db
+    .select({ id: sitePages.id })
+    .from(sitePages)
+    .where(and(eq(sitePages.tenantId, t!.id), eq(sitePages.slug, '')))
+  const [published] = await db
+    .select()
+    .from(pageVersions)
+    .where(and(eq(pageVersions.pageId, home!.id), eq(pageVersions.status, 'published')))
+    .orderBy(desc(pageVersions.createdAt))
+    .limit(1)
+  const data = published!.data as { content: { type: string; props: Record<string, unknown> }[] }
+  const content = {
+    v: 1,
+    values: [
+      { path: 'booking.label', value: { t: { en: 'Book with the spa' } } },
+      { path: 'journey[welcome].clip', value: { video: clip } },
+    ],
+  }
+  await db.insert(pageVersions).values({
+    tenantId: t!.id,
+    pageId: home!.id,
+    status: 'published',
+    data: {
+      ...data,
+      content: data.content.map((n) =>
+        n.type === 'HtmlDesign' ? { ...n, props: { ...n.props, content } } : n,
+      ),
+    },
+  })
+
+  await test.step('?page=: that live page’s defaults with its content, then the CRM; others: the CRM alone', async () => {
+    const json = await feed('?page=')
+    expect(json.locale).toBe('en')
+    expect(json.spa.name).toBe('Defaults Feed Spa')
+    expect(json.booking.label).toBe('Book with the spa')
+    expect(json.journey[0].clip).toMatch(/\/files\/[0-9a-f-]{36}$/)
+    expect(json.booking.form_endpoint).toBe(`${site(slug)}/crm-enquiry?page=`)
+    expect((await feed('?page=&lang=ar')).locale).toBe('ar')
+    for (const q of ['', '?page=nope', '?page=Bad%20Slug']) {
+      const plain = await feed(q)
+      expect(plain.spa.name).toBe('Defaults Feed Spa')
+      expect(plain.booking.label ?? null).not.toBe('Book with the spa')
+      expect(plain.journey).toBeUndefined()
+    }
+  })
+
+  await test.step('the live page fetches its own feed ({{crm_data_url}}) and shows the spa’s content', async () => {
+    await live(page, slug)
+    await expect(page.locator('#label')).toHaveText('Book with the spa')
+    await expect(page.locator('#spa')).toHaveText('Defaults Feed Spa')
+  })
+})

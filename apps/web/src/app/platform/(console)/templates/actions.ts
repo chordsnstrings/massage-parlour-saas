@@ -1,19 +1,28 @@
 'use server'
-import { htmlDesignBakedFixes } from '@spa/core'
+import { carryHtmlContent, crmDesignData, htmlCrmContractOf, htmlDesignBakedFixes } from '@spa/core'
 import { platformDb, tenants, withTenant } from '@spa/db'
 import {
+  type DesignUpgrade,
   DomainError,
+  discardPendingTemplateVersion,
   getStudioTemplate,
   htmlDesignSource,
+  type RolloutSkip,
   SITE_EDIT_MAX_PAGE_BYTES,
   sanitizeTemplatePages,
   saveStudioTemplate,
+  signOffTemplateVersion,
   snapshotSite,
   spaDesignsIntoTemplate,
+  spasOnTemplateVersions,
+  studioToSiteTemplate,
   TEMPLATE_KEY,
   type TemplatePage,
+  templateDocOf,
   templateKeyFrom,
+  templateShas,
   updateStudioTemplate,
+  upgradeHtmlDesignLive,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -23,7 +32,9 @@ import { isTemplateKey, TEMPLATES } from '@/components/site/templates'
 import { type ActionResult, fail, formObject, fromZod, ok } from '@/lib/action'
 import { requirePlatformAdmin } from '@/server/access'
 import { audit } from '@/server/audit'
-import { spaDocReader, templateDocReader } from '@/server/html-design-files'
+import { spaDocReader, templateDocReader, templateIntoSpa } from '@/server/html-design-files'
+import { runQueuedTextsAfter, siteTextsGate } from '@/server/site-texts-queue'
+import { revalidateStudio } from '@/server/studio'
 import { templateProblem, templateSamples } from './data'
 import { parseImages } from './parse-images'
 
@@ -245,4 +256,265 @@ export async function loadHtmlDesignAction(id: string): Promise<{ html: string }
   if (!row || node?.type !== HTML_DESIGN) return { error: 'This is not an uploaded HTML design' }
   const html = await htmlDesignSource(node.props, templateDocReader())
   return html === null ? { error: 'The design file is missing — upload it again' } : { html }
+}
+
+/* ------------------------------------------------------------------ R28 P5: template versions (owner D4 + D5) */
+
+/** Spas a click upgrades at most (each in its own transaction); "Run again for the rest". */
+const ROLLOUT_BATCH = 25
+
+export type RolloutPlan = {
+  version: number
+  /** The version waits for its sign-off (Roll out = sign-off). */
+  pending: boolean
+  /** The version's design sha: the Roll out form sends it back (refused when it changed meanwhile). */
+  sha256: string
+  spas: { name: string; slug: string; own: boolean; kept: number; notKept: number; hasDraft: boolean }[]
+  skipped: { name: string; slug: string; reason: string }[]
+  /** More spas than one click upgrades. */
+  more: boolean
+  /** Why Write texts would be skipped for this super-admin (null: it runs). */
+  textsSkip: string | null
+}
+
+const skipReason = (reason: RolloutSkip['reason'], version: number) =>
+  reason === 'held'
+    ? `kept on version ${Math.max(1, version - 1)} (its upgrade was undone)`
+    : reason === 'changed'
+      ? 'its live design file was changed — never overwritten'
+      : 'not published yet'
+
+const upgradeSkipReason = (u: Extract<DesignUpgrade, { status: 'skipped' }>) =>
+  u.reason === 'locked'
+    ? (u.detail ?? 'open in the Studio editor')
+    : u.reason === 'already'
+      ? 'already on this version'
+      : u.reason === 'not-on-version'
+        ? 'no longer on an older version'
+        : `its website content did not fit the new version${u.detail ? ` (${u.detail})` : ''}`
+
+/** The version a Roll out moves spas to: the pending one, else the current one (spas still on older versions). */
+async function rolloutTarget(id: string) {
+  if (!z.uuid().safeParse(id).success) return null
+  const row = await getStudioTemplate(platformDb(), { id })
+  const current = row ? templateDocOf(row.pages) : null
+  if (!row || !current) return null
+  const pending = row.pending
+  return pending
+    ? {
+        row,
+        pending: true,
+        version: pending.version,
+        toSha: pending.sha256,
+        toDoc: { file: pending.file, sha256: pending.sha256, bytes: pending.bytes, chars: 0 },
+        fromShas: templateShas(row),
+      }
+    : {
+        row,
+        pending: false,
+        version: row.version,
+        toSha: current.sha256,
+        toDoc: current,
+        fromShas: templateShas(row).filter((s) => s !== current.sha256),
+      }
+}
+
+/**
+ * The Roll out sheet: each spa the click would switch (made for it, edits kept / not kept by a carry dry run, a
+ * draft waiting) and the spas left as they are, with why.
+ */
+export async function rolloutPlanAction(id: string): Promise<RolloutPlan | { error: string }> {
+  const { user } = await requirePlatformAdmin()
+  const t = await rolloutTarget(id)
+  if (!t) return { error: 'This is not an uploaded HTML design' }
+  const found = await spasOnTemplateVersions(platformDb(), {
+    key: t.row.key,
+    fromShas: t.fromShas,
+    toSha: t.toSha,
+    version: t.version,
+  })
+  const read = templateDocReader()
+  const newHtml = (await read(t.toDoc)) ?? ''
+  const newData = crmDesignData(htmlCrmContractOf(newHtml))
+  const docs = new Map(
+    [templateDocOf(t.row.pages), ...(t.row.history ?? [])].flatMap((d) =>
+      d ? [[d.sha256, { file: d.file, sha256: d.sha256, bytes: d.bytes, chars: 0 }] as const] : [],
+    ),
+  )
+  const oldHtml = new Map<string, string | null>()
+  const spas: RolloutPlan['spas'] = []
+  for (const s of found.spas.slice(0, ROLLOUT_BATCH)) {
+    if (!oldHtml.has(s.sha256)) {
+      const doc = docs.get(s.sha256)
+      oldHtml.set(s.sha256, doc ? await read(doc) : null)
+    }
+    const c = carryHtmlContent(s.content, newData, newHtml, oldHtml.get(s.sha256) ?? undefined)
+    spas.push({
+      name: s.name,
+      slug: s.slug,
+      own: s.own,
+      kept: c.carried.values + c.carried.texts + c.carried.pictures,
+      notKept: c.dropped.length,
+      hasDraft: s.hasDraft,
+    })
+  }
+  const gate = await siteTextsGate(user.id)
+  return {
+    version: t.version,
+    pending: t.pending,
+    sha256: t.toSha,
+    spas,
+    skipped: found.skipped.map((s) => ({
+      name: s.name,
+      slug: s.slug,
+      reason: skipReason(s.reason, t.version),
+    })),
+    more: found.spas.length > ROLLOUT_BATCH,
+    textsSkip: gate.ok ? null : gate.reason,
+  }
+}
+
+/** Drops a version waiting for its sign-off (nothing else changes). */
+export async function discardTemplateVersionAction(id: string): Promise<ActionResult> {
+  const { user } = await requirePlatformAdmin()
+  const t = await rolloutTarget(id)
+  if (!t?.pending) return fail('There is no version waiting for sign-off')
+  try {
+    await discardPendingTemplateVersion(platformDb(), t.row.id)
+  } catch (e) {
+    return domainFail(e)
+  }
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.site_template.version_discarded',
+    entity: 'site_template',
+    entityId: t.row.key,
+    data: { version: t.version, sha256: t.toSha },
+  })
+  revalidate()
+  return ok(`Version ${t.version} discarded`)
+}
+
+/**
+ * Roll out = sign-off (owner D4): a pending version becomes the template's (new spas get it from now on), then each
+ * spa still live on an older version is switched at once — its own published row with its edits carried, its draft
+ * moved after it, one undo on its page. Owner D5: each switched spa's Write texts is queued (drafts only; skipped on a
+ * design made for that spa or without SITE_AI_EDITOR_EMAILS + 2FA) and runs after the response.
+ */
+export async function rolloutTemplateVersionAction(
+  id: string,
+  _prev: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const { user } = await requirePlatformAdmin()
+  const sha = z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .safeParse(fd.get('sha256'))
+  let t = await rolloutTarget(id)
+  if (!t || !sha.success) return fail('This is not an uploaded HTML design')
+  if (t.toSha !== sha.data)
+    return fail('This version changed meanwhile — reload the page and check it again.')
+  if (t.pending) {
+    try {
+      const signed = await signOffTemplateVersion(platformDb(), t.row.id, sha.data, user.id)
+      t = { ...t, row: signed.row, fromShas: signed.fromShas, toSha: signed.toSha, version: signed.version }
+    } catch (e) {
+      return domainFail(e)
+    }
+    await audit({
+      actorUserId: user.id,
+      action: 'platform.site_template.version_signed_off',
+      entity: 'site_template',
+      entityId: t.row.key,
+      data: { version: t.version, toSha: t.toSha, fromShas: t.fromShas },
+    })
+  }
+  const target = t
+  const found = await spasOnTemplateVersions(platformDb(), {
+    key: target.row.key,
+    fromShas: target.fromShas,
+    toSha: target.toSha,
+    version: target.version,
+  })
+  const template = studioToSiteTemplate(target.row)
+  const gate = await siteTextsGate(user.id)
+  const switched: { tenantId: string; slug: string; name: string; carried: number; dropped: number }[] = []
+  const skipped: { name: string; reason: string }[] = found.skipped.map((s) => ({
+    name: s.name,
+    reason: skipReason(s.reason, target.version),
+  }))
+  for (const s of found.spas.slice(0, ROLLOUT_BATCH)) {
+    let up: DesignUpgrade
+    try {
+      up = await withTenant(s.tenantId, (tx) =>
+        upgradeHtmlDesignLive(tx, s.tenantId, {
+          template,
+          pageId: s.pageId,
+          fromShas: target.fromShas,
+          toSha: target.toSha,
+          version: target.version,
+          userId: user.id,
+          tenantName: s.name,
+          prepare: templateIntoSpa(tx, s.tenantId, user.id),
+          texts: gate.ok ? { actorUserId: user.id } : { skip: gate.reason },
+        }),
+      )
+    } catch (e) {
+      console.error('[site.template_upgraded]', s.slug, e)
+      skipped.push({ name: s.name, reason: 'could not be switched — try again' })
+      continue
+    }
+    if (up.status === 'skipped') {
+      skipped.push({ name: s.name, reason: upgradeSkipReason(up) })
+      continue
+    }
+    await audit({
+      tenantId: s.tenantId,
+      actorUserId: user.id,
+      action: 'site.template_upgraded',
+      entity: 'site',
+      data: {
+        template: target.row.key,
+        version: target.version,
+        fromSha: s.sha256,
+        toSha: target.toSha,
+        carried: up.carried,
+        dropped: up.dropped.slice(0, 20),
+        pins: up.pins,
+        draft: up.draft,
+      },
+    })
+    revalidateStudio(s.slug)
+    switched.push({
+      tenantId: s.tenantId,
+      slug: s.slug,
+      name: s.name,
+      carried: up.carried.values + up.carried.texts + up.carried.pictures,
+      dropped: up.dropped.length,
+    })
+  }
+  const more = found.spas.length > ROLLOUT_BATCH
+  await audit({
+    actorUserId: user.id,
+    action: 'platform.site_template.version_rolled_out',
+    entity: 'site_template',
+    entityId: target.row.key,
+    data: { version: target.version, switched: switched.map((s) => s.slug), skipped },
+  })
+  revalidate()
+  runQueuedTextsAfter(switched)
+  const n = switched.length
+  const notes = skipped.length
+    ? ` Not switched: ${skipped.map((s) => `${s.name} (${s.reason})`).join(', ')}.`
+    : ''
+  return ok(
+    `Version ${target.version} is live for ${n} ${n === 1 ? 'spa' : 'spas'}.${notes}${more ? ' Run again for the rest.' : ''}`,
+    {
+      version: target.version,
+      switched: switched.map(({ name, slug, carried, dropped }) => ({ name, slug, carried, dropped })),
+      skipped,
+      more,
+    },
+  )
 }

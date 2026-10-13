@@ -12,10 +12,13 @@ import {
   htmlDesignContentErrors,
   lockSite,
   markSitemapDue,
+  pageDesignReports,
   publishAll,
   publishPage,
+  queueSiteTexts,
   saveDraft,
   setPageVisible,
+  skipSiteTexts,
   switchTemplate,
   undoTemplateSwitch,
   updateDraftTheme,
@@ -31,6 +34,7 @@ import { audit } from '@/server/audit'
 import { templateIntoSpa } from '@/server/html-design-files'
 import { editStampSchema, publishAllErrors } from '@/server/site-preflight'
 import { resolveTemplate } from '@/server/site-templates'
+import { runQueuedTextsAfter, siteTextsGate } from '@/server/site-texts-queue'
 import { revalidateStudio } from '@/server/studio'
 
 const MAX_PAGE_BYTES = 512 * 1024
@@ -102,9 +106,38 @@ export async function applyTemplateAction(
       console.error('[site.template_applied] seed offer', e)
     }
   }
+  // R28 P5 (owner D5): the contract v2 HTML pages the switch wrote get Write texts (EN + AR drafts) right away.
+  let texts = ''
+  if (template.htmlDesign) {
+    try {
+      const written = new Set(template.pages.map((p) => p.slug))
+      const gate = await siteTextsGate(ctx.user.id)
+      const queued = await withTenant(ctx.tenant.id, async (tx) => {
+        const v2 = (await pageDesignReports(tx, ctx.tenant.id)).filter(
+          (r) => r.report.contract === 'v2' && written.has(r.slug),
+        )
+        if (!v2.length) return null
+        const run = {
+          via: 'template_apply' as const,
+          actorUserId: ctx.user.id,
+          pageIds: v2.map((r) => r.pageId),
+          ...(v2.length === 1 && v2[0]!.sha256 ? { designSha: v2[0]!.sha256 } : {}),
+        }
+        if (gate.ok) await queueSiteTexts(tx, ctx.tenant.id, run)
+        else await skipSiteTexts(tx, ctx.tenant.id, { ...run, summary: gate.reason })
+        return gate
+      })
+      if (queued?.ok) {
+        runQueuedTextsAfter([{ tenantId: ctx.tenant.id, slug }])
+        texts = ' Write texts is drafting its texts.'
+      } else if (queued) texts = ` Write texts skipped: ${queued.reason}.`
+    } catch (e) {
+      console.error('[site.template_applied] write texts', e)
+    }
+  }
   await auditAs(ctx, 'site.template_applied', 'site', undefined, { template: template.key, replaceContent })
   revalidateStudio(slug)
-  return ok(`${template.name} applied`, seedPage ? { seedPage } : undefined)
+  return ok(`${template.name} applied${texts ? `.${texts}` : ''}`, seedPage ? { seedPage } : undefined)
 }
 
 /** One-click undo of the last template switch (template, theme and replaced drafts). */
@@ -116,14 +149,24 @@ export async function undoTemplateAction(
   const { ctx, error } = await studioGuard(slug, 'site.design')
   if (error) return fail(error)
   let key = ''
+  let live: { version: number; fromSha: string; toSha: string } | undefined
   try {
-    key = (await withTenant(ctx.tenant.id, (tx) => undoTemplateSwitch(tx, ctx.tenant.id, ctx.user.id)))
-      .templateKey
+    key = (
+      await withTenant(ctx.tenant.id, async (tx) => {
+        live = (await getSite(tx, ctx.tenant.id))?.templateUndo?.live
+        return undoTemplateSwitch(tx, ctx.tenant.id, ctx.user.id)
+      })
+    ).templateKey
   } catch (e) {
     return domainFail(e)
   }
-  await auditAs(ctx, 'site.template_undone', 'site', undefined, { template: key })
+  await auditAs(ctx, 'site.template_undone', 'site', undefined, {
+    template: key,
+    ...(live ? { live: true, version: live.version } : {}),
+  })
   revalidateStudio(slug)
+  // R28 P5: a live upgrade's undo re-published the previous version.
+  if (live) return ok(`Back to version ${Math.max(1, live.version - 1)} (re-published)`)
   const template = await resolveTemplate(key)
   return ok(`Back to ${template?.name ?? key}`)
 }

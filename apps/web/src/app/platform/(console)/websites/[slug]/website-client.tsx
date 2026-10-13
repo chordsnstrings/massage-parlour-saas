@@ -155,12 +155,15 @@ export function UndoTemplateBar({
   to,
   at,
   pages,
+  live,
 }: {
   slug: string
   from: string
   to: string
   at: string
   pages: number
+  /** R28 P5: a live template upgrade to this version (rollout). */
+  live?: number
 }) {
   return (
     <Card className="anim-fade-in flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -170,13 +173,20 @@ export function UndoTemplateBar({
         </span>
         <div className="min-w-0 space-y-0.5">
           <p className="text-[15px] font-medium">
-            {from === to ? `New ${to} starter drafts` : `Switched from ${from} to ${to}`}
+            {live
+              ? `${to}: upgraded to version ${live}`
+              : from === to
+                ? `New ${to} starter drafts`
+                : `Switched from ${from} to ${to}`}
           </p>
           <p className="text-sm text-muted">
-            {at} ·{' '}
-            {pages
-              ? `${pages} ${pages === 1 ? 'page' : 'pages'} got new drafts · undo is available until you edit or publish them`
-              : 'Colours, fonts and shapes only · undo is available until you change the theme'}
+            {live
+              ? `Upgraded to version ${live} on ${at}. Undo re-publishes the previous version and puts back your draft — available until this page is edited or published again.`
+              : `${at} · ${
+                  pages
+                    ? `${pages} ${pages === 1 ? 'page' : 'pages'} got new drafts · undo is available until you edit or publish them`
+                    : 'Colours, fonts and shapes only · undo is available until you change the theme'
+                }`}
           </p>
         </div>
       </div>

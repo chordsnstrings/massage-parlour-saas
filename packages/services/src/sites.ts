@@ -3,6 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
   type Bilingual,
   pageVersions,
+  type SiteTextRun,
   savedSections,
   serviceCategories,
   services,
@@ -54,7 +55,10 @@ export async function lockSite(tx: Tx, tenantId: string): Promise<void> {
 /** R24: turns a template page's data into the spa's own before it is written (web: HTML design files copied in). */
 export type PreparePageData = (data: PageData) => Promise<PageData>
 
-const preparedPages = async (template: SiteTemplate, prepare?: PreparePageData): Promise<SiteTemplate> =>
+export const preparedPages = async (
+  template: SiteTemplate,
+  prepare?: PreparePageData,
+): Promise<SiteTemplate> =>
   prepare
     ? {
         ...template,
@@ -154,7 +158,13 @@ export async function getPage(tx: Tx, tenantId: string, pageId: string): Promise
 const stamp = (after?: { createdAt: Date } | null) =>
   new Date(Math.max(Date.now(), (after?.createdAt.getTime() ?? 0) + 1))
 
-async function latestVersion(tx: Tx, tenantId: string, pageId: string, status?: 'draft' | 'published') {
+/** The newest version of a page (of one status when given). */
+export async function latestVersion(
+  tx: Tx,
+  tenantId: string,
+  pageId: string,
+  status?: 'draft' | 'published',
+) {
   const [v] = await tx
     .select()
     .from(pageVersions)
@@ -168,6 +178,37 @@ async function latestVersion(tx: Tx, tenantId: string, pageId: string, status?: 
     .orderBy(desc(pageVersions.createdAt))
     .limit(1)
   return v ?? null
+}
+
+/**
+ * R28 P5: a new version row after the page's newest (never through `publishPage`: draft themes and pending renames
+ * stay unpublished, the working draft is not overwritten). Live template upgrades and their undo.
+ */
+export async function insertVersion(
+  tx: Tx,
+  input: {
+    tenantId: string
+    pageId: string
+    data: PageData
+    status: 'draft' | 'published'
+    userId?: string | null
+    label?: string | null
+  },
+): Promise<PageVersionRow> {
+  const latest = await latestVersion(tx, input.tenantId, input.pageId)
+  const [row] = await tx
+    .insert(pageVersions)
+    .values({
+      tenantId: input.tenantId,
+      pageId: input.pageId,
+      data: input.data,
+      status: input.status,
+      label: input.label ?? null,
+      createdBy: input.userId ?? null,
+      createdAt: stamp(latest),
+    })
+    .returning()
+  return row!
 }
 
 /** What the editor opens: the newest version of a page, draft or published. */
@@ -564,6 +605,28 @@ export async function templateUndoChanges(
   const current = site === undefined ? await getSite(tx, tenantId) : site
   const undo = current?.templateUndo
   if (!current || !undo) return []
+  if (undo.live) {
+    // R28 P5 live upgrade (no theme change): still the published row it wrote, and nothing newer than it but the
+    // draft it carried (or the one Write texts saved: `keepTemplateUndo`).
+    const changed: string[] = []
+    for (const p of undo.pages) {
+      const page = await getPage(tx, tenantId, p.pageId)
+      if (!page) continue
+      const live = await latestVersion(tx, tenantId, page.id, 'published')
+      const latest = await latestVersion(tx, tenantId, page.id)
+      const untouched =
+        live?.id === p.versionId &&
+        !!latest &&
+        (latest.id === p.versionId ||
+          (latest.id === p.draftVersionId &&
+            latest.status === 'draft' &&
+            !latest.label &&
+            !!p.draftSavedAt &&
+            latest.createdAt.getTime() === Date.parse(p.draftSavedAt)))
+      if (!untouched) changed.push(page.title.en)
+    }
+    return changed
+  }
   // A draft-theme switch (R24): the live theme must be what it was and the editing theme what the switch wrote.
   const themeKept = undo.draftTheme
     ? sameTokens(current.theme, undo.theme) && sameTokens(editingTheme(current), undo.appliedTheme)
@@ -595,6 +658,7 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
     throw new DomainError(
       `Undo is no longer available: ${changed.join(', ')} changed since the switch. Your edits are kept.`,
     )
+  if (undo.live) return undoLiveUpgrade(tx, site, undo, userId)
   for (const p of undo.pages) {
     const page = await getPage(tx, tenantId, p.pageId)
     if (!page) continue
@@ -627,6 +691,129 @@ export async function undoTemplateSwitch(tx: Tx, tenantId: string, userId?: stri
     .where(eq(sites.id, site.id))
     .returning()
   return updated!
+}
+
+/**
+ * R28 P5: undo of a live template upgrade — the version it replaced is published again as a new row (history kept),
+ * the draft it moved goes back and later rollouts of that version skip the spa (`template_hold`).
+ */
+async function undoLiveUpgrade(tx: Tx, site: SiteRow, undo: TemplateUndo, userId?: string): Promise<SiteRow> {
+  const tenantId = site.tenantId
+  for (const p of undo.pages) {
+    const page = await getPage(tx, tenantId, p.pageId)
+    if (!page || !p.publishedBefore) continue
+    const [before] = await tx
+      .select({ data: pageVersions.data })
+      .from(pageVersions)
+      .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.id, p.publishedBefore)))
+      .limit(1)
+    if (!before) throw new DomainError('Undo is no longer available: the previous version is gone.')
+    if (p.draftVersionId)
+      await tx
+        .delete(pageVersions)
+        .where(and(eq(pageVersions.tenantId, tenantId), eq(pageVersions.id, p.draftVersionId)))
+    await insertVersion(tx, { tenantId, pageId: page.id, data: before.data, status: 'published', userId })
+    if (p.draft)
+      await insertVersion(tx, { tenantId, pageId: page.id, data: p.draft, status: 'draft', userId })
+  }
+  const [updated] = await tx
+    .update(sites)
+    .set({
+      templateKey: undo.templateKey,
+      templateUndo: null,
+      templateHold: {
+        key: site.templateKey,
+        version: undo.live?.version ?? 0,
+        at: new Date().toISOString(),
+        by: userId ?? null,
+      },
+    })
+    .where(eq(sites.id, site.id))
+    .returning()
+  return updated!
+}
+
+/**
+ * R28 P5 (D5): whether `v` is the version the last template switch / upgrade wrote for `pageId`, untouched since (a
+ * Write texts save over it then keeps undo available: no "Before Write texts" label, `keepTemplateUndo` after).
+ */
+export function switchWrote(
+  undo: TemplateUndo | null | undefined,
+  pageId: string,
+  v: { id: string; createdAt: Date; status: string; label: string | null },
+): boolean {
+  const p = undo?.pages.find((x) => x.pageId === pageId)
+  if (!p || v.label) return false
+  if (undo?.live)
+    return (
+      (v.id === p.versionId && v.status === 'published') ||
+      (v.id === p.draftVersionId &&
+        v.status === 'draft' &&
+        !!p.draftSavedAt &&
+        v.createdAt.getTime() === Date.parse(p.draftSavedAt))
+    )
+  return v.id === p.versionId && v.status === 'draft' && v.createdAt.getTime() === Date.parse(p.savedAt)
+}
+
+/**
+ * R28 P5 (D5): after a Write texts save over what a switch / upgrade wrote (`before`, see `switchWrote`), moves the
+ * undo's stamps to the saved draft (`written`), so undo stays available. Same transaction as the save.
+ */
+export async function keepTemplateUndo(
+  tx: Tx,
+  tenantId: string,
+  pageId: string,
+  before: { id: string; createdAt: Date },
+  written: PageVersionRow,
+): Promise<void> {
+  const site = await getSite(tx, tenantId)
+  const undo = site?.templateUndo
+  const at = undo?.pages.findIndex((x) => x.pageId === pageId) ?? -1
+  if (!site || !undo || at < 0) return
+  const p = { ...undo.pages[at]! }
+  const savedAt = written.createdAt.toISOString()
+  if (undo.live) {
+    if (before.id !== p.draftVersionId && before.id !== p.versionId) return
+    p.draftVersionId = written.id
+    p.draftSavedAt = savedAt
+  } else {
+    if (before.id !== p.versionId) return
+    p.versionId = written.id
+    p.savedAt = savedAt
+  }
+  const pages = undo.pages.map((x, i) => (i === at ? p : x))
+  await tx
+    .update(sites)
+    .set({ templateUndo: { ...undo, pages } })
+    .where(eq(sites.id, site.id))
+}
+
+/**
+ * R28 P5 (owner D5): queues Write texts for the spa's pages on a newly applied / upgraded design (drafts only; the
+ * web runs it right away with `after()`, the worker's `site-texts-queue` sweeps what is left). Replaces an earlier run.
+ */
+export async function queueSiteTexts(
+  tx: Tx,
+  tenantId: string,
+  run: Omit<SiteTextRun, 'state' | 'at'>,
+): Promise<void> {
+  await tx
+    .update(sites)
+    .set({ textRun: { ...run, state: 'queued', at: new Date().toISOString() } })
+    .where(eq(sites.tenantId, tenantId))
+}
+
+/** R28 P5 (D5): records why Write texts did not run after a template apply / upgrade (shown on the spa's page). */
+export async function skipSiteTexts(
+  tx: Tx,
+  tenantId: string,
+  run: Omit<SiteTextRun, 'state' | 'at' | 'summary'> & { summary: string },
+): Promise<void> {
+  const at = new Date().toISOString()
+  await tx
+    .update(sites)
+    .set({ textRun: { ...run, state: 'skipped', at, finishedAt: at } })
+    .where(eq(sites.tenantId, tenantId))
 }
 
 /** Slugs the public site uses for its own routes. */

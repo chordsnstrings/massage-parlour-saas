@@ -370,6 +370,8 @@ const assetOf = (bytes: Buffer, contentType: string) => {
   const sha = sha256(bytes)
   return { sha256: sha, bytes, contentType, name: `${sha.slice(0, 16)}.${EXT[contentType] ?? 'bin'}` }
 }
+/** R28 P5: a file for `tenantHtmlAssetSink` (content-addressed name, as the design copies get). */
+export const htmlDesignAsset = assetOf
 
 /** Keeps a URL's query (e.g. `?w=480`) when the file it points at moves. */
 const withQuery = (url: string, from: string) => {

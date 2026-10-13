@@ -456,7 +456,7 @@ describe('site edit ops layer', () => {
       expect((await tx((db) => getHtmlDesign(db, ids.tenant!, 'content-me')))!.content).toBeNull()
       // A design without window.CRM_DATA: its words live in the file.
       const plain = await run([{ op: 'html_content', page: 'design-a', set: {} }])
-      expect(plain.ok ? '' : plain.errors[0]).toMatch(/has no window.CRM_DATA/)
+      expect(plain.ok ? '' : plain.errors[0]).toMatch(/has no CRM_DATA or crm-defaults/)
     })
 
     it('R28 P4: html_content sets page texts and pictures with server-filled src guards; unknown / bound ids and another spa’s files refused; works on a design without window.CRM_DATA (set refused there); file byte-identical', async () => {
@@ -479,7 +479,7 @@ describe('site edit ops layer', () => {
         return r.ok ? '' : r.errors[0]
       }
       expect(await refused({ set: { 'booking.label': { t: { en: 'x' } } } })).toMatch(
-        /has no window.CRM_DATA: change its page texts and pictures with texts \/ pictures, or the file with html_patch/,
+        /has no CRM_DATA or crm-defaults: change its page texts and pictures with texts \/ pictures, or the file with html_patch/,
       )
       expect(await refused({ texts: [{ id: 'txt-9', t: { en: 'x' } }] })).toMatch(
         /no page text "txt-9" in this design — get_html_content lists them/,
