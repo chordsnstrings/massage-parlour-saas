@@ -1,7 +1,7 @@
 # spamanagement.co — Claude notes
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
-Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R28 in progress (§14.8);
+Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R28 (§14.8; R28 dynamic HTML designs ✅ 2026-10-13, P0–P6);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 

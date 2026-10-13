@@ -1231,7 +1231,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   uploaded pictures dropped); texts the design's script writes are read-only, worded "from the CRM" on contract
   designs; Ask AI never writes a text it saw cut short (dropped with a note) and the connector can read such texts
   whole first. Not in P4: `<input value>` / `og:*` texts.
-  **P5 (2026-10-13, built; release with P6):** CRM contract v2 (`docs/design/html-crm-contract.md` §9: neutral
+  **P5 (2026-10-13, live with PR #48, cca4874):** CRM contract v2 (`docs/design/html-crm-contract.md` §9: neutral
   defaults, ids on every item, `ui{}` + `data-crm-text` / `data-crm-attr` for every script and markup string,
   `contract{version: 2, locales, fields, l10n}`, the platform's `locale`, `data-if="photo"`, `clip` / `clipMobile`
   video slots, endpoint designs with `crm-defaults` + `{{crm_data_url}}`). Every upload shows how dynamic the design
@@ -1271,6 +1271,10 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `booking.image`) show BE RELAX branding on bottle labels — please supply neutral photos (until then any other spa
   applying v2 should replace them); **O3 step:** set BE RELAX's branch "Area shown on the website" to "Al Zahiyah, Abu
   Dhabi" before the Roll out, so its first scene matches v1.
+  **P6 (2026-10-13, done):** all unit tests and the full e2e suite (135 passed, 2 skipped by design) on the production
+  build of the live release cca4874. R28 is complete; the owner's steps: set Be Relax's branch area label, upload BE
+  RELAX v2 as a new version of its template, preview EN + AR, Roll out (= sign-off). Open: O5 native review of the v2
+  Arabic defaults + new TH strings; two neutral photos for the v2 defaults (spa.experience_image, booking.image).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
