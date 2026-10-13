@@ -15,7 +15,9 @@ import {
   createBooking,
   DomainError,
   findOrCreateClient,
+  linkSiteEnquiryBooking,
   loadDay,
+  lockSiteEnquiryForBooking,
   OWN_STATUS_TARGETS,
   outboxLink,
   planBookingMessages,
@@ -128,12 +130,14 @@ const bookingSchema = z
     clientPhone: z.string().trim().max(30).optional(),
     source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram']),
     notes: z.string().trim().max(1000).optional(),
+    enquiryId: optionalId,
   })
   .superRefine((v, c) => {
     if (v.clientId) return
     if (!v.clientName)
       c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
-    if (!v.clientPhone)
+    // A request's phone stays on the server for members without phone access.
+    if (!v.clientPhone && !v.enquiryId)
       c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'calendar.errors.clientPhone' })
   })
 
@@ -147,11 +151,15 @@ export async function createBookingAction(
   const parsed = bookingSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
+  // A website booking request is inbox data: the inbox's permission too.
+  if (v.enquiryId && !can(ctx, 'clients.view')) return fail('errors.forbidden')
   try {
     const result = await withTenant(ctx.tenant.id, async (tx) => {
       const branch = await branchFor(tx, ctx, v.branchId)
       const start = startFrom(v.date, v.time, branch.businessDayCutoff.slice(0, 5))
       await assertStaffAndRoom(tx, v.staffId ? [v.staffId] : [], v.roomId)
+      // Locked until this transaction ends: one booking per request, even with two people saving.
+      const enquiry = v.enquiryId ? await lockSiteEnquiryForBooking(tx, v.enquiryId) : null
       let clientId = v.clientId
       if (clientId) {
         const [c] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId))
@@ -161,8 +169,9 @@ export async function createBookingAction(
         clientId = (
           await findOrCreateClient(tx, ctx.tenant.id, {
             name: v.clientName!,
-            phone: v.clientPhone!,
+            phone: v.clientPhone || enquiry!.phone,
             source: v.source,
+            ...(enquiry ? { language: enquiry.locale } : {}),
           })
         ).id
       }
@@ -183,6 +192,8 @@ export async function createBookingAction(
           },
         ],
       })
+      // The request shows "Booked" in the inbox (its booking jsonb; same transaction as the booking).
+      if (enquiry) await linkSiteEnquiryBooking(tx, enquiry.id, booking.id, ctx.user.id)
       // createBooking already planned confirmation + reminders (G4); this returns them for the WhatsApp link.
       const confirmation = (await planBookingMessages(tx, booking.id)).booking_confirmation ?? null
       return { booking, confirmation }
@@ -193,8 +204,24 @@ export async function createBookingAction(
       action: 'booking.created',
       entity: 'booking',
       entityId: result.booking.id,
-      data: { ref: result.booking.refCode, source: v.source },
+      data: {
+        ref: result.booking.refCode,
+        source: v.source,
+        ...(v.enquiryId ? { enquiryId: v.enquiryId } : {}),
+      },
     })
+    if (v.enquiryId) {
+      await audit({
+        tenantId: ctx.tenant.id,
+        actorUserId: ctx.user.id,
+        impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+        action: 'site.enquiry.booked',
+        entity: 'site_enquiry',
+        entityId: v.enquiryId,
+        data: { bookingId: result.booking.id, ref: result.booking.refCode },
+      })
+      revalidatePath(`/dashboard/${slug}/enquiries`)
+    }
     revalidate(slug)
     return ok(
       { key: 'calendar.results.created', params: { ref: result.booking.refCode } },

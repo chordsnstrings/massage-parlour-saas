@@ -118,6 +118,7 @@ export const calendar = {
     newClient: 'New client',
     searchInstead: 'Search instead',
     addServicesFirst: 'Add services first',
+    chooseService: 'Choose a service',
     anyTherapist: 'Any (automatic)',
     automatic: 'Automatic',
     submit: 'Create booking',

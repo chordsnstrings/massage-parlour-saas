@@ -17,6 +17,9 @@ export const domain = {
   },
   // Not found
   bookingNotFound: 'Booking not found',
+  // Enquiries → Make booking (2026-10-13)
+  bookingRequestNotFound: 'Booking request not found',
+  bookingRequestBooked: 'Booking request already booked',
   bookingCheckedOutReopen: 'This booking was checked out — void or refund the sale first',
   completeFirst: 'Mark the booking completed first',
   commissionRange: 'Enter a commission between 0 and 100,000 AED',

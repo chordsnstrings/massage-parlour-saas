@@ -1,12 +1,16 @@
 // R26: the CRM feed of HTML designs (website services + staff, contract facts) and booking requests from a design's form.
-import { addDays, dubaiParts } from '@spa/core'
+import { addDays, dubaiInstant, dubaiParts } from '@spa/core'
 import {
+  bookingItems,
+  bookings,
   branches,
   closeAllDbs,
+  type SiteEnquiryBooking,
   services,
   serviceVariants,
   sitePages,
   staff,
+  type Tx,
   tenants,
   withTenant,
 } from '@spa/db'
@@ -17,13 +21,19 @@ import {
   crmFeedFacts,
   DESIGN_ENQUIRY_TENANT_LIMITS,
   designEnquirySchema,
+  enquiryNight,
   ensureSite,
+  getSiteEnquiry,
+  linkSiteEnquiryBooking,
   listSiteEnquiries,
   liveHtmlDesignVersionIds,
+  lockSiteEnquiryForBooking,
   pageVersionsData,
   publishPage,
+  siteEnquiryBookings,
   siteEnquiryReplyText,
   submitSiteEnquiry,
+  websiteHours,
   websiteServices,
   websiteStaff,
   withinRateLimits,
@@ -248,5 +258,165 @@ describe('booking requests from a design form', () => {
       withinRateLimits(platform, 'site-enquiry-tenant', tenantId, DESIGN_ENQUIRY_TENANT_LIMITS)
     for (let i = 0; i < 30; i++) expect(await hit()).toBe(true)
     expect(await hit()).toBe(false)
+  })
+})
+
+// Owner 2026-10-13: Inbox → Enquiries "Make booking" links the booking to the request; small-hours requests are dated.
+describe('booking a booking request', () => {
+  let otherId = ''
+  const other = <T>(fn: Parameters<typeof withTenant<T>>[1]) => withTenant(otherId, fn, app)
+  // Fri 2026-10-16 night, 00:30 → Sat 2026-10-17 (Be Relax: 11:00–02:00).
+  const late = { fri: [{ open: '11:00', close: '02:00' }] }
+  const request = {
+    service: 'Normal massage',
+    serviceId: '00000000-0000-4000-8000-000000000001',
+    durationMin: 60,
+    date: '2026-10-16',
+    time: '00:30',
+    guests: 1,
+    staff: null,
+    staffId: null,
+  }
+  const enquiry = (db: Tx, tenant: string, booking: SiteEnquiryBooking | null) =>
+    submitSiteEnquiry(
+      db,
+      tenant,
+      { name: 'Layla', phone: '+971501234567', message: 'Strong pressure', locale: 'en', page: '', booking },
+      { ipHash: null },
+    )
+  const booking = async (db: Tx, tenant: string, ref: string) => {
+    const [branch] = await db.select().from(branches).limit(1)
+    const [variant] = await db.select().from(serviceVariants).limit(1)
+    const startsAt = dubaiInstant('2026-10-17', 30)
+    const [b] = await db
+      .insert(bookings)
+      .values({
+        tenantId: tenant,
+        branchId: branch!.id,
+        refCode: ref,
+        source: 'online',
+        status: 'confirmed',
+        businessDate: '2026-10-16',
+        startsAt,
+        endsAt: new Date(startsAt.getTime() + 3600_000),
+      })
+      .returning()
+    await db.insert(bookingItems).values({
+      tenantId: tenant,
+      bookingId: b!.id,
+      serviceVariantId: variant?.id ?? null,
+      serviceName: 'Normal massage',
+      durationMin: 60,
+      startsAt,
+      endsAt: b!.endsAt,
+    })
+    return b!
+  }
+
+  beforeAll(async () => {
+    const [t] = await platform.insert(tenants).values({ slug: 'crm-feed-2', name: 'Other Spa' }).returning()
+    otherId = t!.id
+    await other((db) => db.insert(branches).values({ tenantId: otherId, name: 'Other', isDefault: true }))
+  })
+
+  it('the main branch hours date small-hours requests; stored flags win', async () => {
+    await tx((db) => db.update(branches).set({ openingHours: late }).where(eq(branches.name, 'Main')))
+    expect(await tx((db) => websiteHours(db))).toEqual({ openingHours: late, cutoff: '05:00' })
+    const unset = await other((db) => websiteHours(db))
+    expect(unset).toEqual({ openingHours: {}, cutoff: '05:00' })
+    expect(enquiryNight(request, { openingHours: late })).toEqual({
+      afterMidnight: true,
+      calendarDate: '2026-10-17',
+    })
+    expect(enquiryNight(request, null)).toEqual({ afterMidnight: false, calendarDate: '2026-10-16' })
+    // Hours not set up (the design shows its own): the branch cutoff dates the small hours.
+    expect(enquiryNight(request, unset)).toEqual({ afterMidnight: true, calendarDate: '2026-10-17' })
+    expect(enquiryNight({ ...request, time: '19:00' }, unset).afterMidnight).toBe(false)
+    const stored = { ...request, afterMidnight: false, calendarDate: '2026-10-16' }
+    expect(enquiryNight(stored, { openingHours: late }).afterMidnight).toBe(false)
+  })
+
+  it('locks and links only this spa’s booking requests; one live booking each', async () => {
+    const mine = await tx((db) => enquiry(db, tenantId, request))
+    const plain = await tx((db) => enquiry(db, tenantId, null))
+    const theirs = await other((db) => enquiry(db, otherId, request))
+    const b = await tx((db) => booking(db, tenantId, 'R30A'))
+    const theirBooking = await other((db) => booking(db, otherId, 'R30B'))
+
+    expect((await tx((db) => lockSiteEnquiryForBooking(db, mine.id))).booking).toEqual(request)
+    const notRequest = { message: 'Booking request not found', code: 'not_found' }
+    await expect(tx((db) => lockSiteEnquiryForBooking(db, plain.id))).rejects.toMatchObject(notRequest)
+    // Another spa's request reads as not found (RLS), and so does another spa's booking.
+    await expect(tx((db) => lockSiteEnquiryForBooking(db, theirs.id))).rejects.toMatchObject(notRequest)
+    await expect(tx((db) => linkSiteEnquiryBooking(db, theirs.id, b.id, null))).rejects.toMatchObject(
+      notRequest,
+    )
+    await expect(tx((db) => linkSiteEnquiryBooking(db, mine.id, theirBooking.id, null))).rejects.toThrow(
+      'Booking not found',
+    )
+    await expect(tx((db) => linkSiteEnquiryBooking(db, plain.id, b.id, null))).rejects.toMatchObject(
+      notRequest,
+    )
+
+    const linked = await tx((db) => linkSiteEnquiryBooking(db, mine.id, b.id, null))
+    expect(linked.booking).toMatchObject({ ...request, bookingId: b.id, bookedBy: null })
+    expect(Date.parse(linked.booking!.bookedAt!)).not.toBeNaN()
+    await expect(tx((db) => lockSiteEnquiryForBooking(db, mine.id))).rejects.toThrow(
+      'Booking request already booked',
+    )
+    expect((await other((db) => getSiteEnquiry(db, theirs.id)))!.booking).toEqual(request)
+
+    // The inbox's view of it: Dubai date + time, the night (business date); never from another spa.
+    const made = await tx((db) => siteEnquiryBookings(db, [linked, plain]))
+    expect(made.get(b.id)).toMatchObject({
+      status: 'confirmed',
+      businessDate: '2026-10-16',
+      date: '2026-10-17',
+      time: '00:30',
+      service: { en: 'Normal massage' },
+    })
+    expect((await other((db) => siteEnquiryBookings(db, [linked]))).size).toBe(0)
+
+    // Cancelled → the request can be booked again.
+    await tx((db) => db.update(bookings).set({ status: 'cancelled' }).where(eq(bookings.id, b.id)))
+    expect((await tx((db) => lockSiteEnquiryForBooking(db, mine.id))).id).toBe(mine.id)
+  })
+
+  it('reply texts: the night in both, the booked service in the confirmation; never the typed text', () => {
+    const e = { name: 'Layla', locale: 'en', booking: request }
+    const night = 'on the night of 2026-10-16 at 00:30 (after midnight, 2026-10-17)'
+    expect(siteEnquiryReplyText(e, 'Feed Spa', { hours: { openingHours: late } })).toBe(
+      `Hi Layla, thank you for your booking request at Feed Spa for Normal massage ${night}. `,
+    )
+    // Stored since 2026-10-13: the flag, whatever the hours are now.
+    const stored = { ...request, afterMidnight: true, calendarDate: '2026-10-17' }
+    expect(siteEnquiryReplyText({ ...e, booking: stored }, 'Feed Spa')).toContain(night)
+    expect(siteEnquiryReplyText(e, 'Feed Spa')).toContain('on 2026-10-16 at 00:30. ')
+    const booked = {
+      id: '00000000-0000-4000-8000-000000000002',
+      status: 'confirmed' as const,
+      branchId: '00000000-0000-4000-8000-000000000003',
+      businessDate: '2026-10-16',
+      date: '2026-10-17',
+      time: '00:30',
+      service: { en: 'Swedish massage', ar: 'مساج سويدي' },
+    }
+    expect(siteEnquiryReplyText(e, 'Feed Spa', { booked })).toBe(
+      `Hi Layla, your booking at Feed Spa is confirmed for Swedish massage ${night}. `,
+    )
+    const evening = { ...booked, businessDate: '2026-10-17', time: '19:00' }
+    expect(
+      siteEnquiryReplyText({ ...e, name: 'https://evil.example' }, 'Feed Spa', { booked: evening }),
+    ).toBe('Hi, your booking at Feed Spa is confirmed for Swedish massage on 2026-10-17 at 19:00. ')
+    const ar = siteEnquiryReplyText({ ...e, locale: 'ar' }, 'Feed Spa', { booked })
+    expect(ar).toContain('تم تأكيد حجزك في Feed Spa لـ مساج سويدي')
+    expect(ar).toContain('ليلة 2026-10-16 الساعة 00:30 (بعد منتصف الليل، 2026-10-17)')
+    expect(
+      siteEnquiryReplyText({ ...e, locale: 'ar' }, 'Feed Spa', { hours: { openingHours: late } }),
+    ).toContain('ليلة 2026-10-16')
+    // A plain message never turns into a confirmation.
+    expect(siteEnquiryReplyText({ name: 'Layla', locale: 'en' }, 'Feed Spa', { booked })).toBe(
+      'Hi Layla, thank you for your message to Feed Spa. ',
+    )
   })
 })

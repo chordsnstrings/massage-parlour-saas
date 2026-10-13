@@ -18,10 +18,10 @@ import { NewBookingSheet } from './new-booking-sheet'
 import { RangeSeg } from './range-seg'
 import { type MoveTarget, ResourceGrid } from './resource-grid'
 import { isHiddenStatus, minuteLabel } from './time'
-import type { CalendarData, CalItem } from './types'
+import type { CalendarData, CalItem, EnquiryPrefill } from './types'
 import { WalkInSheet, WalkInsPanel } from './walk-ins'
 
-export type Draft = { startMin?: number; staffId?: string; roomId?: string }
+export type Draft = { startMin?: number; staffId?: string; roomId?: string; enquiry?: EnquiryPrefill }
 
 export function CalendarView({ data }: { data: CalendarData }) {
   const { t, fmt } = useI18n()
@@ -30,7 +30,12 @@ export function CalendarView({ data }: { data: CalendarData }) {
   const [view, setView] = useState(data.view)
   const [showCancelled, setShowCancelled] = useState(data.showCancelled)
   const [items, setItems] = useState(data.items)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  // Enquiries → "Make booking": New booking opens prefilled once (the URL drops `?enquiry=` below).
+  const [draft, setDraft] = useState<Draft | null>(() =>
+    data.enquiry
+      ? { startMin: data.enquiry.startMin, staffId: data.enquiry.staffId, enquiry: data.enquiry }
+      : null,
+  )
   const [draftKey, setDraftKey] = useState(0)
   const [openBooking, setOpenBooking] = useState<string | null>(data.openBooking)
   const [walkInOpen, setWalkInOpen] = useState(false)
