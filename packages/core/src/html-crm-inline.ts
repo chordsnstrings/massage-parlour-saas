@@ -7,12 +7,16 @@
 // /designs files), read server-side (never fetched from a URL), raster only, small ones only. The design document
 // never changes (R24); only values inside CRM_DATA do (R26), plus `inline_originals` {path: original url}.
 
-/** Caps (raw bytes): each picture ≤ 80 KB, all of one page's ≤ 240 KB (counted per occurrence); ≤ 16 paths. */
+/**
+ * Caps (raw bytes): each picture ≤ 80 KB, all of one page's ≤ 240 KB (counted per occurrence); ≤ 16 paths. A render
+ * waits ≤ 300 ms for reads (a later one stays a link for that render and fills the cache for the next load).
+ */
 export const CRM_INLINE_LIMITS = {
   paths: 16,
   pathChars: 200,
   fileBytes: 80 * 1024,
   totalBytes: 240 * 1024,
+  deadlineMs: 300,
 } as const
 
 /** Inline plan of one render: declared path → the picture's url there and its data: URI. */
@@ -166,14 +170,16 @@ export function rasterDataUri(bytes: Uint8Array): { uri: string; size: number } 
 
 /**
  * The inline plan of a render's final data: for each declared path (order kept) whose value is a platform picture
- * that `load` returns, while the running total (raw bytes, per occurrence) stays ≤ 240 KB; each ≤ 80 KB. null =
- * nothing to inline. `load` reads the bytes server-side and caches them (createCrmInlineLoader).
+ * that `load` returns within `deadlineMs` (default 300), while the running total (raw bytes, per occurrence) stays
+ * ≤ 240 KB; each ≤ 80 KB. null = nothing to inline. `load` reads the bytes server-side and caches them
+ * (createCrmInlineLoader): a read past the deadline keeps running and serves the next load.
  */
 export async function planCrmInline(
   data: unknown,
   opts: {
     ourHost: (host: string) => boolean
     load: (src: CrmInlineSource) => Promise<{ uri: string; size: number } | null>
+    deadlineMs?: number
   },
 ): Promise<CrmInline | null> {
   const wanted = crmInlinePaths(data).flatMap((path) => {
@@ -182,7 +188,25 @@ export async function planCrmInline(
     return src ? [{ path, url: url as string, src }] : []
   })
   if (!wanted.length) return null
-  const loaded = await Promise.all(wanted.map((w) => opts.load(w.src).catch(() => null)))
+  // Unset = not read in time (or failed): stays a link this render.
+  const loaded: ({ uri: string; size: number } | null)[] = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    Promise.all(
+      wanted.map((w, i) =>
+        opts.load(w.src).then(
+          (pic) => {
+            loaded[i] = pic
+          },
+          () => {},
+        ),
+      ),
+    ),
+    new Promise<void>((done) => {
+      timer = setTimeout(done, opts.deadlineMs ?? CRM_INLINE_LIMITS.deadlineMs)
+    }),
+  ])
+  clearTimeout(timer)
   const plan: CrmInline = {}
   let total = 0
   wanted.forEach((w, i) => {
@@ -231,19 +255,29 @@ export const crmInlineKey = (plan: CrmInline | null | undefined): string =>
 /**
  * A process-wide, size-bounded (LRU) loader of inline pictures. File ids are scoped to the spa that asks
  * (`scope`), so one spa's cached bytes never answer another's; design files are shared. A miss (not found, not
- * public, not raster, too big) is remembered for `missTtlMs` only; concurrent loads of one key share one read.
+ * public, not raster, too big) is remembered for `missTtlMs` only, a read error for `errorTtlMs`; concurrent loads
+ * of one key share one read, and the file loads of one tick for one spa are read together (one `readFiles` call).
  */
 export function createCrmInlineLoader(o: {
-  /** The spa's own public, raster stored file, at most `max` bytes (else null, ideally without downloading). */
-  readFile: (scope: string, id: string, max: number) => Promise<Uint8Array | null>
+  /**
+   * The spa's own public, raster stored files, each at most `max` bytes: id → bytes (or their pending download;
+   * missing / null = none, ideally without downloading).
+   */
+  readFiles: (
+    scope: string,
+    ids: string[],
+    max: number,
+  ) => Promise<Map<string, Uint8Array | null | Promise<Uint8Array | null>>>
   /** A static design file (public/designs/{design}/{name}), at most `max` bytes. */
   readDesign: (design: string, name: string, max: number) => Promise<Uint8Array | null>
   maxBytes?: number
   missTtlMs?: number
+  errorTtlMs?: number
   now?: () => number
 }) {
   const maxBytes = o.maxBytes ?? 32 * 1024 * 1024
   const missTtl = o.missTtlMs ?? 60_000
+  const errorTtl = o.errorTtlMs ?? 30_000
   const now = o.now ?? Date.now
   type Entry = { pic: { uri: string; size: number } | null; cost: number; until: number }
   const map = new Map<string, Entry>()
@@ -255,11 +289,11 @@ export function createCrmInlineLoader(o: {
     map.delete(k)
     total -= e.cost
   }
-  const put = (k: string, pic: Entry['pic']) => {
+  const put = (k: string, pic: Entry['pic'], ttl = missTtl) => {
     drop(k)
     const cost = pic ? pic.uri.length : 64
     if (cost > maxBytes) return
-    map.set(k, { pic, cost, until: pic ? Number.POSITIVE_INFINITY : now() + missTtl })
+    map.set(k, { pic, cost, until: pic ? Number.POSITIVE_INFINITY : now() + ttl })
     total += cost
     for (const [key, e] of map) {
       if (total <= maxBytes) break
@@ -267,6 +301,33 @@ export function createCrmInlineLoader(o: {
       total -= e.cost
     }
   }
+  // One spa's file loads of this tick → one readFiles call (one tenant transaction).
+  type Waiter = {
+    resolve: (v: Uint8Array | null | Promise<Uint8Array | null>) => void
+    reject: (e: unknown) => void
+  }
+  const batches = new Map<string, Map<string, Waiter>>()
+  const readFile = (scope: string, id: string, max: number) =>
+    new Promise<Uint8Array | null>((resolve, reject) => {
+      let batch = batches.get(scope)
+      if (!batch) {
+        const mine = new Map<string, Waiter>()
+        batch = mine
+        batches.set(scope, mine)
+        queueMicrotask(() => {
+          batches.delete(scope)
+          ;(async () => o.readFiles(scope, [...mine.keys()], max))().then(
+            (got) => {
+              for (const [id, w] of mine) w.resolve(got.get(id) ?? null)
+            },
+            (e) => {
+              for (const w of mine.values()) w.reject(e)
+            },
+          )
+        })
+      }
+      batch.set(id, { resolve, reject })
+    })
   const load = (scope: string, src: CrmInlineSource) => {
     const key = src.kind === 'file' ? `f:${scope}:${src.id}` : `d:${src.design}/${src.name}`
     const hit = map.get(key)
@@ -282,13 +343,14 @@ export function createCrmInlineLoader(o: {
       try {
         const bytes =
           src.kind === 'file'
-            ? await o.readFile(scope, src.id, max)
+            ? await readFile(scope, src.id, max)
             : await o.readDesign(src.design, src.name, max)
         const pic = bytes && bytes.byteLength <= max ? rasterDataUri(bytes) : null
         put(key, pic)
         return pic
       } catch {
-        return null // a read error is not remembered: the next load tries again
+        put(key, null, errorTtl) // a read error (storage down): retried after errorTtl, not on every request
+        return null
       } finally {
         flight.delete(key)
       }

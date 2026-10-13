@@ -2,7 +2,8 @@
 // docs/design/html-crm-contract.md): the first-screen pictures a contract design asks for, delivered as data: URIs
 // inside window.CRM_DATA on the live page and share links (the sandboxed design document reuses nothing from the
 // browser cache on a reload). Bytes are read here, never fetched from a URL: this spa's own public /files (its
-// tenant transaction) and the static public/designs files. Process-wide cache ≤ 32 MB.
+// tenant transaction) and the static public/designs files. Process-wide cache ≤ 32 MB; a render waits ≤ 300 ms for
+// reads (a late one fills the cache for the next load).
 import { readFile as readFs, stat } from 'node:fs/promises'
 import path from 'node:path'
 import {
@@ -20,7 +21,7 @@ import {
   planCrmInline,
 } from '@spa/core'
 import { withTenant } from '@spa/db'
-import { crmInlineFile } from '@spa/services'
+import { crmInlineFileBytes, crmInlineFiles } from '@spa/services'
 import { designContract, designCrmData, designKey } from '@/components/site/html-crm'
 import { platformRoots } from '@/server/origin'
 import { resolveSiteTenant } from '@/server/sites'
@@ -43,7 +44,11 @@ async function readDesignFile(design: string, name: string, max: number): Promis
 
 const g = globalThis as unknown as { __spaCrmInline?: ReturnType<typeof createCrmInlineLoader> }
 g.__spaCrmInline ??= createCrmInlineLoader({
-  readFile: (tenantId, id, max) => withTenant(tenantId, (tx) => crmInlineFile(tx, tenantId, id, max)),
+  // One tenant transaction per spa and tick for the file rows; bucket downloads (5 s limit) only after it returned.
+  readFiles: async (tenantId, ids, max) => {
+    const refs = await withTenant(tenantId, (tx) => crmInlineFiles(tx, tenantId, ids, max))
+    return new Map(ids.map((id) => [id, crmInlineFileBytes(refs.get(id), max)]))
+  },
   readDesign: readDesignFile,
   maxBytes: 32 * 1024 * 1024,
 })

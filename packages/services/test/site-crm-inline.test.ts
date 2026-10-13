@@ -2,9 +2,9 @@
 import { closeAllDbs, tenants, withTenant } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { crmInlineFile, HTML_DESIGN_DOC_PURPOSE, putFile } from '../src'
+import { crmInlineFileBytes, crmInlineFiles, HTML_DESIGN_DOC_PURPOSE, putFile } from '../src'
 
-describe('crmInlineFile', () => {
+describe('crmInlineFiles', () => {
   const { platform, app } = testDbs()
   const ids = {} as Record<string, string>
   const webp = Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBPVP8 '), Buffer.alloc(200)])
@@ -44,8 +44,11 @@ describe('crmInlineFile', () => {
   })
   afterAll(closeAllDbs)
 
-  const read = (tenantId: string, id: string, max = 80 * 1024) =>
-    withTenant(tenantId, (tx) => crmInlineFile(tx, tenantId, id, max), app)
+  const read = async (tenantId: string, id: string, max = 80 * 1024) =>
+    crmInlineFileBytes(
+      (await withTenant(tenantId, (tx) => crmInlineFiles(tx, tenantId, [id], max), app)).get(id),
+      max,
+    )
 
   it("reads the spa's own small public picture", async () => {
     const bytes = await read(ids.a!, ids.logo!)
@@ -56,12 +59,22 @@ describe('crmInlineFile', () => {
     expect(await read(ids.a!, ids.other!)).toBeNull()
     expect(await read(ids.b!, ids.logo!)).toBeNull()
     // Even naming the owner as the tenant from another spa's transaction: RLS hides the row.
-    expect(await withTenant(ids.b!, (tx) => crmInlineFile(tx, ids.a!, ids.logo!, 80 * 1024), app)).toBeNull()
+    const viaB = await withTenant(ids.b!, (tx) => crmInlineFiles(tx, ids.a!, [ids.logo!], 80 * 1024), app)
+    expect(viaB.size).toBe(0)
     expect(await read(ids.a!, ids.private!)).toBeNull()
     expect(await read(ids.a!, ids.doc!)).toBeNull()
     expect(await read(ids.a!, ids.svg!)).toBeNull()
     expect(await read(ids.a!, ids.big!)).toBeNull()
     expect(await read(ids.a!, ids.logo!, 100)).toBeNull()
     expect(await read(ids.a!, '00000000-0000-4000-8000-000000000000')).toBeNull()
+  })
+
+  it("reads all of a render's ids in one go, keeping only the readable ones", async () => {
+    const all = Object.values(ids).filter((id) => id !== ids.a && id !== ids.b)
+    const got = await withTenant(ids.a!, (tx) => crmInlineFiles(tx, ids.a!, all, 80 * 1024), app)
+    expect([...got.keys()]).toEqual([ids.logo])
+    expect(await withTenant(ids.a!, (tx) => crmInlineFiles(tx, ids.a!, [], 80 * 1024), app)).toEqual(
+      new Map(),
+    )
   })
 })

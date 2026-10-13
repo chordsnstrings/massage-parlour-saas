@@ -953,6 +953,8 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
   }
 
   await test.step('live page: data: URIs for the declared platform pictures only, originals recorded', async () => {
+    // A read past the render's 300 ms deadline stays a link that once and is inlined from the next load on.
+    await expect.poll(async () => Object.keys((await liveData()).inline_originals ?? {}).length).toBe(3)
     const got = await liveData()
     expect(got.spa.logo_on_light).toBe(`data:image/webp;base64,${first.b64}`)
     // Not declared: the same logo stays a link there.
@@ -973,6 +975,9 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
   await test.step('a new logo shows on the next load (no stale cache)', async () => {
     const second = await logo('e75ea082f84ff839.webp')
     await publishLogo(second.id)
+    await expect
+      .poll(async () => (await liveData()).inline_originals?.['spa.logo_on_light'])
+      .toBe(`/files/${second.id}`)
     const got = await liveData()
     expect(got.spa.logo_on_light).toBe(`data:image/webp;base64,${second.b64}`)
     expect(got.inline_originals['spa.logo_on_light']).toBe(`/files/${second.id}`)

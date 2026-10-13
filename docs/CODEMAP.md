@@ -651,10 +651,13 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     reuses nothing from the browser cache, so a design's declared first-screen pictures (`contract.inline` paths) go
     into CRM_DATA as `data:` URIs (+ `inline_originals`). Core `html-crm-inline.ts` (`crmInlinePaths`,
     `crmInlineSource` — `/files/{uuid}` / `/designs/{d}/{name}.{webp|png|jpe?g|avif}`, relative or on `ourHost` only,
-    no query —, `sniffRasterType` (never SVG), `planCrmInline` (≤ 80 KB each, ≤ 240 KB a page), `applyCrmInline`
+    no query —, `sniffRasterType` (never SVG), `planCrmInline` (≤ 80 KB each, ≤ 240 KB a page, waits ≤ 300 ms:
+    a late read stays a link that render and fills the cache), `applyCrmInline`
     (copy-on-write, only where the value is still the planned url), `createCrmInlineLoader` (LRU by size, file keys per
-    spa, misses 60 s, shared in-flight reads)); services `crmInlineFile(tx, tenantId, id, max)` (own + public + image +
-    not a design doc, size checked before download); web `server/crm-inline.ts` (`crmInlinePlan` for `app/site-html`,
+    spa, misses 60 s, read errors 30 s, shared in-flight reads, one spa's file loads of a tick → one `readFiles`));
+    services `crmInlineFiles(tx, tenantId, ids, max)` (one query: own + public + image + not a design doc, size
+    checked before any byte; db bytes in the tx) + `crmInlineFileBytes` (bucket GET after the tx, 5 s
+    `getObjectBytes` timeout); web `server/crm-inline.ts` (`crmInlinePlan` for `app/site-html`,
     `pageCrmInline` → `SiteMeta.crmInline` by designKey for `public.tsx` frames + the share link; global loader
     ≤ 32 MB; hosts: `platformRoots()` + the spa's own via `resolveSiteTenant`; `public/designs` read from disk, never
     fetched). `designWithCrm(…, {inline})` applies it last, output key `…|in:{hash(plan)}`; `crmScriptJson(…,

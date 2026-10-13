@@ -244,12 +244,15 @@ pictures inside the HTML.
   that would pass the total is skipped), replaced by `data:{type};base64,…`. `inline_originals` (last key) records
   `{path: original url}` for each one, so a design can upgrade to a sharper `srcset` after load.
 - **Anything else stays as it is:** another spa's file, private files, design documents, template files (an
-  uploaded template's own `/files/{id}/{name}`), unknown hosts, query strings (`?w=480`), larger pictures, read errors.
+  uploaded template's own `/files/{id}/{name}`), unknown hosts, query strings (`?w=480`), larger pictures, read errors, reads not done within 300 ms
+  (the render never waits longer: a late read keeps going and serves the next load).
 - **R24 / R26:** the design document never changes; only values inside `window.CRM_DATA` do (endpoint-only designs'
   live page fetches `crm-data.json`, which is not inlined — the fetch itself is a round trip; use the literal form).
-- **Caches:** pictures in a process-wide LRU (≤ 32 MB; file ids keyed per spa, misses remembered 60 s); the output
+- **Caches:** pictures in a process-wide LRU (≤ 32 MB; file ids keyed per spa, misses remembered 60 s, read errors
+  30 s; one spa's file rows of a render read in one tenant transaction, bucket objects downloaded after it with a 5 s
+  limit, so a slow bucket never holds a db connection); the output
   cache key adds a hash of the plan (paths + urls), and the plan is made from the request's merged data, so a new CRM
-  logo (a new file id) shows on the next load. Code: `@spa/core` html-crm-inline.ts, `@spa/services` crmInlineFile,
+  logo (a new file id) shows on the next load. Code: `@spa/core` html-crm-inline.ts, `@spa/services` crmInlineFiles / crmInlineFileBytes,
   web `server/crm-inline.ts` (`crmInlinePlan`, `pageCrmInline`), `designWithCrm(…, {inline})`.
 - **Authoring:** point the first screen's default picture at a small copy (BE RELAX v2.5: the 1600w welcome still
   `4d56333a0e00bb38.webp`, 58 KB, instead of the 2400w 197 KB one) so it fits the cap; inline Latin fonts in the

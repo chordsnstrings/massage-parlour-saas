@@ -222,13 +222,32 @@ describe('planCrmInline + applyCrmInline', () => {
     expect(crmInlineKey(null)).toBe('')
     expect(crmInlineKey(plan)).toContain(`spa.logo_on_dark=/files/${OTHER}`)
   })
+
+  it('never waits past its deadline: a late read stays a link this render', async () => {
+    const d = data()
+    let late: (v: { uri: string; size: number } | null) => void = () => {}
+    const load = vi.fn((src: CrmInlineSource) =>
+      src.kind === 'file'
+        ? new Promise<{ uri: string; size: number } | null>((r) => {
+            late = r
+          })
+        : Promise.resolve(rasterDataUri(webp(1000))),
+    )
+    const t0 = Date.now()
+    const plan = (await planCrmInline(d, { ourHost, load, deadlineMs: 30 }))!
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(Object.keys(plan)).toEqual(['journey[welcome].image'])
+    late(rasterDataUri(webp(1000))) // finishing later changes nothing already planned
+    expect(Object.keys(plan)).toEqual(['journey[welcome].image'])
+  })
 })
 
 describe('createCrmInlineLoader', () => {
   const setup = (over: { maxBytes?: number } = {}) => {
     let t = 0
-    const readFile = vi.fn(async (scope: string, id: string, _max: number) =>
-      scope === 'spa-a' && id === LOGO ? webp(1000) : null,
+    const readFiles = vi.fn(
+      async (scope: string, ids: string[], _max: number) =>
+        new Map(ids.map((id) => [id, scope === 'spa-a' && id === LOGO ? webp(1000) : null])),
     )
     const readDesign = vi.fn(async (_d: string, name: string, _max: number) =>
       name === 'svg.png'
@@ -237,37 +256,78 @@ describe('createCrmInlineLoader', () => {
           ? webp(CRM_INLINE_LIMITS.fileBytes + 1)
           : webp(2000),
     )
-    const l = createCrmInlineLoader({ readFile, readDesign, missTtlMs: 1000, now: () => t, ...over })
-    return { l, readFile, readDesign, tick: (ms: number) => (t += ms) }
+    const l = createCrmInlineLoader({
+      readFiles,
+      readDesign,
+      missTtlMs: 1000,
+      errorTtlMs: 500,
+      now: () => t,
+      ...over,
+    })
+    return { l, readFiles, readDesign, tick: (ms: number) => (t += ms) }
   }
   const file = { kind: 'file', id: LOGO } as const
 
   it('reads once, shares concurrent loads, and scopes files to the spa that asks', async () => {
-    const { l, readFile } = setup()
+    const { l, readFiles } = setup()
     const [a, b] = await Promise.all([l.load('spa-a', file), l.load('spa-a', file)])
     expect(a?.uri).toMatch(/^data:image\/webp;base64,/)
     expect(b).toBe(a)
     expect(await l.load('spa-a', file)).toBe(a)
-    expect(readFile).toHaveBeenCalledTimes(1)
+    expect(readFiles).toHaveBeenCalledTimes(1)
     // Another spa never gets spa A's cached bytes.
     expect(await l.load('spa-b', file)).toBeNull()
-    expect(readFile).toHaveBeenCalledTimes(2)
-    expect(readFile.mock.calls[1]).toEqual(['spa-b', LOGO, CRM_INLINE_LIMITS.fileBytes])
+    expect(readFiles).toHaveBeenCalledTimes(2)
+    expect(readFiles.mock.calls[1]).toEqual(['spa-b', [LOGO], CRM_INLINE_LIMITS.fileBytes])
   })
 
-  it('remembers a miss for its ttl only; never SVG or too-big bytes; read errors are not remembered', async () => {
-    const { l, readFile, readDesign, tick } = setup()
+  it("reads one spa's file loads of a tick together; a pending download per id is awaited", async () => {
+    const { l, readFiles } = setup()
+    readFiles.mockImplementationOnce(async (_s, ids) => new Map([[ids[0]!, Promise.resolve(webp(1000))]]))
+    const [a, b, c] = await Promise.all([
+      l.load('spa-a', file),
+      l.load('spa-a', { kind: 'file', id: OTHER }),
+      l.load('spa-b', file),
+    ])
+    expect(a?.size).toBe(1000)
+    expect(b).toBeNull()
+    expect(c).toBeNull()
+    expect(readFiles.mock.calls).toEqual([
+      ['spa-a', [LOGO, OTHER], CRM_INLINE_LIMITS.fileBytes],
+      ['spa-b', [LOGO], CRM_INLINE_LIMITS.fileBytes],
+    ])
+  })
+
+  it('remembers a miss for its ttl only, a read error for the shorter one; never SVG or too-big bytes', async () => {
+    const { l, readFiles, readDesign, tick } = setup()
     expect(await l.load('spa-b', file)).toBeNull()
     expect(await l.load('spa-b', file)).toBeNull()
-    expect(readFile).toHaveBeenCalledTimes(1)
+    expect(readFiles).toHaveBeenCalledTimes(1)
     tick(1001)
     await l.load('spa-b', file)
-    expect(readFile).toHaveBeenCalledTimes(2)
+    expect(readFiles).toHaveBeenCalledTimes(2)
     expect(await l.load('x', { kind: 'design', design: 'd', name: 'svg.png' })).toBeNull()
     expect(await l.load('x', { kind: 'design', design: 'd', name: 'big.webp' })).toBeNull()
     readDesign.mockRejectedValueOnce(new Error('EIO'))
-    expect(await l.load('x', { kind: 'design', design: 'd', name: 'ok.webp' })).toBeNull()
-    expect((await l.load('x', { kind: 'design', design: 'd', name: 'ok.webp' }))?.size).toBe(2000)
+    const ok = { kind: 'design', design: 'd', name: 'ok.webp' } as const
+    expect(await l.load('x', ok)).toBeNull()
+    // Storage down: not retried on every request…
+    expect(await l.load('x', ok)).toBeNull()
+    expect(readDesign).toHaveBeenCalledTimes(3)
+    // …but after errorTtl.
+    tick(501)
+    expect((await l.load('x', ok))?.size).toBe(2000)
+    // A failing batch read (or one id's download) is an error too.
+    readFiles.mockRejectedValueOnce(new Error('db down'))
+    expect(await l.load('spa-a', file)).toBeNull()
+    expect(await l.load('spa-a', file)).toBeNull()
+    tick(501)
+    readFiles.mockImplementationOnce(
+      async (_s, ids) => new Map([[ids[0]!, Promise.reject(new Error('bucket timeout'))]]),
+    )
+    expect(await l.load('spa-a', file)).toBeNull()
+    tick(501)
+    expect((await l.load('spa-a', file))?.size).toBe(1000)
   })
 
   it('stays within its size, evicting the least recently used', async () => {
