@@ -14,8 +14,8 @@ const cache = g.__spaDb
 /**
  * Idle connections stay open 10 minutes (pg's default closes them after 10 s, so the first request after a quiet
  * minute paid ~100 ms to reconnect: BE RELAX v2.3 measurement). Same number of connections as before: the pools'
- * `max` (web 10 + 10, worker 4 + 4, pg-boss 3) stays under the droplet's max_connections=60. keepAlive: TCP
- * keep-alive on the held sockets.
+ * `max` (web 10 + 10, worker 4 + 4, pg-boss 3) stays under the droplet's max_connections=60. TCP keep-alive probes
+ * a held socket after 60 s idle (pg's 0 = the OS default of 2 h, i.e. never within the 10 min hold).
  */
 export const POOL_IDLE_MS = 10 * 60_000
 
@@ -25,7 +25,7 @@ export const POOL_IDLE_MS = 10 * 60_000
  * The sslmode query param is dropped then, because node-postgres would otherwise override the CA config.
  */
 export function poolConfig(url: string, max: number): pg.PoolConfig {
-  const base = { max, idleTimeoutMillis: POOL_IDLE_MS, keepAlive: true }
+  const base = { max, idleTimeoutMillis: POOL_IDLE_MS, keepAlive: true, keepAliveInitialDelayMillis: 60_000 }
   const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n')
   if (!ca) return { connectionString: url, ...base }
   const u = new URL(url)
@@ -39,6 +39,9 @@ export function createDb(url: string, max = defaultMax()): Db {
   let entry = cache.get(url)
   if (!entry) {
     const pool = new pg.Pool(poolConfig(url, max))
+    // An idle client whose backend goes away (Postgres restart, network drop) emits 'error' on the pool; unhandled,
+    // it would crash the process (worker). pg-pool already drops the broken client, so logging is enough.
+    pool.on('error', (err) => console.error('db pool: idle client error', err))
     entry = { db: drizzle(pool, { schema }), pool }
     cache.set(url, entry)
   }

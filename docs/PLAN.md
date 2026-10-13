@@ -1323,10 +1323,12 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   CRM data byte for byte; the literal moves into `<head>`, which the platform splices anywhere) requests the logo and
   the first still from `<head>`, from the page's own host, with smaller hosted still copies in srcset (5 new files in
   `public/designs/be-relax/`), the other theme's logo after load, later stills after the first; journey space reserved
-  (no flash of the lower headings). Platform: db pools keep idle connections 10 min (+ keepAlive). Proof (full
-  Chromium 141, sandboxed page, 5 cold loads each): scene picture 0.3–0.45 s sooner on 40 Mbit/90 ms, 0.65–0.8 s on
-  8 Mbit/130 ms; logo 0.1–0.6 s sooner (most with the spa's 414 px WebP logos, spa content); 0.27–0.5 MB less before
-  load. Owner steps: after the deploy, new version of BE RELAX → Preview → Roll out; upload + publish the small logos.
+  (no flash of the lower headings). Platform: db pools keep idle connections 10 min (+ keepAlive probes after 60 s,
+  pool `error` logged, never a crash). Proof (full Chromium 141, sandboxed page, 5 cold loads each, vs today's live
+  page): scene picture 0.3–0.35 s sooner on 40 Mbit/90 ms, 0.5–0.53 s on 8 Mbit/130 ms; logo 0.08–0.12 s sooner;
+  0.16–0.27 MB less before load; srcset re-picked on rotate/resize (larger only). Be Relax's 414 px WebP logos are
+  already live (dark = Website content `spa.logo_on_dark`; light = the spa's CRM logo, which always wins over content
+  `spa.logo_on_light`). Owner steps: after the deploy, new version of BE RELAX with v2.3 → Preview EN + AR → Roll out.
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
      bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when
