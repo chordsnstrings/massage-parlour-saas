@@ -1129,7 +1129,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      iframe → `widget`). Shown as "Online · Instagram" (`bookingSourceLabel`), counted in `kpis.byAttribution`
      (dashboard Booking sources card) and `tenantPerformance.onlineSources` (console Performance detail).
      F16: `entry.utm.partner` (t.js + booking page keep `?partner=`) → `partnerByCode` (active partners only) →
-     `bookings.partner_id`; booking detail shows "Online · QR code · {partner}".
+     `bookings.partner_id`; booking detail shows "Website · QR code · {partner}".
   4. `enqueueBookingMessage`.
   5. `after(notify)`: `booking.online` bell row (dedupe `booking.online:<id>`) + push to `calendar.manage` holders.
   5. Push to the spa via `after(notifyTenant)`.

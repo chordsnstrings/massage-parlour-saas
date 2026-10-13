@@ -1312,7 +1312,11 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   every staff booking; Make booking's default, was WhatsApp); a staff Website booking records attribution `website`
   (new enum value, migration 0057; core `staffBookingAttribution`), legacy staff-made online rows count as `website`
   in reports (`onlineSourceSql`); public booking-page attribution unchanged. Label `online` = "Website" everywhere
-  (EN/TH, console), "Website · Instagram"; TH `เว็บไซต์` + overview title need native review.
+  (EN/TH, console), "Website · Instagram"; TH `เว็บไซต์` + overview title + QR poster note (`growth.poster.receptionSub`)
+  need native review. **Migration order:** booking-website-source took 0057; branches google-pending / google-fixes /
+  google-pending-2 (their own 0057/0058, older timestamps) must delete those SQL files + snapshots + journal entries and
+  re-run `pnpm db:generate` on top of it before merging (hand-renumbering leaves older `when` values that
+  `runMigrations` refuses → droplet migrate fails).
 - **Lazy loading for BE RELAX (owner, 2026-10-13: "make sure that lazy load is on"):** live page measured: 1.6 MB HTML
   (93 % embedded pictures, no-cache), every picture at first visit. R24 kept (platform never alters a design): our own
   file **BE RELAX v2.2** hosts its built-in pictures + Arabic fonts as immutable static files
@@ -1595,7 +1599,7 @@ others till end — finish everything"), built after the Premium/Standard plans 
   F13 `qr`) or a partner (`booking_partners`: name as typed + 6-char code → `&partner={code}`); t.js + the booking page
   carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or paused codes ignored). Partner table: bookings
   all-time / 30 days / completed / latest (cancelled excluded) + "Reception poster" row; pause/resume audited. Booking
-  detail shows "Online · QR code · {partner}". Migration 0044_vouchers_partners.
+  detail shows "Website · QR code · {partner}". Migration 0044_vouchers_partners.
 - ✅ **F17. Google Book button + Search Console** (Premium `marketing`). Google card → "Book button on Google" sets /
   updates / removes the location's Place Actions APPOINTMENT link → `{site}/book?src=google` (F13 `google`); other
   providers' links untouched; worker `gbp-site-sync` (10 min) re-points it when the address changes, failures retried
