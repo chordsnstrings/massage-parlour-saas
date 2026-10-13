@@ -174,6 +174,25 @@ Team section showed then: active + bookable). Book links: keep your own target (
 the CRM never sets `booking.url`. Two logos: `logo_on_dark` is kept for the spa the design names; the CRM logo fills
 `logo_on_light`.
 
+**No delay on a reload (owner 2026-10-13; BE RELAX v2.5, measured in Chromium 141):** the live page is sandboxed, so a
+reload reuses nothing from the browser cache and no connection: the first screen has to come inside the HTML.
+- `contract.inline` (§10) names only what the first screen shows: the first scene's picture (its default a copy that
+  fits the cap) and the header logo of the theme the page starts in. The live page always starts in the design's
+  default theme (the sandbox's in-memory storage keeps no theme choice): BE RELAX inlines `spa.logo_on_dark`, never
+  `logo_on_light`, which loads after the page has.
+- Latin fonts as `@font-face` data: URIs inside the design (OFL fonts allow it; Google's family names, `unicode-range`,
+  `font-display`); no Google Fonts stylesheet (render-blocking and fetched again on every reload).
+- `<link rel="expect" href="#{marker}" blocking="render">` in `<head>` + the marker element right after the script that
+  builds the first screen: Chromium 124+ keeps the previous page until the finished first screen (CPU 4× slower:
+  without it 4 of 5 reloads showed 1–31 background-only frames, with it 0 of 5); Safari and Firefox ignore it.
+- `decoding="sync"` on the inlined pictures and logos (decoded with the frame they first show in).
+- A sharper original after load (`inline_originals[path]`, else the design's own copy table) only where the browser's
+  srcset would take it — Chromium 141: the first candidate dense enough wins (sizes × devicePixelRatio > the copy's
+  width; no geometric mean; e.g. 1680 px+ at 1x, 1280 px at 1.25x) — swapped in only once `img.decode()` resolves.
+- Fonts only one locale needs still download on its reloads (BE RELAX's 4 Arabic faces, ~190 KB: a short font swap on
+  `/ar` reloads). Load them from the page's own host (`url(/designs/…)` first, the absolute URL as fallback; preloads
+  the same) so they share the page's one connection.
+
 ## 9. Contract v2 (R28 P5, authoring rules)
 
 A v2 design is one file every spa can use: nothing a visitor reads is fixed in it. Core: `crmContractManifest`,
