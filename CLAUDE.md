@@ -59,7 +59,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   as a file, the page JSON only references it — CODEMAP "HTML designs"; PLAN §14.8).
   **HTML designs render exactly as built (owner hard rule 2026-10-11, R24)**: no platform CSS/viewport/fixes unless the
   design's "Phone fixes" switch is on; only invisible changes (embedded files moved to /files, `<base>` in frames,
-  placeholders, compat shim, JSON-LD/canonical/t.js); the live page is the design document itself (CSP sandbox, never
+  placeholders, compat shim, JSON-LD/canonical/t.js, `contract.inline` first-screen pictures as data: URIs inside
+  CRM_DATA — owner 2026-10-13 "no delay when I reload", contract doc §10); the live page is the design document itself (CSP sandbox, never
   allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
   **CRM feed for contract designs (R26, 2026-10-12):** a design with `window.CRM_DATA` / `<meta name=crm-endpoint>`
   gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's

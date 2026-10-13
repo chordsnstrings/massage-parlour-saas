@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
  * website sources (bookings.attribution, F13). */
 const SOURCE_LABELS: Record<string, string> = {
   walk_in: 'Walk-in',
-  online: 'Online',
+  online: 'Website',
   whatsapp: 'WhatsApp',
   instagram: 'Instagram',
   phone: 'Staff / phone',
@@ -21,6 +21,7 @@ const SOURCE_LABELS: Record<string, string> = {
   widget: 'Booking widget',
   campaign: 'Campaign link',
   referral: 'Other websites',
+  website: 'Website',
   unknown: 'Not recorded',
 }
 export const sourceLabel = (key: string) => SOURCE_LABELS[key] ?? key

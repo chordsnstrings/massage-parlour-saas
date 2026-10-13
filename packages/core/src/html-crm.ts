@@ -792,12 +792,17 @@ const MEMO_STRINGS_MAX = 512
  * `JSON.stringify(value)` that is safe inside a `<script>` (`<`, `>`, `&`, U+2028, U+2029 as `\uXXXX`; lone
  * surrogates are escaped by JSON.stringify itself), so the data can never close the script or open a comment.
  * Same output as JSON.stringify otherwise (key order, undefined skipped / null in arrays). `memo`: objects and long
- * strings seen before are not serialised again (objects must never be mutated once serialised).
+ * strings seen before are not serialised again (objects must never be mutated once serialised). `transient`: strings
+ * the memo must not hold (contract.inline pictures: they vary per spa, the memo lives with the design).
  */
-export function crmScriptJson(value: unknown, memo?: CrmJsonMemo): string {
+export function crmScriptJson(
+  value: unknown,
+  memo?: CrmJsonMemo,
+  opts: { transient?: ReadonlySet<string> } = {},
+): string {
   const ser = (v: unknown): string | undefined => {
     if (typeof v === 'string') {
-      if (!memo || v.length < MEMO_STRING_MIN) return scriptSafe(JSON.stringify(v))
+      if (!memo || v.length < MEMO_STRING_MIN || opts.transient?.has(v)) return scriptSafe(JSON.stringify(v))
       let s = memo.strings.get(v)
       if (s === undefined) {
         s = scriptSafe(JSON.stringify(v))

@@ -1,4 +1,4 @@
-import { BOOKING_ATTRIBUTIONS, dubaiInstant } from '@spa/core'
+import { BOOKING_ATTRIBUTIONS, dubaiInstant, staffBookingAttribution } from '@spa/core'
 import {
   bookings,
   branches,
@@ -12,6 +12,7 @@ import {
   shifts,
   staff,
   tenants,
+  user,
   withTenant,
 } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
@@ -196,6 +197,40 @@ describe('kpis', () => {
     expect(k.byHour[17]).toBe(0) // cancelled
     expect(k.heatmap[2]![14]).toBe(1) // Tuesday 14:00 (no-show still occupied a slot)
     expect(k.daily).toEqual([{ date: D, revenue: 800, bookings: 3 }])
+  })
+
+  it('counts staff-made Website bookings as website, also without an attribution (2026-10-13)', async () => {
+    await platform.insert(user).values({ id: 'kpi-desk', name: 'Front desk', email: 'desk@kpi.test' })
+    const D3 = '2026-10-20'
+    const rollback = new Error('rollback')
+    await expect(
+      tx(async (db) => {
+        const book = (start: number, createdBy: string | null, attribution: 'website' | null) =>
+          createBooking(db, {
+            tenantId: ids.tenant!,
+            branchId: ids.branch!,
+            clientId: ids.fatima!,
+            source: 'online',
+            attribution,
+            createdBy,
+            status: 'confirmed',
+            allowOffShift: true,
+            items: [
+              { serviceVariantId: ids.variant!, start: dubaiInstant(D3, start), staffIds: [ids.maya!] },
+            ],
+          })
+        await book(11 * 60, 'kpi-desk', staffBookingAttribution('online')) // Make booking / the Website source
+        await book(13 * 60, 'kpi-desk', null) // staff-made, saved without an attribution
+        await book(15 * 60, null, null) // public booking page, booked before F13
+        const k = await kpis(db, { from: D3, to: D3 })
+        expect(k.bySource).toEqual([{ source: 'online', count: 3 }])
+        expect(k.byAttribution).toEqual([
+          { source: 'website', count: 2 },
+          { source: 'unknown', count: 1 },
+        ])
+        throw rollback
+      }),
+    ).rejects.toBe(rollback)
   })
 
   it('fills the daily series across a range and filters by branch', async () => {

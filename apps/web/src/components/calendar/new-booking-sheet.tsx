@@ -15,7 +15,7 @@ import type { Draft } from './calendar-view'
 import { minuteLabel, snap } from './time'
 import type { CalendarData } from './types'
 
-const SOURCES = ['phone', 'whatsapp', 'walk_in', 'instagram'] as const
+const SOURCES = ['phone', 'whatsapp', 'walk_in', 'instagram', 'online'] as const
 
 type ClientHit = { id: string; name: string; phone: string | null; blocked: boolean }
 type Done = { ref: string; whatsapp: string | null; whatsappWeb: string | null }
@@ -194,8 +194,8 @@ export function NewBookingSheet({
                   />
                 </Field>
                 <Field label={t('calendar.fields.source')} name="source">
-                  {/* A request is answered on WhatsApp; "online" stays the public booking page's (F13 reports). */}
-                  <Select id="source" name="source" defaultValue={pre ? 'whatsapp' : 'phone'}>
+                  {/* A booking request came from the spa's website: Website ('online', attribution 'website'). */}
+                  <Select id="source" name="source" defaultValue={pre ? 'online' : 'phone'}>
                     {SOURCES.map((v) => (
                       <option key={v} value={v}>
                         {enumLabel(t, 'bookingSource', v)}

@@ -1301,13 +1301,22 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **Enquiries → Make booking (owner, 2026-10-13: "Inbox button only"):** the HTML design's booking form still creates a
   website enquiry (R26); each Booking request row gets **Make booking** (`calendar.manage`) → the calendar's New booking
   sheet prefilled (client matched by phone or new, service, length, date + time, therapist only while active + bookable
-  + not on leave, notes "Website booking request · N guests", source WhatsApp) → the normal save (reservations, normal
+  + not on leave, notes "Website booking request · N guests", source Website) → the normal save (reservations, normal
   conflicts) links it back (`booking` jsonb `bookingId/bookedAt/bookedBy`, row lock, audit `site.enquiry.booked`, no
   migration) → row shows **Booked** → calendar; Reply on WhatsApp sends the confirmation (service, date, time). A
   cancelled booking reopens the request. **After-midnight fix:** a small-hours time offered under the chosen night
   (Be Relax 11:00–02:00) is the next calendar day (core `afterMidnight`, main-branch hours; no hours set → before the
   business-day cutoff); crm-enquiry stores `afterMidnight` + `calendarDate`, older rows computed. e2e
   `enquiry-booking.spec.ts`. New TH strings (enquiries/calendar/domain) + AR reply texts need native review.
+  **Website source (owner 2026-10-13 23:21, "go live directly"):** New booking's Source gains **Website** (`online`,
+  every staff booking; Make booking's default, was WhatsApp); a staff Website booking records attribution `website`
+  (new enum value, migration 0057; core `staffBookingAttribution`), legacy staff-made online rows count as `website`
+  in reports (`onlineSourceSql`); public booking-page attribution unchanged. Label `online` = "Website" everywhere
+  (EN/TH, console), "Website · Instagram"; TH `เว็บไซต์` + overview title + QR poster note (`growth.poster.receptionSub`)
+  need native review. **Migration order:** booking-website-source took 0057; branches google-pending / google-fixes /
+  google-pending-2 (their own 0057/0058, older timestamps) must delete those SQL files + snapshots + journal entries and
+  re-run `pnpm db:generate` on top of it before merging (hand-renumbering leaves older `when` values that
+  `runMigrations` refuses → droplet migrate fails).
 - **Lazy loading for BE RELAX (owner, 2026-10-13: "make sure that lazy load is on"):** live page measured: 1.6 MB HTML
   (93 % embedded pictures, no-cache), every picture at first visit. R24 kept (platform never alters a design): our own
   file **BE RELAX v2.2** hosts its built-in pictures + Arabic fonts as immutable static files
@@ -1329,6 +1338,17 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   0.16–0.27 MB less before load; srcset re-picked on rotate/resize (larger only). Be Relax's 414 px WebP logos are
   already live (dark = Website content `spa.logo_on_dark`; light = the spa's CRM logo, which always wins over content
   `spa.logo_on_light`). Owner steps: after the deploy, new version of BE RELAX with v2.3 → Preview EN + AR → Roll out.
+- **First-screen pictures inside the page — `contract.inline` (owner 2026-10-13 23:20 Dubai, after reload recordings:
+  "i don't want to see delay when i reload the website"):** the live design document runs under a CSP sandbox
+  (opaque origin, R24), so Chromium reuses nothing from its cache on a reload: the logo, the welcome picture and the
+  fonts download again and pop in after the text. A contract design may declare `contract.inline` (CRM_DATA paths);
+  on the live page (+ its frames) and share links, after the CRM merge and the content, each declared value that is
+  this spa's own public `/files` picture or a static `/designs` file (read server-side, never fetched; raster only)
+  ≤ 80 KB (page total ≤ 240 KB) becomes a `data:` URI inside CRM_DATA, with `inline_originals` {path: url}. R24 kept:
+  only values inside window.CRM_DATA change (an allowed invisible change, CLAUDE.md); never in the Studio editor.
+  Process-wide picture cache ≤ 32 MB; a new CRM logo shows on the next load. Design side: BE RELAX v2.5 declares the
+  dark logo + welcome still (the light logo is never on the first screen), points the welcome default at the 1600w copy (58 KB) and inlines its Latin fonts.
+  Contract doc §10; CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test).
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
      bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when
@@ -1373,6 +1393,40 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   **R24 (2026-10-11):** the base sheet / viewport / width fixes only with the design's "Phone fixes" switch (§14.8 R24).
 - **R15 Logo:** "SM" lime badge + "Spa Management" logo (`apps/web/public/brand/spamanagement-logo.svg`, 2026-10-09; replaced "Continuum" and "Handoff") in admin, marketing and
   login pages (not the spa dashboard, which shows the spa's own logo).
+
+- **R31 Sales & Marketing section + AI sales agent (owner, 2026-10-13: "create agent to help me targeting the spas and
+  sell this to them … collect the data … research either if they will be interested … make videos for marketing and
+  campaigns … show in the console as marketing and sales"; answers: "start in abudhabi, WhatsApp click-to-send only,
+  anyone, cheapest").** PLANNED, not built — build starts only when the owner approves this plan.
+  - **Where:** console section **Sales & Marketing** (English, super-admin + 2FA like the rest of the console; "anyone"
+    = every super-admin; an optional console role "Sales" limited to this section can come later). Platform data
+    (platformDb, no tenant), every write audited.
+  - **Phase 1 — find + research (Abu Dhabi first):** official sources only, no page scraping: Google Places API (New)
+    Text Search + Place Details for "spa / massage / Moroccan bath …" per Abu Dhabi area (aim: stay inside Google's
+    monthly free allowance — verify the current SKUs and caps when building; store the place_id and refresh other
+    Google fields instead of keeping them, per Google's terms), then the spa's **own website** (public email,
+    WhatsApp, Instagram link, booking-system / Arabic / mobile checks). Instagram enrichment only later through the
+    official API once the Meta app is approved. Dedupe against existing spas (tenants), applications and enquiries.
+    AI research on the **cheapest** ModelArk model from `ai_model_config`: fit score 0–100 with reasons (e.g. no
+    online booking, review volume vs replies, branches, outdated site, no Arabic) + a short personal pitch and a
+    WhatsApp opener in EN and AR (AR needs native review). It estimates need, never claims interest.
+  - **Phase 2 — outreach, WhatsApp click-to-send only:** each message opens wa.me with the drafted text; a person
+    sends it from their own WhatsApp; the lead logs who/when; daily cap per sender (default 25) against bans;
+    follow-up reminders (day 3 / day 7); statuses New → Researched → Contacted → Replied → Demo → Applied → Won / Lost
+    + **Do not contact** (honoured forever, source of every contact detail recorded). Applied leads link to the
+    existing Applications → onboarding. No email tool, no SMS, no automated WhatsApp (locked rule).
+  - **Phase 3 — content (cheapest first):** posters, captions, ad copy (existing AI) + product demo videos from real
+    screen recordings with AI voice-over; AI-generated video (ModelArk Seedance) only per video on approval (paid
+    per second). Ads stay manual in Meta / Google Ads Manager (export), tracked with `?src=` on spamanagement.co
+    landing pages (existing t.js analytics).
+  - **Phase 4 — weekly autopilot:** worker job finds new Abu Dhabi spas, refreshes old ones, drafts follow-ups into an
+    approval queue — never sends anything by itself.
+  - **Sketch:** tables `sales_leads` (place_id, name, area, phone, whatsapp, email, website, instagram, rating,
+    reviews, fit_score, research jsonb, stage, owner_user_id, do_not_contact, sources jsonb, refreshed_at),
+    `sales_activities` (lead, user, kind, text, at), `sales_settings` (areas, daily cap, templates).
+  - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
+    USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
+    honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
@@ -1590,7 +1644,7 @@ others till end — finish everything"), built after the Premium/Standard plans 
   F13 `qr`) or a partner (`booking_partners`: name as typed + 6-char code → `&partner={code}`); t.js + the booking page
   carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or paused codes ignored). Partner table: bookings
   all-time / 30 days / completed / latest (cancelled excluded) + "Reception poster" row; pause/resume audited. Booking
-  detail shows "Online · QR code · {partner}". Migration 0044_vouchers_partners.
+  detail shows "Website · QR code · {partner}". Migration 0044_vouchers_partners.
 - ✅ **F17. Google Book button + Search Console** (Premium `marketing`). Google card → "Book button on Google" sets /
   updates / removes the location's Place Actions APPOINTMENT link → `{site}/book?src=google` (F13 `google`); other
   providers' links untouched; worker `gbp-site-sync` (10 min) re-points it when the address changes, failures retried

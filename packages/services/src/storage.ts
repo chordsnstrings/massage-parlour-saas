@@ -87,6 +87,21 @@ export async function getFile(tx: Pick<Tx, 'select'>, id: string) {
   return { ...row, bytes: bytes ?? Buffer.alloc(0) }
 }
 
+/**
+ * A stored file's bucket object, outside any transaction (contract.inline): aborted after `timeoutMs` (download
+ * included), null when it is larger than `maxBytes`.
+ */
+export async function getObjectBytes(objectKey: string, opts: { timeoutMs: number; maxBytes: number }) {
+  const bucket = s3()
+  if (!bucket) throw new Error('S3 storage is not configured')
+  const res = await bucket.client.fetch(`${bucket.endpoint}/${bucket.bucket}/${objectKey}`, {
+    signal: AbortSignal.timeout(opts.timeoutMs),
+  })
+  if (!res.ok) throw new Error(`Download failed (${res.status})`)
+  const bytes = Buffer.from(await res.arrayBuffer())
+  return bytes.length <= opts.maxBytes ? bytes : null
+}
+
 export async function deleteFile(tx: Tx, id: string) {
   const [row] = await tx.delete(storedFiles).where(eq(storedFiles.id, id)).returning()
   const bucket = s3()

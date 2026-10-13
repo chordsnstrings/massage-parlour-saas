@@ -228,7 +228,7 @@ export type NewBooking = {
   branchId: string
   clientId?: string | null
   source: (typeof bookings.$inferInsert)['source']
-  /** F13: online bookings only — the visitor's first-touch website source. */
+  /** F13: online bookings only — the visitor's first-touch website source; staff Website bookings 'website'. */
   attribution?: (typeof bookings.$inferInsert)['attribution']
   /** F16: the partner whose poster / link the online booker came through. */
   partnerId?: string | null

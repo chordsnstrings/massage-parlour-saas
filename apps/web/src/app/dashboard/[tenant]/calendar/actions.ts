@@ -1,5 +1,12 @@
 'use server'
-import { businessDateOf, dubaiInstant, holdInterval, onLeave, overlaps } from '@spa/core'
+import {
+  businessDateOf,
+  dubaiInstant,
+  holdInterval,
+  onLeave,
+  overlaps,
+  staffBookingAttribution,
+} from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -128,7 +135,8 @@ const bookingSchema = z
     clientId: optionalId,
     clientName: z.string().trim().max(120).optional(),
     clientPhone: z.string().trim().max(30).optional(),
-    source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram']),
+    /** 'online' = Website (owner 2026-10-13): Make booking's default; records attribution 'website' (F13 reports). */
+    source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram', 'online']),
     notes: z.string().trim().max(1000).optional(),
     enquiryId: optionalId,
   })
@@ -180,6 +188,7 @@ export async function createBookingAction(
         branchId: branch.id,
         clientId,
         source: v.source,
+        attribution: staffBookingAttribution(v.source),
         status: 'confirmed',
         notes: v.notes || null,
         createdBy: ctx.user.id,
