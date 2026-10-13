@@ -1,3 +1,4 @@
+import { sweepSiteTexts } from '@spa/ai'
 import { pruneAnalytics, rollupAnalytics } from './analytics'
 import { backupDatabase } from './backup'
 import { billingTransitions } from './billing'
@@ -49,6 +50,8 @@ export const jobs: JobDef[] = [
   { name: 'memberships-renew', cron: '25 4 * * *', handler: () => renewAllMemberships() },
   { name: 'media-prune-ai', cron: '40 4 * * *', handler: () => pruneExpiredAiImages() },
   { name: 'html-design-docs-prune', cron: '45 4 * * *', handler: () => pruneUnusedHtmlDesigns() },
+  // R28 P5 (owner D5): Write texts queued by a template apply / upgrade that the web didn't run (or was cut off).
+  { name: 'site-texts-queue', cron: '*/2 * * * *', handler: () => sweepSiteTexts() },
   { name: 'slot-filler', cron: '30 10,15 * * *', handler: () => runSlotFiller() },
   { name: 'verify-custom-domains', cron: '*/10 * * * *', handler: () => verifyCustomDomains() },
   { name: 'instagram-publish', cron: '*/5 * * * *', handler: () => publishScheduledInstagramPosts() },

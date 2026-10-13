@@ -908,6 +908,45 @@ const k = document.getElementById('kid'); k.parentElement.textContent = ''
   })
 })
 
+describe('listHtmlDesignTexts ids + bindings (pre-P5 snapshot)', () => {
+  it('lists the same ids, bindings and bound flags on the P4 fixtures', () => {
+    const rows = (h: string) => listHtmlDesignTexts(h).map(({ path: _path, ...x }) => x)
+    expect({
+      textsDoc: rows(textsDoc),
+      contract: rows(fixture('crm-contract.html')),
+      fidelity: rows(fixture('fidelity.html')),
+    }).toMatchSnapshot()
+  })
+})
+
+describe('listHtmlDesignTexts: v2 slot paths (R28 P5)', () => {
+  it('names the CRM_DATA path of data-crm-text (inherited by inner runs) and of each data-crm-attr entry', () => {
+    const html = `<nav aria-label="Sections" data-crm-attr="aria-label:ui.nav.sections; bogus:x; title: ; ALT : ui.x">
+<a href="#j" data-crm-text="ui.nav.journey">Journey <b>now</b></a><a href="#k" data-crm-text="">Plain</a></nav>
+<input placeholder="05X XXX XXXX" aria-label="Phone" data-crm-attr=" placeholder : ui.form.phone_hint ">
+<p data-crm="spa-name">Name</p><p>Free</p>`
+    const list = listHtmlDesignTexts(html)
+    expect(list.map((x) => [x.text, x.bound, x.boundBy ?? '', x.path ?? ''])).toEqual([
+      ['Sections', true, 'crm', 'ui.nav.sections'],
+      ['Journey', true, 'crm', 'ui.nav.journey'],
+      ['now', true, 'crm', 'ui.nav.journey'],
+      ['Plain', true, 'crm', ''],
+      ['05X XXX XXXX', true, 'crm', 'ui.form.phone_hint'],
+      ['Phone', true, 'crm', ''],
+      ['Name', true, 'crm', ''],
+      ['Free', false, '', ''],
+    ])
+    expect(list[0]!.binding).toBe('data-crm-attr=aria-label:ui.nav.sections; bogus:x; title: ; ALT : ui.x')
+    expect(list[1]!.binding).toBe('data-crm-text=ui.nav.journey')
+    // Runs that are only part of what the script writes: several runs in one element, or a data-crm-tpl template.
+    expect(list.filter((x) => x.pathPart).map((x) => x.text)).toEqual(['Journey', 'now'])
+    const tpl = listHtmlDesignTexts(
+      '<p data-crm-text="ui.hours.note" data-crm-tpl>Open</p><p data-crm-text="ui.a">One</p><p data-crm-text="ui.a">Two</p>',
+    )
+    expect(tpl.map((x) => x.pathPart ?? false)).toEqual([true, false, false])
+  })
+})
+
 describe('applyHtmlTextOverrides (R28 P4)', () => {
   it('no texts / [] / only stale or malformed entries → the very same string', () => {
     expect(applyHtmlTextOverrides(textsDoc, undefined, 'en')).toBe(textsDoc)

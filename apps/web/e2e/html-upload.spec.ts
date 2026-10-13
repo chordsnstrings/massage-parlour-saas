@@ -255,3 +255,29 @@ h1{font-family:Big,serif}.bg{height:200px;background:url("${uri('image/png', img
     })
   })
 })
+
+test('R28 P5: the upload sheet reports how dynamic a design is before it is uploaded (never blocks)', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const owner = await signUpOwner(page, { spa: 'Report Spa' })
+  await makeStudio(owner.slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await page.goto(`${admin}/templates`)
+  await page.getByRole('button', { name: 'Upload HTML' }).click()
+  const dialog = page.getByRole('dialog')
+  const choose = async (file: string) =>
+    dialog.getByLabel('HTML file').setInputFiles({
+      name: file,
+      mimeType: 'text/html',
+      buffer: await readFile(new URL(`./fixtures/${file}`, import.meta.url)),
+    })
+  const panel = dialog.getByTestId('design-report-panel')
+  await choose('fidelity.html')
+  await expect(panel).toContainText('Not connected to the CRM')
+  await choose('crm-contract.html')
+  await expect(panel).toContainText('CRM contract')
+  await expect(panel).not.toContainText('Not connected to the CRM')
+  await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled()
+  await page.keyboard.press('Escape')
+})

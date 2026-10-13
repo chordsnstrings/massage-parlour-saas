@@ -11,6 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import {
   crmAddress,
+  crmDesignData,
   htmlContentLeftovers,
   htmlContentParts,
   htmlContentView,
@@ -51,8 +52,10 @@ import {
   lockSite,
   materializeTemplatePageData,
   type ProcessedImage,
+  pageDesignReports,
   planDesignSeed,
   planTemplateSwitch,
+  queueSiteTexts,
   runSiteEdit,
   type SiteEditResult,
   type SiteTemplate,
@@ -473,6 +476,10 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
       const keepTheme = Boolean(a.keep_theme)
       const fileUrl = ctx.o.fileUrl
       let copied = 0
+      // Owner D5: the contract v2 HTML pages the switch wrote get Write texts (drafts; the worker's site-texts-queue
+      // runs it within minutes), queued in the switch's own transaction. The connector's own gate
+      // (SITE_AI_EDITOR_EMAILS + 2FA) already holds for this actor.
+      let texts = 0
       let plan: Awaited<ReturnType<typeof planTemplateSwitch>>
       try {
         plan = await tenantTx(ctx, spa.id, async (tx) => {
@@ -498,6 +505,18 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
               return r.data
             },
           })
+          const written = new Set(template.pages.map((p) => p.slug))
+          const v2 = (await pageDesignReports(tx, spa.id)).filter(
+            (r) => r.report.contract === 'v2' && written.has(r.slug),
+          )
+          if (v2.length)
+            await queueSiteTexts(tx, spa.id, {
+              via: 'connector_apply',
+              actorUserId: userId,
+              pageIds: v2.map((r) => r.pageId),
+              ...(v2.length === 1 && v2[0]!.sha256 ? { designSha: v2[0]!.sha256 } : {}),
+            })
+          texts = v2.length
           return p
         })
       } catch (e) {
@@ -515,6 +534,7 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
         dryRun: dry,
         pages: plan.pages.map((p) => p.slug),
         copied,
+        writeTexts: texts,
       })
       const locked = plan.locked.map((l) => `${slugOut(l.slug)} (${l.by})`)
       return {
@@ -528,6 +548,12 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
         theme: keepTheme || isHtmlDesignTemplate(template) ? 'kept' : 'draft',
         html_design_pages: plan.htmlDesignPages,
         ...(dry ? {} : { html_files_copied: copied }),
+        ...(texts
+          ? {
+              write_texts:
+                'queued: English + Arabic drafts of the design’s texts are written within a few minutes (drafts only)',
+            }
+          : {}),
         ...(dry && locked.length
           ? { locked, warning: `Saving would be refused: open in the Studio editor — ${locked.join(', ')}` }
           : {}),
@@ -927,16 +953,12 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
           limit: typeof a.limit === 'number' ? a.limit : undefined,
         })
       const parts = htmlContentParts(view.content)
-      const leftovers = htmlContentLeftovers(
-        htmlCrmContractOf(view.html)?.literal?.data ?? null,
-        view.content,
-        {
-          spaName: spa.name,
-          city: crmAddress(facts?.branches[0]?.address ?? '').city,
-          arabic: true,
-          page: { texts: listHtmlDesignTexts(view.html), images: listHtmlDesignImages(view.html) },
-        },
-      )
+      const leftovers = htmlContentLeftovers(crmDesignData(htmlCrmContractOf(view.html)), view.content, {
+        spaName: spa.name,
+        city: crmAddress(facts?.branches[0]?.address ?? '').city,
+        arabic: true,
+        page: { texts: listHtmlDesignTexts(view.html), images: listHtmlDesignImages(view.html) },
+      })
       return {
         spa: spa.slug,
         page: { id: view.page.id, slug: slugOut(view.page.slug), title: view.page.title },
@@ -955,7 +977,7 @@ export const SITE_MCP_TOOLS: Record<string, ToolDef> = {
   set_html_content: {
     title: 'Change a design’s words and pictures',
     description:
-      'Sets or resets the website content of an HTML-design page (paths and ids from get_html_content). set (designs with window.CRM_DATA): data values by slot path — text / longtext / focus / color {t:{en?, ar?}} (Arabic shows on the Arabic site, English when missing; t:{ar} alone keeps the English as it is, en "" = the design’s English; focus "50% 30%", color "#c27b3f"); tags {tags:{en:[…], ar?:[…]}}; image {img} and video {video} (a /files/… path from add_image, or an https link); bool {on}; any kind {hide:true} empties it (the design hides what has no value). texts (every design): page texts by id, [{id, t:{en?, ar?}}] — headings, buttons, links, alt / placeholder / aria-label / title texts, the page title, the search description; plain text ({{spa_name}}-style placeholders are kept); to add Arabic send only t:{ar} (the English stays as it is); en replaces the English and must be the whole new text — never copy get_html_content’s design text into en (long ones are cut there and end with …; such a copy is refused). An entry get_html_content marks cut: true (page text or slot): never write en or ar for it (no translation, no rewrite) until you have read it whole with get_html_content ids. Bound ids are refused: boundBy crm = filled from the CRM — change it in the CRM; boundBy script = filled by the design’s script — change it in the design file (patch_html_design). The server records which design text each one replaces, and one the design no longer has is skipped. pictures (every design): [{id, img}] replaces a design picture (a /files/… path from add_image, or an https link; the picture’s framing stays). reset lists slot paths, "text:<id>" and "picture:<id>" back to the design’s own ("all" = everything). The design file is never changed: its layout, styles, scripts and effects stay exactly as built. Saved as a draft; use dry_run to check, then preview_link.',
+      'Sets or resets the website content of an HTML-design page (paths and ids from get_html_content). set (designs with window.CRM_DATA): data values by slot path — text / longtext / focus / color {t:{en?, ar?}} (Arabic shows on the Arabic site, English when missing; t:{ar} alone keeps the English as it is, en "" = the design’s English; focus "50% 30%", color "#c27b3f"); tags {tags:{en:[…], ar?:[…]}}; image {img} (a /files/… path from add_image, or an https link); video {video} (a /files/… video uploaded in the Studio, or an https link); bool {on}; any kind {hide:true} empties it (the design hides what has no value). texts (every design): page texts by id, [{id, t:{en?, ar?}}] — headings, buttons, links, alt / placeholder / aria-label / title texts, the page title, the search description; plain text ({{spa_name}}-style placeholders are kept); to add Arabic send only t:{ar} (the English stays as it is); en replaces the English and must be the whole new text — never copy get_html_content’s design text into en (long ones are cut there and end with …; such a copy is refused). An entry get_html_content marks cut: true (page text or slot): never write en or ar for it (no translation, no rewrite) until you have read it whole with get_html_content ids. Bound ids are refused: boundBy crm = filled from the CRM — change it in the CRM; boundBy script = filled by the design’s script — change it in the design file (patch_html_design). The server records which design text each one replaces, and one the design no longer has is skipped. pictures (every design): [{id, img}] replaces a design picture (a /files/… path from add_image, or an https link; the picture’s framing stays). reset lists slot paths, "text:<id>" and "picture:<id>" back to the design’s own ("all" = everything). The design file is never changed: its layout, styles, scripts and effects stay exactly as built. Saved as a draft; use dry_run to check, then preview_link.',
     input: {
       spa: spaArg,
       page: pageArg,

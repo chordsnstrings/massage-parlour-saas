@@ -1,5 +1,12 @@
 import { withTenant } from '@spa/db'
-import { createAsset, createVideoAsset, DomainError, MAX_UPLOAD_BYTES, processImage } from '@spa/services'
+import {
+  createAsset,
+  createVideoAsset,
+  DomainError,
+  MAX_FILE_BYTES,
+  MAX_UPLOAD_BYTES,
+  processImage,
+} from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { getT } from '@/i18n/server'
@@ -22,20 +29,23 @@ const json = (status: number, body: Record<string, unknown>) =>
 
 const Tenant = z.string().trim().min(1).max(63)
 const Tags = z.string().max(200).optional()
-/** Multipart overhead allowed on top of the image itself. */
+/** Multipart overhead allowed on top of the image itself (a video: on top of the 8 MB stored-file cap, R28 P5). */
 const BODY_LIMIT = MAX_UPLOAD_BYTES + 64 * 1024
+const VIDEO_BODY_LIMIT = MAX_FILE_BYTES + 64 * 1024
 
 export async function POST(req: Request) {
   // Same-origin only (the dashboard calls this with fetch/XHR, which always sends Origin on POST).
   if (!sameOrigin(req)) return json(403, { ok: false, error: 'Forbidden' })
   const t = await getT()
-  const tooLarge = t('errors.file.imageTooLarge', { size: '20 MB' })
-  if (Number(req.headers.get('content-length') ?? 0) > BODY_LIMIT)
-    return json(413, { ok: false, error: tooLarge })
+  const video = new URL(req.url).searchParams.get('kind') === 'video'
+  const limit = video ? VIDEO_BODY_LIMIT : BODY_LIMIT
+  const tooLarge = video
+    ? t('errors.file.videoTooLarge', { size: '8 MB' })
+    : t('errors.file.imageTooLarge', { size: '20 MB' })
+  if (Number(req.headers.get('content-length') ?? 0) > limit) return json(413, { ok: false, error: tooLarge })
   if (!(await getSession())) return json(401, { ok: false, error: t('errors.signInAgain') })
   const tenant = Tenant.safeParse(new URL(req.url).searchParams.get('tenant'))
   if (!tenant.success) return json(400, { ok: false, error: t('errors.file.uploadFailed') })
-  const video = new URL(req.url).searchParams.get('kind') === 'video'
   // 404s for non-members. Videos only go into Video blocks, which the studio places (design).
   const { ctx, error } = video
     ? await guard(tenant.data, 'site.design')
@@ -44,7 +54,7 @@ export async function POST(req: Request) {
 
   let form: FormData
   try {
-    form = await readForm(req, BODY_LIMIT)
+    form = await readForm(req, limit)
   } catch (e) {
     if (e instanceof TooLarge) return json(413, { ok: false, error: tooLarge })
     return json(400, { ok: false, error: t('errors.file.uploadFailed') })
@@ -53,7 +63,8 @@ export async function POST(req: Request) {
   const file = form.get('file')
   if (!tags.success || !(file instanceof File))
     return json(400, { ok: false, error: t('errors.file.choose') })
-  if (file.size > MAX_UPLOAD_BYTES) return json(413, { ok: false, error: tooLarge })
+  if (file.size > (video ? MAX_FILE_BYTES : MAX_UPLOAD_BYTES))
+    return json(413, { ok: false, error: tooLarge })
 
   try {
     if (video) {

@@ -22,7 +22,8 @@ import {
   htmlContentSlots,
   htmlDesignDocOf,
 } from '@spa/core'
-import { AlertTriangle, ChevronDown, EyeOff, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, EyeOff, Loader2, RotateCcw, Upload } from 'lucide-react'
+import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ImageFieldControl } from '@/components/media/image-field'
 import { cn } from '@/lib/utils'
@@ -746,6 +747,41 @@ function SlotVideo({
   // What was typed but not stored, over the stored value it was typed on: back to the design drops it.
   const [typed, setTyped] = useState<{ raw: string; over: string } | null>(null)
   const draft = typed?.over === value ? typed.raw : null
+  // R28 P5: an MP4 / WebM uploaded here (POST /files/upload?kind=video, like the Video block; ≤ 8 MB).
+  const params = useParams<{ tenant?: string; slug?: string }>()
+  const slug = (typeof params?.tenant === 'string' ? params.tenant : params?.slug) || null
+  const file = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function upload(f: File) {
+    if (!slug) return
+    if (f.size > MAX_VIDEO_BYTES) {
+      setError('Videos can be up to 8 MB.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const body = new FormData()
+      body.set('file', f)
+      const res = await fetch(`/files/upload?tenant=${encodeURIComponent(slug)}&kind=video`, {
+        method: 'POST',
+        body,
+      })
+      const json = (await res.json().catch(() => null)) as
+        | { ok: true; asset: { url: string } }
+        | { ok: false; error: string }
+        | null
+      if (json?.ok) {
+        setTyped(null)
+        onSet({ video: json.asset.url })
+      } else setError(json?.error ?? 'The upload failed. Try again.')
+    } catch {
+      setError('The upload failed — check the connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <>
       <input
@@ -762,11 +798,47 @@ function SlotVideo({
           if (ok) onSet(v ? { video: v } : null)
         }}
       />
-      {draft !== null && (
+      {draft !== null ? (
         <p className="mt-1 text-[11px] text-danger">
           Use a video from the media library (/files/…) or an https link.
         </p>
+      ) : (
+        <p className="mt-1 text-[11px] text-muted">Upload an MP4 / WebM (≤ 8 MB) or paste an https link.</p>
+      )}
+      {!readOnly && slug && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <input
+            ref={file}
+            type="file"
+            accept="video/mp4,video/webm"
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) void upload(f)
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => file.current?.click()}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 text-sm hover:bg-subtle disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+            {busy ? 'Uploading…' : 'Upload video'}
+          </button>
+          {error && (
+            <p role="alert" className="text-[11px] text-danger">
+              {error}
+            </p>
+          )}
+        </div>
       )}
     </>
   )
 }
+
+/** Same cap as services createVideoAsset (stored files are ≤ 8 MB). */
+const MAX_VIDEO_BYTES = 8 * 1024 * 1024

@@ -1,37 +1,11 @@
 'use server'
-import { AiBudgetExceededError, AiDisabledError, loadSiteFacts, planSiteTexts } from '@spa/ai'
-import {
-  crmAddress,
-  dubaiParts,
-  type HtmlDesignContent,
-  htmlContentLeftovers,
-  htmlCrmContractOf,
-  htmlDesignDocOf,
-  listHtmlDesignTexts,
-} from '@spa/core'
-import { type Tx, withTenant } from '@spa/db'
-import {
-  assertPagesUnlocked,
-  getEditablePage,
-  getSite,
-  HTML_DESIGN_BLOCK,
-  htmlDesignContentErrors,
-  htmlDesignSource,
-  labelVersion,
-  listPages,
-  lockSite,
-  PageLockedError,
-  pageLocksHeldByOthers,
-  saveDraft,
-  spaHtmlDocReader,
-} from '@spa/services'
-import { fillTextSlots, type TextDraft, type TextSlot, textSlots } from '@spa/services/site-kit'
+import { runSiteTexts, type SiteTextsResult, siteTextsRunning, siteTextsSkipped } from '@spa/ai'
+import { withTenant } from '@spa/db'
+import { getSite } from '@spa/services'
 import { z } from 'zod'
 import { siteEditSchema } from '@/components/site/ai-schema'
 import { designSignature } from '@/components/site/content'
-import { designKey } from '@/components/site/html-crm'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
-import type { MemberContext } from '@/server/access'
 import { fixtureClient } from '@/server/ai-fixture'
 import { audit } from '@/server/audit'
 import { aiEditReady, siteAiGuard } from '@/server/site-ai-gate'
@@ -43,73 +17,15 @@ import { revalidateStudio } from '@/server/studio'
  * versions are never touched and nothing publishes. Same gate as Studio Ask AI / Claude MCP (SITE_AI_EDITOR_EMAILS
  * super-admins with 2FA) and the same editor locks (a page open in someone else's editor is skipped). R28 P4: an
  * HTML-design page gets its website content written (data texts + page texts, EN + AR; its file never changes).
+ * R28 P5: the loop lives in @spa/ai (`runSiteTexts`), shared with the queued run after a template apply / upgrade.
  */
 
-const MAX_PAGES = 12
-const SLOTS_PER_CALL = 40
-const MAX_CALLS = 24
-const DEADLINE_MS = 150_000
-const MAX_PAGE_BYTES = 512 * 1024
-const RUN_AGAIN = 'not written — run again'
-/** One run per spa at a time (this server process). */
-const running = new Set<string>()
+/** A queued run (owner D5) started less than this ago is still running. */
+const RUNNING_MS = 15 * 60_000
 
 const inputSchema = z.object({ notes: z.string().trim().max(400).optional() })
 
-type Job = {
-  id: string
-  title: string
-  slug: string
-  slots: TextSlot[]
-  /** HTML-design page: its design document (the save re-checks it). */
-  html?: { docKey: string | null }
-  /** Slot keys whose text still names another spa, city, phone or test copy (listed first). */
-  leftovers: string[]
-}
-type DesignNode = { type?: unknown; props?: Record<string, unknown> }
-export type WriteTextsResult = {
-  pages: { id: string; slug: string; title: string; filled: number }[]
-  skipped: { title: string; reason: string }[]
-}
-
-const chunks = <T>(list: T[], size: number) =>
-  Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size))
-
-/** The page's HtmlDesign block (R28 P4), if any. */
-const htmlDesignNode = (data: unknown) => {
-  const content = (data as { content?: unknown } | null)?.content
-  return Array.isArray(content)
-    ? (content as DesignNode[]).find((n) => n?.type === HTML_DESIGN_BLOCK && n.props)
-    : undefined
-}
-/** The page without its HtmlDesign website content (the only part Write texts changes there). */
-const withoutHtmlContent = (data: unknown) => {
-  const d = data as { content?: unknown } | null
-  if (!Array.isArray(d?.content)) return data
-  return {
-    ...d,
-    content: (d.content as DesignNode[]).map((n) => {
-      if (n?.type !== HTML_DESIGN_BLOCK || !n.props) return n
-      const { content: _content, ...props } = n.props
-      return { ...n, props }
-    }),
-  }
-}
-/** An HTML-design page's design source + document key (null source: missing). */
-async function designOf(tx: Tx, tenantId: string, data: unknown) {
-  const node = htmlDesignNode(data)
-  if (!node?.props) return null
-  return {
-    node,
-    source: await htmlDesignSource(node.props, spaHtmlDocReader(tx, tenantId)),
-    docKey: designKey(htmlDesignDocOf(node.props)),
-  }
-}
-
-function dubaiStamp(now = new Date()) {
-  const p = dubaiParts(now)
-  return `${p.date} ${String(Math.floor(p.minutes / 60)).padStart(2, '0')}:${String(p.minutes % 60).padStart(2, '0')}`
-}
+export type WriteTextsResult = SiteTextsResult
 
 export async function writeTextsAction(slug: string, input: unknown): Promise<ActionResult> {
   const { ctx, error } = await siteAiGuard(slug)
@@ -118,215 +34,52 @@ export async function writeTextsAction(slug: string, input: unknown): Promise<Ac
   const parsed = inputSchema.safeParse(input ?? {})
   if (!parsed.success) return fromZod(parsed.error, { english: true })
   const tenantId = ctx.tenant.id
-  if (running.has(tenantId)) return fail('Write texts is already running for this spa.')
-  running.add(tenantId)
+  const queued = await withTenant(tenantId, async (tx) => (await getSite(tx, tenantId))?.textRun)
+  const busy =
+    queued?.state === 'running' && Date.now() - Date.parse(queued.startedAt ?? queued.at) < RUNNING_MS
+  if (busy || siteTextsRunning.has(tenantId)) return fail('Write texts is already running for this spa.')
+  siteTextsRunning.add(tenantId)
   try {
-    return await run(ctx, slug, parsed.data.notes || undefined)
+    const notes = parsed.data.notes || undefined
+    const run = await runSiteTexts({
+      tenantId,
+      slug,
+      userId: ctx.user.id,
+      notes,
+      schema: siteEditSchema(),
+      signature: designSignature,
+      client: fixtureClient(slug),
+    })
+    if (!run.siteId) return fail(run.stop ?? 'Choose a template first: there are no pages to write yet.')
+    const { result, stop, costUsd } = run
+    await audit({
+      tenantId,
+      actorUserId: ctx.user.id,
+      impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+      action: 'site.ai_texts_written',
+      entity: 'site',
+      entityId: run.siteId,
+      data: {
+        via: 'studio_write_texts',
+        pages: result.pages.map((p) => ({ id: p.id, slug: p.slug, filled: p.filled })),
+        skipped: result.skipped,
+        notes: Boolean(notes),
+        costUsd,
+      },
+    })
+    if (result.pages.length) revalidateStudio(slug)
+    const skipped = siteTextsSkipped(result)
+    if (!result.pages.length) return fail(stop ?? `No texts were written.${skipped}`)
+    const n = result.pages.length
+    return ok(
+      `Drafted texts for ${n} ${n === 1 ? 'page' : 'pages'} in English and Arabic (${result.pages
+        .map((p) => `${p.title} ${p.filled}`)
+        .join(
+          ', ',
+        )}).${skipped}${stop ? ` ${stop}` : ''} Nothing is published — read each page, adjust, then Publish.`,
+      result,
+    )
   } finally {
-    running.delete(tenantId)
+    siteTextsRunning.delete(tenantId)
   }
-}
-
-async function run(ctx: MemberContext, slug: string, notes: string | undefined): Promise<ActionResult> {
-  const tenantId = ctx.tenant.id
-  const schema = siteEditSchema()
-  const loaded = await withTenant(tenantId, async (tx) => {
-    const site = await getSite(tx, tenantId)
-    const pages = site ? (await listPages(tx, tenantId)).slice(0, MAX_PAGES) : []
-    const drafts = []
-    for (const p of pages) {
-      const page = await getEditablePage(tx, tenantId, p.id)
-      if (page) drafts.push({ page: p, data: page.data, design: await designOf(tx, tenantId, page.data) })
-    }
-    return {
-      site,
-      drafts,
-      locks: await pageLocksHeldByOthers(
-        tx,
-        tenantId,
-        ctx.user.id,
-        pages.map((p) => p.id),
-      ),
-      facts: await loadSiteFacts(tx, tenantId),
-    }
-  })
-  if (!loaded.site || !loaded.drafts.length)
-    return fail('Choose a template first: there are no pages to write yet.')
-
-  const result: WriteTextsResult = { pages: [], skipped: [] }
-  const jobs: Job[] = []
-  const city = crmAddress(loaded.facts.branches[0]?.address ?? '').city
-  for (const { page, data, design } of loaded.drafts) {
-    const title = page.slug === '' ? 'Home' : page.title.en || `/${page.slug}`
-    const lock = loaded.locks.get(page.id)
-    if (lock) {
-      result.skipped.push({ title, reason: `open in ${lock.holderName}'s editor` })
-      continue
-    }
-    const html = design?.source ?? undefined
-    const leftovers = new Set<string>()
-    if (design && html !== undefined) {
-      // R28 P4: texts that still name another spa, city, phone or test copy go first — ahead of the page's slot cap —
-      // and are named in the prompt.
-      const block = String(design.node.props?.id ?? '')
-      for (const l of htmlContentLeftovers(
-        htmlCrmContractOf(html)?.literal?.data ?? null,
-        design.node.props?.content as HtmlDesignContent | undefined,
-        {
-          spaName: loaded.facts.name,
-          city,
-          arabic: true,
-          page: { texts: listHtmlDesignTexts(html), images: [] },
-        },
-      ))
-        if (l.reason !== 'stale' && l.reason !== 'arabic')
-          leftovers.add(`${block}/${l.path.startsWith('text:') ? l.path : `content:${l.path}`}`)
-    }
-    const slots = textSlots(data, schema, { html, first: leftovers })
-    if (!slots.length) result.skipped.push({ title, reason: 'no texts to write' })
-    else
-      jobs.push({
-        id: page.id,
-        title,
-        slug: page.slug,
-        slots,
-        ...(design ? { html: { docKey: design.docKey } } : {}),
-        leftovers: slots.filter((s) => leftovers.has(s.key)).map((s) => s.key),
-      })
-  }
-  const siteMap = loaded.drafts.map(({ page }) => ({ slug: page.slug, title: page.title.en || page.slug }))
-  const label = `Before Write texts ${dubaiStamp()}`
-  const deadline = Date.now() + DEADLINE_MS
-  // Bounds calls already running at the deadline too (runChat → ModelArk fetch).
-  const signal = AbortSignal.timeout(DEADLINE_MS)
-  let calls = 0
-  let costUsd = 0
-  let stop: string | null = null
-
-  /**
-   * Writes one page's drafts in its own transaction (locks re-checked; an edit made during the run wins). Never
-   * throws: a page that can't be saved is reported, and the other pages (and the audit) go on.
-   */
-  const save = async (job: Job, drafts: TextDraft[]) => {
-    try {
-      const outcome = await withTenant(tenantId, async (tx): Promise<number | string> => {
-        await lockSite(tx, tenantId)
-        await assertPagesUnlocked(tx, { tenantId, pageIds: [job.id], userId: ctx.user.id })
-        const current = await getEditablePage(tx, tenantId, job.id)
-        if (!current) return 'page was deleted'
-        let html: string | undefined
-        if (job.html) {
-          const design = await designOf(tx, tenantId, current.data)
-          if (!design || design.source === null || design.docKey !== job.html.docKey)
-            return 'the design changed meanwhile — nothing written'
-          html = design.source
-        }
-        const out = fillTextSlots(current.data, job.slots, drafts, { html })
-        if (!out.filled) return 'edited meanwhile — nothing written'
-        if (
-          designSignature(withoutHtmlContent(out.data)) !==
-            designSignature(withoutHtmlContent(current.data)) ||
-          JSON.stringify(out.data).length > MAX_PAGE_BYTES ||
-          (job.html && (await htmlDesignContentErrors(tx, tenantId, out.data)).length)
-        )
-          return 'the texts did not fit this page'
-        // A hand-written working draft stays restorable from the editor's Versions.
-        if (current.version?.status === 'draft' && !current.version.label)
-          await labelVersion(tx, tenantId, current.version.id, label)
-        await saveDraft(tx, { tenantId, pageId: job.id, data: out.data, userId: ctx.user.id })
-        return out.filled
-      })
-      if (typeof outcome === 'string') result.skipped.push({ title: job.title, reason: outcome })
-      else result.pages.push({ id: job.id, slug: job.slug, title: job.title, filled: outcome })
-    } catch (e) {
-      if (e instanceof PageLockedError)
-        result.skipped.push({ title: job.title, reason: `open in ${e.lock.holderName}'s editor` })
-      else {
-        console.error('write texts save failed', e)
-        result.skipped.push({ title: job.title, reason: 'could not be saved — run again' })
-      }
-    }
-  }
-
-  const queue = [...jobs]
-  const worker = async () => {
-    for (let job = queue.shift(); job; job = queue.shift()) {
-      const drafts: TextDraft[] = []
-      let failed = false
-      for (const slots of chunks(job.slots, SLOTS_PER_CALL)) {
-        if (stop || Date.now() > deadline || calls >= MAX_CALLS) break
-        calls++
-        try {
-          const r = await planSiteTexts({
-            tenantId,
-            facts: loaded.facts,
-            notes,
-            page: { slug: job.slug, title: job.title },
-            siteMap,
-            slots,
-            ...(job.html
-              ? { htmlDesign: true, leftovers: job.leftovers.filter((k) => slots.some((s) => s.key === k)) }
-              : {}),
-            client: fixtureClient(slug),
-            signal,
-          })
-          drafts.push(...r.texts)
-          costUsd += r.costUsd
-        } catch (e) {
-          if (e instanceof AiBudgetExceededError) stop = 'The monthly AI budget for this spa is used up.'
-          else if (e instanceof AiDisabledError)
-            stop = 'AI site editing is switched off in the AI model settings.'
-          // Out of time (the deadline aborted the call): "run again", like the pages not started.
-          else if (!signal.aborted) {
-            console.error('write texts failed', e)
-            failed = true
-          }
-          break
-        }
-      }
-      if (drafts.length) await save(job, drafts)
-      else
-        result.skipped.push({
-          title: job.title,
-          reason: failed ? 'the AI reply could not be read — run again' : RUN_AGAIN,
-        })
-    }
-  }
-  // Both workers finish before the audit (and before the per-spa slot frees up).
-  for (const r of await Promise.allSettled([worker(), worker()]))
-    if (r.status === 'rejected') console.error('write texts failed', r.reason)
-  // Two pages run at a time: report them in menu order.
-  const order = new Map(jobs.map((j, i) => [j.id, i]))
-  result.pages.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-
-  await audit({
-    tenantId,
-    actorUserId: ctx.user.id,
-    impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
-    action: 'site.ai_texts_written',
-    entity: 'site',
-    entityId: loaded.site.id,
-    data: {
-      via: 'studio_write_texts',
-      pages: result.pages.map((p) => ({ id: p.id, slug: p.slug, filled: p.filled })),
-      skipped: result.skipped,
-      notes: Boolean(notes),
-      costUsd,
-    },
-  })
-  if (result.pages.length) revalidateStudio(slug)
-
-  const skipped = result.skipped.length
-    ? ` Skipped: ${result.skipped.map((s) => `${s.title} (${s.reason})`).join(', ')}.`
-    : ''
-  if (!result.pages.length) return fail(stop ?? `No texts were written.${skipped}`)
-  const n = result.pages.length
-  return ok(
-    `Drafted texts for ${n} ${n === 1 ? 'page' : 'pages'} in English and Arabic (${result.pages
-      .map((p) => `${p.title} ${p.filled}`)
-      .join(
-        ', ',
-      )}).${skipped}${stop ? ` ${stop}` : ''} Nothing is published — read each page, adjust, then Publish.`,
-    result,
-  )
 }

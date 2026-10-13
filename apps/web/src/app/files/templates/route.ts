@@ -1,22 +1,31 @@
 import {
   decodeHtmlBytes,
   fixHtmlDesign,
+  type HtmlDesignReport,
   htmlCrmContractOf,
   htmlDesignEmbedHosts,
   htmlDesignEmbedWarning,
+  htmlDesignReport,
+  htmlDesignReportLine,
   MAX_HTML_UPLOAD_BYTES,
 } from '@spa/core'
-import { platformDb } from '@spa/db'
+import { type PendingTemplateVersion, platformDb } from '@spa/db'
 import {
   DomainError,
+  getStudioTemplate,
+  htmlDesignDocFor,
   MAX_TEMPLATE_BYTES,
   MAX_TEMPLATE_FILE_BYTES,
   parseTemplateJson,
+  pushTemplateVersion,
   SITE_EDIT_MAX_PAGE_BYTES,
   saveStudioTemplate,
+  setPendingTemplateVersion,
   storeTemplateHtmlDoc,
   templateDesignsIntoFiles,
+  templateDocOf,
   templateKeyFrom,
+  templateVersionEntry,
 } from '@spa/services'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -32,8 +41,9 @@ import { readForm, sameOrigin, TooLarge } from '@/server/read-form'
 import { getSession } from '@/server/session'
 
 /**
- * POST /files/templates?kind=html|json (multipart) — the console's "Upload HTML" (R17/R24, files up to 5 MB) and
- * "Import JSON" (≤ 11 MB: an export inlines its designs). A route handler instead of server actions: those cap request bodies at 1 MB (Next's
+ * POST /files/templates?kind=html|json|version (multipart) — the console's "Upload HTML" (R17/R24, files up to 5 MB),
+ * "Import JSON" (≤ 11 MB: an export inlines its designs) and an HTML template's "Upload new version" (R28 P5:
+ * `&id={templateId}`, waits for its sign-off — the Roll out). A route handler instead of server actions: those cap request bodies at 1 MB (Next's
  * serverActions.bodySizeLimit, global — raising it would raise it for every action, anonymous spa-site ones too).
  * Not proxied (/files). Origin, Content-Length, session and super-admin + 2FA are checked before the body is read,
  * then the body is streamed through a byte counter. Replies in the ActionResult shape the console forms use.
@@ -44,7 +54,39 @@ const reply = (status: number, result: ActionResult) =>
 /** Rolls the upload transaction back when the page JSON (image adjustments) is over the draft cap. */
 class PageTooLarge extends Error {}
 const MULTIPART = 256 * 1024
-const LIMITS = { html: MAX_HTML_UPLOAD_BYTES + MULTIPART, json: MAX_TEMPLATE_FILE_BYTES + 64 * 1024 }
+const LIMITS = {
+  html: MAX_HTML_UPLOAD_BYTES + MULTIPART,
+  version: MAX_HTML_UPLOAD_BYTES + MULTIPART,
+  json: MAX_TEMPLATE_FILE_BYTES + 64 * 1024,
+}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** R28 P5: the design report as audited (codes only). */
+const reportAudit = (r: HtmlDesignReport) => ({
+  contract: r.contract,
+  slots: r.slots,
+  texts: r.texts,
+  warnings: r.warnings.map((w) => w.code),
+})
+
+/** The chosen file decoded as a design, or the refusal (same checks for an upload and a new version). */
+async function htmlFileOf(
+  form: FormData,
+): Promise<{ raw: string; encoding: string; size: number } | [number, ActionResult]> {
+  const file = form.get('file')
+  if (!(file instanceof File) || !file.size)
+    return [422, fail('Choose an HTML file', { file: 'Choose an .html file' })]
+  if (!/\.html?$/i.test(file.name) && file.type !== 'text/html')
+    return [422, fail('Only .html files can be uploaded', { file: 'Choose an .html file' })]
+  if (file.size > MAX_HTML_UPLOAD_BYTES) {
+    const error = htmlTooLarge(file.size)
+    return [413, fail(error, { file: error })]
+  }
+  const { html: raw, encoding } = decodeHtmlBytes(new Uint8Array(await file.arrayBuffer()))
+  if (!/<(?:!doctype|html|head|body|div|section|main)\b/i.test(raw))
+    return [422, fail('This file does not look like an HTML page', { file: 'Choose an .html file' })]
+  return { raw, encoding, size: file.size }
+}
 
 const optionalText = (max: number) =>
   z
@@ -91,6 +133,10 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
       const doc = await storeTemplateHtmlDoc(db, { html: raw, userId })
       const pages = htmlDesignPages(key, doc, images, phoneFixes)
       if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES) throw new PageTooLarge()
+      // R28 P5: replacing an HTML template's file makes the replaced one an older version (spas on it can be rolled
+      // out to this one).
+      const before = replace ? await getStudioTemplate(db, { key }) : null
+      const entry = before ? templateVersionEntry(before) : null
       await saveStudioTemplate(
         db,
         {
@@ -104,6 +150,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
         },
         { replace },
       )
+      if (entry) await pushTemplateVersion(db, key, entry)
       return doc.bytes
     })
   } catch (e) {
@@ -117,6 +164,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
   const fixes = phoneFixes ? fixHtmlDesign(raw).fixes : []
   const embeds = htmlDesignEmbedHosts(raw)
   const crm = htmlCrmContractOf(raw)?.mode ?? null
+  const report = htmlDesignReport(raw)
   await audit({
     actorUserId: userId,
     action: 'platform.site_template.html_uploaded',
@@ -132,6 +180,7 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
       embeds,
       crm,
       adjustedImages: images.length,
+      report: reportAudit(report),
     },
   })
   revalidatePath('/platform/templates', 'layout')
@@ -148,9 +197,78 @@ async function uploadHtml(form: FormData, userId: string): Promise<[number, Acti
   return [
     200,
     ok(
-      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}. Stored exactly as the file${encoding === 'utf-8' ? '' : ` (read as ${encoding})`}.${fixed}${live}${warning ? ` ${warning}` : ''}`,
-      { embeds, crm },
+      `${parsed.data.name} uploaded${active ? '' : ' — hidden from spas until you switch it on'}. Stored exactly as the file${encoding === 'utf-8' ? '' : ` (read as ${encoding})`}.${fixed}${live}${warning ? ` ${warning}` : ''} ${htmlDesignReportLine(report)}.`,
+      { embeds, crm, report },
     ),
+  ]
+}
+
+/**
+ * R28 P5 (owner D4): a new version of an uploaded HTML template, stored as its pending version — invisible to spas
+ * and to apply until the super-admin signs it off with Roll out (which moves the spas on older versions to it).
+ */
+async function uploadVersion(form: FormData, userId: string, id: string): Promise<[number, ActionResult]> {
+  const row = UUID.test(id) ? await getStudioTemplate(platformDb(), { id }) : null
+  const current = row ? templateDocOf(row.pages) : null
+  if (!row || !current) return [404, fail('Only an uploaded HTML template gets new versions.')]
+  const read = await htmlFileOf(form)
+  if (Array.isArray(read)) return read
+  const { raw, size } = read
+  if (htmlDesignDocFor(raw).sha256 === current.sha256)
+    return [422, fail('This is the current version.', { file: 'This is the current version.' })]
+  const images = parseImages(form.get('images'))
+  if (!images) return [422, fail('The image adjustments could not be read. Reopen the file and try again.')]
+  const phoneFixes = form.get('phoneFixes') === 'on'
+  const report = htmlDesignReport(raw)
+  const version = row.version + 1
+  let pending: PendingTemplateVersion
+  try {
+    pending = await platformDb().transaction(async (db) => {
+      const doc = await storeTemplateHtmlDoc(db, { html: raw, userId })
+      const pages = htmlDesignPages(row.key, doc, images, phoneFixes)
+      if (JSON.stringify(pages[0]!.data).length > SITE_EDIT_MAX_PAGE_BYTES) throw new PageTooLarge()
+      const p: PendingTemplateVersion = {
+        version,
+        sha256: doc.sha256,
+        file: doc.file,
+        bytes: doc.bytes,
+        at: new Date().toISOString(),
+        by: userId,
+        pages,
+        report: report as unknown as Record<string, unknown>,
+      }
+      await setPendingTemplateVersion(db, row.id, p)
+      return p
+    })
+  } catch (e) {
+    if (e instanceof PageTooLarge) {
+      const error = 'Too many image adjustments for this design (page size limit)'
+      return [422, fail(error, { file: error })]
+    }
+    if (e instanceof DomainError) return [422, fail(e.message, { file: e.message })]
+    throw e
+  }
+  await audit({
+    actorUserId: userId,
+    action: 'platform.site_template.version_uploaded',
+    entity: 'site_template',
+    entityId: row.key,
+    data: {
+      fromSha: current.sha256,
+      toSha: pending.sha256,
+      version,
+      bytes: size,
+      phoneFixes,
+      report: reportAudit(report),
+    },
+  })
+  revalidatePath('/platform/templates', 'layout')
+  return [
+    200,
+    ok(`Version ${version} uploaded — waiting for your sign-off. ${htmlDesignReportLine(report)}.`, {
+      report,
+      version,
+    }),
   ]
 }
 
@@ -214,12 +332,13 @@ async function importJson(form: FormData, userId: string): Promise<[number, Acti
 
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return reply(403, fail('Forbidden'))
-  const kind = new URL(req.url).searchParams.get('kind')
-  if (kind !== 'html' && kind !== 'json') return reply(400, fail('Unknown upload'))
+  const q = new URL(req.url).searchParams
+  const kind = q.get('kind')
+  if (kind !== 'html' && kind !== 'json' && kind !== 'version') return reply(400, fail('Unknown upload'))
   const limit = LIMITS[kind]
   const size = Number(req.headers.get('content-length') ?? 0) || limit
   const tooLarge = () => {
-    const error = kind === 'html' ? htmlTooLarge(size) : jsonTooLarge(size)
+    const error = kind === 'json' ? jsonTooLarge(size) : htmlTooLarge(size)
     return fail(error, { file: error })
   }
   if (size > limit && req.headers.get('content-length')) return reply(413, tooLarge())
@@ -234,6 +353,9 @@ export async function POST(req: Request) {
     if (e instanceof TooLarge) return reply(413, tooLarge())
     return reply(400, fail('Upload failed. Try again.'))
   }
-  const [status, result] = await (kind === 'html' ? uploadHtml : importJson)(form, session.user.id)
+  const [status, result] =
+    kind === 'version'
+      ? await uploadVersion(form, session.user.id, q.get('id') ?? '')
+      : await (kind === 'html' ? uploadHtml : importJson)(form, session.user.id)
   return reply(status, result)
 }

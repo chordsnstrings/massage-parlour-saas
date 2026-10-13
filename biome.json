@@ -13,7 +13,8 @@
       "!**/public/t.js",
       "!**/public/widget.js",
       "!docs/design",
-      "!**/pdf/fonts.generated.ts"
+      "!**/pdf/fonts.generated.ts",
+      "!apps/web/e2e/fixtures/r28-v*.html"
     ]
   },
   "formatter": {

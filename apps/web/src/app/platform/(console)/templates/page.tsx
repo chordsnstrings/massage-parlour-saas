@@ -1,8 +1,15 @@
-import { type HtmlImageAdjust, htmlDesignBakedFixes, htmlDesignDocOf, htmlDesignPhoneFixes } from '@spa/core'
+import {
+  type HtmlDesignReport,
+  type HtmlImageAdjust,
+  htmlDesignBakedFixes,
+  htmlDesignDocOf,
+  htmlDesignPhoneFixes,
+  htmlDesignReportLine,
+} from '@spa/core'
 import { platformDb, sites, tenants } from '@spa/db'
-import { listStudioTemplates, type StudioTemplateRow } from '@spa/services'
+import { listStudioTemplates, type StudioTemplateRow, templateRolloutCounts } from '@spa/services'
 import { asc, eq } from 'drizzle-orm'
-import { Download, Eye, FileCode, Images, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
+import { Download, Eye, FileCode, FileUp, Images, LayoutTemplate, PencilLine, Upload } from 'lucide-react'
 import type { Metadata } from 'next'
 import { HTML_DESIGN, HTML_DESIGN_PLACEHOLDERS } from '@/components/site/html-design-values'
 import { TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
@@ -20,6 +27,7 @@ import { formatDateTime } from '@/lib/utils'
 import { requirePlatformAdmin } from '@/server/access'
 import { saveHtmlImagesAction, saveSiteAsTemplateAction, updateTemplateAction } from './actions'
 import { HtmlFileField, TemplateImageAdjuster } from './html-images'
+import { DiscardVersionButton, RolloutSheet } from './rollout-sheet'
 import { PhoneFixesSwitch, TemplateUploadSheet } from './upload-sheet'
 
 export const metadata: Metadata = { title: 'Site templates' }
@@ -80,6 +88,47 @@ function EditSheet({ row }: { row: StudioTemplateRow }) {
 }
 
 type Spa = { slug: string; name: string }
+
+/** R28 P5: "Upload new version" of an HTML template — stored as its pending version until the Roll out. */
+function VersionSheet({ row, spas }: { row: StudioTemplateRow; spas: Spa[] }) {
+  // The current version's Phone fixes + picture adjustments are prefilled (else Roll out would drop them live).
+  const design = htmlDesignOf(row)
+  return (
+    <TemplateUploadSheet
+      kind="version"
+      query={`&id=${row.id}`}
+      title={`Upload a new version · ${row.name}`}
+      className="md:max-w-4xl"
+      description={`Version ${row.version + 1} waits for your sign-off: preview it, then Roll out — spas on older versions switch to it at once (their edits are carried, each can undo it). Until then nothing changes for any spa.`}
+      trigger={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-11 min-w-11"
+          aria-label={`Upload new version of ${row.name}`}
+        >
+          <FileUp /> <span className="max-lg:sr-only">Upload new version</span>
+        </Button>
+      }
+      submitLabel="Upload version"
+    >
+      <HtmlFileField
+        spas={spas}
+        hint="One .html file up to 5 MB, stored exactly as it is (embedded images and fonts stay in the file)."
+        current={
+          design ? { version: row.version, phoneFixes: design.phoneFixes, images: design.images } : undefined
+        }
+      />
+    </TemplateUploadSheet>
+  )
+}
+
+/** R28 P5: the row's version line (a pending version, or spas still on older versions) + its Roll out. */
+function versionState(row: StudioTemplateRow, counts: { current: number; older: number } | undefined) {
+  const pending = row.pending
+  const onOld = (counts?.older ?? 0) + (pending ? (counts?.current ?? 0) : 0)
+  return { pending, onOld }
+}
 
 /**
  * Image adjustments and Phone fixes switch of an HTML-design template, or null for a block one. The design itself
@@ -147,6 +196,7 @@ export default async function TemplatesStudioPage() {
     .orderBy(asc(tenants.name))
     .limit(500)
   const libraries: Spa[] = spas.map((s) => ({ slug: s.slug, name: s.name }))
+  const counts = await templateRolloutCounts(db, rows)
 
   return (
     <>
@@ -175,7 +225,7 @@ export default async function TemplatesStudioPage() {
               </Field>
               <HtmlFileField
                 spas={libraries}
-                hint="One .html file up to 5 MB. Images and fonts embedded in it are moved to the platform's files; the page itself (markup, styles, scripts) can be up to about 500 KB. Links to files on your computer won't work."
+                hint="One .html file up to 5 MB, stored exactly as it is (embedded images and fonts stay in the file)."
               />
               <div className="space-y-2 rounded-xl border p-4 text-sm">
                 <p className="font-medium">Each spa's details (optional)</p>
@@ -302,15 +352,37 @@ export default async function TemplatesStudioPage() {
                   key: 'name',
                   header: 'Template',
                   primary: true,
-                  cell: (r) => (
-                    <span className="block min-w-0">
-                      <span className="block truncate font-medium">{r.name}</span>
-                      <span className="block truncate text-xs text-muted">
-                        {r.key}
-                        {r.description ? ` · ${r.description}` : ''}
+                  cell: (r) => {
+                    const { pending, onOld } = versionState(r, counts.get(r.key))
+                    return (
+                      <span className="block min-w-0">
+                        <span className="block truncate font-medium">{r.name}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {r.key}
+                          {r.description ? ` · ${r.description}` : ''}
+                        </span>
+                        {pending ? (
+                          <span
+                            className="mt-1 block text-xs whitespace-normal"
+                            data-testid="template-version"
+                          >
+                            Version {pending.version} waiting for sign-off ·{' '}
+                            {formatDateTime(new Date(pending.at))} ·{' '}
+                            {htmlDesignReportLine(pending.report as unknown as HtmlDesignReport)}
+                          </span>
+                        ) : (
+                          onOld > 0 && (
+                            <span
+                              className="mt-1 block text-xs whitespace-normal"
+                              data-testid="template-version"
+                            >
+                              {onOld} {onOld === 1 ? 'spa' : 'spas'} still on an older version
+                            </span>
+                          )
+                        )}
                       </span>
-                    </span>
-                  ),
+                    )
+                  },
                 },
                 {
                   key: 'pages',
@@ -347,9 +419,31 @@ export default async function TemplatesStudioPage() {
                       />
                       {(() => {
                         const design = htmlDesignOf(r)
+                        const { pending, onOld } = versionState(r, counts.get(r.key))
+                        const spasLabel = `${onOld} ${onOld === 1 ? 'spa' : 'spas'}`
                         return (
                           design && (
                             <>
+                              {pending && (
+                                <LinkButton
+                                  href={adminPath(`/templates/${r.id}/preview?version=pending`)}
+                                  label={`Preview version ${pending.version}`}
+                                  icon={<Eye />}
+                                />
+                              )}
+                              {(pending || onOld > 0) && (
+                                <RolloutSheet
+                                  id={r.id}
+                                  name={r.name}
+                                  label={
+                                    onOld > 0
+                                      ? `Roll out to ${spasLabel}`
+                                      : `Sign off version ${pending?.version ?? r.version}`
+                                  }
+                                />
+                              )}
+                              {pending && <DiscardVersionButton id={r.id} version={pending.version} />}
+                              <VersionSheet row={r} spas={libraries} />
                               <PhoneFixesSwitch
                                 id={r.id}
                                 name={r.name}

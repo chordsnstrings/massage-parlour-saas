@@ -226,6 +226,55 @@ All in `packages/core/src/html-crm.ts`:
 - **Endpoint-only designs:** `crm-data.json?page=` merges the published block's `content`.
 - **Designs without CRM_DATA:** they still get page texts, pictures and placeholders. The card says "Not connected to the CRM" and offers a connector conversion into a draft.
 - **Video:** `/files/upload` gets a video kind (mp4/webm, ≤ 8 MB, under `site.design`).
+- **As built (P5, platform):**
+  - **Template versions:** on the same `site_templates` row (`version`, `history`, `pending`; migration 0052). "Upload
+    new version" (`/files/templates?kind=version&id=`) stores the pending one with its report — invisible to apply.
+    **Roll out = sign-off** (`signOffTemplateVersion`, one transaction; the update only applies while the pending sha
+    is the reviewed one and the version has not moved — else "changed meanwhile"): pending → pages, the old sha →
+    history. A "Replace" upload of an HTML row also makes the replaced file an older version (`pushTemplateVersion`).
+    "Upload new version" prefills the current version's Phone fixes and picture adjustments (re-pointed at the new
+    file's pictures by `src`, services site-kit `repointHtmlImageAdjustments`).
+  - **Who switches:** spas whose LIVE HtmlDesign file is one of the old versions' shas (`spasOnTemplateVersions`, one
+    entry per spa with every visible page still on an old sha; BE RELAX v1 has no `/files` references, so a spa's copy
+    keeps the template's sha). A spa with no page on an old sha but another live sha (patched, localised, applied but
+    never published, an earlier undo) → listed as skipped, never overwritten. A click switches spas until 25 are
+    switched or ~30 s are spent; spas it cannot switch don't count and the sheet sends them back (`later`) so the next
+    click tries the others first ("Run again for the rest").
+  - **The switch** (`upgradeHtmlDesignLive`, in the spa's own transaction; all of the spa's old-version pages in a
+    savepoint, or none): never `publishPage` — its own published row per page (`insertVersion`), so draft themes and
+    pending renames stay unpublished; content = `carryHtmlContent` (with the old file for pairing) +
+    `htmlDesignOwnPins` (embedded logos stored as the spa's files); props: the spa's own Phone fixes kept on, its own picture
+    adjustments kept for pictures still in the new file that the new version sets none for; settings equal to the old
+    version's (only inherited) follow the new version (`upgradedProps(…, fromProps)`); each
+    working draft carried (same old file) or kept, moved after the new live row; ONE `templateUndo.live` holding every
+    page → Undo re-publishes the previous versions as new rows, puts the drafts back and sets `sites.template_hold`
+    (later rollouts of that version skip the spa). An editor lock on any page, a content check that fails on any page
+    (savepoint rolled back, nothing written), or a spa already on the new file → skipped with the reason.
+  - **D5:** `sites.text_run` queue (`queueSiteTexts`, in the apply's / switch's own transaction — console apply:
+    reads in a savepoint, a failure records a skipped line instead; connector `apply_template`: same transaction; the
+    rollout: ONE run with all switched pages) → `@spa/ai` `runQueuedSiteTexts` (atomic claim; gate re-checked for the
+    super-admin who queued it; `htmlOnly`, `onlyDefaults`, `keepUndo`, `designSha`) right after the response
+    (`after()`), the worker's `site-texts-queue` cron sweeps queued (> 3 min) and stale running (> 15 min) runs. Only
+    contract v2 pages; skipped with a reason on the card for the spa's own old design (O1) or a clicker without the AI
+    gate. System copy (`ui.*` the design translates or keeps English) is never drafted (only the Arabic of the spa's
+    own English, below); a draft losing a `{token}` is
+    skipped. **Decision (integrator, 2026-10-13):** on `/ar` of a v2 design the order is content Arabic > the design's
+    `l10n.ar` > content English > design English (contract doc §4); so a value the spa wrote in English only (leftover
+    reason `arabic`; not a field the contract keeps English) is an `arabicOnly` slot: only its Arabic is drafted, the
+    stored English kept (`{t: {en: stored, ar}}`), listed right after the leftovers — with `onlyDefaults`, and on
+    translated system copy in either mode.
+  - **Feed + render:** `crm-data.json` + `locale`; `?page=` = that live page's `crm-defaults` + content, then the CRM
+    (literal designs: the CRM alone); `{{crm_data_url}}` placeholder; `designWithCrm` writes `locale` into v2 data and
+    `l10n.ar` on Arabic (v1 output and keys as in P4). Video: upload body cap 8 MB, `SlotVideo` upload button; a
+    picture file in a video slot (or the reverse) is refused on save.
+  - **Console:** report panel in the upload sheet, report in the upload message / audit, Pages card badge + line +
+    warnings + connector prompt, rollout sheet (carry dry run per spa: pages, edits kept / not kept, made for this spa,
+    keeps its phone fixes / N picture adjustments, has a draft; a pending version's Phone fixes and picture-adjustment
+    differences against the current one; skipped spas with reasons), live Undo bar copy.
+  - **Owner open points (review, 2026-10-13):** O5 the Arabic defaults need native review; O6 two v2 default
+    pictures (`spa.experience_image`, `booking.image`) show BE RELAX branding on bottle labels — the owner supplies
+    neutral photos (until then any other spa applying v2 should replace them); before the Roll out set BE RELAX's
+    branch "Area shown on the website" to "Al Zahiyah, Abu Dhabi" so its first scene matches v1.
 
 ## 8. Tests
 
@@ -286,7 +335,7 @@ Each phase runs typecheck, lint, the touched packages' tests and that phase's e2
 | P2 | Console "Website content" field (CRM summary, Story, Visit, Booking, Messages, Logo), readiness and leftovers, card, publish warnings | 10 | Every story text and picture is a plain field with uploads and focal points, with a list of what still mentions BE RELAX or Abu Dhabi |
 | P3 | `catalog.ts` move, `design-seed.ts`, matcher, seed sheet, migration 0051 area field, staff photo hint, upload permission fix | 10 | Applying BE RELAX fills the CRM: treatments get their photos, missing ones can be created, therapist photos are assigned by click, each branch has its area field |
 | P4 | Page texts, attributes, title and meta description; per-spa Pictures; replace-only fit fix; Ask AI + Write texts on content. **Done 2026-10-13 (PR pending):** A core + render + `html_content` op + draft-save check, B Ask AI / Write texts / connector, C editor; as built: the "As built (P4)" notes in §2 (item 2), §3 and §6, review fixes below the table | 9 | Every heading, button, nav label and the page title is editable; one click drafts all of a spa's texts in EN + AR |
-| P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is |
+| P5 | Contract v2 doc, upload report, BE RELAX v2 (ui dictionary, bindings, `data-if` on photos, neutral defaults; Arabic texts in the same layout per D3), `carryHtmlContent`, `crm-data.json?page=`, video upload. **Built 2026-10-13 (A core, B platform, C BE RELAX v2 file):** template versions + Roll out = sign-off (D4: live at once, content carried, own look pinned, per-spa undo + hold), D5 Write texts queue (web `after()` + worker sweep), report in upload / Pages card, `?page=` + locale + `{{crm_data_url}}`, video upload in the editor; as built: §7 "As built (P5, platform)" | 11 + your look review | System and form messages are editable too; Arabic texts on BE RELAX; each upload shows how dynamic the design is; BE RELAX spas move to v2 when you click Roll out |
 | P6 | Build + full e2e (`E2E_SERVER=start`) + walkthrough on last-test + final docs | 3 | Release |
 
 **Total: about 58 h.** P0–P2 already make each spa's site its own; P3–P5 complete it.

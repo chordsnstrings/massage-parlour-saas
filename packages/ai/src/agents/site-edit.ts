@@ -151,6 +151,7 @@ Rules for this page:
 - Change the words and pictures of this design ONLY with "html_content"; never add, move, remove or update its blocks.
 - Use only slot paths, page text ids and picture ids listed in <content>; never invent them.
 - Keep {{…}} placeholders (e.g. {{spa_name}}) exactly as they are. Keep each text close to its current length: the design's layout is fixed.
+- Keep single-brace {tokens} (e.g. {time}, {name}) exactly; the design fills them.
 - Long design texts and values in <content> are cut short (they end with "…"): never copy one into "en". An entry marked "cut": true shows only the start of its text ("length" = the whole one): never translate it (Arabic alone for it is dropped); only when the user asks for new English, send a whole new "en" (with its "ar" if wanted) written from scratch. To add or change only the Arabic of a page text send {"id","ar"} WITHOUT "en" (a set value: {"t":{"ar":"…"}}): its English stays as it is. Send "en" (page texts and set values) only when the English itself must change, and then the whole new text.
 - Never set CRM data (name, phones, address, hours, services, prices, staff): it comes live from the spa's CRM and is not listed.
 - Pictures: only URLs (/files/… or https) given in the instruction; never invent picture URLs.
@@ -397,8 +398,10 @@ Rules:
 const HTML_TEXTS_RULES = `
 This page is an uploaded design (block HtmlDesign):
 - Keep {{…}} placeholders (e.g. {{spa_name}}) exactly as they are.
+- Keep single-brace {tokens} (e.g. {time}, {name}) exactly; the design fills them.
 - Texts of an uploaded design keep their length: its layout is fixed.
-- Keys listed as LEFTOVERS still name another spa, city, phone or test copy: rewrite them for this spa from FACTS.`
+- Keys listed as LEFTOVERS still name another spa, city, phone or test copy: rewrite them for this spa from FACTS.
+- Slots with "arabic_only": true were written by the spa in English: return their "en" exactly as given and write only "ar", a natural Arabic version of that English.`
 
 /**
  * R23 "Write texts": new EN + AR copy for a page's text slots (`textSlots`, @spa/services/site-kit) from the spa's
@@ -427,6 +430,7 @@ export async function planSiteTexts(opts: {
     multiline: s.multiline,
     en: s.en,
     ar: s.ar || undefined,
+    ...(s.arabicOnly ? { arabic_only: true } : {}),
   }))
   const res = await runChat({
     tenantId: opts.tenantId,
