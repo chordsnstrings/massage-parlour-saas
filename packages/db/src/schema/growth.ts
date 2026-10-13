@@ -212,10 +212,12 @@ export const socialAccounts = pgTable(
     // to a connected Page, belong to one spa at a time (across tenants; connects also take an advisory lock).
     uniqueIndex('social_accounts_meta_connected')
       .on(t.platform, t.externalId)
-      .where(sql`${t.status} = 'connected' and ${t.platform} in ('instagram', 'facebook')`),
+      // Predicates never name 'facebook': that enum value comes from 0028 (ALTER TYPE … ADD VALUE), and a fresh
+      // database runs every migration in one transaction, where a value added earlier in it can't be used yet.
+      .where(sql`${t.status} = 'connected' and ${t.platform} <> 'gbp'`),
     uniqueIndex('social_accounts_fb_ig_connected')
       .on(sql`(${t.meta} ->> 'igUserId')`)
-      .where(sql`${t.platform} = 'facebook' and ${t.status} = 'connected'`),
+      .where(sql`${t.platform} not in ('gbp', 'instagram') and ${t.status} = 'connected'`),
     ...tenantPolicies(),
   ],
 )

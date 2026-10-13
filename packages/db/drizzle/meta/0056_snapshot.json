@@ -7335,7 +7335,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"social_accounts\".\"status\" = 'connected' and \"social_accounts\".\"platform\" in ('instagram', 'facebook')",
+          "where": "\"social_accounts\".\"status\" = 'connected' and \"social_accounts\".\"platform\" <> 'gbp'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -7351,7 +7351,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"social_accounts\".\"platform\" = 'facebook' and \"social_accounts\".\"status\" = 'connected'",
+          "where": "\"social_accounts\".\"platform\" not in ('gbp', 'instagram') and \"social_accounts\".\"status\" = 'connected'",
           "concurrently": false,
           "method": "btree",
           "with": {}
