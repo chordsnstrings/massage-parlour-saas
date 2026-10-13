@@ -13,14 +13,18 @@ export const enums = {
   },
   bookingSource: {
     walk_in: 'Walk-in',
-    online: 'Online',
+    /** Owner 2026-10-13: bookings from the spa's website (public booking page, booking requests, staff-entered). */
+    online: 'Website',
     whatsapp: 'WhatsApp',
     instagram: 'Instagram',
     phone: 'Phone',
     ai_agent: 'AI agent',
     gbp: 'Google',
   },
-  /** F13: an online booking's website source (bookings.attribution); `unknown` = booked before it was recorded. */
+  /**
+   * F13: an online booking's website source (bookings.attribution); `unknown` = booked before it was recorded,
+   * `website` = staff-made Website booking (Make booking from a request, or the Website source).
+   */
   bookingAttribution: {
     instagram: 'Instagram',
     gbp: 'Google Business Profile',
@@ -33,6 +37,7 @@ export const enums = {
     campaign: 'Campaign link',
     referral: 'Other websites',
     direct: 'Direct',
+    website: 'Website',
     unknown: 'Not recorded',
   },
   rotationStatus: { available: 'Available', busy: 'Busy', break: 'On break', off: 'Off' },

@@ -2,6 +2,7 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  bookingSourceLabel,
   createFormat,
   createTranslator,
   en,
@@ -88,6 +89,16 @@ describe('translator', () => {
         to: { key: 'errors.domain.word.bookingStatus.pending' },
       }),
     ).toBe('ไม่สามารถเปลี่ยนการจองจาก “เสร็จสิ้น” เป็น “รอยืนยัน” ได้')
+  })
+
+  it('labels website bookings: channel + website source, never "Website · Website" (2026-10-13)', () => {
+    const t = translator('en')
+    expect(bookingSourceLabel(t, 'online', 'instagram')).toBe('Website · Instagram')
+    expect(bookingSourceLabel(t, 'online', 'website')).toBe('Website')
+    expect(bookingSourceLabel(t, 'online', null)).toBe('Website')
+    expect(bookingSourceLabel(t, 'phone', null)).toBe('Phone')
+    expect(bookingSourceLabel(translator('th'), 'online', 'website')).toBe('เว็บไซต์')
+    expect(enumLabel(t, 'bookingAttribution', 'website')).toBe('Website')
   })
 
   it('picks plural forms per locale', () => {

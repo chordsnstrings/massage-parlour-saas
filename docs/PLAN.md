@@ -1301,13 +1301,22 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **Enquiries → Make booking (owner, 2026-10-13: "Inbox button only"):** the HTML design's booking form still creates a
   website enquiry (R26); each Booking request row gets **Make booking** (`calendar.manage`) → the calendar's New booking
   sheet prefilled (client matched by phone or new, service, length, date + time, therapist only while active + bookable
-  + not on leave, notes "Website booking request · N guests", source WhatsApp) → the normal save (reservations, normal
+  + not on leave, notes "Website booking request · N guests", source Website) → the normal save (reservations, normal
   conflicts) links it back (`booking` jsonb `bookingId/bookedAt/bookedBy`, row lock, audit `site.enquiry.booked`, no
   migration) → row shows **Booked** → calendar; Reply on WhatsApp sends the confirmation (service, date, time). A
   cancelled booking reopens the request. **After-midnight fix:** a small-hours time offered under the chosen night
   (Be Relax 11:00–02:00) is the next calendar day (core `afterMidnight`, main-branch hours; no hours set → before the
   business-day cutoff); crm-enquiry stores `afterMidnight` + `calendarDate`, older rows computed. e2e
   `enquiry-booking.spec.ts`. New TH strings (enquiries/calendar/domain) + AR reply texts need native review.
+  **Website source (owner 2026-10-13 23:21, "go live directly"):** New booking's Source gains **Website** (`online`,
+  every staff booking; Make booking's default, was WhatsApp); a staff Website booking records attribution `website`
+  (new enum value, migration 0057; core `staffBookingAttribution`), legacy staff-made online rows count as `website`
+  in reports (`onlineSourceSql`); public booking-page attribution unchanged. Label `online` = "Website" everywhere
+  (EN/TH, console), "Website · Instagram"; TH `เว็บไซต์` + overview title + QR poster note (`growth.poster.receptionSub`)
+  need native review. **Migration order:** booking-website-source took 0057; branches google-pending / google-fixes /
+  google-pending-2 (their own 0057/0058, older timestamps) must delete those SQL files + snapshots + journal entries and
+  re-run `pnpm db:generate` on top of it before merging (hand-renumbering leaves older `when` values that
+  `runMigrations` refuses → droplet migrate fails).
 - **Lazy loading for BE RELAX (owner, 2026-10-13: "make sure that lazy load is on"):** live page measured: 1.6 MB HTML
   (93 % embedded pictures, no-cache), every picture at first visit. R24 kept (platform never alters a design): our own
   file **BE RELAX v2.2** hosts its built-in pictures + Arabic fonts as immutable static files
@@ -1624,7 +1633,7 @@ others till end — finish everything"), built after the Premium/Standard plans 
   F13 `qr`) or a partner (`booking_partners`: name as typed + 6-char code → `&partner={code}`); t.js + the booking page
   carry `partner`, `bookOnline` stores `bookings.partner_id` (unknown or paused codes ignored). Partner table: bookings
   all-time / 30 days / completed / latest (cancelled excluded) + "Reception poster" row; pause/resume audited. Booking
-  detail shows "Online · QR code · {partner}". Migration 0044_vouchers_partners.
+  detail shows "Website · QR code · {partner}". Migration 0044_vouchers_partners.
 - ✅ **F17. Google Book button + Search Console** (Premium `marketing`). Google card → "Book button on Google" sets /
   updates / removes the location's Place Actions APPOINTMENT link → `{site}/book?src=google` (F13 `google`); other
   providers' links untouched; worker `gbp-site-sync` (10 min) re-points it when the address changes, failures retried

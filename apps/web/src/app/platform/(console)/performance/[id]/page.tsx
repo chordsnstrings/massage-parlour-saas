@@ -226,7 +226,7 @@ export default async function SpaPerformancePage({
               />
               {p.onlineSources.length > 0 && (
                 <div data-testid="perf-online-sources" className="space-y-3 border-t pt-4">
-                  <p className="text-xs text-muted">Online bookings by website source</p>
+                  <p className="text-xs text-muted">Website bookings by source</p>
                   <ShareList
                     rows={p.onlineSources.map((s) => ({ label: sourceLabel(s.source), value: s.count }))}
                   />

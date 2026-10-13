@@ -6,6 +6,7 @@ import {
   configChecks,
   configFlags,
   resolveTurnstile,
+  staffBookingAttribution,
   TURNSTILE_VERIFY_URL,
   turnstileConfig,
   turnstileStatusText,
@@ -167,5 +168,14 @@ describe('booking attribution (F13)', () => {
     expect(webEntrySource({ src: 'qr' }, 'https://www.google.com/')).toBe('qr')
     expect(attributionOf('dubai-guide.ae')).toBe('referral')
     expect(BOOKING_ATTRIBUTIONS).toContain(attributionOf('anything'))
+  })
+
+  it('records website for staff-made Website bookings only; public tags stay as they were (2026-10-13)', () => {
+    expect(staffBookingAttribution('online')).toBe('website')
+    for (const source of ['phone', 'whatsapp', 'walk_in', 'instagram'])
+      expect(staffBookingAttribution(source)).toBeNull()
+    expect(BOOKING_ATTRIBUTIONS).toContain('website')
+    // A public booking page visit tagged ?src=website is still a campaign link, not a staff Website booking.
+    expect(bookingAttribution({ utm: { src: 'website' } })).toBe('campaign')
   })
 })

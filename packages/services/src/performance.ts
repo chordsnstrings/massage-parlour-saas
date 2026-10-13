@@ -3,6 +3,7 @@ import type { Tx } from '@spa/db'
 import { type SQL, sql } from 'drizzle-orm'
 import { aiMonth, aiUsageTotals } from './ai-usage'
 import { campaignResults } from './campaigns'
+import { onlineSourceSql } from './reports'
 
 /**
  * Super-admin performance view (PLAN §18.1): aggregate numbers per spa, read inside that spa's `withTenant()`
@@ -126,7 +127,7 @@ export async function tenantPerformance(
           from (select source::text as source, count(*)::int as n from bookings
             where ${dates(sql`business_date`)} and status <> 'cancelled' group by 1) x) as booking_sources,
         (select coalesce(json_agg(json_build_object('source', x.source, 'count', x.n) order by x.n desc, x.source), '[]')
-          from (select coalesce(attribution::text, 'unknown') as source, count(*)::int as n from bookings
+          from (select ${onlineSourceSql(sql`bookings`)} as source, count(*)::int as n from bookings
             where ${dates(sql`business_date`)} and source = 'online' and status <> 'cancelled' group by 1) x) as online_sources,
         (select coalesce(json_agg(json_build_object('source', x.src, 'sessions', x.sessions, 'booked', x.booked)
             order by x.sessions desc, x.src), '[]')

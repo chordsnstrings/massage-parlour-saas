@@ -178,13 +178,13 @@ test('F13: a visitor from Instagram (?src=ig) books online; the booking and the 
   expect(row).toMatchObject({ source: 'online', attribution: 'instagram' })
 
   await page.goto(`${dashboard}/bookings/${row!.id}`)
-  await expect(page.getByText('Online · Instagram')).toBeVisible()
+  await expect(page.getByText('Website · Instagram')).toBeVisible()
 
   // Home KPIs end today: move the booking onto today's business date so "Today" counts it.
   await db.update(bookings).set({ businessDate: today() }).where(eq(bookings.id, row!.id))
   await page.goto(dashboard)
   const online = page.getByTestId('online-sources')
-  await expect(online).toContainText('Online bookings by website source')
+  await expect(online).toContainText('Website bookings by source')
   await expect(online).toContainText('Instagram')
   await expect(online).toContainText('1 · 100%')
 })

@@ -79,7 +79,8 @@ test('Enquiries → Make booking: a website booking request becomes a booking in
     await expect(sheet.getByLabel('Service')).toHaveValue(sixty!)
     await expect(sheet.getByLabel('Time')).toHaveValue('00:30')
     await expect(sheet.getByLabel('Therapist')).toHaveValue(maya!)
-    await expect(sheet.getByLabel('Source')).toHaveValue('whatsapp')
+    // A request came from the spa's website: Website, recorded as a website booking (2026-10-13).
+    await expect(sheet.getByLabel('Source')).toHaveValue('online')
     await expect(sheet.getByLabel('Notes')).toHaveValue('Website booking request · 2 guests\nStrong pressure')
   })
 
@@ -90,7 +91,12 @@ test('Enquiries → Make booking: a website booking request becomes a booking in
     const [enquiry] = await db.select().from(siteEnquiries).where(eq(siteEnquiries.id, request!.id))
     expect(enquiry!.booking?.bookingId).toBeTruthy()
     const [made] = await db.select().from(bookings).where(eq(bookings.id, enquiry!.booking!.bookingId!))
-    expect(made).toMatchObject({ source: 'whatsapp', businessDate: night, status: 'confirmed' })
+    expect(made).toMatchObject({
+      source: 'online',
+      attribution: 'website',
+      businessDate: night,
+      status: 'confirmed',
+    })
     expect(made!.startsAt.toISOString()).toBe(dubaiInstant(next, 30).toISOString())
     const audits = await db
       .select()

@@ -13,6 +13,7 @@ export const BOOKING_ATTRIBUTIONS = [
   'campaign',
   'referral',
   'direct',
+  'website',
 ] as const
 export type BookingAttribution = (typeof BOOKING_ATTRIBUTIONS)[number]
 
@@ -69,3 +70,11 @@ export function attributionOf(raw: string | null | undefined): BookingAttributio
 /** A visitor's entry ({ referrer, utm }) → booking attribution. */
 export const bookingAttribution = (entry: WebEntry | null | undefined) =>
   attributionOf(webEntrySource(entry?.utm, entry?.referrer))
+
+/**
+ * A staff-made booking's attribution (calendar New booking / Enquiries → Make booking): the Website source records
+ * `website` (from the spa's website: a booking request, or the visitor said so), so reports count it as a website
+ * booking, not "Not recorded"; other channels none. Public booking-page bookings keep bookingAttribution(entry).
+ */
+export const staffBookingAttribution = (source: string): BookingAttribution | null =>
+  source === 'online' ? 'website' : null

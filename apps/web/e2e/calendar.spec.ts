@@ -40,6 +40,7 @@ test('reception works the day calendar: check in, then book a client into a free
     await expect(sheet.getByLabel('Time')).toHaveValue('15:00')
     await sheet.getByLabel('Client').fill('Fati')
     await sheet.getByRole('button', { name: /Fatima Al Mansoori/ }).click()
+    await expect(sheet.getByLabel('Source').locator('option[value="online"]')).toHaveText('Website')
     await sheet.getByLabel('Source').selectOption('whatsapp')
     await sheet.getByRole('button', { name: 'Create booking' }).click()
     await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
