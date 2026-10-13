@@ -164,8 +164,9 @@ first, then consent) and picks the location; the card shows "Connected as {email
 - **One spa per location** (R29): a location held by another spa (connected or needing a reconnect) can't be chosen —
   "This Business Profile is already connected to another spa." (unique index `social_accounts_gbp_location`).
 - **Disconnect** deletes this spa's tokens; Google's revoke (which removes the whole grant of that Google account for
-  our project) is called only when no other spa is connected with the same Google account, and never for connections
-  made before `openid email` (account unknown).
+  our project) is called only when no other spa is connected with the same Google account or with an unknown one
+  (connections made before `openid email`: possibly the same account), and never for a connection whose account is
+  unknown.
 - Reviews sync every 2 hours (worker job `gbp-reviews-sync`) and on *Sync now*; new reviews get an AI draft when the
   review agent is on, autopilot posts 4–5★ replies.
 - **Review content ≤ 30 days** (Business Profile API policy, "Content storage": stored temporarily "for no more than 30

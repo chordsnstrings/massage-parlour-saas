@@ -52,7 +52,7 @@ export const reviews = pgTable(
     replyError: text('reply_error'),
     /**
      * R29: last sync in which the Google API returned this review (null = pasted by hand). Business Profile API policy:
-     * content is stored "for no more than 30 calendar days" — the daily purge deletes rows not refreshed for 30 days.
+     * content is stored "for no more than 30 calendar days" — the daily purge deletes rows not refreshed for 29 days (one run a day keeps nothing past 30).
      */
     syncedAt: ts('synced_at'),
     createdAt: createdAt(),

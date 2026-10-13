@@ -478,6 +478,13 @@ describe('R29 Google setup fixes: connection', () => {
     expect(await disconnectGbp({ tenantId: ids.tenant!, db: app, platform, fetch: unknown.fn })).toBe(true)
     expect(unknown.calls).toHaveLength(0)
     expect(await tx((db) => db.select().from(socialAccounts))).toHaveLength(0)
+    // another spa's older row of an unknown account may be this same account: no revoke either
+    await save(ids.tenant!, null)
+    await save(ids.other!, OWNER)
+    const legacy = mockFetch(revokeRoute)
+    expect(await disconnectGbp({ tenantId: ids.other!, db: app, platform, fetch: legacy.fn })).toBe(true)
+    expect(legacy.calls).toHaveLength(0)
+    expect(await tx((db) => db.select().from(socialAccounts))).toHaveLength(1)
   })
 
   it('lets only one spa hold a Business Profile location, race included', async () => {

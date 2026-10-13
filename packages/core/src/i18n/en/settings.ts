@@ -382,7 +382,7 @@ export const settings = {
         auth: 'sign-in expired or was revoked. Reconnect Google Business Profile.',
         // R29 (changed, flagged for native TH review)
         client_config:
-          'the platform’s Google setup needs fixing (Google rejected its sign-in settings). If this spa then asks you to reconnect Google, please do.',
+          'the platform’s Google setup needs fixing (Google rejected its sign-in settings). The platform team has to fix it; if this card later asks you to reconnect Google, please do.',
         permission: 'this Google account has no access to it.',
         not_found: 'Google could not find the location or site any more.',
         quota: 'too many requests right now. It is retried later.',

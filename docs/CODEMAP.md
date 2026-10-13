@@ -397,7 +397,8 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     `GoogleTokens.account` → `saveGbpTokens` stores `meta.googleSub|googleEmail` (no ID token = cleared), kept by
     `chooseGbpLocation` / `resetGbpLocation`; card "Connected as {email}" (`gbpConnectionView.googleEmail`).
   - **Disconnect:** Google's revoke kills the whole grant of that account for our project, so `disconnectGbp` revokes
-    only when `gbpGoogleAccountTenants(sub)` (platform lookup, any gbp row) finds no other spa; unknown sub = never.
+    only when `gbpGoogleAccountTenants(sub)` and `gbpUnknownAccountTenants()` (platform lookups, any gbp row; the
+    latter = rows without `googleSub`, possibly the same account) find no other spa; unknown sub here = never.
   - **One spa per location:** unique index `social_accounts_gbp_location` (external_id) where gbp + status
     connected|error + not 'pending' (0057; 'error' keeps the location so its reconnect can't collide);
     `chooseGbpLocation` pre-checks `gbpLocationTenants` and maps the violation → `gbpLocationInUse()` DomainError

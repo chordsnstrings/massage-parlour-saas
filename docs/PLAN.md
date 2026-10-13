@@ -1358,8 +1358,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Changed TH strings (two redirect URI labels shortened) need native review.
 - **R29 Google setup fixes (owner 2026-10-13 "fix all"; items 1, 2, 5–10, one PR after the Meta fixes):**
   1. **Shared Google account:** `openid email` scopes; `sub` + email from the code exchange's ID token stored on the
-     gbp row; card "Connected as {email}"; disconnect revokes at Google only when no other spa has the same `sub`
-     (unknown `sub` = never revoke, local delete only).
+     gbp row; card "Connected as {email}"; disconnect revokes at Google only when no other spa has the same `sub` or
+     an unknown one (older rows may be the same account); unknown `sub` here = never revoke, local delete only.
   2. **One spa per location:** cross-tenant unique index `social_accounts_gbp_location` (migration 0057
      `google_one_spa_per_location`; connected|error rows, not 'pending') + pre-check → "This Business Profile is
      already connected to another spa." (EN/TH) on the location step.
@@ -1373,8 +1373,15 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   8. **Review content ≤ 30 days** (GBP API policy "Content storage"): `reviews.synced_at` (migration 0058), complete
      syncs delete vanished reviews, daily `gbp-reviews-purge` (04:55) deletes API reviews not refreshed for 29 days;
      hand-pasted reviews untouched. Fewer rows only lower counts (card/reviews stats, site Reviews block, performance).
-  9. **Privacy policy** Google wording (Business Profile + Search Console uses, email, 30 days, shared-account
-     disconnect) — **pending owner approval before release**.
+  9. **Privacy policy** Google wording (Business Profile + Search Console uses incl. autopilot, Book link and
+     sitemap in the "only to" list, email + Google account ID, 30 days, backups up to 12 months, shared-account
+     disconnect, tokens deleted on disconnect) — **pending owner approval before release**.
+     **Owner decisions pending (review 2026-10-13):** (a) backups: monthly off-site dumps (365-day lifecycle) hold
+     Google review content up to ~12 months; the wording states it — alternative: shorter monthly retention or
+     `pg_dump --exclude-table-data=reviews` for the monthly key. (b) Location title/address (`social_accounts.username`,
+     `meta.title|address`, from the Business Information API) are stored without expiry, outside the 30-day rule
+     (item 8 covered reviews only) — cheapest fix: refresh them in `gbp-reviews-sync` (`locations.get`,
+     `locationSyncedAt`) and clear them in the daily purge after 29 days unrefreshed (keep the location name).
   10. **Account chooser:** `prompt=select_account consent`.
   New/changed TH strings (`settings.integrations.gbp.connectedAs|disconnectConfirm`, `errors.domain.gbpLocationInUse`, `settings.integrations.google.errors.client_config`) need native review.
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file

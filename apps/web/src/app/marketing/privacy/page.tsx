@@ -62,10 +62,14 @@ export default function PrivacyPage() {
       <ul>
         <li>read messages, comments and reviews so the spa can see them and reply;</li>
         <li>draft replies and posts (with AI) for the spa to review;</li>
-        <li>publish replies and posts that the spa has approved;</li>
+        <li>publish replies and posts that the spa has approved, or that its autopilot setting allows;</li>
+        <li>
+          set up the spa’s booking link and website listing (its Google “Book” link and Search Console
+          sitemap);
+        </li>
         <li>show basic insights about the spa’s own account.</li>
       </ul>
-      <p>With a Google account, that means:</p>
+      <p>With a Google account, specifically:</p>
       <ul>
         <li>
           <strong>Google Business Profile</strong>: we list the locations the account manages so the spa can
@@ -78,20 +82,25 @@ export default function PrivacyPage() {
           website address as a property, and submit and check its sitemap. We do not read search performance
           data.
         </li>
-        <li>We receive the account’s email address only to show which Google account is connected.</li>
+        <li>
+          We receive the account’s email address and Google account ID, to show which Google account is
+          connected and to recognise the same account when it is connected to more than one spa.
+        </li>
         <li>
           Review content from Google is kept for at most 30 days unless Google returns it again when we sync;
-          a review removed from Google is deleted at the next full sync.
+          a review removed from Google is deleted at the next full sync. Encrypted disaster-recovery backups
+          are kept for up to 12 months and then deleted.
         </li>
       </ul>
       <p>
         We do not sell this data, use it for advertising, or share it with anyone other than the service
         providers listed below. Access tokens are stored encrypted. A spa can disconnect at any time in its
         settings, or revoke access directly in Instagram/Facebook settings or its Google account; we then stop
-        using the token and delete it. If the same Google account is connected to more than one spa,
-        disconnecting one spa leaves the others connected; to remove our access from that Google account
-        completely, revoke it in the Google account’s settings. Our use of data received from Google APIs
-        follows the Google API Services User Data Policy, including the Limited Use requirements.
+        using the token and delete it (a token revoked in the Google account is deleted when the spa
+        disconnects). If the same Google account is connected to more than one spa, disconnecting one spa
+        leaves the others connected; to remove our access from that Google account completely, revoke it in
+        the Google account’s settings. Our use of data received from Google APIs follows the Google API
+        Services User Data Policy, including the Limited Use requirements.
       </p>
 
       <h2>AI processing</h2>
@@ -118,7 +127,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           We keep spa data while the subscription is active. After it ends, the spa can export its data for 30
-          days; we then delete it. Encrypted backups roll off within a further 30 days.
+          days; we then delete it. Daily encrypted backups roll off within a further 30 days and monthly ones
+          within 12 months.
         </li>
         <li>Website visit statistics are kept for 90 days in detail and then only as totals.</li>
         <li>Billing records are kept as long as UAE tax law requires.</li>
@@ -137,7 +147,7 @@ export default function PrivacyPage() {
         DigitalOcean (hosting), Cloudflare (network and security), BytePlus ModelArk (AI), an email provider
         for account emails (such as sign-in and password reset), and Stripe if a spa chooses to pay a platform
         invoice by card. Meta and Google receive only what a spa publishes or sets up through them (replies,
-        posts, its Google “Book” link and its website’s sitemap).
+        posts, its Google “Book” link, and its website address and sitemap in Search Console).
       </p>
 
       <h2>Cookies and analytics</h2>

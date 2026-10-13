@@ -63,6 +63,15 @@ export async function gbpGoogleAccountTenants(sub: string, o: { platform?: Db } 
   return [...new Set(rows.map((r) => r.tenantId))]
 }
 
+/** Spas with a Google connection of an unknown Google account (saved before `openid email`): possibly any account. */
+export async function gbpUnknownAccountTenants(o: { platform?: Db } = {}) {
+  const rows = await (o.platform ?? platformDb())
+    .select({ tenantId: socialAccounts.tenantId })
+    .from(socialAccounts)
+    .where(and(eq(socialAccounts.platform, 'gbp'), sql`${socialAccounts.meta} ->> 'googleSub' is null`))
+  return [...new Set(rows.map((r) => r.tenantId))]
+}
+
 /** R29: the location is already another spa's (the check before saving, or the unique index on a race). */
 export const gbpLocationInUse = () =>
   new DomainError('This Business Profile is already connected to another spa.', 'invalid', {
@@ -282,18 +291,22 @@ export async function resetGbpLocation(tx: Tx, tenantId: string) {
  * Deletes the connection (reviews stay; Google-sourced ones expire after 30 days, reviews.ts) after a best-effort revoke
  * at Google. R29: Google's revoke removes the whole grant of that Google account for our project, which would also cut
  * off every other spa connected with the same account (an owner of two spas, a shared manager account). So it revokes
- * only when no other spa has a Google connection of this account (`meta.googleSub`, platform lookup). With no known
- * account (connections made before `openid email` was requested) it never revokes, only deletes here: the grant then
- * stays in that Google account's third-party access list until its owner removes it (or Google expires it unused).
+ * only when no other spa has a Google connection of this account (`meta.googleSub`, platform lookup) and no other spa
+ * has one of an unknown account (saved before `openid email` was requested: it may be this same account). When this
+ * spa's own account is unknown it never revokes, only deletes: the grant then stays in that Google account's
+ * third-party access list until its owner removes it (or Google expires it unused).
  */
 export async function disconnectGbp(opts: GbpOpts) {
   const row = await withTenant(opts.tenantId, (tx) => getGbpAccount(tx, opts.tenantId), opts.db)
   if (!row) return false
   const sub = row.meta?.googleSub
   const sealed = row.refreshTokenEnc ?? row.tokenEnc
-  // Unknown account (no sub): never revoke — it may be shared with another spa, and we can't tell.
-  const revoke =
-    Boolean(sealed && sub) && !(await gbpGoogleAccountTenants(sub!, opts)).some((id) => id !== opts.tenantId)
+  // Unknown account (no sub) here or on any other spa's row: never revoke — it may be shared, and we can't tell.
+  const others = async () =>
+    [...(await gbpGoogleAccountTenants(sub!, opts)), ...(await gbpUnknownAccountTenants(opts))].some(
+      (id) => id !== opts.tenantId,
+    )
+  const revoke = Boolean(sealed && sub) && !(await others())
   if (sealed && revoke) {
     try {
       await revokeGoogleToken(decryptSecret(sealed), opts.fetch)

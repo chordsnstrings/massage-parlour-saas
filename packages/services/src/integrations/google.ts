@@ -186,7 +186,7 @@ export function describeGoogleError(e: unknown): string {
   if (e instanceof GoogleApiError) {
     // R29: no "no need to reconnect" — when the platform has to replace its Google client, every spa reconnects.
     if (e.isClientConfig)
-      return "Google rejected the platform's Google sign-in settings, so the platform's Google setup needs fixing. If this spa then asks you to reconnect Google, please do."
+      return "Google rejected the platform's Google sign-in settings, so the platform's Google setup needs fixing. The platform team has to fix it; if this card later asks you to reconnect Google, please do."
     if (e.isAuth)
       return 'Google sign-in expired or was revoked. Reconnect Google Business Profile in Settings.'
     if (e.status === 403 || e.status === 429)
