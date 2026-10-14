@@ -1468,6 +1468,20 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
     USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
     honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
+- **R32 Daily sales sheet PDF (owner, 2026-10-14; PLANNED, not built — owner: "ask me before start coding"):** the
+  spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM PDF, every day. Therapists always live in the CRM by name
+  (commission + tips per therapist); "Show on website" stays optional and separate.
+  - **Rows** (one per session, business day by `business_day_cutoff`): No., therapist, Q = her turn number that day,
+    start–end time, room, code, cash, card. **Code** = source + client type: `P1`–`P4` = which spa phone line the client
+    called (4 lines; Settings → phone lines with their numbers), `W` = walk-in, `B` = booking; `/R` = regular, `/N` =
+    new client — **reception picks R/N** (not automatic). **Pink rows (Q = 0)** = the therapist's **own lead** (her own
+    client): shown in pink, does not use her queue turn.
+  - **Right panel:** each therapist's turns that day (1, 2, 3 …) or OFF. **Expenses** (e.g. Laundry 58): reception
+    records each cash expense during the day; Total sale = cash + card − expenses, Total card, Total cash = cash −
+    expenses (sheet: 1460 + 1080 − 58 = 2482; cash 1402).
+  - **PDF:** download for any day from Daily close **and** made automatically on "Close the day" (kept with that day).
+    Tips per therapist and commission per therapist are **optional** (tips chosen on).
+  - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
