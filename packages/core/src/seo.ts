@@ -1,6 +1,7 @@
 // Search + social data for public pages (PLAN §17 F12): schema.org JSON-LD, robots.txt and sitemap.xml. Pure; no DB.
 import type { OpeningHours, Weekday } from './booking'
 import { EMIRATE_NAMES } from './emirates'
+import { crmName } from './html-crm'
 import { normalizeGoogleMapsUrl } from './maps'
 
 type Json = Record<string, unknown>
@@ -92,11 +93,11 @@ export function geoFromMapsUrl(
   return at ? geo(Number(at[1]), Number(at[2])) : null
 }
 
-/** "350" / "350.50" for a price in AED; null when hidden or not a number. */
+/** "350" / "350.50" for a price in AED; null when hidden, not a number, 0 or negative (never "AED 0", QA M7). */
 function money(v: string | number | null | undefined): string | null {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
-  if (!Number.isFinite(n) || n < 0) return null
+  if (!Number.isFinite(n) || n <= 0) return null
   return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
@@ -149,6 +150,39 @@ function priceRange(services: SeoService[]): string | undefined {
   return lo === hi ? `AED ${lo}` : `AED ${lo}–${hi}`
 }
 
+/**
+ * One offer per treatment name (QA M7), like the CRM feed's collapseSameName: a service in two menus ("Asian Menu"
+ * + "Arabic Menu") is listed once — the first one's category, the first description, every length once at its
+ * lowest public price. Unnamed services are never joined.
+ */
+function sameNameServices(services: SeoService[]): SeoService[] {
+  const out: SeoService[] = []
+  const byName = new Map<string, SeoService>()
+  for (const s of services) {
+    const key = crmName(s.name)
+    const seen = key ? byName.get(key) : undefined
+    if (!seen) {
+      const first = { ...s, variants: [...s.variants] }
+      out.push(first)
+      if (key) byName.set(key, first)
+      continue
+    }
+    seen.description ||= s.description
+    seen.category ||= s.category
+    for (const v of s.variants) {
+      const i = seen.variants.findIndex((x) => x.durationMin === v.durationMin)
+      const price = money(v.priceAed)
+      if (i < 0) seen.variants.push(v)
+      else {
+        const had = money(seen.variants[i]!.priceAed)
+        if (price !== null && (had === null || Number(price) < Number(had))) seen.variants[i] = v
+      }
+    }
+    seen.variants.sort((a, b) => a.durationMin - b.durationMin)
+  }
+  return out
+}
+
 function offer(s: SeoService): Json {
   const service: Json = { '@type': 'Service', name: s.name }
   if (text(s.description)) service.description = text(s.description)
@@ -172,12 +206,12 @@ function offer(s: SeoService): Json {
 
 /**
  * schema.org graph for a spa's public page: the DaySpa (a HealthAndBeautyBusiness) with its main branch's address,
- * pin, phone and hours, public profiles and its services as offers (prices only where the spa shows them), plus a
- * BreadcrumbList on inner pages. Serialise with jsonLdString.
+ * pin, phone and hours, public profiles and its services as offers (one per name; prices only where the spa shows
+ * them and above 0), plus a BreadcrumbList on inner pages. Serialise with jsonLdString.
  */
 export function spaJsonLd(input: SpaJsonLdInput): Json {
   const b = input.branch ?? null
-  const services = input.services ?? []
+  const services = sameNameServices(input.services ?? [])
   const spa: Json = {
     '@type': 'DaySpa',
     '@id': `${input.url}#spa`,

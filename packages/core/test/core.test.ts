@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_PERMISSIONS,
+  asciiDigits,
   CUSTOM_ROLE_PERMISSIONS,
   checkSlug,
   DEFAULT_EMAIL_FROM,
@@ -153,6 +154,8 @@ describe('whatsapp', () => {
     ['00971501234567', '971501234567'],
     ['501234567', '971501234567'],
     ['04 123 4567', null],
+    ['٠٥٠ ١٢٣ ٤٥٦٧', '971501234567'],
+    ['۰۵۰۱۲۳۴۵۶۷', '971501234567'],
   ])('toUaeE164(%s)', (input, out) => expect(toUaeE164(input)).toBe(out))
 
   it.each([
@@ -172,7 +175,18 @@ describe('whatsapp', () => {
     ['+0 123 456 789', null],
     ['call me', null],
     ['50+1234567', null],
+    // Arabic-Indic and Extended Arabic-Indic (Persian) digits, also mixed with ASCII (QA M3).
+    ['٠٥٠ ١٢٣ ٤٥٦٧', '971501234567'],
+    ['+٩٧١ ٥٠ ١٢٣ ٤٥٦٧', '971501234567'],
+    ['۰۵۰ ۱۲۳ ۴۵۶۷', '971501234567'],
+    ['٠٤ 123 ٤٥٦٧', '97141234567'],
+    ['+٤٤ ٧٧٠٠ ٩٠٠١٢٣', '447700900123'],
+    ['٠٥٠ ١٢٣', null],
   ])('toE164(%s)', (input, out) => expect(toE164(input)).toBe(out))
+
+  it('maps Arabic-Indic digits to ASCII and leaves the rest', () => {
+    expect(asciiDigits('٠١٢٣٤٥٦٧٨٩ ۰۱۲۳۴۵۶۷۸۹ +971')).toBe('0123456789 0123456789 +971')
+  })
 
   it('builds links per mode', () => {
     expect(whatsappLink('971501234567', 'Hi & bye')).toBe('https://wa.me/971501234567?text=Hi%20%26%20bye')

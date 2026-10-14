@@ -1171,14 +1171,16 @@ export async function spaHidesPrices(tx: Tx, tenantId: string) {
 }
 
 /**
- * The price a public page (website, online booking) may show: null = "price on request", either because the
- * variant has no price or because the service (else the spa default) hides prices.
+ * The price a public page (website, online booking, JSON-LD) may show: null = "price on request", either because
+ * the variant has no price (none, 0 or negative — never "AED 0", QA M6) or because the service (else the spa
+ * default) hides prices.
  */
 export function publicPrice(
   priceAed: string | null,
   serviceShowPrice: boolean | null,
   spaHides: boolean,
 ): string | null {
+  if (!(Number(priceAed) > 0)) return null
   return (serviceShowPrice ?? !spaHides) ? priceAed : null
 }
 

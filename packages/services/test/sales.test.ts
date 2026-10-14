@@ -829,5 +829,8 @@ describe('price on request (R4)', () => {
     expect(publicPrice('350.00', true, true)).toBe('350.00')
     expect(publicPrice('350.00', false, false)).toBeNull()
     expect(publicPrice(null, true, false)).toBeNull()
+    // A 0 / negative / junk price is "price on request", never "AED 0" (QA M6).
+    for (const p of ['0', '0.00', '-10.00', 'abc', '']) expect(publicPrice(p, true, false)).toBeNull()
+    expect(publicPrice('0.50', null, false)).toBe('0.50')
   })
 })

@@ -1,6 +1,15 @@
-/** Normalises a UAE mobile number to E.164 digits without '+', e.g. 0501234567 → 971501234567. */
+/** Arabic-Indic (U+0660–0669) and Extended Arabic-Indic / Persian (U+06F0–06F9) digits → ASCII. */
+export const asciiDigits = (s: string) =>
+  s
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+
+/**
+ * Normalises a UAE mobile number to E.164 digits without '+', e.g. 0501234567 → 971501234567 (Arabic-Indic
+ * digits accepted).
+ */
 export function toUaeE164(input: string): string | null {
-  let digits = input.replace(/\D/g, '')
+  let digits = asciiDigits(input).replace(/\D/g, '')
   if (digits.startsWith('00')) digits = digits.slice(2)
   if (digits.startsWith('0')) digits = `971${digits.slice(1)}`
   if (digits.length === 9 && digits.startsWith('5')) digits = `971${digits}`
@@ -13,12 +22,14 @@ const KEEPS_LEADING_ZERO = new Set(['39', '378', '379', '225', '229', '241', '24
 /**
  * Any phone number → E.164 digits without '+' (contact enquiries, PLAN §18.4): UAE mobiles as `toUaeE164`
  * (05…, 5…, 9715…), other UAE numbers with the trunk 0 (04 123 4567 → 97141234567), international numbers with +
- * or 00. A trunk 0 is dropped: '(0)' anywhere (+44 (0)20 …), after +971, and after a country code typed apart
+ * or 00 (Arabic-Indic digits read as ASCII, QA M3). A trunk 0 is dropped: '(0)' anywhere (+44 (0)20 …), after +971, and after a country code typed apart
  * (+44 07700 …, 0049 030 …) unless that country keeps it. Null unless it can be a valid E.164 number (8–15 digits,
  * no leading 0).
  */
 export function toE164(input: string): string | null {
-  const raw = input.replace(/\(\s*0\s*\)/g, ' ').trim()
+  const raw = asciiDigits(input)
+    .replace(/\(\s*0\s*\)/g, ' ')
+    .trim()
   if (!raw || /[^\d\s+()./-]/.test(raw) || raw.lastIndexOf('+') > 0) return null
   const uae = toUaeE164(raw)
   if (uae) return uae

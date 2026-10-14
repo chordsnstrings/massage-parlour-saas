@@ -148,6 +148,9 @@ describe('booking requests from a design form', () => {
       return r.success ? [] : r.error.issues.map((i) => i.message)
     }
     expect(codes({ phone: '123' })).toContain('phone')
+    // Typed in Arabic-Indic / Persian digits (QA M3): accepted and stored as ASCII E.164.
+    expect(designEnquirySchema.parse(body({ phone: '٠٥٠ ١٢٣ ٤٥٦٧' })).phone).toBe('+971501234567')
+    expect(designEnquirySchema.parse(body({ phone: '+۹۷۱ ۵۰ ۱۲۳ ۴۵۶۷' })).phone).toBe('+971501234567')
     expect(codes({ date: '2026-02-30' })).toContain('date')
     expect(codes({ date: addDays(today, 200) })).toContain('date')
     expect(codes({ date: addDays(today, -3) })).toContain('date')
