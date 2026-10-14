@@ -234,6 +234,7 @@ export const sales = {
     counted: 'Counted',
     // R32 expenses paid from the drawer.
     drawerExpenses: 'Expenses from the drawer',
+    amended: 'Amended {time}',
     expensesTitle: 'Expenses paid from the drawer',
     expensesSub: 'Cash taken from the drawer today (e.g. laundry). It comes off the expected cash.',
     expenseWhat: 'What for',

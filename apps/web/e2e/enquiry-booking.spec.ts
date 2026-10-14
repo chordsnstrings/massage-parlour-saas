@@ -86,6 +86,9 @@ test('Enquiries → Make booking: a website booking request becomes a booking in
 
   await test.step('the normal save books it on the next calendar day and links the request', async () => {
     const sheet = page.getByRole('dialog')
+    // R32: the fee is prefilled from the list price; reception types the therapist's commission.
+    await expect(sheet.getByLabel('Fee (AED)')).toHaveValue('350')
+    await sheet.getByLabel('Commission (AED)').fill('40')
     await sheet.getByRole('button', { name: 'Create booking' }).click()
     await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
     const [enquiry] = await db.select().from(siteEnquiries).where(eq(siteEnquiries.id, request!.id))

@@ -62,6 +62,8 @@ test('therapist: own booking status and "My earnings"', async ({ page, browser }
     await expect(sheet.getByText('In service', { exact: true })).toBeVisible()
     await sheet.getByRole('button', { name: 'Complete' }).click()
     await expect(sheet.getByText('Completed', { exact: true })).toBeVisible()
+    // R32 (D7): completed by the therapist, no sale yet — reception finishes it with the payment.
+    await expect(sheet.getByText('Not paid yet')).toBeVisible()
     await expect(sheet.getByRole('button', { name: 'Check in' })).toHaveCount(0)
     const [row] = await db.select({ s: bookings.status }).from(bookings).where(eq(bookings.id, mine.id))
     expect(row!.s).toBe('completed')

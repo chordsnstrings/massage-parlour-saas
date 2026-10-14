@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
+import { bookings, rotationEntries } from '@spa/db'
+import { eq } from 'drizzle-orm'
+import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
 test('reception works the day calendar: check in, then book a client into a free slot', async ({ page }) => {
   const { slug } = await signUpOwner(page)
@@ -25,7 +27,7 @@ test('reception works the day calendar: check in, then book a client into a free
     await expect(sheet.getByText('Confirmed', { exact: true })).toBeVisible()
     await sheet.getByRole('button', { name: 'Check in' }).click()
     await expect(sheet.getByText('Checked in', { exact: true })).toBeVisible()
-    await expect(sheet.getByRole('link', { name: 'Check out' })).toHaveAttribute(
+    await expect(sheet.getByRole('link', { name: 'Finish & pay' })).toHaveAttribute(
       'href',
       /sales\/new\?booking=/,
     )
@@ -38,10 +40,14 @@ test('reception works the day calendar: check in, then book a client into a free
     const sheet = page.getByRole('dialog')
     await expect(sheet.getByRole('heading', { name: 'New booking' })).toBeVisible()
     await expect(sheet.getByLabel('Time')).toHaveValue('15:00')
-    await sheet.getByLabel('Client').fill('Fati')
+    await sheet.getByLabel('Client', { exact: true }).fill('Fati')
     await sheet.getByRole('button', { name: /Fatima Al Mansoori/ }).click()
     await expect(sheet.getByLabel('Source').locator('option[value="online"]')).toHaveText('Website')
     await sheet.getByLabel('Source').selectOption('whatsapp')
+    // R32: fee + commission prefilled from the last amounts typed for this treatment (the seeded booking).
+    await expect(sheet.getByLabel('Fee (AED)')).toHaveValue('350')
+    await expect(sheet.getByLabel('Commission (AED)')).toHaveValue('0')
+    await sheet.getByLabel('Commission (AED)').fill('35')
     await sheet.getByRole('button', { name: 'Create booking' }).click()
     await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
     await expect(sheet.getByRole('link', { name: 'Send confirmation on WhatsApp' })).toHaveAttribute(
@@ -110,6 +116,36 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
       page.getByRole('group', { name: 'Maya' }).getByRole('button', { name: /Sara/ }),
     ).toBeVisible()
     await expect(panel.locator('[aria-current="true"]')).toContainText('Ploy')
+  })
+
+  await test.step('an own-client walk-in with a hand-picked therapist does not use her turn (R32)', async () => {
+    await page.getByRole('button', { name: 'Walk-in' }).first().click()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByLabel('Therapist')).toContainText('Next in rotation (Ploy)')
+    await sheet.getByLabel('Therapist').selectOption({ label: 'Ploy' })
+    await sheet.getByLabel('Name').fill('Hind')
+    await sheet.getByRole('switch', { name: 'Own client' }).click()
+    await sheet.getByLabel('Fee (AED)').fill('300')
+    await sheet.getByLabel('Commission (AED)').fill('60')
+    await sheet.getByRole('button', { name: 'Start walk-in' }).click()
+    await expect(page.getByText('Walk-in checked in with Ploy')).toBeVisible()
+    await expect(sheet).toBeHidden()
+    // Her turn count and place in the rotation are unchanged (Maya, who took the first walk-in, stays behind her).
+    const turns = await testDb()
+      .select({
+        staffId: rotationEntries.staffId,
+        turns: rotationEntries.turns,
+        position: rotationEntries.position,
+      })
+      .from(rotationEntries)
+      .where(eq(rotationEntries.branchId, seed.branchId))
+    const ploy = turns.find((r) => r.staffId === seed.staffIds[1])!
+    const maya = turns.find((r) => r.staffId === seed.staffIds[0])!
+    expect(ploy.turns).toBe(0)
+    expect(maya.turns).toBe(1)
+    expect(ploy.position).toBeLessThan(maya.position)
+    const [own] = await testDb().select().from(bookings).where(eq(bookings.notes, 'Walk-in: Hind'))
+    expect(own).toMatchObject({ ownLead: true, source: 'walk_in' })
   })
 
   await test.step('rooms view shows the booking in its room; cancelling hides it', async () => {

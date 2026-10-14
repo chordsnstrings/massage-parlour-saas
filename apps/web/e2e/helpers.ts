@@ -486,10 +486,10 @@ export async function seedCatalog(slug: string) {
   }
 }
 
-/** Creates a confirmed booking for the seeded client, `hoursFromNow` ahead (rounded to the quarter hour). */
 /**
  * Seeds a confirmed booking for Fatima with Maya. `when` is either hours from now (rounded up to 15 min) or a
- * fixed Dubai time today ('HH:MM') — use the latter whenever the test depends on clock positions.
+ * fixed Dubai time today ('HH:MM') — use the latter whenever the test depends on clock positions. R32: confirmed as
+ * reception does — the list price as the fee and a planned commission of AED 0 (Finish & pay needs one).
  */
 export async function seedBooking(seed: Awaited<ReturnType<typeof seedCatalog>>, when: number | string = 2) {
   const start =
@@ -510,6 +510,7 @@ export async function seedBooking(seed: Awaited<ReturnType<typeof seedCatalog>>,
           start,
           staffIds: [seed.staffIds[0]!],
           roomId: seed.roomIds[0]!,
+          commissionAed: 0,
         },
       ],
     }),

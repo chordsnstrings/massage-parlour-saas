@@ -233,6 +233,7 @@ export const sales: Messages['sales'] = {
     counted: 'นับได้',
     // R32 (needs native review).
     drawerExpenses: 'ค่าใช้จ่ายจากลิ้นชักเงินสด',
+    amended: 'แก้ไขเมื่อ {time}',
     expensesTitle: 'ค่าใช้จ่ายที่จ่ายจากลิ้นชักเงินสด',
     expensesSub: 'เงินสดที่จ่ายออกจากลิ้นชักวันนี้ (เช่น ค่าซักรีด) จะหักออกจากยอดเงินสดที่ควรมี',
     expenseWhat: 'รายการ',

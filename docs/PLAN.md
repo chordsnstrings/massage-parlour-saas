@@ -1485,7 +1485,27 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     enters the fee + the therapist's commission (typed each time, pre-filled from the last amount for that treatment).
     **Finish** = cash/card payment + tips → the booking is completed and its sale is created and linked. Reception can
     correct fee/commission/tips until the day is closed; after that only owner/manager, every change audited.
-  - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns.
+  - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns. Until then cancelled, no-show
+    and pending bookings are not on the sheet and are not sales (today's behaviour).
+  - **PART 1 built (2026-10-14, branch `r32-daily-sheet`, not merged yet; spec D1–D14 in the implementation design):**
+    migration 0058 (bookings `phone_line` 1–4 / `client_type` regular|new / `own_lead`; booking_items `commission_aed`
+    planned + `terms_set_at`; expenses `from_drawer`; day_closes `amended_at/by`), core `day-sheet.ts` (sheetCode,
+    turnNumbers, sheetTotals, phoneLineOptions, daySheetColumns), permission `pos.correct` (owners + managers only),
+    services `booking-order.ts` (lastBookingTerms, setBookingTerms, setBookingDetails, orderDay, finishBooking,
+    correctBookingOrder, orderSale) + `drawer-expenses.ts` + the day lock in sales.ts (lockBusinessDay / isDayClosed /
+    markDayAmended; createSale refuses a closed day without `allowClosedDay`), web `server/day-lock.ts`, new booking +
+    walk-in fields, booking sheet + booking page Order card (Confirm, Fee & commission, Order details, Finish & pay,
+    Correct payment), checkout commission card, Daily close drawer expenses (+ "Amended" pill), Settings → Daily sales
+    sheet (phone lines + column defaults). Expected cash = float + cash + cash tips − cash refunds − drawer expenses.
+    Choices made while building (deviations from the design text): the planned commission is one amount per treatment
+    (per therapist on it; Finish can still type each therapist separately); a member without `calendar.commission`
+    keeps the stored commission; the client-type field reads "Regular or new" and the switch "Own client" (labels that
+    don't collide with "Client"/"Therapist"); Thai drafts use the existing glossary (พนักงานนวด, ค่าคอมมิชชัน) — new
+    strings need the owner's native review. PART 2 (daySheet query, PDF, close integration) is next.
+  - **Notes for the owner:** phone (P) and other bookings don't move the walk-in rotation (only walk-ins do; an own
+    client never does); Q on the sheet still numbers every non-own session. Once a day is closed, new payments, fee /
+    commission / tips changes and drawer expenses on it need an owner or manager; the counted cash and variance stay as
+    recorded and the close is marked "Amended".
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly

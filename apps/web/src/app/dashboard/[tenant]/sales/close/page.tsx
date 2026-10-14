@@ -188,9 +188,17 @@ export default async function ClosePage({
               title={t('sales.dayClosed')}
               sub={t('sales.close.closedAt', { time: fmt.dateTime(s.close.closedAt) })}
               actions={
-                <Pill tone="acc">
-                  <Lock className="size-3" aria-hidden /> {t('sales.close.locked')}
-                </Pill>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* R32 (D6): changed later by an owner/manager (pos.correct); the counted cash stays as closed. */}
+                  {s.close.amendedAt && (
+                    <Pill tone="warn">
+                      {t('sales.close.amended', { time: fmt.dateTime(s.close.amendedAt) })}
+                    </Pill>
+                  )}
+                  <Pill tone="acc">
+                    <Lock className="size-3" aria-hidden /> {t('sales.close.locked')}
+                  </Pill>
+                </div>
               }
             >
               <dl className="space-y-2.5 text-[length:var(--crm-fs-td)]">

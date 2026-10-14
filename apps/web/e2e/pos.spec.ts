@@ -29,6 +29,8 @@ test('reception checks out a booking with split payment + tip, then closes the d
     await expect(page.getByText('Swedish massage · 60 min').first()).toBeVisible()
     await expect(page.getByLabel('Therapist for item 1')).toHaveValue(seed.staffIds[0]!)
     await expect(page.getByTestId('sale-total')).toHaveText(/350/)
+    // R32 Finish: Maya is paid a sales %, not per booking → her booking commission is prefilled 0.
+    await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('0')
     await screenshotAt(page, 'pos-checkout')
   })
 
