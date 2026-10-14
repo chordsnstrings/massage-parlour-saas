@@ -130,6 +130,8 @@ export type SpaJsonLdInput = {
   services?: SeoService[]
   /** Public profiles (Instagram, Google Maps place …). */
   sameAs?: (string | null | undefined)[]
+  /** The offer catalog's name in the page's language (default "Treatments"). */
+  catalogName?: string
 }
 
 const text = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
@@ -247,7 +249,7 @@ export function spaJsonLd(input: SpaJsonLdInput): Json {
   if (services.length)
     spa.hasOfferCatalog = {
       '@type': 'OfferCatalog',
-      name: 'Treatments',
+      name: text(input.catalogName) || 'Treatments',
       itemListElement: services.map(offer),
     }
   const graph: Json[] = [spa]

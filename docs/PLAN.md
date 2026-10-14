@@ -1386,7 +1386,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   2. **JSON-LD (M7):** core `seo.ts` `money()` skips ≤ 0, so no `priceRange "AED 0"` and no 0 offers / unit prices;
      an all-on-request treatment stays an Offer without a price (valid schema.org, same as a hidden price). `spaJsonLd`
      lists each treatment name once (`crmName` identity, like the CRM feed's `collapseSameName`): first category +
-     description, every length once at its lowest public price.
+     description, every length once at its lowest public price. The offer catalog is named in the page's language
+     (`catalogName`: "Treatments" / "العلاجات").
   3. **Arabic digits (M3):** core `asciiDigits` (moved from services data-io) maps U+0660–0669 / U+06F0–06F9 to ASCII
      at the start of `toUaeE164` and `toE164` (which also drops the invisible direction marks WhatsApp / iOS
      Contacts wrap pasted numbers in), so the website enquiry / design booking form (`siteEnquirySchema`,

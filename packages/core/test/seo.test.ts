@@ -269,6 +269,14 @@ describe('spaJsonLd', () => {
     expect(ld['@graph'][0]!.priceRange).toBe('AED 50–300')
   })
 
+  it("names the offer catalog in the page's language (QA M7)", () => {
+    const services = [{ name: 'Hot Oil', variants: [{ durationMin: 60, priceAed: '200' }] }]
+    const en = spaJsonLd({ ...base, services }) as Graph
+    const ar = spaJsonLd({ ...base, services, catalogName: 'العلاجات' }) as Graph
+    expect(en['@graph'][0]!.hasOfferCatalog.name).toBe('Treatments')
+    expect(ar['@graph'][0]!.hasOfferCatalog.name).toBe('العلاجات')
+  })
+
   it('stays valid JSON with hostile spa text', () => {
     const out = jsonLdString(spaJsonLd({ ...base, name: BREAKOUT, branch: { address: BREAKOUT } }))
     expect(out).not.toContain('<')
