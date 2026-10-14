@@ -94,20 +94,32 @@ async function hostCheck(tenantId: string, urls: unknown[]): Promise<(host: stri
 export type CrmInlineRender = { inline: CrmInline | null; fonts: CrmInlineFonts | null }
 const NOTHING: CrmInlineRender = { inline: null, fonts: null }
 
-/** The inline plans of one design render (same inputs as designWithCrm). */
-export async function crmInlinePlan(
-  tenant: { id: string },
+/**
+ * The data of one design render (same inputs as designWithCrm) when its design declares contract.inline or this
+ * locale's contract.inline_fonts: what the inline plans and the live page's link-preview photo (core
+ * crmSharePicture) are read from, before anything is inlined (og:image never becomes a data: URI); else null.
+ */
+export function crmInlineData(
   html: string,
   key: string | null,
   crm: CrmContract | null | undefined,
   opts: { inject: boolean; content?: HtmlDesignContent | null; locale?: CrmLocale },
-): Promise<CrmInlineRender> {
+): Record<string, unknown> | null {
   const locale = opts.locale ?? 'en'
   // Designs without contract.inline / inline_fonts for this locale pay one cached parse.
   const found = designContract(html, key)?.found
   const own = found ? crmDesignData(found) : null
-  if (!own || (!crmInlinePaths(own).length && !crmInlineFontUrls(own, locale).length)) return NOTHING
+  if (!own || (!crmInlinePaths(own).length && !crmInlineFontUrls(own, locale).length)) return null
   const data = designCrmData(html, key, crm, opts)
+  return data && (crmInlinePaths(data).length || crmInlineFontUrls(data, locale).length) ? data : null
+}
+
+/** The inline plans of one design render's data (`crmInlineData`, same locale). */
+export async function crmInlinePlan(
+  tenant: { id: string },
+  data: Record<string, unknown> | null,
+  locale: CrmLocale = 'en',
+): Promise<CrmInlineRender> {
   if (!data) return NOTHING
   const paths = crmInlinePaths(data)
   const fonts = crmInlineFontUrls(data, locale)
@@ -140,11 +152,12 @@ export async function pageCrmInline(
     const props = n?.type === 'HtmlDesign' ? n.props : undefined
     if (!props || typeof props.html !== 'string' || !props.html) continue
     const key = designKey(htmlDesignDocOf(props))
-    const plan = await crmInlinePlan(tenant, props.html, key, crm, {
+    const data = crmInlineData(props.html, key, crm, {
       inject: true,
       content: props.content as HtmlDesignContent | undefined,
       locale: opts.locale,
     })
+    const plan = await crmInlinePlan(tenant, data, opts.locale)
     if (plan.inline) pictures[key ?? ''] = plan.inline
     if (plan.fonts) fonts[key ?? ''] = plan.fonts
   }
