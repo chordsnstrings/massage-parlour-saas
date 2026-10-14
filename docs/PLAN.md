@@ -1481,6 +1481,10 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     expenses (sheet: 1460 + 1080 − 58 = 2482; cash 1402).
   - **PDF:** download for any day from Daily close **and** made automatically on "Close the day" (kept with that day).
     Tips per therapist and commission per therapist are **optional** (tips chosen on).
+  - **Booking ↔ sale flow (owner 2026-10-14):** booking and sale stay linked (one order). **Confirm** = reception
+    enters the fee + the therapist's commission (typed each time, pre-filled from the last amount for that treatment).
+    **Finish** = cash/card payment + tips → the booking is completed and its sale is created and linked. Reception can
+    correct fee/commission/tips until the day is closed; after that only owner/manager, every change audited.
   - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
