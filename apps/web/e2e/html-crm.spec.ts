@@ -22,6 +22,7 @@ import {
   app,
   editorUrl,
   makeStudio,
+  PATH,
   PORT,
   signInStudioOnAdmin,
   signUpOwner,
@@ -222,6 +223,84 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(served.match(LITERAL)![0]).not.toBe(fixture.match(LITERAL)![0])
     // The page JSON can't close the script: no raw < > & inside it.
     expect(served.match(LITERAL)![0].slice(8, -9)).not.toMatch(/[<>&]/)
+  })
+
+  await test.step('M11: the share / icon / hreflang tags the design lacks; /favicon.ico → the spa logo', async () => {
+    const db = testDb()
+    const bytes = await readFile(new URL('../public/designs/be-relax/c4e79f1703476507.webp', import.meta.url))
+    const [file] = await db
+      .insert(storedFiles)
+      .values({
+        tenantId: seed.tenantId,
+        contentType: 'image/webp',
+        size: bytes.length,
+        bytes,
+        isPublic: true,
+        purpose: 'logo',
+      })
+      .returning({ id: storedFiles.id })
+    const [before] = await db
+      .select({ locales: sites.locales, logo: tenants.logoFileId })
+      .from(sites)
+      .innerJoin(tenants, eq(tenants.id, sites.tenantId))
+      .where(eq(sites.tenantId, seed.tenantId))
+    await db.update(tenants).set({ logoFileId: file!.id }).where(eq(tenants.id, seed.tenantId))
+    await db
+      .update(sites)
+      .set({ locales: ['en', 'ar'] })
+      .where(eq(sites.tenantId, seed.tenantId))
+    try {
+      const head = async (query: string) => {
+        const html = await (await viaHost(page, `${site(slug)}/${query}`)).text()
+        return html.slice(0, html.indexOf('<body>'))
+      }
+      const en = await head('')
+      const home = /<link rel="canonical" href="([^"]+)">/.exec(en)![1]!
+      const logo = `${new URL(home).origin}/files/${file!.id}`
+      // The fixture has its own <title>, no description and no picture in its markup (CRM_DATA fills them): the
+      // logo is the preview picture (small card) and the icon.
+      for (const tag of [
+        '<meta property="og:title" content="CRM contract fixture">',
+        `<meta property="og:url" content="${home}">`,
+        '<meta property="og:type" content="website">',
+        '<meta property="og:locale" content="en_AE">',
+        '<meta property="og:site_name" content="CRM Feed Spa">',
+        `<meta property="og:image" content="${logo}">`,
+        '<meta name="twitter:card" content="summary">',
+        '<meta name="twitter:title" content="CRM contract fixture">',
+        `<meta name="twitter:image" content="${logo}">`,
+        `<link rel="icon" href="${logo}">`,
+        `<link rel="apple-touch-icon" href="${logo}">`,
+        `<link rel="alternate" hreflang="en" href="${home}">`,
+        `<link rel="alternate" hreflang="ar" href="${home}?lang=ar">`,
+        `<link rel="alternate" hreflang="x-default" href="${home}">`,
+      ])
+        expect(en).toContain(tag)
+      expect(en).not.toMatch(/og:description|twitter:description/)
+      // Its own <title> stays the only one; the design's own tags are never doubled.
+      expect(en.match(/<title>/g)).toHaveLength(1)
+      expect(en.match(/name="viewport"/g)).toHaveLength(1)
+      const ar = await head('?lang=ar')
+      expect(ar).toContain('<meta property="og:locale" content="ar_AE">')
+      expect(ar).toContain(`<meta property="og:url" content="${home}?lang=ar">`)
+      if (!PATH) {
+        // The proxy never rewrites these: a spa host answers with its logo (cookie-free lookup, cached ≤ 30 s).
+        for (const path of ['/favicon.ico', '/apple-touch-icon.png'])
+          await expect
+            .poll(
+              async () => {
+                const res = await viaHost(page, `${site(slug)}${path}`)
+                return `${res.status()} ${res.headers().location ?? ''}`
+              },
+              { timeout: 45_000 },
+            )
+            .toBe(`302 /files/${file!.id}`)
+        expect((await viaHost(page, `${app}/favicon.ico`)).status()).toBe(404)
+      }
+    } finally {
+      await db.update(tenants).set({ logoFileId: before!.logo }).where(eq(tenants.id, seed.tenantId))
+      await db.update(sites).set({ locales: before!.locales }).where(eq(sites.tenantId, seed.tenantId))
+    }
   })
 
   await test.step('"Show on website" in the CRM staff screen → that person appears (and only them)', async () => {
@@ -884,7 +963,21 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     { id: 'big', title: 'Big', image: `${DESIGNS}/998d1a1a386836e2.webp` },
     { id: 'moroccan', title: 'Bath', image: `${DESIGNS}/c4e79f1703476507.webp` },
   ]
-  const design = fixture.replace(literal, `<script>window.CRM_DATA = ${JSON.stringify(data)};</script>`)
+  // Decision B (owner 2026-10-14): the Arabic page's woff2 fonts (BE RELAX's own files) inside CRM_DATA on `ar` only.
+  const ownFont = `${site(slug)}${DESIGNS}/90aef64fea9794f2.woff2`
+  const fonts = {
+    ar: [
+      `${DESIGNS}/16734a5adb27b0f3.woff2`,
+      ownFont,
+      // Not ours (never read) / not a woff2 file: never inlined; 3427efdf7896718d.woff2 is not declared.
+      `https://evil.example${DESIGNS}/6010e7fd0dce5d52.woff2`,
+      `${DESIGNS}/4d56333a0e00bb38.webp`,
+    ],
+  }
+  const design = fixture.replace(
+    literal,
+    `<script>window.CRM_DATA = ${JSON.stringify({ ...data, contract: { ...data.contract, inline_fonts: fonts } })};</script>`,
+  )
   const { tenantId } = await seedSpa(slug)
   const db = testDb()
   const picture = (file: string) => readFile(new URL(`../public${DESIGNS}/${file}`, import.meta.url))
@@ -945,8 +1038,8 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
 
   const b64 = async (file: string) => (await picture(file)).toString('base64')
   const welcome = await b64('4d56333a0e00bb38.webp')
-  const liveData = async () => {
-    const html = await (await viaHost(page, site(slug))).text()
+  const liveData = async (query = '') => {
+    const html = await (await viaHost(page, `${site(slug)}/${query}`)).text()
     const m = html.match(LITERAL)
     expect(m).toBeTruthy()
     return JSON.parse(m![0].slice('<script>window.CRM_DATA = '.length, -';</script>'.length))
@@ -970,6 +1063,35 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
       'journey[welcome].image': `${DESIGNS}/4d56333a0e00bb38.webp`,
       'journey[abs].image': own,
     })
+    // English: never the Arabic fonts.
+    expect(got.inline_fonts).toBeUndefined()
+  })
+
+  const font = async (file: string) => `data:font/woff2;base64,${await b64(file)}`
+  await test.step('contract.inline_fonts: the declared woff2 fonts on the Arabic page only, keyed as declared', async () => {
+    await expect.poll(async () => Object.keys((await liveData('?lang=ar')).inline_fonts ?? {}).length).toBe(2)
+    const got = await liveData('?lang=ar')
+    expect(got.locale).toBe('ar')
+    expect(got.inline_fonts).toEqual({
+      [`${DESIGNS}/16734a5adb27b0f3.woff2`]: await font('16734a5adb27b0f3.woff2'),
+      [ownFont]: await font('90aef64fea9794f2.woff2'),
+    })
+    // The Arabic page keeps its inline pictures; the design's own contract (the declaration) is unchanged.
+    expect(Object.keys(got.inline_originals)).toHaveLength(3)
+    expect(got.contract.inline_fonts).toEqual(fonts)
+    expect((await liveData()).inline_fonts).toBeUndefined()
+  })
+
+  await test.step('Decision A: the link-preview picture = the first declared photo, by its original url', async () => {
+    const html = await (await viaHost(page, site(slug))).text()
+    const head = html.slice(0, html.indexOf('<body'))
+    const home = /<link rel="canonical" href="([^"]+)">/.exec(head)![1]!
+    // spa.logo_on_light (declared first) is a logo: skipped; the welcome still is inlined, so its original url.
+    const still = `${new URL(home).origin}${DESIGNS}/4d56333a0e00bb38.webp`
+    expect(head).toContain(`<meta property="og:image" content="${still}">`)
+    expect(head).toContain('<meta name="twitter:card" content="summary_large_image">')
+    expect(head).toContain(`<meta name="twitter:image" content="${still}">`)
+    expect(head).not.toMatch(/<meta [^>]*content="data:/)
   })
 
   await test.step('a new logo shows on the next load (no stale cache)', async () => {
@@ -1003,5 +1125,43 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     // (The design travels in the page's RSC payload, maybe split across chunks: a short prefix is enough.)
     expect(text).toContain(`data:image/webp;base64,${welcome.slice(0, 120)}`)
     expect(text).toContain('inline_originals')
+    expect(text).not.toContain('data:font/woff2')
+    // The Arabic share link: the Arabic fonts too.
+    const ar = await viaHost(page, `${app}/website/preview?token=${encodeURIComponent(token)}&lang=ar`)
+    expect(ar.status()).toBe(200)
+    const arText = await ar.text()
+    expect(arText).toContain((await font('16734a5adb27b0f3.woff2')).slice(0, 120))
+    expect(arText).not.toContain((await font('3427efdf7896718d.woff2')).slice(0, 120))
+    expect(arText).not.toContain((await font('6010e7fd0dce5d52.woff2')).slice(0, 120))
+  })
+
+  await test.step('a design that declares only contract.inline_fonts (no contract.inline) still gets them', async () => {
+    const { inline: _pictures, ...fontsOnly } = data.contract
+    await upload(
+      page,
+      'CRM Fonts Only',
+      fixture.replace(
+        literal,
+        `<script>window.CRM_DATA = ${JSON.stringify({ ...data, contract: { ...fontsOnly, inline_fonts: { ar: [fonts.ar[0]] } } })};</script>`,
+      ),
+    )
+    // A live site switches template through Apply → Switch (a draft), then publishes.
+    await page.goto(studioUrl(slug))
+    await page
+      .getByRole('article', { name: 'CRM Fonts Only' })
+      .getByRole('button', { name: 'Apply CRM Fonts Only' })
+      .click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Switch to CRM Fonts Only' }).click()
+    await expect(page.getByTestId('current-template')).toHaveText('CRM Fonts Only', { timeout: 30_000 })
+    await page.getByRole('button', { name: 'Publish site' }).click()
+    await page.getByRole('button', { name: 'Publish now' }).click()
+    await expect(page.getByText(/^Published \d+ pages?/)).toBeVisible({ timeout: 30_000 })
+    await expect
+      .poll(async () => (await liveData('?lang=ar')).inline_fonts?.[`${DESIGNS}/16734a5adb27b0f3.woff2`])
+      .toBe(await font('16734a5adb27b0f3.woff2'))
+    const got = await liveData('?lang=ar')
+    expect(got.contract.inline).toBeUndefined()
+    expect(got.inline_originals).toBeUndefined()
+    expect((await liveData()).inline_fonts).toBeUndefined()
   })
 })

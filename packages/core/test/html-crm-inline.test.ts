@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { overlayHtmlContent } from '../src/html-content'
+import { htmlContentSlots, overlayHtmlContent } from '../src/html-content'
 import {
   buildCrmContract,
   crmJsonMemo,
@@ -10,16 +10,24 @@ import {
 } from '../src/html-crm'
 import {
   applyCrmInline,
+  applyCrmInlineFonts,
   CRM_INLINE_LIMITS,
+  type CrmInlineFontSource,
   type CrmInlineSource,
   createCrmInlineLoader,
+  crmInlineFontSource,
+  crmInlineFontsKey,
+  crmInlineFontUrls,
   crmInlineKey,
   crmInlinePaths,
   crmInlineSource,
   crmValueAt,
+  isWoff2,
   planCrmInline,
+  planCrmInlineFonts,
   rasterDataUri,
   sniffRasterType,
+  woff2DataUri,
 } from '../src/html-crm-inline'
 
 // biome-ignore lint/suspicious/noExplicitAny: the tests read the merged JSON freely
@@ -432,5 +440,197 @@ describe('a contract design with contract.inline, rendered', () => {
     })
     const datas = [...out.matchAll(/data:image\//g)]
     expect(datas).toHaveLength(3)
+  })
+})
+
+describe('contract.inline_fonts (Decision B, owner 2026-10-14)', () => {
+  const woff2 = (size: number) => {
+    const b = new Uint8Array(Math.max(size, 48))
+    b.set(
+      [...'wOF2'].map((c) => c.charCodeAt(0)),
+      0,
+    )
+    return b
+  }
+  const AR = [
+    '/designs/be-relax/16734a5adb27b0f3.woff2',
+    'https://spamanagement.co/designs/be-relax/3427efdf7896718d.woff2',
+    'https://be-relax.spamanagement.co/designs/be-relax/6010e7fd0dce5d52.woff2',
+  ]
+  const data = (inline_fonts: unknown = { ar: AR }) => ({
+    contract: { version: 2, locales: ['en', 'ar'], inline_fonts },
+    spa: { name: 'Your Spa' },
+  })
+  const fontLoader = (sizes: Record<string, number>) =>
+    vi.fn(async (src: CrmInlineFontSource) =>
+      src.name in sizes ? woff2DataUri(woff2(sizes[src.name]!)) : null,
+    )
+
+  it("reads only the render locale's list: distinct strings, at most 16, in order", () => {
+    expect(crmInlineFontUrls(data(), 'ar')).toEqual(AR)
+    expect(crmInlineFontUrls(data(), 'en')).toEqual([])
+    expect(crmInlineFontUrls(data({ en: [AR[0]] }), 'ar')).toEqual([])
+    expect(
+      crmInlineFontUrls(data({ ar: [AR[0], 7, null, AR[0], `/${'x'.repeat(2000)}`, AR[1]] }), 'ar'),
+    ).toEqual([AR[0], AR[1]])
+    const many = Array.from({ length: 20 }, (_, i) => `/designs/be-relax/f${i}.woff2`)
+    expect(crmInlineFontUrls(data({ ar: many }), 'ar')).toEqual(many.slice(0, 16))
+    for (const bad of [null, 'x', ['/a.woff2'], { ar: '/a.woff2' }, { ar: { 0: '/a.woff2' } }])
+      expect(crmInlineFontUrls(data(bad), 'ar')).toEqual([])
+    expect(crmInlineFontUrls({ contract: { version: 2 } }, 'ar')).toEqual([])
+    // Only the contract declares fonts (a top-level key is the reserved output, never a declaration).
+    expect(crmInlineFontUrls({ inline_fonts: { ar: AR } }, 'ar')).toEqual([])
+    expect(crmInlineFontUrls(null, 'ar')).toEqual([])
+    // An own key only (prototype names are never locales).
+    expect(crmInlineFontUrls(data({}), 'constructor')).toEqual([])
+  })
+
+  it('names only static design woff2 files on our hosts (the same rules as contract.inline)', () => {
+    expect(crmInlineFontSource(AR[0], ourHost)).toEqual({
+      kind: 'design',
+      design: 'be-relax',
+      name: '16734a5adb27b0f3.woff2',
+    })
+    expect(crmInlineFontSource(AR[1], ourHost)).toMatchObject({ name: '3427efdf7896718d.woff2' })
+    expect(crmInlineFontSource(AR[2], ourHost)).toMatchObject({ name: '6010e7fd0dce5d52.woff2' })
+    for (const url of [
+      'https://evil.example/designs/be-relax/16734a5adb27b0f3.woff2',
+      'https://spamanagement.co.evil.example/designs/be-relax/a.woff2',
+      '//spamanagement.co/designs/be-relax/a.woff2',
+      'https://user@spamanagement.co/designs/be-relax/a.woff2',
+      '/designs/be-relax/a.woff2?v=2',
+      '/designs/be-relax/a.woff2#x',
+      '/designs/be-relax/a.woff',
+      '/designs/be-relax/a.ttf',
+      '/designs/be-relax/a.webp',
+      '/designs/be-relax/../a.woff2',
+      '/designs/be-relax/%2e%2e.woff2',
+      '/designs/Be-Relax/a.woff2',
+      '/files/6f9c2b1e-1a2b-4c3d-8e4f-0123456789ab/a.woff2',
+      'https://fonts.gstatic.com/s/notonaskharabic/v1/a.woff2',
+      'data:font/woff2;base64,d09GMg==',
+      42,
+      null,
+    ])
+      expect(crmInlineFontSource(url, ourHost)).toBeNull()
+    // A font url never reads as a picture.
+    expect(crmInlineSource(AR[0], ourHost)).toBeNull()
+  })
+
+  it('sniffs the WOFF2 signature: nothing else becomes a font', () => {
+    expect(isWoff2(woff2(100))).toBe(true)
+    expect(woff2DataUri(woff2(100))?.uri).toMatch(/^data:font\/woff2;base64,d09GMg/)
+    expect(woff2DataUri(woff2(100))?.size).toBe(100)
+    const woff1 = woff2(100)
+    woff1.set([...'wOFF'].map((c) => c.charCodeAt(0)))
+    for (const b of [
+      woff1,
+      webp(1000),
+      new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>'.padEnd(64)),
+      new Uint8Array([0x77, 0x4f, 0x46, 0x32]),
+      new Uint8Array(100),
+    ]) {
+      expect(isWoff2(b)).toBe(false)
+      expect(woff2DataUri(b)).toBeNull()
+    }
+  })
+
+  it("plans the locale's fonts within the caps (each ≤ 150 KB, all ≤ 400 KB), keyed exactly as declared", async () => {
+    const load = fontLoader({
+      '16734a5adb27b0f3.woff2': 150 * 1024,
+      '3427efdf7896718d.woff2': 150 * 1024,
+      '6010e7fd0dce5d52.woff2': 120 * 1024,
+    })
+    const fonts = (await planCrmInlineFonts(data(), 'ar', { ourHost, load }))!
+    // 150 + 150 + 120 > 400: the third is skipped (the total counts per declared url, in order).
+    expect(Object.keys(fonts)).toEqual([AR[0], AR[1]])
+    expect(fonts[AR[0]!]).toMatch(/^data:font\/woff2;base64,/)
+    expect(await planCrmInlineFonts(data(), 'en', { ourHost, load })).toBeNull()
+    const big = fontLoader({ '16734a5adb27b0f3.woff2': 150 * 1024 + 1, '3427efdf7896718d.woff2': 1000 })
+    expect(Object.keys((await planCrmInlineFonts(data(), 'ar', { ourHost, load: big }))!)).toEqual([AR[1]])
+    // Unknown hosts and other file types are never read at all.
+    const read = fontLoader({ 'a.woff2': 1000 })
+    const odd = data({
+      ar: ['https://evil.example/designs/x/a.woff2', '/designs/x/a.webp', '/designs/x/a.woff2'],
+    })
+    expect(await planCrmInlineFonts(odd, 'ar', { ourHost, load: read })).toEqual({
+      '/designs/x/a.woff2': expect.stringMatching(/^data:font\/woff2;base64,/),
+    })
+    expect(read).toHaveBeenCalledTimes(1)
+    // A loader answering with anything but a woff2 data URI never makes it into the plan.
+    const wrong = vi.fn(async () => rasterDataUri(webp(1000)))
+    expect(await planCrmInlineFonts(data(), 'ar', { ourHost, load: wrong })).toBeNull()
+    const failing = vi.fn(async () => {
+      throw new Error('disk')
+    })
+    expect(await planCrmInlineFonts(data(), 'ar', { ourHost, load: failing })).toBeNull()
+  })
+
+  it('never waits past its deadline: a late font stays a link this render', async () => {
+    const load = vi.fn((src: CrmInlineFontSource) =>
+      src.name.startsWith('1673')
+        ? new Promise<{ uri: string; size: number } | null>(() => {})
+        : Promise.resolve(woff2DataUri(woff2(1000))),
+    )
+    const t0 = Date.now()
+    const fonts = (await planCrmInlineFonts(data(), 'ar', { ourHost, load, deadlineMs: 30 }))!
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(Object.keys(fonts)).toEqual([AR[1], AR[2]])
+  })
+
+  it('sets the reserved inline_fonts key last (copy-on-write), never a content slot or overlay', () => {
+    const d: Record<string, unknown> = { ...data(), inline_fonts: { old: 'x' }, tail: 1 }
+    const uri = woff2DataUri(woff2(100))!.uri
+    const out: Json = applyCrmInlineFonts(d, { [AR[0]!]: uri, [AR[1]!]: 'data:image/webp;base64,AAAA' })
+    expect(Object.keys(out).at(-1)).toBe('inline_fonts')
+    expect(out.inline_fonts).toEqual({ [AR[0]!]: uri })
+    expect(d.inline_fonts).toEqual({ old: 'x' })
+    expect(applyCrmInlineFonts(d, null)).toBe(d)
+    expect(applyCrmInlineFonts(d, {})).toBe(d)
+    expect(applyCrmInlineFonts(d, { [AR[0]!]: 'javascript:x' })).toBe(d)
+    expect(crmInlineFontsKey(null)).toBe('')
+    expect(crmInlineFontsKey({ [AR[0]!]: uri })).toBe(`${AR[0]}#${uri.length}`)
+    // Reserved: never listed in Website content, never overlaid (console, connector).
+    const withFonts = { ...data(), inline_fonts: { [AR[0]!]: uri }, title: 'Hi' }
+    expect(htmlContentSlots(withFonts).some((s) => s.path.startsWith('inline_fonts'))).toBe(false)
+    const content = { v: 1, values: [{ path: 'inline_fonts', value: { t: { en: 'x' } } }] }
+    expect(overlayHtmlContent(withFonts, content as Json, { locale: 'en' })).toBe(withFonts)
+  })
+
+  it('the loader reads fonts once, woff2 only, ≤ 150 KB, in the same size-bounded cache as the pictures', async () => {
+    const readDesign = vi.fn(async (_d: string, name: string, _max: number) =>
+      name === 'big.woff2'
+        ? woff2(CRM_INLINE_LIMITS.fontBytes + 1)
+        : name === 'fake.woff2'
+          ? webp(1000)
+          : woff2(100_000),
+    )
+    const l = createCrmInlineLoader({ readFiles: vi.fn(async () => new Map()), readDesign })
+    const src = { kind: 'design', design: 'be-relax', name: 'a.woff2' } as const
+    const [a, b] = await Promise.all([l.loadFont(src), l.loadFont(src)])
+    expect(a?.uri).toMatch(/^data:font\/woff2;base64,/)
+    expect(b).toBe(a)
+    expect(await l.loadFont(src)).toBe(a)
+    expect(readDesign).toHaveBeenCalledTimes(1)
+    expect(readDesign.mock.calls[0]).toEqual(['be-relax', 'a.woff2', CRM_INLINE_LIMITS.fontBytes])
+    expect(l.size()).toBe(a!.uri.length)
+    expect(await l.loadFont({ ...src, name: 'big.woff2' })).toBeNull()
+    expect(await l.loadFont({ ...src, name: 'fake.woff2' })).toBeNull()
+    // The picture loader never answers from a font's cache entry (and never takes a font as a picture).
+    expect(await l.load('spa-a', src)).toBeNull()
+  })
+
+  it('a rendered design gets inline_fonts in CRM_DATA only; every other byte stays as built', () => {
+    const d = data()
+    const html = `<!doctype html><html><head><style>@font-face{font-family:A;src:url(${AR[0]}) format("woff2")}</style><script>window.CRM_DATA = ${JSON.stringify(d)};</script></head><body></body></html>`
+    const found = htmlCrmContractOf(html)!
+    const uri = woff2DataUri(woff2(2000))!.uri
+    const json = crmScriptJson(applyCrmInlineFonts(found.literal!.data, { [AR[0]!]: uri }))
+    const out = spliceCrmData(html, found, json, { inject: false })
+    const literal = htmlCrmContractOf(out)!.literal!
+    expect(out.slice(0, found.literal!.start)).toBe(html.slice(0, found.literal!.start))
+    expect(out.slice(literal.end)).toBe(html.slice(found.literal!.end))
+    expect((literal.data as Json).inline_fonts).toEqual({ [AR[0]!]: uri })
+    expect((literal.data as Json).contract).toEqual(d.contract)
   })
 })

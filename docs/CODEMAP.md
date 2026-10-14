@@ -588,6 +588,28 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     allow-same-origin; no COOP; Permissions-Policy without the motion sensors). Body = `htmlDesignDocument(…, { top:
     true })` + JSON-LD, canonical / `<title>` only if the design has none, `t.js` (`text/plain` beacons from the opaque
     origin); `x-robots-tag` when not indexable. Not an exact design any more → 307 to `?__page=1` (normal page, no lookup).
+    QA M11/M2 (Decision A, owner-approved 2026-10-14): + core `html-design-head.ts` `htmlDesignHeadTags`
+    (tests: core/test/html-design-head.test.ts) = what block sites get from `publicSiteMetadata`, read off the
+    design's head as a parser sees it (up to the real `</head>` / `<body>`, else the first body-only tag; comments and
+    script / style / template / noscript / title bodies skipped; titles = its `<title>`, descriptions = its meta
+    description, else the page's): og:title/description/url (canonical)/type=website/locale (en_AE|ar_AE)/site_name/
+    image, twitter:card/title/description/image, `rel=icon` + `rel=apple-touch-icon` (spa logo), hreflang en/ar/
+    x-default (`hreflang()`, only with Arabic); each left out when the design has it (og/twitter by property or name +
+    og:image:url / twitter:image:src aliases, any icon / apple-touch-icon rel token, any hreflang link = none of ours).
+    The design's own share tags win: twitter:title/description/image only where it has no og:* counterpart (X falls
+    back to og:*), an added og:* reuses its twitter:* value, twitter:card follows its own picture (large unless SVG /
+    .ico / data:).
+    Preview picture = a `contract.inline` design's first declared CRM_DATA photo (core `crmSharePicture` on
+    web `crmInlineData` = the render's merged data, the same the inline plan reads: logo / icon paths skipped, an
+    inlined value by its `inline_originals` url, SVG / .ico / data: skipped; `absoluteImage` on `seo.origin`, the
+    canonical address; large card) → `heroImageOf` (if a photo) → the design's first photo in document order as shown (core
+    `htmlDesignPictures` per design key: `<img>` + backgrounds interleaved, logo / icon `<img>`s marked by width/height
+    < 200 or "logo"/"icon" in src/class/id/alt; `htmlDesignPictureSrcs` applies replacements and drops marks, SVG,
+    .ico, data:; https or site-relative only) → logo (`summary` card).
+    `<html lang>` is not touched (an attribute of the design's own tag, read by its CSS; designs set it themselves).
+    `app/favicon.ico` + `app/apple-touch-icon.png` routes (`server/site-icon.ts`; the proxy never rewrites them): a spa
+    host (subdomain / custom domain; block sites too, which had no icon either) → 302 `/files/{logo}` (`pwaTenant`
+    lookup, cached 30 s), platform hosts / no logo → 404.
   - **Frames** (editor, Studio/CRM/template previews, legacy designs, fallback): `HtmlDesignFrame` (`<iframe
     src=/api/html-design/frame sandbox=HTML_DESIGN_SANDBOX allow="autoplay; fullscreen; clipboard-write; web-share;
     picture-in-picture; encrypted-media; screen-wake-lock; xr-spatial-tracking; accelerometer; gyroscope; magnetometer
@@ -671,6 +693,16 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     ≤ 32 MB; hosts: `platformRoots()` + the spa's own via `resolveSiteTenant`; `public/designs` read from disk, never
     fetched). `designWithCrm(…, {inline})` applies it last, output key `…|in:{hash(plan)}`; `crmScriptJson(…,
     {transient})` keeps those strings out of the design's memo. Studio editor + console previews: never.
+    **`contract.inline_fonts` (Decision B, owner 2026-10-14; contract doc §11):** `{locale: [font url]}` → the reserved
+    root `inline_fonts` {url as declared: `data:font/woff2;base64,…`} on that locale's responses only. Core
+    `crmInlineFontUrls(data, locale)` (≤ 16, own keys only), `crmInlineFontSource` (`/designs/{d}/{name}.woff2` only,
+    same `platformPath` host rules as pictures), `isWoff2` (`wOF2` signature), `planCrmInlineFonts` (≤ 150 KB each,
+    ≤ 400 KB a page: a separate budget), `applyCrmInlineFonts` (last key, replaces), `crmInlineFontsKey`, loader
+    `loadFont` (same LRU + 32 MB, key `w:{design}/{name}`, shared by every spa); `inline_fonts` in html-content.ts
+    `RESERVED`. Web `crmInlineData` (gate: `contract.inline` paths or this locale's fonts; pre-inline data, also read by
+    `crmSharePicture`) → `crmInlinePlan(tenant, data, locale)` → `{inline, fonts}` (both plans in parallel: one 300 ms
+    deadline, one `hostCheck`),
+    `pageCrmInline` → `SiteMeta.crmFonts`; `designWithCrm(…, {fonts})` output key `…|fo:{hash}`.
   - **Website content (R28, `docs/design/r28-dynamic-html-designs.md`):** per-spa values over a contract design's own
     `window.CRM_DATA` (story scenes, experience, booking label / picture, message templates; never operational keys).
     Core `html-content.ts`: `htmlContentSlots(data)` (every editable leaf: path `journey[welcome].title` — items by

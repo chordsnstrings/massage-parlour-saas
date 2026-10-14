@@ -1349,6 +1349,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Process-wide picture cache ≤ 32 MB; a new CRM logo shows on the next load. Design side: BE RELAX v2.5 declares the
   dark logo + welcome still (the light logo is never on the first screen), points the welcome default at the 1600w copy (58 KB) and inlines its Latin fonts.
   Contract doc §10; CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test).
+- **Decision B (owner 2026-10-14 ~11:05 Dubai: "put the Arabic fonts inside the Arabic page, so its heading doesn't
+  flicker on reload. Yes") — `contract.inline_fonts`:** BE RELAX's four Arabic faces (~186 KB woff2 under
+  `/designs/be-relax/`) downloaded on every `/ar` reload of the sandboxed page (heading font swap 0.1–0.5 s after the
+  first frame). A contract design may declare `contract.inline_fonts: {"ar": [font url, …]}` (urls exactly as its own
+  `@font-face` src; static `/designs/{d}/{name}.woff2`, relative or absolute on our hosts); on the live page (+ its
+  frames) and share links, only when the response's locale is a key, each is read from `public/designs` on disk (never
+  fetched; `wOF2` sniffed), ≤ 150 KB each, ≤ 400 KB a page (separate from the 240 KB picture budget), into the
+  reserved `CRM_DATA.inline_fonts` {url: data URI}. Same 300 ms deadline (run with the pictures), LRU, miss/error
+  memory and output-key rules as contract.inline; English never carries them; designs without the key unchanged.
+  R24 kept: only window.CRM_DATA's value changes (owner-approved extension of the allowed invisible changes). Design
+  side: BE RELAX v2.6 declares the four faces for `ar` and uses the data URIs before its urls. Contract doc §11;
+  CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test, `?lang=ar` + Arabic share link).
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,
      bare/`www.`, `{slug}.`) 308s to the same surface, path + query on spamanagement.co (spa → own domain when
@@ -1395,6 +1407,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      design file's own client-side check is fixed in the design (v2.6).
   Tests: core seo + whatsapp, services sales (publicPrice) + site-crm-feed (designEnquirySchema), ai site-edit
   (loadSiteFacts).
+- **Decision A (owner 2026-10-14):** "link preview picture and summary when the site is shared, the browser tab icon,
+  and language tags for Google … Yes" (QA M11 / M2) — added to the R24 invisible changes. An exact HTML design's live
+  page (`/site-html`) gets, before `</head>`, each tag the design lacks: og:title / description / url (canonical) /
+  type / locale (`en_AE` / `ar_AE`) / site_name / image, the twitter card, `rel=icon` + `rel=apple-touch-icon` (spa
+  logo) and hreflang en / ar / x-default (sites with Arabic); a design's own tag is never doubled, `<html lang>` never
+  touched (core `htmlDesignHeadTags`). Preview picture: a `contract.inline` design's first declared CRM_DATA photo
+  (core `crmSharePicture`: logo / icon paths skipped, an inlined one by its `inline_originals` url, never data:;
+  absolute on the spa's canonical address; `summary_large_image`) → the page hero → the design's first photo in
+  markup → the logo (`summary`). `/favicon.ico` + `/apple-touch-icon.png` on a spa host → 302 to its logo (block
+  sites too). Tests: core html-design-head; e2e html-crm (M11 step + contract.inline step).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).
