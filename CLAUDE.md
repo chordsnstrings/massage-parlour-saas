@@ -143,8 +143,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
-- Deploys: the droplet's `spa-update` timer pulls the deploy branch **`claude/intelligent-heisenberg-g9e81o`** (also the
-  GitHub default; every push there reaches production) every 2 min and rebuilds; check
+- Deploys: the droplet's `spa-update` timer deploys **`deploy/green`** every 2 min and rebuilds: CI's `promote` job moves
+  it (forward only) to each commit of the deploy branch **`claude/intelligent-heisenberg-g9e81o`** (also the GitHub
+  default) whose checks passed (G7), so every green push there reaches production; `/api/health` shows the release; check
   `https://<host>/_status/deploy.json` (basic auth `ops`). Secrets without SSH: commit `deploy/droplet/secrets.env.enc`
   (see deploy/droplet/README.md). Public deploy settings (domain, routing, ACME email): `deploy/droplet/site.env`
   (applied over the overlay, CI-validated by test-update.sh). A changed update.sh runs from the next deploy on.
