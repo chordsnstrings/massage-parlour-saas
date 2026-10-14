@@ -302,6 +302,21 @@ export function listHtmlDesignImages(html: string): HtmlDesignImage[] {
   ].slice(0, MAX_HTML_IMAGES)
 }
 
+/**
+ * What each listed image shows with the adjustments (the replacement where the id + src guard holds, as in the
+ * render), in list order: a link preview takes the first usable one (M11).
+ */
+export function htmlDesignPictureSrcs(
+  images: Pick<HtmlDesignImage, 'id' | 'src'>[],
+  adjust: HtmlImageAdjust[] = [],
+): string[] {
+  const byId = new Map<string, HtmlImageAdjust[]>()
+  for (const a of adjust) if (HTML_IMAGE_ID.test(a.id)) byId.set(a.id, [...(byId.get(a.id) ?? []), a])
+  return images.map(
+    (img) => htmlImageUrl(byId.get(img.id)?.findLast((a) => a.src === srcKey(img.src))?.replace) ?? img.src,
+  )
+}
+
 function applyEdits(html: string, edits: Edit[]) {
   let out = ''
   let pos = 0
@@ -1801,6 +1816,8 @@ function decodeText(s: string): string | null {
 }
 /** A value's text for labels and checks (an unreadable reference kept as written). */
 const textOf = (s: string) => decodeText(s) ?? s
+/** Markup text or an attribute value as a visitor reads it (an unreadable reference kept as written). */
+export const htmlTextOf = textOf
 /** A `javascript:` URL runs its percent-decoded text, after the URL parser dropped tabs and newlines. */
 const urlScript = (s: string) =>
   s
