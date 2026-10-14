@@ -22,7 +22,12 @@ export const PERMISSION_GROUPS = {
   },
   pos: {
     label: 'Point of sale',
-    actions: { use: 'Take payments', refund: 'Refunds and voids', close: 'Daily close' },
+    actions: {
+      use: 'Take payments',
+      refund: 'Refunds and voids',
+      close: 'Daily close',
+      correct: 'Correct closed days',
+    },
   },
   services: { label: 'Services & rooms', actions: { manage: 'Manage services, rooms and resources' } },
   staff: { label: 'Staff', actions: { view: 'View staff', manage: 'Manage staff, shifts and pay' } },

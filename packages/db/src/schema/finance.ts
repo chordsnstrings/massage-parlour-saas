@@ -125,10 +125,16 @@ export const expenses = pgTable(
     paidVia: expensePaidVia('paid_via').notNull(),
     receiptUrl: text('receipt_url'),
     ocr: jsonb('ocr'),
+    /** R32: paid in cash from the reception drawer on Daily close (counted in that day's expected cash). */
+    fromDrawer: boolean('from_drawer').notNull().default(false),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
   },
-  (t) => [index('expenses_date').on(t.tenantId, t.expenseDate), ...tenantPolicies()],
+  (t) => [
+    index('expenses_date').on(t.tenantId, t.expenseDate),
+    index('expenses_drawer_day').on(t.branchId, t.expenseDate).where(sql`${t.fromDrawer}`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const packageDefinitions = pgTable(

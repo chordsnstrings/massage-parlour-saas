@@ -221,6 +221,9 @@ export const dayCloses = pgTable(
     notes: text('notes'),
     closedBy: text('closed_by').references(() => user.id),
     closedAt: createdAt(),
+    /** R32: last change to this closed day by an owner/manager (`pos.correct`); null = as closed. */
+    amendedAt: timestamp('amended_at', { withTimezone: true }),
+    amendedBy: text('amended_by').references(() => user.id),
   },
   (t) => [unique('day_close_unique').on(t.branchId, t.businessDate), ...tenantPolicies()],
 )
