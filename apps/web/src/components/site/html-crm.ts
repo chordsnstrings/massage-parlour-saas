@@ -3,11 +3,14 @@
 // htmlDesignDocument. A design without the contract comes back as the very same string.
 import {
   applyCrmInline,
+  applyCrmInlineFonts,
   type CrmContract,
   type CrmInline,
+  type CrmInlineFonts,
   type CrmJsonMemo,
   type CrmLocale,
   contractLocaleData,
+  crmInlineFontsKey,
   crmInlineKey,
   crmJsonMemo,
   crmScriptJson,
@@ -88,7 +91,8 @@ export function designContract(html: string, key: string | null): Parsed | null 
  * (R28 P5): `locale` written into the data (the frame's script sets `lang`), and on `ar` the design's reviewed Arabic
  * defaults (`contract.l10n.ar`) applied before the content. Only `content.values` count here (and in the output key):
  * page texts and pictures (R28 P4) are applied by htmlDesignDocument afterwards, so texts-only content keeps the
- * no-content path and key. `inline` (contract.inline): its pictures replace their urls last (part of the key).
+ * no-content path and key. `inline` (contract.inline): its pictures replace their urls last; `fonts`
+ * (contract.inline_fonts) set the reserved `inline_fonts` key after them (both part of the key).
  */
 export function designWithCrm(
   html: string,
@@ -99,13 +103,22 @@ export function designWithCrm(
   const p = prepare(html, key, crm, opts)
   if (!p) return html
   const inline = crmInlineKey(opts.inline)
-  const outKey = p.outKey ? `${p.outKey}${inline ? `|in:${cyrb53(inline)}` : ''}` : null
+  const fonts = crmInlineFontsKey(opts.fonts)
+  const outKey = p.outKey
+    ? `${p.outKey}${inline ? `|in:${cyrb53(inline)}` : ''}${fonts ? `|fo:${cyrb53(fonts)}` : ''}`
+    : null
   const hit = outKey ? outputs.get(outKey) : undefined
   if (hit !== undefined) return hit
   const base = merged(p, crm)
-  const data = base && opts.inline ? applyCrmInline(base, opts.inline) : base
+  const pictures = base && opts.inline ? applyCrmInline(base, opts.inline) : base
+  const data = pictures && opts.fonts ? applyCrmInlineFonts(pictures, opts.fonts) : pictures
+  // The design's serialisation memo never holds a spa's inline pictures or fonts.
+  const transient = [
+    ...Object.values(opts.inline ?? {}).map((x) => x.data),
+    ...Object.values(opts.fonts ?? {}),
+  ]
   const json = crmScriptJson(data, p.parsed.memo, {
-    transient: opts.inline ? new Set(Object.values(opts.inline).map((x) => x.data)) : undefined,
+    transient: transient.length ? new Set(transient) : undefined,
   })
   const out = spliceCrmData(html, p.found, json, opts)
   if (outKey) outputs.set(outKey, out, out.length * 2)
@@ -121,6 +134,11 @@ type CrmOpts = {
    * URIs (server/crm-inline.ts) — the live page and share links only, never the Studio editor.
    */
   inline?: CrmInline | null
+  /**
+   * contract.inline_fonts (Decision B, owner 2026-10-14): the server's plan of the locale's woff2 fonts as data: URIs
+   * (`inline_fonts`), same pages as `inline`; only when the render's locale is one of the design's keys.
+   */
+  fonts?: CrmInlineFonts | null
 }
 
 /** What a render merges (+ its output cache key), or null when `html` comes back unchanged. */

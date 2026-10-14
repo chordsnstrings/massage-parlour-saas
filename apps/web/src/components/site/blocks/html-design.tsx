@@ -74,6 +74,7 @@ export const HtmlDesign: ComponentConfig<Props> = {
       content,
       locale: meta.locale,
       inline: meta.crmInline?.[key ?? ''],
+      fonts: meta.crmFonts?.[key ?? ''],
     })
     return (
       <HtmlDesignFrame

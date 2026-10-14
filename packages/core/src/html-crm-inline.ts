@@ -6,16 +6,23 @@
 // into window.CRM_DATA as a data: URI — only the platform's own files (this spa's public /files, the static
 // /designs files), read server-side (never fetched from a URL), raster only, small ones only. The design document
 // never changes (R24); only values inside CRM_DATA do (R26), plus `inline_originals` {path: original url}.
+// Decision B (owner 2026-10-14): `contract.inline_fonts` {locale: [font url]} — the static design woff2 files one
+// locale's page needs (BE RELAX's Arabic faces), as the reserved `inline_fonts` {url: data: URI} on that locale only.
 
 /**
- * Caps (raw bytes): each picture ≤ 80 KB, all of one page's ≤ 240 KB (counted per occurrence); ≤ 16 paths. A render
- * waits ≤ 300 ms for reads (a later one stays a link for that render and fills the cache for the next load).
+ * Caps (raw bytes): each picture ≤ 80 KB, all of one page's ≤ 240 KB (counted per occurrence); ≤ 16 paths. Fonts
+ * (a separate budget): ≤ 16 urls a locale, each ≤ 150 KB, all ≤ 400 KB. A render waits ≤ 300 ms for reads, pictures
+ * and fonts together (a later one stays a link for that render and fills the cache for the next load).
  */
 export const CRM_INLINE_LIMITS = {
   paths: 16,
   pathChars: 200,
   fileBytes: 80 * 1024,
   totalBytes: 240 * 1024,
+  fonts: 16,
+  fontUrlChars: 2000,
+  fontBytes: 150 * 1024,
+  fontTotalBytes: 400 * 1024,
   deadlineMs: 300,
 } as const
 
@@ -24,6 +31,10 @@ export type CrmInline = Record<string, { url: string; data: string }>
 /** Where a picture's bytes come from (both immutable: a file id never changes content, design files are hashed). */
 export type CrmInlineSource = { kind: 'file'; id: string } | { kind: 'design'; design: string; name: string }
 export type CrmRasterType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/avif' | 'image/gif'
+/** Inline fonts of one render (`inline_fonts`): each declared font url, exactly as declared → its data: URI. */
+export type CrmInlineFonts = Record<string, string>
+/** Where a font's bytes come from: a static design file (hashed names: its content never changes). */
+export type CrmInlineFontSource = { kind: 'design'; design: string; name: string }
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -112,6 +123,24 @@ function setAt(node: unknown, segs: Seg[], i: number, value: string): unknown | 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const FILE_PATH = new RegExp(`^/files/(${UUID})(?:/[A-Za-z0-9._-]{1,120})?$`, 'i')
 const DESIGN_PATH = /^\/designs\/([a-z0-9][a-z0-9-]{0,63})\/([A-Za-z0-9_-]{1,64}\.(?:webp|png|jpe?g|avif))$/
+const FONT_PATH = /^\/designs\/([a-z0-9][a-z0-9-]{0,63})\/([A-Za-z0-9_-]{1,64}\.woff2)$/
+
+/**
+ * The path of a url on our hosts: relative, or absolute (http/https) on a host `ourHost` accepts; null = neither. No
+ * query, fragment, credentials, backslashes, spaces or percent-escapes.
+ */
+function platformPath(url: unknown, ourHost: (host: string) => boolean): string | null {
+  if (typeof url !== 'string' || url.length > 2000 || /[\s\\?#%]/.test(url)) return null
+  if (url.startsWith('/') && !url.startsWith('//')) return url
+  if (!/^https?:\/\/[^/@]+\//i.test(url)) return null
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return null
+  }
+  return u.username || u.password || !ourHost(u.host.toLowerCase()) ? null : u.pathname
+}
 
 /**
  * The platform source of a picture url, or null (left as it is): `/files/{uuid}[/{name}]` or
@@ -119,19 +148,8 @@ const DESIGN_PATH = /^\/designs\/([a-z0-9][a-z0-9-]{0,63})\/([A-Za-z0-9_-]{1,64}
  * (the platform's domains, this spa's own). No query, fragment, credentials, backslashes or spaces; never fetched.
  */
 export function crmInlineSource(url: unknown, ourHost: (host: string) => boolean): CrmInlineSource | null {
-  if (typeof url !== 'string' || url.length > 2000 || /[\s\\?#%]/.test(url)) return null
-  let path: string
-  if (url.startsWith('/') && !url.startsWith('//')) path = url
-  else if (/^https?:\/\/[^/@]+\//i.test(url)) {
-    let u: URL
-    try {
-      u = new URL(url)
-    } catch {
-      return null
-    }
-    if (u.username || u.password || !ourHost(u.host.toLowerCase())) return null
-    path = u.pathname
-  } else return null
+  const path = platformPath(url, ourHost)
+  if (path === null) return null
   const file = FILE_PATH.exec(path)
   if (file) return { kind: 'file', id: file[1]!.toLowerCase() }
   const design = DESIGN_PATH.exec(path)
@@ -160,12 +178,75 @@ export function sniffRasterType(b: Uint8Array): CrmRasterType | null {
   return null
 }
 
+/** Whether the bytes are a WOFF2 font (its 'wOF2' signature; nothing else is ever inlined as a font). */
+export const isWoff2 = (b: Uint8Array): boolean => b.length >= 48 && ascii(b, 0, 'wOF2')
+
+/** One font as a data: URI (null = not WOFF2). */
+export function woff2DataUri(bytes: Uint8Array): { uri: string; size: number } | null {
+  if (!isWoff2(bytes)) return null
+  const b64 = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
+  return { uri: `data:font/woff2;base64,${b64}`, size: bytes.byteLength }
+}
+
+/**
+ * The design data's `contract.inline_fonts[locale]`: distinct strings ≤ 2000 chars, at most 16, in order; [] = none
+ * for that locale (a locale that is not a key never gets fonts).
+ */
+export function crmInlineFontUrls(data: unknown, locale: string): string[] {
+  const map = isObj(data) && isObj(data.contract) ? data.contract.inline_fonts : undefined
+  const list = isObj(map) && Object.hasOwn(map, locale) ? map[locale] : undefined
+  if (!Array.isArray(list)) return []
+  const out: string[] = []
+  for (const u of list) {
+    if (out.length >= CRM_INLINE_LIMITS.fonts) break
+    if (typeof u === 'string' && u.length <= CRM_INLINE_LIMITS.fontUrlChars && !out.includes(u)) out.push(u)
+  }
+  return out
+}
+
+/**
+ * The static design file a font url names, or null (never read): `/designs/{design}/{name}.woff2`, relative or
+ * absolute on a host `ourHost` accepts — the same host and form rules as crmInlineSource.
+ */
+export function crmInlineFontSource(
+  url: unknown,
+  ourHost: (host: string) => boolean,
+): CrmInlineFontSource | null {
+  const path = platformPath(url, ourHost)
+  const m = path === null ? null : FONT_PATH.exec(path)
+  return m ? { kind: 'design', design: m[1]!, name: m[2]! } : null
+}
+
 /** One picture as a data: URI (null = not a raster image). */
 export function rasterDataUri(bytes: Uint8Array): { uri: string; size: number } | null {
   const type = sniffRasterType(bytes)
   if (!type) return null
   const b64 = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
   return { uri: `data:${type};base64,${b64}`, size: bytes.byteLength }
+}
+
+type Loaded = { uri: string; size: number } | null
+/** What the loads returned within `deadlineMs` (default 300); unset = not read in time, or failed (a link this render). */
+async function withinDeadline(loads: Promise<Loaded>[], deadlineMs?: number): Promise<Loaded[]> {
+  const loaded: Loaded[] = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    Promise.all(
+      loads.map((p, i) =>
+        p.then(
+          (x) => {
+            loaded[i] = x
+          },
+          () => {},
+        ),
+      ),
+    ),
+    new Promise<void>((done) => {
+      timer = setTimeout(done, deadlineMs ?? CRM_INLINE_LIMITS.deadlineMs)
+    }),
+  ])
+  clearTimeout(timer)
+  return loaded
 }
 
 /**
@@ -188,25 +269,10 @@ export async function planCrmInline(
     return src ? [{ path, url: url as string, src }] : []
   })
   if (!wanted.length) return null
-  // Unset = not read in time (or failed): stays a link this render.
-  const loaded: ({ uri: string; size: number } | null)[] = []
-  let timer: ReturnType<typeof setTimeout> | undefined
-  await Promise.race([
-    Promise.all(
-      wanted.map((w, i) =>
-        opts.load(w.src).then(
-          (pic) => {
-            loaded[i] = pic
-          },
-          () => {},
-        ),
-      ),
-    ),
-    new Promise<void>((done) => {
-      timer = setTimeout(done, opts.deadlineMs ?? CRM_INLINE_LIMITS.deadlineMs)
-    }),
-  ])
-  clearTimeout(timer)
+  const loaded = await withinDeadline(
+    wanted.map((w) => opts.load(w.src)),
+    opts.deadlineMs,
+  )
   const plan: CrmInline = {}
   let total = 0
   wanted.forEach((w, i) => {
@@ -253,7 +319,72 @@ export const crmInlineKey = (plan: CrmInline | null | undefined): string =>
     : ''
 
 /**
- * A process-wide, size-bounded (LRU) loader of inline pictures. File ids are scoped to the spa that asks
+ * Decision B (owner 2026-10-14): the inline fonts of a `locale` render. Each url `contract.inline_fonts[locale]`
+ * declares (order kept) that names a static design woff2 file on our hosts and that `load` returns within
+ * `deadlineMs` (default 300, the pictures' deadline: run both plans together), each ≤ 150 KB while the running total
+ * (raw bytes, per declared url) stays ≤ 400 KB. Keys stay exactly as declared (the design's own @font-face src).
+ * null = nothing to inline (a locale that is not a key, nothing declared, or nothing read in time).
+ */
+export async function planCrmInlineFonts(
+  data: unknown,
+  locale: string,
+  opts: {
+    ourHost: (host: string) => boolean
+    load: (src: CrmInlineFontSource) => Promise<{ uri: string; size: number } | null>
+    deadlineMs?: number
+  },
+): Promise<CrmInlineFonts | null> {
+  const wanted = crmInlineFontUrls(data, locale).flatMap((url) => {
+    const src = crmInlineFontSource(url, opts.ourHost)
+    return src ? [{ url, src }] : []
+  })
+  if (!wanted.length) return null
+  const loaded = await withinDeadline(
+    wanted.map((w) => opts.load(w.src)),
+    opts.deadlineMs,
+  )
+  const fonts: CrmInlineFonts = {}
+  let total = 0
+  wanted.forEach((w, i) => {
+    const font = loaded[i]
+    if (
+      !font?.uri.startsWith(WOFF2_URI) ||
+      font.size > CRM_INLINE_LIMITS.fontBytes ||
+      total + font.size > CRM_INLINE_LIMITS.fontTotalBytes
+    )
+      return
+    total += font.size
+    fonts[w.url] = font.uri
+  })
+  return Object.keys(fonts).length ? fonts : null
+}
+
+const WOFF2_URI = 'data:font/woff2;base64,'
+
+/**
+ * The data with the reserved `inline_fonts` {url: data: URI} set from the plan's woff2 data URIs (last key; a value
+ * the data had there is replaced). Nothing to apply → the very same object.
+ */
+export function applyCrmInlineFonts(
+  data: Record<string, unknown>,
+  fonts: CrmInlineFonts | null | undefined,
+): Record<string, unknown> {
+  const ok = Object.entries(fonts ?? {}).filter(([, uri]) => uri.startsWith(WOFF2_URI))
+  if (!ok.length) return data
+  const { inline_fonts: _, ...rest } = data
+  return { ...rest, inline_fonts: Object.fromEntries(ok) }
+}
+
+/** A stable key of a font plan for output caches (design font files are hashed: the bytes behind a url never change). */
+export const crmInlineFontsKey = (fonts: CrmInlineFonts | null | undefined): string =>
+  fonts
+    ? Object.entries(fonts)
+        .map(([url, uri]) => `${url}#${uri.length}`)
+        .join('\n')
+    : ''
+
+/**
+ * A process-wide, size-bounded (LRU) loader of inline pictures, and fonts (`loadFont`: the same cache and cap). File ids are scoped to the spa that asks
  * (`scope`), so one spa's cached bytes never answer another's; design files are shared. A miss (not found, not
  * public, not raster, too big) is remembered for `missTtlMs` only, a read error for `errorTtlMs`; concurrent loads
  * of one key share one read, and the file loads of one tick for one spa are read together (one `readFiles` call).
@@ -268,7 +399,7 @@ export function createCrmInlineLoader(o: {
     ids: string[],
     max: number,
   ) => Promise<Map<string, Uint8Array | null | Promise<Uint8Array | null>>>
-  /** A static design file (public/designs/{design}/{name}), at most `max` bytes. */
+  /** A static design file (public/designs/{design}/{name}: a picture or a woff2 font), at most `max` bytes. */
   readDesign: (design: string, name: string, max: number) => Promise<Uint8Array | null>
   maxBytes?: number
   missTtlMs?: number
@@ -328,8 +459,12 @@ export function createCrmInlineLoader(o: {
       }
       batch.set(id, { resolve, reject })
     })
-  const load = (scope: string, src: CrmInlineSource) => {
-    const key = src.kind === 'file' ? `f:${scope}:${src.id}` : `d:${src.design}/${src.name}`
+  const cached = (
+    key: string,
+    max: number,
+    read: () => Promise<Uint8Array | null>,
+    encode: (bytes: Uint8Array) => Entry['pic'],
+  ) => {
     const hit = map.get(key)
     if (hit && hit.until > now()) {
       map.delete(key)
@@ -338,14 +473,10 @@ export function createCrmInlineLoader(o: {
     }
     const running = flight.get(key)
     if (running) return running
-    const max = CRM_INLINE_LIMITS.fileBytes
     const p = (async () => {
       try {
-        const bytes =
-          src.kind === 'file'
-            ? await readFile(scope, src.id, max)
-            : await o.readDesign(src.design, src.name, max)
-        const pic = bytes && bytes.byteLength <= max ? rasterDataUri(bytes) : null
+        const bytes = await read()
+        const pic = bytes && bytes.byteLength <= max ? encode(bytes) : null
         put(key, pic)
         return pic
       } catch {
@@ -358,9 +489,30 @@ export function createCrmInlineLoader(o: {
     flight.set(key, p)
     return p
   }
+  const load = (scope: string, src: CrmInlineSource) => {
+    const max = CRM_INLINE_LIMITS.fileBytes
+    return src.kind === 'file'
+      ? cached(`f:${scope}:${src.id}`, max, () => readFile(scope, src.id, max), rasterDataUri)
+      : cached(
+          `d:${src.design}/${src.name}`,
+          max,
+          () => o.readDesign(src.design, src.name, max),
+          rasterDataUri,
+        )
+  }
+  /** A static design font (woff2 only, ≤ 150 KB), shared by every spa like the design pictures. */
+  const loadFont = (src: CrmInlineFontSource) => {
+    const max = CRM_INLINE_LIMITS.fontBytes
+    return cached(
+      `w:${src.design}/${src.name}`,
+      max,
+      () => o.readDesign(src.design, src.name, max),
+      woff2DataUri,
+    )
+  }
   const clear = () => {
     map.clear()
     total = 0
   }
-  return { load, size: () => total, entries: () => map.size, clear }
+  return { load, loadFont, size: () => total, entries: () => map.size, clear }
 }

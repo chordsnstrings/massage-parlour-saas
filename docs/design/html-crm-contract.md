@@ -35,10 +35,14 @@ services[]{id, name, category, note, description, durations[], price, image, ima
 staff[]{id, name, specialty, photo, photo_alt}
 locale                             'en' | 'ar' — written by the platform (v2 designs and crm-data.json only; never in the file)
 contract{version: 2, locales[], fields{}, l10n{ar{}}}   contract v2 manifest (§9); read-only for the platform
+                                   (+ `inline[]` §10, `inline_fonts{locale: [url]}` §11: the design's declarations)
 ui{…}                              v2: every interface string of the design (§9), editable per spa like any content
+inline_originals{path: url}        written by the platform (§10, live page + share links): the inlined pictures' urls
+inline_fonts{url: data URI}        written by the platform (§11, a declared locale only): the inlined woff2 fonts
 ```
 
-`contract` and `locale` are reserved roots in every version: never website content, never overlaid, never leftovers.
+`contract`, `locale`, `inline_originals` and `inline_fonts` are reserved roots in every version: never website
+content, never overlaid (console, connector), never leftovers.
 On v2, `spa.short_name` and `spa.logo_on_light` are website content too (§9); the merge rules of §3 still decide.
 
 ## 3. Field sources and precedence
@@ -102,6 +106,8 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
   values when there is content); a CRM change makes a new key.
 - **`contract.inline` (§10, owner 2026-10-13):** the first-screen pictures a design names come as `data:` URIs inside
   the JSON on the live page and share links (+ `inline_originals`); the output key adds a hash of that plan.
+- **`contract.inline_fonts` (§11, Decision B, owner 2026-10-14):** the woff2 fonts a design declares for a locale come
+  as `data:` URIs in `inline_fonts` on that locale's live page and share links only; the output key adds their hash.
 - Template apply, "Save site as template", JSON export and the connector read the **stored** design (the design's
   own defaults).
 - `{{placeholders}}` in CRM text are filled like any design text (JS-string-safe inside the script).
@@ -189,9 +195,10 @@ reload reuses nothing from the browser cache and no connection: the first screen
 - A sharper original after load (`inline_originals[path]`, else the design's own copy table) only where the browser's
   srcset would take it — Chromium 141: the first candidate dense enough wins (sizes × devicePixelRatio > the copy's
   width; no geometric mean; e.g. 1680 px+ at 1x, 1280 px at 1.25x) — swapped in only once `img.decode()` resolves.
-- Fonts only one locale needs still download on its reloads (BE RELAX's 4 Arabic faces, ~190 KB: a short font swap on
-  `/ar` reloads). Load them from the page's own host (`url(/designs/…)` first, the absolute URL as fallback; preloads
-  the same) so they share the page's one connection.
+- Fonts only one locale needs (BE RELAX's 4 Arabic faces, ~190 KB: without inlining, a 0.1–0.5 s heading font swap on
+  `/ar` reloads): declare them in `contract.inline_fonts` (§11) and use `CRM_DATA.inline_fonts[url]` before the url.
+  Keep the file urls as the fallback, from the page's own host (`url(/designs/…)` first, the absolute URL after it;
+  preloads the same), so a font not inlined that load still shares the page's one connection.
 
 ## 9. Contract v2 (R28 P5, authoring rules)
 
@@ -275,5 +282,64 @@ pictures inside the HTML.
   web `server/crm-inline.ts` (`crmInlinePlan`, `pageCrmInline`), `designWithCrm(…, {inline})`.
 - **Authoring:** point the first screen's default picture at a small copy (BE RELAX v2.5: the 1600w welcome still
   `4d56333a0e00bb38.webp`, 58 KB, instead of the 2400w 197 KB one) so it fits the cap; inline Latin fonts in the
-  design file itself (the platform never touches fonts). The full design-side checklist (render-blocking marker,
-  sync decode, sharper swap after `decode()`, one-locale fonts from the page host) is §8 "No delay on a reload".
+  design file itself (the platform inlines only the one-locale fonts §11 declares, never a design's @font-face). The
+  full design-side checklist (render-blocking marker, sync decode, sharper swap after `decode()`, one-locale fonts)
+  is §8 "No delay on a reload".
+
+## 11. `contract.inline_fonts`: one locale's fonts inside the page (Decision B, owner 2026-10-14)
+
+Owner (2026-10-14, Decision B): "put the Arabic fonts inside the Arabic page, so its heading doesn't flicker on
+reload. Yes". The sandboxed live page reuses nothing from the browser cache (§10), so BE RELAX's four Arabic faces
+(45,688 + 56,536 + 42,848 + 45,296 bytes, `/designs/be-relax/{sha16}.woff2`) download on every `/ar` reload and the
+heading swaps its font 0.1–0.5 s after the first frame. Latin fonts live in the design file itself (§8); a font only
+one locale needs would cost every other locale's page its bytes there, so the platform delivers it on that locale.
+
+- **Declare** (contract v1 or v2): `contract.inline_fonts: { "ar": ["/designs/be-relax/16734a5adb27b0f3.woff2", …] }`
+  — keys are page locales (`en` | `ar`), ≤ 16 urls a locale, each ≤ 2,000 chars, **exactly as the design's own
+  `@font-face` src names it** (the output key is that string, byte for byte). A url is a static design file
+  `/designs/{design}/{name}.woff2`, relative or absolute on a platform host / this spa's own domain (the host rules of
+  §10; no query, fragment, credentials or %-escapes). Declare one form per file (relative recommended): each declared
+  url counts against the budget, so the relative and the absolute form of one file cost it twice.
+- **What the platform does** (live page `/site-html`, the live page's frames, share links `/website/preview?token=`;
+  never the Studio editor or console previews), **only when the response's locale is one of the keys**: each declared
+  url is read from `public/designs` on disk (**never fetched from a URL**), must start with the WOFF2 signature
+  `wOF2`, ≤ 150 KB each, the running total ≤ 400 KB (raw bytes, per declared url, in declared order: one that would
+  pass the total is skipped) — a budget separate from the pictures' 240 KB. The result is the reserved key
+  `inline_fonts` (after `inline_originals`, the last key):
+
+  ```
+  window.CRM_DATA = {
+    …,
+    "contract": { …, "inline_fonts": { "ar": ["/designs/be-relax/16734a5adb27b0f3.woff2", …] } },
+    …,
+    "inline_originals": { … },            // only when contract.inline inlined pictures (§10)
+    "inline_fonts": {
+      "/designs/be-relax/16734a5adb27b0f3.woff2": "data:font/woff2;base64,d09GMgABAAAA…",
+      …
+    }
+  }
+  ```
+
+  A url missing from `inline_fonts` (not read within the deadline, a read error, over a cap, not ours, not WOFF2)
+  simply has no entry: the design's own url loads as before (the next load usually has it). Other locales' responses
+  (English for an `ar` list) never carry the key, and designs that declare nothing get exactly the §10 output.
+- **Anything else is never inlined:** other hosts, uploaded `/files`, `.woff` / `.ttf` / `.otf` / pictures, a `.woff2`
+  whose bytes are not WOFF2, files over 150 KB, reads not done within 300 ms.
+- **Reliability (as §10):** one 300 ms deadline shared with the pictures (both plans run together; a late read keeps
+  going and fills the cache for the next load); the same process-wide LRU (≤ 32 MB, pictures and fonts together; a
+  design font is one entry shared by every spa), misses remembered 60 s, read errors 30 s; the output cache key adds
+  `|fo:{hash(urls + sizes)}` (design files are content-hashed: the bytes behind a url never change).
+- **Reserved:** `inline_fonts` is a platform root like `inline_originals`: never a Website content slot, never shown in
+  the console's Website content, never overlaid or set by a connector; a value the design's own literal has there is
+  replaced whenever the platform sets the key.
+- **R24 / R26:** the design document never changes (its `@font-face` rules included); only the value of
+  `window.CRM_DATA` does. Endpoint-only designs' live page fetches `crm-data.json`, which carries no fonts (§10).
+- **Design side:** before the first paint of the locale's page, for each face use `CRM_DATA.inline_fonts[url]` when
+  present, its url otherwise — e.g. write the locale's `@font-face` rules from the script with
+  `src: url(<data URI>) format("woff2"), url(/designs/…) format("woff2"), url(https://…) format("woff2")`, or
+  `new FontFace(family, 'url(' + data + ')', descriptors)` + `document.fonts.add()` — keeping the render-blocking
+  marker of §8 after the first screen. Never on other locales: their data has no key.
+- Code: `@spa/core` html-crm-inline.ts (`crmInlineFontUrls`, `crmInlineFontSource`, `isWoff2` / `woff2DataUri`,
+  `planCrmInlineFonts`, `applyCrmInlineFonts`, `crmInlineFontsKey`, the loader's `loadFont`), html-content.ts
+  (`inline_fonts` reserved), web `server/crm-inline.ts` (`crmInlinePlan` → `{inline, fonts}`, `pageCrmInline` →
+  `SiteMeta.crmFonts`), `designWithCrm(…, {inline, fonts})`; e2e `html-crm.spec.ts` (contract.inline test).

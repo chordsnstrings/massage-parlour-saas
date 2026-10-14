@@ -884,7 +884,21 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     { id: 'big', title: 'Big', image: `${DESIGNS}/998d1a1a386836e2.webp` },
     { id: 'moroccan', title: 'Bath', image: `${DESIGNS}/c4e79f1703476507.webp` },
   ]
-  const design = fixture.replace(literal, `<script>window.CRM_DATA = ${JSON.stringify(data)};</script>`)
+  // Decision B (owner 2026-10-14): the Arabic page's woff2 fonts (BE RELAX's own files) inside CRM_DATA on `ar` only.
+  const ownFont = `${site(slug)}${DESIGNS}/90aef64fea9794f2.woff2`
+  const fonts = {
+    ar: [
+      `${DESIGNS}/16734a5adb27b0f3.woff2`,
+      ownFont,
+      // Not ours (never read) / not a woff2 file: never inlined; 3427efdf7896718d.woff2 is not declared.
+      `https://evil.example${DESIGNS}/6010e7fd0dce5d52.woff2`,
+      `${DESIGNS}/4d56333a0e00bb38.webp`,
+    ],
+  }
+  const design = fixture.replace(
+    literal,
+    `<script>window.CRM_DATA = ${JSON.stringify({ ...data, contract: { ...data.contract, inline_fonts: fonts } })};</script>`,
+  )
   const { tenantId } = await seedSpa(slug)
   const db = testDb()
   const picture = (file: string) => readFile(new URL(`../public${DESIGNS}/${file}`, import.meta.url))
@@ -945,8 +959,8 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
 
   const b64 = async (file: string) => (await picture(file)).toString('base64')
   const welcome = await b64('4d56333a0e00bb38.webp')
-  const liveData = async () => {
-    const html = await (await viaHost(page, site(slug))).text()
+  const liveData = async (query = '') => {
+    const html = await (await viaHost(page, `${site(slug)}/${query}`)).text()
     const m = html.match(LITERAL)
     expect(m).toBeTruthy()
     return JSON.parse(m![0].slice('<script>window.CRM_DATA = '.length, -';</script>'.length))
@@ -970,6 +984,23 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
       'journey[welcome].image': `${DESIGNS}/4d56333a0e00bb38.webp`,
       'journey[abs].image': own,
     })
+    // English: never the Arabic fonts.
+    expect(got.inline_fonts).toBeUndefined()
+  })
+
+  const font = async (file: string) => `data:font/woff2;base64,${await b64(file)}`
+  await test.step('contract.inline_fonts: the declared woff2 fonts on the Arabic page only, keyed as declared', async () => {
+    await expect.poll(async () => Object.keys((await liveData('?lang=ar')).inline_fonts ?? {}).length).toBe(2)
+    const got = await liveData('?lang=ar')
+    expect(got.locale).toBe('ar')
+    expect(got.inline_fonts).toEqual({
+      [`${DESIGNS}/16734a5adb27b0f3.woff2`]: await font('16734a5adb27b0f3.woff2'),
+      [ownFont]: await font('90aef64fea9794f2.woff2'),
+    })
+    // The Arabic page keeps its inline pictures; the design's own contract (the declaration) is unchanged.
+    expect(Object.keys(got.inline_originals)).toHaveLength(3)
+    expect(got.contract.inline_fonts).toEqual(fonts)
+    expect((await liveData()).inline_fonts).toBeUndefined()
   })
 
   await test.step('a new logo shows on the next load (no stale cache)', async () => {
@@ -1003,5 +1034,13 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     // (The design travels in the page's RSC payload, maybe split across chunks: a short prefix is enough.)
     expect(text).toContain(`data:image/webp;base64,${welcome.slice(0, 120)}`)
     expect(text).toContain('inline_originals')
+    expect(text).not.toContain('data:font/woff2')
+    // The Arabic share link: the Arabic fonts too.
+    const ar = await viaHost(page, `${app}/website/preview?token=${encodeURIComponent(token)}&lang=ar`)
+    expect(ar.status()).toBe(200)
+    const arText = await ar.text()
+    expect(arText).toContain((await font('16734a5adb27b0f3.woff2')).slice(0, 120))
+    expect(arText).not.toContain((await font('3427efdf7896718d.woff2')).slice(0, 120))
+    expect(arText).not.toContain((await font('6010e7fd0dce5d52.woff2')).slice(0, 120))
   })
 })

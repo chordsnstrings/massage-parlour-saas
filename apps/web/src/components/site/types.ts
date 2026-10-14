@@ -1,4 +1,4 @@
-import type { CrmContract, CrmInline, OpeningHours } from '@spa/core'
+import type { CrmContract, CrmInline, CrmInlineFonts, OpeningHours } from '@spa/core'
 import type { SiteTheme } from './theme'
 
 export type Locale = 'en' | 'ar'
@@ -102,6 +102,11 @@ export type SiteMeta = {
    * ('' = inline legacy design) — the live page and share links only (server/crm-inline.ts pageCrmInline).
    */
   crmInline?: Record<string, CrmInline>
+  /**
+   * contract.inline_fonts (Decision B, owner 2026-10-14): the server's plans of the locale's woff2 fonts as data: URIs,
+   * by designKey, same pages as `crmInline` (server/crm-inline.ts pageCrmInline).
+   */
+  crmFonts?: Record<string, CrmInlineFonts>
 }
 
 /** A published post on its own page (`{site}/blog/{slug}`). */

@@ -100,11 +100,12 @@ async function render(req: Request, head: boolean) {
   const content = block.props.content as HtmlDesignContent | undefined
   const key = designKey(htmlDesignDocOf(block.props))
   // contract.inline (owner 2026-10-13 "no delay when I reload"): the first-screen pictures it asks for as data: URIs
-  // in that JSON (this document reuses nothing from the browser cache on a reload).
+  // in that JSON (this document reuses nothing from the browser cache on a reload); contract.inline_fonts (Decision B,
+  // owner 2026-10-14): this locale's declared woff2 fonts as `inline_fonts` there too.
   const opts = { inject: false, content, locale }
-  const inline = await crmInlinePlan(tenant, block.props.html, key, crm, opts)
+  const { inline, fonts } = await crmInlinePlan(tenant, block.props.html, key, crm, opts)
   let html = htmlDesignDocument(
-    designWithCrm(block.props.html, key, crm, { ...opts, inline }),
+    designWithCrm(block.props.html, key, crm, { ...opts, inline, fonts }),
     htmlDesignValues(meta),
     false,
     htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content),

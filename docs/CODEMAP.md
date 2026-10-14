@@ -671,6 +671,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     ≤ 32 MB; hosts: `platformRoots()` + the spa's own via `resolveSiteTenant`; `public/designs` read from disk, never
     fetched). `designWithCrm(…, {inline})` applies it last, output key `…|in:{hash(plan)}`; `crmScriptJson(…,
     {transient})` keeps those strings out of the design's memo. Studio editor + console previews: never.
+    **`contract.inline_fonts` (Decision B, owner 2026-10-14; contract doc §11):** `{locale: [font url]}` → the reserved
+    root `inline_fonts` {url as declared: `data:font/woff2;base64,…`} on that locale's responses only. Core
+    `crmInlineFontUrls(data, locale)` (≤ 16, own keys only), `crmInlineFontSource` (`/designs/{d}/{name}.woff2` only,
+    same `platformPath` host rules as pictures), `isWoff2` (`wOF2` signature), `planCrmInlineFonts` (≤ 150 KB each,
+    ≤ 400 KB a page: a separate budget), `applyCrmInlineFonts` (last key, replaces), `crmInlineFontsKey`, loader
+    `loadFont` (same LRU + 32 MB, key `w:{design}/{name}`, shared by every spa); `inline_fonts` in html-content.ts
+    `RESERVED`. Web `crmInlinePlan` → `{inline, fonts}` (both plans in parallel: one 300 ms deadline, one `hostCheck`),
+    `pageCrmInline` → `SiteMeta.crmFonts`; `designWithCrm(…, {fonts})` output key `…|fo:{hash}`.
   - **Website content (R28, `docs/design/r28-dynamic-html-designs.md`):** per-spa values over a contract design's own
     `window.CRM_DATA` (story scenes, experience, booking label / picture, message templates; never operational keys).
     Core `html-content.ts`: `htmlContentSlots(data)` (every editable leaf: path `journey[welcome].title` — items by
