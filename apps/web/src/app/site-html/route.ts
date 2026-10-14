@@ -1,8 +1,14 @@
 import {
   type HtmlDesignContent,
+  type HtmlDesignPicture,
+  type HtmlImageAdjust,
   htmlDesignDocOf,
   htmlDesignDocument,
+  htmlDesignHeadTags,
+  htmlDesignPictureSrcs,
+  htmlDesignPictures,
   htmlPictureAdjustments,
+  isSharePhoto,
 } from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
@@ -20,7 +26,7 @@ import {
   htmlRouteKey,
   sitePageOf,
 } from '@/server/html-design-route'
-import { sitePageUrl, siteSeo } from '@/server/seo'
+import { absoluteImage, heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { resolveSiteTenant } from '@/server/sites'
 
 /**
@@ -28,11 +34,35 @@ import { resolveSiteTenant } from '@/server/sites'
  * server/html-design-route says so; its response headers = @spa/core htmlDesignPageHeaders: CSP sandbox without
  * allow-same-origin, so the design never runs with the platform's origin). The body is the design exactly as built;
  * only invisible additions: the compat shim (htmlDesignDocument top mode), the spa JSON-LD, a canonical link and a
- * <title> when the design has none, and the cookieless tracker. Anything else (the page changed meanwhile, not an
- * exact design any more) → 307 to the normal page (`__page=1`, which the proxy never rewrites here).
+ * <title> when the design has none, the share / icon / hreflang tags it lacks (M11, `htmlDesignHeadTags`) and the
+ * cookieless tracker. Anything else (the page changed meanwhile, not an exact design any more) → 307 to the normal
+ * page (`__page=1`, which the proxy never rewrites here).
  */
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// Each stored design's pictures in document order (content-addressed key; ≤ 200 entries, long data: URIs cut).
+const designImages = new Map<string, HtmlDesignPicture[]>()
+
+/**
+ * The design's first photo in document order as it shows (the spa's / template's replacements applied; logos,
+ * icons, SVGs and inline data skipped), absolute; else null.
+ */
+function designPicture(html: string, key: string | null, adjust: HtmlImageAdjust[], origin: string) {
+  let images = key ? designImages.get(key) : undefined
+  if (!images) {
+    images = htmlDesignPictures(html).map((i) => ({ ...i, src: i.src.slice(0, 2048) }))
+    if (key) {
+      if (designImages.size >= 200) designImages.delete(designImages.keys().next().value ?? '')
+      designImages.set(key, images)
+    }
+  }
+  for (const src of htmlDesignPictureSrcs(images, adjust)) {
+    const url = absoluteImage(src.trim(), origin)
+    if (url) return url
+  }
+  return null
+}
 
 /** Before the design's </head> (else before <body>, else at the end: never before its doctype). */
 function beforeHeadEnd(html: string, extra: string) {
@@ -63,7 +93,7 @@ async function render(req: Request, head: boolean) {
   const loaded = await loadPublished(tenant, p.page)
   const data = loaded?.published.data as
     | {
-        root?: { props?: { htmlDesign?: unknown; title?: Bi } }
+        root?: { props?: { htmlDesign?: unknown; title?: Bi; description?: Bi } }
         content?: { type: string; props: Record<string, unknown> }[]
       }
     | undefined
@@ -103,19 +133,35 @@ async function render(req: Request, head: boolean) {
   // in that JSON (this document reuses nothing from the browser cache on a reload).
   const opts = { inject: false, content, locale }
   const inline = await crmInlinePlan(tenant, block.props.html, key, crm, opts)
+  const adjust = htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content)
   let html = htmlDesignDocument(
     designWithCrm(block.props.html, key, crm, { ...opts, inline }),
     htmlDesignValues(meta),
     false,
-    htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content),
+    adjust,
     htmlDesignLinks(meta),
     { top: true, texts: content?.texts, locale },
   )
   const seo = await siteSeo(tenant)
-  const title = tr(data.root?.props?.title, { locale, data: loaded.data }) || tenant.name
+  const ctx = { locale, data: loaded.data }
+  const title = tr(data.root?.props?.title, ctx) || tenant.name
   const canonical = sitePageUrl(seo.base, p.page, locale === 'ar' && seo.arabic ? 'ar' : undefined)
   const ld = await siteJsonLd(tenant, p.page, loaded, locale)
   const site = p.kind === 'slug' ? tenant.slug : p.key
+  // Link previews: the page's hero (block-site rule), else the design's first photo as shown, else the logo.
+  const hero = heroImageOf(data, seo.origin)
+  const picture =
+    (hero && isSharePhoto(hero) ? hero : null) ?? designPicture(block.props.html, key, adjust, seo.origin)
+  const share = htmlDesignHeadTags(html, {
+    title,
+    description: tr(data.root?.props?.description, ctx) || undefined,
+    url: canonical,
+    siteName: tenant.name,
+    locale,
+    image: picture ? { url: picture, large: true } : seo.logo ? { url: seo.logo, large: false } : null,
+    icon: seo.logo,
+    languages: hreflang(seo.base, p.page, seo.arabic),
+  })
   html = beforeHeadEnd(
     html,
     `<script type="application/ld+json">${ld}</script>` +
@@ -123,6 +169,7 @@ async function render(req: Request, head: boolean) {
         ? ''
         : `<link rel="canonical" href="${esc(canonical)}">`) +
       (/<title\b/i.test(html) ? '' : `<title>${esc(title)}</title>`) +
+      share +
       `<script src="/t.js" data-site="${esc(site)}" defer></script>`,
   )
   return new Response(head ? null : html, {

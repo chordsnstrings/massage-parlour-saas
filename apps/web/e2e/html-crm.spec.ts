@@ -22,6 +22,7 @@ import {
   app,
   editorUrl,
   makeStudio,
+  PATH,
   PORT,
   signInStudioOnAdmin,
   signUpOwner,
@@ -222,6 +223,84 @@ test('R26: a contract design shows the live CRM data, and its booking form creat
     expect(served.match(LITERAL)![0]).not.toBe(fixture.match(LITERAL)![0])
     // The page JSON can't close the script: no raw < > & inside it.
     expect(served.match(LITERAL)![0].slice(8, -9)).not.toMatch(/[<>&]/)
+  })
+
+  await test.step('M11: the share / icon / hreflang tags the design lacks; /favicon.ico → the spa logo', async () => {
+    const db = testDb()
+    const bytes = await readFile(new URL('../public/designs/be-relax/c4e79f1703476507.webp', import.meta.url))
+    const [file] = await db
+      .insert(storedFiles)
+      .values({
+        tenantId: seed.tenantId,
+        contentType: 'image/webp',
+        size: bytes.length,
+        bytes,
+        isPublic: true,
+        purpose: 'logo',
+      })
+      .returning({ id: storedFiles.id })
+    const [before] = await db
+      .select({ locales: sites.locales, logo: tenants.logoFileId })
+      .from(sites)
+      .innerJoin(tenants, eq(tenants.id, sites.tenantId))
+      .where(eq(sites.tenantId, seed.tenantId))
+    await db.update(tenants).set({ logoFileId: file!.id }).where(eq(tenants.id, seed.tenantId))
+    await db
+      .update(sites)
+      .set({ locales: ['en', 'ar'] })
+      .where(eq(sites.tenantId, seed.tenantId))
+    try {
+      const head = async (query: string) => {
+        const html = await (await viaHost(page, `${site(slug)}/${query}`)).text()
+        return html.slice(0, html.indexOf('<body>'))
+      }
+      const en = await head('')
+      const home = /<link rel="canonical" href="([^"]+)">/.exec(en)![1]!
+      const logo = `${new URL(home).origin}/files/${file!.id}`
+      // The fixture has its own <title>, no description and no picture in its markup (CRM_DATA fills them): the
+      // logo is the preview picture (small card) and the icon.
+      for (const tag of [
+        '<meta property="og:title" content="CRM contract fixture">',
+        `<meta property="og:url" content="${home}">`,
+        '<meta property="og:type" content="website">',
+        '<meta property="og:locale" content="en_AE">',
+        '<meta property="og:site_name" content="CRM Feed Spa">',
+        `<meta property="og:image" content="${logo}">`,
+        '<meta name="twitter:card" content="summary">',
+        '<meta name="twitter:title" content="CRM contract fixture">',
+        `<meta name="twitter:image" content="${logo}">`,
+        `<link rel="icon" href="${logo}">`,
+        `<link rel="apple-touch-icon" href="${logo}">`,
+        `<link rel="alternate" hreflang="en" href="${home}">`,
+        `<link rel="alternate" hreflang="ar" href="${home}?lang=ar">`,
+        `<link rel="alternate" hreflang="x-default" href="${home}">`,
+      ])
+        expect(en).toContain(tag)
+      expect(en).not.toMatch(/og:description|twitter:description/)
+      // Its own <title> stays the only one; the design's own tags are never doubled.
+      expect(en.match(/<title>/g)).toHaveLength(1)
+      expect(en.match(/name="viewport"/g)).toHaveLength(1)
+      const ar = await head('?lang=ar')
+      expect(ar).toContain('<meta property="og:locale" content="ar_AE">')
+      expect(ar).toContain(`<meta property="og:url" content="${home}?lang=ar">`)
+      if (!PATH) {
+        // The proxy never rewrites these: a spa host answers with its logo (cookie-free lookup, cached ≤ 30 s).
+        for (const path of ['/favicon.ico', '/apple-touch-icon.png'])
+          await expect
+            .poll(
+              async () => {
+                const res = await viaHost(page, `${site(slug)}${path}`)
+                return `${res.status()} ${res.headers().location ?? ''}`
+              },
+              { timeout: 45_000 },
+            )
+            .toBe(`302 /files/${file!.id}`)
+        expect((await viaHost(page, `${app}/favicon.ico`)).status()).toBe(404)
+      }
+    } finally {
+      await db.update(tenants).set({ logoFileId: before!.logo }).where(eq(tenants.id, seed.tenantId))
+      await db.update(sites).set({ locales: before!.locales }).where(eq(sites.tenantId, seed.tenantId))
+    }
   })
 
   await test.step('"Show on website" in the CRM staff screen → that person appears (and only them)', async () => {
