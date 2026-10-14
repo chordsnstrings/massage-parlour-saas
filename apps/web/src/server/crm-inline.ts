@@ -85,20 +85,30 @@ async function hostCheck(tenantId: string, urls: unknown[]): Promise<(host: stri
   return (host) => platform(host) || own.has(bare(host))
 }
 
-/** The inline plan of one design render (same inputs as designWithCrm); null = nothing to inline. */
-export async function crmInlinePlan(
-  tenant: { id: string },
+/**
+ * The data of one design render (same inputs as designWithCrm) when its design declares contract.inline: what the
+ * inline plan and the live page's link-preview photo (core crmSharePicture) are read from; else null.
+ */
+export function crmInlineData(
   html: string,
   key: string | null,
   crm: CrmContract | null | undefined,
   opts: { inject: boolean; content?: HtmlDesignContent | null; locale?: CrmLocale },
-): Promise<CrmInline | null> {
+): Record<string, unknown> | null {
   // Designs without contract.inline pay one cached parse.
   const found = designContract(html, key)?.found
   if (!found || !crmInlinePaths(crmDesignData(found)).length) return null
   const data = designCrmData(html, key, crm, opts)
+  return data && crmInlinePaths(data).length ? data : null
+}
+
+/** The inline plan of one design render's data (`crmInlineData`); null = nothing to inline. */
+export async function crmInlinePlan(
+  tenant: { id: string },
+  data: Record<string, unknown> | null,
+): Promise<CrmInline | null> {
+  if (!data) return null
   const paths = crmInlinePaths(data)
-  if (!data || !paths.length) return null
   const ourHost = await hostCheck(
     tenant.id,
     paths.map((p) => crmValueAt(data, p)),
@@ -123,11 +133,12 @@ export async function pageCrmInline(
     const props = n?.type === 'HtmlDesign' ? n.props : undefined
     if (!props || typeof props.html !== 'string' || !props.html) continue
     const key = designKey(htmlDesignDocOf(props))
-    const plan = await crmInlinePlan(tenant, props.html, key, crm, {
+    const data = crmInlineData(props.html, key, crm, {
       inject: true,
       content: props.content as HtmlDesignContent | undefined,
       locale: opts.locale,
     })
+    const plan = await crmInlinePlan(tenant, data)
     if (plan) out[key ?? ''] = plan
   }
   return Object.keys(out).length ? { crmInline: out } : {}

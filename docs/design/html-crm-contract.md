@@ -82,13 +82,15 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
   get the design with **only the literal's JSON range replaced** by the merged contract. The JSON is script-safe
   (`<`, `>`, `&`, U+2028, U+2029 as `\uXXXX`; lone surrogates escaped by JSON.stringify), so it can't close the
   script or open a comment. Every other byte is the stored file (plus the R24 invisible additions).
-- **head tags (QA M11/M2, proposed, awaits the owner's OK):** the live page also gets, before `</head>`, the share,
+- **head tags (QA M11/M2, Decision A, owner 2026-10-14):** the live page also gets, before `</head>`, the share,
   icon and language tags the design doesn't have itself: og:title / og:description (its own `<title>` and meta
   description), og:url (canonical), og:type, og:locale (`en_AE` / `ar_AE`), og:site_name, og:image + the twitter card
   (its first photo in page order as shown — logos, icons and SVGs skipped — else the spa logo; a design's own og:*
   tags also stand for X, so no twitter:* of ours goes over them), `rel=icon` / `rel=apple-touch-icon` (spa logo) and hreflang
   en / ar / x-default (sites with Arabic). A design that wants its own simply writes the tag: that one is never
-  doubled. CRM_DATA pictures aren't markup, so a contract design's preview is the logo unless it writes og:image.
+  doubled. CRM_DATA pictures aren't markup: a design with `contract.inline` (§10) is previewed with the first
+  declared path that holds a photo (logo / icon paths skipped; an inlined one by its `inline_originals` url, never the
+  data: URI; absolute on the spa's own address; large card); without one, the logo unless it writes og:image.
 - **endpoint-only designs**: the live page is byte for byte the stored file and fetches `crm-data.json` itself;
   frames (which have no site URL to fetch from) get one `<script>window.CRM_DATA=…;</script>` before the design's
   first script.

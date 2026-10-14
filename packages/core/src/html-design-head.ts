@@ -1,4 +1,6 @@
-// Share, icon and hreflang head tags for an exact HTML design's live page (QA M11 / M2, site-html route). Pure; no DB.
+// Share, icon and hreflang head tags for an exact HTML design's live page (QA M11 / M2, Decision A owner-approved
+// 2026-10-14; site-html route). Pure; no DB.
+import { crmInlinePaths, crmValueAt } from './html-crm-inline'
 import { attributesOf, htmlTextOf, isSharePhoto } from './html-design'
 
 /** What an exact HTML design's live page is shared and bookmarked with (site-html route; absolute URLs). */
@@ -84,7 +86,7 @@ function designHead(html: string): { markup: string; title: string } {
 }
 
 /**
- * M11 / M2 (QA 2026-10-14; extends the R24 invisible additions, owner approval pending): the head tags block sites
+ * M11 / M2 (QA 2026-10-14; Decision A, an R24 invisible addition, owner-approved 2026-10-14): the head tags block sites
  * get from their page metadata, for an exact HTML design's live document — Open Graph (title, description, url, type,
  * locale, site_name, image), the Twitter card, icon + apple-touch-icon links and hreflang alternates. Read from the
  * design's head (`designHead`): the titles = its `<title>`, the descriptions = its meta description (else `share`'s).
@@ -159,4 +161,29 @@ export function htmlDesignHeadTags(html: string, share: HtmlDesignShare): string
     for (const [lang, href] of Object.entries(share.languages ?? {}))
       out += `<link rel="alternate" hreflang="${attrText(lang)}" href="${attrText(href)}">`
   return out
+}
+
+// A CRM_DATA path naming a logo or icon (`spa.logo_on_dark`): never a link-preview photo (as html-design's `<img>` marks).
+const MARK_PATH = /(?:^|[^a-z])(?:logo|icon|favicon|sprite)s?(?![a-z])/i
+
+/**
+ * Decision A (owner 2026-10-14): a contract design's link-preview photo. Its pictures live in window.CRM_DATA, not in
+ * markup, so the design's `contract.inline` paths (its first-screen pictures, declared order) are read from the
+ * render's data (after the CRM merge and the spa's content): the first one that is a photo — logo / icon paths
+ * skipped; an inlined value's original url (`inline_originals`, never its data: URI); SVG / .ico / data: skipped
+ * (`isSharePhoto`). As written (relative or absolute); null = none.
+ */
+export function crmSharePicture(data: unknown): string | null {
+  const originals = (data as { inline_originals?: unknown } | null)?.inline_originals
+  for (const path of crmInlinePaths(data)) {
+    if (MARK_PATH.test(path)) continue
+    let src = crmValueAt(data, path)
+    if (typeof src === 'string' && /^\s*data:/i.test(src))
+      src =
+        originals && typeof originals === 'object' && Object.hasOwn(originals, path)
+          ? (originals as Record<string, unknown>)[path]
+          : undefined
+    if (typeof src === 'string' && src.trim() && isSharePhoto(src)) return src.trim()
+  }
+  return null
 }

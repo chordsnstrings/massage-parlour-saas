@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { htmlDesignPictureSrcs, htmlDesignPictures, listHtmlDesignImages } from '../src/html-design'
-import { type HtmlDesignShare, htmlDesignHeadTags } from '../src/html-design-head'
+import { crmSharePicture, type HtmlDesignShare, htmlDesignHeadTags } from '../src/html-design-head'
 
 describe('htmlDesignHeadTags (M11 / M2)', () => {
   const share: HtmlDesignShare = {
@@ -187,5 +187,71 @@ describe('htmlDesignPictures + htmlDesignPictureSrcs (link-preview photo)', () =
         { id: 'bg-1', src: '/files/bg.svg', replace: 'javascript:alert(1)' },
       ]),
     ).toEqual(['https://cdn.example/new.jpg', '/files/a'])
+  })
+})
+
+describe('crmSharePicture (Decision A, owner 2026-10-14)', () => {
+  const DESIGNS = '/designs/be-relax'
+  // BE RELAX's shape: the header logo + the first scene's still inlined by the render (applyCrmInline).
+  const beRelax = {
+    spa: { name: 'BE RELAX', logo_on_dark: 'data:image/webp;base64,AAAA', logo_on_light: '/files/light' },
+    journey: [
+      { id: 'welcome', image: 'data:image/webp;base64,BBBB' },
+      { id: 'bath', image: `${DESIGNS}/c4e79f1703476507.webp` },
+    ],
+    contract: { version: 2, inline: ['spa.logo_on_dark', 'journey[welcome].image'] },
+    inline_originals: {
+      'spa.logo_on_dark': '/files/dark',
+      'journey[welcome].image': `${DESIGNS}/4d56333a0e00bb38.webp`,
+    },
+  }
+
+  it('the first declared photo, an inlined one by its original url (never the data: URI), logo paths skipped', () => {
+    expect(crmSharePicture(beRelax)).toBe(`${DESIGNS}/4d56333a0e00bb38.webp`)
+    // Not inlined (over the cap, a late read, another host): the value itself.
+    const { inline_originals: _, ...plain } = beRelax
+    expect(
+      crmSharePicture({ ...plain, journey: [{ id: 'welcome', image: ' https://cdn.example/still.jpg ' }] }),
+    ).toBe('https://cdn.example/still.jpg')
+  })
+
+  it('declared order; SVG / .ico / data: without an original / empty / non-string / missing paths skipped', () => {
+    const data = {
+      a: { icon: '/files/icon', image: 'https://cdn.example/a.svg' },
+      b: [
+        { id: 'x', image: 'data:image/png;base64,AA' },
+        { id: 'y', image: '' },
+      ],
+      c: { image: 42, favicon: '/f.ico', photo: '/files/photo' },
+      contract: {
+        inline: ['a.icon', 'a.image', 'b[x].image', 'b[y].image', 'c.image', 'nope.image', 'c.photo'],
+      },
+    }
+    expect(crmSharePicture(data)).toBe('/files/photo')
+    expect(crmSharePicture({ ...data, contract: { inline: ['a.image', 'b[0].image'] } })).toBeNull()
+  })
+
+  it('none without contract.inline', () => {
+    expect(crmSharePicture(null)).toBeNull()
+    expect(
+      crmSharePicture({ journey: beRelax.journey, inline_originals: beRelax.inline_originals }),
+    ).toBeNull()
+    expect(crmSharePicture({ ...beRelax, contract: { version: 2 } })).toBeNull()
+  })
+
+  it('as the preview picture: a large card over the design markup that has none', () => {
+    const html = '<!doctype html><html><head><title>BE RELAX</title></head><body></body></html>'
+    const url = `https://berelax.example.ae${crmSharePicture(beRelax)}`
+    const out = htmlDesignHeadTags(html, {
+      title: 'x',
+      url: 'https://berelax.example.ae/',
+      siteName: 'BE RELAX',
+      locale: 'en',
+      image: { url, large: true },
+    })
+    expect(out).toContain(`<meta property="og:image" content="${url}">`)
+    expect(out).toContain('<meta name="twitter:card" content="summary_large_image">')
+    expect(out).toContain(`<meta name="twitter:image" content="${url}">`)
+    expect(out).not.toContain('data:')
   })
 })

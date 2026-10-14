@@ -1051,6 +1051,18 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     })
   })
 
+  await test.step('Decision A: the link-preview picture = the first declared photo, by its original url', async () => {
+    const html = await (await viaHost(page, site(slug))).text()
+    const head = html.slice(0, html.indexOf('<body'))
+    const home = /<link rel="canonical" href="([^"]+)">/.exec(head)![1]!
+    // spa.logo_on_light (declared first) is a logo: skipped; the welcome still is inlined, so its original url.
+    const still = `${new URL(home).origin}${DESIGNS}/4d56333a0e00bb38.webp`
+    expect(head).toContain(`<meta property="og:image" content="${still}">`)
+    expect(head).toContain('<meta name="twitter:card" content="summary_large_image">')
+    expect(head).toContain(`<meta name="twitter:image" content="${still}">`)
+    expect(head).not.toMatch(/<meta [^>]*content="data:/)
+  })
+
   await test.step('a new logo shows on the next load (no stale cache)', async () => {
     const second = await logo('e75ea082f84ff839.webp')
     await publishLogo(second.id)

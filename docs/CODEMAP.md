@@ -588,7 +588,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     allow-same-origin; no COOP; Permissions-Policy without the motion sensors). Body = `htmlDesignDocument(…, { top:
     true })` + JSON-LD, canonical / `<title>` only if the design has none, `t.js` (`text/plain` beacons from the opaque
     origin); `x-robots-tag` when not indexable. Not an exact design any more → 307 to `?__page=1` (normal page, no lookup).
-    QA M11/M2 (branch qa-head-tags, held for the owner's OK): + core `html-design-head.ts` `htmlDesignHeadTags`
+    QA M11/M2 (Decision A, owner-approved 2026-10-14): + core `html-design-head.ts` `htmlDesignHeadTags`
     (tests: core/test/html-design-head.test.ts) = what block sites get from `publicSiteMetadata`, read off the
     design's head as a parser sees it (up to the real `</head>` / `<body>`, else the first body-only tag; comments and
     script / style / template / noscript / title bodies skipped; titles = its `<title>`, descriptions = its meta
@@ -599,7 +599,10 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     The design's own share tags win: twitter:title/description/image only where it has no og:* counterpart (X falls
     back to og:*), an added og:* reuses its twitter:* value, twitter:card follows its own picture (large unless SVG /
     .ico / data:).
-    Preview picture = `heroImageOf` (if a photo) → the design's first photo in document order as shown (core
+    Preview picture = a `contract.inline` design's first declared CRM_DATA photo (core `crmSharePicture` on
+    web `crmInlineData` = the render's merged data, the same the inline plan reads: logo / icon paths skipped, an
+    inlined value by its `inline_originals` url, SVG / .ico / data: skipped; `absoluteImage` on `seo.origin`, the
+    canonical address; large card) → `heroImageOf` (if a photo) → the design's first photo in document order as shown (core
     `htmlDesignPictures` per design key: `<img>` + backgrounds interleaved, logo / icon `<img>`s marked by width/height
     < 200 or "logo"/"icon" in src/class/id/alt; `htmlDesignPictureSrcs` applies replacements and drops marks, SVG,
     .ico, data:; https or site-relative only) → logo (`summary` card).

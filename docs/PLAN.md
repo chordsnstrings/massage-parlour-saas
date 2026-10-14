@@ -1395,6 +1395,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      design file's own client-side check is fixed in the design (v2.6).
   Tests: core seo + whatsapp, services sales (publicPrice) + site-crm-feed (designEnquirySchema), ai site-edit
   (loadSiteFacts).
+- **Decision A (owner 2026-10-14):** "link preview picture and summary when the site is shared, the browser tab icon,
+  and language tags for Google … Yes" (QA M11 / M2) — added to the R24 invisible changes. An exact HTML design's live
+  page (`/site-html`) gets, before `</head>`, each tag the design lacks: og:title / description / url (canonical) /
+  type / locale (`en_AE` / `ar_AE`) / site_name / image, the twitter card, `rel=icon` + `rel=apple-touch-icon` (spa
+  logo) and hreflang en / ar / x-default (sites with Arabic); a design's own tag is never doubled, `<html lang>` never
+  touched (core `htmlDesignHeadTags`). Preview picture: a `contract.inline` design's first declared CRM_DATA photo
+  (core `crmSharePicture`: logo / icon paths skipped, an inlined one by its `inline_originals` url, never data:;
+  absolute on the spa's canonical address; `summary_large_image`) → the page hero → the design's first photo in
+  markup → the logo (`summary`). `/favicon.ico` + `/apple-touch-icon.png` on a spa host → 302 to its logo (block
+  sites too). Tests: core html-design-head; e2e html-crm (M11 step + contract.inline step).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

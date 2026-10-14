@@ -1,4 +1,5 @@
 import {
+  crmSharePicture,
   type HtmlDesignContent,
   type HtmlDesignPicture,
   type HtmlImageAdjust,
@@ -18,7 +19,7 @@ import { tr } from '@/components/site/i18n'
 import { loadPublished, siteJsonLd } from '@/components/site/published'
 import type { Bi } from '@/components/site/types'
 import { PATH_ROUTING } from '@/lib/paths'
-import { crmInlinePlan } from '@/server/crm-inline'
+import { crmInlineData, crmInlinePlan } from '@/server/crm-inline'
 import {
   forgetHtmlDesignRoutes,
   HTML_ROUTE_FALLBACK,
@@ -132,7 +133,8 @@ async function render(req: Request, head: boolean) {
   // contract.inline (owner 2026-10-13 "no delay when I reload"): the first-screen pictures it asks for as data: URIs
   // in that JSON (this document reuses nothing from the browser cache on a reload).
   const opts = { inject: false, content, locale }
-  const inline = await crmInlinePlan(tenant, block.props.html, key, crm, opts)
+  const crmData = crmInlineData(block.props.html, key, crm, opts)
+  const inline = await crmInlinePlan(tenant, crmData)
   const adjust = htmlPictureAdjustments(Array.isArray(block.props.images) ? block.props.images : [], content)
   let html = htmlDesignDocument(
     designWithCrm(block.props.html, key, crm, { ...opts, inline }),
@@ -148,10 +150,15 @@ async function render(req: Request, head: boolean) {
   const canonical = sitePageUrl(seo.base, p.page, locale === 'ar' && seo.arabic ? 'ar' : undefined)
   const ld = await siteJsonLd(tenant, p.page, loaded, locale)
   const site = p.kind === 'slug' ? tenant.slug : p.key
-  // Link previews: the page's hero (block-site rule), else the design's first photo as shown, else the logo.
+  // Link previews (Decision A, owner 2026-10-14): a contract.inline design's first CRM_DATA photo (its pictures aren't
+  // markup), else the page's hero (block-site rule), else the design's first photo as shown, else the logo. Absolute
+  // on the spa's canonical address (seo.origin), never the visitor's host.
+  const crmPicture = crmSharePicture(crmData)
   const hero = heroImageOf(data, seo.origin)
   const picture =
-    (hero && isSharePhoto(hero) ? hero : null) ?? designPicture(block.props.html, key, adjust, seo.origin)
+    (crmPicture ? absoluteImage(crmPicture, seo.origin) : null) ??
+    (hero && isSharePhoto(hero) ? hero : null) ??
+    designPicture(block.props.html, key, adjust, seo.origin)
   const share = htmlDesignHeadTags(html, {
     title,
     description: tr(data.root?.props?.description, ctx) || undefined,
