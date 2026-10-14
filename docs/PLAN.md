@@ -1376,6 +1376,25 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
      Instagram testers → App Review per permission with screen recordings → publish; Tech Provider Access Verification
      retired 2026-10-09), droplet README Meta + EXTRA_ROOT_DOMAINS, CODEMAP, CLAUDE.md gotcha.
   Changed TH strings (two redirect URI labels shortened) need native review.
+- **QA fixes (owner 2026-10-14 'check everything': "check the website in proper way … desktop, mobile and tablet
+  view"; BE RELAX QA report M3/M6/M7, platform part):**
+  1. **Never "AED 0" on a public page (M6):** services `publicPrice` returns null ("price on request") unless the price
+     is > 0 (missing / 0 / negative / junk) — block pages, smart blocks, hero "from", online booking (+ its confirmation
+     total) and JSON-LD all read it; public AI agents (`ai` context.ts) and the Write texts / Ask AI copywriter facts
+     (`ai` site-edit.ts `loadSiteFacts`) use the same > 0 rule. Staff/CRM screens show
+     the stored price as before. The HTML-design CRM feed already kept only p > 0.
+  2. **JSON-LD (M7):** core `seo.ts` `money()` skips ≤ 0, so no `priceRange "AED 0"` and no 0 offers / unit prices;
+     an all-on-request treatment stays an Offer without a price (valid schema.org, same as a hidden price). `spaJsonLd`
+     lists each treatment name once (`crmName` identity, like the CRM feed's `collapseSameName`): first category +
+     description, every length once at its lowest public price. The offer catalog is named in the page's language
+     (`catalogName`: "Treatments" / "العلاجات").
+  3. **Arabic digits (M3):** core `asciiDigits` (moved from services data-io) maps U+0660–0669 / U+06F0–06F9 to ASCII
+     at the start of `toUaeE164` and `toE164` (which also drops the invisible direction marks WhatsApp / iOS
+     Contacts wrap pasted numbers in), so the website enquiry / design booking form (`siteEnquirySchema`,
+     `designEnquirySchema`), CRM enquiries and every UAE mobile field accept a number typed in Arabic digits. The
+     design file's own client-side check is fixed in the design (v2.6).
+  Tests: core seo + whatsapp, services sales (publicPrice) + site-crm-feed (designEnquirySchema), ai site-edit
+  (loadSiteFacts).
 - **R17 HTML design upload (owner, 2026-10-08):** Templates library (super-admin) → "Upload HTML": one `.html` file
   becomes a one-page studio template shown on the spa site **exactly as built** (its CSS, fonts, motion, scripts). Owner
   chose: exact page (not AI conversion), HTML only (no .md), Templates library only (not per-site upload).

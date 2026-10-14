@@ -1,7 +1,7 @@
 // Import/export helpers (pure): decoding, delimiter + date detection, header-row detection, column auto-mapping and
 // row validation/normalisation. CSV parsing (papaparse) happens in the web app; .xlsx output/input lives in
 // xlsx.ts (server-only subpath); the database side lives in data-import.ts / data-export.ts.
-import { toUaeE164 } from '@spa/core'
+import { asciiDigits, toUaeE164 } from '@spa/core'
 
 export const IMPORT_KINDS = ['clients', 'menu', 'products'] as const
 export type ImportKind = (typeof IMPORT_KINDS)[number]
@@ -339,12 +339,6 @@ export function detectDelimiter(text: string): string {
 // ---------------------------------------------------------------------------
 // Value parsing
 // ---------------------------------------------------------------------------
-
-/** Arabic-Indic and Persian digits → ASCII. */
-export const asciiDigits = (s: string) =>
-  s
-    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
 
 /** Trims and removes invisible characters (BOM, zero-width, direction marks, NBSP). */
 export const cleanCell = (s: string | undefined | null) =>

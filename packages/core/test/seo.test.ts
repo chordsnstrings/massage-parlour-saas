@@ -187,6 +187,96 @@ describe('spaJsonLd', () => {
     })
   })
 
+  it('never publishes AED 0: 0, negative and junk prices count as price on request (QA M7)', () => {
+    const ld = spaJsonLd({
+      ...base,
+      services: [
+        {
+          name: 'Normal',
+          variants: [0, '0.00', '-5', 'abc'].map((p, i) => ({ durationMin: 45 + i * 15, priceAed: p })),
+        },
+      ],
+    }) as Graph
+    const [spa] = ld['@graph']
+    expect(spa!.priceRange).toBeUndefined()
+    expect(spa!.hasOfferCatalog.itemListElement).toEqual([
+      { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Normal' } },
+    ])
+    // One real price among zeros: only it is published.
+    const mixed = spaJsonLd({
+      ...base,
+      services: [
+        {
+          name: 'Normal',
+          variants: [
+            { durationMin: 60, priceAed: '0' },
+            { durationMin: 90, priceAed: '250' },
+          ],
+        },
+      ],
+    }) as Graph
+    expect(mixed['@graph'][0]!.priceRange).toBe('AED 250')
+    const [o] = mixed['@graph'][0]!.hasOfferCatalog.itemListElement
+    expect(o.price).toBe('250')
+    expect(o.priceSpecification).toHaveLength(1)
+    const platform = platformJsonLd({
+      url: 'https://spamanagement.co',
+      name: 'x',
+      email: 'ask@spamanagement.co',
+      logo: 'https://spamanagement.co/logo.png',
+      description: 'x',
+      plans: [{ name: 'Free', priceAed: 0 }],
+    }) as Graph
+    expect(JSON.stringify(platform)).not.toContain('"price"')
+  })
+
+  it('lists a treatment in two menus once: every length at its lowest public price (QA M7)', () => {
+    const ld = spaJsonLd({
+      ...base,
+      services: [
+        { name: 'Hot Oil', category: 'Asian Menu', variants: [{ durationMin: 60, priceAed: '200' }] },
+        {
+          name: ' hot  oil ',
+          description: 'Warm oil.',
+          category: 'Arabic Menu',
+          variants: [
+            { durationMin: 90, priceAed: '300' },
+            { durationMin: 60, priceAed: '180' },
+          ],
+        },
+        { name: 'Morocco Bath', category: 'Asian Menu', variants: [{ durationMin: 45, priceAed: null }] },
+        { name: 'Morocco Bath', category: 'Arabic Menu', variants: [{ durationMin: 45, priceAed: null }] },
+        { name: '', variants: [{ durationMin: 30, priceAed: '50' }] },
+        { name: '', variants: [{ durationMin: 30, priceAed: '60' }] },
+      ],
+    }) as Graph
+    const items = ld['@graph'][0]!.hasOfferCatalog.itemListElement
+    expect(items.map((i: { itemOffered: { name: string } }) => i.itemOffered.name)).toEqual([
+      'Hot Oil',
+      'Morocco Bath',
+      '',
+      '',
+    ])
+    expect(items[0]).toMatchObject({
+      price: '180',
+      itemOffered: { name: 'Hot Oil', category: 'Asian Menu', description: 'Warm oil.' },
+    })
+    expect(items[0].priceSpecification.map((p: { price: string }) => p.price)).toEqual(['180', '300'])
+    expect(items[1]).toEqual({
+      '@type': 'Offer',
+      itemOffered: { '@type': 'Service', name: 'Morocco Bath', category: 'Asian Menu' },
+    })
+    expect(ld['@graph'][0]!.priceRange).toBe('AED 50–300')
+  })
+
+  it("names the offer catalog in the page's language (QA M7)", () => {
+    const services = [{ name: 'Hot Oil', variants: [{ durationMin: 60, priceAed: '200' }] }]
+    const en = spaJsonLd({ ...base, services }) as Graph
+    const ar = spaJsonLd({ ...base, services, catalogName: 'العلاجات' }) as Graph
+    expect(en['@graph'][0]!.hasOfferCatalog.name).toBe('Treatments')
+    expect(ar['@graph'][0]!.hasOfferCatalog.name).toBe('العلاجات')
+  })
+
   it('stays valid JSON with hostile spa text', () => {
     const out = jsonLdString(spaJsonLd({ ...base, name: BREAKOUT, branch: { address: BREAKOUT } }))
     expect(out).not.toContain('<')
