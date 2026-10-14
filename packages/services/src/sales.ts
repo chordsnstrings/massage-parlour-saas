@@ -9,6 +9,7 @@ import {
   commissionEntries,
   counters,
   dayCloses,
+  expenses,
   giftCards,
   giftCardTxns,
   membershipRedemptions,
@@ -97,6 +98,13 @@ export type NewSale = {
   tips?: { staffId: string; amountAed: number; method: PosMethod }[]
   createdBy?: string | null
   now?: Date
+  /**
+   * R32: the business date to book the sale on (Finish / Correct payment); must have started. Missing = today's
+   * business date for the branch.
+   */
+  businessDate?: string
+  /** R32 (D6): the caller may add money to a closed day (`pos.correct`); otherwise a closed day refuses. */
+  allowClosedDay?: boolean
 }
 
 /** Next per-tenant number for `key` (UPDATE … RETURNING; the row is created on first use). */
@@ -148,7 +156,13 @@ export async function createSale(tx: Tx, given: NewSale) {
   }
   if (!input.lines.length) throw new DomainError('Add at least one item')
   const branch = await branchRow(tx, input.branchId)
-  const businessDate = businessDateOf(input.now ?? new Date(), branch.businessDayCutoff.slice(0, 5))
+  const today = businessDateOf(input.now ?? new Date(), branch.businessDayCutoff.slice(0, 5))
+  if (input.businessDate && input.businessDate > today)
+    throw new DomainError('That business day has not started yet')
+  const businessDate = input.businessDate ?? today
+  // R32 (D6): new money never lands on a closed day unless an owner/manager corrects it.
+  if ((await isDayClosed(tx, input.branchId, businessDate, { lock: true })) && !input.allowClosedDay)
+    throw new DomainError(DAY_CLOSED)
 
   // Membership discounts are the period's snapshotted %; who may use it is checked once the client is known.
   const memberIds = [...new Set(input.lines.flatMap((l) => (l.membership ? [l.membership.id] : [])))]
@@ -233,7 +247,8 @@ export async function createSale(tx: Tx, given: NewSale) {
     ;[booking] = await tx.select().from(bookings).where(eq(bookings.id, input.bookingId)).for('update')
     if (!booking) throw new DomainError('Booking not found', 'not_found')
     if (booking.branchId !== input.branchId) throw new DomainError('That booking belongs to another branch')
-    if (!['confirmed', 'checked_in', 'in_service'].includes(booking.status))
+    // R32 (D7): a booking the therapist completed (G14) or whose sale was voided is finished here too.
+    if (!['confirmed', 'checked_in', 'in_service', 'completed'].includes(booking.status))
       throw new DomainError(`A ${booking.status.replace('_', ' ')} booking can't be checked out`)
     const [prior] = await tx
       .select({ id: sales.id })
@@ -468,7 +483,8 @@ export async function createSale(tx: Tx, given: NewSale) {
   let message: Awaited<ReturnType<typeof enqueueBookingMessage>> = null
   if (booking) {
     if (booking.status === 'confirmed') await setBookingStatus(tx, booking.id, 'checked_in')
-    await setBookingStatus(tx, booking.id, 'completed')
+    if (booking.status !== 'completed') await setBookingStatus(tx, booking.id, 'completed')
+    // Idempotent (onConflictDoNothing): a re-created sale after a correction never sends a second thank-you.
     message = await enqueueBookingMessage(tx, booking.id, 'thank_you')
   }
   return { sale: sale!, lines, message }
@@ -520,12 +536,30 @@ async function sessionCommission(
   })
 }
 
-async function isClosed(tx: Tx, branchId: string, date: string) {
+/** R32 (D6) DomainError text: a closed day changes only with `pos.correct` (owner/manager). */
+export const DAY_CLOSED = 'That day is closed — ask a manager to change it'
+
+/** Serialises closes and edits of one branch business day (transaction-scoped advisory lock). */
+export async function lockBusinessDay(tx: Tx, branchId: string, date: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${branchId}:${date}`}, 0))`)
+}
+
+/** True when the day is closed; `lock` takes lockBusinessDay first (use it before any write that depends on it). */
+export async function isDayClosed(tx: Tx, branchId: string, date: string, opts?: { lock?: boolean }) {
+  if (opts?.lock) await lockBusinessDay(tx, branchId, date)
   const [row] = await tx
     .select({ id: dayCloses.id })
     .from(dayCloses)
     .where(and(eq(dayCloses.branchId, branchId), eq(dayCloses.businessDate, date)))
   return Boolean(row)
+}
+
+/** R32: a closed day was changed (pos.correct): stamps day_closes.amended_at/by; no-op when the day is open. */
+export async function markDayAmended(tx: Tx, branchId: string, date: string, userId?: string | null) {
+  await tx
+    .update(dayCloses)
+    .set({ amendedAt: new Date(), amendedBy: userId ?? null })
+    .where(and(eq(dayCloses.branchId, branchId), eq(dayCloses.businessDate, date)))
 }
 
 async function saleRow(tx: Tx, saleId: string) {
@@ -546,14 +580,23 @@ const refundedFils = async (tx: Tx, saleId: string) => {
  * Voids a sale on a day that is still open: the sale drops out of the day's totals and its ledger entries
  * and commissions are reversed (append-only). After the daily close, use a refund instead.
  */
-export async function voidSale(tx: Tx, input: { saleId: string; reason: string; userId?: string | null }) {
+export async function voidSale(
+  tx: Tx,
+  input: {
+    saleId: string
+    reason: string
+    userId?: string | null
+    /** R32 Correct payment on a closed day (`pos.correct`): the void + re-created sale stay on that day. */
+    allowClosedDay?: boolean
+  },
+) {
   const reason = input.reason.trim()
   if (reason.length < 3) throw new DomainError('Give a reason for the void')
   const sale = await saleRow(tx, input.saleId)
   if (sale.status !== 'paid') throw new DomainError(`This sale is already ${sale.status}`)
   if ((await refundedFils(tx, sale.id)) > 0)
     throw new DomainError('This sale has refunds — refund the rest instead')
-  if (await isClosed(tx, sale.branchId, sale.businessDate))
+  if ((await isDayClosed(tx, sale.branchId, sale.businessDate, { lock: true })) && !input.allowClosedDay)
     throw new DomainError('That day is closed — record a refund instead')
   const soldLines = await tx.select().from(saleLines).where(eq(saleLines.saleId, sale.id))
   const giftPaid = await tx
@@ -1020,9 +1063,29 @@ export async function refundSale(
 
 export type DaySummary = Awaited<ReturnType<typeof daySummary>>
 
+/** R32: cash expenses paid from a branch's drawer on a business day (oldest first). */
+export async function drawerExpenseRows(tx: Tx, branchId: string, date: string) {
+  const rows = await tx
+    .select({
+      id: expenses.id,
+      description: expenses.description,
+      accountCode: expenses.accountCode,
+      amountAed: expenses.amountAed,
+      createdAt: expenses.createdAt,
+      createdBy: expenses.createdBy,
+    })
+    .from(expenses)
+    .where(
+      and(eq(expenses.branchId, branchId), eq(expenses.expenseDate, date), eq(expenses.fromDrawer, true)),
+    )
+    .orderBy(asc(expenses.createdAt), asc(expenses.id))
+  return rows.map((r) => ({ ...r, description: r.description ?? '', amountAed: num(r.amountAed) }))
+}
+
 /**
  * Z-report for a branch and business date. Voided sales are excluded; refunds count on the day they were
- * given. Expected cash = opening float + cash payments + cash tips − cash refunds.
+ * given. Expected cash = opening float + cash payments + cash tips − cash refunds − expenses paid from the drawer
+ * (R32, `expenses.from_drawer` dated that day for the branch).
  */
 export async function daySummary(tx: Tx, branchId: string, date: string, openingFloatAed?: number) {
   const live = and(eq(sales.branchId, branchId), eq(sales.businessDate, date), ne(sales.status, 'void'))
@@ -1067,6 +1130,8 @@ export async function daySummary(tx: Tx, branchId: string, date: string, opening
     .select()
     .from(dayCloses)
     .where(and(eq(dayCloses.branchId, branchId), eq(dayCloses.businessDate, date)))
+  const drawer = await drawerExpenseRows(tx, branchId, date)
+  const drawerF = drawer.reduce((s, e) => s + fils(e.amountAed), 0)
 
   const byMethod = (rows: { method: string; v: string }[]) => {
     const out: Record<string, number> = {}
@@ -1108,7 +1173,9 @@ export async function daySummary(tx: Tx, branchId: string, date: string, opening
     refundsAed: sum(ref) / 100,
     refundsByMethod: toAed(ref),
     openingFloatAed: floatF / 100,
-    expectedCashAed: (floatF + (pay.cash ?? 0) + (tipMethod.cash ?? 0) - (ref.cash ?? 0)) / 100,
+    drawerExpenses: drawer,
+    drawerExpensesAed: drawerF / 100,
+    expectedCashAed: (floatF + (pay.cash ?? 0) + (tipMethod.cash ?? 0) - (ref.cash ?? 0) - drawerF) / 100,
     close: close ?? null,
   }
 }
@@ -1128,6 +1195,8 @@ export async function closeDay(
 ) {
   if (input.openingFloatAed < 0 || input.countedCashAed < 0)
     throw new DomainError('Amounts cannot be negative')
+  // R32 (D6): a close waits for an edit of the same day in flight (and vice versa).
+  await lockBusinessDay(tx, input.branchId, input.date)
   const s = await daySummary(tx, input.branchId, input.date, input.openingFloatAed)
   if (s.close) throw new DomainError('This day is already closed')
   const variance = fils(input.countedCashAed) - fils(s.expectedCashAed)
@@ -1139,6 +1208,7 @@ export async function closeDay(
     discounts: s.discountAed.toFixed(2),
     tips: s.tipsAed.toFixed(2),
     refunds: s.refundsAed.toFixed(2),
+    expenses: s.drawerExpensesAed.toFixed(2),
   }
   for (const [m, v] of Object.entries(s.paymentsByMethod)) totals[`pay_${m}`] = v.toFixed(2)
   for (const [m, v] of Object.entries(s.tipsByMethod)) totals[`tips_${m}`] = v.toFixed(2)

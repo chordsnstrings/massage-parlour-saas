@@ -198,6 +198,7 @@ export const accounts = {
     a6150: 'Cleaning supplies',
     a6160: 'Spa materials & supplies',
     a6170: 'Small equipment',
+    a6180: 'Laundry',
     a6200: 'Utilities (DEWA, internet)',
     a6300: 'Marketing',
     a6400: 'Staff accommodation & transport',

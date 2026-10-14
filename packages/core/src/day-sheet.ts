@@ -24,7 +24,9 @@ export const phoneLinesConfigured = (s: { phoneLines?: string[] } | null | undef
   phoneLineOptions(s).length > 0
 
 /** Optional day-sheet columns (missing: tips on, commission off). */
-export function daySheetColumns(s: { daySheet?: { tips?: boolean; commission?: boolean } } | null | undefined): {
+export function daySheetColumns(
+  s: { daySheet?: { tips?: boolean; commission?: boolean } } | null | undefined,
+): {
   tips: boolean
   commission: boolean
 } {
@@ -32,9 +34,17 @@ export function daySheetColumns(s: { daySheet?: { tips?: boolean; commission?: b
 }
 
 /** "P2/R", "P/N" (phone without a line), "W", "W/N", "B", "B/R". phone → P{line}, walk_in → W, every other → B. */
-export function sheetCode(b: { source: string; phoneLine: number | null; clientType: string | null }): string {
+export function sheetCode(b: {
+  source: string
+  phoneLine: number | null
+  clientType: string | null
+}): string {
   const base =
-    b.source === 'phone' ? `P${isPhoneLine(b.phoneLine) ? b.phoneLine : ''}` : b.source === 'walk_in' ? 'W' : 'B'
+    b.source === 'phone'
+      ? `P${isPhoneLine(b.phoneLine) ? b.phoneLine : ''}`
+      : b.source === 'walk_in'
+        ? 'W'
+        : 'B'
   const type = b.clientType === 'regular' ? '/R' : b.clientType === 'new' ? '/N' : ''
   return base + type
 }

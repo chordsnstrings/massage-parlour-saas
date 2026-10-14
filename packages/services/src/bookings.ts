@@ -1,4 +1,6 @@
 import {
+  BOOKING_CLIENT_TYPES,
+  type BookingClientType,
   businessDateOf,
   businessDayWindow,
   canTransition,
@@ -6,6 +8,7 @@ import {
   findSlots,
   holdInterval,
   type Interval,
+  isPhoneLine,
   newRefCode,
   type OpeningHours,
   onLeave,
@@ -222,7 +225,16 @@ export async function availableSlots(
   })
 }
 
-export type NewBookingItem = { serviceVariantId: string; start: Date; staffIds?: string[]; roomId?: string }
+export type NewBookingItem = {
+  serviceVariantId: string
+  start: Date
+  staffIds?: string[]
+  roomId?: string
+  /** R32: the fee reception typed (replaces the variant price in `price_aed`); missing = the list price. */
+  feeAed?: number | null
+  /** R32: planned commission per therapist (off the ledger until Finish). */
+  commissionAed?: number | null
+}
 export type NewBooking = {
   tenantId: string
   branchId: string
@@ -238,6 +250,23 @@ export type NewBooking = {
   items: NewBookingItem[]
   /** Reception may book outside shifts/hours; overlaps are still impossible (DB constraint). */
   allowOffShift?: boolean
+  /** R32: the spa phone line the client called (1–4); kept only when source = phone. */
+  phoneLine?: number | null
+  /** R32: picked by reception (never automatic). */
+  clientType?: BookingClientType | null
+  /** R32: the therapist's own client (pink on the day sheet, Q = 0, no rotation turn). */
+  ownLead?: boolean
+}
+
+const MAX_TERMS_AED = 100_000
+/** R32: a typed fee / commission in AED (0–100,000), as numeric text; null/undefined = not given. */
+export function termsAmount(v: number | null | undefined, kind: 'fee' | 'commission'): string | null {
+  if (v == null) return null
+  if (!Number.isFinite(v) || v < 0 || v > MAX_TERMS_AED) {
+    if (kind === 'fee') throw new DomainError('Enter a fee between 0 and 100,000 AED')
+    throw new DomainError('Enter a commission between 0 and 100,000 AED')
+  }
+  return (Math.round(v * 100) / 100).toFixed(2)
 }
 
 /**
@@ -246,6 +275,16 @@ export type NewBooking = {
  */
 export async function createBooking(tx: Tx, input: NewBooking) {
   if (!input.items.length) throw new DomainError('Add at least one service')
+  const terms = input.items.map((i) => ({
+    fee: termsAmount(i.feeAed, 'fee'),
+    commission: termsAmount(i.commissionAed, 'commission'),
+  }))
+  const phoneLine = input.source === 'phone' && isPhoneLine(input.phoneLine) ? input.phoneLine : null
+  const clientType =
+    input.clientType && (BOOKING_CLIENT_TYPES as readonly string[]).includes(input.clientType)
+      ? input.clientType
+      : null
+  const termsAt = new Date()
   const [branch] = await tx.select().from(branches).where(eq(branches.id, input.branchId))
   if (!branch) throw new DomainError('Branch not found', 'not_found')
   const cutoff = branch.businessDayCutoff.slice(0, 5)
@@ -346,10 +385,14 @@ export async function createBooking(tx: Tx, input: NewBooking) {
             startsAt,
             endsAt,
             notes: input.notes ?? null,
+            phoneLine,
+            clientType,
+            ownLead: input.ownLead ?? false,
             createdBy: input.createdBy ?? null,
           })
           .returning()
-        for (const p of prepared) {
+        for (const [i, p] of prepared.entries()) {
+          const t = terms[i]!
           const [row] = await sp
             .insert(bookingItems)
             .values({
@@ -358,7 +401,9 @@ export async function createBooking(tx: Tx, input: NewBooking) {
               serviceVariantId: p.item.serviceVariantId,
               serviceName: p.name,
               durationMin: p.duration,
-              priceAed: p.price,
+              priceAed: t.fee ?? p.price,
+              commissionAed: t.commission,
+              termsSetAt: t.fee != null || t.commission != null ? termsAt : null,
               startsAt: p.item.start,
               endsAt: new Date(p.item.start.getTime() + p.duration * 60_000),
               roomId: p.roomId,

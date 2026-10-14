@@ -359,4 +359,15 @@ export const domain = {
   seedDesignStaffMissing: 'The design has no team member “{id}”',
   seedPickService: 'Pick the CRM service to fill',
   seedPickTherapist: 'Pick the therapist for the photo',
+  // R32 booking ↔ sale order, day lock, drawer expenses.
+  dayClosedAskManager: 'That day is closed — ask a manager to change it',
+  bookingCheckedOutCorrect: 'This booking was checked out — correct the payment instead',
+  bookingCantChange: "Can't change a {status} booking",
+  noPaymentToCorrect: 'This booking has no payment to correct',
+  correctionReason: 'Give a reason for the correction',
+  feeRange: 'Enter a fee between 0 and 100,000 AED',
+  drawerAmountRange: 'Enter an amount between 0.01 and 100,000 AED',
+  drawerExpenseWhat: 'Say what the expense was for',
+  drawerExpenseCategory: 'Pick a category',
+  saleLineNotFound: 'Sale line not found',
 } as const

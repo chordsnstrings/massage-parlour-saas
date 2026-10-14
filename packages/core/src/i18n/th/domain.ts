@@ -322,4 +322,15 @@ export const domain: Messages['errors']['domain'] = {
   seedDesignStaffMissing: 'ดีไซน์นี้ไม่มีสมาชิกทีม “{id}”',
   seedPickService: 'เลือกบริการใน CRM ที่จะเติมข้อมูล',
   seedPickTherapist: 'เลือกพนักงานนวดสำหรับรูปนี้',
+  // R32 booking ↔ sale order, day lock, drawer expenses.
+  dayClosedAskManager: 'วันนี้ปิดยอดแล้ว กรุณาให้ผู้จัดการแก้ไข',
+  bookingCheckedOutCorrect: 'การจองนี้ชำระเงินแล้ว กรุณาแก้ไขการชำระเงินแทน',
+  bookingCantChange: 'ไม่สามารถแก้ไขการจองที่มีสถานะ “{status}” ได้',
+  noPaymentToCorrect: 'การจองนี้ไม่มีการชำระเงินให้แก้ไข',
+  correctionReason: 'ระบุเหตุผลในการแก้ไข',
+  feeRange: 'กรอกค่าบริการระหว่าง 0 ถึง 100,000 AED',
+  drawerAmountRange: 'กรอกจำนวนเงินระหว่าง 0.01 ถึง 100,000 AED',
+  drawerExpenseWhat: 'ระบุว่าเป็นค่าใช้จ่ายอะไร',
+  drawerExpenseCategory: 'เลือกหมวดหมู่',
+  saleLineNotFound: 'ไม่พบรายการในบิลขาย',
 }

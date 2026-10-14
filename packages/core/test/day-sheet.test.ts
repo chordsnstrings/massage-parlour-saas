@@ -60,7 +60,10 @@ describe('R32 day sheet helpers', () => {
   it('daySheetColumns defaults to tips on, commission off', () => {
     expect(daySheetColumns({})).toEqual({ tips: true, commission: false })
     expect(daySheetColumns(null)).toEqual({ tips: true, commission: false })
-    expect(daySheetColumns({ daySheet: { tips: false, commission: true } })).toEqual({ tips: false, commission: true })
+    expect(daySheetColumns({ daySheet: { tips: false, commission: true } })).toEqual({
+      tips: false,
+      commission: true,
+    })
   })
 
   it('phoneLineOptions lists only lines with a number (blank and missing skipped)', () => {
