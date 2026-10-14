@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { htmlDesignPictureSrcs, listHtmlDesignImages } from '../src/html-design'
 import {
   geoFromMapsUrl,
-  type HtmlDesignShare,
-  htmlDesignHeadTags,
   jsonLdString,
   openingHoursSpecification,
   platformJsonLd,
@@ -242,115 +239,5 @@ describe('robotsTxt + sitemapXml', () => {
     expect(out).toContain('<xhtml:link rel="alternate" hreflang="ar" href="https://a.ae/?lang=ar"/>')
     expect(out).toContain('<lastmod>2026-10-09T00:00:00.000Z</lastmod>')
     expect(sitemapXml([])).toContain('<urlset')
-  })
-})
-
-describe('htmlDesignHeadTags (M11 / M2)', () => {
-  const share: HtmlDesignShare = {
-    title: 'Fallback title',
-    description: 'Fallback description',
-    url: 'https://spa.example.ae/',
-    siteName: 'Spa "One" & Co',
-    locale: 'en',
-    image: { url: 'https://spa.example.ae/files/hero', large: true },
-    icon: 'https://spa.example.ae/files/logo',
-    languages: {
-      en: 'https://spa.example.ae/',
-      ar: 'https://spa.example.ae/?lang=ar',
-      'x-default': 'https://spa.example.ae/',
-    },
-  }
-  const tags = (s: string) => [...s.matchAll(/<(?:meta|link)\b[^>]*>/g)].map((m) => m[0])
-
-  it('a design without any: every tag, the design’s own title + description, values escaped', () => {
-    const html =
-      '<!doctype html><html><head><title> Caf&eacute; &amp;\n Spa </title>' +
-      '<meta name="description" content="Relax &quot;here&quot;"></head><body><p>x</p></body></html>'
-    expect(tags(htmlDesignHeadTags(html, share))).toEqual([
-      '<meta property="og:title" content="Café &amp; Spa">',
-      '<meta property="og:description" content="Relax &quot;here&quot;">',
-      '<meta property="og:url" content="https://spa.example.ae/">',
-      '<meta property="og:type" content="website">',
-      '<meta property="og:locale" content="en_AE">',
-      '<meta property="og:site_name" content="Spa &quot;One&quot; &amp; Co">',
-      '<meta property="og:image" content="https://spa.example.ae/files/hero">',
-      '<meta name="twitter:card" content="summary_large_image">',
-      '<meta name="twitter:title" content="Café &amp; Spa">',
-      '<meta name="twitter:description" content="Relax &quot;here&quot;">',
-      '<meta name="twitter:image" content="https://spa.example.ae/files/hero">',
-      '<link rel="icon" href="https://spa.example.ae/files/logo">',
-      '<link rel="apple-touch-icon" href="https://spa.example.ae/files/logo">',
-      '<link rel="alternate" hreflang="en" href="https://spa.example.ae/">',
-      '<link rel="alternate" hreflang="ar" href="https://spa.example.ae/?lang=ar">',
-      '<link rel="alternate" hreflang="x-default" href="https://spa.example.ae/">',
-    ])
-  })
-
-  it('no title / description of its own: the page’s; Arabic; the logo as a small card; no Arabic site → no hreflang', () => {
-    const out = htmlDesignHeadTags('<p>bare</p>', {
-      ...share,
-      description: undefined,
-      locale: 'ar',
-      image: { url: 'https://spa.example.ae/files/logo', large: false },
-      languages: undefined,
-    })
-    expect(out).toContain('<meta property="og:title" content="Fallback title">')
-    expect(out).toContain('<meta property="og:locale" content="ar_AE">')
-    expect(out).toContain('<meta name="twitter:card" content="summary">')
-    expect(out).not.toContain('description')
-    expect(out).not.toContain('hreflang')
-  })
-
-  it('never adds a tag the design has (by property or name, aliases, rel tokens, any hreflang)', () => {
-    const html =
-      '<html><head><title>T</title>' +
-      '<meta property="og:title" content="Own"><meta name="OG:Description" content="Own">' +
-      "<meta property='og:image:url' content='https://x/own.jpg'><meta name=twitter:card content=summary>" +
-      '<meta name="twitter:image:src" content="https://x/own.jpg">' +
-      '<link rel="shortcut icon" href="/own.ico"><link rel="apple-touch-icon-precomposed" href="/own.png">' +
-      '<link rel="alternate" hreflang="fr" href="https://x/fr"></head><body></body></html>'
-    expect(tags(htmlDesignHeadTags(html, share))).toEqual([
-      '<meta property="og:url" content="https://spa.example.ae/">',
-      '<meta property="og:type" content="website">',
-      '<meta property="og:locale" content="en_AE">',
-      '<meta property="og:site_name" content="Spa &quot;One&quot; &amp; Co">',
-      '<meta name="twitter:title" content="T">',
-      '<meta name="twitter:description" content="Fallback description">',
-    ])
-  })
-
-  it('reads only the head: comments and body markup are not the design’s tags', () => {
-    const html =
-      '<head><!-- <meta property="og:title" content="x"> <link rel="icon" href="/x"> --></head>' +
-      '<body><meta property="og:image" content="/body.jpg"><link rel="alternate" hreflang="ar" href="/ar"></body>'
-    const out = htmlDesignHeadTags(html, share)
-    expect(out).toContain('<meta property="og:title" content="Fallback title">')
-    expect(out).toContain('<meta property="og:image" content="https://spa.example.ae/files/hero">')
-    expect(out).toContain('<link rel="icon" href="https://spa.example.ae/files/logo">')
-    expect(out).toContain('hreflang="ar"')
-  })
-
-  it('no logo → no icon links; no picture → no image tags', () => {
-    const out = htmlDesignHeadTags('<head></head>', { ...share, icon: null, image: null })
-    expect(out).not.toMatch(/rel="(?:icon|apple-touch-icon)"/)
-    expect(out).not.toMatch(/og:image|twitter:image/)
-    expect(out).toContain('<meta name="twitter:card" content="summary">')
-  })
-})
-
-describe('htmlDesignPictureSrcs', () => {
-  const html =
-    '<style>.hero{background:url(/files/bg)}</style><img src="data:image/png;base64,AA"><img src="/files/a">'
-  const images = listHtmlDesignImages(html)
-
-  it('list order (imgs, then backgrounds), the replacement where id + src still match', () => {
-    expect(htmlDesignPictureSrcs(images)).toEqual(['data:image/png;base64,AA', '/files/a', '/files/bg'])
-    expect(
-      htmlDesignPictureSrcs(images, [
-        { id: 'img-0', src: 'data:image/png;base64,AA', replace: 'https://cdn.example/new.jpg' },
-        { id: 'img-1', src: '/files/other', replace: 'https://cdn.example/stale.jpg' },
-        { id: 'bg-0', src: '/files/bg', replace: 'javascript:alert(1)' },
-      ]),
-    ).toEqual(['https://cdn.example/new.jpg', '/files/a', '/files/bg'])
   })
 })

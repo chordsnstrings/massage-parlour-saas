@@ -1,7 +1,6 @@
 // Search + social data for public pages (PLAN §17 F12): schema.org JSON-LD, robots.txt and sitemap.xml. Pure; no DB.
 import type { OpeningHours, Weekday } from './booking'
 import { EMIRATE_NAMES } from './emirates'
-import { attributesOf, htmlTextOf } from './html-design'
 import { normalizeGoogleMapsUrl } from './maps'
 
 type Json = Record<string, unknown>
@@ -375,93 +374,4 @@ export function sitemapXml(entries: SitemapEntry[]): string {
     return `<url>${parts.join('')}</url>`
   })
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${body.join('\n')}${body.length ? '\n' : ''}</urlset>\n`
-}
-
-/** What an exact HTML design's live page is shared and bookmarked with (site-html route; absolute URLs). */
-export type HtmlDesignShare = {
-  /** The page title when the design has no `<title>` of its own (the route adds that one too). */
-  title: string
-  /** The page's search description when the design has no meta description. */
-  description?: string
-  /** Canonical address of this page (`?lang=ar` for the Arabic one). */
-  url: string
-  siteName: string
-  locale: 'en' | 'ar'
-  /** Link-preview picture; `large` = a photo (`summary_large_image` card), else the logo (`summary`). */
-  image?: { url: string; large: boolean } | null
-  /** The spa logo: `rel=icon` + `rel=apple-touch-icon`. */
-  icon?: string | null
-  /** hreflang → URL (en, ar, x-default) when the site has Arabic. */
-  languages?: Record<string, string>
-}
-
-/** Names a design may use instead: either one counts as the design's own tag. */
-const SHARE_ALIASES: Record<string, string[]> = {
-  'og:image': ['og:image:url', 'og:image:secure_url'],
-  'twitter:image': ['twitter:image:src'],
-}
-const attrText = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
-
-/**
- * M11 / M2 (QA 2026-10-14; extends the R24 invisible additions, owner approval pending): the head tags block sites
- * get from their page metadata, for an exact HTML design's live document — Open Graph (title, description, url, type,
- * locale, site_name, image), the Twitter card, icon + apple-touch-icon links and hreflang alternates. Read from the
- * design's head (markup before `<body>`, comments dropped): the titles = its `<title>`, the descriptions = its meta
- * description (else `share`'s). Each tag the design already has is left out — og:* and twitter:* by property or
- * name, an `icon` / `apple-touch-icon` link, and any `hreflang` link (then none of ours).
- */
-export function htmlDesignHeadTags(html: string, share: HtmlDesignShare): string {
-  const bodyAt = html.search(/<body\b/i)
-  const head = (bodyAt < 0 ? html : html.slice(0, bodyAt)).replace(/<!--[\s\S]*?-->/g, '')
-  const named = new Set<string>()
-  let icon = false
-  let apple = false
-  let languages = false
-  let description = ''
-  for (const m of head.matchAll(/<(meta|link)\b/gi)) {
-    const attrs = attributesOf(head, m.index + m[0].length)
-    const value = (name: string) => {
-      const a = attrs.find((x) => x.name === name)
-      return a && a.start >= 0 ? htmlTextOf(head.slice(a.start, a.end)) : ''
-    }
-    if (m[1]!.toLowerCase() === 'meta') {
-      for (const key of [value('property'), value('name')])
-        if (key.trim()) named.add(key.trim().toLowerCase())
-      if (!description && value('name').trim().toLowerCase() === 'description')
-        description = oneLine(value('content'))
-      continue
-    }
-    const rel = value('rel').toLowerCase().split(/\s+/)
-    if (rel.includes('icon')) icon = true
-    if (rel.includes('apple-touch-icon') || rel.includes('apple-touch-icon-precomposed')) apple = true
-    if (attrs.some((a) => a.name === 'hreflang')) languages = true
-  }
-  const own = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(head)
-  const title = (own ? oneLine(htmlTextOf(own[1]!)) : '') || share.title
-  const text = description || share.description || ''
-  const image = share.image?.url
-  const meta = (attr: 'property' | 'name', key: string, content: string | undefined) =>
-    content && !named.has(key) && !SHARE_ALIASES[key]?.some((k) => named.has(k))
-      ? `<meta ${attr}="${key}" content="${attrText(content)}">`
-      : ''
-  let out =
-    meta('property', 'og:title', title) +
-    meta('property', 'og:description', text) +
-    meta('property', 'og:url', share.url) +
-    meta('property', 'og:type', 'website') +
-    meta('property', 'og:locale', share.locale === 'ar' ? 'ar_AE' : 'en_AE') +
-    meta('property', 'og:site_name', share.siteName) +
-    meta('property', 'og:image', image) +
-    meta('name', 'twitter:card', share.image?.large ? 'summary_large_image' : 'summary') +
-    meta('name', 'twitter:title', title) +
-    meta('name', 'twitter:description', text) +
-    meta('name', 'twitter:image', image)
-  if (share.icon && !icon) out += `<link rel="icon" href="${attrText(share.icon)}">`
-  if (share.icon && !apple) out += `<link rel="apple-touch-icon" href="${attrText(share.icon)}">`
-  if (!languages)
-    for (const [lang, href] of Object.entries(share.languages ?? {}))
-      out += `<link rel="alternate" hreflang="${attrText(lang)}" href="${attrText(href)}">`
-  return out
 }

@@ -85,7 +85,8 @@ as for `short_name`). On another spa's design an empty CRM value or list stays e
 - **head tags (QA M11/M2, proposed, awaits the owner's OK):** the live page also gets, before `</head>`, the share,
   icon and language tags the design doesn't have itself: og:title / og:description (its own `<title>` and meta
   description), og:url (canonical), og:type, og:locale (`en_AE` / `ar_AE`), og:site_name, og:image + the twitter card
-  (its first picture as shown, else the spa logo), `rel=icon` / `rel=apple-touch-icon` (spa logo) and hreflang
+  (its first photo in page order as shown — logos, icons and SVGs skipped — else the spa logo; a design's own og:*
+  tags also stand for X, so no twitter:* of ours goes over them), `rel=icon` / `rel=apple-touch-icon` (spa logo) and hreflang
   en / ar / x-default (sites with Arabic). A design that wants its own simply writes the tag: that one is never
   doubled. CRM_DATA pictures aren't markup, so a contract design's preview is the logo unless it writes og:image.
 - **endpoint-only designs**: the live page is byte for byte the stored file and fetches `crm-data.json` itself;

@@ -302,19 +302,61 @@ export function listHtmlDesignImages(html: string): HtmlDesignImage[] {
   ].slice(0, MAX_HTML_IMAGES)
 }
 
+/** A link-preview candidate (M11): a listed image; `mark` = an `<img>` that looks like a logo or icon. */
+export type HtmlDesignPicture = Pick<HtmlDesignImage, 'id' | 'src'> & { mark?: true }
+
+const MARK_WORD = /(?:^|[^a-z])(?:logo|icon|favicon|sprite)s?(?![a-z])/i
+
+/** `<img>` drawn as a logo or icon: a width / height attribute under 200 px, or "logo" / "icon" in src, class, id or alt. */
+function isMarkImg(tag: string) {
+  const attrs = attributesOf(tag, 4)
+  const value = (name: string) => {
+    const a = attrs.find((x) => x.name === name)
+    return a && a.start >= 0 ? textOf(tag.slice(a.start, a.end)) : ''
+  }
+  if (['width', 'height'].some((n) => /^\s*\d/.test(value(n)) && Number.parseFloat(value(n)) < 200))
+    return true
+  const file = value('src').split(/[?#]/)[0]!.split('/').pop() ?? ''
+  return [file, value('class'), value('id'), value('alt')].some((v) => MARK_WORD.test(v))
+}
+
 /**
- * What each listed image shows with the adjustments (the replacement where the id + src guard holds, as in the
- * render), in list order: a link preview takes the first usable one (M11).
+ * The listed images (same ids as `listHtmlDesignImages`) in document order, `<img>` and CSS backgrounds interleaved:
+ * a hero drawn as a background before a later `<img>` comes first (M11 link previews).
+ */
+export function htmlDesignPictures(html: string): HtmlDesignPicture[] {
+  const { imgs, bgs } = scan(html)
+  const listedImgs = imgs.slice(0, MAX_HTML_IMAGES)
+  const listedBgs = bgs.slice(0, Math.max(0, MAX_HTML_IMAGES - listedImgs.length))
+  return [
+    ...listedImgs.map((i) => ({ at: i.tagStart, id: i.id, src: i.src, mark: isMarkImg(i.tag) })),
+    ...listedBgs.map((b) => ({ at: b.urlStart, id: b.id, src: b.src, mark: false })),
+  ]
+    .sort((a, b) => a.at - b.at)
+    .map(({ id, src, mark }) => (mark ? { id, src, mark: true as const } : { id, src }))
+}
+
+/**
+ * A picture link previews can show as a large photo: not inline data, not SVG (Facebook, WhatsApp and X don't
+ * render it) and not an `.ico`.
+ */
+export const isSharePhoto = (src: string) =>
+  !/^\s*(?:data|blob):/i.test(src) && !/\.(?:svgz?|ico)(?:[?#]|$)/i.test(src.trim())
+
+/**
+ * The photos a link preview may use, in the given (document) order: each picture as it shows with the adjustments
+ * (the replacement where the id + src guard holds, as in the render), logos / icons, inline data and SVGs left out.
  */
 export function htmlDesignPictureSrcs(
-  images: Pick<HtmlDesignImage, 'id' | 'src'>[],
+  pictures: HtmlDesignPicture[],
   adjust: HtmlImageAdjust[] = [],
 ): string[] {
   const byId = new Map<string, HtmlImageAdjust[]>()
   for (const a of adjust) if (HTML_IMAGE_ID.test(a.id)) byId.set(a.id, [...(byId.get(a.id) ?? []), a])
-  return images.map(
-    (img) => htmlImageUrl(byId.get(img.id)?.findLast((a) => a.src === srcKey(img.src))?.replace) ?? img.src,
-  )
+  return pictures
+    .filter((p) => !p.mark)
+    .map((p) => htmlImageUrl(byId.get(p.id)?.findLast((a) => a.src === srcKey(p.src))?.replace) ?? p.src)
+    .filter((src) => src.trim() && isSharePhoto(src))
 }
 
 function applyEdits(html: string, edits: Edit[]) {

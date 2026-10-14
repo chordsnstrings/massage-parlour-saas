@@ -1,13 +1,14 @@
 import {
   type HtmlDesignContent,
-  type HtmlDesignImage,
+  type HtmlDesignPicture,
   type HtmlImageAdjust,
   htmlDesignDocOf,
   htmlDesignDocument,
   htmlDesignHeadTags,
   htmlDesignPictureSrcs,
+  htmlDesignPictures,
   htmlPictureAdjustments,
-  listHtmlDesignImages,
+  isSharePhoto,
 } from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
@@ -40,14 +41,17 @@ import { resolveSiteTenant } from '@/server/sites'
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-// Each stored design's pictures in list order (content-addressed key; ≤ 200 entries, long data: URIs cut).
-const designImages = new Map<string, Pick<HtmlDesignImage, 'id' | 'src'>[]>()
+// Each stored design's pictures in document order (content-addressed key; ≤ 200 entries, long data: URIs cut).
+const designImages = new Map<string, HtmlDesignPicture[]>()
 
-/** The design's first picture as it shows (the spa's / template's replacements applied), absolute; else null. */
+/**
+ * The design's first photo in document order as it shows (the spa's / template's replacements applied; logos,
+ * icons, SVGs and inline data skipped), absolute; else null.
+ */
 function designPicture(html: string, key: string | null, adjust: HtmlImageAdjust[], origin: string) {
   let images = key ? designImages.get(key) : undefined
   if (!images) {
-    images = listHtmlDesignImages(html).map((i) => ({ id: i.id, src: i.src.slice(0, 2048) }))
+    images = htmlDesignPictures(html).map((i) => ({ ...i, src: i.src.slice(0, 2048) }))
     if (key) {
       if (designImages.size >= 200) designImages.delete(designImages.keys().next().value ?? '')
       designImages.set(key, images)
@@ -144,8 +148,10 @@ async function render(req: Request, head: boolean) {
   const canonical = sitePageUrl(seo.base, p.page, locale === 'ar' && seo.arabic ? 'ar' : undefined)
   const ld = await siteJsonLd(tenant, p.page, loaded, locale)
   const site = p.kind === 'slug' ? tenant.slug : p.key
-  // Link previews: the page's hero (block-site rule), else the design's first picture as shown, else the logo.
-  const picture = heroImageOf(data, seo.origin) ?? designPicture(block.props.html, key, adjust, seo.origin)
+  // Link previews: the page's hero (block-site rule), else the design's first photo as shown, else the logo.
+  const hero = heroImageOf(data, seo.origin)
+  const picture =
+    (hero && isSharePhoto(hero) ? hero : null) ?? designPicture(block.props.html, key, adjust, seo.origin)
   const share = htmlDesignHeadTags(html, {
     title,
     description: tr(data.root?.props?.description, ctx) || undefined,
