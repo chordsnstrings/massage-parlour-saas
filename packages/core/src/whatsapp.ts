@@ -5,6 +5,12 @@ export const asciiDigits = (s: string) =>
     .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
 
 /**
+ * Invisible direction and zero-width marks (LRM/RLM/ALM, embeddings/overrides, isolates, BOM) that WhatsApp, iOS
+ * Contacts and Arabic keyboards wrap pasted numbers in (QA M3; data-io cleanCell strips the same).
+ */
+const FORMAT_MARKS = /[\u200b-\u200f\u061c\u202a-\u202e\u2066-\u2069\ufeff]/g
+
+/**
  * Normalises a UAE mobile number to E.164 digits without '+', e.g. 0501234567 → 971501234567 (Arabic-Indic
  * digits accepted).
  */
@@ -22,12 +28,13 @@ const KEEPS_LEADING_ZERO = new Set(['39', '378', '379', '225', '229', '241', '24
 /**
  * Any phone number → E.164 digits without '+' (contact enquiries, PLAN §18.4): UAE mobiles as `toUaeE164`
  * (05…, 5…, 9715…), other UAE numbers with the trunk 0 (04 123 4567 → 97141234567), international numbers with +
- * or 00 (Arabic-Indic digits read as ASCII, QA M3). A trunk 0 is dropped: '(0)' anywhere (+44 (0)20 …), after +971, and after a country code typed apart
+ * or 00 (Arabic-Indic digits read as ASCII, invisible direction marks dropped, QA M3). A trunk 0 is dropped: '(0)' anywhere (+44 (0)20 …), after +971, and after a country code typed apart
  * (+44 07700 …, 0049 030 …) unless that country keeps it. Null unless it can be a valid E.164 number (8–15 digits,
  * no leading 0).
  */
 export function toE164(input: string): string | null {
   const raw = asciiDigits(input)
+    .replace(FORMAT_MARKS, '')
     .replace(/\(\s*0\s*\)/g, ' ')
     .trim()
   if (!raw || /[^\d\s+()./-]/.test(raw) || raw.lastIndexOf('+') > 0) return null

@@ -353,6 +353,14 @@ describe('planSiteTexts (R23 Write texts)', () => {
         await tx
           .insert(serviceVariants)
           .values({ tenantId, serviceId: hidden.id, durationMin: 75, priceAed: '400' })
+        // A price of 0 is "price on request" for the copywriter too (QA: no "AED 0" in drafted page text).
+        const [free] = await tx
+          .insert(services)
+          .values({ tenantId, name: { en: 'Foot ritual' }, sort: 1 })
+          .returning()
+        await tx
+          .insert(serviceVariants)
+          .values({ tenantId, serviceId: free.id, durationMin: 45, priceAed: '0' })
         await tx
           .insert(brandProfiles)
           .values({ tenantId, voice: 'Quiet luxury.', dos: ['Mention free parking'] })
@@ -366,6 +374,7 @@ describe('planSiteTexts (R23 Write texts)', () => {
     expect(facts.services.map((s) => s.options)).toEqual([
       ['60 min AED 250', '90 min AED 340'],
       ['75 min price on request'],
+      ['45 min price on request'],
     ])
     const slots = textSlots(data, schema)
     expect(slots.map((s) => s.key)).toEqual(['hero-1/title'])
@@ -414,6 +423,8 @@ describe('planSiteTexts (R23 Write texts)', () => {
     )
     expect(user).toContain('Hot stones: 75 min price on request')
     expect(user).not.toContain('AED 400')
+    expect(user).toContain('Foot ritual: 45 min price on request')
+    expect(user).not.toContain('AED 0')
     expect(user).toContain("Owner's notes: Female therapists available")
     expect(user).toContain('- About (/about)')
     expect(user).toMatch(

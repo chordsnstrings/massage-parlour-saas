@@ -182,6 +182,14 @@ describe('whatsapp', () => {
     ['٠٤ 123 ٤٥٦٧', '97141234567'],
     ['+٤٤ ٧٧٠٠ ٩٠٠١٢٣', '447700900123'],
     ['٠٥٠ ١٢٣', null],
+    // Pasted with invisible direction marks (WhatsApp / iOS Contacts / Arabic keyboards), as toUaeE164 accepts.
+    ['\u202a+971 50 123 4567\u202c', '971501234567'],
+    ['\u200f٠٥٠١٢٣٤٥٦٧', '971501234567'],
+    ['\u061c٠٥٠١٢٣٤٥٦٧', '971501234567'],
+    ['\u2066+971501234567\u2069', '971501234567'],
+    ['\u200e+44 7700 900123\u200e', '447700900123'],
+    ['\ufeff04 123 4567', '97141234567'],
+    ['\u202bcall me\u202c', null],
   ])('toE164(%s)', (input, out) => expect(toE164(input)).toBe(out))
 
   it('maps Arabic-Indic digits to ASCII and leaves the rest', () => {

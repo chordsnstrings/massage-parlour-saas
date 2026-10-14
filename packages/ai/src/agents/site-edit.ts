@@ -316,7 +316,8 @@ export async function loadSiteFacts(tx: Tx, tenantId: string): Promise<SiteFacts
     .orderBy(asc(services.sort), asc(services.createdAt), asc(serviceVariants.durationMin))
   const byService = new Map<string, SiteFacts['services'][number]>()
   for (const m of menu) {
-    const shown = m.priceAed != null && (m.showPrice ?? !tenant?.settings.hidePrices)
+    // Same rule as services publicPrice / context.ts: a missing, 0 or negative price is 'price on request' (QA M6).
+    const shown = Number(m.priceAed) > 0 && (m.showPrice ?? !tenant?.settings.hidePrices)
     const entry = byService.get(m.id) ?? {
       name: m.name.en,
       nameAr: m.name.ar || null,
