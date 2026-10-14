@@ -1,20 +1,23 @@
-import { bookingSourceLabel } from '@spa/core/i18n'
+import { phoneLineOptions, sheetCode } from '@spa/core'
+import { bookingSourceLabel, enumLabel } from '@spa/core/i18n'
 import { withTenant } from '@spa/db'
-import { bookingDetail } from '@spa/services'
-import { ArrowLeft } from 'lucide-react'
+import { bookingDetail, isDayClosed, lastBookingTerms, orderSale } from '@spa/services'
+import { ArrowLeft, Receipt } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { allowedBranches, ownStaffId } from '@/app/dashboard/[tenant]/calendar/data'
+import { CorrectOrderForm } from '@/components/bookings/correct-order'
+import { DetailsForm, TermsForm } from '@/components/bookings/order-forms'
 import { formatPhone } from '@/components/calendar/time'
 import { maskClientPhone } from '@/components/clients/shared'
-import { Card, Grid, Note, Stack, TName } from '@/components/crm'
+import { Card, Grid, Note, Pill, Stack, TName } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { BookingMarks, CommissionForm, CompleteButton } from '../booking-client'
+import { BookingMarks, CommissionForm } from '../booking-client'
 import { MarkPill } from '../mark-pill'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -29,7 +32,8 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
   const slug = ctx.tenant.slug
   const canManage = can(ctx, 'calendar.manage')
   const canCommission = canManage && can(ctx, 'calendar.commission')
-  const data = await withTenant(ctx.tenant.id, async (tx) => {
+  const canCheckout = can(ctx, 'pos.use')
+  const loaded = await withTenant(ctx.tenant.id, async (tx) => {
     const b = await bookingDetail(tx, id)
     if (!b || !(await allowedBranches(tx, ctx)).some((br) => br.id === b.branchId)) return null
     // Therapists see only bookings they work on.
@@ -37,12 +41,29 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
       const mine = await ownStaffId(tx, ctx)
       if (!mine || !b.items.some((i) => i.therapists.some((x) => x.staffId === mine))) return null
     }
-    return b
+    // R32: the linked order (sale), the last amounts typed per treatment, and the day lock of the order's day.
+    const order = await orderSale(tx, b.id)
+    const last = await lastBookingTerms(
+      tx,
+      b.items.flatMap((i) => (i.serviceVariantId ? [i.serviceVariantId] : [])),
+    )
+    const closed = await isDayClosed(tx, b.branchId, order?.sale.businessDate ?? b.businessDate)
+    return { b, order, last, closed }
   })
-  if (!data) notFound()
+  if (!loaded) notFound()
+  const { b: data, order, last } = loaded
 
   const completed = data.status === 'completed'
   const open = !completed && data.status !== 'cancelled' && data.status !== 'no_show'
+  // R32 (D6): a closed day changes only with pos.correct (owners/managers).
+  const locked = loaded.closed && !can(ctx, 'pos.correct')
+  const finished = order !== null
+  const lineOf = (n: number | null) =>
+    n == null
+      ? '—'
+      : [`P${n}`, phoneLineOptions(ctx.tenant.settings).find((o) => o.line === n)?.number]
+          .filter(Boolean)
+          .join(' · ')
   const rows = data.items.flatMap((i) =>
     i.therapists.map((x) => ({
       itemId: i.id,
@@ -72,6 +93,26 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
       [bookingSourceLabel(t, data.source, data.attribution), data.partnerName].filter(Boolean).join(' · '),
     ],
     [t('bookings.detail.total'), fmt.aed(total)],
+    [t('bookings.order.code'), sheetCode(data)],
+    ...(data.source === 'phone'
+      ? [[t('calendar.fields.phoneLine'), lineOf(data.phoneLine)] as [string, string]]
+      : []),
+    [
+      t('calendar.fields.clientType'),
+      data.clientType
+        ? enumLabel(t, 'bookingClientType', data.clientType)
+        : t('calendar.fields.clientTypeNone'),
+    ],
+    ...(data.ownLead
+      ? [
+          [
+            t('calendar.fields.ownLead'),
+            <Pill key="own" tone="own">
+              {t('calendar.sheet.ownClient')}
+            </Pill>,
+          ] as [string, React.ReactNode],
+        ]
+      : []),
     ...(data.notes ? [[t('bookings.detail.notes'), data.notes] as [string, string]] : []),
     ...(data.cancelReason && data.status === 'cancelled'
       ? [[t('bookings.detail.cancelReason'), data.cancelReason] as [string, string]]
@@ -95,14 +136,34 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
       <Stack>
         <Grid cols="col-2">
           <Card title={t('bookings.detail.details')}>
-            <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-[length:var(--crm-fs-body)]">
-              {facts.map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="crm-muted">{k}</dt>
-                  <dd className="min-w-0">{v}</dd>
-                </div>
-              ))}
-            </dl>
+            <Stack>
+              <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-[length:var(--crm-fs-body)]">
+                {facts.map(([k, v]) => (
+                  <div key={k} className="contents">
+                    <dt className="crm-muted">{k}</dt>
+                    <dd className="min-w-0">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              {canManage && !locked && (open || completed) && (
+                <details className="group">
+                  <summary className="cursor-pointer text-[length:var(--crm-fs-sub)] font-medium text-[var(--crm-accent)]">
+                    {t('calendar.sheet.details')}
+                  </summary>
+                  <div className="pt-3">
+                    <DetailsForm
+                      slug={slug}
+                      bookingId={data.id}
+                      source={data.source}
+                      phoneLines={phoneLineOptions(ctx.tenant.settings)}
+                      phoneLine={data.phoneLine}
+                      clientType={data.clientType}
+                      ownLead={data.ownLead}
+                    />
+                  </div>
+                </details>
+              )}
+            </Stack>
           </Card>
           <Card title={t('bookings.detail.treatments')}>
             <ul className="space-y-2">
@@ -128,34 +189,94 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
 
         {(open || completed) && (
           <Card
-            title={t('bookings.commission.title')}
-            sub={completed ? t('bookings.commission.subDone') : t('bookings.commission.sub')}
+            title={t('bookings.order.title')}
+            sub={finished ? t('bookings.commission.subDone') : t('bookings.commission.sub')}
           >
             <Stack>
-              {completed && rows.length > 0 && !data.commissionEntered && (
+              {locked && <Note>{t('bookings.order.closedNote')}</Note>}
+              {completed && !finished && <Note tone="warn">{t('bookings.order.notPaid')}</Note>}
+              {finished && (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Link
+                    href={appPath(`/${slug}/sales/${order.sale.id}`)}
+                    className="inline-flex items-center gap-2 font-medium text-[var(--crm-accent)] hover:underline"
+                  >
+                    <Receipt className="size-4" aria-hidden />{' '}
+                    {t('calendar.sheet.sale', { number: order.sale.number })}
+                  </Link>
+                  <span className="crm-muted crm-num text-[length:var(--crm-fs-sub)]">
+                    {t('bookings.order.summary', {
+                      cash: fmt.aed(order.cashAed),
+                      card: fmt.aed(order.cardAed),
+                      other: fmt.aed(order.otherAed),
+                      tips: fmt.aed(order.tipsAed),
+                    })}
+                  </span>
+                </div>
+              )}
+              {finished && rows.length > 0 && !data.commissionEntered && (
                 <Note tone="warn">{t('bookings.commission.missingNote')}</Note>
               )}
-              {!canCommission ? (
-                <>
-                  {rows.map((r) => (
+              {!finished && open && canManage && !locked && (
+                <TermsForm
+                  slug={slug}
+                  bookingId={data.id}
+                  canCommission={canCommission}
+                  items={data.items.map((i) => {
+                    const prev = i.serviceVariantId ? last.get(i.serviceVariantId) : undefined
+                    return {
+                      id: i.id,
+                      serviceName: i.serviceName,
+                      feeAed: i.termsSet ? i.priceAed : (prev?.feeAed ?? i.priceAed),
+                      commissionAed: i.plannedCommissionAed ?? prev?.commissionAed ?? null,
+                    }
+                  })}
+                />
+              )}
+              {finished && canCommission && !locked && rows.length > 0 ? (
+                <CommissionForm slug={slug} bookingId={data.id} rows={rows} completed />
+              ) : (
+                rows.map((r) => {
+                  const planned = data.items.find((i) => i.id === r.itemId)?.plannedCommissionAed
+                  const amount = r.amountAed ?? (planned == null ? null : Number(planned))
+                  return (
                     <p key={`${r.itemId}:${r.staffId}`} className="flex justify-between gap-3">
                       <span>
                         {r.name} · {r.service}
                       </span>
                       <span className="crm-num">
-                        {r.amountAed === null ? t('bookings.missing') : fmt.aed(r.amountAed)}
+                        {amount === null ? t('bookings.missing') : fmt.aed(amount)}
                       </span>
                     </p>
-                  ))}
-                  {open && <Note>{t('bookings.commission.noPermission')}</Note>}
-                </>
-              ) : rows.length ? (
-                <CommissionForm slug={slug} bookingId={data.id} rows={rows} completed={completed} />
-              ) : (
-                <>
-                  <p className="crm-muted">{t('bookings.commission.noTherapists')}</p>
-                  {open && <CompleteButton slug={slug} bookingId={data.id} />}
-                </>
+                  )
+                })
+              )}
+              {!locked && (
+                <div className="flex flex-wrap gap-2">
+                  {!finished && canCheckout && data.status !== 'pending' && (
+                    <Button asChild>
+                      <Link href={appPath(`/${slug}/sales/new?booking=${data.id}`)}>
+                        <Receipt /> {t('bookings.order.finish')}
+                      </Link>
+                    </Button>
+                  )}
+                  {finished && canCheckout && canCommission && (
+                    <CorrectOrderForm
+                      slug={slug}
+                      bookingId={data.id}
+                      lines={order.lines}
+                      payments={order.payments}
+                      tips={order.tips}
+                      staff={[
+                        ...new Map(
+                          data.items.flatMap((i) =>
+                            i.therapists.map((x) => [x.staffId, { id: x.staffId, name: x.name ?? '—' }]),
+                          ),
+                        ).values(),
+                      ]}
+                    />
+                  )}
+                </div>
               )}
             </Stack>
           </Card>

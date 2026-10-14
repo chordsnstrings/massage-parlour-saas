@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-export type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'acc'
+export type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'acc' | 'own'
 
 /** Status/tag pill (crm-spec §3 `.pill`). `dot` adds the leading status dot. */
 export function Pill({

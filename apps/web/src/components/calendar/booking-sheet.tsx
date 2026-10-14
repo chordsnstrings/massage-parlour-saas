@@ -1,7 +1,7 @@
 'use client'
-import { canTransition } from '@spa/core'
+import { canTransition, sheetCode } from '@spa/core'
 import { bookingSourceLabel, enumLabel } from '@spa/core/i18n'
-import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt } from 'lucide-react'
+import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt, SlidersHorizontal } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
@@ -10,7 +10,8 @@ import {
   setOwnStatusAction,
   setStatusAction,
 } from '@/app/dashboard/[tenant]/calendar/actions'
-import { Pill, statusTone } from '@/components/crm'
+import { DetailsForm, TermsForm, type TermsItem } from '@/components/bookings/order-forms'
+import { Note, Pill, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
 import { Input, Select } from '@/components/ui/input'
@@ -84,10 +85,26 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
   const [moving, setMoving] = useState(false)
+  const [editing, setEditing] = useState<'terms' | 'details' | null>(null)
   const movable = data.canManage && !['completed', 'cancelled', 'no_show'].includes(status)
-  // Completing (with the therapist commission) and re-opening happen on the booking page (PLAN §14.8 R2).
+  // R32: a pending booking is confirmed with its fee + commission (the Confirm form below); completing = Finish & pay.
   const actions =
-    data.canManage && status !== 'completed' ? ACTIONS.filter((a) => canTransition(status, a.to)) : []
+    data.canManage && status !== 'completed'
+      ? ACTIONS.filter((a) => canTransition(status, a.to) && !(status === 'pending' && a.to === 'confirmed'))
+      : []
+  const live = status !== 'cancelled' && status !== 'no_show'
+  const paid = first.saleId !== null
+  const canEdit = data.canManage && live && !data.editLocked
+  // Prefill: the typed fee/commission, else the last amounts used for the treatment, else the list price.
+  const termsItems: TermsItem[] = items.map((i) => {
+    const v = data.variants.find((x) => x.id === i.variantId)
+    return {
+      id: i.id,
+      serviceName: i.serviceName,
+      feeAed: i.termsSet ? i.priceAed : (v?.lastFeeAed ?? i.priceAed),
+      commissionAed: i.commissionAed ?? v?.lastCommissionAed ?? null,
+    }
+  })
   const mine =
     !data.canManage &&
     data.ownStatusStaffId !== null &&
@@ -121,6 +138,8 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <Pill tone={statusTone(status)}>{enumLabel(t, 'bookingStatus', status)}</Pill>
+        <Pill>{sheetCode(first)}</Pill>
+        {first.ownLead && <Pill tone="own">{t('calendar.sheet.ownClient')}</Pill>}
         {first.clientPhone && (
           <span className="inline-flex items-center gap-1.5 text-sm text-muted tabular">
             <Phone className="size-3.5" strokeWidth={1.5} /> {first.clientPhone}
@@ -175,6 +194,79 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
           {first.cancelReason && (
             <p className="text-muted">{t('calendar.details.cancelled', { reason: first.cancelReason })}</p>
           )}
+        </div>
+      )}
+
+      {data.canManage && live && data.editLocked && <Note>{t('calendar.sheet.closedNote')}</Note>}
+      {status === 'completed' && !paid && <Note tone="warn">{t('calendar.sheet.notPaid')}</Note>}
+      {paid && (
+        <Link
+          href={`${data.salesBase}/${first.saleId}`}
+          className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-accent hover:underline"
+        >
+          <Receipt className="size-4" strokeWidth={1.5} />{' '}
+          {t('calendar.sheet.sale', { number: first.saleNumber ?? '' })}
+        </Link>
+      )}
+
+      {canEdit && status === 'pending' && (
+        <div className="space-y-3 rounded-xl border p-4">
+          <p className="text-sm font-medium">{t('calendar.sheet.confirm')}</p>
+          <TermsForm
+            slug={data.slug}
+            bookingId={first.bookingId}
+            items={termsItems}
+            canCommission={data.canCommission}
+            confirm
+          />
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          {!paid && status !== 'pending' && (
+            <button
+              type="button"
+              onClick={() => setEditing((e) => (e === 'terms' ? null : 'terms'))}
+              aria-expanded={editing === 'terms'}
+              className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-accent hover:underline"
+            >
+              <Receipt className="size-4" strokeWidth={1.5} /> {t('calendar.sheet.terms')}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEditing((e) => (e === 'details' ? null : 'details'))}
+            aria-expanded={editing === 'details'}
+            className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-accent hover:underline"
+          >
+            <SlidersHorizontal className="size-4" strokeWidth={1.5} /> {t('calendar.sheet.details')}
+          </button>
+        </div>
+      )}
+      {canEdit && editing === 'terms' && !paid && status !== 'pending' && (
+        <div className="rounded-xl border p-4">
+          <TermsForm
+            slug={data.slug}
+            bookingId={first.bookingId}
+            items={termsItems}
+            canCommission={data.canCommission}
+            onDone={() => setEditing(null)}
+          />
+        </div>
+      )}
+      {canEdit && editing === 'details' && (
+        <div className="rounded-xl border p-4">
+          <DetailsForm
+            slug={data.slug}
+            bookingId={first.bookingId}
+            source={first.source}
+            phoneLines={data.phoneLines}
+            phoneLine={first.phoneLine}
+            clientType={first.clientType}
+            ownLead={first.ownLead}
+            onDone={() => setEditing(null)}
+          />
         </div>
       )}
 
@@ -285,7 +377,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
         </Button>
       )}
 
-      {data.canCheckout && status !== 'cancelled' && status !== 'no_show' && (
+      {data.canCheckout && live && !paid && status !== 'pending' && !data.editLocked && (
         <Button
           asChild
           variant={status === 'completed' ? 'primary' : 'secondary'}
@@ -293,7 +385,7 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
           className="w-full"
         >
           <Link href={`${data.checkoutBase}?booking=${first.bookingId}`}>
-            <Receipt /> {t('calendar.details.checkOut')}
+            <Receipt /> {t('calendar.sheet.finish')}
           </Link>
         </Button>
       )}

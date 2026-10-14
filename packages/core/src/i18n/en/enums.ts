@@ -11,6 +11,8 @@ export const enums = {
     no_show: 'No-show',
     cancelled: 'Cancelled',
   },
+  /** R32: picked by reception on the booking (day sheet "/R" or "/N"). */
+  bookingClientType: { regular: 'Regular', new: 'New' },
   bookingSource: {
     walk_in: 'Walk-in',
     /** Owner 2026-10-13: bookings from the spa's website (public booking page, booking requests, staff-entered). */

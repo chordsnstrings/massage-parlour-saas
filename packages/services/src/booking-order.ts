@@ -350,3 +350,20 @@ export async function correctBookingOrder(
   const after = await snapshot(tx, booking.id, sale)
   return { before, after, voidedSaleId, sale }
 }
+
+/** The order's live sale with its lines, payments and tips (booking page), or null before Finish. */
+export async function orderSale(tx: Tx, bookingId: string) {
+  const sale = await liveSale(tx, bookingId)
+  if (!sale) return null
+  const snap = await snapshot(tx, bookingId, sale)
+  const sum = (m: (method: string) => boolean) =>
+    snap.payments.filter((p) => m(p.method)).reduce((s, p) => s + fils(p.amountAed), 0) / 100
+  return {
+    sale,
+    ...snap,
+    cashAed: sum((m) => m === 'cash'),
+    cardAed: sum((m) => m === 'card_terminal'),
+    otherAed: sum((m) => m !== 'cash' && m !== 'card_terminal'),
+    tipsAed: snap.tips.reduce((s, t) => s + fils(t.amountAed), 0) / 100,
+  }
+}

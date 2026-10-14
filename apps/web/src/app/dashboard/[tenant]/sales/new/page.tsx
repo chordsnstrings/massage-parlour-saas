@@ -6,20 +6,22 @@ import {
   membershipPlans,
   packageDefinitions,
   products,
+  sales,
   services,
   serviceVariants,
   staff,
   stockLevels,
   withTenant,
 } from '@spa/db'
-import { and, asc, eq } from 'drizzle-orm'
+import { lastBookingTerms } from '@spa/services'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import { ArrowLeft, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { maskPhone } from '@/components/calendar/time'
 import { Card } from '@/components/crm'
-import { Checkout, type CheckoutLine } from '@/components/pos/checkout'
+import { Checkout, type CheckoutCommission, type CheckoutLine } from '@/components/pos/checkout'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
@@ -33,7 +35,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const CHECKOUT_OK = ['confirmed', 'checked_in', 'in_service']
+// R32 (D7): a booking the therapist completed (G14) or whose sale was voided is finished here too.
+const CHECKOUT_OK = ['confirmed', 'checked_in', 'in_service', 'completed']
 
 export default async function NewSalePage({
   params,
@@ -48,6 +51,7 @@ export default async function NewSalePage({
   const sp = await searchParams
   const bookingParam = one(sp.booking)
   const seePhone = can(ctx, 'clients.phone')
+  const canCommission = can(ctx, 'calendar.commission')
   const { t } = await getI18n()
 
   const data = await withTenant(ctx.tenant.id, async (tx) => {
@@ -104,7 +108,7 @@ export default async function NewSalePage({
       .where(eq(membershipPlans.active, true))
       .orderBy(asc(membershipPlans.createdAt))
     const staffRows = await tx
-      .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds })
+      .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds, payType: staff.payType })
       .from(staff)
       .where(eq(staff.active, true))
       .orderBy(asc(staff.sort), asc(staff.displayName))
@@ -112,8 +116,11 @@ export default async function NewSalePage({
       bookingId: string
       ref: string
       status: string
+      /** R32: already finished (a live sale is linked) — checkout is refused. */
+      paid: boolean
       client: { id: string; name: string; phone: string | null } | null
       lines: CheckoutLine[]
+      commissions: CheckoutCommission[]
     } | null = null
     if (booking) {
       const items = await tx
@@ -127,10 +134,39 @@ export default async function NewSalePage({
             .from(clients)
             .where(eq(clients.id, booking.clientId))
         : []
+      const [live] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(and(eq(sales.bookingId, booking.id), ne(sales.status, 'void')))
+      // Commission per item × therapist: planned on the booking, else the last typed for the treatment, else 0 for
+      // someone not paid per booking, else blank (must be typed).
+      const last = await lastBookingTerms(
+        tx,
+        items.flatMap((it) => (it.serviceVariantId ? [it.serviceVariantId] : [])),
+      )
+      const commissions: CheckoutCommission[] = items.flatMap((it) =>
+        it.staffIds.map((sid) => {
+          const person = staffRows.find((s) => s.id === sid)
+          const planned =
+            it.commissionAed != null
+              ? Number(it.commissionAed)
+              : (last.get(it.serviceVariantId ?? '')?.commissionAed ??
+                (person && person.payType !== 'booking_commission' ? 0 : null))
+          return {
+            bookingItemId: it.id,
+            staffId: sid,
+            name: person?.name ?? '—',
+            service: it.serviceName,
+            amountAed: planned ?? '',
+          }
+        }),
+      )
       prefill = {
         bookingId: booking.id,
         ref: booking.refCode,
         status: booking.status,
+        paid: Boolean(live),
+        commissions,
         client: client
           ? {
               id: client.id,
@@ -208,7 +244,7 @@ export default async function NewSalePage({
   }
 
   const { prefill } = data
-  const blocked = prefill && !CHECKOUT_OK.includes(prefill.status)
+  const blocked = prefill && (!CHECKOUT_OK.includes(prefill.status) || prefill.paid)
   return (
     <>
       <PageHeader
@@ -240,6 +276,7 @@ export default async function NewSalePage({
           plans={data.plans}
           staff={data.staff}
           receiptBase={appPath(`/${slug}/sales`)}
+          commissions={canCommission ? (prefill?.commissions ?? []) : []}
         />
       )}
     </>

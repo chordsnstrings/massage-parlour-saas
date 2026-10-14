@@ -125,6 +125,7 @@ export const sales: Messages['sales'] = {
     tipsFor: 'ทิปให้ {name}',
     complete: 'ปิดการขาย · {amount}',
     addItemFirst: 'เพิ่มรายการก่อนจึงจะดำเนินการต่อได้',
+    commissionTitle: 'ค่าคอมมิชชันพนักงานนวด',
   },
   invoice: {
     title: 'ใบกำกับภาษี',
@@ -230,6 +231,20 @@ export const sales: Messages['sales'] = {
     businessDay: 'วันทำการ',
     expected: 'ควรมี',
     counted: 'นับได้',
+    // R32 (needs native review).
+    drawerExpenses: 'ค่าใช้จ่ายจากลิ้นชักเงินสด',
+    expensesTitle: 'ค่าใช้จ่ายที่จ่ายจากลิ้นชักเงินสด',
+    expensesSub: 'เงินสดที่จ่ายออกจากลิ้นชักวันนี้ (เช่น ค่าซักรีด) จะหักออกจากยอดเงินสดที่ควรมี',
+    expenseWhat: 'รายการ',
+    expenseCategory: 'หมวดหมู่',
+    expenseAmount: 'จำนวนเงิน (AED)',
+    expenseTime: 'เวลา',
+    expenseBy: 'โดย',
+    addExpense: 'เพิ่มค่าใช้จ่าย',
+    noExpenses: 'ไม่มีค่าใช้จ่ายวันนี้',
+    void: 'ยกเลิก',
+    voidExpense: 'ยกเลิก {what}',
+    voidExpenseConfirm: 'ยกเลิกค่าใช้จ่าย “{what}” หรือไม่? เงินจะกลับเข้ายอดเงินสดในลิ้นชัก',
   },
   toast: {
     recorded: 'บันทึกรายการขาย #{number} แล้ว',
@@ -237,6 +252,8 @@ export const sales: Messages['sales'] = {
     voided: 'ยกเลิกรายการขาย #{number} แล้ว',
     refunded: 'บันทึกการคืนเงิน {amount} แล้ว',
     dayClosed: 'ปิดยอดแล้ว',
+    expenseAdded: 'เพิ่มค่าใช้จ่ายแล้ว',
+    expenseVoided: 'ยกเลิกค่าใช้จ่ายแล้ว',
   },
   v: {
     amount: 'กรอกจำนวนเงิน',

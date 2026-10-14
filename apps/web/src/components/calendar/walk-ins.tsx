@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/page'
 import { Sheet } from '@/components/ui/sheet'
 import { useT } from '@/i18n/client'
 import { cn } from '@/lib/utils'
+import { ClientTypeField, OwnLeadField, TermsFields } from './order-fields'
 import { minuteLabel } from './time'
 import type { CalendarData, RotationRow } from './types'
 
@@ -92,6 +93,8 @@ export function WalkInSheet({
   const rotation = data.rotation ?? []
   const next = rotation.find((r) => r.status === 'free')
   const [startLabel, setStartLabel] = useState('')
+  const [variantId, setVariantId] = useState(() => data.variants[0]?.id ?? '')
+  const variant = data.variants.find((v) => v.id === variantId)
   useEffect(() => {
     if (!open) return
     setStartLabel(minuteLabel(Math.round((Date.now() - data.dayStartMs) / 300_000) * 5))
@@ -113,7 +116,12 @@ export function WalkInSheet({
       >
         <input type="hidden" name="branchId" value={data.branchId} />
         <Field label={t('calendar.fields.service')} name="variantId">
-          <Select id="variantId" name="variantId" defaultValue={data.variants[0]?.id}>
+          <Select
+            id="variantId"
+            name="variantId"
+            value={variantId}
+            onChange={(e) => setVariantId(e.target.value)}
+          >
             {data.variants.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label}
@@ -153,6 +161,9 @@ export function WalkInSheet({
             />
           </Field>
         </div>
+        <ClientTypeField />
+        <TermsFields variant={variant} canCommission={data.canCommission} />
+        <OwnLeadField />
         <SubmitButton size="lg" className="w-full">
           {t('calendar.walkIns.start')}
         </SubmitButton>

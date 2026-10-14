@@ -1,8 +1,8 @@
 import { addDays } from '@spa/core'
 import { enumLabel, type Translator } from '@spa/core/i18n'
-import { dayCloses, withTenant } from '@spa/db'
-import { daySummary } from '@spa/services'
-import { desc, eq } from 'drizzle-orm'
+import { dayCloses, platformDb, user, withTenant } from '@spa/db'
+import { DRAWER_EXPENSE_CODES, daySummary } from '@spa/services'
+import { desc, eq, inArray } from 'drizzle-orm'
 import { ArrowLeft, Lock, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -10,12 +10,14 @@ import { notFound } from 'next/navigation'
 import { Card, Grid, Hairline, Note, Pill, Stack } from '@/components/crm'
 import { CloseForm } from '@/components/pos/close-form'
 import { DayNav } from '@/components/pos/day-nav'
+import { DrawerExpenseForm, VoidDrawerExpenseButton } from '@/components/pos/drawer-expenses'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { can, requireMember } from '@/server/access'
+import { accountName } from '../../accounts/labels'
 import { closeDayAction } from '../actions'
 import { DATE, dayDate, pickBranch } from '../data'
 
@@ -70,6 +72,23 @@ export default async function ClosePage({
     )
   }
   const { branch, date, today, summary: s, past } = data
+  // R32 (D6/D11): drawer expenses are added/voided on an open day, or on a closed one by owners/managers.
+  const canEditDay = !s.close || can(ctx, 'pos.correct')
+  const whoIds = [...new Set(s.drawerExpenses.flatMap((e) => (e.createdBy ? [e.createdBy] : [])))]
+  const who = new Map(
+    whoIds.length
+      ? (
+          await platformDb()
+            .select({ id: user.id, name: user.name })
+            .from(user)
+            .where(inArray(user.id, whoIds))
+        ).map((u) => [u.id, u.name])
+      : [],
+  )
+  const categories = DRAWER_EXPENSE_CODES.map((c) => ({
+    code: c.code,
+    label: accountName(t, c.code, c.name),
+  }))
   const multi = data.branches.length > 1
   const href = (d: string) => {
     const p = new URLSearchParams()
@@ -79,7 +98,8 @@ export default async function ClosePage({
     return appPath(`/${slug}/sales/close${q ? `?${q}` : ''}`)
   }
   const cash = (o: Record<string, number>) => o.cash ?? 0
-  const cashMovement = cash(s.paymentsByMethod) + cash(s.tipsByMethod) - cash(s.refundsByMethod)
+  const cashMovement =
+    cash(s.paymentsByMethod) + cash(s.tipsByMethod) - cash(s.refundsByMethod) - s.drawerExpensesAed
   const methods = Object.keys({ ...s.paymentsByMethod, ...s.refundsByMethod })
   const prevFloat = past.find((p) => p.businessDate < date)?.openingFloatAed
   const method = (m: string) => enumLabel(t, 'paymentMethodKind', m)
@@ -148,6 +168,15 @@ export default async function ClosePage({
               {s.tipsByStaff.map((tip) => (
                 <Line key={tip.staffId} label={`· ${tip.name}`} value={aed(tip.amountAed)} muted />
               ))}
+              {s.drawerExpensesAed > 0 && (
+                <>
+                  <Hairline />
+                  <Line label={t('sales.close.drawerExpenses')} value={aed(-s.drawerExpensesAed)} danger />
+                  {s.drawerExpenses.map((e) => (
+                    <Line key={e.id} label={`· ${e.description}`} value={aed(-e.amountAed)} muted />
+                  ))}
+                </>
+              )}
               <Hairline />
               <Line label={t('sales.close.cashIn')} value={aed(cashMovement)} strong />
             </dl>
@@ -192,6 +221,60 @@ export default async function ClosePage({
             </Card>
           )}
         </Grid>
+
+        {(canEditDay || s.drawerExpenses.length > 0) && (
+          <Card title={t('sales.close.expensesTitle')} sub={t('sales.close.expensesSub')}>
+            <Stack>
+              {s.drawerExpenses.length === 0 ? (
+                <p className="crm-muted">{t('sales.close.noExpenses')}</p>
+              ) : (
+                <div className="crm-tbl-wrap">
+                  <table className="crm-tbl" data-stack="true">
+                    <thead>
+                      <tr>
+                        <th>{t('sales.close.expenseWhat')}</th>
+                        <th>{t('sales.close.expenseCategory')}</th>
+                        <th className="crm-num-c">{t('sales.close.expenseAmount')}</th>
+                        <th>{t('sales.close.expenseTime')}</th>
+                        <th>{t('sales.close.expenseBy')}</th>
+                        {canEditDay && <th aria-label={t('sales.close.void')} />}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {s.drawerExpenses.map((e) => (
+                        <tr key={e.id}>
+                          <td data-label={t('sales.close.expenseWhat')} className="font-semibold">
+                            {e.description}
+                          </td>
+                          <td data-label={t('sales.close.expenseCategory')}>
+                            {categories.find((c) => c.code === e.accountCode)?.label ?? e.accountCode}
+                          </td>
+                          <td data-label={t('sales.close.expenseAmount')} className="crm-num-c">
+                            {fmt.aed(e.amountAed)}
+                          </td>
+                          <td data-label={t('sales.close.expenseTime')} className="crm-muted">
+                            {fmt.time(e.createdAt)}
+                          </td>
+                          <td data-label={t('sales.close.expenseBy')} className="crm-muted">
+                            {(e.createdBy && who.get(e.createdBy)) || '—'}
+                          </td>
+                          {canEditDay && (
+                            <td>
+                              <VoidDrawerExpenseButton slug={slug} expenseId={e.id} label={e.description} />
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {canEditDay && (
+                <DrawerExpenseForm slug={slug} branchId={branch.id} date={date} categories={categories} />
+              )}
+            </Stack>
+          </Card>
+        )}
 
         <Card title={t('sales.close.past')} sub={multi ? branch.name : t('sales.close.recentFirst')}>
           {past.length === 0 ? (

@@ -1,10 +1,12 @@
 'use server'
 import {
+  type BookingClientType,
   businessDateOf,
   dubaiInstant,
   holdInterval,
   onLeave,
   overlaps,
+  phoneLinesConfigured,
   staffBookingAttribution,
 } from '@spa/core'
 import {
@@ -26,11 +28,14 @@ import {
   loadDay,
   lockSiteEnquiryForBooking,
   OWN_STATUS_TARGETS,
+  orderDay,
   outboxLink,
   planBookingMessages,
   rescheduleItem,
   rotationFor,
+  setBookingDetails,
   setBookingStatus,
+  setBookingTerms,
   setOwnBookingStatus,
   takeTurn,
 } from '@spa/services'
@@ -41,6 +46,7 @@ import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
+import { afterDayChange, editDay, periodLocked } from '@/server/day-lock'
 import { allowedBranches, ownStaffId } from './data'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'calendar.errors.pickDate')
@@ -82,7 +88,70 @@ async function assertStaffAndRoom(tx: Tx, staffIds: string[], roomId?: string) {
 
 const handle = (e: unknown): ActionResult => {
   if (e instanceof DomainError) return failDomain(e)
+  if (periodLocked(e)) return fail('accounts.result.lockedDate')
   throw e
+}
+
+// ---------------------------------------------------------------------------
+// R32 order fields: fee + commission (Confirm), phone line, client type, own client
+// ---------------------------------------------------------------------------
+
+const orderFields = {
+  feeAed: z.string().trim().max(20).optional(),
+  commissionAed: z.string().trim().max(20).optional(),
+  phoneLine: z.string().max(2).optional(),
+  clientType: z.enum(['regular', 'new', '']).optional(),
+  ownLead: z.string().max(5).optional(),
+}
+type OrderInput = { [K in keyof typeof orderFields]?: string }
+
+/** A typed AED amount 0–100,000 (2 decimals), or null when empty / invalid. */
+const parseAmount = (raw: string | undefined) => {
+  if (raw == null || raw.trim() === '') return null
+  const n = Number(raw.replace(/,/g, ''))
+  return Number.isFinite(n) && n >= 0 && n <= 100_000 ? Math.round(n * 100) / 100 : null
+}
+
+/**
+ * The R32 order fields of New booking / Walk-in. The fee is required; the commission too for members who may enter it
+ * (calendar.commission; others' typed value is ignored); a phone booking picks its line once lines are set in
+ * Settings; an own client needs her therapist.
+ */
+function orderTerms(
+  ctx: MemberContext,
+  v: OrderInput,
+  o: { source: string; staffId?: string },
+):
+  | { ok: false; error: ActionResult }
+  | {
+      ok: true
+      feeAed: number
+      commissionAed: number | null
+      phoneLine: number | null
+      clientType: BookingClientType | null
+      ownLead: boolean
+    } {
+  const fieldErrors: Record<string, string> = {}
+  const feeAed = parseAmount(v.feeAed)
+  if (feeAed === null) fieldErrors.feeAed = 'calendar.errors.fee'
+  const mayCommission = can(ctx, 'calendar.commission')
+  const commissionAed = mayCommission ? parseAmount(v.commissionAed) : null
+  if (mayCommission && commissionAed === null) fieldErrors.commissionAed = 'calendar.errors.commission'
+  const line = Number(v.phoneLine)
+  const phoneLine = o.source === 'phone' && line >= 1 && line <= 4 ? line : null
+  if (o.source === 'phone' && !phoneLine && phoneLinesConfigured(ctx.tenant.settings))
+    fieldErrors.phoneLine = 'calendar.errors.phoneLine'
+  const ownLead = v.ownLead === 'on'
+  if (ownLead && !o.staffId) fieldErrors.ownLead = 'calendar.errors.ownLeadTherapist'
+  if (Object.keys(fieldErrors).length) return { ok: false, error: fail('errors.checkFields', fieldErrors) }
+  return {
+    ok: true,
+    feeAed: feeAed!,
+    commissionAed,
+    phoneLine,
+    clientType: (v.clientType || null) as BookingClientType | null,
+    ownLead,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,8 +208,11 @@ const bookingSchema = z
     source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram', 'online']),
     notes: z.string().trim().max(1000).optional(),
     enquiryId: optionalId,
+    ...orderFields,
   })
   .superRefine((v, c) => {
+    if (v.ownLead === 'on' && !v.staffId)
+      c.addIssue({ code: 'custom', path: ['ownLead'], message: 'calendar.errors.ownLeadTherapist' })
     if (v.clientId) return
     if (!v.clientName)
       c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
@@ -161,6 +233,8 @@ export async function createBookingAction(
   const v = parsed.data
   // A website booking request is inbox data: the inbox's permission too.
   if (v.enquiryId && !can(ctx, 'clients.view')) return fail('errors.forbidden')
+  const terms = orderTerms(ctx, v, { source: v.source, staffId: v.staffId })
+  if (!terms.ok) return terms.error
   try {
     const result = await withTenant(ctx.tenant.id, async (tx) => {
       const branch = await branchFor(tx, ctx, v.branchId)
@@ -192,12 +266,17 @@ export async function createBookingAction(
         status: 'confirmed',
         notes: v.notes || null,
         createdBy: ctx.user.id,
+        phoneLine: terms.phoneLine,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
         items: [
           {
             serviceVariantId: v.variantId,
             start,
             staffIds: v.staffId ? [v.staffId] : undefined,
             roomId: v.roomId,
+            feeAed: terms.feeAed,
+            commissionAed: terms.commissionAed,
           },
         ],
       })
@@ -216,6 +295,11 @@ export async function createBookingAction(
       data: {
         ref: result.booking.refCode,
         source: v.source,
+        fee: terms.feeAed,
+        commission: terms.commissionAed,
+        phoneLine: terms.phoneLine,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
         ...(v.enquiryId ? { enquiryId: v.enquiryId } : {}),
       },
     })
@@ -454,6 +538,7 @@ const walkInSchema = z.object({
   staffId: optionalId,
   clientName: z.string().trim().max(120).optional(),
   clientPhone: z.string().trim().max(30).optional(),
+  ...orderFields,
 })
 
 export async function walkInAction(
@@ -466,6 +551,9 @@ export async function walkInAction(
   const parsed = walkInSchema.safeParse(formObject(formData))
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
+  // R32: an own client is hand-picked (a rotation pick is never her own client) and doesn't use her turn.
+  const terms = orderTerms(ctx, v, { source: 'walk_in', staffId: v.staffId })
+  if (!terms.ok) return terms.error
   try {
     const result = await withTenant(ctx.tenant.id, async (tx) => {
       const branch = await branchFor(tx, ctx, v.branchId)
@@ -529,9 +617,19 @@ export async function walkInAction(
         notes: !client && v.clientName ? `Walk-in: ${v.clientName}` : null,
         createdBy: ctx.user.id,
         allowOffShift: true,
-        items: [{ serviceVariantId: v.variantId, start, staffIds: [therapist.id] }],
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        items: [
+          {
+            serviceVariantId: v.variantId,
+            start,
+            staffIds: [therapist.id],
+            feeAed: terms.feeAed,
+            commissionAed: terms.commissionAed,
+          },
+        ],
       })
-      await takeTurn(tx, branch.id, businessDate, therapist.id)
+      if (!terms.ownLead) await takeTurn(tx, branch.id, businessDate, therapist.id)
       return { booking, therapist: therapist.name }
     })
     await audit({
@@ -540,13 +638,166 @@ export async function walkInAction(
       action: 'booking.walk_in',
       entity: 'booking',
       entityId: result.booking.id,
-      data: { ref: result.booking.refCode, therapist: result.therapist },
+      data: {
+        ref: result.booking.refCode,
+        therapist: result.therapist,
+        fee: terms.feeAed,
+        commission: terms.commissionAed,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        turn: !terms.ownLead,
+      },
     })
     revalidate(slug)
     return ok(
       { key: 'calendar.walkIns.started', params: { name: result.therapist } },
       { ref: result.booking.refCode },
     )
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R32 Confirm (fee + commission), Fee & commission, Order details — day lock (D6) applies
+// ---------------------------------------------------------------------------
+
+/** `fee:<itemId>` / `commission:<itemId>` fields → item terms (commission ignored without calendar.commission). */
+function termsFromForm(ctx: MemberContext, formData: FormData) {
+  const mayCommission = can(ctx, 'calendar.commission')
+  const items = new Map<string, { bookingItemId: string; feeAed: number; commissionAed?: number | null }>()
+  const fieldErrors: Record<string, string> = {}
+  for (const [key, raw] of formData.entries()) {
+    const m = /^(fee|commission):([0-9a-f-]{36})$/.exec(key)
+    if (!m || typeof raw !== 'string') continue
+    const kind = m[1] as 'fee' | 'commission'
+    const itemId = m[2]!
+    const row = items.get(itemId) ?? { bookingItemId: itemId, feeAed: Number.NaN }
+    const amount = parseAmount(raw)
+    if (kind === 'fee') {
+      if (amount === null) fieldErrors[key] = 'calendar.errors.fee'
+      else row.feeAed = amount
+    } else if (mayCommission) {
+      if (amount === null) fieldErrors[key] = 'calendar.errors.commission'
+      else row.commissionAed = amount
+    }
+    items.set(itemId, row)
+  }
+  for (const row of items.values())
+    if (Number.isNaN(row.feeAed) && !fieldErrors[`fee:${row.bookingItemId}`])
+      fieldErrors[`fee:${row.bookingItemId}`] = 'calendar.errors.fee'
+  return { items: [...items.values()], fieldErrors }
+}
+
+/** Shared by Confirm and Fee & commission: the booking (branch access), its order day locked, then the terms. */
+async function saveTerms(slug: string, bookingId: string, formData: FormData, confirm: boolean) {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(bookingId).success) return fail('errors.generic')
+  const { items, fieldErrors } = termsFromForm(ctx, formData)
+  if (Object.keys(fieldErrors).length) return fail('errors.checkFields', fieldErrors)
+  if (!items.length) return fail('errors.generic')
+  try {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
+      const day = await orderDay(tx, bookingId)
+      await branchFor(tx, ctx, day.branchId)
+      const lock = await editDay(tx, ctx, day.branchId, day.date)
+      const saved = await setBookingTerms(tx, { bookingId, items })
+      const booking = confirm
+        ? await setBookingStatus(tx, bookingId, 'confirmed', undefined, { userId: ctx.user.id })
+        : saved.booking
+      return { ...saved, booking, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: confirm ? 'booking.confirmed' : 'booking.terms',
+      entity: 'booking',
+      entityId: bookingId,
+      data: { ref: r.booking.refCode, before: r.before, after: r.after, closedDay: r.lock.closed },
+    })
+    await afterDayChange(ctx, r.lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
+    return ok(
+      confirm
+        ? { key: 'calendar.results.confirmed', params: { ref: r.booking.refCode } }
+        : 'calendar.results.termsSaved',
+    )
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/** R32 Confirm: reception types the fee + the therapist's commission (prefilled), then the booking is confirmed. */
+export async function confirmBookingAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  return saveTerms(slug, bookingId, formData, true)
+}
+
+/** R32 Fee & commission before Finish (booking sheet + booking page). */
+export async function saveBookingTermsAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  return saveTerms(slug, bookingId, formData, false)
+}
+
+const detailsSchema = z.object({
+  phoneLine: orderFields.phoneLine,
+  clientType: orderFields.clientType,
+  ownLead: orderFields.ownLead,
+})
+
+/** R32 Order details: phone line (phone bookings), client type, own client. */
+export async function saveBookingDetailsAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(bookingId).success) return fail('errors.generic')
+  const parsed = detailsSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  const line = Number(v.phoneLine)
+  const phoneLine = line >= 1 && line <= 4 ? line : null
+  try {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
+      const day = await orderDay(tx, bookingId)
+      await branchFor(tx, ctx, day.branchId)
+      if (day.booking.source === 'phone' && !phoneLine && phoneLinesConfigured(ctx.tenant.settings))
+        return null
+      const lock = await editDay(tx, ctx, day.branchId, day.date)
+      const saved = await setBookingDetails(tx, {
+        bookingId,
+        phoneLine,
+        clientType: (v.clientType || null) as BookingClientType | null,
+        ownLead: v.ownLead === 'on',
+      })
+      return { ...saved, lock }
+    })
+    if (!r) return fail('errors.checkFields', { phoneLine: 'calendar.errors.phoneLine' })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.details',
+      entity: 'booking',
+      entityId: bookingId,
+      data: { ref: r.booking.refCode, before: r.before, after: r.after, closedDay: r.lock.closed },
+    })
+    await afterDayChange(ctx, r.lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
+    return ok('calendar.results.detailsSaved')
   } catch (e) {
     return handle(e)
   }

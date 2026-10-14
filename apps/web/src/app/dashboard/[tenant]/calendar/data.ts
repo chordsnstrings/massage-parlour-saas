@@ -7,6 +7,8 @@ import {
   type OpeningHours,
   openIntervals,
   overlaps,
+  phoneLineOptions,
+  phoneLinesConfigured,
   weekStartOf,
   whatsappLink,
 } from '@spa/core'
@@ -15,6 +17,7 @@ import {
   bookings,
   branches,
   clients,
+  sales,
   services,
   serviceVariants,
   staff,
@@ -25,13 +28,15 @@ import {
   enquiryNight,
   equipmentStatus,
   getSiteEnquiry,
+  isDayClosed,
+  lastBookingTerms,
   loadCalendarRange,
   loadDay,
   rotationFor,
   siteEnquiryBookings,
   websiteHours,
 } from '@spa/services'
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm'
 import { formatPhone, maskPhone } from '@/components/calendar/time'
 import type {
   BookingStatus,
@@ -178,6 +183,15 @@ export async function loadCalendar(
       tx,
       rows.map((r) => r.item),
     )
+    // R32: the order's linked live sale (Finish & pay done) per booking.
+    const bookingIds = [...new Set(rows.map((r) => r.booking.id))]
+    const liveSales = bookingIds.length
+      ? await tx
+          .select({ id: sales.id, number: sales.number, bookingId: sales.bookingId })
+          .from(sales)
+          .where(and(inArray(sales.bookingId, bookingIds), ne(sales.status, 'void')))
+      : []
+    const saleOf = new Map(liveSales.map((x) => [x.bookingId!, x]))
     let items: CalItem[] = rows.map(({ item, booking, client }) => ({
       id: item.id,
       bookingId: booking.id,
@@ -204,6 +218,14 @@ export async function loadCalendar(
       cancelReason: booking.cancelReason,
       equipment: kit.get(item.id)?.names ?? [],
       equipmentMissing: kit.get(item.id)?.missing ?? [],
+      phoneLine: booking.phoneLine,
+      clientType: booking.clientType,
+      ownLead: booking.ownLead,
+      commissionAed: item.commissionAed,
+      variantId: item.serviceVariantId,
+      termsSet: item.termsSetAt !== null,
+      saleId: saleOf.get(booking.id)?.id ?? null,
+      saleNumber: saleOf.get(booking.id)?.number ?? null,
     }))
 
     // Shifts clipped to this business day (loadDay also returns the neighbouring days).
@@ -248,14 +270,18 @@ export async function loadCalendar(
     const gridStart = Math.floor(lo / 60) * 60
     const gridEnd = Math.max(gridStart + 60, Math.ceil(hi / 60) * 60)
 
-    const variants = (
-      await tx
-        .select({ variant: serviceVariants, service: services })
-        .from(serviceVariants)
-        .innerJoin(services, eq(services.id, serviceVariants.serviceId))
-        .where(and(eq(services.active, true), eq(serviceVariants.active, true)))
-        .orderBy(asc(services.sort), asc(serviceVariants.sort), asc(serviceVariants.durationMin))
-    ).map(({ variant, service }) => ({
+    const variants = await tx
+      .select({ variant: serviceVariants, service: services })
+      .from(serviceVariants)
+      .innerJoin(services, eq(services.id, serviceVariants.serviceId))
+      .where(and(eq(services.active, true), eq(serviceVariants.active, true)))
+      .orderBy(asc(services.sort), asc(serviceVariants.sort), asc(serviceVariants.durationMin))
+    // R32: Fee + Commission are prefilled from the last amounts typed for each treatment.
+    const lastTerms = await lastBookingTerms(
+      tx,
+      variants.map((v) => v.variant.id),
+    )
+    const calVariants = variants.map(({ variant, service }) => ({
       id: variant.id,
       label: t('calendar.variant', {
         service: service.name.en,
@@ -264,7 +290,11 @@ export async function loadCalendar(
       }),
       durationMin: variant.durationMin,
       priceAed: variant.priceAed,
+      lastFeeAed: lastTerms.get(variant.id)?.feeAed ?? null,
+      lastCommissionAed: lastTerms.get(variant.id)?.commissionAed ?? null,
     }))
+    const settings = ctx.tenant.settings ?? {}
+    const dayClosed = await isDayClosed(tx, branch.id, date)
 
     let rotation: RotationRow[] | null = null
     if (canManage && !ownOnly && date === today) {
@@ -308,14 +338,20 @@ export async function loadCalendar(
       rooms: roomCols,
       staffNames,
       items,
-      variants,
+      variants: calVariants,
       rotation,
       canManage,
       canCheckout: can(ctx, 'pos.use'),
+      canCommission: canManage && can(ctx, 'calendar.commission'),
+      phoneLines: phoneLineOptions(settings),
+      phoneLineRequired: phoneLinesConfigured(settings),
+      // R32 (D6): a closed day changes only with pos.correct (owners/managers).
+      editLocked: dayClosed && !can(ctx, 'pos.correct'),
       ownOnly,
       // G14: a therapist may check in / start / complete bookings with their own staff profile on them.
       ownStatusStaffId: can(ctx, 'calendar.ownStatus') ? myStaff : null,
       checkoutBase: appPath(`/${ctx.tenant.slug}/sales/new`),
+      salesBase: appPath(`/${ctx.tenant.slug}/sales`),
       bookingsBase: appPath(`/${ctx.tenant.slug}/bookings`),
       calendarBase: appPath(`/${ctx.tenant.slug}/calendar`),
       openBooking: items.some((i) => i.bookingId === q.open) ? q.open! : null,

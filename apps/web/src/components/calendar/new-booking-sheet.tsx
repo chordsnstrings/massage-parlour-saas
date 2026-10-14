@@ -12,6 +12,7 @@ import { useT } from '@/i18n/client'
 import { spring } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 import type { Draft } from './calendar-view'
+import { ClientTypeField, OwnLeadField, PhoneLineField, TermsFields } from './order-fields'
 import { minuteLabel, snap } from './time'
 import type { CalendarData } from './types'
 
@@ -50,6 +51,12 @@ export function NewBookingSheet({
     setCoarse(window.matchMedia('(pointer: coarse)').matches)
   }, [])
   const staffName = draft?.staffId ? data.staffNames[draft.staffId]?.name : undefined
+  // R32: the treatment and source drive the fee/commission prefill and the phone-line picker.
+  const [variantId, setVariantId] = useState(() =>
+    pre ? (pre.variantId ?? '') : (data.variants[0]?.id ?? ''),
+  )
+  const [source, setSource] = useState<string>(pre ? 'online' : 'phone')
+  const variant = data.variants.find((v) => v.id === variantId)
 
   return (
     <Sheet
@@ -166,7 +173,8 @@ export function NewBookingSheet({
                 <Select
                   id="variantId"
                   name="variantId"
-                  defaultValue={pre ? (pre.variantId ?? '') : data.variants[0]?.id}
+                  value={variantId}
+                  onChange={(e) => setVariantId(e.target.value)}
                 >
                   {data.variants.length === 0 && (
                     <option value="">{t('calendar.create.addServicesFirst')}</option>
@@ -195,7 +203,12 @@ export function NewBookingSheet({
                 </Field>
                 <Field label={t('calendar.fields.source')} name="source">
                   {/* A booking request came from the spa's website: Website ('online', attribution 'website'). */}
-                  <Select id="source" name="source" defaultValue={pre ? 'online' : 'phone'}>
+                  <Select
+                    id="source"
+                    name="source"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                  >
                     {SOURCES.map((v) => (
                       <option key={v} value={v}>
                         {enumLabel(t, 'bookingSource', v)}
@@ -224,6 +237,11 @@ export function NewBookingSheet({
                   </Select>
                 </Field>
               </div>
+
+              {source === 'phone' && <PhoneLineField lines={data.phoneLines} />}
+              <ClientTypeField />
+              <TermsFields variant={variant} canCommission={data.canCommission} />
+              <OwnLeadField />
 
               <Field label={t('calendar.fields.notes')} name="notes" hint={t('calendar.fields.notesHint')}>
                 <Textarea id="notes" name="notes" rows={2} className="min-h-16" defaultValue={pre?.notes} />

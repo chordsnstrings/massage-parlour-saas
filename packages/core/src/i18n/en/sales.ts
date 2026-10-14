@@ -125,6 +125,7 @@ export const sales = {
     tipsFor: 'Tips for {name}',
     complete: 'Complete sale · {amount}',
     addItemFirst: 'Add an item to continue.',
+    commissionTitle: 'Therapist commission',
   },
   invoice: {
     title: 'Tax invoice',
@@ -231,6 +232,20 @@ export const sales = {
     businessDay: 'Business day',
     expected: 'Expected',
     counted: 'Counted',
+    // R32 expenses paid from the drawer.
+    drawerExpenses: 'Expenses from the drawer',
+    expensesTitle: 'Expenses paid from the drawer',
+    expensesSub: 'Cash taken from the drawer today (e.g. laundry). It comes off the expected cash.',
+    expenseWhat: 'What for',
+    expenseCategory: 'Category',
+    expenseAmount: 'Amount (AED)',
+    expenseTime: 'Time',
+    expenseBy: 'By',
+    addExpense: 'Add expense',
+    noExpenses: 'No expenses today',
+    void: 'Void',
+    voidExpense: 'Void {what}',
+    voidExpenseConfirm: 'Void the expense “{what}”? It goes back into the drawer count.',
   },
   toast: {
     recorded: 'Sale #{number} recorded',
@@ -238,6 +253,8 @@ export const sales = {
     voided: 'Sale #{number} voided',
     refunded: 'Refund of {amount} recorded',
     dayClosed: 'Day closed',
+    expenseAdded: 'Expense added',
+    expenseVoided: 'Expense voided',
   },
   v: {
     amount: 'Enter an amount',

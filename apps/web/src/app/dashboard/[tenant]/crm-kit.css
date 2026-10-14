@@ -399,6 +399,12 @@
     background: var(--crm-info-bg);
     color: var(--crm-info);
   }
+  /* own = R32 the therapist's own client (pink, as on the paper day sheet) */
+  :where(:root:has(.crm)) .crm-pill[data-tone="own"] {
+    border-color: transparent;
+    background: var(--crm-own-bg);
+    color: var(--crm-own);
+  }
   /* acc = the brand highlight: lime chip, dark-green text */
   :where(:root:has(.crm)) .crm-pill[data-tone="acc"] {
     border-color: rgb(15 107 75 / 0.14);

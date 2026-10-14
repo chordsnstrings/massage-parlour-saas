@@ -43,6 +43,14 @@ type ClientMember = ClientPkg & { discountPct: number; endsOn: string }
 const PREPAID = new Set(['package', 'gift_card', 'membership'])
 type Tip = { key: string; staffId: string; amount: string; method: Method }
 type ClientHit = { id: string; name: string; phone: string | null }
+/** R32 Finish: one planned/typed commission per booking item × therapist (posted with the sale). */
+export type CheckoutCommission = {
+  bookingItemId: string
+  staffId: string
+  name: string
+  service: string
+  amountAed: number | string
+}
 
 const METHODS: Method[] = ['cash', 'card_terminal', 'bank_transfer', 'other']
 const PAY_METHODS: PayMethod[] = [...METHODS, 'gift_card']
@@ -68,6 +76,7 @@ export function Checkout({
   plans = [],
   staff,
   receiptBase,
+  commissions: initialCommissions = [],
 }: {
   slug: string
   branchId: string
@@ -81,6 +90,8 @@ export function Checkout({
   plans?: { id: string; label: string; priceAed: number }[]
   staff: { id: string; name: string }[]
   receiptBase: string
+  /** R32 Finish of a booking: the therapist commission card (only for members who may enter it). */
+  commissions?: CheckoutCommission[]
 }) {
   const router = useRouter()
   const reduce = useReducedMotion()
@@ -98,6 +109,11 @@ export function Checkout({
     { key: 'p0', method: 'cash', amount: '', reference: '' },
   ])
   const [tips, setTips] = useState<Tip[]>([])
+  const [commission, setCommission] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      initialCommissions.map((c) => [`${c.bookingItemId}:${c.staffId}`, String(c.amountAed)]),
+    ),
+  )
   const [pending, start] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [clientPkgs, setClientPkgs] = useState<ClientPkg[]>([])
@@ -303,6 +319,11 @@ export function Checkout({
         tips: tips
           .filter((t) => f(t.amount) > 0)
           .map((t) => ({ staffId: t.staffId, amountAed: f(t.amount) / 100, method: t.method })),
+        // Blank = the booking's planned amount (the server refuses when there is none).
+        commissions: initialCommissions.flatMap((c) => {
+          const v = commission[`${c.bookingItemId}:${c.staffId}`]?.trim()
+          return v ? [{ bookingItemId: c.bookingItemId, staffId: c.staffId, amountAed: f(v) / 100 }] : []
+        }),
       })
       if (r?.ok) {
         toast.success(resultText(t, r) || t('sales.toast.recordedPlain'))
@@ -701,6 +722,35 @@ export function Checkout({
           </ul>
           {tips.length === 0 && <div className="pb-[var(--crm-pad-card)]" />}
         </Card>
+
+        {/* R32 Finish: therapist commission per booking item × therapist (prefilled from the booking) */}
+        {initialCommissions.length > 0 && (
+          <Card title={t('sales.checkout.commissionTitle')} sub={t('bookings.commission.sub')}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {initialCommissions.map((c, i) => {
+                const key = `${c.bookingItemId}:${c.staffId}`
+                const id = `commission-${i}`
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <Label htmlFor={id}>
+                      {t('bookings.commission.amount', { name: c.name, service: c.service })}
+                    </Label>
+                    <Input
+                      id={id}
+                      inputMode="decimal"
+                      value={commission[key] ?? ''}
+                      onChange={(e) => setCommission((v) => ({ ...v, [key]: e.target.value }))}
+                      className="h-11 tabular"
+                    />
+                    {fieldError(`commissions.${i}.amountAed`) && (
+                      <p className="text-[13px] text-danger">{fieldError(`commissions.${i}.amountAed`)}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Summary + payment */}

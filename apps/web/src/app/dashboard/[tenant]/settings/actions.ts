@@ -227,3 +227,53 @@ export async function saveOnlineBookingAction(
   revalidatePath(`/dashboard/${slug}`, 'layout')
   return ok('settings.profile.online.saved')
 }
+
+const daySheetSchema = z.object({
+  line1: z.string().trim().max(30, 'settings.profile.daySheet.lineTooLong').optional(),
+  line2: z.string().trim().max(30, 'settings.profile.daySheet.lineTooLong').optional(),
+  line3: z.string().trim().max(30, 'settings.profile.daySheet.lineTooLong').optional(),
+  line4: z.string().trim().max(30, 'settings.profile.daySheet.lineTooLong').optional(),
+  tips: z.enum(['on', 'off']).optional(),
+  commission: z.enum(['on', 'off']).optional(),
+})
+
+/** R32: the spa's four phone lines (P1–P4 codes, typed as-is) and the day sheet's optional columns. */
+export async function saveDaySheetSettingsAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'settings.manage')
+  if (error) return fail(error)
+  const parsed = daySheetSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  const next = {
+    phoneLines: [v.line1 ?? '', v.line2 ?? '', v.line3 ?? '', v.line4 ?? ''],
+    daySheet: { tips: v.tips !== 'off', commission: v.commission === 'on' },
+  }
+  const before = await withTenant(ctx.tenant.id, async (tx) => {
+    // Read-modify-write under the row lock so a parallel settings save is not lost.
+    const [cur] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenant.id))
+      .for('update')
+    await tx
+      .update(tenants)
+      .set({ settings: { ...(cur?.settings ?? {}), ...next } })
+      .where(eq(tenants.id, ctx.tenant.id))
+    return { phoneLines: cur?.settings.phoneLines ?? [], daySheet: cur?.settings.daySheet ?? {} }
+  })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+    action: 'settings.day_sheet',
+    entity: 'tenant',
+    entityId: ctx.tenant.id,
+    data: { before, after: next },
+  })
+  revalidatePath(`/dashboard/${slug}`, 'layout')
+  return ok('settings.profile.daySheet.saved')
+}
