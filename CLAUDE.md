@@ -2,7 +2,8 @@
 
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R30 (§14.8; R28 dynamic HTML designs ✅ 2026-10-13, P0–P6; R29 console Google/Meta keys,
-R30 weekly SEO check, Enquiries → Make booking, BE RELAX v2.2 lazy loading ✅ 2026-10-13);
+R30 weekly SEO check, Enquiries → Make booking, BE RELAX v2.2 lazy loading ✅ 2026-10-13; R32 booking ↔ sale order + daily sales
+sheet PDF ✅ built 2026-10-15 on branch `r32-daily-sheet`, not merged);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 
@@ -41,6 +42,11 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   keeps the old `134-209-145-162.sslip.io` address working (B1; steps: deploy/droplet/README.md "Move to spamanagement.co").
   **The only spamanagement.co email address anywhere (site, legal pages, default sender, ops contacts) is
   `ask@spamanagement.co`** (owner 2026-10-09).
+- **Booking ↔ sale = one order (R32, owner 2026-10-14):** fee = `booking_items.price_aed`, planned commission
+  (`booking_items.commission_aed`) off the ledger until Finish (`finishBooking` = sale + commission, one tx); corrections
+  = void + re-create on the same business date; closed days change only with `pos.correct` (owners/managers, audited,
+  close marked amended, stored day-sheet PDF regenerated). Daily sales sheet rules + PDF: CODEMAP "Daily sales sheet".
+  Open (owner "ask me later"): how cancelled bookings count — today they are not on the sheet and not sales.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,
   no unofficial WhatsApp automation libraries.

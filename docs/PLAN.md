@@ -1468,7 +1468,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
     USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
     honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
-- **R32 Daily sales sheet PDF (owner, 2026-10-14; PLANNED, not built — owner: "ask me before start coding"):** the
+- **R32 Daily sales sheet PDF (owner, 2026-10-14, "Go" ~16:20; ✅ built 2026-10-15 on branch `r32-daily-sheet` —
+  PART 1 f0cdd65…f0145ff, PART 2 8560d46 — not merged yet, code follows the normal review path):** the
   spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM PDF, every day. Therapists always live in the CRM by name
   (commission + tips per therapist); "Show on website" stays optional and separate.
   - **Rows** (one per session, business day by `business_day_cutoff`): No., therapist, Q = her turn number that day,
@@ -1501,11 +1502,29 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     (per therapist on it; Finish can still type each therapist separately); a member without `calendar.commission`
     keeps the stored commission; the client-type field reads "Regular or new" and the switch "Own client" (labels that
     don't collide with "Client"/"Therapist"); Thai drafts use the existing glossary (พนักงานนวด, ค่าคอมมิชชัน) — new
-    strings need the owner's native review. PART 2 (daySheet query, PDF, close integration) is next.
+    strings need the owner's native review.
+  - **PART 2 built (2026-10-15):** migration 0059 (`day_closes.pdf_file_id/pdf_sha256/pdf_generated_at`); services
+    `day-sheet.ts` `daySheet(tx, branch, date)` (sessions = confirmed/checked-in/in-service/completed bookings of that
+    branch business date, one row per item × therapist in start order; Q computed; money = the linked live sale's
+    payments on the booking's first row when the sale is dated that day, else "paid {date}" / unpaid; "Other sales" =
+    retail and other days' bookings; totals from all live sales of the day; panel = every bookable therapist, OFF = no
+    session + no shift or on leave; tips / commission per therapist); `pdf/kit.ts` (shared with the intake PDF) +
+    `pdf/day-sheet-pdf.ts` (A4 portrait like the paper: table left with pink own-lead rows and Cash/Card sums, turn
+    panel + expenses + "1,460 + 1,080 - 58 = 2,482" + totals right, footer = close / "Not closed yet", EN or TH);
+    Daily close card "Daily sales sheet" (Tips / Commission switches defaulting to Settings, "Download day sheet
+    (PDF)" for any day ≤ today, "PDF saved at close" or "Create PDF", unfinished-sessions note); route
+    `sales/close/sheet` (pos.close); Close the day stores the PDF after the close commits (a render failure never
+    blocks the close); a correction of a closed day regenerates it ("Amended after close"); stored file purpose
+    `day_sheet_pdf` → pos.close. Check: the 13-10-26 sheet reproduced through the real flow gives cash 1460, card
+    1080, laundry 58, total sale 2482, total cash 1402 (unit + e2e). Choices: times print 24 h (13:35, the paper
+    writes 01:35); Thai "No." is ที่ (ลำดับ didn't fit the column).
   - **Notes for the owner:** phone (P) and other bookings don't move the walk-in rotation (only walk-ins do; an own
     client never does); Q on the sheet still numbers every non-own session. Once a day is closed, new payments, fee /
     commission / tips changes and drawer expenses on it need an owner or manager; the counted cash and variance stay as
-    recorded and the close is marked "Amended".
+    recorded, the close is marked "Amended" and its saved PDF is made again. Bank transfer, gift card, package and
+    "other" payments get an "Other" column and count in Total sale. Tips and refunds are not in the sheet totals
+    (tips: optional column + one line; cash refunds: one footnote line); the drawer count at close still includes cash
+    tips and cash refunds, so expected cash can differ from the sheet's Total cash by exactly those.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
