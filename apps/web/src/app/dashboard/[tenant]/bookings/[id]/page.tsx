@@ -41,22 +41,30 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
       const mine = await ownStaffId(tx, ctx)
       if (!mine || !b.items.some((i) => i.therapists.some((x) => x.staffId === mine))) return null
     }
-    // R32: the linked order (sale), the last amounts typed per treatment, and the day lock of the order's day.
+    // R32: the linked order (sale), the last amounts typed per treatment, and the day locks: the booking's day for
+    // fee / commission / details / Finish (its sheet row and commission rows), the sale's day for the payment.
     const order = await orderSale(tx, b.id)
     const last = await lastBookingTerms(
       tx,
       b.items.flatMap((i) => (i.serviceVariantId ? [i.serviceVariantId] : [])),
     )
-    const closed = await isDayClosed(tx, b.branchId, order?.sale.businessDate ?? b.businessDate)
-    return { b, order, last, closed }
+    const bookingClosed = await isDayClosed(tx, b.branchId, b.businessDate)
+    const saleClosed = order
+      ? order.sale.businessDate === b.businessDate
+        ? bookingClosed
+        : await isDayClosed(tx, b.branchId, order.sale.businessDate)
+      : false
+    return { b, order, last, bookingClosed, saleClosed }
   })
   if (!loaded) notFound()
   const { b: data, order, last } = loaded
 
   const completed = data.status === 'completed'
   const open = !completed && data.status !== 'cancelled' && data.status !== 'no_show'
-  // R32 (D6): a closed day changes only with pos.correct (owners/managers).
-  const locked = loaded.closed && !can(ctx, 'pos.correct')
+  // R32 (D6): a closed day changes only with pos.correct (owners/managers) — the same days the actions lock.
+  const mayCorrect = can(ctx, 'pos.correct')
+  const locked = loaded.bookingClosed && !mayCorrect
+  const paymentLocked = loaded.saleClosed && !mayCorrect
   const finished = order !== null
   const lineOf = (n: number | null) =>
     n == null
@@ -193,7 +201,7 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
             sub={finished ? t('bookings.commission.subDone') : t('bookings.commission.sub')}
           >
             <Stack>
-              {locked && <Note>{t('bookings.order.closedNote')}</Note>}
+              {(locked || (finished && paymentLocked)) && <Note>{t('bookings.order.closedNote')}</Note>}
               {completed && !finished && <Note tone="warn">{t('bookings.order.notPaid')}</Note>}
               {finished && (
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -234,7 +242,16 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
                 />
               )}
               {finished && canCommission && !locked && rows.length > 0 ? (
-                <CommissionForm slug={slug} bookingId={data.id} rows={rows} completed />
+                <CommissionForm
+                  slug={slug}
+                  bookingId={data.id}
+                  // Nothing recorded yet (finished by someone without commission rights): the planned amount.
+                  rows={rows.map((r) => {
+                    const planned = data.items.find((i) => i.id === r.itemId)?.plannedCommissionAed
+                    return { ...r, amountAed: r.amountAed ?? (planned == null ? null : Number(planned)) }
+                  })}
+                  completed
+                />
               ) : (
                 rows.map((r) => {
                   const planned = data.items.find((i) => i.id === r.itemId)?.plannedCommissionAed
@@ -251,16 +268,16 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
                   )
                 })
               )}
-              {!locked && (
+              {(!locked || (finished && !paymentLocked)) && (
                 <div className="flex flex-wrap gap-2">
-                  {!finished && canCheckout && data.status !== 'pending' && (
+                  {!finished && !locked && canCheckout && data.status !== 'pending' && (
                     <Button asChild>
                       <Link href={appPath(`/${slug}/sales/new?booking=${data.id}`)}>
                         <Receipt /> {t('bookings.order.finish')}
                       </Link>
                     </Button>
                   )}
-                  {finished && canCheckout && canCommission && (
+                  {finished && !paymentLocked && canCheckout && canCommission && (
                     <CorrectOrderForm
                       slug={slug}
                       bookingId={data.id}
@@ -284,7 +301,12 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
 
         {canManage && (
           <Card title={t('bookings.detail.markTitle')} sub={t('bookings.detail.markSub')}>
-            <BookingMarks slug={slug} bookingId={data.id} status={data.status} canReopen={canCommission} />
+            <BookingMarks
+              slug={slug}
+              bookingId={data.id}
+              status={data.status}
+              canReopen={canCommission && !locked}
+            />
           </Card>
         )}
         <div>

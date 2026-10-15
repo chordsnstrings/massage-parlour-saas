@@ -131,7 +131,12 @@ export function DetailsForm({
     >
       {source === 'phone' && <PhoneLineField lines={phoneLines} defaultValue={phoneLine} />}
       <ClientTypeField defaultValue={clientType} />
-      <OwnLeadField defaultChecked={ownLead} />
+      {/* A walk-in's own client is set when it starts (it decided her rotation turn). */}
+      {source === 'walk_in' ? (
+        <input type="hidden" name="ownLead" value={ownLead ? 'on' : 'off'} />
+      ) : (
+        <OwnLeadField defaultChecked={ownLead} />
+      )}
       <SubmitButton className="w-full sm:w-auto">{t('calendar.sheet.save')}</SubmitButton>
     </ActionForm>
   )

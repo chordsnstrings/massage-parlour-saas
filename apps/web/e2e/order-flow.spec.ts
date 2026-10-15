@@ -1,24 +1,29 @@
 import { expect, test } from '@playwright/test'
 import {
+  auditLog,
   bookingCommissions,
   bookingItems,
   bookings,
   dayCloses,
+  expenses,
   rotationEntries,
   sales,
   tenants,
 } from '@spa/db'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import {
   addMember,
   app,
   createLogin,
   OWNER_PASSWORD,
+  seedBooking,
   seedCatalog,
   signUpOwner,
   testDb,
   today,
 } from './helpers'
+
+const DAY_CLOSED = 'That day is closed — ask a manager to change it'
 
 // R32 (PLAN §14.8): booking ↔ sale = one order. Confirm = fee + commission (prefilled from the last amounts), Finish =
 // payment + tips → completed + linked sale; own clients don't use the walk-in turn; drawer expenses come off the
@@ -60,12 +65,15 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     await sheet.getByLabel('Time').fill('20:00')
     await sheet.getByLabel('Therapist').selectOption({ label: 'Maya' })
     await expect(sheet.getByLabel('Source')).toHaveValue('phone')
-    await sheet.getByRole('button', { name: 'P2 · 04 222 2222' }).click()
     await sheet.getByRole('button', { name: 'Regular', exact: true }).click()
     await expect(sheet.getByLabel('Fee (AED)')).toHaveValue('350')
     await expect(sheet.getByLabel('Commission (AED)')).toHaveValue('')
     await sheet.getByLabel('Fee (AED)').fill('150')
     await sheet.getByLabel('Commission (AED)').fill('40')
+    // Lines are set in Settings, so a phone booking must say which line rang.
+    await sheet.getByRole('button', { name: 'Create booking' }).click()
+    await expect(sheet.getByText('Choose the phone line')).toBeVisible()
+    await sheet.getByRole('button', { name: 'P2 · 04 222 2222' }).click()
     await sheet.getByRole('button', { name: 'Create booking' }).click()
     await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
     await sheet.getByRole('button', { name: 'Done' }).click()
@@ -122,12 +130,66 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     await expect(sheet).toBeHidden()
   })
 
+  await test.step('CONFIRM a pending online booking: fee + commission prefilled from the last used; no Check in', async () => {
+    // An online request of the same treatment: no fee typed yet (the list price 350 is copied), nothing planned.
+    const pending = await seedBooking(seed, '22:00', {
+      source: 'online',
+      status: 'pending',
+      commissionAed: null,
+    })
+    await desk.goto(`${app}/${slug}/calendar`)
+    await desk
+      .getByRole('group', { name: 'Maya' })
+      .getByRole('button', { name: /^22:00–23:00/ })
+      .click()
+    const sheet = desk.getByRole('dialog')
+    await expect(sheet.getByText('Pending', { exact: true })).toBeVisible()
+    // Confirm is the only way forward: no Check in / Start service while pending.
+    await expect(sheet.getByRole('button', { name: 'Check in' })).toHaveCount(0)
+    await expect(sheet.getByRole('button', { name: 'Start service' })).toHaveCount(0)
+    await expect(sheet.getByLabel('Fee (AED)')).toHaveValue('150')
+    await expect(sheet.getByLabel('Commission (AED)')).toHaveValue('40')
+    await sheet.getByRole('button', { name: 'Confirm', exact: true }).click()
+    await expect(desk.getByText(`Booking ${pending.refCode} confirmed`)).toBeVisible()
+    await expect(sheet.getByText('Confirmed', { exact: true })).toBeVisible()
+    const [b] = await db.select().from(bookings).where(eq(bookings.id, pending.id))
+    expect(b!.status).toBe('confirmed')
+    const [item] = await db.select().from(bookingItems).where(eq(bookingItems.bookingId, pending.id))
+    expect(item).toMatchObject({ priceAed: '150.00', commissionAed: '40.00' })
+    expect(item!.termsSetAt).toBeInstanceOf(Date)
+
+    // Order details after booking: Regular/New and own client (not a walk-in, so it may change).
+    await sheet.getByRole('button', { name: 'Order details' }).click()
+    await sheet.getByRole('button', { name: 'New', exact: true }).click()
+    await sheet.getByRole('switch', { name: 'Own client' }).click()
+    await sheet.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(desk.getByText('Order details saved')).toBeVisible()
+    await expect(sheet.getByText('Own client', { exact: true })).toBeVisible()
+    await expect(sheet.getByText('B/N', { exact: true })).toBeVisible()
+    const [d] = await db.select().from(bookings).where(eq(bookings.id, pending.id))
+    expect(d).toMatchObject({ clientType: 'new', ownLead: true })
+    const [confirmed] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, pending.id), eq(auditLog.action, 'booking.confirmed')))
+    expect(confirmed!.data).toMatchObject({
+      before: [{ feeAed: 350, commissionAed: null }],
+      after: [{ feeAed: 150, commissionAed: 40 }],
+      closedDay: false,
+    })
+    await desk.keyboard.press('Escape')
+    await expect(sheet).toBeHidden()
+  })
+
   await test.step('an own-client walk-in with Ploy picked by hand keeps the rotation; pill reads Own client', async () => {
     await desk.getByRole('button', { name: 'Walk-in' }).first().click()
     const sheet = desk.getByRole('dialog')
-    await sheet.getByLabel('Therapist').selectOption({ label: 'Ploy' })
     await sheet.getByLabel('Name').fill('Reem')
     await sheet.getByRole('switch', { name: 'Own client' }).click()
+    // A rotation pick is never her own client: the therapist must be chosen by hand.
+    await sheet.getByRole('button', { name: 'Start walk-in' }).click()
+    await expect(sheet.getByText('Choose the therapist for her own client')).toBeVisible()
+    await sheet.getByLabel('Therapist').selectOption({ label: 'Ploy' })
     await sheet.getByRole('button', { name: 'Start walk-in' }).click()
     await expect(desk.getByText('Walk-in checked in with Ploy')).toBeVisible()
     await expect(sheet).toBeHidden()
@@ -135,7 +197,12 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     expect(rot.find((r) => r.staffId === ploy)?.turns).toBe(0)
     expect(rot.find((r) => r.staffId === maya)?.turns ?? 0).toBe(0)
     await desk.getByRole('group', { name: 'Ploy' }).getByRole('button', { name: /Reem/ }).click()
-    await expect(desk.getByRole('dialog').getByText('Own client', { exact: true })).toBeVisible()
+    const walkIn = desk.getByRole('dialog')
+    await expect(walkIn.getByText('Own client', { exact: true })).toBeVisible()
+    // A walk-in's own client decided her turn when it started: Order details can't switch it any more.
+    await walkIn.getByRole('button', { name: 'Order details' }).click()
+    await expect(walkIn.getByRole('button', { name: 'Save', exact: true })).toBeVisible()
+    await expect(walkIn.getByRole('switch', { name: 'Own client' })).toHaveCount(0)
     await desk.keyboard.press('Escape')
   })
 
@@ -152,6 +219,17 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     await desk.getByLabel('Opening float (AED)').fill('0')
     await expect(desk.getByTestId('expected-cash')).toHaveText(/48/)
     await expect(desk.getByText(/−AED\s*48/).first()).toBeVisible()
+    const [rec] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.tenantId, seed.tenantId), eq(auditLog.action, 'expense.recorded')))
+    expect(rec!.data).toMatchObject({
+      description: 'Laundry',
+      amountAed: '58.00',
+      accountCode: '6180',
+      fromDrawer: true,
+      closedDay: false,
+    })
   })
 
   await test.step('Correct payment (card → cash): a new sale, the old one void, same business day', async () => {
@@ -168,10 +246,30 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
       voidReason: 'Corrected: Paid cash, not card',
     })
     expect(all.find((s) => s.number === 2)).toMatchObject({ status: 'paid', businessDate: today() })
+    // Audited with the numbers before and after (the only record of them once a closed day is amended).
+    const [entry] = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, bookingId), eq(auditLog.action, 'booking.order_corrected')))
+    expect(entry!.data).toMatchObject({
+      reason: 'Paid cash, not card',
+      before: { saleNumber: 1, payments: [{ method: 'card_terminal', amountAed: 150 }] },
+      after: { saleNumber: 2, payments: [{ method: 'cash', amountAed: 150 }] },
+      voidedSale: all.find((s) => s.number === 1)!.id,
+      sale: 2,
+      closedDay: false,
+    })
   })
 
   let closedPdf = ''
+  // Two desk tabs opened before the close: they still show the open-day forms afterwards (stale pages).
+  const staleBooking = await desk.context().newPage()
+  const staleClose = await desk.context().newPage()
   await test.step('close the day: 150 cash + 10 cash tip − 58 laundry = 102, balanced', async () => {
+    await staleBooking.goto(`${app}/${slug}/bookings/${bookingId}`)
+    await expect(staleBooking.getByRole('button', { name: 'Correct payment' })).toBeVisible()
+    await staleClose.goto(`${app}/${slug}/sales/close`)
+    await expect(staleClose.getByRole('button', { name: 'Add expense' })).toBeVisible()
     await desk.goto(`${app}/${slug}/sales/close`)
     await desk.getByLabel('Opening float (AED)').fill('0')
     await expect(desk.getByTestId('expected-cash')).toHaveText(/102/)
@@ -186,6 +284,49 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     closedPdf = close!.pdfFileId!
     // Reception can no longer add drawer expenses to the closed day.
     await expect(desk.getByRole('button', { name: 'Add expense' })).toHaveCount(0)
+  })
+
+  await test.step('closed day: the server refuses reception from the stale tabs (no new rows)', async () => {
+    const count = async () => ({
+      sales: (await db.select().from(sales).where(eq(sales.tenantId, seed.tenantId))).length,
+      commissions: (
+        await db.select().from(bookingCommissions).where(eq(bookingCommissions.bookingId, bookingId))
+      ).length,
+      expenses: (await db.select().from(expenses).where(eq(expenses.tenantId, seed.tenantId))).length,
+    })
+    const was = await count()
+    await staleBooking.getByRole('button', { name: 'Correct payment' }).click()
+    const correct = staleBooking.getByRole('dialog', { name: 'Correct the payment' })
+    await correct.getByLabel('Tip 1 amount').fill('12')
+    await correct.getByLabel('Reason for the correction').fill('Tip was 12')
+    await correct.getByRole('button', { name: 'Correct payment' }).click()
+    await expect(staleBooking.getByText(DAY_CLOSED).first()).toBeVisible()
+    await staleBooking.keyboard.press('Escape')
+    await expect(correct).toBeHidden()
+    // Wait for that toast to go, so the next refusal is its own.
+    await expect(staleBooking.getByText(DAY_CLOSED)).toHaveCount(0)
+    await staleBooking.getByLabel('Commission for Maya · Swedish massage').fill('45')
+    await staleBooking.getByRole('button', { name: 'Save commission' }).click()
+    await expect(staleBooking.getByText(DAY_CLOSED).first()).toBeVisible()
+    await staleClose.getByLabel('What for').fill('Water')
+    await staleClose.getByLabel('Amount (AED)').fill('5')
+    await staleClose.getByRole('button', { name: 'Add expense' }).click()
+    await expect(staleClose.getByText(DAY_CLOSED).first()).toBeVisible()
+    // New money on the closed day: a retail checkout is refused too.
+    await desk.goto(`${app}/${slug}/sales/new`)
+    await desk.getByLabel('Add a service').selectOption(seed.variantIds[0]!)
+    await desk.getByLabel('Payment 1 method').selectOption('cash')
+    await desk.getByLabel('Payment 1 amount').fill('350')
+    await desk.getByRole('button', { name: /Complete sale/ }).click()
+    await expect(desk.getByText(DAY_CLOSED).first()).toBeVisible()
+    expect(await count()).toEqual(was)
+    const [c] = await db
+      .select({ v: sql<string>`sum(${bookingCommissions.amountAed})` })
+      .from(bookingCommissions)
+      .where(eq(bookingCommissions.bookingId, bookingId))
+    expect(Number(c!.v)).toBe(40)
+    await staleBooking.close()
+    await staleClose.close()
   })
 
   await test.step('closed day: reception reads only; the owner corrects it and the close shows Amended', async () => {
@@ -210,6 +351,19 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     expect(close!.pdfFileId).not.toBe(closedPdf)
     await page.goto(`${app}/${slug}/sales/close`)
     await expect(page.getByText(/^Amended /)).toBeVisible()
+    const corrections = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityId, bookingId), eq(auditLog.action, 'booking.order_corrected')))
+      .orderBy(asc(auditLog.id))
+    expect(corrections).toHaveLength(2)
+    expect(corrections[1]!.data).toMatchObject({
+      reason: 'Tip was 15',
+      before: { saleNumber: 2, tips: [{ amountAed: 10 }] },
+      after: { saleNumber: 3, tips: [{ amountAed: 15 }] },
+      sale: 3,
+      closedDay: true,
+    })
   })
   await desk.context().close()
 })

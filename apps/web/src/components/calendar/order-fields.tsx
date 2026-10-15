@@ -22,13 +22,16 @@ export function PhoneLineField({
 }) {
   const t = useT()
   const [value, setValue] = useState(defaultValue ? String(defaultValue) : '')
+  // With numbers the four lines are long ("P4 · 050 444 4444"): a 2 × 2 grid so none is cut off on a phone.
+  const withNumbers = lines.some((l) => l.number)
   return (
     <div className="space-y-1.5">
-      <Label>{t('calendar.fields.phoneLine')}</Label>
+      <Label className="block">{t('calendar.fields.phoneLine')}</Label>
       <Seg
         label={t('calendar.fields.phoneLine')}
         value={value}
         onChange={setValue}
+        className={withNumbers ? 'grid grid-cols-2' : 'grid grid-cols-4'}
         items={PHONE_LINES.map((n) => {
           const number = lines.find((l) => l.line === n)?.number
           return {
@@ -49,7 +52,7 @@ export function ClientTypeField({ defaultValue }: { defaultValue?: string | null
   const [value, setValue] = useState(defaultValue ?? '')
   return (
     <div className="space-y-1.5">
-      <Label>{t('calendar.fields.clientType')}</Label>
+      <Label className="block">{t('calendar.fields.clientType')}</Label>
       <Seg
         label={t('calendar.fields.clientType')}
         value={value}

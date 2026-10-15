@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { commissionEntries, staff } from '@spa/db'
+import { bookingCommissions, commissionEntries, staff } from '@spa/db'
 import { eq, sql } from 'drizzle-orm'
 import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
@@ -8,7 +8,8 @@ test('reception checks out a booking with split payment + tip, then closes the d
 }) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  const booking = await seedBooking(seed)
+  // A planned booking commission of 40 for the treatment (R32): Maya is paid a sales %, so it must not be posted.
+  const booking = await seedBooking(seed, 2, { commissionAed: 40 })
   // Maya earns a 10% sales commission, so the refund below must take it back (G13: commission reversal).
   const maya = seed.staffIds[0]!
   await testDb().update(staff).set({ payType: 'sales_commission' }).where(eq(staff.id, maya))
@@ -29,8 +30,10 @@ test('reception checks out a booking with split payment + tip, then closes the d
     await expect(page.getByText('Swedish massage · 60 min').first()).toBeVisible()
     await expect(page.getByLabel('Therapist for item 1')).toHaveValue(seed.staffIds[0]!)
     await expect(page.getByTestId('sale-total')).toHaveText(/350/)
-    // R32 Finish: Maya is paid a sales %, not per booking → her booking commission is prefilled 0.
-    await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('0')
+    // R32 Finish: Maya is paid a sales %, not per booking → no booking commission field for her, even though the
+    // treatment has a planned 40 (the pay-type rule comes first).
+    await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveCount(0)
+    await expect(page.getByText('Therapist commission', { exact: true })).toHaveCount(0)
     await screenshotAt(page, 'pos-checkout')
   })
 
@@ -48,6 +51,12 @@ test('reception checks out a booking with split payment + tip, then closes the d
     await page.getByRole('button', { name: /Complete sale/ }).click()
     await page.waitForURL(/\/sales\/[0-9a-f-]{36}$/)
     expect(await commission()).toBe(33.33) // 10% of AED 333.33 net of VAT (the tip earns none)
+    // …and no per-booking commission on top (a 0 is recorded so the booking reads "entered").
+    const posted = await testDb()
+      .select({ v: bookingCommissions.amountAed })
+      .from(bookingCommissions)
+      .where(eq(bookingCommissions.bookingId, booking.id))
+    expect(posted.map((r) => r.v)).toEqual(['0.00'])
   })
 
   await test.step('the receipt is a simplified tax invoice with payments, tip and WhatsApp share', async () => {

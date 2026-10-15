@@ -340,6 +340,9 @@ const statusSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 })
 
+/** Statuses a pending booking reaches only through Confirm (R32: fee + commission typed first). */
+const FORWARD: string[] = ['confirmed', 'checked_in', 'in_service', 'completed']
+
 export async function setStatusAction(
   slug: string,
   input: z.input<typeof statusSchema>,
@@ -352,26 +355,37 @@ export async function setStatusAction(
   if (status === 'cancelled' && !reason)
     return fail('calendar.errors.reason', { reason: 'validation.required' })
   try {
-    const updated = await withTenant(ctx.tenant.id, async (tx) => {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
       const [b] = await tx
-        .select({ branchId: bookings.branchId, status: bookings.status })
+        .select({ branchId: bookings.branchId, status: bookings.status, date: bookings.businessDate })
         .from(bookings)
         .where(eq(bookings.id, bookingId))
       if (!b) throw new DomainError('Booking not found', 'not_found')
       await branchFor(tx, ctx, b.branchId)
-      // Leaving `completed` reverses commission: only from the booking page, with that permission.
+      // R32: a pending booking goes forward only through Confirm (reception types its fee + commission).
+      if (b.status === 'pending' && FORWARD.includes(status)) return null
+      // Leaving `completed` reverses commission: only from the booking page, with that permission, and the day
+      // lock of the booking's day (its commission rows) applies.
       if (b.status === 'completed' && !can(ctx, 'calendar.commission'))
         throw new DomainError('Booking not found', 'not_found')
-      return setBookingStatus(tx, bookingId, status, reason, { userId: ctx.user.id })
+      const lock = b.status === 'completed' ? await editDay(tx, ctx, b.branchId, b.date) : null
+      const updated = await setBookingStatus(tx, bookingId, status, reason, { userId: ctx.user.id })
+      return { updated, lock }
     })
+    if (!r) return fail('calendar.errors.confirmFirst')
+    const { updated, lock } = r
     await audit({
       tenantId: ctx.tenant.id,
       actorUserId: ctx.user.id,
       action: `booking.${status}`,
       entity: 'booking',
       entityId: bookingId,
-      data: reason ? { reason } : undefined,
+      data:
+        reason || lock?.closed
+          ? { ...(reason ? { reason } : {}), ...(lock?.closed ? { closedDay: true } : {}) }
+          : undefined,
     })
+    if (lock) await afterDayChange(ctx, lock)
     revalidate(slug)
     return ok({
       key: 'calendar.results.status',
@@ -689,7 +703,7 @@ function termsFromForm(ctx: MemberContext, formData: FormData) {
   return { items: [...items.values()], fieldErrors }
 }
 
-/** Shared by Confirm and Fee & commission: the booking (branch access), its order day locked, then the terms. */
+/** Shared by Confirm and Fee & commission: the booking (branch access), its business day locked, then the terms. */
 async function saveTerms(slug: string, bookingId: string, formData: FormData, confirm: boolean) {
   const { ctx, error } = await guard(slug, 'calendar.manage')
   if (error) return fail(error)
@@ -701,7 +715,8 @@ async function saveTerms(slug: string, bookingId: string, formData: FormData, co
     const r = await withTenant(ctx.tenant.id, async (tx) => {
       const day = await orderDay(tx, bookingId)
       await branchFor(tx, ctx, day.branchId)
-      const lock = await editDay(tx, ctx, day.branchId, day.date)
+      // The fee and planned commission belong to the booking's day (its sheet row); a live sale refuses below.
+      const lock = await editDay(tx, ctx, day.branchId, day.booking.businessDate)
       const saved = await setBookingTerms(tx, { bookingId, items })
       const booking = confirm
         ? await setBookingStatus(tx, bookingId, 'confirmed', undefined, { userId: ctx.user.id })
@@ -776,7 +791,8 @@ export async function saveBookingDetailsAction(
       await branchFor(tx, ctx, day.branchId)
       if (day.booking.source === 'phone' && !phoneLine && phoneLinesConfigured(ctx.tenant.settings))
         return null
-      const lock = await editDay(tx, ctx, day.branchId, day.date)
+      // Code, own client and Q are on the booking's day sheet, whatever day it was paid.
+      const lock = await editDay(tx, ctx, day.branchId, day.booking.businessDate)
       const saved = await setBookingDetails(tx, {
         bookingId,
         phoneLine,

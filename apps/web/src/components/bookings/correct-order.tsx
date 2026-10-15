@@ -14,7 +14,8 @@ import { resultText, useI18n } from '@/i18n/client'
 
 const METHODS = ['cash', 'card_terminal', 'bank_transfer', 'other'] as const
 type Method = (typeof METHODS)[number]
-type Row = { key: string; method: Method; amount: string }
+/** `reference`: the card slip / transfer reference recorded with the payment (kept unless the method changes). */
+type Row = { key: string; method: Method; amount: string; reference: string | null }
 type TipRow = { key: string; staffId: string; amount: string; method: Method }
 
 const text = (n: number) => String(Math.round(n * 100) / 100)
@@ -36,7 +37,7 @@ export function CorrectOrderForm({
   slug: string
   bookingId: string
   lines: { saleLineId: string; description: string; unitPriceAed: number }[]
-  payments: { method: string; amountAed: number }[]
+  payments: { method: string; amountAed: number; reference?: string | null }[]
   tips: { staffId: string; amountAed: number; method: string }[]
   staff: { id: string; name: string }[]
 }) {
@@ -50,7 +51,12 @@ export function CorrectOrderForm({
   const asMethod = (m: string): Method =>
     (METHODS as readonly string[]).includes(m) ? (m as Method) : 'other'
   const [pays, setPays] = useState<Row[]>(() =>
-    payments.map((p) => ({ key: key(), method: asMethod(p.method), amount: text(p.amountAed) })),
+    payments.map((p) => ({
+      key: key(),
+      method: asMethod(p.method),
+      amount: text(p.amountAed),
+      reference: p.reference ?? null,
+    })),
   )
   const [tipRows, setTipRows] = useState<TipRow[]>(() =>
     tips.map((x) => ({
@@ -72,7 +78,7 @@ export function CorrectOrderForm({
           saleLineId: l.saleLineId,
           unitPriceAed: num(prices[l.saleLineId] ?? '0'),
         })),
-        payments: pays.map((p) => ({ method: p.method, amountAed: num(p.amount) })),
+        payments: pays.map((p) => ({ method: p.method, amountAed: num(p.amount), reference: p.reference })),
         tips: tipRows.map((x) => ({ staffId: x.staffId, amountAed: num(x.amount), method: x.method })),
       })
       if (r?.ok) {
@@ -115,7 +121,9 @@ export function CorrectOrderForm({
                   value={p.method}
                   onChange={(e) =>
                     setPays((rows) =>
-                      rows.map((x) => (x.key === p.key ? { ...x, method: e.target.value as Method } : x)),
+                      rows.map((x) =>
+                        x.key === p.key ? { ...x, method: e.target.value as Method, reference: null } : x,
+                      ),
                     )
                   }
                   className="h-11 flex-1"
@@ -151,7 +159,9 @@ export function CorrectOrderForm({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setPays((rows) => [...rows, { key: key(), method: 'cash', amount: '' }])}
+              onClick={() =>
+                setPays((rows) => [...rows, { key: key(), method: 'cash', amount: '', reference: null }])
+              }
             >
               <Plus /> {t('bookings.order.addPayment')}
             </Button>

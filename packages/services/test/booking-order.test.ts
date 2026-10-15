@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   accountTotals,
   closeDay,
+  completeBooking,
   correctBookingOrder,
   createBooking,
   createSale,
@@ -32,9 +33,11 @@ import {
   lastBookingTerms,
   markDayAmended,
   orderDay,
+  recordOrderCommissions,
   setBookingDetails,
   setBookingStatus,
   setBookingTerms,
+  voidSale,
 } from '../src'
 
 const { platform, app } = testDbs()
@@ -91,11 +94,20 @@ const line = (price: number) => ({
 })
 const finish = (
   b: { id: string },
-  o: { price?: number; date?: Date; commission?: number; tip?: number } = {},
+  o: {
+    price?: number
+    date?: Date
+    commission?: number
+    tip?: number
+    allowClosedDay?: boolean
+    commissionLater?: boolean
+  } = {},
 ) =>
   tx((db) =>
     finishBooking(db, {
       ...base(),
+      allowClosedDay: o.allowClosedDay,
+      commissionLater: o.commissionLater,
       bookingId: b.id,
       lines: [line(o.price ?? 150)],
       payments: [{ method: 'card_terminal', amountAed: o.price ?? 150 }],
@@ -139,6 +151,17 @@ beforeAll(async () => {
     ids.variant = v!.id
     const [m] = await db.insert(staff).values({ tenantId: ids.tenant!, displayName: 'Maya' }).returning()
     ids.maya = m!.id
+    // Ploy is paid a sales %, not per booking (R32 review: no booking commission at Finish).
+    const [p] = await db
+      .insert(staff)
+      .values({ tenantId: ids.tenant!, displayName: 'Ploy', payType: 'sales_commission' })
+      .returning()
+    ids.ploy = p!.id
+    const [v2] = await db
+      .insert(serviceVariants)
+      .values({ tenantId: ids.tenant!, serviceId: s!.id, durationMin: 90, priceAed: '300' })
+      .returning()
+    ids.variant2 = v2!.id
     const [r] = await db
       .insert(rooms)
       .values({ tenantId: ids.tenant!, branchId: b!.id, name: '4' })
@@ -273,9 +296,16 @@ describe('R32 finish', () => {
     const older = '2026-10-04'
     const c = await book({ date: older, fee: 150, commission: 30 })
     await tx((db) => closeDay(db, { ...base(), date: older, openingFloatAed: 0, countedCashAed: 0 }))
-    const r = await finish(c)
+    // Its commission + sheet row land on the closed day: only with pos.correct (allowClosedDay).
+    await expect(finish(c)).rejects.toThrow(DAY_CLOSED)
+    const r = await finish(c, { allowClosedDay: true })
     expect(r.saleDate).toBe(D)
     expect(r.sale.businessDate).toBe(D)
+    expect(r.bookingDayClosed).toBe(true)
+    const rows = await tx((db) =>
+      db.select().from(bookingCommissions).where(eq(bookingCommissions.bookingId, c.id)),
+    )
+    expect(rows.map((x) => x.businessDate)).toEqual([older])
   })
 
   it("finishes a booking the therapist completed herself (G14: 'Not paid yet')", async () => {
@@ -320,7 +350,7 @@ describe('R32 correct payment', () => {
     expect(fixed.voidedSaleId).toBe(old.id)
     expect(fixed.sale.businessDate).toBe('2026-10-05')
     expect(fixed.sale.totalAed).toBe('170.00')
-    expect(fixed.after.payments).toEqual([{ method: 'cash', amountAed: 170 }])
+    expect(fixed.after.payments).toEqual([{ method: 'cash', amountAed: 170, reference: null }])
     const [voided] = await tx((db) => db.select().from(sales).where(eq(sales.id, old.id)))
     expect(voided).toMatchObject({ status: 'void', voidReason: 'Corrected: Fee was 170' })
     const oldEntries = await journal(old.id)
@@ -456,5 +486,227 @@ describe('R32 day lock', () => {
         }),
       ),
     ).rejects.toThrow('That business day has not started yet')
+  })
+})
+
+/** A confirmed one-treatment booking for another therapist / treatment (on a day of its own, one after another). */
+const EXTRA_DAY = '2026-09-28'
+let extra = 0
+async function bookFor(o: { staffIds: string[]; variant?: string; fee?: number; commission?: number }) {
+  const start = dubaiInstant(EXTRA_DAY, 6 * 60 + extra++ * 95)
+  const b = await tx((db) =>
+    createBooking(db, {
+      ...base(),
+      clientId: ids.client,
+      source: 'phone',
+      status: 'confirmed',
+      allowOffShift: true,
+      items: [
+        {
+          serviceVariantId: o.variant ?? ids.variant!,
+          start,
+          staffIds: o.staffIds,
+          roomId: ids.room,
+          feeAed: o.fee,
+          commissionAed: o.commission,
+        },
+      ],
+    }),
+  )
+  const [item] = await tx((db) => db.select().from(bookingItems).where(eq(bookingItems.bookingId, b.id)))
+  return { ...b, item: item! }
+}
+const itemOf = async (id: string) =>
+  (await tx((db) => db.select().from(bookingItems).where(eq(bookingItems.id, id))))[0]!
+
+describe('R32 review: commission at Finish', () => {
+  it('a therapist not paid per booking gets none, whatever is planned or typed (no double pay with her %)', async () => {
+    const b = await bookFor({ staffIds: [ids.ploy!], fee: 150, commission: 40 })
+    const r = await tx((db) =>
+      finishBooking(db, {
+        ...base(),
+        bookingId: b.id,
+        lines: [{ ...line(150), staffId: ids.ploy }],
+        payments: [{ method: 'cash', amountAed: 150 }],
+        commissions: [{ bookingItemId: b.item.id, staffId: ids.ploy!, amountAed: 40 }],
+        now: NOW,
+      }),
+    )
+    expect(r.commissions).toEqual([{ bookingItemId: b.item.id, staffId: ids.ploy, amountAed: 0 }])
+    expect(await commissionOf(b.id)).toBe(0)
+    // Her 0 is not a plan: the treatment's planned amount stays as typed.
+    expect((await itemOf(b.item.id)).commissionAed).toBe('40.00')
+    // Nothing planned or typed: no refusal either.
+    const c = await bookFor({ staffIds: [ids.ploy!], fee: 150 })
+    await tx((db) =>
+      finishBooking(db, {
+        ...base(),
+        bookingId: c.id,
+        lines: [{ ...line(150), staffId: ids.ploy }],
+        payments: [{ method: 'cash', amountAed: 150 }],
+        now: NOW,
+      }),
+    )
+    expect(await commissionOf(c.id)).toBe(0)
+  })
+
+  it('finishing again after a void keeps the commission saved since (not the old plan)', async () => {
+    const b = await book({ fee: 150, commission: 40 })
+    const { sale } = await finish(b)
+    await tx((db) =>
+      recordOrderCommissions(db, {
+        bookingId: b.id,
+        amounts: [{ bookingItemId: b.item.id, staffId: ids.maya!, amountAed: 50 }],
+        now: NOW,
+      }),
+    )
+    // The plan mirrors the saved commission.
+    expect((await itemOf(b.item.id)).commissionAed).toBe('50.00')
+    await tx((db) => voidSale(db, { saleId: sale.id, reason: 'Wrong client' }))
+    await finish(b)
+    expect(await commissionOf(b.id)).toBe(50)
+    const rows = await tx((db) =>
+      db.select().from(bookingCommissions).where(eq(bookingCommissions.bookingId, b.id)),
+    )
+    expect(rows.map((x) => x.amountAed).sort()).toEqual(['10.00', '40.00'])
+  })
+
+  it('a legacy completion (commission recorded, nothing planned) keeps its commission at Finish', async () => {
+    const b = await book({ fee: 150 })
+    await tx((db) =>
+      completeBooking(db, {
+        bookingId: b.id,
+        amounts: [{ bookingItemId: b.item.id, staffId: ids.maya!, amountAed: 45 }],
+        now: NOW,
+      }),
+    )
+    await finish(b)
+    expect(await commissionOf(b.id)).toBe(45)
+  })
+
+  it('commissionLater (no commission rights): finished without commission when none is known', async () => {
+    const b = await book({ fee: 150 })
+    await expect(finish(b)).rejects.toThrow('Enter the commission for every therapist')
+    const r = await finish(b, { commissionLater: true })
+    expect(r.commissions).toEqual([])
+    expect(r.sale.bookingId).toBe(b.id)
+    expect(
+      await tx((db) => db.select().from(bookingCommissions).where(eq(bookingCommissions.bookingId, b.id))),
+    ).toHaveLength(0)
+    // A planned amount is still posted.
+    const c = await book({ fee: 150, commission: 30 })
+    await finish(c, { commissionLater: true })
+    expect(await commissionOf(c.id)).toBe(30)
+  })
+})
+
+describe('R32 review: fee, references, details, closed booking day', () => {
+  it('Finish and Correct payment write the fee charged back; the "last used" prefill is per treatment', async () => {
+    const b = await book({ fee: 150, commission: 40 })
+    // Reception changed the line price at checkout (real time, after the bookings above were typed).
+    await finish(b, { price: 160, date: new Date() })
+    expect((await itemOf(b.item.id)).priceAed).toBe('160.00')
+    expect((await tx((db) => lastBookingTerms(db, [ids.variant!]))).get(ids.variant!)?.feeAed).toBe(160)
+    const [saleLine] = (
+      await tx((db) => correctBookingOrder(db, { bookingId: b.id, reason: 'Check', now: new Date() }))
+    ).before.lines
+    await tx((db) =>
+      correctBookingOrder(db, {
+        bookingId: b.id,
+        reason: 'Fee was 170',
+        lines: [{ saleLineId: saleLine!.saleLineId, unitPriceAed: 170 }],
+        payments: [{ method: 'card_terminal', amountAed: 170 }],
+        now: new Date(),
+      }),
+    )
+    expect((await itemOf(b.item.id)).priceAed).toBe('170.00')
+    const v2 = await bookFor({ staffIds: [ids.maya!], variant: ids.variant2, fee: 300, commission: 60 })
+    expect(v2.item.priceAed).toBe('300.00')
+    const last = await tx((db) => lastBookingTerms(db, [ids.variant!, ids.variant2!]))
+    expect(last.get(ids.variant!)).toEqual({ feeAed: 170, commissionAed: 40 })
+    expect(last.get(ids.variant2!)).toEqual({ feeAed: 300, commissionAed: 60 })
+  })
+
+  it('Correct payment keeps the payment references (transfer / card slip)', async () => {
+    const b = await book({ fee: 150, commission: 40 })
+    await tx((db) =>
+      finishBooking(db, {
+        ...base(),
+        bookingId: b.id,
+        lines: [line(150)],
+        payments: [{ method: 'bank_transfer', amountAed: 150, reference: 'TRX-123' }],
+        now: NOW,
+      }),
+    )
+    const tipOnly = await tx((db) =>
+      correctBookingOrder(db, {
+        bookingId: b.id,
+        reason: 'Tip was 10',
+        tips: [{ staffId: ids.maya!, amountAed: 10, method: 'cash' }],
+        now: NOW,
+      }),
+    )
+    expect(tipOnly.voidedSaleId).toBeTruthy()
+    expect(tipOnly.after.payments).toEqual([
+      { method: 'bank_transfer', amountAed: 150, reference: 'TRX-123' },
+    ])
+    // Sent without its reference (same method + amount): kept as well.
+    const again = await tx((db) =>
+      correctBookingOrder(db, {
+        bookingId: b.id,
+        reason: 'Tip was 15',
+        payments: [{ method: 'bank_transfer', amountAed: 150 }],
+        tips: [{ staffId: ids.maya!, amountAed: 15, method: 'cash' }],
+        now: NOW,
+      }),
+    )
+    expect(again.after.payments[0]?.reference).toBe('TRX-123')
+  })
+
+  it('a walk-in keeps the own client it started with (her rotation turn); an own client needs a therapist', async () => {
+    const w = await book({ source: 'walk_in' })
+    await expect(
+      tx((db) =>
+        setBookingDetails(db, { bookingId: w.id, phoneLine: null, clientType: null, ownLead: true }),
+      ),
+    ).rejects.toThrow('Own client is set when the walk-in starts')
+    const ok = await tx((db) =>
+      setBookingDetails(db, { bookingId: w.id, phoneLine: null, clientType: 'new', ownLead: false }),
+    )
+    expect(ok.after).toEqual({ phoneLine: null, clientType: 'new', ownLead: false })
+    // An item left without a therapist (e.g. she was taken off it).
+    const n = await bookFor({ staffIds: [ids.maya!] })
+    await tx((db) => db.update(bookingItems).set({ staffIds: [] }).where(eq(bookingItems.id, n.item.id)))
+    await expect(
+      tx((db) =>
+        setBookingDetails(db, { bookingId: n.id, phoneLine: null, clientType: null, ownLead: true }),
+      ),
+    ).rejects.toThrow('Choose the therapist for her own client')
+  })
+
+  it('a commission change on a closed booking day needs allowClosedDay even when the sale is on an open day', async () => {
+    const day = '2026-10-01'
+    const b = await book({ date: day, fee: 150, commission: 30 })
+    await tx((db) => closeDay(db, { ...base(), date: day, openingFloatAed: 0, countedCashAed: 0 }))
+    expect((await finish(b, { allowClosedDay: true })).saleDate).toBe(D)
+    const correct = (o: { commission?: number; tip?: number; allowClosedDay?: boolean }) =>
+      tx((db) =>
+        correctBookingOrder(db, {
+          bookingId: b.id,
+          reason: 'Correction',
+          tips: o.tip ? [{ staffId: ids.maya!, amountAed: o.tip, method: 'cash' }] : undefined,
+          commissions:
+            o.commission === undefined
+              ? undefined
+              : [{ bookingItemId: b.item.id, staffId: ids.maya!, amountAed: o.commission }],
+          allowClosedDay: o.allowClosedDay,
+          now: NOW,
+        }),
+      )
+    await expect(correct({ commission: 35 })).rejects.toThrow(DAY_CLOSED)
+    // The money of the open sale day still changes; the same commission is no change.
+    expect((await correct({ tip: 5, commission: 30 })).voidedSaleId).toBeTruthy()
+    await correct({ commission: 35, allowClosedDay: true })
+    expect(await commissionOf(b.id)).toBe(35)
   })
 })

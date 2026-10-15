@@ -159,6 +159,7 @@ export const calendar = {
     phoneLine: 'Choose the phone line',
     fee: 'Enter the fee',
     commission: 'Enter the commission',
+    confirmFirst: 'Confirm the booking with its fee first',
   },
   /** R32 booking ↔ sale order on the booking sheet. */
   sheet: {

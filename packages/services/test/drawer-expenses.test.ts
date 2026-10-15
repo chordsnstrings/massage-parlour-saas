@@ -18,6 +18,7 @@ import {
   createSale,
   DAY_CLOSED,
   DRAWER_EXPENSE_CODES,
+  daySheet,
   daySummary,
   drawerExpenses,
   recordDrawerExpense,
@@ -128,6 +129,38 @@ describe('drawer expenses', () => {
     await expect(tx((db) => voidDrawerExpense(db, { expenseId: row!.id }))).rejects.toThrow(DAY_CLOSED)
     const late = await laundry({ description: 'Water', amountAed: 5, allowClosedDay: true })
     expect(late.expenseDate).toBe(D)
+  })
+
+  it('keeps Accounts-page expenses (not from the drawer) out of the expected cash and the day sheet', async () => {
+    const day = '2026-10-11'
+    await tx((db) =>
+      createSale(db, {
+        ...base(),
+        lines: [{ kind: 'other', description: 'Session', qty: 1, unitPriceAed: 300 }],
+        payments: [{ method: 'cash', amountAed: 300 }],
+        businessDate: day,
+        now: NOW,
+      }),
+    )
+    // Rent paid in cash on the same branch and day, entered on the Accounts page.
+    await tx((db) =>
+      db.insert(expenses).values({
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        expenseDate: day,
+        accountCode: '6100',
+        description: 'Rent',
+        amountAed: '100.00',
+        paidVia: 'cash',
+      }),
+    )
+    const s = await tx((db) => daySummary(db, ids.branch!, day, 0))
+    expect(s.drawerExpensesAed).toBe(0)
+    expect(s.drawerExpenses).toHaveLength(0)
+    expect(s.expectedCashAed).toBe(300)
+    const sheet = await tx((db) => daySheet(db, ids.branch!, day))
+    expect(sheet.expenses).toHaveLength(0)
+    expect(sheet.totals).toMatchObject({ cashAed: 300, expensesAed: 0, totalCashAed: 300, totalSaleAed: 300 })
   })
 
   it('voids with a reversal on the expense date and removes the row', async () => {

@@ -295,6 +295,13 @@ export function Checkout({
       toast.error(t('sales.checkout.priceMissing'))
       return
     }
+    // Blank commission rows are left out (= the booking's planned amount); `sent[n]` is the card row of payload row n.
+    const sent = initialCommissions.flatMap((c, row) => {
+      const v = commission[`${c.bookingItemId}:${c.staffId}`]?.trim()
+      return v
+        ? [{ row, input: { bookingItemId: c.bookingItemId, staffId: c.staffId, amountAed: f(v) / 100 } }]
+        : []
+    })
     start(async () => {
       const r = await createSaleAction(slug, {
         branchId,
@@ -320,16 +327,20 @@ export function Checkout({
           .filter((t) => f(t.amount) > 0)
           .map((t) => ({ staffId: t.staffId, amountAed: f(t.amount) / 100, method: t.method })),
         // Blank = the booking's planned amount (the server refuses when there is none).
-        commissions: initialCommissions.flatMap((c) => {
-          const v = commission[`${c.bookingItemId}:${c.staffId}`]?.trim()
-          return v ? [{ bookingItemId: c.bookingItemId, staffId: c.staffId, amountAed: f(v) / 100 }] : []
-        }),
+        commissions: sent.map((x) => x.input),
       })
       if (r?.ok) {
         toast.success(resultText(t, r) || t('sales.toast.recordedPlain'))
         router.push(`${receiptBase}/${r.data?.id as string}`)
       } else if (r) {
-        setErrors(r.fieldErrors ?? {})
+        // Commission errors name the payload row: show them under that therapist's field.
+        const errs: Record<string, string> = {}
+        for (const [k, msg] of Object.entries(r.fieldErrors ?? {})) {
+          const m = /^commissions\.(\d+)\.(.+)$/.exec(k)
+          const row = m ? sent[Number(m[1])]?.row : undefined
+          errs[m && row !== undefined ? `commissions.${row}.${m[2]}` : k] = msg
+        }
+        setErrors(errs)
         toast.error(resultText(t, r) ?? t('errors.generic'))
       }
     })

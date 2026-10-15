@@ -160,6 +160,7 @@ export const calendar: Messages['calendar'] = {
     phoneLine: 'เลือกสายโทรศัพท์',
     fee: 'กรอกค่าบริการ',
     commission: 'กรอกค่าคอมมิชชัน',
+    confirmFirst: 'กรุณายืนยันการจองพร้อมค่าบริการก่อน',
   },
   /** R32 booking ↔ sale order on the booking sheet (needs native review). */
   sheet: {

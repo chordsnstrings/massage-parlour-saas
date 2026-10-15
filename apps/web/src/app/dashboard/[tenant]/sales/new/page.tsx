@@ -13,8 +13,8 @@ import {
   stockLevels,
   withTenant,
 } from '@spa/db'
-import { lastBookingTerms } from '@spa/services'
-import { and, asc, eq, ne } from 'drizzle-orm'
+import { commissionTotals, isDayClosed, lastBookingTerms } from '@spa/services'
+import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { ArrowLeft, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -108,7 +108,7 @@ export default async function NewSalePage({
       .where(eq(membershipPlans.active, true))
       .orderBy(asc(membershipPlans.createdAt))
     const staffRows = await tx
-      .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds, payType: staff.payType })
+      .select({ id: staff.id, name: staff.displayName, branchIds: staff.branchIds })
       .from(staff)
       .where(eq(staff.active, true))
       .orderBy(asc(staff.sort), asc(staff.displayName))
@@ -118,6 +118,8 @@ export default async function NewSalePage({
       status: string
       /** R32: already finished (a live sale is linked) — checkout is refused. */
       paid: boolean
+      /** R32 (D6): the booking's business day is closed and this member may not change it. */
+      dayLocked: boolean
       client: { id: string; name: string; phone: string | null } | null
       lines: CheckoutLine[]
       commissions: CheckoutCommission[]
@@ -138,34 +140,54 @@ export default async function NewSalePage({
         .select({ id: sales.id })
         .from(sales)
         .where(and(eq(sales.bookingId, booking.id), ne(sales.status, 'void')))
-      // Commission per item × therapist: planned on the booking, else the last typed for the treatment, else 0 for
-      // someone not paid per booking, else blank (must be typed).
+      // Commission per item × therapist (same rules as finishBooking): only therapists paid per booking get a field
+      // (sales %, salary and booking-fee staff get none); prefilled with what is already recorded (a voided sale, a
+      // legacy completion), else the planned amount, else the last typed for the treatment, else blank.
       const last = await lastBookingTerms(
         tx,
         items.flatMap((it) => (it.serviceVariantId ? [it.serviceVariantId] : [])),
       )
+      const recorded = await commissionTotals(tx, booking.id)
+      const ids = [...new Set(items.flatMap((it) => it.staffIds))]
+      const people = new Map(
+        (ids.length
+          ? await tx
+              .select({ id: staff.id, name: staff.displayName, payType: staff.payType })
+              .from(staff)
+              .where(inArray(staff.id, ids))
+          : []
+        ).map((p) => [p.id, p]),
+      )
       const commissions: CheckoutCommission[] = items.flatMap((it) =>
-        it.staffIds.map((sid) => {
-          const person = staffRows.find((s) => s.id === sid)
+        it.staffIds.flatMap((sid) => {
+          const person = people.get(sid)
+          if (person && person.payType !== 'booking_commission') return []
+          const had = recorded.get(`${it.id}:${sid}`)
           const planned =
-            it.commissionAed != null
-              ? Number(it.commissionAed)
-              : (last.get(it.serviceVariantId ?? '')?.commissionAed ??
-                (person && person.payType !== 'booking_commission' ? 0 : null))
-          return {
-            bookingItemId: it.id,
-            staffId: sid,
-            name: person?.name ?? '—',
-            service: it.serviceName,
-            amountAed: planned ?? '',
-          }
+            had !== undefined
+              ? had / 100
+              : it.commissionAed != null
+                ? Number(it.commissionAed)
+                : (last.get(it.serviceVariantId ?? '')?.commissionAed ?? null)
+          return [
+            {
+              bookingItemId: it.id,
+              staffId: sid,
+              name: person?.name ?? '—',
+              service: it.serviceName,
+              amountAed: planned ?? '',
+            },
+          ]
         }),
       )
+      const dayLocked =
+        !can(ctx, 'pos.correct') && (await isDayClosed(tx, booking.branchId, booking.businessDate))
       prefill = {
         bookingId: booking.id,
         ref: booking.refCode,
         status: booking.status,
         paid: Boolean(live),
+        dayLocked,
         commissions,
         client: client
           ? {
@@ -244,7 +266,7 @@ export default async function NewSalePage({
   }
 
   const { prefill } = data
-  const blocked = prefill && (!CHECKOUT_OK.includes(prefill.status) || prefill.paid)
+  const blocked = prefill && (!CHECKOUT_OK.includes(prefill.status) || prefill.paid || prefill.dayLocked)
   return (
     <>
       <PageHeader
@@ -258,9 +280,13 @@ export default async function NewSalePage({
           <EmptyState
             icon={<Store className="size-5" />}
             title={t('sales.checkout.blockedTitle')}
-            description={t('sales.checkout.blockedBody', {
-              status: enumLabel(t, 'bookingStatus', prefill.status).toLowerCase(),
-            })}
+            description={
+              prefill.dayLocked && CHECKOUT_OK.includes(prefill.status) && !prefill.paid
+                ? t('bookings.order.closedNote')
+                : t('sales.checkout.blockedBody', {
+                    status: enumLabel(t, 'bookingStatus', prefill.status).toLowerCase(),
+                  })
+            }
           />
         </Card>
       ) : (

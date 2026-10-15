@@ -31,6 +31,8 @@ const ACTIONS: { to: Target; variant: 'primary' | 'secondary' | 'danger' }[] = [
   { to: 'cancelled', variant: 'danger' },
 ]
 
+const PENDING_TARGETS: Target[] = ['no_show', 'cancelled']
+
 type OwnTarget = 'checked_in' | 'in_service' | 'completed'
 /** A therapist's own booking (G14): check in → start → complete; never confirm, cancel or move. */
 const OWN_ACTIONS: { to: OwnTarget; variant: 'primary' | 'secondary' }[] = [
@@ -87,10 +89,13 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
   const [moving, setMoving] = useState(false)
   const [editing, setEditing] = useState<'terms' | 'details' | null>(null)
   const movable = data.canManage && !['completed', 'cancelled', 'no_show'].includes(status)
-  // R32: a pending booking is confirmed with its fee + commission (the Confirm form below); completing = Finish & pay.
+  // R32: a pending booking goes forward only through Confirm (fee + commission, the form below) — it can still be
+  // cancelled or marked no-show; completing = Finish & pay.
   const actions =
     data.canManage && status !== 'completed'
-      ? ACTIONS.filter((a) => canTransition(status, a.to) && !(status === 'pending' && a.to === 'confirmed'))
+      ? ACTIONS.filter(
+          (a) => canTransition(status, a.to) && (status !== 'pending' || PENDING_TARGETS.includes(a.to)),
+        )
       : []
   const live = status !== 'cancelled' && status !== 'no_show'
   const paid = first.saleId !== null

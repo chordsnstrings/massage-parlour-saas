@@ -120,6 +120,19 @@ export async function setBookingDetails(tx: Tx, i: { bookingId: string } & Detai
         : null,
     ownLead: Boolean(i.ownLead),
   }
+  if (after.ownLead !== booking.ownLead) {
+    // A walk-in's own client decided her rotation turn when it started (takeTurn or not); changing it later would
+    // leave the rotation wrong, so it is fixed then (R32 review).
+    if (booking.source === 'walk_in') throw new DomainError('Own client is set when the walk-in starts')
+    if (after.ownLead) {
+      const items = await tx
+        .select({ staffIds: bookingItems.staffIds })
+        .from(bookingItems)
+        .where(eq(bookingItems.bookingId, booking.id))
+      if (!items.some((it) => it.staffIds.length > 0))
+        throw new DomainError('Choose the therapist for her own client')
+    }
+  }
   const [updated] = await tx.update(bookings).set(after).where(eq(bookings.id, booking.id)).returning()
   return { booking: updated!, before, after }
 }
@@ -149,19 +162,122 @@ async function commissionSlots(tx: Tx, bookingId: string) {
   return {
     items,
     slots: items.flatMap((item) =>
-      item.staffIds.map((staffId) => ({ item, staffId, pay: pay.get(staffId) })),
+      item.staffIds.map((staffId) => ({ item, staffId, pay: pay.get(staffId) ?? 'booking_commission' })),
     ),
+  }
+}
+
+const keyOf = (c: { bookingItemId: string; staffId: string }) => `${c.bookingItemId}:${c.staffId}`
+const fixed = (aed: number) => (Math.round(aed * 100) / 100).toFixed(2)
+
+type Slots = Awaited<ReturnType<typeof commissionSlots>>
+
+/**
+ * The planned commission (`booking_items.commission_aed`) mirrors what is recorded: per item, the amount of its first
+ * therapist paid per booking (others' 0 is not a plan). Keeps Finish-again and the "last amount used" prefill right.
+ */
+async function mirrorPlannedCommission(tx: Tx, { items, slots }: Slots, amounts: CommissionInput[]) {
+  for (const item of items) {
+    const slot = slots.find((s) => s.item.id === item.id && s.pay === 'booking_commission')
+    const a = slot && amounts.find((x) => x.bookingItemId === item.id && x.staffId === slot.staffId)
+    if (!a || fixed(a.amountAed) === item.commissionAed) continue
+    await tx
+      .update(bookingItems)
+      .set({ commissionAed: fixed(a.amountAed) })
+      .where(eq(bookingItems.id, item.id))
+  }
+}
+
+/**
+ * R2 commission edit of an order (booking page "Save commission", Correct payment): posts only the differences
+ * (recordBookingCommissions) and keeps the planned commission on the items in step.
+ */
+export async function recordOrderCommissions(
+  tx: Tx,
+  i: { bookingId: string; amounts: CommissionInput[]; userId?: string | null; now?: Date },
+) {
+  const r = await recordBookingCommissions(tx, i)
+  await mirrorPlannedCommission(tx, await commissionSlots(tx, i.bookingId), i.amounts)
+  return r
+}
+
+type FeeLine = Pick<NewSaleLine, 'kind' | 'refId' | 'staffId' | 'qty' | 'unitPriceAed'> &
+  Partial<Pick<NewSaleLine, 'clientPackageId' | 'membership'>>
+
+/**
+ * The fee actually charged per booking item (fils): its service lines, matched by treatment + therapist, then by
+ * treatment alone (a therapist changed at checkout). Package / membership sessions (price 0) are not a fee.
+ */
+export function chargedFees(
+  items: { id: string; serviceVariantId: string | null; staffIds: string[] }[],
+  lines: FeeLine[],
+): Map<string, number> {
+  const used = new Set<number>()
+  const fees = new Map<string, number>()
+  const free = new Set<string>()
+  const svc = lines.flatMap((l, n) => (l.kind === 'service' && l.refId ? [{ l, n }] : []))
+  const take = (itemId: string, hit: { l: FeeLine; n: number }) => {
+    used.add(hit.n)
+    if (hit.l.clientPackageId || hit.l.membership?.use === 'session') free.add(itemId)
+    else fees.set(itemId, (fees.get(itemId) ?? 0) + fils(hit.l.unitPriceAed) * hit.l.qty)
+  }
+  const left: { itemId: string; variant: string }[] = []
+  for (const it of items) {
+    if (!it.serviceVariantId) continue
+    for (const staffId of it.staffIds.length ? it.staffIds : [null]) {
+      const hit = svc.find(
+        (x) => !used.has(x.n) && x.l.refId === it.serviceVariantId && (x.l.staffId ?? null) === staffId,
+      )
+      if (hit) take(it.id, hit)
+      else left.push({ itemId: it.id, variant: it.serviceVariantId })
+    }
+  }
+  for (const p of left) {
+    const hit = svc.find((x) => !used.has(x.n) && x.l.refId === p.variant)
+    if (hit) take(p.itemId, hit)
+  }
+  for (const id of free) fees.delete(id)
+  return fees
+}
+
+/** Writes the charged fee back to `price_aed` (D1: the agreed fee = what was charged); `bump` = the "last used" time. */
+async function writeBackFees(
+  tx: Tx,
+  items: (typeof bookingItems.$inferSelect)[],
+  fees: Map<string, number>,
+  o: { now: Date; bump: 'all' | 'changed' },
+) {
+  for (const item of items) {
+    const fee = fees.get(item.id)
+    if (fee === undefined) continue
+    const changed = item.priceAed == null || fils(Number(item.priceAed)) !== fee
+    if (!changed && o.bump === 'changed') continue
+    await tx
+      .update(bookingItems)
+      .set({ priceAed: (fee / 100).toFixed(2), termsSetAt: o.now })
+      .where(eq(bookingItems.id, item.id))
   }
 }
 
 /**
  * FINISH (D3, D5): the booking's checkout — createSale + recordBookingCommissions in one transaction. The sale is
- * dated the booking's business day when that day has started and is not closed, else today's. Commission per item ×
- * therapist = the typed amount, else the planned one, else 0 for someone not paid per booking; otherwise refused.
+ * dated the booking's business day when that day has started and is not closed, else today's. A closed booking day
+ * (its commission rows and its day-sheet row change) needs `allowClosedDay` (pos.correct). Commission per item ×
+ * therapist: someone not paid per booking (sales %, salary, booking fee) gets none (what is already recorded stays,
+ * else 0; typed amounts are ignored); otherwise the typed amount, else what is recorded (a voided sale / legacy
+ * completion), else the planned one; still none → refused, or — `commissionLater`, a member who may not enter
+ * commission — the sale is made without it (entered later on the booking page, "Commission missing").
+ * The fee charged per item is written back to `price_aed` (the "last amount used" prefill).
  */
 export async function finishBooking(
   tx: Tx,
-  i: NewSale & { bookingId: string; commissions?: CommissionInput[]; userId?: string | null; now?: Date },
+  i: NewSale & {
+    bookingId: string
+    commissions?: CommissionInput[]
+    commissionLater?: boolean
+    userId?: string | null
+    now?: Date
+  },
 ) {
   const now = i.now ?? new Date()
   const [peek] = await tx.select().from(bookings).where(eq(bookings.id, i.bookingId))
@@ -169,43 +285,45 @@ export async function finishBooking(
   if (peek.branchId !== i.branchId) throw new DomainError('That booking belongs to another branch')
   const today = await branchBusinessDate(tx, peek.branchId, now)
   // Day lock first (advisory), then the booking row — the order every day edit uses.
-  const date =
-    peek.businessDate <= today && !(await isDayClosed(tx, peek.branchId, peek.businessDate, { lock: true }))
-      ? peek.businessDate
-      : today
+  const bookingDayClosed = await isDayClosed(tx, peek.branchId, peek.businessDate, { lock: true })
+  if (bookingDayClosed && !i.allowClosedDay) throw new DomainError(DAY_CLOSED)
+  const date = peek.businessDate <= today && !bookingDayClosed ? peek.businessDate : today
   const booking = await lockBooking(tx, peek.id)
   if (!['confirmed', 'checked_in', 'in_service', 'completed'].includes(booking.status))
     throw new DomainError(`A ${booking.status.replace('_', ' ')} booking can't be checked out`)
-  const { items, slots } = await commissionSlots(tx, peek.id)
-  const given = new Map((i.commissions ?? []).map((c) => [`${c.bookingItemId}:${c.staffId}`, c.amountAed]))
-  const amounts: CommissionInput[] = slots.map(({ item, staffId, pay }) => {
-    const typed = given.get(`${item.id}:${staffId}`)
-    const amount = typed ?? num(item.commissionAed) ?? (pay !== 'booking_commission' ? 0 : null)
-    if (amount == null) throw new DomainError('Enter the commission for every therapist')
+  const order = await commissionSlots(tx, peek.id)
+  const { items, slots } = order
+  const recorded = await commissionTotals(tx, peek.id)
+  const given = new Map((i.commissions ?? []).map((c) => [keyOf(c), c.amountAed]))
+  for (const key of given.keys())
+    if (!slots.some((s) => keyOf({ bookingItemId: s.item.id, staffId: s.staffId }) === key))
+      throw new DomainError('Therapist not found', 'not_found')
+  const resolved = slots.map(({ item, staffId, pay }) => {
+    const key = keyOf({ bookingItemId: item.id, staffId })
+    const had = recorded.get(key)
+    const amount =
+      pay !== 'booking_commission'
+        ? (had ?? 0) / 100
+        : (given.get(key) ?? (had !== undefined ? had / 100 : num(item.commissionAed)))
     return { bookingItemId: item.id, staffId, amountAed: amount }
   })
-  for (const key of given.keys())
-    if (!slots.some((s) => `${s.item.id}:${s.staffId}` === key))
-      throw new DomainError('Therapist not found', 'not_found')
+  const missing = resolved.some((a) => a.amountAed == null)
+  if (missing && !i.commissionLater) throw new DomainError('Enter the commission for every therapist')
+  const amounts = missing ? [] : (resolved as CommissionInput[])
   const { sale, lines, message } = await createSale(tx, { ...i, businessDate: date, now })
-  for (const item of items) {
-    const first = amounts.find((a) => a.bookingItemId === item.id)
-    if (!first) continue
-    await tx
-      .update(bookingItems)
-      .set({ commissionAed: (Math.round(first.amountAed * 100) / 100).toFixed(2), termsSetAt: now })
-      .where(eq(bookingItems.id, item.id))
-  }
-  if (amounts.length)
+  await writeBackFees(tx, items, chargedFees(items, i.lines), { now, bump: 'all' })
+  if (amounts.length) {
+    await mirrorPlannedCommission(tx, order, amounts)
     await recordBookingCommissions(tx, { bookingId: peek.id, amounts, userId: i.userId, now })
-  return { sale, lines, message, saleDate: date, commissions: amounts }
+  }
+  return { sale, lines, message, saleDate: date, commissions: amounts, bookingDayClosed }
 }
 
 type OrderSnapshot = {
   saleId: string | null
   saleNumber: number | null
   lines: { saleLineId: string; description: string; unitPriceAed: number }[]
-  payments: { method: string; amountAed: number }[]
+  payments: { method: string; amountAed: number; reference: string | null }[]
   tips: { staffId: string; amountAed: number; method: string }[]
   commissions: CommissionInput[]
 }
@@ -232,7 +350,7 @@ async function snapshot(tx: Tx, bookingId: string, sale: Sale | null): Promise<O
       description: l.description,
       unitPriceAed: Number(l.unitPriceAed),
     })),
-    payments: ps.map((p) => ({ method: p.method, amountAed: Number(p.amountAed) })),
+    payments: ps.map((p) => ({ method: p.method, amountAed: Number(p.amountAed), reference: p.reference })),
     tips: ts.map((t) => ({ staffId: t.staffId, amountAed: Number(t.amountAed), method: t.method })),
     commissions,
   }
@@ -249,8 +367,10 @@ const sameMoney = <T extends { amountAed: number }>(a: T[], b: T[], key: (x: T) 
 
 /**
  * Correct payment (D4): new line prices / payments / tips → void the live sale ("Corrected: …") and re-create it on
- * the SAME business date in this transaction; commission changes post only the differences. A closed day needs
- * `allowClosedDay` (pos.correct). Prepaid, gift-card and refunded sales are refused by voidSale with its texts.
+ * the SAME business date in this transaction; commission changes post only the differences (dated the booking's
+ * day). A closed day — the sale's for money, the booking's for commission — needs `allowClosedDay` (pos.correct).
+ * Prepaid, gift-card and refunded sales are refused by voidSale with its texts. A payment sent without a reference
+ * keeps the old one of the same method + amount (card slip / transfer reference); new fees go back to `price_aed`.
  */
 export async function correctBookingOrder(
   tx: Tx,
@@ -291,18 +411,35 @@ export async function correctBookingOrder(
     discountAed: Number(l.discountAed),
     staffId: l.staffId,
   }))
-  const newPayments =
-    i.payments ??
-    before.payments.map((p) => ({ ...p, method: p.method as NewSale['payments'][number]['method'] }))
+  type Pay = NewSale['payments'][number]
+  const oldRefs = before.payments.filter((p) => p.reference)
+  const newPayments: Pay[] = (
+    i.payments ?? before.payments.map((p) => ({ ...p, method: p.method as Pay['method'] }))
+  ).map((p) => {
+    if (p.reference) return p
+    const n = oldRefs.findIndex((o) => o.method === p.method && fils(o.amountAed) === fils(p.amountAed))
+    if (n < 0) return { ...p, reference: null }
+    const [o] = oldRefs.splice(n, 1)
+    return { ...p, reference: o!.reference }
+  })
   const newTips =
     i.tips ??
     before.tips.map((t) => ({ ...t, method: t.method as NonNullable<NewSale['tips']>[number]['method'] }))
   const linesChanged = oldLines.some(
     (l, n) => fils(newLines[n]!.unitPriceAed) !== fils(Number(l.unitPriceAed)),
   )
+  const had = new Map(before.commissions.map((c) => [keyOf(c), fils(c.amountAed)]))
+  const commissionChanged = (i.commissions ?? []).some((c) => had.get(keyOf(c)) !== fils(c.amountAed))
+  if (
+    commissionChanged &&
+    !i.allowClosedDay &&
+    booking.businessDate !== old.businessDate &&
+    (await isDayClosed(tx, booking.branchId, booking.businessDate, { lock: true }))
+  )
+    throw new DomainError(DAY_CLOSED)
   const moneyChanged =
     linesChanged ||
-    !sameMoney(before.payments, newPayments, (p) => p.method) ||
+    !sameMoney<{ method: string; amountAed: number }>(before.payments, newPayments, (p) => p.method) ||
     !sameMoney(before.tips, newTips, (t) => `${t.staffId}:${t.method}`)
   let sale = old
   let voidedSaleId: string | null = null
@@ -329,6 +466,13 @@ export async function correctBookingOrder(
       now: i.now,
     })
     sale = created.sale
+    if (linesChanged) {
+      const items = await tx.select().from(bookingItems).where(eq(bookingItems.bookingId, booking.id))
+      await writeBackFees(tx, items, chargedFees(items, newLines), {
+        now: i.now ?? new Date(),
+        bump: 'changed',
+      })
+    }
     // G16 billing details printed on the full tax invoice stay with the order.
     if (old.billing)
       [sale] = (await tx
@@ -337,16 +481,13 @@ export async function correctBookingOrder(
         .where(eq(sales.id, sale.id))
         .returning()) as [Sale]
   }
-  if (i.commissions) {
-    const had = new Map(before.commissions.map((c) => [`${c.bookingItemId}:${c.staffId}`, fils(c.amountAed)]))
-    if (i.commissions.some((c) => had.get(`${c.bookingItemId}:${c.staffId}`) !== fils(c.amountAed)))
-      await recordBookingCommissions(tx, {
-        bookingId: booking.id,
-        amounts: i.commissions,
-        userId: i.userId,
-        now: i.now,
-      })
-  }
+  if (i.commissions && commissionChanged)
+    await recordOrderCommissions(tx, {
+      bookingId: booking.id,
+      amounts: i.commissions,
+      userId: i.userId,
+      now: i.now,
+    })
   const after = await snapshot(tx, booking.id, sale)
   return { before, after, voidedSaleId, sale }
 }

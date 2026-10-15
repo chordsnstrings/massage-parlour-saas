@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, type Page, test } from '@playwright/test'
 import { addDays } from '@spa/core'
-import { branches, dayCloses, storedFiles, tenants } from '@spa/db'
+import { branches, dayCloses, expenses, storedFiles, tenants } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import { extractText, getDocumentProxy } from 'unpdf'
 import { SHEET_TOTALS, seedDaySheetDay } from '../../../packages/services/test/fixtures/day-sheet-13-10-26'
@@ -130,6 +130,45 @@ test('daily sales sheet: download any day, auto copy at close, reception totals 
     expect(
       (await fetchFrom(page, `${app}/${slug}/sales/close/sheet?date=${addDays(today(), 1)}`)).status,
     ).toBe(404)
+    await p.context().close()
+  })
+
+  await test.step('PDF missing after close (render failed): "Create PDF" stores it again', async () => {
+    await db
+      .update(dayCloses)
+      .set({ pdfFileId: null, pdfSha256: null, pdfGeneratedAt: null })
+      .where(and(eq(dayCloses.branchId, branch!.id), eq(dayCloses.businessDate, day)))
+    await page.goto(closePage)
+    await expect(page.getByTestId('day-sheet-saved')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Create PDF' }).click()
+    await expect(page.getByText('Day sheet PDF created')).toBeVisible()
+    await expect(page.getByTestId('day-sheet-saved')).toBeVisible()
+    const [close] = await db
+      .select()
+      .from(dayCloses)
+      .where(and(eq(dayCloses.branchId, branch!.id), eq(dayCloses.businessDate, day)))
+    expect(close!.pdfFileId).toBeTruthy()
+    expect(close!.pdfFileId).not.toBe(fileId)
+    const [file] = await db.select().from(storedFiles).where(eq(storedFiles.id, close!.pdfFileId!))
+    expect(file).toMatchObject({ purpose: 'day_sheet_pdf', isPublic: false })
+    assertSheet(await pdfText(new Uint8Array((await fetchFrom(page, `/files/${file!.id}`)).bytes)))
+  })
+
+  await test.step('an accountant (no pos.correct) cannot void the closed day’s drawer expense from Accounts', async () => {
+    const p = await (await browser.newContext()).newPage()
+    const email = `accountant-${slug.slice(-8)}@e2e.test`
+    await createLogin(p, { name: 'Sheet Accountant', email, password: OWNER_PASSWORD })
+    await addMember(slug, email, 'accountant')
+    await p.goto(`${app}/${slug}/accounts/expenses?month=${day.slice(0, 7)}`)
+    await expect(p.getByText('Laundry').first()).toBeVisible()
+    await p.getByRole('button', { name: 'Void' }).first().click()
+    await p.getByRole('button', { name: 'Confirm void' }).first().click()
+    await expect(p.getByText('That day is closed — ask a manager to change it')).toBeVisible()
+    const left = await db
+      .select()
+      .from(expenses)
+      .where(and(eq(expenses.branchId, branch!.id), eq(expenses.expenseDate, day)))
+    expect(left.map((e) => [e.description, e.amountAed, e.fromDrawer])).toEqual([['Laundry', '58.00', true]])
     await p.context().close()
   })
 })

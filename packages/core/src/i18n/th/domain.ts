@@ -334,4 +334,6 @@ export const domain: Messages['errors']['domain'] = {
   drawerExpenseCategory: 'เลือกหมวดหมู่',
   saleLineNotFound: 'ไม่พบรายการในบิลขาย',
   dayCloseNotFound: 'ไม่พบการปิดยอดของวันนี้',
+  ownLeadWalkIn: 'ลูกค้าส่วนตัวต้องเลือกตอนเริ่มวอล์กอิน',
+  ownLeadTherapist: 'เลือกพนักงานนวดสำหรับลูกค้าส่วนตัวของเธอ',
 }

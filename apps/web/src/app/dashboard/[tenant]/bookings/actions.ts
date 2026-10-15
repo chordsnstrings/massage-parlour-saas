@@ -8,7 +8,7 @@ import {
   orderDay,
   PAY_METHODS,
   POS_METHODS,
-  recordBookingCommissions,
+  recordOrderCommissions,
   setBookingStatus,
 } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -56,15 +56,17 @@ export async function markBookingAction(
   if (!parsed.success) return fromZod(parsed.error)
   const { bookingId, mark, reason } = parsed.data
   try {
-    const { updated, from } = await withTenant(ctx.tenant.id, async (tx) => {
+    const { updated, from, lock } = await withTenant(ctx.tenant.id, async (tx) => {
       const b = await ownBooking(tx, ctx, bookingId)
-      // Re-opening a completed booking reverses commission — same permission as entering it.
+      // Re-opening a completed booking reverses commission — same permission as entering it, and the day lock of
+      // the booking's day (its commission rows) applies.
       if (b.status === 'completed' && !can(ctx, 'calendar.commission'))
         throw new DomainError('Booking not found', 'not_found')
+      const lock = b.status === 'completed' ? await editDay(tx, ctx, b.branchId, b.businessDate) : null
       const updated = await setBookingStatus(tx, bookingId, mark, reason || undefined, {
         userId: ctx.user.id,
       })
-      return { updated, from: b.status }
+      return { updated, from: b.status, lock }
     })
     await audit({
       tenantId: ctx.tenant.id,
@@ -72,8 +74,9 @@ export async function markBookingAction(
       action: `booking.${mark}`,
       entity: 'booking',
       entityId: bookingId,
-      data: { from, ...(reason ? { reason } : {}) },
+      data: { from, ...(reason ? { reason } : {}), ...(lock?.closed ? { closedDay: true } : {}) },
     })
+    if (lock) await afterDayChange(ctx, lock)
     revalidate(slug)
     return ok({
       key: 'bookings.results.marked',
@@ -120,7 +123,7 @@ export async function saveCommissionAction(
       if (b.status !== 'completed') return null
       const lock = await editDay(tx, ctx, b.branchId, b.businessDate)
       const before = Object.fromEntries(await commissionTotals(tx, bookingId))
-      await recordBookingCommissions(tx, { bookingId, amounts, userId: ctx.user.id })
+      await recordOrderCommissions(tx, { bookingId, amounts, userId: ctx.user.id })
       const after = Object.fromEntries(await commissionTotals(tx, bookingId))
       return { lock, before, after }
     })
@@ -172,7 +175,8 @@ export type CorrectOrderPayload = z.input<typeof correctSchema>
 /**
  * R32 (D4) Correct payment: new fee / payment split / tips → the sale is voided and re-created on the same business
  * date in one transaction (no pos.refund: the void and the new sale are one atomic correction); commission changes
- * post only the differences. Day lock (D6) on the sale's date. Needs pos.use + calendar.commission.
+ * post only the differences. Day lock (D6) on the sale's date for the money, and on the booking's date (its commission
+ * rows) when the commission changes. Needs pos.use + calendar.commission.
  */
 export async function correctOrderAction(
   slug: string,
@@ -191,6 +195,16 @@ export async function correctOrderAction(
       await ownBooking(tx, ctx, bookingId)
       const day = await orderDay(tx, bookingId)
       const lock = await editDay(tx, ctx, day.branchId, day.date)
+      let bookingLock: typeof lock | null = null
+      if (v.commissions?.length && day.booking.businessDate !== day.date) {
+        const had = await commissionTotals(tx, bookingId)
+        if (
+          v.commissions.some(
+            (c) => had.get(`${c.bookingItemId}:${c.staffId}`) !== Math.round(c.amountAed * 100),
+          )
+        )
+          bookingLock = await editDay(tx, ctx, day.branchId, day.booking.businessDate)
+      }
       const done = await correctBookingOrder(tx, {
         bookingId,
         reason: v.reason,
@@ -198,10 +212,10 @@ export async function correctOrderAction(
         payments: v.payments?.filter((p) => p.amountAed > 0),
         tips: v.tips?.filter((t) => t.amountAed > 0),
         commissions: v.commissions,
-        allowClosedDay: lock.closed,
+        allowClosedDay: lock.closed || Boolean(bookingLock?.closed),
         userId: ctx.user.id,
       })
-      return { ...done, lock }
+      return { ...done, lock, bookingLock }
     })
     await audit({
       tenantId: ctx.tenant.id,
@@ -216,9 +230,11 @@ export async function correctOrderAction(
         voidedSale: r.voidedSaleId,
         sale: r.sale.number,
         closedDay: r.lock.closed,
+        ...(r.bookingLock ? { bookingDay: r.bookingLock.date, bookingDayClosed: r.bookingLock.closed } : {}),
       },
     })
     await afterDayChange(ctx, r.lock)
+    if (r.bookingLock) await afterDayChange(ctx, r.bookingLock)
     revalidate(slug)
     revalidatePath(`/dashboard/${slug}/sales`, 'layout')
     return ok({ key: 'bookings.results.corrected', params: { number: r.sale.number } }, { saleId: r.sale.id })

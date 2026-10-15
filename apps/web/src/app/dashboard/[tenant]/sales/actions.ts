@@ -1,5 +1,5 @@
 'use server'
-import { clientPackages, clients, dayCloses, expenses, sales, withTenant } from '@spa/db'
+import { bookings, clientPackages, clients, dayCloses, expenses, sales, withTenant } from '@spa/db'
 import {
   closeDay,
   createSale,
@@ -145,9 +145,19 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
   // R32 (D6): new money on a closed day only with pos.correct (owners/managers).
   const allowClosedDay = can(ctx, 'pos.correct')
   try {
-    const { sale, finished, closed } = await withTenant(ctx.tenant.id, async (tx) => {
+    const { sale, finished, closed, bookingDay } = await withTenant(ctx.tenant.id, async (tx) => {
       const picked = await pickBranch(tx, ctx, v.branchId)
       if (!picked || picked.branch.id !== v.branchId) throw new DomainError('Branch not found', 'not_found')
+      // Finishing a booking posts its commission and fills its day-sheet row on the BOOKING's business day: a
+      // closed booking day changes only with pos.correct, and is then marked amended (its PDF regenerated).
+      let bookingDay: { branchId: string; date: string; closed: boolean } | null = null
+      if (v.bookingId) {
+        const [b] = await tx
+          .select({ branchId: bookings.branchId, date: bookings.businessDate })
+          .from(bookings)
+          .where(eq(bookings.id, v.bookingId))
+        if (b && b.branchId === v.branchId) bookingDay = await editDay(tx, ctx, b.branchId, b.date)
+      }
       let clientId = v.clientId ?? null
       if (!clientId && v.newClient?.name) {
         clientId = (await findOrCreateClient(tx, ctx.tenant.id, { ...v.newClient, source: 'walk_in' })).id
@@ -170,12 +180,14 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
             ...input,
             bookingId: v.bookingId,
             commissions: can(ctx, 'calendar.commission') ? v.commissions : undefined,
+            // Without commission rights the commission is entered later on the booking page when none is known.
+            commissionLater: !can(ctx, 'calendar.commission'),
             userId: ctx.user.id,
           })
         : { ...(await createSale(tx, input)), saleDate: null, commissions: null }
       const closed = await isDayClosed(tx, v.branchId, done.sale.businessDate)
       if (closed) await markDayAmended(tx, v.branchId, done.sale.businessDate, ctx.user.id)
-      return { sale: done.sale, finished: done.saleDate ? done : null, closed }
+      return { sale: done.sale, finished: done.saleDate ? done : null, closed, bookingDay }
     })
     await audit({
       tenantId: ctx.tenant.id,
@@ -195,6 +207,7 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
         data: { sale: sale.number, saleDate: finished.saleDate, commissions: finished.commissions },
       })
     await afterDayChange(ctx, { branchId: v.branchId, date: sale.businessDate, closed })
+    if (bookingDay && bookingDay.date !== sale.businessDate) await afterDayChange(ctx, bookingDay)
     revalidate(slug)
     if (v.bookingId) revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
     if (v.bookingId) revalidatePath(`/dashboard/${slug}/calendar`)

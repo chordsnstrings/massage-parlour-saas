@@ -371,4 +371,6 @@ export const domain = {
   drawerExpenseCategory: 'Pick a category',
   saleLineNotFound: 'Sale line not found',
   dayCloseNotFound: 'Day close not found',
+  ownLeadWalkIn: 'Own client is set when the walk-in starts',
+  ownLeadTherapist: 'Choose the therapist for her own client',
 } as const
