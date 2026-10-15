@@ -41,6 +41,6 @@ for the flow you touched: `pnpm --filter @spa/web e2e <spec>`. More commands and
 
 ## Releases (important)
 
-`claude/intelligent-heisenberg-g9e81o` is the default branch **and the production branch**. Every push to it that passes CI
-is deployed to https://spamanagement.co within about 2 minutes. Work on your own branch, open a pull request into it, and
-merge (squash) only when CI is green. Details are in [`docs/HANDOVER.md`](docs/HANDOVER.md#how-a-change-reaches-production).
+`claude/intelligent-heisenberg-g9e81o` is the default branch **and the production branch**. Every push to it whose CI
+passes (about 25–30 min) is deployed to https://spamanagement.co a few minutes later. Work on your own branch, open a
+pull request into it, and merge (squash) only when CI is green. Details are in [`docs/HANDOVER.md`](docs/HANDOVER.md#how-a-change-reaches-production).

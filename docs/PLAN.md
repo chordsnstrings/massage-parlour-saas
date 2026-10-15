@@ -1359,7 +1359,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   reserved `CRM_DATA.inline_fonts` {url: data URI}. Same 300 ms deadline (run with the pictures), LRU, miss/error
   memory and output-key rules as contract.inline; English never carries them; designs without the key unchanged.
   R24 kept: only window.CRM_DATA's value changes (owner-approved extension of the allowed invisible changes). Design
-  side: BE RELAX v2.6 declares the four faces for `ar` and uses the data URIs before its urls. Contract doc §11;
+  side: BE RELAX v2.7 (`docs/design/be-relax-site/`) declares the four faces for `ar` and uses the data URIs before its urls. Contract doc §11;
   CODEMAP "contract.inline"; e2e `html-crm.spec.ts` (contract.inline test, `?lang=ar` + Arabic share link).
 - **R29 Meta setup fixes (owner 2026-10-13 "fix all"; one platform with Meta apps for every spa):**
   1. **Old domain → canonical:** every GET/HEAD page on an `EXTRA_ROOT_DOMAINS` host (old sslip.io: `app.`, `admin.`,

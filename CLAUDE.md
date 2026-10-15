@@ -27,6 +27,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - **Fix backlog reminder:** PLAN §17: F1–F32 released 2026-10-10, nothing open (owner 2026-10-09: "always remind me"). While any is open,
   remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
   the next one in order. Don't fix them until the owner says so.
+- **Ask before coding (owner 2026-10-15: "ask me before start coding"):** for a new feature or change request, explain the
+  plan and ask the open questions first; code only after the owner's go. Docs/memory upkeep and fixes to Claude's own
+  in-flight work are exempt.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
   `docs/CODEMAP.md` / `docs/PLAN.md` in the same session, commit, and merge the docs into the deploy branch
   `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path).

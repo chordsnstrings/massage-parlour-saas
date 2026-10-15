@@ -1,7 +1,7 @@
 # BE RELAX website design files
 
 These are the HTML design files for the spa BE RELAX MASSAGE CENTER AND SPA (`be-relax-massage-center-and-spa`). Each one is
-uploaded in Console → Websites → the spa → design → Upload new version, then Roll out. The platform renders an
+uploaded in Console → Site templates → the design's row → Upload new version, then Roll out. The platform renders an
 uploaded design exactly as built (CLAUDE.md, R24). The CRM fills in live data such as services, prices, staff and
 hours (`docs/design/html-crm-contract.md`).
 
