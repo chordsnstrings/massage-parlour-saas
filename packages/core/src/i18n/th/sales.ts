@@ -208,7 +208,7 @@ export const sales: Messages['sales'] = {
     noPayments: 'ยังไม่มีการชำระเงิน',
     refundsBy: 'คืนเงิน · {method}',
     tips: 'ทิป',
-    cashIn: 'เงินสดเข้า (ขาย + ทิป − คืนเงิน)',
+    cashIn: 'เงินสดเข้า (ขาย + ทิป − คืนเงิน − ค่าใช้จ่ายจากลิ้นชัก)',
     closedAt: 'ปิดเมื่อ {time}',
     locked: 'ล็อกแล้ว',
     openingFloat: 'เงินทอนตั้งต้น',

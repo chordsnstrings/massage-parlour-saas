@@ -130,7 +130,9 @@ export async function renderDaySheetPdf(input: DaySheetPdfInput): Promise<Buffer
     }
     const nameW = CONTENT_W / 2 - offset
     cell(input.spaName, MARGIN + offset - 3, y + 12, nameW, { size: 13, bold: true })
-    cell(input.branch.name, MARGIN + offset - 3, y + 23, nameW, { color: MUTED })
+    // The branch line only when it says something the spa name does not (one-branch spas often share the name).
+    if (input.branch.name.trim().toLowerCase() !== input.spaName.trim().toLowerCase())
+      cell(input.branch.name, MARGIN + offset - 3, y + 23, nameW, { color: MUTED })
     const endX = MARGIN + CONTENT_W / 2
     const endW = CONTENT_W / 2
     drawLine(L('title'), { x: endX, y: y + 11, w: endW }, { size: 11, bold: true, rtl: false, right: true })

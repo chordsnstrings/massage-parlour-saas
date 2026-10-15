@@ -1468,7 +1468,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
     USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
     honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
-- **R32 Daily sales sheet PDF + booking ↔ sale order (owner, 2026-10-14, "Go" ~16:20) — ✅ as built 2026-10-15 on
+- **R32 Daily sales sheet PDF + booking ↔ sale order (owner, "Go" 2026-10-15 02:28 Dubai) — ✅ as built 2026-10-15 on
   branch `r32-daily-sheet` (f0cdd65…f0145ff, 8560d46, af0d14f; not merged yet, code follows the normal review path).**
   The spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM feature. Code rules: CODEMAP "Booking ↔ sale order
   (R32)", "Daily sales sheet (R32)", "Daily close".

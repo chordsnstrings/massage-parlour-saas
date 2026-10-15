@@ -209,7 +209,7 @@ export const sales = {
     noPayments: 'No payments recorded.',
     refundsBy: 'Refunds · {method}',
     tips: 'Tips',
-    cashIn: 'Cash in (sales + tips − refunds)',
+    cashIn: 'Cash in (sales + tips − refunds − drawer expenses)',
     closedAt: 'Closed {time}',
     locked: 'Locked',
     openingFloat: 'Opening float',
