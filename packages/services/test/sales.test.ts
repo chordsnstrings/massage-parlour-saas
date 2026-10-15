@@ -286,6 +286,17 @@ describe('sales', () => {
     ).rejects.toThrow(/already closed/)
     // Closed day: void no longer allowed, a refund is.
     await expect(tx((db) => voidSale(db, { saleId: refunded.id, reason: 'late' }))).rejects.toThrow()
+    // R32 (D6): no new sale on the closed day either (owners/managers pass allowClosedDay).
+    await expect(
+      tx((db) =>
+        createSale(db, {
+          ...base(),
+          lines: [swedish()],
+          payments: [{ method: 'cash', amountAed: 350 }],
+          now: NOON,
+        }),
+      ),
+    ).rejects.toThrow('That day is closed — ask a manager to change it')
     const c = await tx((db) => db.select().from(counters).where(eq(counters.key, 'sale')))
     expect(c[0]!.value).toBe(4)
   })
@@ -491,8 +502,9 @@ describe('a booking is checked out once (F3)', () => {
     const b = await book(16)
     const { sale: first } = await checkout(b.id)
     await tx((db) => voidSale(db, { saleId: first.id, reason: 'Wrong items' }))
-    // Voiding leaves the booking completed; reopen it so the status check doesn't mask the sale check.
-    await tx((db) => db.update(bookings).set({ status: 'in_service' }).where(eq(bookings.id, b.id)))
+    // Voiding leaves the booking completed; R32 (D7) checks out a completed booking that has no live sale.
+    const [left] = await tx((db) => db.select().from(bookings).where(eq(bookings.id, b.id)))
+    expect(left!.status).toBe('completed')
     const { sale: second } = await checkout(b.id)
     expect(second.bookingId).toBe(b.id)
     // A second live sale for the booking is refused by the partial unique index itself.

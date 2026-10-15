@@ -18,6 +18,7 @@ import {
 import { createdAt, id } from './_columns'
 import { tenantPolicies } from './_rls'
 import { user } from './auth'
+import { storedFiles } from './files'
 import { type BillingDetails, bookings, clients, staff } from './operations'
 import { tenants } from './platform'
 import { branches, members } from './tenant'
@@ -221,6 +222,13 @@ export const dayCloses = pgTable(
     notes: text('notes'),
     closedBy: text('closed_by').references(() => user.id),
     closedAt: createdAt(),
+    /** R32: last change to this closed day by an owner/manager (`pos.correct`); null = as closed. */
+    amendedAt: timestamp('amended_at', { withTimezone: true }),
+    amendedBy: text('amended_by').references(() => user.id),
+    /** R32: the day-sheet PDF stored at close (private file, purpose `day_sheet_pdf`); regenerated on amendment. */
+    pdfFileId: uuid('pdf_file_id').references(() => storedFiles.id, { onDelete: 'set null' }),
+    pdfSha256: text('pdf_sha256'),
+    pdfGeneratedAt: timestamp('pdf_generated_at', { withTimezone: true }),
   },
   (t) => [unique('day_close_unique').on(t.branchId, t.businessDate), ...tenantPolicies()],
 )

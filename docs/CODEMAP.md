@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `resend-domains.ts` (R18): `resendDomains(key, {fetch, baseUrl})` (tests only inject; base URL never from env), `setUpSendingDomain`/`checkSendingDomain`, `namecheapHost`, `ResendDomainError` codes. `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview; `TURNSTILE` is web-only, left out of the worker flags). `turnstile.ts` (F9): `turnstileConfig` (both keys or off), `turnstileOnCustomDomains`, `verifyTurnstileToken` (siteverify, fail closed). `attribution.ts` (F13): `webEntrySource` (raw web_events.source), `attributionOf`/`bookingAttribution` → `BOOKING_ATTRIBUTIONS` (= db `booking_attribution` enum); `staffBookingAttribution` = `website` for a staff Website (`online`) booking (createBookingAction; reports `onlineSourceSql`: null + `created_by` → `website`, else `unknown`). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `toE164`, `whatsappLink` (desktop/web/mobile), `asciiDigits` (Arabic-Indic/Persian → ASCII; both phone parsers apply it first, `toE164` also drops bidi/zero-width marks, QA M3). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14); `pos.correct` (R32, "Correct closed days") only through `ALL_PERMISSIONS` (owners, managers). `day-sheet.ts` (R32): `sheetCode` (P1–P4 / W / B + /R /N), `turnNumbers` (Q; own leads 0), `sheetTotals`, `phoneLineOptions`, `daySheetColumns`. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `toE164`, `whatsappLink` (desktop/web/mobile), `asciiDigits` (Arabic-Indic/Persian → ASCII; both phone parsers apply it first, `toE164` also drops bidi/zero-width marks, QA M3). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`; `poolConfig`: idle connections kept 10 min (`POOL_IDLE_MS`) + TCP keepAlive probing after 60 s; `createDb` logs a pool `error` (idle client lost its backend) instead of crashing — pg's 10 s default cost ~100 ms to reconnect after a quiet minute; per process `DB_POOL_MAX` web 10 + 10, worker 4 + 4, pg-boss 3 = 31 of the droplet's `max_connections=60`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
@@ -318,7 +318,7 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `platform.tenant.slug_renamed` → clears the redirect map, `resolveSiteTenant` cache, the R20 own-domain map and PWA
   slug caches (globalThis-backed so the action reaches the bundles that read them).
 - **`files/`**: `/files/{id}` (public = immutable cache; private = active members with the purpose's permission —
-  receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view — under requireMember's rules (deleted spa closed,
+  receipt: accounting, staff/business document: staff.manage, `intake_pdf`: clients.view, `day_sheet_pdf`: pos.close — under requireMember's rules (deleted spa closed,
   "Require 2FA"), or super-admins with 2FA; anything else 404; no signed URLs) and `/files/upload?tenant=` (images:
   `site.content`, `services.manage` or `staff.manage` via `guardAny(IMAGE_UPLOAD_PERMISSIONS)` — the media picker's
   `listMediaAction` too, so the CRM service/therapist photo pickers work (R28); `kind=video`: `site.design`).
@@ -1267,12 +1267,12 @@ integrations note,
   - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
     internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
     cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
-  - Commission (R2): `completeBooking` = complete + `recordBookingCommissions` (AED per item + therapist, every
-    pair required, 0 allowed). `booking_commissions` is append-only (trigger): edits insert the delta, leaving
+  - Commission (R2, R32): Finish (`finishBooking`, below) = the sale + `recordBookingCommissions` (AED per item +
+    therapist, every pair required, 0 allowed); `completeBooking` remains for services tests only (no web caller). `booking_commissions` is append-only (trigger): edits insert the delta, leaving
     `completed` inserts the negative; each change posts 6010/2300 (`booking_commission[_reversal]`) on the
-    branch's current business date; row `business_date` = the booking's. POS checkout completes without
-    commission → list filter "Commission missing". Calendar can't complete/re-open (booking page only);
-    entering/re-opening needs `calendar.commission` (owner, manager, receptionist).
+    branch's current business date; row `business_date` = the booking's. A therapist's own Complete (G14) leaves a
+    completed booking without a sale → "Not paid yet" + list filter "Commission missing" until Finish & pay.
+    Entering/re-opening commission needs `calendar.commission` (owner, manager, receptionist).
 - **Ledger**:
   - `post` only inserts; `reverseSource` posts a mirror entry with source type `<type>_reversal`.
   - `DEFAULT_CHART` codes:
@@ -1298,12 +1298,14 @@ integrations note,
     | 5000 | COGS |
     | 5100 | Consumables |
     | 6150 / 6160 / 6170 | Cleaning supplies / Spa materials & supplies / Small equipment (purchases) |
+    | 6180 | Laundry (R32 drawer expenses) |
     | 6xxx | Expenses |
 
   - Payment method maps to an account via `PAYMENT_ACCOUNT`.
 - **Sales**:
   - The business date comes from the branch cutoff.
-  - Void is allowed only on the same open day, with no refunds and nothing prepaid. It reverses the sale,
+  - Void is allowed only on an open day (R32: a closed day only through Correct payment with `pos.correct`), with no
+    refunds and nothing prepaid. It reverses the sale,
     commission and COGS entries and returns stock.
   - Refunds are line-level (`refundSale` takes `lines: [{saleLineId, qty}]`; `refundOptions` feeds the sheet).
     Unit amount = share of the line's net paid `line_total_aed`, cumulative rounding in fils; VAT, COGS and
@@ -1328,7 +1330,50 @@ integrations note,
     are unused legacy enum values.
   - The sale row is locked (`FOR UPDATE`) during a refund; it becomes `refunded` when nothing refundable is left.
     The sale total still caps all refunds (pre-F2 amount-only refunds have no lines).
-  - `closeDay` runs once per branch and day.
+  - `closeDay` runs once per branch and day. **Daily close (R32)**: expected cash = float + cash payments + cash tips
+    − cash refunds − drawer expenses (`expenses.from_drawer`, dated the branch business date; `daySummary.drawerExpenses`,
+    `totals.expenses`). Day lock (D6): `lockBusinessDay` (advisory xact lock per branch + date, shared by `closeDay`
+    and every day edit), `isDayClosed`, `markDayAmended` (`day_closes.amended_at/by`); `createSale` refuses a closed
+    day (`DAY_CLOSED`) unless `allowClosedDay`; web `server/day-lock.ts` (`assertDayEditable` / `editDay` →
+    `pos.correct`; `afterDayChange` regenerates the stored day sheet). Counted cash / variance / `totals` stay as closed.
+- **Booking ↔ sale order (R32, PLAN §14.8)**: services `booking-order.ts`. Fee = `booking_items.price_aed` (typed at
+  Confirm / New booking, prefilled from `lastBookingTerms`), planned commission = `booking_items.commission_aed` (one
+  amount per treatment, off the ledger) + `terms_set_at`; `setBookingTerms` (refused once a live sale exists),
+  `setBookingDetails` (phone line 1–4 only for phone, client type regular|new by hand, own lead); `finishBooking` =
+  `createSale` (dated the booking's day when it has started and is open, else today) + commission write-back +
+  `recordBookingCommissions` in one transaction (accepts completed-without-sale bookings); `correctBookingOrder` =
+  `voidSale` + `createSale` again on the same business date ("Corrected: reason"; append-only), commission deltas;
+  `orderDay` / `orderSale` for the booking page. Own-lead walk-ins skip `takeTurn`. Review rules (2026-10-15):
+  commission per item × therapist at Finish = none for staff not paid per booking (`pay_type <> booking_commission`;
+  recorded stays, else 0), else typed > recorded (`commissionTotals`) > planned; `commissionLater` (web: no
+  `calendar.commission`) finishes without commission when none is known; `recordOrderCommissions` = R2 deltas +
+  planned mirror (booking page Save commission, Correct payment); `chargedFees` writes the charged fee back to
+  `price_aed` at Finish / Correct; Correct keeps payment references (same method + amount); a commission change
+  on a closed booking day needs `allowClosedDay`, and so does Finish (web: `editDay` on the booking's date in
+  createSaleAction / correctOrderAction / saveTerms / saveBookingDetails / leaving completed; sale date for money);
+  `setBookingDetails` refuses an own-lead change on a walk-in and an own client without a therapist; web
+  `setStatusAction` refuses pending → confirmed/checked_in/in_service (Confirm only). Drawer expenses:
+  `drawer-expenses.ts` (`recordDrawerExpense` → `postExpense` Dr expense / Cr 1000; `voidDrawerExpense` →
+  `reverseSource` on the expense date + delete).
+- **Daily sales sheet (R32)**: services `day-sheet.ts` `daySheet(tx, branchId, date)` (bundle-safe; rules in the
+  file header: sessions = confirmed…completed bookings of that branch business date, one row per item × therapist
+  in start order, Q via core `turnNumbers`; money = the booking's live sale payments (cash / card_terminal / other)
+  on its first row when the sale is dated that day, else `other_day` / `no`; `otherSales`; totals over every live
+  sale of the day, tips + cash refunds outside them; panel from `loadDay` staff, OFF = no session and no shift or on
+  leave; `unfinished`; R32 OPEN comment for cancelled bookings). `pdf/kit.ts` (colours, A4, fonts, `makeDrawLine`,
+  `logoForPdf`; shared with the intake PDF) + `pdf/day-sheet-pdf.ts` (subpath `@spa/services/day-sheet-pdf`):
+  `renderDaySheetPdf` (labels `sales.sheet.*` via `translator('en'|'th')`, ~46 rows per page, right column flows on
+  its own pages) and `generateDaySheetPdf(tx, dayCloseId)` (private file purpose `day_sheet_pdf`, columns from
+  `tenants.settings.daySheet`, replaces the old file). Web: `sales/close/sheet/route.ts` (pos.close, any day ≤ today,
+  viewer's language, `tips`/`commission` on|off), Daily close card, `closeDayAction` stores the PDF after commit
+  (`server/day-sheet.ts` `storeDaySheetPdf`, failure logged `[day-sheet]` → "Create PDF" =
+  `createDaySheetPdfAction`). Fixture: `packages/services/test/fixtures/day-sheet-13-10-26.ts` (unit + e2e).
+  Verified 2026-10-15 (final check, before merge): the fixture day driven through the app (pending → Confirm in the
+  calendar sheet / `setBookingTerms` + `setBookingStatus`, Finish & pay in checkout / `finishBooking` with tips,
+  Laundry on Daily close, Download, Close the day) gives 13 rows and 1,460 / 1,080 / 58 / 2,482 / 1,402 in both the
+  download and the stored PDF; expected cash = 1,402 + cash tips. Known small gaps: the Daily close label
+  `sales.close.cashIn` ("Cash in (sales + tips − refunds)") doesn't name the drawer expenses it now subtracts; the PDF
+  header prints the branch name under the spa name even when both are the same.
   - Full tax invoice (G16): `sales.billing` / `clients.billing` jsonb (`BillingDetails`); `taxInvoiceLines` splits
     VAT-inclusive line totals into taxable + VAT (prepaid kinds 0 %), matching `sales.vat_aed`; invoice no. = sale
     number. Route `dashboard/[tenant]/sales/[id]/invoice`, action `saveBillingAction` (pos.use + branch scope).
@@ -1725,3 +1770,6 @@ in **PLAN §17** (items F1–F8 match the numbers below; all fixed).
 8. ✅ **Discounted package liability** (fixed, F8): `issuePackage` takes optional `pricePaidAed` (default list price);
    `createSale` passes each package's share of the line's net `line_total_aed` (cumulative fils rounding). Older
    packages unchanged.
+9. ✅ **Completion paths** (R32): booking completion now ends in one linked order — Finish & pay (`finishBooking`);
+   the booking page's R2 "Mark completed" is gone; a therapist's own Complete (G14) shows "Not paid yet" and can
+   still be finished, as can a booking whose sale was voided.

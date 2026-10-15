@@ -75,6 +75,13 @@ export function layoutLanes(list: { id: string; startMin: number; endMin: number
 }
 
 /** Block colours: therapist colour, styled by status. */
+/** R32: the therapist's own client — a pink inline-start stripe (crm.css --crm-own, the paper sheet's pink). */
+const OWN_STRIPE: React.CSSProperties = {
+  borderInlineStartColor: 'var(--crm-own)',
+  borderInlineStartWidth: 3,
+  borderInlineStartStyle: 'solid',
+}
+
 export function blockStyle(status: CalItem['status'], color: string): React.CSSProperties {
   const c = { '--c': color } as React.CSSProperties
   switch (status) {
@@ -455,13 +462,16 @@ function Block({
         aria-disabled={canDrag ? attributes['aria-disabled'] : undefined}
         aria-roledescription={canDrag ? t('calendar.grid.draggable') : undefined}
         onClick={() => onOpen(item.bookingId)}
+        data-own={item.ownLead || undefined}
         className={cn(
           'flex size-full flex-col overflow-hidden rounded-lg border px-2.5 text-start text-fg transition-[box-shadow,transform] duration-150 ease-[var(--ease-calm)] hover:-translate-y-px hover:shadow-soft',
           compact ? 'justify-center py-0.5' : 'py-1.5',
           canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
           isDragging && 'scale-[1.02] shadow-pop',
         )}
-        style={blockStyle(item.status, color)}
+        style={
+          item.ownLead ? { ...blockStyle(item.status, color), ...OWN_STRIPE } : blockStyle(item.status, color)
+        }
       >
         <span className="flex items-center gap-1.5 text-[11px] text-muted tabular">
           {isDragging ? (

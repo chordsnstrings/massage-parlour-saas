@@ -3,6 +3,7 @@
 import { sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   customType,
   date,
   index,
@@ -12,6 +13,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -337,6 +339,9 @@ export const bookingPartners = pgTable(
   (t) => [unique('booking_partners_code').on(t.tenantId, t.code), ...tenantPolicies()],
 )
 
+/** R32: picked by reception (never automatic): regular → "/R", new → "/N" on the day sheet. */
+export const bookingClientType = pgEnum('booking_client_type', ['regular', 'new'])
+
 export const bookings = pgTable(
   'bookings',
   {
@@ -358,12 +363,19 @@ export const bookings = pgTable(
     endsAt: ts('ends_at').notNull(),
     notes: text('notes'),
     cancelReason: text('cancel_reason'),
+    /** R32: which spa phone line the client called (1–4 = P1–P4; settings.phoneLines); only when source = phone. */
+    phoneLine: smallint('phone_line'),
+    /** R32: picked by reception (never automatic): regular → "/R", new → "/N" on the day sheet. */
+    clientType: bookingClientType('client_type'),
+    /** R32: the therapist's own client: pink row on the day sheet, Q = 0, no walk-in rotation turn. */
+    ownLead: boolean('own_lead').notNull().default(false),
     createdBy: text('created_by').references(() => user.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     unique('bookings_tenant_ref').on(t.tenantId, t.refCode),
+    check('bookings_phone_line', sql`${t.phoneLine} is null or ${t.phoneLine} between 1 and 4`),
     index('bookings_branch_day').on(t.branchId, t.businessDate),
     index('bookings_client').on(t.clientId),
     // F21: console tenant list (last booking created, bookings in the last 30 days).
@@ -386,8 +398,12 @@ export const bookingItems = pgTable(
     }),
     serviceName: text('service_name').notNull(),
     durationMin: integer('duration_min').notNull(),
-    /** Copied from the variant; null = price on request (typed at checkout). */
+    /** The agreed fee (R32): copied from the variant, replaced by reception's fee at Confirm; null = not set yet. */
     priceAed: aed('price_aed'),
+    /** R32 planned commission per therapist on this item (AED, off the ledger; posted at Finish). */
+    commissionAed: aed('commission_aed'),
+    /** R32: when fee/commission were last typed (the "last amount used for that treatment" prefill). */
+    termsSetAt: ts('terms_set_at'),
     startsAt: ts('starts_at').notNull(),
     endsAt: ts('ends_at').notNull(),
     roomId: uuid('room_id').references(() => rooms.id, { onDelete: 'set null' }),
@@ -396,7 +412,13 @@ export const bookingItems = pgTable(
     equipmentIds: uuid('equipment_ids').array().notNull().default([]),
   },
   // Joins from bookings (reports: F31 room utilisation, rebooking by therapist).
-  (t) => [index('booking_items_booking').on(t.bookingId), ...tenantPolicies()],
+  (t) => [
+    index('booking_items_booking').on(t.bookingId),
+    index('booking_items_variant_terms')
+      .on(t.tenantId, t.serviceVariantId, t.termsSetAt.desc())
+      .where(sql`${t.termsSetAt} is not null`),
+    ...tenantPolicies(),
+  ],
 )
 
 export const resourceKind = pgEnum('resource_kind', ['staff', 'room', 'equipment'])

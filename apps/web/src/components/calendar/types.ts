@@ -37,6 +37,20 @@ export type CalItem = {
   /** Reserved equipment units (names, as typed) and required types not covered by one (B5.3 conflict). */
   equipment: string[]
   equipmentMissing: string[]
+  /** R32: the spa phone line called (1–4) for phone bookings; null otherwise. */
+  phoneLine: number | null
+  /** R32: picked by reception; null = not set. */
+  clientType: 'regular' | 'new' | null
+  /** R32: the therapist's own client (pink on the day sheet, no rotation turn). */
+  ownLead: boolean
+  /** R32 planned commission per therapist (AED text; off the ledger until Finish). */
+  commissionAed: string | null
+  /** R32: the treatment (prefill from its last typed amounts) and whether the fee/commission were typed yet. */
+  variantId: string | null
+  termsSet: boolean
+  /** R32: the order's live sale once finished (Finish & pay). */
+  saleId: string | null
+  saleNumber: number | null
 }
 
 export type CalStaff = {
@@ -51,7 +65,15 @@ export type CalStaff = {
 
 export type CalRoom = { id: string; name: string }
 
-export type CalVariant = { id: string; label: string; durationMin: number; priceAed: string | null }
+export type CalVariant = {
+  id: string
+  label: string
+  durationMin: number
+  priceAed: string | null
+  /** R32: the last fee / commission typed for this treatment (prefill), null = none yet. */
+  lastFeeAed: number | null
+  lastCommissionAed: number | null
+}
 
 export type RotationRow = {
   staffId: string
@@ -85,10 +107,20 @@ export type CalendarData = {
   rotation: RotationRow[] | null
   canManage: boolean
   canCheckout: boolean
+  /** R32: may type the therapist commission (calendar.manage + calendar.commission). */
+  canCommission: boolean
+  /** R32: the spa's phone lines with a number (Settings → Daily sales sheet). */
+  phoneLines: { line: number; number: string | null }[]
+  /** R32: a phone booking must pick its line (at least one line has a number). */
+  phoneLineRequired: boolean
+  /** R32 (D6): this business day is closed and the member lacks pos.correct (orders read-only). */
+  editLocked: boolean
   ownOnly: boolean
   /** Staff id whose bookings this member may check in / start / complete (`calendar.ownStatus`, G14). */
   ownStatusStaffId: string | null
   checkoutBase: string
+  /** R32: the linked sale of a finished order (`{salesBase}/{saleId}`). */
+  salesBase: string
   bookingsBase: string
   calendarBase: string
   /** Booking whose sheet opens on load (`?open=` from the Week view). */

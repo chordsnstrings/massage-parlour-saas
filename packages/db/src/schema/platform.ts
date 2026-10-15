@@ -200,6 +200,10 @@ export type TenantSettings = {
     reviewDelayHours?: number
     winbackDays?: number
   }
+  /** R32: the spa's phone lines as typed, index 0 = P1 … 3 = P4 ('' or missing = not used). */
+  phoneLines?: string[]
+  /** R32 daily sales sheet optional columns (missing: tips on, commission off; read with core daySheetColumns()). */
+  daySheet?: { tips?: boolean; commission?: boolean }
 }
 
 export const tenants = pgTable(

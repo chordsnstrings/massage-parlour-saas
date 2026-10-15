@@ -1,4 +1,4 @@
-import { requires2fa } from '@spa/core'
+import { daySheetColumns, PHONE_LINES, requires2fa } from '@spa/core'
 import { branches, withTenant } from '@spa/db'
 import { IMPORT_KINDS, listAuditLog, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -15,7 +15,12 @@ import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { saveOnlineBookingAction, saveSecurityAction, saveSettingsAction } from './actions'
+import {
+  saveDaySheetSettingsAction,
+  saveOnlineBookingAction,
+  saveSecurityAction,
+  saveSettingsAction,
+} from './actions'
 import { actorLabel } from './audit/labels'
 import { AreaLabelFields } from './branches/branches-client'
 import { LogoForm } from './logo-form'
@@ -175,6 +180,38 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
               </div>
               <div className="mt-4 flex justify-end">
                 <SubmitButton>{t('settings.profile.online.save')}</SubmitButton>
+              </div>
+            </Card>
+          </ActionForm>
+          {/* R32: phone lines for the day sheet's P1–P4 codes + its optional columns. */}
+          <ActionForm action={saveDaySheetSettingsAction.bind(null, tenant.slug)}>
+            <Card title={t('settings.profile.daySheet.title')} sub={t('settings.profile.daySheet.sub')}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {PHONE_LINES.map((n) => (
+                  <Field key={n} label={t('settings.profile.daySheet.line', { n })} name={`line${n}`}>
+                    <Input
+                      id={`line${n}`}
+                      name={`line${n}`}
+                      type="tel"
+                      maxLength={30}
+                      defaultValue={tenant.settings.phoneLines?.[n - 1] ?? ''}
+                      className="tabular"
+                    />
+                  </Field>
+                ))}
+              </div>
+              {(['tips', 'commission'] as const).map((col) => (
+                <div key={col} className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
+                  <p className="text-sm font-medium">{t(`settings.profile.daySheet.${col}`)}</p>
+                  <Toggle
+                    name={col}
+                    label={t(`settings.profile.daySheet.${col}`)}
+                    defaultChecked={daySheetColumns(tenant.settings)[col]}
+                  />
+                </div>
+              ))}
+              <div className="mt-4 flex justify-end">
+                <SubmitButton>{t('settings.profile.daySheet.save')}</SubmitButton>
               </div>
             </Card>
           </ActionForm>

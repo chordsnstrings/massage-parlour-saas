@@ -78,7 +78,7 @@ export type CommissionRow = {
   amountAed: number | null
 }
 
-/** One AED field per item + therapist; submitting completes the booking (or saves a correction). */
+/** One AED field per item + therapist on a finished order; saving posts only the differences (R32). */
 export function CommissionForm({
   slug,
   bookingId,
@@ -137,19 +137,6 @@ export function CommissionForm({
           <CheckCircle2 /> {completed ? t('bookings.commission.save') : t('bookings.commission.complete')}
         </SubmitButton>
       </div>
-    </ActionForm>
-  )
-}
-
-/** Completing a booking without therapists: just the button. */
-export function CompleteButton({ slug, bookingId }: { slug: string; bookingId: string }) {
-  const t = useT()
-  const router = useRouter()
-  return (
-    <ActionForm action={saveCommissionAction.bind(null, slug, bookingId)} onSuccess={() => router.refresh()}>
-      <SubmitButton>
-        <CheckCircle2 /> {t('bookings.commission.complete')}
-      </SubmitButton>
     </ActionForm>
   )
 }

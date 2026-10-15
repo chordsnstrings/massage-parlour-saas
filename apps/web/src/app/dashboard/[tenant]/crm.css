@@ -49,6 +49,9 @@
   --crm-warn-bg: rgb(245 184 46 / 0.2);
   --crm-bad: #b93b1b;
   --crm-bad-bg: rgb(226 84 48 / 0.12);
+  /* R32: the therapist's own client — the pink of the paper day sheet */
+  --crm-own: #a3245e;
+  --crm-own-bg: #f8d7e6;
   --crm-shadow-card: 0 1px 2px rgb(17 40 28 / 0.04), 0 6px 20px rgb(17 40 28 / 0.05);
   --crm-shadow-window: 0 20px 60px rgb(17 40 28 / 0.1);
   --crm-info: #1b6684;

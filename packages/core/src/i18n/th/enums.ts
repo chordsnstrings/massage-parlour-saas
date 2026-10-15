@@ -11,6 +11,8 @@ export const enums: Messages['enums'] = {
     no_show: 'ไม่มาตามนัด',
     cancelled: 'ยกเลิกแล้ว',
   },
+  // R32 (needs native review).
+  bookingClientType: { regular: 'ลูกค้าประจำ', new: 'ลูกค้าใหม่' },
   bookingSource: {
     walk_in: 'วอล์กอิน',
     // 2026-10-13 (Website source): needs native review.

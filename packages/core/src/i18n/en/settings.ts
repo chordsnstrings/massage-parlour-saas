@@ -129,6 +129,17 @@ export const settings = {
       saved: 'Online booking settings saved',
       errors: { visits: 'Enter a number from 1 to 50' },
     },
+    /** R32 daily sales sheet: phone lines for the P1–P4 codes + optional columns. */
+    daySheet: {
+      title: 'Daily sales sheet',
+      sub: 'Phone lines for the P1–P4 codes and the optional sheet columns.',
+      line: 'Line P{n}',
+      tips: 'Tips per therapist',
+      commission: 'Commission per therapist',
+      save: 'Save day sheet settings',
+      saved: 'Day sheet settings saved',
+      lineTooLong: 'At most 30 characters',
+    },
   },
   hours: {
     title: 'Opening hours',

@@ -62,6 +62,8 @@ test('therapist: own booking status and "My earnings"', async ({ page, browser }
     await expect(sheet.getByText('In service', { exact: true })).toBeVisible()
     await sheet.getByRole('button', { name: 'Complete' }).click()
     await expect(sheet.getByText('Completed', { exact: true })).toBeVisible()
+    // R32 (D7): completed by the therapist, no sale yet — reception finishes it with the payment.
+    await expect(sheet.getByText('Not paid yet')).toBeVisible()
     await expect(sheet.getByRole('button', { name: 'Check in' })).toHaveCount(0)
     const [row] = await db.select({ s: bookings.status }).from(bookings).where(eq(bookings.id, mine.id))
     expect(row!.s).toBe('completed')
@@ -118,6 +120,24 @@ test('therapist: own booking status and "My earnings"', async ({ page, browser }
   await test.step('someone else’s booking stays closed to the therapist', async () => {
     const res = await tp.goto(`${app}/${slug}/bookings/${theirs.id}`)
     expect(res?.status()).toBe(404)
+  })
+
+  await test.step('reception finishes her completed booking with the payment (D7) → the booking shows its sale', async () => {
+    await page.goto(`${app}/${slug}/bookings/${mine.id}`)
+    await expect(page.getByText('Not paid yet. Finish to take the payment.')).toBeVisible()
+    await page.getByRole('link', { name: 'Finish & pay' }).click()
+    await expect(page.getByRole('heading', { name: 'Check out', level: 1 })).toBeVisible()
+    // The commission already recorded on the booking is the prefill (nothing is posted twice).
+    await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('45')
+    await page.getByLabel('Payment 1 method').selectOption('cash')
+    await page.getByLabel('Payment 1 amount').fill('350')
+    await page.getByRole('button', { name: /Complete sale/ }).click()
+    await page.waitForURL(/\/sales\/[0-9a-f-]{36}$/)
+    const [sale] = await db.select().from(sales).where(eq(sales.bookingId, mine.id))
+    expect(sale).toMatchObject({ status: 'paid', totalAed: '350.00' })
+    await page.goto(`${app}/${slug}/bookings/${mine.id}`)
+    await expect(page.getByRole('link', { name: `Sale #${sale!.number}` })).toBeVisible()
+    await expect(page.getByText('Not paid yet. Finish to take the payment.')).toHaveCount(0)
   })
   await ctx.close()
 })

@@ -25,7 +25,12 @@ export const permissions: Messages['permissions'] = {
     },
     pos: {
       label: 'จุดขาย (POS)',
-      actions: { use: 'รับชำระเงิน', refund: 'คืนเงินและยกเลิกบิล', close: 'ปิดยอดประจำวัน' },
+      actions: {
+        use: 'รับชำระเงิน',
+        refund: 'คืนเงินและยกเลิกบิล',
+        close: 'ปิดยอดประจำวัน',
+        correct: 'แก้ไขวันที่ปิดยอดแล้ว',
+      },
     },
     services: { label: 'บริการและห้อง', actions: { manage: 'จัดการบริการ ห้อง และทรัพยากร' } },
     staff: { label: 'พนักงาน', actions: { view: 'ดูข้อมูลพนักงาน', manage: 'จัดการพนักงาน กะงาน และค่าตอบแทน' } },

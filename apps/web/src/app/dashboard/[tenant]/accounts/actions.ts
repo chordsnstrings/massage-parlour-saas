@@ -1,7 +1,14 @@
 'use server'
 import { includedVat } from '@spa/core'
 import { branches, expenses, withTenant } from '@spa/db'
-import { DomainError, EXPENSE_CODES, lockPeriod, postExpense, reverseSource } from '@spa/services'
+import {
+  DomainError,
+  EXPENSE_CODES,
+  lockPeriod,
+  postExpense,
+  reverseSource,
+  voidDrawerExpense,
+} from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -9,6 +16,7 @@ import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/
 import { todayDubai } from '@/lib/utils'
 import { guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { afterDayChange, editDay } from '@/server/day-lock'
 import { receiptColumns, receiptFields } from './expenses/receipt'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'accounts.validation.pickDate')
@@ -90,20 +98,32 @@ export async function voidExpenseAction(slug: string, id: string): Promise<Actio
   const { ctx, error } = await guard(slug, 'accounting.manage')
   if (error) return fail(error)
   try {
-    const removed = await withTenant(ctx.tenant.id, async (tx) => {
+    const { removed, lock } = await withTenant(ctx.tenant.id, async (tx) => {
       const [row] = await tx.select().from(expenses).where(eq(expenses.id, id))
       if (!row) throw new DomainError('Expense not found', 'not_found')
+      // R32 (D11): a Daily-close drawer expense follows the day lock and reverses on its own date.
+      if (row.fromDrawer && row.branchId) {
+        const lock = await editDay(tx, ctx, row.branchId, row.expenseDate)
+        await voidDrawerExpense(tx, { expenseId: id, userId: ctx.user.id, allowClosedDay: lock.closed })
+        return { removed: row, lock }
+      }
       await reverseSource(tx, ctx.tenant.id, 'expense', id, todayDubai(), ctx.user.id)
       await tx.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.tenantId, ctx.tenant.id)))
-      return row
+      return { removed: row, lock: null }
     })
     await audit({
       tenantId: ctx.tenant.id,
       actorUserId: ctx.user.id,
       action: 'expense.voided',
       entityId: id,
-      data: { amountAed: removed.amountAed, accountCode: removed.accountCode, date: removed.expenseDate },
+      data: {
+        amountAed: removed.amountAed,
+        accountCode: removed.accountCode,
+        date: removed.expenseDate,
+        ...(removed.fromDrawer ? { fromDrawer: true, branch: removed.branchId } : {}),
+      },
     })
+    if (lock) await afterDayChange(ctx, lock)
   } catch (e) {
     if (e instanceof DomainError)
       return e.message === 'Expense not found' ? fail('accounts.result.notFound') : failDomain(e)

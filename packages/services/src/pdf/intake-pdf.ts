@@ -3,8 +3,6 @@
 // `intake_pdf`) and linked from the submission; regenerating replaces the file.
 import { clients, intakeSubmissions, intakeTemplates, type Tx, tenants } from '@spa/db'
 import { eq } from 'drizzle-orm'
-import PDFDocument from 'pdfkit'
-import sharp from 'sharp'
 import { DomainError } from '../errors'
 import {
   INTAKE_PDF_PURPOSE,
@@ -13,9 +11,9 @@ import {
   intakePdfFilename,
   sha256Hex,
 } from '../intake'
-import { deleteFile, getFile, putFile } from '../storage'
-import { PDF_FONTS, type PdfFontKey } from './fonts.generated'
-import { baseRtl, type Family, type Piece, visualPieces, wrapLines } from './text'
+import { deleteFile, putFile } from '../storage'
+import { A4, ACCENT, createPdf, INK, LINE, logoForPdf, MUTED, makeDrawLine } from './kit'
+import { baseRtl, wrapLines } from './text'
 
 export type IntakePdfInput = {
   spaName: string
@@ -66,36 +64,7 @@ const LABELS = {
   },
 } as const
 
-const INK = '#16201B'
-const MUTED = '#5E6B64'
-const LINE = '#D5DED8'
-const ACCENT = '#0F6B4B'
-
-const A4 = { w: 595.28, h: 841.89 }
 const M = { x: 48, top: 48, bottom: 64 }
-
-const fontKey = (family: Family, bold: boolean) => `${family}${bold ? 'Bold' : 'Regular'}` as PdfFontKey
-
-/**
- * Features passed to pdfkit: any value makes pdfkit shape the whole piece at once (its default path lays text out
- * word by word, which puts right-to-left words in left-to-right order). The script's default features (joining,
- * marks, kerning) still apply.
- */
-const SHAPE = { features: [] as PDFKit.Mixins.OpenTypeFeatures[] }
-
-/**
- * Glyphs made by decomposition (Noto Naskh's separate dot glyphs, Thai NIKHAHIT split out of SARA AM) map to no
- * text, and pdf.js and others then show the glyph id as a character when copying. Map them to U+034F (combining
- * grapheme joiner: invisible, transparent to Arabic joining). Uses pdfkit's EmbeddedFont `unicode` table (pdfkit
- * is pinned; the services test reads the text back).
- */
-function fillEmptyToUnicode(doc: PDFKit.PDFDocument) {
-  const fonts = (doc as unknown as { _fontFamilies?: Record<string, { unicode?: number[][] }> })._fontFamilies
-  for (const f of Object.values(fonts ?? {}))
-    f.unicode?.forEach((cps, gid) => {
-      if (gid > 0 && cps.length === 0) f.unicode![gid] = [0x034f]
-    })
-}
 
 export const formatSignedAt = (d: Date, lang: 'en' | 'ar') =>
   new Intl.DateTimeFormat(lang === 'ar' ? 'ar-AE-u-nu-latn' : 'en-GB', {
@@ -112,15 +81,9 @@ export const formatSignedAt = (d: Date, lang: 'en' | 'ar') =>
 export async function renderIntakePdf(input: IntakePdfInput): Promise<Buffer> {
   const L = LABELS[input.lang]
   const docRtl = input.lang === 'ar'
-  const doc = new PDFDocument({
-    size: 'A4',
+  const { doc, finish } = createPdf({
     margins: { top: M.top, bottom: 24, left: M.x, right: M.x },
-    bufferPages: true,
-    autoFirstPage: true,
-    // No standard (Helvetica) font: every glyph comes from the embedded subsets.
-    font: null as unknown as string,
     lang: input.lang,
-    displayTitle: true,
     info: {
       Title: `${input.templateName ?? L.fallbackTitle} — ${input.clientName}`,
       Author: input.spaName,
@@ -131,45 +94,11 @@ export async function renderIntakePdf(input: IntakePdfInput): Promise<Buffer> {
       CreationDate: input.generatedAt,
     },
   })
-  for (const [key, b64] of Object.entries(PDF_FONTS)) doc.registerFont(key, Buffer.from(b64, 'base64'))
-  const chunks: Buffer[] = []
-  doc.on('data', (c: Buffer) => chunks.push(c))
-  const done = new Promise<Buffer>((resolve, reject) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)))
-    doc.on('error', reject)
-  })
+  const { measure, drawLine } = makeDrawLine(doc)
 
   const contentW = A4.w - 2 * M.x
   const bottom = A4.h - M.bottom
   let y = M.top
-  const measure = (p: Piece, size: number, bold = false) =>
-    doc.font(fontKey(p.family, bold)).fontSize(size).widthOfString(p.text, SHAPE)
-
-  /** Draws one line: `rtl` = its bidi base direction, `right` = right-aligned (default: when rtl). */
-  const drawLine = (
-    line: string,
-    at: { x: number; y: number; w: number },
-    o: { size: number; bold?: boolean; color?: string; rtl: boolean; right?: boolean },
-  ) => {
-    const pieces = visualPieces(line, o.rtl)
-    const widths = pieces.map((p) => measure(p, o.size, o.bold))
-    const total = widths.reduce((a, b) => a + b, 0)
-    let x = (o.right ?? o.rtl) ? at.x + at.w - total : at.x
-    pieces.forEach((p, i) => {
-      // Arabic glyphs are shared between letters (skeleton + dots), so copy/search uses ActualText instead.
-      const actual = p.family === 'arabic' && !/^[\s\d٠-٩۰-۹]*$/.test(p.text)
-      if (actual) doc.markContent('Span', { actual: p.rtl ? p.text : [...p.text].reverse().join('') })
-      doc
-        .font(fontKey(p.family, Boolean(o.bold)))
-        .fontSize(o.size)
-        .fillColor(o.color ?? INK)
-        .text(p.text, x, at.y, { ...SHAPE, lineBreak: false, baseline: 'alphabetic' })
-      if (actual) doc.endMarkedContent()
-      x += widths[i]!
-    })
-    return total
-  }
-
   /** Wrapped paragraph in the content column, page breaks included; direction from its text unless given. */
   const paragraph = (
     text: string,
@@ -325,25 +254,7 @@ export async function renderIntakePdf(input: IntakePdfInput): Promise<Buffer> {
       { size: 7, color: MUTED, rtl: docRtl },
     )
   }
-  fillEmptyToUnicode(doc)
-  doc.end()
-  return done
-}
-
-/** The spa logo as a small JPEG for the PDF header (null when unset or unreadable). */
-async function logoForPdf(tx: Tx, fileId: string | null) {
-  if (!fileId) return null
-  try {
-    const f = await getFile(tx, fileId)
-    if (!f?.bytes.length) return null
-    return await sharp(f.bytes)
-      .resize(160, 160, { fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .jpeg({ quality: 88 })
-      .toBuffer()
-  } catch {
-    return null
-  }
+  return finish()
 }
 
 /**

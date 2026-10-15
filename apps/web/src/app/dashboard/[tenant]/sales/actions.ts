@@ -1,15 +1,21 @@
 'use server'
-import { clientPackages, clients, sales, withTenant } from '@spa/db'
+import { bookings, clientPackages, clients, dayCloses, expenses, sales, withTenant } from '@spa/db'
 import {
   closeDay,
   createSale,
   DomainError,
+  DRAWER_EXPENSE_CODES,
   findOrCreateClient,
+  finishBooking,
+  isDayClosed,
   liveMemberships,
+  markDayAmended,
   PAY_METHODS,
   POS_METHODS,
+  recordDrawerExpense,
   refundSale,
   saveSaleBilling,
+  voidDrawerExpense,
   voidSale,
 } from '@spa/services'
 import { and, asc, eq, gt, ilike, or } from 'drizzle-orm'
@@ -20,6 +26,8 @@ import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/
 import { formatAed } from '@/lib/utils'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
+import { afterDayChange, editDay, periodLocked } from '@/server/day-lock'
+import { storeDaySheetPdf } from '@/server/day-sheet'
 import { pickBranch } from './data'
 
 const money = z.coerce
@@ -38,6 +46,7 @@ const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/sales`, 
 
 const handle = (e: unknown): ActionResult => {
   if (e instanceof DomainError) return failDomain(e)
+  if (periodLocked(e)) return fail('accounts.result.lockedDate')
   throw e
 }
 
@@ -113,6 +122,17 @@ const saleSchema = z.object({
     .array(z.object({ method: payMethod, amountAed: money, reference: z.string().trim().max(300).nullish() }))
     .max(8),
   tips: z.array(z.object({ staffId: z.uuid('sales.v.therapist'), amountAed: money, method })).max(12),
+  /** R32 Finish of a booking: commission per item × therapist (blank rows = the booking's planned amount). */
+  commissions: z
+    .array(
+      z.object({
+        bookingItemId: z.uuid(),
+        staffId: z.uuid(),
+        amountAed: money.max(100_000, 'bookings.errors.amount'),
+      }),
+    )
+    .max(24)
+    .optional(),
 })
 export type SalePayload = z.input<typeof saleSchema>
 
@@ -122,15 +142,27 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
   const parsed = saleSchema.safeParse(payload)
   if (!parsed.success) return fromZod(parsed.error)
   const v = parsed.data
+  // R32 (D6): new money on a closed day only with pos.correct (owners/managers).
+  const allowClosedDay = can(ctx, 'pos.correct')
   try {
-    const { sale } = await withTenant(ctx.tenant.id, async (tx) => {
+    const { sale, finished, closed, bookingDay } = await withTenant(ctx.tenant.id, async (tx) => {
       const picked = await pickBranch(tx, ctx, v.branchId)
       if (!picked || picked.branch.id !== v.branchId) throw new DomainError('Branch not found', 'not_found')
+      // Finishing a booking posts its commission and fills its day-sheet row on the BOOKING's business day: a
+      // closed booking day changes only with pos.correct, and is then marked amended (its PDF regenerated).
+      let bookingDay: { branchId: string; date: string; closed: boolean } | null = null
+      if (v.bookingId) {
+        const [b] = await tx
+          .select({ branchId: bookings.branchId, date: bookings.businessDate })
+          .from(bookings)
+          .where(eq(bookings.id, v.bookingId))
+        if (b && b.branchId === v.branchId) bookingDay = await editDay(tx, ctx, b.branchId, b.date)
+      }
       let clientId = v.clientId ?? null
       if (!clientId && v.newClient?.name) {
         clientId = (await findOrCreateClient(tx, ctx.tenant.id, { ...v.newClient, source: 'walk_in' })).id
       }
-      return createSale(tx, {
+      const input = {
         tenantId: ctx.tenant.id,
         branchId: v.branchId,
         bookingId: v.bookingId ?? null,
@@ -140,7 +172,22 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
         payments: v.payments.filter((p) => p.amountAed > 0),
         tips: v.tips.filter((t) => t.amountAed > 0),
         createdBy: ctx.user.id,
-      })
+        allowClosedDay,
+      }
+      // FINISH (R32 D3): a booking's checkout = its sale + the therapist commission, one transaction.
+      const done = v.bookingId
+        ? await finishBooking(tx, {
+            ...input,
+            bookingId: v.bookingId,
+            commissions: can(ctx, 'calendar.commission') ? v.commissions : undefined,
+            // Without commission rights the commission is entered later on the booking page when none is known.
+            commissionLater: !can(ctx, 'calendar.commission'),
+            userId: ctx.user.id,
+          })
+        : { ...(await createSale(tx, input)), saleDate: null, commissions: null }
+      const closed = await isDayClosed(tx, v.branchId, done.sale.businessDate)
+      if (closed) await markDayAmended(tx, v.branchId, done.sale.businessDate, ctx.user.id)
+      return { sale: done.sale, finished: done.saleDate ? done : null, closed, bookingDay }
     })
     await audit({
       tenantId: ctx.tenant.id,
@@ -150,7 +197,19 @@ export async function createSaleAction(slug: string, payload: SalePayload): Prom
       entityId: sale.id,
       data: { number: sale.number, total: sale.totalAed, booking: v.bookingId ?? null },
     })
+    if (finished && v.bookingId)
+      await audit({
+        tenantId: ctx.tenant.id,
+        actorUserId: ctx.user.id,
+        action: 'booking.finished',
+        entity: 'booking',
+        entityId: v.bookingId,
+        data: { sale: sale.number, saleDate: finished.saleDate, commissions: finished.commissions },
+      })
+    await afterDayChange(ctx, { branchId: v.branchId, date: sale.businessDate, closed })
+    if (bookingDay && bookingDay.date !== sale.businessDate) await afterDayChange(ctx, bookingDay)
     revalidate(slug)
+    if (v.bookingId) revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
     if (v.bookingId) revalidatePath(`/dashboard/${slug}/calendar`)
     return ok({ key: 'sales.toast.recorded', params: { number: sale.number } }, { id: sale.id })
   } catch (e) {
@@ -268,6 +327,9 @@ export async function closeDayAction(
       if (v.date > picked.today) throw new DomainError('That business day has not started yet')
       return closeDay(tx, { tenantId: ctx.tenant.id, ...v, closedBy: ctx.user.id })
     })
+    // R32 (D13): the day-sheet PDF is kept with the close, rendered after it commits in the closer's language; a
+    // render failure never undoes the close (the page then offers "Create PDF").
+    const pdfFileId = await storeDaySheetPdf(ctx.tenant.id, row.id, { createdBy: ctx.user.id })
     await audit({
       tenantId: ctx.tenant.id,
       actorUserId: ctx.user.id,
@@ -279,10 +341,50 @@ export async function closeDayAction(
         expected: row.expectedCashAed,
         counted: row.countedCashAed,
         variance: row.varianceAed,
+        expenses: row.totals.expenses ?? '0.00',
+        pdf: Boolean(pdfFileId),
       },
     })
     revalidate(slug)
     return ok('sales.toast.dayClosed')
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/** R32: (re)creates the stored day-sheet PDF of a closed day ("Create PDF" when the render at close failed). */
+export async function createDaySheetPdfAction(
+  slug: string,
+  branchId: string,
+  date: string,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.close')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(branchId).success || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return fail('errors.generic')
+  try {
+    const id = await withTenant(ctx.tenant.id, async (tx) => {
+      const picked = await pickBranch(tx, ctx, branchId)
+      if (!picked || picked.branch.id !== branchId) throw new DomainError('Branch not found', 'not_found')
+      const [close] = await tx
+        .select({ id: dayCloses.id })
+        .from(dayCloses)
+        .where(and(eq(dayCloses.branchId, branchId), eq(dayCloses.businessDate, date)))
+      if (!close) throw new DomainError('Day close not found', 'not_found')
+      return close.id
+    })
+    const fileId = await storeDaySheetPdf(ctx.tenant.id, id, { createdBy: ctx.user.id })
+    if (!fileId) return fail('errors.generic')
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'day.sheet_pdf',
+      entity: 'day_close',
+      entityId: id,
+      data: { date, fileId },
+    })
+    revalidate(slug)
+    return ok('sales.toast.pdfCreated', { fileId })
   } catch (e) {
     return handle(e)
   }
@@ -362,6 +464,118 @@ export async function saveBillingAction(slug: string, saleId: string, _p: Action
     })
     revalidate(slug)
     return ok('sales.invoice.saved')
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R32 (D11) expenses paid from the drawer on Daily close
+// ---------------------------------------------------------------------------
+
+const drawerExpenseSchema = z.object({
+  branchId: z.uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: z.string().trim().min(1, 'sales.v.describe').max(80, 'sales.v.describe'),
+  accountCode: z.enum(DRAWER_EXPENSE_CODES.map((a) => a.code) as [string, ...string[]], {
+    message: 'accounts.validation.pickCategory',
+  }),
+  amountAed: z.coerce
+    .number({ error: 'sales.v.amount' })
+    .min(0.01, 'sales.v.amount')
+    .max(100_000, 'sales.v.tooLarge'),
+})
+
+export async function addDrawerExpenseAction(
+  slug: string,
+  branchId: string,
+  date: string,
+  _p: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.close')
+  if (error) return fail(error)
+  const parsed = drawerExpenseSchema.safeParse({ ...formObject(formData), branchId, date })
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  try {
+    const { row, lock } = await withTenant(ctx.tenant.id, async (tx) => {
+      const picked = await pickBranch(tx, ctx, v.branchId)
+      if (!picked || picked.branch.id !== v.branchId) throw new DomainError('Branch not found', 'not_found')
+      if (v.date > picked.today) throw new DomainError('That business day has not started yet')
+      const lock = await editDay(tx, ctx, v.branchId, v.date)
+      const row = await recordDrawerExpense(tx, {
+        tenantId: ctx.tenant.id,
+        branchId: v.branchId,
+        date: v.date,
+        description: v.description,
+        accountCode: v.accountCode,
+        amountAed: v.amountAed,
+        createdBy: ctx.user.id,
+        allowClosedDay: lock.closed,
+      })
+      return { row, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'expense.recorded',
+      entity: 'expense',
+      entityId: row.id,
+      data: {
+        date: v.date,
+        branch: v.branchId,
+        description: v.description,
+        amountAed: row.amountAed,
+        accountCode: v.accountCode,
+        fromDrawer: true,
+        closedDay: lock.closed,
+      },
+    })
+    await afterDayChange(ctx, lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/accounts`, 'layout')
+    return ok('sales.toast.expenseAdded')
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+export async function voidDrawerExpenseAction(slug: string, expenseId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.close')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(expenseId).success) return fail('errors.generic')
+  try {
+    const { row, lock } = await withTenant(ctx.tenant.id, async (tx) => {
+      const [found] = await tx.select().from(expenses).where(eq(expenses.id, expenseId))
+      if (!found?.fromDrawer || !found.branchId) throw new DomainError('Expense not found', 'not_found')
+      const picked = await pickBranch(tx, ctx, found.branchId)
+      if (!picked || picked.branch.id !== found.branchId)
+        throw new DomainError('Expense not found', 'not_found')
+      const lock = await editDay(tx, ctx, found.branchId, found.expenseDate)
+      const row = await voidDrawerExpense(tx, { expenseId, userId: ctx.user.id, allowClosedDay: lock.closed })
+      return { row, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'expense.voided',
+      entity: 'expense',
+      entityId: expenseId,
+      data: {
+        date: row.expenseDate,
+        branch: row.branchId,
+        description: row.description,
+        amountAed: row.amountAed,
+        accountCode: row.accountCode,
+        fromDrawer: true,
+        closedDay: lock.closed,
+      },
+    })
+    await afterDayChange(ctx, lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/accounts`, 'layout')
+    return ok('sales.toast.expenseVoided')
   } catch (e) {
     return handle(e)
   }

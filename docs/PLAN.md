@@ -1468,24 +1468,51 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
     USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
     honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
-- **R32 Daily sales sheet PDF (owner, 2026-10-14; PLANNED, not built — owner: "ask me before start coding"):** the
-  spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM PDF, every day. Therapists always live in the CRM by name
-  (commission + tips per therapist); "Show on website" stays optional and separate.
-  - **Rows** (one per session, business day by `business_day_cutoff`): No., therapist, Q = her turn number that day,
-    start–end time, room, code, cash, card. **Code** = source + client type: `P1`–`P4` = which spa phone line the client
-    called (4 lines; Settings → phone lines with their numbers), `W` = walk-in, `B` = booking; `/R` = regular, `/N` =
-    new client — **reception picks R/N** (not automatic). **Pink rows (Q = 0)** = the therapist's **own lead** (her own
-    client): shown in pink, does not use her queue turn.
-  - **Right panel:** each therapist's turns that day (1, 2, 3 …) or OFF. **Expenses** (e.g. Laundry 58): reception
-    records each cash expense during the day; Total sale = cash + card − expenses, Total card, Total cash = cash −
-    expenses (sheet: 1460 + 1080 − 58 = 2482; cash 1402).
-  - **PDF:** download for any day from Daily close **and** made automatically on "Close the day" (kept with that day).
-    Tips per therapist and commission per therapist are **optional** (tips chosen on).
-  - **Booking ↔ sale flow (owner 2026-10-14):** booking and sale stay linked (one order). **Confirm** = reception
-    enters the fee + the therapist's commission (typed each time, pre-filled from the last amount for that treatment).
-    **Finish** = cash/card payment + tips → the booking is completed and its sale is created and linked. Reception can
-    correct fee/commission/tips until the day is closed; after that only owner/manager, every change audited.
-  - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns.
+- **R32 Daily sales sheet PDF + booking ↔ sale order (owner, "Go" 2026-10-15 02:28 Dubai) — ✅ as built 2026-10-15 on
+  branch `r32-daily-sheet` (f0cdd65…f0145ff, 8560d46, af0d14f; not merged yet, code follows the normal review path).**
+  The spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM feature. Code rules: CODEMAP "Booking ↔ sale order
+  (R32)", "Daily sales sheet (R32)", "Daily close".
+  - **One order per booking:** **Confirm** = reception types the fee (`booking_items.price_aed`) + the therapist's
+    commission (planned, off the ledger), prefilled from the last amount used for that treatment; a pending booking
+    moves on only through Confirm. **Finish & pay** = checkout: cash / card (split allowed) + tips → the sale is created
+    and linked, the booking completed and the commission posted, in one transaction (commission only for therapists
+    paid per booking). **Correct payment** = void + new sale on the same business day, with a reason (append-only).
+    A therapist's own Complete (G14) reads "Not paid yet" until Finish & pay.
+  - **Day lock:** reception may change fee / commission / tips / payments / order details until the day is closed;
+    after that only `pos.correct` (owners + managers). The booking's day applies to fee, commission, details and
+    Finish, the sale's day to payments. Every change is audited; a change to a closed day marks the close "Amended" and
+    makes its saved PDF again (counted cash and variance stay as recorded).
+  - **Booking fields:** phone line P1–P4 (Settings → Profile → Daily sales sheet: the 4 numbers; required for phone
+    bookings once set), client type Regular / New (picked by hand), own client (pink, Q 0, no walk-in rotation turn;
+    fixed when a walk-in starts; needs a therapist). Therapists are always in the CRM by name; "Show on website" stays
+    separate.
+  - **Drawer expenses** (Daily close, e.g. Laundry 58, account 6180): reduce the expected cash and Total cash.
+  - **Sheet:** Daily close → "Download day sheet (PDF)" for any day ≤ today (viewer's language, EN / TH), and stored
+    automatically on Close the day ("Create PDF" if that render failed). Rows No., therapist, Q, time, room, code
+    (`P1`–`P4` / `W` / `B` + `/R` `/N`), cash, card (+ Other when the day has other methods); own-client rows pink;
+    panel = every active therapist's turns, own-client 0s or OFF; tips per therapist (default on) and commission
+    (default off); expenses; Total sale = cash + card + other − expenses, Total card, Total cash = cash − expenses.
+    Choices: times print 24 h; Thai "No." = ที่; money is grouped by the sale's business date (as the Z-report).
+  - **Verified 2026-10-15 (final check):** lint, typecheck, drift, unit 1,459/1,459, full e2e 143 passed + 2 skipped
+    on a production build; the 13-10-26 sheet reproduced end to end in the app (Confirm in the calendar and through
+    the services, Finish & pay in checkout and through the services with tips, own clients, Laundry added on Daily
+    close, Download, Close the day): both PDFs show 13 rows and 1,460 / 1,080 / 58 / 2,482 / 1,402, row by row as on
+    the photo.
+  - **Notes for the owner:** phone (P) and other bookings don't move the walk-in rotation (only walk-ins do; an own
+    client never does); Q still numbers every non-own session. Once a day is closed, new payments and changes on it
+    need an owner or manager. Tips and refunds are not in the sheet totals; the drawer count still includes cash tips
+    and cash refunds, so expected cash can differ from Total cash by exactly those (13-10-26 with 30 cash tips:
+    1,432 vs 1,402).
+  - **Open (owner: "ask me later"):** how cancelled bookings count. Until then cancelled, no-show and pending bookings
+    are not on the sheet and are not sales (today's behaviour; comment in services `daySheet()`).
+  - **Left for the owner:** type the 4 phone lines and the column defaults (Settings → Profile → Daily sales sheet);
+    native review of the new Thai strings (`packages/core/src/i18n/th/`: `sales.sheet.*`, `sales.close` expenses /
+    PDF, `calendar` fields / sheet / errors incl. `confirmFirst`, `bookings.order.*`, `settings.profile.daySheet.*`,
+    `enums.bookingClientType`, permission `pos.correct`, account 6180, the R32 domain errors); confirm three choices
+    (a walk-in's own client is fixed at start; a session left unpaid on a closed day is finished only by an owner /
+    manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (not
+    done): the Daily close line "Cash in (sales + tips − refunds)" also subtracts drawer expenses now; the PDF header
+    repeats the branch name under the spa name when they are the same.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly

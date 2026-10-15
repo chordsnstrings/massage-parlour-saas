@@ -130,6 +130,10 @@ export async function bookingDetail(tx: Tx, bookingId: string) {
       durationMin: i.durationMin,
       priceAed: i.priceAed,
       startsAt: i.startsAt,
+      /** R32: the treatment (last-terms prefill), the planned commission and whether the terms were typed. */
+      serviceVariantId: i.serviceVariantId,
+      plannedCommissionAed: i.commissionAed,
+      termsSet: i.termsSetAt !== null,
       therapists: i.staffIds.map((id) => {
         const p = people.find((x) => x.id === id)
         const v = totals.get(`${i.id}:${id}`)

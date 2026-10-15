@@ -87,6 +87,11 @@ describe('ledger', () => {
     expect(vat.inputVatAed).toBe(500)
   })
 
+  it('seeds 6180 Laundry (R32 drawer expenses) as an expense category', async () => {
+    const [row] = await tx((db) => db.select().from(ledgerAccounts).where(eq(ledgerAccounts.code, '6180')))
+    expect(row).toMatchObject({ name: 'Laundry', type: 'expense' })
+  })
+
   it('rejects unbalanced entries (service check and DB constraint)', async () => {
     await expect(
       tx((db) => post(db, { tenantId, date: D, sourceType: 'manual', lines: [{ code: '1000', debit: 10 }] })),

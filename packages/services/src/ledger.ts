@@ -32,6 +32,7 @@ export const DEFAULT_CHART: { code: string; name: string; type: AccountType }[] 
   { code: '6150', name: 'Cleaning supplies', type: 'expense' },
   { code: '6160', name: 'Spa materials & supplies', type: 'expense' },
   { code: '6170', name: 'Small equipment', type: 'expense' },
+  { code: '6180', name: 'Laundry', type: 'expense' },
   { code: '6200', name: 'Utilities (DEWA, internet)', type: 'expense' },
   { code: '6300', name: 'Marketing', type: 'expense' },
   { code: '6400', name: 'Staff accommodation & transport', type: 'expense' },
