@@ -45,7 +45,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - **Booking ↔ sale = one order (R32, owner 2026-10-14):** fee = `booking_items.price_aed`, planned commission
   (`booking_items.commission_aed`) off the ledger until Finish (`finishBooking` = sale + commission, one tx); corrections
   = void + re-create on the same business date; closed days change only with `pos.correct` (owners/managers, audited,
-  close marked amended, stored day-sheet PDF regenerated). Daily sales sheet rules + PDF: CODEMAP "Daily sales sheet".
+  close marked amended, stored day-sheet PDF regenerated) — lock the booking's day for fee/commission/details/Finish,
+  the sale's day for money; no booking commission for staff not paid per booking (CODEMAP "Booking ↔ sale order").
+  Daily sales sheet rules + PDF: CODEMAP "Daily sales sheet".
   Open (owner "ask me later"): how cancelled bookings count — today they are not on the sheet and not sales.
 - Payments are **recorded, never processed** (cash / own card terminal / bank transfer). SaaS billing manual + Stripe Checkout for platform invoices only (PLAN §14.3).
 - Customer comms = **WhatsApp click-to-send only** (wa.me / web.whatsapp.com / whatsapp:// links). No SMS, no customer email,

@@ -1343,7 +1343,16 @@ integrations note,
   `createSale` (dated the booking's day when it has started and is open, else today) + commission write-back +
   `recordBookingCommissions` in one transaction (accepts completed-without-sale bookings); `correctBookingOrder` =
   `voidSale` + `createSale` again on the same business date ("Corrected: reason"; append-only), commission deltas;
-  `orderDay` / `orderSale` for the booking page. Own-lead walk-ins skip `takeTurn`. Drawer expenses:
+  `orderDay` / `orderSale` for the booking page. Own-lead walk-ins skip `takeTurn`. Review rules (2026-10-15):
+  commission per item × therapist at Finish = none for staff not paid per booking (`pay_type <> booking_commission`;
+  recorded stays, else 0), else typed > recorded (`commissionTotals`) > planned; `commissionLater` (web: no
+  `calendar.commission`) finishes without commission when none is known; `recordOrderCommissions` = R2 deltas +
+  planned mirror (booking page Save commission, Correct payment); `chargedFees` writes the charged fee back to
+  `price_aed` at Finish / Correct; Correct keeps payment references (same method + amount); a commission change
+  on a closed booking day needs `allowClosedDay`, and so does Finish (web: `editDay` on the booking's date in
+  createSaleAction / correctOrderAction / saveTerms / saveBookingDetails / leaving completed; sale date for money);
+  `setBookingDetails` refuses an own-lead change on a walk-in and an own client without a therapist; web
+  `setStatusAction` refuses pending → confirmed/checked_in/in_service (Confirm only). Drawer expenses:
   `drawer-expenses.ts` (`recordDrawerExpense` → `postExpense` Dr expense / Cr 1000; `voidDrawerExpense` →
   `reverseSource` on the expense date + delete).
 - **Daily sales sheet (R32)**: services `day-sheet.ts` `daySheet(tx, branchId, date)` (bundle-safe; rules in the

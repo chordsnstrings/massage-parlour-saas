@@ -1525,6 +1525,23 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     "other" payments get an "Other" column and count in Total sale. Tips and refunds are not in the sheet totals
     (tips: optional column + one line; cash refunds: one footnote line); the drawer count at close still includes cash
     tips and cash refunds, so expected cash can differ from the sheet's Total cash by exactly those.
+  - **Review fixes (2026-10-15, same branch):** (1) commission at Finish: a therapist **not paid per booking**
+    (sales %, salary, booking fee) gets no booking commission (checkout shows no field; planned / typed amounts are
+    ignored, anything already recorded stays) — no double pay with her %; for the others typed > already recorded
+    (voided sale, legacy completion) > planned; a member without `calendar.commission` finishes without commission
+    when none is known ("Commission missing", entered later on the booking page, as before R32). (2) The planned
+    commission mirrors every saved commission (Save commission, Correct payment). (3) Day lock dates: the **booking's**
+    business day for fee / commission / Order details / Finish / re-opening a completed booking (its sheet row and
+    commission rows), the **sale's** day for the payment; a session left unpaid on a closed day is finished only by an
+    owner/manager (that day is marked amended and its PDF made again); booking page, calendar sheet and checkout use
+    the same dates. (4) The fee actually charged (checkout line prices, Correct payment) is written back to
+    `price_aed` (the "last amount used" prefill; package / membership sessions excluded). (5) A walk-in's own client is
+    fixed when it starts (it decided her rotation turn; Order details hides the switch for walk-ins); an own client
+    needs a therapist. (6) A pending booking moves forward only through Confirm (no Check in / Start while pending,
+    server too). (7) Correct payment keeps payment references. New strings (need native review):
+    `calendar.errors.confirmFirst` "Confirm the booking with its fee first" | กรุณายืนยันการจองพร้อมค่าบริการก่อน;
+    domain `ownLeadWalkIn` "Own client is set when the walk-in starts" | ลูกค้าส่วนตัวต้องเลือกตอนเริ่มวอล์กอิน;
+    domain `ownLeadTherapist` "Choose the therapist for her own client" | เลือกพนักงานนวดสำหรับลูกค้าส่วนตัวของเธอ.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
