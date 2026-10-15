@@ -314,7 +314,15 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     await expect(staleClose.getByText(DAY_CLOSED).first()).toBeVisible()
     // New money on the closed day: a retail checkout is refused too.
     await desk.goto(`${app}/${slug}/sales/new`)
-    await desk.getByLabel('Add a service').selectOption(seed.variantIds[0]!)
+    // goto returns on `load`, before React hydrates the checkout: a pick made then is lost (the select snaps back,
+    // no item). Pick again, as a person would, until the item shows in the total (CI's Chrome 153 is fast enough
+    // to hit that window).
+    await expect(async () => {
+      if (await desk.getByText('Add an item to continue.').isVisible()) {
+        await desk.getByLabel('Add a service').selectOption(seed.variantIds[0]!)
+      }
+      await expect(desk.getByTestId('sale-total')).toHaveText(/350/, { timeout: 1_000 })
+    }).toPass({ timeout: 20_000 })
     await desk.getByLabel('Payment 1 method').selectOption('cash')
     await desk.getByLabel('Payment 1 amount').fill('350')
     await desk.getByRole('button', { name: /Complete sale/ }).click()
