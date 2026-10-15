@@ -34,6 +34,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 ## Work split (owner, 2026-10-08)
 - The Track B partner is stopped: **Claude owns every track** (UI, services, db, worker, auth, deploy). Queue: finish
   PLAN §14.6 Phase 2 → owner requests R1–R15 (PLAN §14.8) → former Track B items B1–B6 (PLAN §14.7).
+- **Owner 2026-10-15: the owner's partner codes again alongside Claude.** Start point + state: `docs/HANDOVER.md`
+  (keep it current: unmerged branches, open items). Both work on own branches → PRs into the deploy branch; a second
+  PR adding a migration regenerates it after merging the base (never renumber by hand).
 
 ## Locked decisions (don't re-litigate)
 - UAE only: AED, Asia/Dubai (store UTC), EN + AR (RTL) tenant sites.

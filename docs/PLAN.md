@@ -1072,7 +1072,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   down to ~590 px (e2e `console-sidebar.spec.ts`). Overview health/config rows aligned with the card padding.
 - **R22 Console in English + Arabic (owner, 2026-10-10):** the super-admin console only (spa CRM stays EN + TH), RTL for
   Arabic, a language switch in the user menu. **On hold (owner, 2026-10-10: "console keep english for now")**: the console
-  stays English; an unfinished foundation is kept only on Claude's local branch `r22` (not pushed).
+  stays English; an unfinished foundation is on the GitHub branch `claude/paused-r22-console-arabic` (pushed 2026-10-15, not merged).
 - **R23 Website Studio in the console (owner, 2026-10-10):** the owner builds every spa's site without entering its CRM:
   fewer clicks, help with the texts, always a clear next step. **Built (2026-10-11), PR waiting for owner approval.**
   Console → Websites: every spa with a status from data (Not started → Template chosen → Draft → Live, + "unpublished
@@ -1314,7 +1314,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   in reports (`onlineSourceSql`); public booking-page attribution unchanged. Label `online` = "Website" everywhere
   (EN/TH, console), "Website · Instagram"; TH `เว็บไซต์` + overview title + QR poster note (`growth.poster.receptionSub`)
   need native review. **Migration order:** booking-website-source took 0057; branches google-pending / google-fixes /
-  google-pending-2 (their own 0057/0058, older timestamps) must delete those SQL files + snapshots + journal entries and
+  google-pending-2 (latest = GitHub `claude/held-google-fixes-review-replies`; their own 0057/0058, older timestamps) must delete those SQL files + snapshots + journal entries and
   re-run `pnpm db:generate` on top of it before merging (hand-renumbering leaves older `when` values that
   `runMigrations` refuses → droplet migrate fails).
 - **Lazy loading for BE RELAX (owner, 2026-10-13: "make sure that lazy load is on"):** live page measured: 1.6 MB HTML
@@ -1510,9 +1510,9 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     PDF, `calendar` fields / sheet / errors incl. `confirmFirst`, `bookings.order.*`, `settings.profile.daySheet.*`,
     `enums.bookingClientType`, permission `pos.correct`, account 6180, the R32 domain errors); confirm three choices
     (a walk-in's own client is fixed at start; a session left unpaid on a closed day is finished only by an owner /
-    manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (not
-    done): the Daily close line "Cash in (sales + tips − refunds)" also subtracts drawer expenses now; the PDF header
-    repeats the branch name under the spa name when they are the same.
+    manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (done in
+    PR #55): the Daily close line reads "Cash in (sales + tips − refunds − drawer expenses)"; the PDF header shows the
+    branch name only when it differs from the spa name.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
