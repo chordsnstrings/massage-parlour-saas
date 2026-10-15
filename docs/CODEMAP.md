@@ -1368,6 +1368,12 @@ integrations note,
   viewer's language, `tips`/`commission` on|off), Daily close card, `closeDayAction` stores the PDF after commit
   (`server/day-sheet.ts` `storeDaySheetPdf`, failure logged `[day-sheet]` → "Create PDF" =
   `createDaySheetPdfAction`). Fixture: `packages/services/test/fixtures/day-sheet-13-10-26.ts` (unit + e2e).
+  Verified 2026-10-15 (final check, before merge): the fixture day driven through the app (pending → Confirm in the
+  calendar sheet / `setBookingTerms` + `setBookingStatus`, Finish & pay in checkout / `finishBooking` with tips,
+  Laundry on Daily close, Download, Close the day) gives 13 rows and 1,460 / 1,080 / 58 / 2,482 / 1,402 in both the
+  download and the stored PDF; expected cash = 1,402 + cash tips. Known small gaps: the Daily close label
+  `sales.close.cashIn` ("Cash in (sales + tips − refunds)") doesn't name the drawer expenses it now subtracts; the PDF
+  header prints the branch name under the spa name even when both are the same.
   - Full tax invoice (G16): `sales.billing` / `clients.billing` jsonb (`BillingDetails`); `taxInvoiceLines` splits
     VAT-inclusive line totals into taxable + VAT (prepaid kinds 0 %), matching `sales.vat_aed`; invoice no. = sale
     number. Route `dashboard/[tenant]/sales/[id]/invoice`, action `saveBillingAction` (pos.use + branch scope).

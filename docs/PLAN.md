@@ -1468,80 +1468,51 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   - **Costs (cheapest):** Google within the free allowance for Abu Dhabi's few hundred spas (verify), AI research about
     USD 1–3 per 1,000 spas, WhatsApp free; no new subscriptions. **Compliance:** business contact details only, opt-out
     honoured, UAE PDPL / TDRA marketing rules are the operator's responsibility (owner).
-- **R32 Daily sales sheet PDF (owner, 2026-10-14, "Go" ~16:20; ✅ built 2026-10-15 on branch `r32-daily-sheet` —
-  PART 1 f0cdd65…f0145ff, PART 2 8560d46 — not merged yet, code follows the normal review path):** the
-  spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM PDF, every day. Therapists always live in the CRM by name
-  (commission + tips per therapist); "Show on website" stays optional and separate.
-  - **Rows** (one per session, business day by `business_day_cutoff`): No., therapist, Q = her turn number that day,
-    start–end time, room, code, cash, card. **Code** = source + client type: `P1`–`P4` = which spa phone line the client
-    called (4 lines; Settings → phone lines with their numbers), `W` = walk-in, `B` = booking; `/R` = regular, `/N` =
-    new client — **reception picks R/N** (not automatic). **Pink rows (Q = 0)** = the therapist's **own lead** (her own
-    client): shown in pink, does not use her queue turn.
-  - **Right panel:** each therapist's turns that day (1, 2, 3 …) or OFF. **Expenses** (e.g. Laundry 58): reception
-    records each cash expense during the day; Total sale = cash + card − expenses, Total card, Total cash = cash −
-    expenses (sheet: 1460 + 1080 − 58 = 2482; cash 1402).
-  - **PDF:** download for any day from Daily close **and** made automatically on "Close the day" (kept with that day).
-    Tips per therapist and commission per therapist are **optional** (tips chosen on).
-  - **Booking ↔ sale flow (owner 2026-10-14):** booking and sale stay linked (one order). **Confirm** = reception
-    enters the fee + the therapist's commission (typed each time, pre-filled from the last amount for that treatment).
-    **Finish** = cash/card payment + tips → the booking is completed and its sale is created and linked. Reception can
-    correct fee/commission/tips until the day is closed; after that only owner/manager, every change audited.
-  - **Open (owner: "ask me later"):** how cancelled bookings count in the totals/turns. Until then cancelled, no-show
-    and pending bookings are not on the sheet and are not sales (today's behaviour).
-  - **PART 1 built (2026-10-14, branch `r32-daily-sheet`, not merged yet; spec D1–D14 in the implementation design):**
-    migration 0058 (bookings `phone_line` 1–4 / `client_type` regular|new / `own_lead`; booking_items `commission_aed`
-    planned + `terms_set_at`; expenses `from_drawer`; day_closes `amended_at/by`), core `day-sheet.ts` (sheetCode,
-    turnNumbers, sheetTotals, phoneLineOptions, daySheetColumns), permission `pos.correct` (owners + managers only),
-    services `booking-order.ts` (lastBookingTerms, setBookingTerms, setBookingDetails, orderDay, finishBooking,
-    correctBookingOrder, orderSale) + `drawer-expenses.ts` + the day lock in sales.ts (lockBusinessDay / isDayClosed /
-    markDayAmended; createSale refuses a closed day without `allowClosedDay`), web `server/day-lock.ts`, new booking +
-    walk-in fields, booking sheet + booking page Order card (Confirm, Fee & commission, Order details, Finish & pay,
-    Correct payment), checkout commission card, Daily close drawer expenses (+ "Amended" pill), Settings → Daily sales
-    sheet (phone lines + column defaults). Expected cash = float + cash + cash tips − cash refunds − drawer expenses.
-    Choices made while building (deviations from the design text): the planned commission is one amount per treatment
-    (per therapist on it; Finish can still type each therapist separately); a member without `calendar.commission`
-    keeps the stored commission; the client-type field reads "Regular or new" and the switch "Own client" (labels that
-    don't collide with "Client"/"Therapist"); Thai drafts use the existing glossary (พนักงานนวด, ค่าคอมมิชชัน) — new
-    strings need the owner's native review.
-  - **PART 2 built (2026-10-15):** migration 0059 (`day_closes.pdf_file_id/pdf_sha256/pdf_generated_at`); services
-    `day-sheet.ts` `daySheet(tx, branch, date)` (sessions = confirmed/checked-in/in-service/completed bookings of that
-    branch business date, one row per item × therapist in start order; Q computed; money = the linked live sale's
-    payments on the booking's first row when the sale is dated that day, else "paid {date}" / unpaid; "Other sales" =
-    retail and other days' bookings; totals from all live sales of the day; panel = every bookable therapist, OFF = no
-    session + no shift or on leave; tips / commission per therapist); `pdf/kit.ts` (shared with the intake PDF) +
-    `pdf/day-sheet-pdf.ts` (A4 portrait like the paper: table left with pink own-lead rows and Cash/Card sums, turn
-    panel + expenses + "1,460 + 1,080 - 58 = 2,482" + totals right, footer = close / "Not closed yet", EN or TH);
-    Daily close card "Daily sales sheet" (Tips / Commission switches defaulting to Settings, "Download day sheet
-    (PDF)" for any day ≤ today, "PDF saved at close" or "Create PDF", unfinished-sessions note); route
-    `sales/close/sheet` (pos.close); Close the day stores the PDF after the close commits (a render failure never
-    blocks the close); a correction of a closed day regenerates it ("Amended after close"); stored file purpose
-    `day_sheet_pdf` → pos.close. Check: the 13-10-26 sheet reproduced through the real flow gives cash 1460, card
-    1080, laundry 58, total sale 2482, total cash 1402 (unit + e2e). Choices: times print 24 h (13:35, the paper
-    writes 01:35); Thai "No." is ที่ (ลำดับ didn't fit the column).
+- **R32 Daily sales sheet PDF + booking ↔ sale order (owner, 2026-10-14, "Go" ~16:20) — ✅ as built 2026-10-15 on
+  branch `r32-daily-sheet` (f0cdd65…f0145ff, 8560d46, af0d14f; not merged yet, code follows the normal review path).**
+  The spa's paper day sheet (photo 13-10-26, BE RELAX) as a CRM feature. Code rules: CODEMAP "Booking ↔ sale order
+  (R32)", "Daily sales sheet (R32)", "Daily close".
+  - **One order per booking:** **Confirm** = reception types the fee (`booking_items.price_aed`) + the therapist's
+    commission (planned, off the ledger), prefilled from the last amount used for that treatment; a pending booking
+    moves on only through Confirm. **Finish & pay** = checkout: cash / card (split allowed) + tips → the sale is created
+    and linked, the booking completed and the commission posted, in one transaction (commission only for therapists
+    paid per booking). **Correct payment** = void + new sale on the same business day, with a reason (append-only).
+    A therapist's own Complete (G14) reads "Not paid yet" until Finish & pay.
+  - **Day lock:** reception may change fee / commission / tips / payments / order details until the day is closed;
+    after that only `pos.correct` (owners + managers). The booking's day applies to fee, commission, details and
+    Finish, the sale's day to payments. Every change is audited; a change to a closed day marks the close "Amended" and
+    makes its saved PDF again (counted cash and variance stay as recorded).
+  - **Booking fields:** phone line P1–P4 (Settings → Profile → Daily sales sheet: the 4 numbers; required for phone
+    bookings once set), client type Regular / New (picked by hand), own client (pink, Q 0, no walk-in rotation turn;
+    fixed when a walk-in starts; needs a therapist). Therapists are always in the CRM by name; "Show on website" stays
+    separate.
+  - **Drawer expenses** (Daily close, e.g. Laundry 58, account 6180): reduce the expected cash and Total cash.
+  - **Sheet:** Daily close → "Download day sheet (PDF)" for any day ≤ today (viewer's language, EN / TH), and stored
+    automatically on Close the day ("Create PDF" if that render failed). Rows No., therapist, Q, time, room, code
+    (`P1`–`P4` / `W` / `B` + `/R` `/N`), cash, card (+ Other when the day has other methods); own-client rows pink;
+    panel = every active therapist's turns, own-client 0s or OFF; tips per therapist (default on) and commission
+    (default off); expenses; Total sale = cash + card + other − expenses, Total card, Total cash = cash − expenses.
+    Choices: times print 24 h; Thai "No." = ที่; money is grouped by the sale's business date (as the Z-report).
+  - **Verified 2026-10-15 (final check):** lint, typecheck, drift, unit 1,459/1,459, full e2e 143 passed + 2 skipped
+    on a production build; the 13-10-26 sheet reproduced end to end in the app (Confirm in the calendar and through
+    the services, Finish & pay in checkout and through the services with tips, own clients, Laundry added on Daily
+    close, Download, Close the day): both PDFs show 13 rows and 1,460 / 1,080 / 58 / 2,482 / 1,402, row by row as on
+    the photo.
   - **Notes for the owner:** phone (P) and other bookings don't move the walk-in rotation (only walk-ins do; an own
-    client never does); Q on the sheet still numbers every non-own session. Once a day is closed, new payments, fee /
-    commission / tips changes and drawer expenses on it need an owner or manager; the counted cash and variance stay as
-    recorded, the close is marked "Amended" and its saved PDF is made again. Bank transfer, gift card, package and
-    "other" payments get an "Other" column and count in Total sale. Tips and refunds are not in the sheet totals
-    (tips: optional column + one line; cash refunds: one footnote line); the drawer count at close still includes cash
-    tips and cash refunds, so expected cash can differ from the sheet's Total cash by exactly those.
-  - **Review fixes (2026-10-15, same branch):** (1) commission at Finish: a therapist **not paid per booking**
-    (sales %, salary, booking fee) gets no booking commission (checkout shows no field; planned / typed amounts are
-    ignored, anything already recorded stays) — no double pay with her %; for the others typed > already recorded
-    (voided sale, legacy completion) > planned; a member without `calendar.commission` finishes without commission
-    when none is known ("Commission missing", entered later on the booking page, as before R32). (2) The planned
-    commission mirrors every saved commission (Save commission, Correct payment). (3) Day lock dates: the **booking's**
-    business day for fee / commission / Order details / Finish / re-opening a completed booking (its sheet row and
-    commission rows), the **sale's** day for the payment; a session left unpaid on a closed day is finished only by an
-    owner/manager (that day is marked amended and its PDF made again); booking page, calendar sheet and checkout use
-    the same dates. (4) The fee actually charged (checkout line prices, Correct payment) is written back to
-    `price_aed` (the "last amount used" prefill; package / membership sessions excluded). (5) A walk-in's own client is
-    fixed when it starts (it decided her rotation turn; Order details hides the switch for walk-ins); an own client
-    needs a therapist. (6) A pending booking moves forward only through Confirm (no Check in / Start while pending,
-    server too). (7) Correct payment keeps payment references. New strings (need native review):
-    `calendar.errors.confirmFirst` "Confirm the booking with its fee first" | กรุณายืนยันการจองพร้อมค่าบริการก่อน;
-    domain `ownLeadWalkIn` "Own client is set when the walk-in starts" | ลูกค้าส่วนตัวต้องเลือกตอนเริ่มวอล์กอิน;
-    domain `ownLeadTherapist` "Choose the therapist for her own client" | เลือกพนักงานนวดสำหรับลูกค้าส่วนตัวของเธอ.
+    client never does); Q still numbers every non-own session. Once a day is closed, new payments and changes on it
+    need an owner or manager. Tips and refunds are not in the sheet totals; the drawer count still includes cash tips
+    and cash refunds, so expected cash can differ from Total cash by exactly those (13-10-26 with 30 cash tips:
+    1,432 vs 1,402).
+  - **Open (owner: "ask me later"):** how cancelled bookings count. Until then cancelled, no-show and pending bookings
+    are not on the sheet and are not sales (today's behaviour; comment in services `daySheet()`).
+  - **Left for the owner:** type the 4 phone lines and the column defaults (Settings → Profile → Daily sales sheet);
+    native review of the new Thai strings (`packages/core/src/i18n/th/`: `sales.sheet.*`, `sales.close` expenses /
+    PDF, `calendar` fields / sheet / errors incl. `confirmFirst`, `bookings.order.*`, `settings.profile.daySheet.*`,
+    `enums.bookingClientType`, permission `pos.correct`, account 6180, the R32 domain errors); confirm three choices
+    (a walk-in's own client is fixed at start; a session left unpaid on a closed day is finished only by an owner /
+    manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (not
+    done): the Daily close line "Cash in (sales + tips − refunds)" also subtracts drawer expenses now; the PDF header
+    repeats the branch name under the spa name when they are the same.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
