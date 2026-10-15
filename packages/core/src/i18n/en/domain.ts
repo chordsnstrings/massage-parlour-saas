@@ -370,4 +370,5 @@ export const domain = {
   drawerExpenseWhat: 'Say what the expense was for',
   drawerExpenseCategory: 'Pick a category',
   saleLineNotFound: 'Sale line not found',
+  dayCloseNotFound: 'Day close not found',
 } as const

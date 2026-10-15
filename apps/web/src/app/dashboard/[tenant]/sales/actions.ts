@@ -1,5 +1,5 @@
 'use server'
-import { clientPackages, clients, expenses, sales, withTenant } from '@spa/db'
+import { clientPackages, clients, dayCloses, expenses, sales, withTenant } from '@spa/db'
 import {
   closeDay,
   createSale,
@@ -27,6 +27,7 @@ import { formatAed } from '@/lib/utils'
 import { can, guard } from '@/server/access'
 import { audit } from '@/server/audit'
 import { afterDayChange, editDay, periodLocked } from '@/server/day-lock'
+import { storeDaySheetPdf } from '@/server/day-sheet'
 import { pickBranch } from './data'
 
 const money = z.coerce
@@ -313,6 +314,9 @@ export async function closeDayAction(
       if (v.date > picked.today) throw new DomainError('That business day has not started yet')
       return closeDay(tx, { tenantId: ctx.tenant.id, ...v, closedBy: ctx.user.id })
     })
+    // R32 (D13): the day-sheet PDF is kept with the close, rendered after it commits in the closer's language; a
+    // render failure never undoes the close (the page then offers "Create PDF").
+    const pdfFileId = await storeDaySheetPdf(ctx.tenant.id, row.id, { createdBy: ctx.user.id })
     await audit({
       tenantId: ctx.tenant.id,
       actorUserId: ctx.user.id,
@@ -325,12 +329,49 @@ export async function closeDayAction(
         counted: row.countedCashAed,
         variance: row.varianceAed,
         expenses: row.totals.expenses ?? '0.00',
-        // R32 PART 2 stores the day-sheet PDF with the close.
-        pdf: false,
+        pdf: Boolean(pdfFileId),
       },
     })
     revalidate(slug)
     return ok('sales.toast.dayClosed')
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/** R32: (re)creates the stored day-sheet PDF of a closed day ("Create PDF" when the render at close failed). */
+export async function createDaySheetPdfAction(
+  slug: string,
+  branchId: string,
+  date: string,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.close')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(branchId).success || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return fail('errors.generic')
+  try {
+    const id = await withTenant(ctx.tenant.id, async (tx) => {
+      const picked = await pickBranch(tx, ctx, branchId)
+      if (!picked || picked.branch.id !== branchId) throw new DomainError('Branch not found', 'not_found')
+      const [close] = await tx
+        .select({ id: dayCloses.id })
+        .from(dayCloses)
+        .where(and(eq(dayCloses.branchId, branchId), eq(dayCloses.businessDate, date)))
+      if (!close) throw new DomainError('Day close not found', 'not_found')
+      return close.id
+    })
+    const fileId = await storeDaySheetPdf(ctx.tenant.id, id, { createdBy: ctx.user.id })
+    if (!fileId) return fail('errors.generic')
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'day.sheet_pdf',
+      entity: 'day_close',
+      entityId: id,
+      data: { date, fileId },
+    })
+    revalidate(slug)
+    return ok('sales.toast.pdfCreated', { fileId })
   } catch (e) {
     return handle(e)
   }

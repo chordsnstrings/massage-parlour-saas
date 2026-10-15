@@ -333,4 +333,5 @@ export const domain: Messages['errors']['domain'] = {
   drawerExpenseWhat: 'ระบุว่าเป็นค่าใช้จ่ายอะไร',
   drawerExpenseCategory: 'เลือกหมวดหมู่',
   saleLineNotFound: 'ไม่พบรายการในบิลขาย',
+  dayCloseNotFound: 'ไม่พบการปิดยอดของวันนี้',
 }

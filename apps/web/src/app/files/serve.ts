@@ -10,6 +10,7 @@ import {
   withTenant,
 } from '@spa/db'
 import {
+  DAY_SHEET_PDF_PURPOSE,
   FONT_TYPES,
   getFile,
   getTemplateFile,
@@ -77,13 +78,15 @@ const notFound = () =>
 
 /**
  * Private files by purpose: document scans need staff.manage, receipt scans need accounting access, signed intake
- * PDFs (F27) need clients.view (same as the submission page).
+ * PDFs (F27) need clients.view (same as the submission page), day-sheet PDFs (R32) pos.close.
  */
 const PURPOSE_PERMISSIONS: Record<string, Permission[]> = {
   staff_document: ['staff.manage'],
   business_document: ['staff.manage'],
   receipt: ['accounting.view', 'accounting.manage'],
   [INTAKE_PDF_PURPOSE]: ['clients.view'],
+  // R32: the day-sheet PDF kept with a close (same permission as the Daily close page).
+  [DAY_SHEET_PDF_PURPOSE]: ['pos.close'],
 }
 
 type FileTenant = { tenantId: string; purpose: string; deleted: boolean; settings: { require2fa?: boolean } }

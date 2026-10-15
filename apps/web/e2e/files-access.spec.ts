@@ -1,7 +1,7 @@
 // F14 (PLAN §17, gap G13): who may read stored files (app/files/serve.ts) and the private exports/uploads next to them.
 // Public site images: anyone, on any host. Private files (receipts: accounting; document scans: staff.manage): only
 // active members of that spa with the permission, under the same rules as the dashboard (deleted spa closed, "Require
-// 2FA"), and super-admins with 2FA (without 2FA: two-factor.spec). Signed intake PDFs (F27): clients.view. Everyone else gets the same 404 as a missing id.
+// 2FA"), and super-admins with 2FA (without 2FA: two-factor.spec). Signed intake PDFs (F27): clients.view; day-sheet PDFs (R32): pos.close. Everyone else gets the same 404 as a missing id.
 // There are no signed URLs: every request re-checks the session (Cache-Control private, no-cache; Vary Cookie).
 // Public caching, ETag/304 and resized variants are media.spec.
 import { expect, type Page, test } from '@playwright/test'
@@ -79,6 +79,8 @@ test('files: public for anyone, private only for the right members of that spa a
     receipt: await store(spaA, false, 'receipt'),
     document: await store(spaA, false, 'staff_document'),
     intake: await store(spaA, false, 'intake_pdf'),
+    // R32: the day-sheet PDF kept with a close — pos.close (owner, manager, receptionist).
+    daySheet: await store(spaA, false, 'day_sheet_pdf'),
     // R24 review: a draft HTML design document — the platform renders it; /files serves it to nobody.
     design: await store(spaA, false, 'html_design_doc'),
   }
@@ -104,12 +106,32 @@ test('files: public for anyone, private only for the right members of that spa a
 
   await test.step('the matrix: public 200 for all; receipts need accounting, documents staff.manage', async () => {
     const matrix: [string, Page, Record<keyof typeof files, number>][] = [
-      ['anonymous', anon, { public: 200, receipt: 404, document: 404, intake: 404, design: 404 }],
-      ['owner', owner, { public: 200, receipt: 200, document: 200, intake: 200, design: 404 }],
-      ['receptionist', receptionist, { public: 200, receipt: 404, document: 404, intake: 200, design: 404 }],
-      ['accountant', accountant, { public: 200, receipt: 200, document: 404, intake: 404, design: 404 }],
-      ['owner of another spa', other, { public: 200, receipt: 404, document: 404, intake: 404, design: 404 }],
-      ['super-admin', ops, { public: 200, receipt: 200, document: 200, intake: 200, design: 404 }],
+      [
+        'anonymous',
+        anon,
+        { public: 200, receipt: 404, document: 404, intake: 404, daySheet: 404, design: 404 },
+      ],
+      ['owner', owner, { public: 200, receipt: 200, document: 200, intake: 200, daySheet: 200, design: 404 }],
+      [
+        'receptionist',
+        receptionist,
+        { public: 200, receipt: 404, document: 404, intake: 200, daySheet: 200, design: 404 },
+      ],
+      [
+        'accountant',
+        accountant,
+        { public: 200, receipt: 200, document: 404, intake: 404, daySheet: 404, design: 404 },
+      ],
+      [
+        'owner of another spa',
+        other,
+        { public: 200, receipt: 404, document: 404, intake: 404, daySheet: 404, design: 404 },
+      ],
+      [
+        'super-admin',
+        ops,
+        { public: 200, receipt: 200, document: 200, intake: 200, daySheet: 200, design: 404 },
+      ],
     ]
     for (const [who, p, want] of matrix) {
       const got: Record<string, number> = {}
@@ -159,7 +181,7 @@ test('files: public for anyone, private only for the right members of that spa a
     expect(await upload(receptionist, `${app}/${slug}/documents/upload`)).toBe(403)
     expect(await upload(anon, `${app}/${slug}/documents/upload`)).toBe(401)
     const [stored] = await db.select({ n: count() }).from(storedFiles).where(eq(storedFiles.tenantId, spaA))
-    expect(stored!.n).toBe(5)
+    expect(stored!.n).toBe(Object.keys(files).length) // nothing was uploaded
   })
 
   await test.step('the CRM photo pickers: services.manage or staff.manage upload images, never videos (R28)', async () => {

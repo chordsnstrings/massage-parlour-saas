@@ -1,15 +1,16 @@
-import { addDays } from '@spa/core'
+import { addDays, daySheetColumns } from '@spa/core'
 import { enumLabel, type Translator } from '@spa/core/i18n'
 import { dayCloses, platformDb, user, withTenant } from '@spa/db'
-import { DRAWER_EXPENSE_CODES, daySummary } from '@spa/services'
+import { DRAWER_EXPENSE_CODES, daySheet, daySummary, fileUrl } from '@spa/services'
 import { desc, eq, inArray } from 'drizzle-orm'
-import { ArrowLeft, Lock, Store } from 'lucide-react'
+import { ArrowLeft, Download, FileText, Lock, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Card, Grid, Hairline, Note, Pill, Stack } from '@/components/crm'
+import { Card, Grid, Hairline, Note, Pill, Stack, Toggle } from '@/components/crm'
 import { CloseForm } from '@/components/pos/close-form'
 import { DayNav } from '@/components/pos/day-nav'
+import { CreateDaySheetPdfButton } from '@/components/pos/day-sheet'
 import { DrawerExpenseForm, VoidDrawerExpenseButton } from '@/components/pos/drawer-expenses'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader } from '@/components/ui/page'
@@ -45,13 +46,15 @@ export default async function ClosePage({
     const wanted = one(sp.date)
     const date = wanted && DATE.test(wanted) && wanted <= picked.today ? wanted : picked.today
     const summary = await daySummary(tx, picked.branch.id, date)
+    // R32: the day sheet's unfinished sessions (no payment yet) — a note only, never blocks the close.
+    const { unfinished } = await daySheet(tx, picked.branch.id, date)
     const past = await tx
       .select()
       .from(dayCloses)
       .where(eq(dayCloses.branchId, picked.branch.id))
       .orderBy(desc(dayCloses.businessDate))
       .limit(30)
-    return { ...picked, date, summary, past }
+    return { ...picked, date, summary, past, unfinished }
   })
 
   const back = (
@@ -71,7 +74,8 @@ export default async function ClosePage({
       </>
     )
   }
-  const { branch, date, today, summary: s, past } = data
+  const { branch, date, today, summary: s, past, unfinished } = data
+  const sheetCols = daySheetColumns(ctx.tenant.settings)
   // R32 (D6/D11): drawer expenses are added/voided on an open day, or on a closed one by owners/managers.
   const canEditDay = !s.close || can(ctx, 'pos.correct')
   const whoIds = [...new Set(s.drawerExpenses.flatMap((e) => (e.createdBy ? [e.createdBy] : [])))]
@@ -283,6 +287,49 @@ export default async function ClosePage({
             </Stack>
           </Card>
         )}
+
+        {/* R32: the paper day sheet as a PDF — any day up to today; a closed day also keeps the one saved at close. */}
+        <Card title={t('sales.sheet.title')} sub={t('sales.sheet.sub')}>
+          <Stack>
+            {unfinished > 0 && <Note>{t('sales.close.unfinished', { count: unfinished })}</Note>}
+            <form
+              method="get"
+              action={appPath(`/${slug}/sales/close/sheet`)}
+              className="flex flex-wrap items-center justify-between gap-4"
+            >
+              <input type="hidden" name="date" value={date} />
+              <input type="hidden" name="branch" value={branch.id} />
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                {(['tips', 'commission'] as const).map((col) => (
+                  <div key={col} className="flex items-center gap-3">
+                    <Toggle
+                      name={col}
+                      label={t(`sales.sheet.${col}Column`)}
+                      defaultChecked={sheetCols[col]}
+                    />
+                    <span className="text-[length:var(--crm-fs-td)]">{t(`sales.sheet.${col}Column`)}</span>
+                  </div>
+                ))}
+              </div>
+              <Button type="submit" data-testid="day-sheet-download">
+                <Download aria-hidden /> {t('sales.sheet.download')}
+              </Button>
+            </form>
+            {s.close && (
+              <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+                {s.close.pdfFileId ? (
+                  <Button variant="secondary" asChild>
+                    <a href={fileUrl(s.close.pdfFileId)} download data-testid="day-sheet-saved">
+                      <FileText aria-hidden /> {t('sales.close.pdfSaved')}
+                    </a>
+                  </Button>
+                ) : (
+                  <CreateDaySheetPdfButton slug={slug} branchId={branch.id} date={date} />
+                )}
+              </div>
+            )}
+          </Stack>
+        </Card>
 
         <Card title={t('sales.close.past')} sub={multi ? branch.name : t('sales.close.recentFirst')}>
           {past.length === 0 ? (

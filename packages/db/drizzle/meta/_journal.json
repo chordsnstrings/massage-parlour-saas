@@ -414,6 +414,13 @@
       "when": 1792018602006,
       "tag": "0058_r32_booking_order",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792021729923,
+      "tag": "0059_r32_day_sheet_pdf",
+      "breakpoints": true
     }
   ]
 }

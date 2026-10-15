@@ -170,6 +170,7 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     expect(all.find((s) => s.number === 2)).toMatchObject({ status: 'paid', businessDate: today() })
   })
 
+  let closedPdf = ''
   await test.step('close the day: 150 cash + 10 cash tip − 58 laundry = 102, balanced', async () => {
     await desk.goto(`${app}/${slug}/sales/close`)
     await desk.getByLabel('Opening float (AED)').fill('0')
@@ -180,6 +181,9 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     const [close] = await db.select().from(dayCloses).where(eq(dayCloses.branchId, seed.branchId))
     expect(close).toMatchObject({ expectedCashAed: '102.00', varianceAed: '0.00', amendedAt: null })
     expect(close!.totals.expenses).toBe('58.00')
+    // R32: the day-sheet PDF is saved with the close.
+    expect(close!.pdfFileId).toBeTruthy()
+    closedPdf = close!.pdfFileId!
     // Reception can no longer add drawer expenses to the closed day.
     await expect(desk.getByRole('button', { name: 'Add expense' })).toHaveCount(0)
   })
@@ -201,6 +205,9 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
     expect(close!.amendedAt).not.toBeNull()
     // The counted cash and variance stay as recorded at close.
     expect(close).toMatchObject({ countedCashAed: '102.00', varianceAed: '0.00' })
+    // …and the saved day sheet is regenerated (marked "Amended after close").
+    expect(close!.pdfFileId).toBeTruthy()
+    expect(close!.pdfFileId).not.toBe(closedPdf)
     await page.goto(`${app}/${slug}/sales/close`)
     await expect(page.getByText(/^Amended /)).toBeVisible()
   })
