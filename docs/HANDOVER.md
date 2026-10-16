@@ -87,6 +87,12 @@ never with force. Anything else, config included, goes through a PR. CI runs and
 
 ## Working alongside Claude
 
+- The partner's Claude session works on its own session branch, `claude/youthful-cannon-apb1vb` (owner 2026-10-16), and
+  opens one PR at a time from it.
+  - After that PR is squash-merged, restart the branch from the latest default branch before the next task:
+    `git fetch origin claude/intelligent-heisenberg-g9e81o && git checkout -B claude/youthful-cannon-apb1vb origin/claude/intelligent-heisenberg-g9e81o`,
+    then `git push --force-with-lease`. Only do this when the branch holds nothing but already-merged work.
+  - For two tasks at once, start a second session, which gets its own branch.
 - Claude works on `claude/laughing-faraday-fjgrsu` and releases through PRs from it. Before starting, tell the owner which
   area you take, so two people don't edit the same files at once. Pull the default branch often.
 - **Migrations are numbered in order** (`packages/db/drizzle`). If two open PRs both add one, whoever merges second
