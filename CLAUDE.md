@@ -32,7 +32,8 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   in-flight work are exempt.
 - **Keep memory current:** when a decision, structure or verified finding changes, update CLAUDE.md /
   `docs/CODEMAP.md` / `docs/PLAN.md` in the same session, commit, and merge the docs into the deploy branch
-  `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path).
+  `claude/intelligent-heisenberg-g9e81o` (owner-approved for docs; code still follows the normal review path). This applies to this session only: the
+  partner sends docs through PRs as well (owner 2026-10-16).
 
 ## Work split (owner, 2026-10-08)
 - The Track B partner is stopped: **Claude owns every track** (UI, services, db, worker, auth, deploy). Queue: finish

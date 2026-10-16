@@ -80,8 +80,10 @@ the existing flow.
    rebuilds and runs migrations first. A merge is live about half an hour later.
 5. Confirm at https://spamanagement.co/api/health, which shows the release commit.
 
-Never push code straight to the default branch, never force-push it, and never move `deploy/green` by hand. Docs-only
-commits may go straight to the default branch: they deploy too, harmlessly.
+Never push straight to the default branch, never force-push it, and never move `deploy/green` by hand. Docs go through
+a PR too, either in the same PR as the code or in their own (owner 2026-10-16). The only exception is the owner's
+Claude session (`claude/laughing-faraday-fjgrsu`), which keeps its owner-approved direct pushes for memory and docs
+upkeep.
 
 ## Working alongside Claude
 
