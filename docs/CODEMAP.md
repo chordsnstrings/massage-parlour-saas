@@ -122,6 +122,23 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
      `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
      for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
+   - Custom domain checks (services `domains.ts`; 2026-10-16, PLAN §14.8 "Custom domain go-live fix"): `evaluateDomain`
+     = TXT `_spamanagement.{host}` (chunks joined + trimmed, contains the token) → routing (CNAME to `cnameTarget()` =
+     `CF_CNAME_TARGET`, or A/AAAA equal to the target's addresses; a leftover zone A/AAAA elsewhere = "wrong") →
+     Cloudflare for SaaS when configured. DNS = `verificationDns()`: the zone's own nameservers (NS + their IPv4 via
+     the public resolvers, public unicast only, ≤ 4, one Resolver each, tries 1) + `VERIFY_RESOLVERS` (1.1.1.1,
+     8.8.8.8, one Resolver each), all at once, `DNS_SOURCE_DEADLINE_MS` (4 s) per source; never the container's
+     resolver (negative caching). `askAll` merges (any answer wins) and attaches `DnsMeta` {partial, zone}; "missing"
+     only when no source failed (TXT: when the zone says so). Rules (owner 2026-10-16: SERVFAIL, ENOTFOUND, timeouts =
+     retry, never a permanent fail): only a **confirmed** wrong answer (the zone's own nameservers point elsewhere)
+     ends automatic checks after `GIVE_UP_AFTER_MS` or takes an active domain down; missing records / failed lookups
+     leave a note (never-verified domains past 7 days are checked daily, `isDomainCheckDue`). Worker
+     `verify-custom-domains` (10 min); "Check now" = `checkDomain`, 30 s cooldown (no DNS cache in the app).
+     www twin (core `wwwPair`, strict pair x ↔ www.x): proxy.ts 301s (GET/HEAD; 308 others) the twin to the active
+     connected hostname (`wwwTwinTarget`, own-domain.ts `state.active`, 30 s refresh); the ask endpoint allows the twin
+     only while the connected one is active (spa not cancelled) and the twin reaches us (`hostnameReachesUs`), so no
+     certificate order starts for a parked name. `customDomainTlsAutomatic()` = `CUSTOM_DOMAIN_TLS=on-demand` (droplet
+     Caddy) or Cloudflare for SaaS → the spa Domains page's SSL wording. e2e `own-domain-redirect.spec` (twin steps).
      `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). R26: `{site}/crm-enquiry` (POST/OPTIONS) is never
      redirected or platform-only (works on the temporary address and the own domain); a GET of `crm-data.json` 301s
      like a page, with `Access-Control-Allow-Origin: *` on the hop. Studio previews live on the console
@@ -1562,7 +1579,8 @@ i18n namespace `automations`.
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
   - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
-    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains of spas not cancelled + the
+    www twin of an active one while it points at us), a 25 MB
     body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
     catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
     stops Caddy).

@@ -20,7 +20,7 @@ import {
   HTML_ROUTE_HEADER,
   htmlRouteKey,
 } from '@/server/html-design-route'
-import { ownDomainTarget } from '@/server/own-domain'
+import { ownDomainTarget, wwwTwinTarget } from '@/server/own-domain'
 import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
@@ -145,6 +145,18 @@ export async function proxy(req: NextRequest) {
     res.headers.set('cache-control', 'private, max-age=300')
     // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
     if (site && crmFeedPath(site)) res.headers.set('access-control-allow-origin', '*')
+    return res
+  }
+  // A connected custom domain's www twin (www.theirspa.ae ↔ theirspa.ae) → the connected hostname, path + query kept,
+  // one hop: GET/HEAD 301, other methods 308. Short browser cache, like R20: a domain change applies within minutes.
+  const custom = customHost(host)
+  const twin = custom ? await wwwTwinTarget(custom, req.nextUrl.pathname, req.nextUrl.search) : null
+  if (twin) {
+    const res = NextResponse.redirect(twin, safe ? 301 : 308)
+    res.headers.set('cache-control', 'private, max-age=300')
+    // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+    if (crmFeedPath(internalPath(host, req.nextUrl.pathname)))
+      res.headers.set('access-control-allow-origin', '*')
     return res
   }
   const url = req.nextUrl.clone()

@@ -292,7 +292,8 @@ which domains are ours:
 **TLS (no Caddyfile edit):** Caddy gets the `SITE_HOST` certificate at start; every other host (`www.`, `app.`,
 `admin.`, `{slug}.`, the extra domains, spa custom domains) gets one **on demand** on its first visit, approved by
 `/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing and renamed spa slugs, custom
-domains that are pending, verifying or active; anything else is refused). `/_status/` is served on `SITE_HOST` and
+domains that are pending, verifying or active of spas not cancelled, and the www twin of an active custom domain
+while it points at the droplet — it 301s to the connected hostname; anything else is refused). `/_status/` is served on `SITE_HOST` and
 on the droplet's own `<ip>.sslip.io`.
 
 ### Move to spamanagement.co

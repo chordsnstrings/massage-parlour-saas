@@ -1,7 +1,7 @@
 import type { Translator } from '@spa/core/i18n'
 import { domainOrders, domains, withTenant } from '@spa/db'
 import {
-  cloudflareConfig,
+  customDomainTlsAutomatic,
   type DnsRecord,
   type DomainRow,
   dnsRecordsFor,
@@ -48,7 +48,7 @@ export default async function DomainsPage({ params }: { params: Promise<{ tenant
   const custom = rows[0] ?? null
   const freeUrl = canonicalUrls().site(slug)
   const customPrimary = custom?.status === 'active' && custom.isPrimary
-  const sslAuto = cloudflareConfig() !== null
+  const sslAuto = customDomainTlsAutomatic()
 
   return (
     <>

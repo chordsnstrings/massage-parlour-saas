@@ -10,6 +10,7 @@ import {
   pathRoutedAddress,
   platformOnlyPath,
   temporarySitePath,
+  wwwPair,
 } from '../src'
 
 // The move from path routing (sslip.io, ROUTING=path) to host routing on spamanagement.co: old addresses on any platform
@@ -223,6 +224,14 @@ describe('temporary site address → own domain', () => {
     )
     const odd = new URL(ownDomainUrl('www.pilot.ae', '//evil.example/x', '?a=@evil.example'))
     expect(odd.host).toBe('www.pilot.ae')
+  })
+
+  it('pairs a custom domain with its www twin (the other half redirects to the connected one)', () => {
+    expect(wwwPair('berelaxmassage.com')).toBe('www.berelaxmassage.com')
+    expect(wwwPair('WWW.BeRelaxMassage.com')).toBe('berelaxmassage.com')
+    expect(wwwPair('www.spa.co.ae')).toBe('spa.co.ae')
+    expect(wwwPair('www.ae')).toBeNull()
+    expect(wwwPair('localhost')).toBeNull()
   })
 
   it('knows the platform-only endpoints a custom domain never answers', () => {

@@ -171,8 +171,9 @@ Reception → "Walk-in" → service → "next in rotation" therapist + free room
 
 **Custom domain**
 Tenant enters `www.theirspa.ae` → UI shows `CNAME www → customers.spamanagement.co`
-+ ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
-(many .ae registrars lack CNAME flattening). Caddy issues certificates on demand (Cloudflare for SaaS is optional code, unused),
++ ownership TXT → background job polls → active → becomes primary; a bare domain may instead use an A record equal
+to customers.spamanagement.co's address (cPanel can't CNAME the apex), and the www/apex twin of an active domain
+gets a certificate and 301s to it (2026-10-16, §14.8 "Custom domain go-live fix"); else registrar forwarding. Caddy issues certificates on demand (Cloudflare for SaaS is optional code, unused),
 asking `/api/domains/allowed` first; in path-routing mode any non-platform host is served as `/domain/{host}`.
 
 **Buy a domain (Namecheap)**
@@ -1513,6 +1514,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (done in
     PR #55): the Daily close line reads "Cash in (sales + tips − refunds − drawer expenses)"; the PDF header shows the
     branch name only when it differs from the spa name.
+- **Custom domain go-live fix (owner task 2026-10-16, berelaxmassage.com for BE RELAX):** the domain stayed "Pending":
+  the first check got `DNS ESERVFAIL`, then "couldn't find the TXT record" although public DNS had it. Cause: the checks
+  used the server's resolver (Docker → the droplet's provider), which had cached "no such record" from a check made
+  before the record existed (the zone's SOA allows 86400 s of negative caching); Google DNS also still served the old
+  apex A (148.251.64.158) and the old "no TXT" answer that day. www.berelaxmassage.com failed TLS: the Caddy ask
+  endpoint only knew the registered hostname. Fixed (services `verificationDns`, CODEMAP "Custom domain checks"):
+  every lookup asks the zone's own nameservers + 1.1.1.1 + 8.8.8.8 directly (any answer counts; a TXT is missing once
+  the zone's nameservers say so); SERVFAIL, ENOTFOUND and timeouts are always "try again" (owner): only a wrong answer
+  confirmed by the zone's own nameservers ends automatic checks after 7 days or takes an active domain down; routing = CNAME to `CF_CNAME_TARGET` **or** A/AAAA equal to its addresses (cPanel can't CNAME an apex);
+  the www twin of an active custom domain gets a certificate and 301s (GET/HEAD; 308 otherwise) to the connected
+  hostname; `CUSTOM_DOMAIN_TLS=on-demand` (deploy/droplet/compose.yml) makes the spa Domains page show SSL as on
+  (Caddy issues every custom-domain certificate on first visit; the old note waited for Cloudflare for SaaS).
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
