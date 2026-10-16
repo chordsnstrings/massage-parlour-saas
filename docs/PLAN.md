@@ -1514,7 +1514,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (done in
     PR #55): the Daily close line reads "Cash in (sales + tips − refunds − drawer expenses)"; the PDF header shows the
     branch name only when it differs from the spa name.
-- **Custom domain go-live fix (owner task 2026-10-16, berelaxmassage.com for BE RELAX):** the domain stayed "Pending":
+- **Custom domain go-live fix (owner task 2026-10-16, berelaxmassage.com for BE RELAX) — ✅ live 2026-10-16 23:54 Dubai,
+  PR #57 (www.berelaxmassage.com 301 → berelaxmassage.com over HTTPS, temporary address 301s to it):** the domain stayed "Pending":
   the first check got `DNS ESERVFAIL`, then "couldn't find the TXT record" although public DNS had it. Cause: the checks
   used the server's resolver (Docker → the droplet's provider), which had cached "no such record" from a check made
   before the record existed (the zone's SOA allows 86400 s of negative caching); Google DNS also still served the old
