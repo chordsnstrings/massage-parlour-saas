@@ -122,6 +122,19 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
      `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
      for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
+   - Custom domain checks (services `domains.ts`; 2026-10-16, PLAN §14.8 "Custom domain go-live fix"): `evaluateDomain`
+     = TXT `_spamanagement.{host}` (chunks joined + trimmed, contains the token) → routing (CNAME to `cnameTarget()` =
+     `CF_CNAME_TARGET`, or A/AAAA equal to the target's addresses) → Cloudflare for SaaS when configured. DNS =
+     `verificationDns()`: the zone's own nameservers (NS via the public resolvers, up to 4 IPv4) + `VERIFY_RESOLVERS`
+     (1.1.1.1, 8.8.8.8) each asked directly, never the container's resolver (negative caching); `askAll`: any answer
+     wins (merged), "missing" (ENODATA/ENOTFOUND) only when all agree — for TXT the zone's nameservers decide — else
+     the error code = "try again later" (`state: 'error'`: never counts towards `GIVE_UP_AFTER_MS`, never takes an
+     active domain down; a failed lookup of our own target is an error, not "wrong"). Worker `verify-custom-domains`
+     (10 min; due rules `isDomainCheckDue`), "Check now" = `checkDomain` with a 30 s cooldown (no DNS cache in the app).
+     www twin (core `wwwPair`): proxy.ts 301s (GET/HEAD; 308 others) `www.{domain}` ↔ `{domain}` to the active
+     connected hostname (`wwwTwinTarget`, own-domain.ts `state.active`, 30 s refresh); the ask endpoint allows the twin
+     only while the connected one is active. `customDomainTlsAutomatic()` = `CUSTOM_DOMAIN_TLS=on-demand` (droplet
+     Caddy) or Cloudflare for SaaS → the spa Domains page's SSL wording. e2e `own-domain-redirect.spec` (twin steps).
      `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). R26: `{site}/crm-enquiry` (POST/OPTIONS) is never
      redirected or platform-only (works on the temporary address and the own domain); a GET of `crm-data.json` 301s
      like a page, with `Access-Control-Allow-Origin: *` on the hop. Studio previews live on the console
@@ -1562,7 +1575,8 @@ i18n namespace `automations`.
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
   - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
-    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains + the www
+    twin of an active one), a 25 MB
     body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
     catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
     stops Caddy).

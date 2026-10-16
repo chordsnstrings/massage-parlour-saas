@@ -1,6 +1,6 @@
 // R20: once a spa's own domain is active and primary, its site lives only there — the temporary address
 // ({slug}.{platform root} / /s/{slug}) 301s to it (proxy.ts). Runs in the proxy, so it stays light (@spa/db + core).
-import { ownDomainUrl, temporarySitePath } from '@spa/core'
+import { ownDomainUrl, temporarySitePath, wwwPair } from '@spa/core'
 import { domains, platformDb, tenants } from '@spa/db'
 import { and, eq, ne } from 'drizzle-orm'
 import { currentSlugFor } from '@/server/slug-redirect'
@@ -9,29 +9,29 @@ import { currentSlugFor } from '@/server/slug-redirect'
 // run in another process); domain changes in the web app clear it at once (sites.ts invalidateSiteHost/forgetSiteTenants;
 // globalThis: the proxy and the server actions are separate bundles in one process).
 const TTL = 30_000
-type State = { map: Map<string, string>; at: number; gen: number; loading?: Promise<Map<string, string>> }
+type State = {
+  map: Map<string, string>
+  /** Every active custom hostname (primary or not): their www twins redirect to them. */
+  active: Set<string>
+  at: number
+  gen: number
+  loading?: Promise<Map<string, string>>
+}
 // sites.ts's host cache (`h:{hostname}` → tenant | 'missing'), read directly: importing sites.ts here would be a cycle.
 type HostCache = { peek(key: string): unknown; delete(key: string): boolean }
 const g = globalThis as unknown as { __spaOwnDomains?: State; __spaSiteHosts?: HostCache }
-if (!g.__spaOwnDomains) g.__spaOwnDomains = { map: new Map(), at: 0, gen: 0 }
+if (!g.__spaOwnDomains) g.__spaOwnDomains = { map: new Map(), active: new Set(), at: 0, gen: 0 }
 const state = g.__spaOwnDomains
 
 function load(): Promise<Map<string, string>> {
   const gen = state.gen
   const loading: Promise<Map<string, string>> = platformDb()
-    .select({ slug: tenants.slug, hostname: domains.hostname })
+    .select({ slug: tenants.slug, hostname: domains.hostname, isPrimary: domains.isPrimary })
     .from(domains)
     .innerJoin(tenants, eq(tenants.id, domains.tenantId))
-    .where(
-      and(
-        eq(domains.kind, 'custom'),
-        eq(domains.status, 'active'),
-        eq(domains.isPrimary, true),
-        ne(tenants.status, 'cancelled'),
-      ),
-    )
+    .where(and(eq(domains.kind, 'custom'), eq(domains.status, 'active'), ne(tenants.status, 'cancelled')))
     .then((rows) => {
-      const map = new Map(rows.map((r) => [r.slug, r.hostname]))
+      const map = new Map(rows.filter((r) => r.isPrimary).map((r) => [r.slug, r.hostname]))
       // Only redirect where the own domain serves: a 'missing' cached while it was pending (the worker activates domains
       // in another process and can't clear this cache) would 301 visitors to a 404 for up to 60 s.
       for (const hostname of map.values())
@@ -39,6 +39,7 @@ function load(): Promise<Map<string, string>> {
       // A change while this query ran: don't keep its (maybe older) answer for the next 30 s.
       if (gen === state.gen) {
         state.map = map
+        state.active = new Set(rows.map((r) => r.hostname))
         state.at = Date.now()
       }
       return map
@@ -78,4 +79,17 @@ export async function ownDomainTarget(internalPath: string, search: string): Pro
   // The own domain found no active domain after this map loaded (e.g. the worker deactivated it): serve here meanwhile.
   if (!hostname || g.__spaSiteHosts?.peek(`h:${hostname}`) === 'missing') return null
   return ownDomainUrl(hostname, site.path, search)
+}
+
+/**
+ * The www twin of an active custom domain (www.theirspa.ae for theirspa.ae, or the other way round) → the same path +
+ * query on the connected hostname, one hop; null when this host is itself connected or its twin isn't active. The twin
+ * gets its certificate from api/domains/allowed, so the redirect is served over HTTPS.
+ */
+export async function wwwTwinTarget(hostname: string, path: string, search: string): Promise<string | null> {
+  const twin = wwwPair(hostname)
+  if (!twin) return null
+  await ownDomains()
+  if (state.active.has(hostname) || !state.active.has(twin)) return null
+  return ownDomainUrl(twin, path, search)
 }

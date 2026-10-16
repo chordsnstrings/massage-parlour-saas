@@ -10,6 +10,7 @@ import {
   checkDomain,
   cloudflareConfig,
   cnameTarget,
+  customDomainTlsAutomatic,
   type DnsLookup,
   type DomainDeps,
   type DomainRow,
@@ -18,9 +19,13 @@ import {
   forceDomainStatus,
   isDomainCheckDue,
   normaliseHostname,
+  type RawResolver,
+  type ResolverFactory,
   removeDomain,
   setPrimaryDomain,
   tenantDomainRun,
+  VERIFY_RESOLVERS,
+  verificationDns,
 } from '../src'
 
 const ROOT = 'spamanagement.ae'
@@ -37,6 +42,7 @@ type Answers = {
   txt?: Record<string, string[][] | string>
   cname?: Record<string, string[] | string>
   a?: Record<string, string[] | string>
+  aaaa?: Record<string, string[] | string>
 }
 function fakeDns(answers: Answers): DnsLookup {
   const pick = <T>(table: Record<string, T | string> | undefined, name: string): Promise<T> => {
@@ -49,6 +55,7 @@ function fakeDns(answers: Answers): DnsLookup {
     txt: (n) => pick(answers.txt, n),
     cname: (n) => pick(answers.cname, n),
     a: (n) => pick(answers.a, n),
+    ...(answers.aaaa ? { aaaa: (n: string) => pick<string[]>(answers.aaaa, n) } : {}),
   }
 }
 
@@ -376,6 +383,204 @@ describe('evaluateDomain state machine', () => {
     const b = await evaluateDomain(row({ status: 'failed', cfHostnameId: 'cf-1' }), deps(dns, blocked.cfg))
     expect(b.status).toBe('failed')
     expect(blocked.calls.map((c) => c.method)).toEqual(['GET'])
+  })
+})
+
+describe('domain checks seen from a real incident (berelaxmassage.com, 2026-10-16)', () => {
+  const apex = (over: Partial<DomainRow> = {}) => row({ hostname: 'berelaxmassage.com', ...over })
+  const txt = { '_spamanagement.berelaxmassage.com': [[TOKEN]] }
+
+  it('accepts a bare domain whose A record is the target’s address (cPanel can’t CNAME the apex)', async () => {
+    const p = await evaluateDomain(
+      apex(),
+      deps(
+        fakeDns({
+          txt,
+          cname: { 'berelaxmassage.com': 'ENODATA' },
+          a: { 'berelaxmassage.com': ['134.209.145.162'], [TARGET]: ['134.209.145.162'] },
+        }),
+      ),
+    )
+    expect(p).toMatchObject({ status: 'active', lastError: null })
+  })
+
+  it('accepts a CNAME to the target (trailing dot) and a www CNAME to an apex that points at us', async () => {
+    const cname = await evaluateDomain(
+      row(),
+      deps(fakeDns({ txt: txtOk, cname: { 'www.serenity.ae': [`${TARGET}.`] } })),
+    )
+    expect(cname.status).toBe('active')
+    const viaApex = await evaluateDomain(
+      row({ hostname: 'www.berelaxmassage.com' }),
+      deps(
+        fakeDns({
+          txt: { '_spamanagement.www.berelaxmassage.com': [[TOKEN]] },
+          cname: { 'www.berelaxmassage.com': ['berelaxmassage.com.'] },
+          a: { 'www.berelaxmassage.com': ['134.209.145.162'], [TARGET]: ['134.209.145.162'] },
+        }),
+      ),
+    )
+    expect(viaApex.status).toBe('active')
+  })
+
+  it('accepts IPv6 (AAAA) records equal to the target’s', async () => {
+    const p = await evaluateDomain(
+      apex(),
+      deps(
+        fakeDns({
+          txt,
+          cname: { 'berelaxmassage.com': 'ENODATA' },
+          a: { 'berelaxmassage.com': 'ENODATA', [TARGET]: ['134.209.145.162'] },
+          aaaa: { 'berelaxmassage.com': ['2a03:b0c0:3:d0::1'], [TARGET]: ['2A03:B0C0:3:D0::1'] },
+        }),
+      ),
+    )
+    expect(p.status).toBe('active')
+  })
+
+  it('an A record elsewhere is "wrong" with both fixes named; a failed target lookup is only "try again"', async () => {
+    const wrong = await evaluateDomain(
+      apex(),
+      deps(fakeDns({ txt, a: { 'berelaxmassage.com': ['148.251.64.158'], [TARGET]: ['134.209.145.162'] } })),
+    )
+    expect(wrong).toMatchObject({ status: 'verifying' })
+    expect(wrong.lastError).toMatch(
+      /points at 148\.251\.64\.158: it needs a CNAME to .* or an A record to 134\.209/,
+    )
+    // An active domain is never taken down because our own target's lookup failed.
+    const active = apex({ status: 'active', verifiedAt: now })
+    const hiccup = await evaluateDomain(
+      active,
+      deps(fakeDns({ a: { 'berelaxmassage.com': ['134.209.145.162'], [TARGET]: 'ESERVFAIL' } })),
+    )
+    expect(hiccup).toMatchObject({ status: 'active', lastError: expect.stringMatching(/ESERVFAIL/) })
+  })
+
+  it('SERVFAIL and timeouts never count towards giving up: a week-old automatic check stays pending', async () => {
+    const old = apex({ createdAt: new Date(now.getTime() - 8 * 86_400_000) })
+    const servfail = await evaluateDomain(
+      old,
+      deps(fakeDns({ txt: { '_spamanagement.berelaxmassage.com': 'ESERVFAIL' } })),
+      { automatic: true },
+    )
+    expect(servfail).toMatchObject({ status: 'pending', lastError: expect.stringMatching(/DNS ESERVFAIL/) })
+    const routing = await evaluateDomain(
+      old,
+      deps(
+        fakeDns({
+          txt,
+          cname: { 'berelaxmassage.com': 'ETIMEOUT' },
+          a: { 'berelaxmassage.com': 'ETIMEOUT' },
+        }),
+      ),
+      { automatic: true },
+    )
+    expect(routing).toMatchObject({ status: 'verifying', lastError: expect.stringMatching(/ETIMEOUT/) })
+    // A definitive "no record" for a week still gives up (as before); "Check now" retries it.
+    const missing = await evaluateDomain(old, deps(fakeDns({})), { automatic: true })
+    expect(missing.status).toBe('failed')
+  })
+})
+
+describe('verificationDns: the zone’s own nameservers + 1.1.1.1 + 8.8.8.8, never the server’s resolver', () => {
+  const AUTH = '162.55.84.110'
+  const BOTH = VERIFY_RESOLVERS.join(',')
+  type Table = Record<string, unknown[] | string>
+  /** Answers per server set (`'1.1.1.1'`, the zone's nameserver IPs, or both public ones for the NS lookup). */
+  const resolvers = (by: Record<string, Table>, asked: string[] = []): ResolverFactory => {
+    return (servers) => {
+      const key = servers.join(',')
+      const answer = (type: string) => async (name: string) => {
+        asked.push(`${key} ${type} ${name}`)
+        const v = by[key]?.[`${type} ${name}`]
+        if (v === undefined) throw dnsError('ENOTFOUND')
+        if (typeof v === 'string') throw dnsError(v)
+        return v
+      }
+      return {
+        resolveTxt: answer('TXT'),
+        resolveCname: answer('CNAME'),
+        resolve4: answer('A'),
+        resolve6: answer('AAAA'),
+        resolveNs: answer('NS'),
+      } as unknown as RawResolver
+    }
+  }
+  const zone: Table = { 'NS berelaxmassage.com': ['ns100.hd-g.net'], 'A ns100.hd-g.net': [AUTH] }
+  const NAME = '_spamanagement.berelaxmassage.com'
+
+  it('finds a TXT record a public resolver still caches as missing (the stale "no such record" of this incident)', async () => {
+    const asked: string[] = []
+    const dns = verificationDns({
+      resolvers: resolvers(
+        {
+          [BOTH]: zone,
+          [AUTH]: { [`TXT ${NAME}`]: [['spamanagement-verify=', '3ffd507202a6317ecb27283d']] },
+          '1.1.1.1': { [`TXT ${NAME}`]: [['spamanagement-verify=3ffd507202a6317ecb27283d']] },
+          '8.8.8.8': { [`TXT ${NAME}`]: 'ENOTFOUND' },
+        },
+        asked,
+      ),
+    })
+    // Chunked or not, every answer joins to the same value (checkOwnership joins and trims each record).
+    const values = new Set((await dns.txt(NAME)).map((c) => c.join('').trim()))
+    expect([...values]).toEqual(['spamanagement-verify=3ffd507202a6317ecb27283d'])
+    // Only the zone's nameservers and the two public resolvers were asked (the NS lookup goes to the public pair).
+    const allowed = new Set([AUTH, '1.1.1.1', '8.8.8.8', BOTH])
+    for (const q of asked) expect(allowed.has(q.split(' ')[0] ?? ''), q).toBe(true)
+    expect(asked.some((q) => q.startsWith(`${AUTH} TXT`))).toBe(true)
+  })
+
+  it('the zone’s own nameservers alone are enough when every public cache is stale', async () => {
+    const dns = verificationDns({
+      resolvers: resolvers({ [BOTH]: zone, [AUTH]: { [`TXT ${NAME}`]: [['spamanagement-verify=abc']] } }),
+    })
+    expect(await dns.txt(NAME)).toEqual([['spamanagement-verify=abc']])
+  })
+
+  it('SERVFAIL / timeouts everywhere → that error (try again later), not "missing"', async () => {
+    const dns = verificationDns({
+      resolvers: resolvers({
+        [BOTH]: zone,
+        [AUTH]: { [`TXT ${NAME}`]: 'ESERVFAIL' },
+        '1.1.1.1': { [`TXT ${NAME}`]: 'ETIMEOUT' },
+        '8.8.8.8': { [`TXT ${NAME}`]: 'ENOTFOUND' },
+      }),
+    })
+    await expect(dns.txt(NAME)).rejects.toMatchObject({ code: 'ESERVFAIL' })
+  })
+
+  it('a TXT is missing once the zone’s nameservers say so; A/AAAA only when every source agrees', async () => {
+    const dns = verificationDns({
+      resolvers: resolvers({
+        [BOTH]: zone,
+        [AUTH]: { [`TXT ${NAME}`]: 'ENOTFOUND', 'A www.berelaxmassage.com': 'ENODATA' },
+        '1.1.1.1': { [`TXT ${NAME}`]: 'ETIMEOUT', 'A www.berelaxmassage.com': 'ETIMEOUT' },
+        '8.8.8.8': { [`TXT ${NAME}`]: 'ETIMEOUT', 'A www.berelaxmassage.com': 'ETIMEOUT' },
+      }),
+    })
+    await expect(dns.txt(NAME)).rejects.toMatchObject({ code: 'ENOTFOUND' })
+    // (A CNAME out of the zone leaves its nameservers without the final A: not definitive on their own.)
+    await expect(dns.a('www.berelaxmassage.com')).rejects.toMatchObject({ code: 'ETIMEOUT' })
+  })
+
+  it('merges answers (an old cached A next to the new one) and still asks the public resolvers without NS', async () => {
+    const dns = verificationDns({
+      resolvers: resolvers({
+        [BOTH]: { 'NS berelaxmassage.com': 'ESERVFAIL' },
+        '1.1.1.1': { 'A berelaxmassage.com': ['134.209.145.162'] },
+        '8.8.8.8': { 'A berelaxmassage.com': ['148.251.64.158'] },
+      }),
+    })
+    expect((await dns.a('berelaxmassage.com')).sort()).toEqual(['134.209.145.162', '148.251.64.158'])
+  })
+})
+
+describe('customDomainTlsAutomatic', () => {
+  it('is on with on-demand certificates (the droplet’s Caddy) or Cloudflare for SaaS, off otherwise', () => {
+    expect(customDomainTlsAutomatic({ CUSTOM_DOMAIN_TLS: 'on-demand' })).toBe(true)
+    expect(customDomainTlsAutomatic({ CF_API_TOKEN: 't', CF_ZONE_ID: 'z' })).toBe(true)
+    expect(customDomainTlsAutomatic({})).toBe(false)
   })
 })
 

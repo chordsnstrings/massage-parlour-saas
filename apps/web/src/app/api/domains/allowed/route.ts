@@ -1,4 +1,4 @@
-import { matchRoot } from '@spa/core'
+import { matchRoot, wwwPair } from '@spa/core'
 import { domains, platformDb, tenants } from '@spa/db'
 import { and, eq, inArray } from 'drizzle-orm'
 import { PATH_ROUTING } from '@/lib/paths'
@@ -31,23 +31,25 @@ async function isPlatformHost(hostname: string) {
 
 /**
  * Caddy on-demand TLS "ask" endpoint: a certificate may only be issued for hostnames that serve something — a spa's
- * custom domain (not yet removed), or a host on one of the platform domains (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS), so a
- * new platform domain needs only DNS and config. Called by Caddy over the internal network: GET ?domain=<hostname>.
+ * custom domain (not yet removed), the www twin of an active one (it redirects to it, proxy.ts), or a host on one of the
+ * platform domains (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS), so a new platform domain needs only DNS and config. Called by
+ * Caddy over the internal network: GET ?domain=<hostname>.
  */
 export async function GET(req: Request) {
   const hostname = new URL(req.url).searchParams.get('domain')?.trim().toLowerCase().replace(/\.$/, '')
   if (!hostname || hostname.length > 253) return new Response(null, { status: 400 })
   if (await isPlatformHost(hostname)) return new Response(null, { status: 200 })
-  const [row] = await platformDb()
-    .select({ id: domains.id })
+  const twin = wwwPair(hostname)
+  const rows = await platformDb()
+    .select({ hostname: domains.hostname, status: domains.status })
     .from(domains)
     .where(
       and(
-        eq(domains.hostname, hostname),
+        inArray(domains.hostname, twin ? [hostname, twin] : [hostname]),
         eq(domains.kind, 'custom'),
         inArray(domains.status, ['pending', 'verifying', 'active']),
       ),
     )
-    .limit(1)
-  return new Response(null, { status: row ? 200 : 404 })
+  const allowed = rows.some((r) => r.hostname === hostname || r.status === 'active')
+  return new Response(null, { status: allowed ? 200 : 404 })
 }

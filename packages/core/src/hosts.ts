@@ -194,6 +194,19 @@ export function ownDomainUrl(hostname: string, path: string, search = ''): strin
   return `https://${hostname}${path || '/'}${search}`
 }
 
+/**
+ * The other half of a custom domain's www pair (www.theirspa.ae ↔ theirspa.ae), or null when there is none: a spa
+ * connects one of the two, and the other redirects to it (proxy.ts) with its own certificate (api/domains/allowed).
+ */
+export function wwwPair(hostname: string): string | null {
+  const h = hostname.toLowerCase()
+  if (h.startsWith('www.')) {
+    const bare = h.slice(4)
+    return bare.includes('.') ? bare : null
+  }
+  return h.includes('.') ? `www.${h}` : null
+}
+
 /** Platform-only endpoints (sign-in API, OAuth discovery, MCP, integrations) a spa's custom domain never answers (R20). */
 export function platformOnlyPath(pathname: string): boolean {
   return /^\/(?:api\/(?:auth|mcp|integrations)|\.well-known)(?:\/|$)/.test(pathname)

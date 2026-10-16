@@ -48,7 +48,13 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
   const ops = await adminCtx.newPage()
   const { slug } = await signUpOwner(owner, { spa: 'Own Domain Spa' })
   const HOST = `www.${slug}.test`
+  const TWIN = `${slug}.test` // the other half of the www pair: redirects to HOST once it is active
   const own = (path: string) => `https://${HOST}${path}`
+  /** Caddy's on-demand TLS question: may this hostname get a certificate? */
+  const ask = async (hostname: string) =>
+    (
+      await ops.request.get(`${base}/api/domains/allowed?domain=${hostname}`, { failOnStatusCode: false })
+    ).status()
   const db = testDb()
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
   await signInPlatformAdmin(ops)
@@ -85,6 +91,10 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     await served(home(slug))
     await served(`${site(slug)}/book?src=qr`)
     await served(`http://${HOST}/`, 404)
+    // Its www twin neither redirects nor gets a certificate while the domain is not connected.
+    await served(`http://${TWIN}/`, 404)
+    expect(await ask(HOST)).toBe(200)
+    expect(await ask(TWIN)).toBe(404)
   })
 
   await test.step('activated by the worker’s check: the 301 starts only once the own domain serves', async () => {
@@ -126,6 +136,10 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     }
     const res = await served(`http://${HOST}/`)
     expect(await res.text()).toContain('Own Domain Spa')
+    // The www twin (here the bare domain) → the connected hostname, path + query kept, and it gets a certificate.
+    await redirects(`http://${TWIN}/book?src=qr`, own('/book?src=qr'))
+    await redirects(`http://${TWIN}/`, own('/'), 'HEAD')
+    expect(await ask(TWIN)).toBe(200)
   })
 
   await test.step('R26: crm-enquiry works on the own domain and the temporary address (never redirected)', async () => {
