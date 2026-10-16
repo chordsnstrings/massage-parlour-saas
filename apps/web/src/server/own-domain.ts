@@ -88,7 +88,8 @@ export async function ownDomainTarget(internalPath: string, search: string): Pro
  */
 export async function wwwTwinTarget(hostname: string, path: string, search: string): Promise<string | null> {
   const twin = wwwPair(hostname)
-  if (!twin) return null
+  // Only the real pair (x ↔ www.x): www.www.x is no twin of www.x.
+  if (!twin || wwwPair(twin) !== hostname) return null
   await ownDomains()
   if (state.active.has(hostname) || !state.active.has(twin)) return null
   return ownDomainUrl(twin, path, search)

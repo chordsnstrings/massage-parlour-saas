@@ -13,7 +13,7 @@ const BUDGET_MS = 8 * 60_000
 
 /**
  * Every 10 minutes: re-check custom domains that are due — pending/verifying ones every 10 minutes for the
- * first day, then hourly (automatic checks give up after 7 days), active ones once a day. The due list is a
+ * first day, then hourly, daily after 7 days (missing records never fail a domain), active ones once a day. The due list is a
  * platform lookup; each check then reads and writes the domain inside withTenant().
  */
 export async function verifyCustomDomains(
@@ -29,6 +29,7 @@ export async function verifyCustomDomains(
       status: domains.status,
       createdAt: domains.createdAt,
       checkedAt: domains.checkedAt,
+      verifiedAt: domains.verifiedAt,
     })
     .from(domains)
     .innerJoin(tenants, eq(tenants.id, domains.tenantId))

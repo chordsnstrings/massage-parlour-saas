@@ -1,6 +1,7 @@
 import { matchRoot, wwwPair } from '@spa/core'
 import { domains, platformDb, tenants } from '@spa/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { hostnameReachesUs } from '@spa/services'
+import { and, eq, inArray, ne } from 'drizzle-orm'
 import { PATH_ROUTING } from '@/lib/paths'
 import { platformRoots } from '@/server/origin'
 import { currentSlugFor } from '@/server/slug-redirect'
@@ -31,25 +32,31 @@ async function isPlatformHost(hostname: string) {
 
 /**
  * Caddy on-demand TLS "ask" endpoint: a certificate may only be issued for hostnames that serve something — a spa's
- * custom domain (not yet removed), the www twin of an active one (it redirects to it, proxy.ts), or a host on one of the
- * platform domains (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS), so a new platform domain needs only DNS and config. Called by
- * Caddy over the internal network: GET ?domain=<hostname>.
+ * custom domain (not yet removed, spa not cancelled), the www twin of an active one while it points at us (it
+ * redirects to it, proxy.ts; checked first so no certificate order starts for a name parked elsewhere), or a host on
+ * one of the platform domains (ROOT_DOMAIN + EXTRA_ROOT_DOMAINS), so a new platform domain needs only DNS and config.
+ * Called by Caddy over the internal network: GET ?domain=<hostname>.
  */
 export async function GET(req: Request) {
   const hostname = new URL(req.url).searchParams.get('domain')?.trim().toLowerCase().replace(/\.$/, '')
   if (!hostname || hostname.length > 253) return new Response(null, { status: 400 })
   if (await isPlatformHost(hostname)) return new Response(null, { status: 200 })
-  const twin = wwwPair(hostname)
+  const pair = wwwPair(hostname)
+  // Only the real pair (x ↔ www.x): www.www.x is no twin of www.x.
+  const twin = pair && wwwPair(pair) === hostname ? pair : null
   const rows = await platformDb()
     .select({ hostname: domains.hostname, status: domains.status })
     .from(domains)
+    .innerJoin(tenants, eq(tenants.id, domains.tenantId))
     .where(
       and(
         inArray(domains.hostname, twin ? [hostname, twin] : [hostname]),
         eq(domains.kind, 'custom'),
         inArray(domains.status, ['pending', 'verifying', 'active']),
+        ne(tenants.status, 'cancelled'),
       ),
     )
-  const allowed = rows.some((r) => r.hostname === hostname || r.status === 'active')
+  if (rows.some((r) => r.hostname === hostname)) return new Response(null, { status: 200 })
+  const allowed = rows.some((r) => r.status === 'active') && (await hostnameReachesUs(hostname))
   return new Response(null, { status: allowed ? 200 : 404 })
 }

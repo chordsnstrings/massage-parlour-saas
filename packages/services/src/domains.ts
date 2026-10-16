@@ -10,7 +10,7 @@
 // left by a cancelled spa — is released when another spa adds the same hostname (support can also remove it).
 import { randomBytes } from 'node:crypto'
 import { Resolver } from 'node:dns/promises'
-import { isIP } from 'node:net'
+import { BlockList, isIP, isIPv4 } from 'node:net'
 import { domainToASCII } from 'node:url'
 import { parseRoots, trimTrailing } from '@spa/core'
 import { type Db, type DbOrTx, domains, platformDb, tenants, withTenant } from '@spa/db'
@@ -171,88 +171,178 @@ export type DnsLookup = {
   aaaa?: (name: string) => Promise<string[]>
 }
 
+/**
+ * What verificationDns attaches to an answer (the array, or the thrown "missing" error): `partial` = a source failed
+ * (timeout, SERVFAIL…), so a negative result may be incomplete; `zone` = what the zone's own nameservers said (their
+ * values, or 'missing'), absent when they couldn't be asked or didn't answer. Plain answers (test fakes) carry none and
+ * count as complete answers straight from the zone.
+ */
+export type DnsMeta = { partial: boolean; zone?: unknown[] | 'missing' }
+type WithMeta = { meta?: DnsMeta }
+
 /** Public resolvers asked directly for verification lookups (never the host's own resolver chain). */
 export const VERIFY_RESOLVERS: readonly string[] = ['1.1.1.1', '8.8.8.8']
+/** Each source gets this long; a late one counts as a timeout (the others' answers still count). */
+export const DNS_SOURCE_DEADLINE_MS = 4000
 
 /** The resolver calls verificationDns needs: node:dns/promises' Resolver, or a fake in tests. */
 export type RawResolver = Pick<
   Resolver,
   'resolveTxt' | 'resolveCname' | 'resolve4' | 'resolve6' | 'resolveNs'
 >
-export type ResolverFactory = (servers: readonly string[]) => RawResolver
+/** One resolver per server: a multi-server c-ares channel never moves on after a SERVFAIL/REFUSED. */
+export type ResolverFactory = (server: string, opts: { tries: number }) => RawResolver
 
 const MISSING_CODES = new Set(['ENODATA', 'ENOTFOUND'])
+/** No authoritative nameservers could be found: that source simply isn't there (not a failure). */
+const NO_AUTHORITY = 'ENOAUTHORITY'
 const dnsCode = (error: unknown) => (error as { code?: string }).code ?? 'ERROR'
-const dnsFailure = (code: string) => Object.assign(new Error(`DNS ${code}`), { code })
+const dnsFailure = (code: string, meta?: DnsMeta) =>
+  Object.assign(new Error(`DNS ${code}`), { code }, meta ? { meta } : {})
+const unique = <T>(values: T[]) => [...new Map(values.map((v) => [JSON.stringify(v), v])).values()]
+
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(dnsFailure('ETIMEOUT')), ms)
+  })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
 
 type Ask<T> = { authoritative: boolean; run: () => Promise<T[]> }
 /**
- * Asks every source at once. Any answer wins (all answers merged). "Missing" (ENODATA/ENOTFOUND) needs every source
- * to say so — or, with `authorityDecides`, the zone's own nameservers. Anything else (SERVFAIL, timeouts, refused) is
- * thrown as that error code, which the checks treat as "try again later".
+ * Asks every source at once and merges: any answer wins. "Missing" (ENODATA/ENOTFOUND) only when no source failed —
+ * or, with `authorityDecides`, when the zone's own nameservers say so. Otherwise the first failure's code is thrown,
+ * which the checks treat as "try again later". The result (or the "missing" error) carries DnsMeta.
  */
-export async function askAll<T>(asks: Ask<T>[], opts: { authorityDecides?: boolean } = {}): Promise<T[]> {
+export async function askAll<T>(
+  asks: Ask<T>[],
+  opts: { authorityDecides?: boolean } = {},
+): Promise<T[] & WithMeta> {
   const settled = await Promise.allSettled(asks.map((a) => a.run()))
-  const found = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
-  if (found.length) {
-    const seen = new Map(found.map((v) => [JSON.stringify(v), v]))
-    return [...seen.values()]
-  }
-  const codes = settled.map((r) => (r.status === 'fulfilled' ? 'ENODATA' : dnsCode(r.reason)))
-  const missing = codes.map((c) => MISSING_CODES.has(c))
-  const decided =
-    missing.length > 0 &&
-    (missing.every(Boolean) || (opts.authorityDecides && asks.some((a, i) => a.authoritative && missing[i])))
-  if (decided) throw dnsFailure(codes.find((c) => MISSING_CODES.has(c)) ?? 'ENODATA')
-  throw dnsFailure(codes.find((c) => !MISSING_CODES.has(c)) ?? 'ERROR')
+  const found: T[] = []
+  const missingCodes: string[] = []
+  const errorCodes: string[] = []
+  let zone: DnsMeta['zone']
+  settled.forEach((r, i) => {
+    const authoritative = asks[i]!.authoritative
+    if (r.status === 'fulfilled' && r.value.length) {
+      found.push(...r.value)
+      if (authoritative) zone = r.value
+      return
+    }
+    // c-ares answers a name that is only a CNAME with an empty list: no record of this type.
+    const code = r.status === 'fulfilled' ? 'ENODATA' : dnsCode(r.reason)
+    if (code === NO_AUTHORITY) return
+    if (MISSING_CODES.has(code)) {
+      missingCodes.push(code)
+      if (authoritative && zone === undefined) zone = 'missing'
+    } else errorCodes.push(code)
+  })
+  const meta: DnsMeta = { partial: errorCodes.length > 0, ...(zone === undefined ? {} : { zone }) }
+  if (found.length) return Object.assign(unique(found), { meta })
+  if (missingCodes.length && (!meta.partial || (opts.authorityDecides && zone === 'missing')))
+    throw dnsFailure(missingCodes[0]!, meta)
+  throw dnsFailure(errorCodes[0] ?? 'ERROR', meta)
 }
+
+/** Answers from the zone's nameservers (one source): any answer wins; "missing" once one of them says so. */
+async function askZone<T>(
+  resolvers: RawResolver[],
+  call: (r: RawResolver) => Promise<T[]>,
+  deadlineMs: number,
+): Promise<T[]> {
+  if (!resolvers.length) throw dnsFailure(NO_AUTHORITY)
+  const settled = await Promise.allSettled(resolvers.map((r) => withDeadline(call(r), deadlineMs)))
+  const found = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+  if (found.length) return unique(found)
+  const codes = settled.map((r) => (r.status === 'fulfilled' ? 'ENODATA' : dnsCode(r.reason)))
+  throw dnsFailure(codes.find((c) => MISSING_CODES.has(c)) ?? codes[0] ?? 'ERROR')
+}
+
+// Nameserver addresses we never send queries to (a spa's own zone picks its NS records): private, loopback,
+// link-local, shared, documentation, benchmarking, multicast and reserved ranges.
+const NOT_PUBLIC = new BlockList()
+for (const [net, bits] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+] as const)
+  NOT_PUBLIC.addSubnet(net, bits, 'ipv4')
+export const isPublicIpv4 = (ip: string) => isIPv4(ip) && !NOT_PUBLIC.check(ip, 'ipv4')
 
 const nodeResolvers =
   (timeoutMs: number): ResolverFactory =>
-  (servers) => {
-    const r = new Resolver({ timeout: timeoutMs, tries: 2 })
-    r.setServers([...servers])
+  (server, { tries }) => {
+    const r = new Resolver({ timeout: timeoutMs, tries })
+    r.setServers([server])
     return r
   }
 
 /**
  * DNS for the domain checks. Each lookup asks, in parallel, the zone's own nameservers (no cache at all) and the public
- * resolvers (VERIFY_RESOLVERS, one at a time), never the server's resolver (Docker → the droplet's provider): after a
+ * resolvers (VERIFY_RESOLVERS, each on its own), never the server's resolver (Docker → the droplet's provider): after a
  * check that ran before the owner added a record, a resolver may keep "no such record" for as long as the zone's SOA
  * says (often a day), and public caches can still hold an old A record. A record any source returns counts; a TXT is
- * "missing" once the zone's own nameservers say so (everything else only when every source agrees).
+ * "missing" once the zone's own nameservers say so (everything else only when no source failed). Every source has
+ * DNS_SOURCE_DEADLINE_MS; nameserver addresses outside public IPv4 are never asked.
  */
 export function verificationDns(
-  opts: { servers?: readonly string[]; timeoutMs?: number; resolvers?: ResolverFactory } = {},
+  opts: {
+    servers?: readonly string[]
+    timeoutMs?: number
+    deadlineMs?: number
+    resolvers?: ResolverFactory
+  } = {},
 ): DnsLookup {
-  const make = opts.resolvers ?? nodeResolvers(opts.timeoutMs ?? 2500)
-  const servers = opts.servers ?? VERIFY_RESOLVERS
-  const publics = servers.map((s) => make([s]))
-  const anyPublic = make(servers)
-  const zones = new Map<string, Promise<RawResolver | null>>()
-  /** The zone's nameservers (IPv4, found through the public resolvers), once per zone; null when not found. */
-  const authority = (name: string) => {
-    const zone = apexOf(name)
+  const make = opts.resolvers ?? nodeResolvers(opts.timeoutMs ?? 1500)
+  const deadline = opts.deadlineMs ?? DNS_SOURCE_DEADLINE_MS
+  const publics = (opts.servers ?? VERIFY_RESOLVERS).map((s) => make(s, { tries: 2 }))
+  const askPublic = <T>(call: (r: RawResolver) => Promise<T[]>) =>
+    askAll<T>(publics.map((r) => ({ authoritative: false, run: () => withDeadline(call(r), deadline) })))
+  // Found nameservers are kept for this lookup instance (one check, or one worker run); a failed search is retried.
+  const zones = new Map<string, Promise<RawResolver[]>>()
+  const authority = (zone: string) => {
     let found = zones.get(zone)
     if (!found) {
       found = (async () => {
-        const ns = await anyPublic.resolveNs(zone)
-        const ips = await Promise.allSettled(ns.slice(0, 4).map((host) => anyPublic.resolve4(host)))
-        const list = [...new Set(ips.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])))].slice(0, 4)
-        return list.length ? make(list) : null
-      })().catch(() => null)
+        const ns = await askPublic((r) => r.resolveNs(zone))
+        const ips = await Promise.allSettled(ns.slice(0, 4).map((host) => askPublic((r) => r.resolve4(host))))
+        const list = unique(ips.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])))
+        return list
+          .filter(isPublicIpv4)
+          .slice(0, 4)
+          .map((ip) => make(ip, { tries: 1 }))
+      })().catch(() => [])
+      found.then((list) => {
+        if (!list.length) zones.delete(zone)
+      })
       zones.set(zone, found)
     }
     return found
   }
   const query =
     <T>(call: (r: RawResolver, name: string) => Promise<T[]>, authorityDecides = false) =>
-    async (name: string) => {
-      const auth = await authority(name)
+    (name: string) => {
+      const zone = authority(apexOf(name))
       return askAll<T>(
         [
-          ...(auth ? [{ authoritative: true, run: () => call(auth, name) }] : []),
-          ...publics.map((r) => ({ authoritative: false, run: () => call(r, name) })),
+          { authoritative: true, run: async () => askZone(await zone, (r) => call(r, name), deadline) },
+          ...publics.map((r) => ({
+            authoritative: false,
+            run: () => withDeadline(call(r, name), deadline),
+          })),
         ],
         { authorityDecides },
       )
@@ -286,17 +376,31 @@ export function domainDeps(over: Partial<DomainDeps> = {}): DomainDeps {
   }
 }
 
-type Lookup<T> = { ok: true; value: T } | { ok: false; missing: boolean; code: string }
+type Lookup<T> =
+  | { ok: true; value: T; meta?: DnsMeta }
+  | { ok: false; missing: boolean; code: string; meta?: DnsMeta }
 async function lookup<T>(fn: () => Promise<T>): Promise<Lookup<T>> {
   try {
-    return { ok: true, value: await fn() }
+    const value = await fn()
+    return { ok: true, value, meta: (value as WithMeta).meta }
   } catch (error) {
-    const code = (error as { code?: string }).code ?? 'ERROR'
-    return { ok: false, missing: code === 'ENODATA' || code === 'ENOTFOUND', code }
+    const code = dnsCode(error)
+    return { ok: false, missing: MISSING_CODES.has(code), code, meta: (error as WithMeta).meta }
   }
 }
+/** The zone's own nameservers answered this lookup (a plain answer without DnsMeta counts as theirs). */
+const fromZone = (l: Lookup<unknown>) => (l.ok || l.missing) && (!l.meta || l.meta.zone !== undefined)
+/** Addresses the zone's own nameservers gave (plain answers without DnsMeta are theirs). */
+const zoneAddresses = (l: Lookup<string[]>) =>
+  !l.ok ? [] : !l.meta ? l.value : Array.isArray(l.meta.zone) ? (l.meta.zone as string[]) : []
 
-type Outcome = { state: 'ok' } | { state: 'missing' | 'wrong' | 'error'; message: string }
+/**
+ * `confirmed`: the zone's own nameservers gave this negative answer (a record that is missing or points elsewhere),
+ * not only caches. Only a confirmed "wrong" may end automatic checks or take a live site down.
+ */
+type Outcome =
+  | { state: 'ok' }
+  | { state: 'missing' | 'wrong' | 'error'; message: string; confirmed?: boolean }
 const norm = (h: string) => h.toLowerCase().replace(/\.$/, '')
 const dnsTrouble = (name: string, code: string) =>
   `We couldn't look up ${name} right now (DNS ${code}). We'll try again automatically.`
@@ -304,21 +408,29 @@ const dnsTrouble = (name: string, code: string) =>
 async function checkOwnership(dns: DnsLookup, hostname: string, token: string | null): Promise<Outcome> {
   const name = `${TXT_LABEL}.${hostname}`
   if (!token)
-    return { state: 'wrong', message: 'This domain has no verification code — remove it and add it again.' }
+    return {
+      state: 'wrong',
+      confirmed: true,
+      message: 'This domain has no verification code — remove it and add it again.',
+    }
   const r = await lookup(() => dns.txt(name))
   if (!r.ok)
     return r.missing
-      ? { state: 'missing', message: `We couldn't find the TXT record ${name} yet.` }
+      ? { state: 'missing', confirmed: fromZone(r), message: `We couldn't find the TXT record ${name} yet.` }
       : { state: 'error', message: dnsTrouble(name, r.code) }
   const values = r.value.map((chunks) => chunks.join('').trim())
-  return values.some((v) => v.includes(token))
-    ? { state: 'ok' }
-    : { state: 'wrong', message: `The TXT record ${name} exists but doesn't contain your verification code.` }
+  if (values.some((v) => v.includes(token))) return { state: 'ok' }
+  return {
+    state: 'wrong',
+    confirmed: fromZone(r),
+    message: `The TXT record ${name} exists but doesn't contain your verification code.`,
+  }
 }
 
 const noIpv6 = () => Promise.reject(Object.assign(new Error('ENODATA'), { code: 'ENODATA' }))
 const addresses = (...found: Lookup<string[]>[]) => found.flatMap((l) => (l.ok ? l.value : [])).map(norm)
 
+/** Does the hostname reach us: a CNAME to the target, or A/AAAA records equal to the target's addresses? */
 async function checkRouting(dns: DnsLookup, hostname: string, target: string): Promise<Outcome> {
   const v6 = dns.aaaa ?? noIpv6
   const [cname, a, aaaa, targetA, targetAaaa] = await Promise.all([
@@ -333,23 +445,56 @@ async function checkRouting(dns: DnsLookup, hostname: string, target: string): P
   // target's addresses, set by hand or by CNAME flattening / ALIAS records.
   const theirs = addresses(a, aaaa)
   const ours = new Set(addresses(targetA, targetAaaa))
-  if (theirs.some((ip) => ours.has(ip))) return { state: 'ok' }
+  if (theirs.some((ip) => ours.has(ip))) {
+    // Every address the zone itself lists must be ours: a leftover AAAA (cPanel adds one for its server) would send
+    // IPv6 visitors — and the certificate check, which prefers IPv6 — to the old host.
+    const stray = unique([...zoneAddresses(a), ...zoneAddresses(aaaa)].map(norm)).filter(
+      (ip) => !ours.has(ip),
+    )
+    if (!stray.length) return { state: 'ok' }
+    return {
+      state: 'wrong',
+      confirmed: true,
+      message: `${hostname} also points at ${stray.join(', ')}. Delete ${stray.length > 1 ? 'those records' : 'that record'} so every visitor reaches your site.`,
+    }
+  }
   // Without the target's own addresses nothing can be compared: try again later (never "wrong" on a lookup hiccup).
   if (theirs.length && ours.size === 0)
     return { state: 'error', message: dnsTrouble(target, targetA.ok ? 'ENODATA' : targetA.code) }
+  // No match. A failed lookup means the answer may be incomplete: try again later.
+  const failed = [cname, a].find((l) => !l.ok && !l.missing)
+  if (failed && !failed.ok) return { state: 'error', message: dnsTrouble(hostname, failed.code) }
+  const confirmed = fromZone(cname) && fromZone(a)
+  const either = `a CNAME to ${target}${ours.size ? ` or an A record to ${[...ours].join(', ')}` : ''}`
   if (cname.ok)
     return {
       state: 'wrong',
+      confirmed,
       message: `${hostname} points at ${norm(cname.value[0] ?? '')} instead of ${target}.`,
     }
   if (theirs.length)
     return {
       state: 'wrong',
-      message: `${hostname} points at ${theirs.join(', ')}: it needs a CNAME to ${target} or an A record to ${[...ours].join(', ')}.`,
+      confirmed,
+      message: `${hostname} points at ${theirs.join(', ')}: it needs ${either}.`,
     }
-  if (!cname.missing) return { state: 'error', message: dnsTrouble(hostname, cname.code) }
-  if (!a.ok && !a.missing) return { state: 'error', message: dnsTrouble(hostname, a.code) }
-  return { state: 'missing', message: `We couldn't find the CNAME record for ${hostname} yet.` }
+  return {
+    state: 'missing',
+    confirmed,
+    message: `We couldn't find the CNAME record for ${hostname} yet (${either}).`,
+  }
+}
+
+/**
+ * Whether a hostname reaches us right now (CNAME to the target, or A/AAAA equal to its addresses). The Caddy ask
+ * endpoint uses it before allowing a certificate for a custom domain's www twin, so no certificate order is started
+ * for a name that points elsewhere.
+ */
+export async function hostnameReachesUs(
+  hostname: string,
+  deps: Pick<DomainDeps, 'dns' | 'env'> = domainDeps(),
+): Promise<boolean> {
+  return (await checkRouting(deps.dns, hostname, cnameTarget(deps.env))).state === 'ok'
 }
 
 const cfWaiting = (cf: CfHostname) =>
@@ -370,7 +515,10 @@ export type DomainPatch = Partial<
 
 /**
  * Runs the DNS (+ Cloudflare) checks for one domain and returns the new state. No database access.
- * `automatic` checks (the worker) give up on a never-verified domain after GIVE_UP_AFTER_MS; manual ones
+ * A record that can't be found yet, or a lookup that failed (SERVFAIL, timeout, "not found"), is always "try again
+ * later" (owner 2026-10-16): never a permanent fail. `automatic` checks (the worker) give up on a never-verified
+ * domain after GIVE_UP_AFTER_MS only on a confirmed wrong answer (a record the zone itself points elsewhere) or a
+ * Cloudflare hostname still not ready; a live domain is taken down only on a confirmed wrong answer. Manual checks
  * never give up and ask Cloudflare to retry a hostname it gave up on.
  */
 export async function evaluateDomain(
@@ -382,9 +530,8 @@ export async function evaluateDomain(
   const wasActive = row.status === 'active'
   const stale =
     opts.automatic && !row.verifiedAt && now.getTime() - row.createdAt.getTime() > GIVE_UP_AFTER_MS
-  // A lookup that failed (SERVFAIL, timeout, Cloudflare API trouble) never counts towards giving up: only answers do.
-  const notYet = (status: 'pending' | 'verifying', message: string, transient = false): DomainPatch =>
-    stale && !transient
+  const notYet = (status: 'pending' | 'verifying', message: string, final: boolean): DomainPatch =>
+    stale && final
       ? {
           status: 'failed',
           lastError: `${message} We stopped checking automatically after 7 days — fix the records and press Check now.`,
@@ -395,7 +542,10 @@ export async function evaluateDomain(
   if (!wasActive && !row.verifiedAt) {
     const own = await checkOwnership(deps.dns, row.hostname, row.verificationToken)
     if (own.state !== 'ok')
-      return { checkedAt: now, ...notYet('pending', own.message, own.state === 'error') }
+      return {
+        checkedAt: now,
+        ...notYet('pending', own.message, own.state === 'wrong' && own.confirmed === true),
+      }
   }
 
   // 2. Routing — the hostname must reach us.
@@ -421,10 +571,12 @@ export async function evaluateDomain(
   // An active Cloudflare hostname passed HTTP validation, so traffic reaches us even when the records are
   // hidden behind the customer's own Cloudflare proxy (orange cloud answers with their anycast IPs).
   if (cf?.active) routing = { state: 'ok' }
+  const confirmedWrong = routing.state === 'wrong' && routing.confirmed === true
 
   if (wasActive) {
-    // Only definitive answers take a live site down; timeouts and API hiccups just leave a note.
-    if (routing.state === 'missing' || routing.state === 'wrong')
+    // Only a confirmed wrong answer takes a live site down; missing records, lookup failures and API hiccups just
+    // leave a note (checked again tomorrow).
+    if (confirmedWrong && routing.state !== 'ok')
       return {
         ...base,
         status: 'failed',
@@ -432,21 +584,24 @@ export async function evaluateDomain(
       }
     if (cf?.failed) return { ...base, status: 'failed', lastError: cfFailed(cf) }
     const note =
-      routing.state === 'error' ? routing.message : (cfError ?? (cf && !cf.active ? cfWaiting(cf) : null))
+      routing.state !== 'ok' ? routing.message : (cfError ?? (cf && !cf.active ? cfWaiting(cf) : null))
     return { ...base, status: 'active', lastError: note }
   }
 
   if (cf?.failed) return { ...base, status: 'failed', lastError: cfFailed(cf) }
   const problem =
     routing.state !== 'ok' ? routing.message : (cfError ?? (cf && !cf.active ? cfWaiting(cf) : null))
-  const transient = routing.state === 'error' || (routing.state === 'ok' && cfError !== null)
-  if (problem) return { ...base, ...notYet('verifying', problem, transient) }
+  const final = routing.state === 'ok' ? cfError === null : confirmedWrong
+  if (problem) return { ...base, ...notYet('verifying', problem, final) }
   return { ...base, status: 'active', lastError: null, verifiedAt: row.verifiedAt ?? now }
 }
 
-/** Should the worker check this domain now? New domains every 10 min, hourly after a day, active ones daily. */
+/**
+ * Should the worker check this domain now? New domains every 10 min, hourly after a day, daily once a never-verified
+ * domain is past the give-up time (missing records never fail it), active ones daily, failed ones never.
+ */
 export function isDomainCheckDue(
-  row: Pick<DomainRow, 'status' | 'createdAt' | 'checkedAt'>,
+  row: Pick<DomainRow, 'status' | 'createdAt' | 'checkedAt'> & { verifiedAt?: Date | null },
   now = new Date(),
 ) {
   if (row.status === 'failed') return false
@@ -454,8 +609,9 @@ export function isDomainCheckDue(
   const since = now.getTime() - row.checkedAt.getTime()
   const slack = MIN // the job itself runs every 10 minutes
   if (row.status === 'active') return since >= DAY - slack
-  const young = now.getTime() - row.createdAt.getTime() < DAY
-  return since >= (young ? 10 * MIN : HOUR) - slack
+  const age = now.getTime() - row.createdAt.getTime()
+  if (!row.verifiedAt && age > GIVE_UP_AFTER_MS) return since >= DAY - slack
+  return since >= (age < DAY ? 10 * MIN : HOUR) - slack
 }
 
 // ---------------------------------------------------------------------------

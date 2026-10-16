@@ -136,10 +136,12 @@ test('R20: the temporary address redirects to the spa’s own domain once it is 
     }
     const res = await served(`http://${HOST}/`)
     expect(await res.text()).toContain('Own Domain Spa')
-    // The www twin (here the bare domain) → the connected hostname, path + query kept, and it gets a certificate.
+    // The www twin (here the bare domain) → the connected hostname, path + query kept. Its certificate is allowed only
+    // while it points at us (no certificate order for a name parked elsewhere): a .test name points nowhere.
     await redirects(`http://${TWIN}/book?src=qr`, own('/book?src=qr'))
     await redirects(`http://${TWIN}/`, own('/'), 'HEAD')
-    expect(await ask(TWIN)).toBe(200)
+    expect(await ask(TWIN)).toBe(404)
+    expect(await ask(`www.${HOST}`)).toBe(404) // www.www.x is no twin of www.x
   })
 
   await test.step('R26: crm-enquiry works on the own domain and the temporary address (never redirected)', async () => {
