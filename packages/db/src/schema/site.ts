@@ -238,6 +238,33 @@ export const sitePosts = pgTable(
   ],
 )
 
+/** R33: how a redirect was added (console "Add redirect" or "Import list"). */
+export const siteRedirectSource = pgEnum('site_redirect_source', ['manual', 'import'])
+
+/**
+ * R33 (owner 2026-10-17): the spa's own redirects — an address of its old website (Google still lists it, now a 404)
+ * → a page of the site, a 301 on every public address of the spa (web proxy, server/site-redirect.ts). Managed by
+ * super-admins in the console (Websites → spa → Redirects). `from_path` is decoded, lower-case, no trailing slash;
+ * `from_query` = sorted source params ('' = any query); `to_path` = an on-site path [?query][#hash] (core
+ * redirects.ts). A live page or published post at `from_path` wins (path-only rules); chains are flattened on save.
+ */
+export const siteRedirects = pgTable(
+  'site_redirects',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fromPath: text('from_path').notNull(),
+    fromQuery: text('from_query').notNull().default(''),
+    toPath: text('to_path').notNull(),
+    source: siteRedirectSource('source').notNull().default('manual'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [unique('site_redirects_from').on(t.tenantId, t.fromPath, t.fromQuery), ...tenantPolicies()],
+)
+
 /**
  * F15 enquiry form: leads sent from the spa's website (EnquiryForm block). The spa works them in the dashboard
  * (Inbox → Enquiries) and answers by WhatsApp click-to-send; nothing is ever emailed to the sender.

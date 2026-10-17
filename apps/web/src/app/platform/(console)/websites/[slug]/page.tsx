@@ -39,6 +39,7 @@ import {
   SeoCheckCard,
   TemplatesCard,
 } from './cards'
+import { RedirectsCard } from './redirects-card'
 import { SeedOffer } from './seed-sheet'
 import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
@@ -290,6 +291,7 @@ export default async function SpaWebsitePage({
                   />
                 )}
                 <BlogCard slug={slug} posts={posts} canEdit={canEdit} />
+                <RedirectsCard slug={slug} tenantId={ctx.tenant.id} />
                 {glance && (
                   <Card>
                     <CardHeader
