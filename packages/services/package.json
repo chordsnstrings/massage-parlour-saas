@@ -19,9 +19,9 @@
     "@spa/core": "workspace:*",
     "@spa/db": "workspace:*",
     "aws4fetch": "^1.0.20",
-    "drizzle-orm": "0.45.3",
+    "drizzle-orm": "0.45.4",
     "exceljs": "^4.4.0",
-    "pdfkit": "0.17.2",
+    "pdfkit": "0.20.2",
     "sharp": "^0.35.5",
     "web-push": "^3.6.7",
     "zod": "^4.6.5"
