@@ -10,6 +10,7 @@ import {
   htmlDesignPictures,
   htmlPictureAdjustments,
   isSharePhoto,
+  prefillCrmMarkup,
 } from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
@@ -145,6 +146,9 @@ async function render(req: Request, head: boolean) {
     htmlDesignLinks(meta),
     { top: true, texts: content?.texts, locale },
   )
+  // Contract §12 (R33, owner "Option A"): crawlers that run no JavaScript read the spa's address, phones, hours and
+  // links where visitors see them (`contract.prefill` designs only; after the page texts, whose ids are positional).
+  html = prefillCrmMarkup(html)
   const seo = await siteSeo(tenant)
   const ctx = { locale, data: loaded.data }
   const title = tr(data.root?.props?.title, ctx) || tenant.name

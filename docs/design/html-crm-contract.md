@@ -177,6 +177,12 @@ redirected; a GET of `crm-data.json` on the temporary address 301s to the own do
   (the l10n texts and `locale: 'ar'`). The design sets `<html lang>` itself; no RTL (owner D3).
 - Path routing limit: a relative `crm-data.json` from `/s/{slug}` (no trailing slash) resolves to `/s/crm-data.json`
   and misses; production uses host routing, and the literal form (recommended) needs no fetch.
+- Server prefill (§12, R33): a design whose literal declares `contract.prefill: 1` gets, on its live page only, the
+  JSON range **plus** the prefilled empty `data-crm` slots, the `[crm-whatsapp-link]` / `[crm-maps-link]` /
+  `[crm-booking-url]` hrefs and the server-rendered `phones` / `whatsapp-phones` / `hours-rows` rows (only where the
+  parser keeps them as written, §12); once the design's script has run the DOM is identical to the unprefilled page
+  (it writes the same values and re-renders the lists).
+  Without the declaration (every existing design, the e2e byte fixtures) the guarantees above hold unchanged.
 
 ## 8. Authoring a contract design
 
@@ -352,3 +358,73 @@ one locale needs would cost every other locale's page its bytes there, so the pl
   `planCrmInlineFonts`, `applyCrmInlineFonts`, `crmInlineFontsKey`, the loader's `loadFont`), html-content.ts
   (`inline_fonts` reserved), web `server/crm-inline.ts` (`crmInlinePlan` → `{inline, fonts}`, `pageCrmInline` →
   `SiteMeta.crmFonts`), `designWithCrm(…, {inline, fonts})`; e2e `html-crm.spec.ts` (contract.inline test).
+
+## 12. Server prefill (crawler text) (R33, owner "Option A" 2026-10-17)
+
+Search crawlers that run no JavaScript must find the spa's real address, phone numbers, opening hours and links in
+the raw HTML of a contract design, exactly where visitors see them, while the page looks and behaves exactly the same
+once the design's script has run (R24: invisible changes only). JSON-LD (`seo.ts`) already carries telephone,
+address, map and opening hours; this puts the same facts into the visible slots.
+
+- **Declare** (v2 only, in the literal): `"contract": {"version": 2, …, "prefill": 1}`. `1` = the prefill format of
+  the BE RELAX v2.x binder (`buildModel` / `renderLists` / `bindValues` / `bindUi`; first file: `be-relax-v2.8.html`).
+  Any other value, v1, endpoint-only designs, no contract, framed designs (phone fixes) → the very same string, as is
+  any data the prefill cannot read (it throws where the script would, e.g. a lone surrogate in the WhatsApp message).
+- **Where:** the live page `/site-html` only (`prefillCrmMarkup` in `@spa/core` html-crm-prefill.ts), on the final
+  html right after `htmlDesignDocument` (page texts first: their `txt-n` ids are positional) and before the head tags.
+  It reads the final served literal (design + l10n + content + CRM merged, placeholders filled, `locale` set): what the
+  script reads. Never the Studio editor, console previews or share links.
+- **Values** (ported exactly from the v2 binder; `T(path)` = the literal's string at `path`, else `''`):
+  - `spa-name` = `spa.name`; `booking-label` = `booking.label` || `ui.cta.book_now`; `year` = the Dubai year (the
+    script then writes the visitor's); `address` = line 1, line 2, city, country joined `, `; `address-line1`.
+  - `city`: English `location.city`; Arabic page: an Arabic `spa.area_label`, else the Arabic name of a known UAE city
+    (abu dhabi, dubai, sharjah, ajman, umm al quwain, ras al khaimah, fujairah, al ain; lower case, runs of space / `.`
+    / `-` as one space), else `location.city`.
+  - Hours: days grouped by `open-close` (or closed) in mon…sun order; a group reads `ui.hours.days.{d}` or
+    `{from} – {to}`; a time is `{h12}[:{mm}] {ui.hours.am|pm}` with `h % 24` (`24:00` → 12 AM); a row's time is
+    `ui.hours.closed` or `{open} – {close}`. `operating-days` = `ui.hours.every_day` when all 7 days open, else the open
+    groups joined `, `; `working-hours` = the one open time, else `ui.hours.vary`, or `ui.hours.closed_all`.
+  - `phone` = the `data-phone`-indexed phone's `display`, else the first number that takes calls but not WhatsApp,
+    else the first that takes calls, else the first.
+  - Links: WhatsApp `https://wa.me/{digits}[?text={encodeURIComponent(message)}]` (`contact.whatsapp_number`, else the
+    first WhatsApp phone; Arabic-Indic digits read as 0-9; message = `contact.whatsapp_message` with `{spa}` = short name,
+    `{service}` = ''); maps = `location.maps_url`, else a Google Maps search of the address; booking = `booking.url` ||
+    `#book`.
+- **Text slots:** an element with `data-crm` = one of the keys above whose content is whitespace only up to its own
+  end tag, outside `<template>`, `data-crm-list` subtrees and raw-text elements, not a table or select part (`table`,
+  `thead`, `tbody`, `tfoot`, `tr`, `colgroup`, `select`, `datalist`, `optgroup`: the parser moves text out of tables),
+  without its own `data-crm-text` / `data-crm-tpl`, with a non-empty value, and not inside a part a `data-if` hides
+  once the script runs (a list name with no items, an empty value). Never `live-status` (it changes with the time),
+  never the text of `<a data-crm="address">`. An `address` right after a `data-crm="address-line1"` sibling gets the
+  rest after line 1 (empty → left empty). Text is escaped (`& < >`, and `{` as `&#123;`).
+- **Link tokens** (an `<a>` with a quoted `href` whose value is exactly the token, same skip rules):
+  `[crm-whatsapp-link]` without `data-phone` → the WhatsApp link when there is a number (else the token stays: the
+  script hides it); `[crm-maps-link]` → the maps link when it is a plain http(s) link; `[crm-booking-url]` → only an
+  in-page `#` target (an http(s) url needs the script's `target` / `rel`); `[crm-booking-endpoint]` never. The script
+  finds these links by the token, so a replaced one is simply no longer rewired: the value is the one it would set.
+- **List rows:** for `data-crm-list="phones" | "whatsapp-phones" | "hours-rows"` containers whose only children are
+  whitespace and one direct `<template>` (not hidden by `data-if`, items present) and where the parser keeps the rows
+  as written (they stand in the document, where its closing rules reach them; in the template they were walled off):
+  the container is a `div`, `section`, `article`, `aside`, `nav`, `main`, `header`, `footer`, `ul` or `ol` outside
+  `<svg>`, with no open `p`, `a`, `button`, `li`, `dd`, `dt`, `h1`–`h6`, table, select or MathML element above it; the
+  template holds nothing that acts or loads in the document (`script`, `style`, `link` / `meta` / `base` / `title`,
+  frames, `object` / `embed`, `img` / `picture` / `video` / `audio`, forms, tables, selects, ruby text, MathML, custom
+  elements, `on*` handlers, `autofocus`; in `<svg>`: `script`, `style`, `image`, `foreignObject`, HTML tags, markup in
+  `title` / `desc`) and no nesting the parser closes early (a block in a `<p>`, `<li>` in `<li>`, `<dd>` / `<dt>` in
+  either, a heading in a heading, `<a>` in `<a>`, `<button>` in `<button>`). Otherwise the list keeps its template
+  only (the script renders it as before). Each item's template elements (top-level text is left out: the script
+  removes element children only) are rendered right before the `<template>`: `[phone-index]` / `[service-id]` /
+  `[staff-id]` attribute values, `data-if` (adds or drops `hidden`), `data-item`, `data-item-alt` (on `img` / `input`
+  / `area`, where `el.alt` reflects), `data-item-copy` (→ `data-copy`), then `data-crm` texts (same rules),
+  `data-crm-aria`, the token links (a per-phone `[crm-whatsapp-link]` → that number's link, none → `hidden`; booking
+  with `target="_blank" rel="noopener"` for http(s)) and `data-crm-text` / `data-crm-tpl` / `data-crm-attr` from the
+  literal (localised rows on `/ar`). `data-item-src` is not rendered. Items: phones `{…phone, index, kind}` (kind =
+  label or mobile / landline, then calls & WhatsApp, lower case), `whatsapp-phones` = the WhatsApp ones, `hours-rows`
+  `{days, time}`. `renderLists` removes these rows and renders them again, so the final DOM is the script's.
+- **Not covered:** services, staff, experience and other lists; `data-crm-text` outside list rows (the /ar raw HTML
+  keeps the design's English interface words, `<html lang>` untouched); `data-crm-src` pictures. In browsers without
+  `<link rel=expect blocking=render>` (Safari, Firefox) a prefilled slot shows its text instead of the loading
+  skeleton until the script runs.
+- **A new prefill design version** must keep these formats (or declare another format number, which the platform then
+  needs to learn). Proof: core `html-crm-prefill.test.ts` (formats, skips, rows, identity) and e2e
+  `html-prefill.spec.ts` (raw text EN + AR, rendered = raw for every slot, link and row, no-JS page).
