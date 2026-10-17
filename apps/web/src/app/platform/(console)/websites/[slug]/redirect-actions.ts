@@ -31,6 +31,9 @@ const auditAs = (ctx: MemberContext, action: string, entityId: string | undefine
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 const shown = (from: string, query: string) => (query ? `${from}?${query}` : from)
+/** Other rows the save's chain shortening moved (X → B now X → C), for the audit. */
+const movedSample = (r: SiteRedirectSave) =>
+  r.moved.slice(0, 20).map((m) => ({ from: shown(m.from, m.query), before: m.before, after: m.after }))
 
 /** The spa's public addresses a pasted full URL may be on: its domains (+ www twins) and its free address. */
 async function addressesOf(tx: Tx, slug: string): Promise<string[]> {
@@ -109,6 +112,8 @@ export async function addRedirectAction(
     from: shown(row.from, row.query),
     to: row.to,
     updated: outcome.updated > 0,
+    flattened: outcome.flattened,
+    moved: movedSample(outcome),
   })
   revalidateStudio(slug)
   return ok(
@@ -126,7 +131,11 @@ export type RedirectPreview = {
 }
 
 const importSchema = z.object({
-  lines: z.string().trim().min(1, 'Paste at least one address').max(400_000, 'That list is too long'),
+  // Not trimmed: the import numbers the lines as pasted.
+  lines: z
+    .string()
+    .max(400_000, 'That list is too long')
+    .refine((s) => s.trim() !== '', 'Paste at least one address'),
   intent: z.enum(['preview', 'add']),
 })
 
@@ -206,6 +215,7 @@ export async function importRedirectsAction(
     flattened: saved.flattened,
     skipped,
     sample: saved.saved.slice(0, 20).map((s) => ({ from: shown(s.from, s.query), to: s.to })),
+    moved: movedSample(saved),
   })
   revalidateStudio(slug)
   return ok(summary(saved, skipped))

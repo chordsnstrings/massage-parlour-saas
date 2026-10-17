@@ -5,6 +5,8 @@ import {
   normalizeRedirectTarget,
   parseRedirectLines,
   REDIRECT_IMPORT_MAX_LINES,
+  type RedirectRule,
+  redirectChainEnd,
   redirectLoops,
   redirectPathProblem,
   redirectRequestKey,
@@ -59,6 +61,18 @@ describe('old address (source)', () => {
     expect(src('/a/../b')).toHaveProperty('error')
   })
 
+  it('a literal %, ? or # in an old path survives a round trip through its link (the service re-checks it)', () => {
+    for (const [encoded, path] of [
+      ['/50%25-Off', '/50%-off'],
+      ['/old%3Fpage', '/old?page'],
+      ['/a%23b', '/a#b'],
+    ] as const) {
+      expect(src(encoded)).toEqual({ path, query: '' })
+      expect(src(redirectSourceHref(path, ''))).toEqual({ path, query: '' })
+    }
+    expect(src(redirectSourceHref('/old?page', 'p=1'))).toEqual({ path: '/old?page', query: 'p=1' })
+  })
+
   it('refuses the site’s own routes and what the proxy never sees', () => {
     for (const path of [
       '/book',
@@ -91,6 +105,13 @@ describe('old address (source)', () => {
     expect(src('https://theirspa.ae/')).toHaveProperty('error')
     expect(src('https://theirspa.ae/?p=12')).toEqual({ path: '/', query: 'p=12' })
     expect(src('/shop?b=2&a=Ab&&=x')).toEqual({ path: '/shop', query: 'a=Ab&b=2' })
+  })
+
+  it('the site’s own ?lang= and _rsc are never part of an old address (a path rule keeps them)', () => {
+    expect(src('https://theirspa.ae/About/?lang=ar')).toEqual({ path: '/about', query: '' })
+    expect(src('/shop?lang=ar&cat=1&_rsc=x1')).toEqual({ path: '/shop', query: 'cat=1' })
+    expect(src('/?p=12&lang=ar')).toEqual({ path: '/', query: 'p=12' })
+    expect(src('/?lang=ar')).toHaveProperty('error')
   })
 })
 
@@ -166,6 +187,32 @@ describe('matching', () => {
     expect(redirectLoops({ from: '/old', query: 'p=1', to: '/old?p=1&x=2' })).toBe(true)
     expect(redirectLoops({ from: '/old', query: 'p=1', to: '/old' })).toBe(false)
     expect(matchRedirect([{ from: '/old', query: '', to: '/old' }], '/old', '')).toBeNull()
+  })
+
+  it('follows chains hop by hop and finds loops, also through carried params', () => {
+    const at = (rules: RedirectRule[]) => (key: string) => rules.filter((r) => r.from === key)
+    const chain = at([
+      { from: '/a', query: '', to: '/b' },
+      { from: '/b', query: '', to: '/c?x=1' },
+    ])
+    expect(redirectChainEnd(chain, '/a?gclid=1')).toBe('/c?x=1&gclid=1')
+    expect(redirectChainEnd(chain, '/none')).toBe('/none')
+    // `/a → /b` with `/b?x=1 → /a?x=1`: only a visitor bringing x=1 loops.
+    const carried = at([
+      { from: '/a', query: '', to: '/b' },
+      { from: '/b', query: 'x=1', to: '/a?x=1' },
+    ])
+    expect(redirectChainEnd(carried, '/a')).toBe('/b')
+    expect(redirectChainEnd(carried, '/a?x=1')).toBeNull()
+    // Consumed params end the chain: not a loop.
+    const consumed = at([
+      { from: '/a', query: '', to: '/b' },
+      { from: '/b', query: 'x=1', to: '/a' },
+    ])
+    expect(redirectChainEnd(consumed, '/a?x=1')).toBe('/b')
+    const long = at(Array.from({ length: 30 }, (_, i) => ({ from: `/p${i}`, query: '', to: `/p${i + 1}` })))
+    expect(redirectChainEnd(long, '/p0')).toBeNull()
+    expect(redirectChainEnd(long, '/p0', 40)).toBe('/p30')
   })
 
   it('links to the old address', () => {

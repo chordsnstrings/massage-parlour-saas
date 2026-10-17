@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
-import { auditLog, domains, pageVersions, sitePages, sites, tenants } from '@spa/db'
+import { auditLog, domains, pageVersions, sitePages, siteRedirects, sites, tenants } from '@spa/db'
 import { ensureSite, publishAll } from '@spa/services'
 import { and, eq, like } from 'drizzle-orm'
 import { admin, PATH, PORT, signInPlatformAdmin, signUpOwner, site, studioUrl, testDb } from './helpers'
@@ -93,22 +93,21 @@ test('R33: redirects send old addresses to the spa’s pages (301, every address
   await test.step('console: import a Search Console list (Preview shows the bad line, then Add)', async () => {
     await ops.getByRole('button', { name: 'Import list' }).click()
     const sheet = ops.getByRole('dialog')
-    await sheet
-      .getByLabel('Old addresses')
-      .fill(
-        [
-          'URL,Last crawled',
-          `${S}/Old-Services/,2026-10-01`,
-          `${homeQ('p=12')} /offers`,
-          'https://elsewhere.example/page,2026-09-30',
-          '/about-us',
-        ].join('\n'),
-      )
+    await sheet.getByLabel('Old addresses').fill(
+      [
+        '', // a blank first line: the errors still name the textarea's own line numbers
+        'URL,Last crawled',
+        `${S}/Old-Services/,2026-10-01`,
+        `${homeQ('p=12')} /offers`,
+        'https://elsewhere.example/page,2026-09-30',
+        '/about-us',
+      ].join('\n'),
+    )
     await sheet.getByRole('button', { name: 'Preview' }).click()
     const preview = sheet.getByTestId('redirect-preview')
     await expect(preview).toContainText('3 redirects to add or change, 1 line skipped')
     await expect(preview.getByTestId('redirect-errors')).toContainText(
-      'Line 4: elsewhere.example isn’t one of this spa’s addresses.',
+      'Line 5: elsewhere.example isn’t one of this spa’s addresses.',
     )
     await sheet.getByRole('button', { name: 'Add 3 redirects' }).click()
     await expect(ops.getByText('3 redirects added, 1 skipped')).toBeVisible()
@@ -148,6 +147,11 @@ test('R33: redirects send old addresses to the spa’s pages (301, every address
   })
 
   await test.step('a page published at an old address wins (console: inactive; saving it is refused)', async () => {
+    // A loop stored anyway (saving refuses them; a page hidden later can bring one back): the proxy never answers it.
+    await db.insert(siteRedirects).values([
+      { tenantId: tenant!.id, fromPath: '/loop-a', toPath: '/loop-b' },
+      { tenantId: tenant!.id, fromPath: '/loop-b', toPath: '/loop-a' },
+    ])
     const [s] = await db.select().from(sites).where(eq(sites.tenantId, tenant!.id))
     const [about] = await db
       .insert(sitePages)
@@ -167,6 +171,7 @@ test('R33: redirects send old addresses to the spa’s pages (301, every address
     const res = await served(`${S}/about-us`)
     expect(await res.text()).toContain('About us')
     await redirects(`${S}/gone-page`, `${S}/offers`)
+    await served(`${S}/loop-a`, 404)
   })
 
   const HOST = `${slug}.test`
@@ -198,7 +203,7 @@ test('R33: redirects send old addresses to the spa’s pages (301, every address
     await redirects(`http://${HOST}/old-services`, `http://${HOST}/`)
     ops.once('dialog', (d) => d.accept())
     await ops.getByRole('button', { name: 'Clear all' }).click()
-    await expect(ops.getByText('4 redirects deleted')).toBeVisible()
+    await expect(ops.getByText('6 redirects deleted')).toBeVisible()
     await served(`http://${HOST}/old-services`, 404)
     const actions = (
       await db

@@ -3,11 +3,12 @@
 // permission (studioGuard 'site.publish') + audit stay in the caller. Kept light (core, db, drizzle only): the proxy
 // imports `siteRedirectRules` through the `@spa/services/site-redirects` subpath, never the services barrel.
 import {
-  matchRedirect,
   normalizeRedirectSource,
   normalizeRedirectTarget,
   type RedirectRule,
+  redirectChainEnd,
   redirectLoops,
+  redirectSourceHref,
   redirectTargetKey,
 } from '@spa/core'
 import { type DbOrTx, pageVersions, sitePages, sitePosts, siteRedirects, sites, type Tx } from '@spa/db'
@@ -25,6 +26,8 @@ export type SiteRedirectSave = {
   updated: number
   /** Rows whose target was moved to the end of a chain (A → B → C stored as A → C), new or existing. */
   flattened: number
+  /** Existing rows outside this save whose target the flattening moved (X → B now X → C), for the audit. */
+  moved: { from: string; query: string; before: string; after: string }[]
   unchanged: number
   skipped: SiteRedirectSkip[]
   /** The rows of this save (a new row's id only once written, not on a dry run). */
@@ -63,6 +66,12 @@ async function livePaths(tx: Tx, tenantId: string): Promise<Set<string>> {
   ])
 }
 
+/**
+ * A live page or published post at the old address wins (`live` = livePaths): the redirect doesn't apply, with or
+ * without a ?query. Not the home page: it is always live, so its rules all have a query (WordPress `/?p=12`).
+ */
+const pageWins = (from: string, live: Set<string>) => from !== '/' && live.has(from)
+
 /** Targets that always answer: online booking and vouchers (pages and posts: `live`). */
 const targetLive = (to: string, live: Set<string>) => {
   const key = redirectTargetKey(to)
@@ -87,7 +96,7 @@ export async function listSiteRedirects(tx: Tx, tenantId: string): Promise<SiteR
   const live = await livePaths(tx, tenantId)
   return rows.map((r) => ({
     ...r,
-    inactive: !r.fromQuery && live.has(r.fromPath),
+    inactive: pageWins(r.fromPath, live),
     targetMissing: !targetLive(r.toPath, live),
   }))
 }
@@ -97,7 +106,10 @@ type Entry = RedirectRule & { id?: string; stored?: string; line?: number }
 /**
  * Adds or updates redirects (upsert on the old address; a new target replaces the old one), under the site lock so
  * concurrent saves can't build a loop. Refuses an old address a live page or published post uses (the page wins), a
- * redirect to itself, one that would close a loop, and new rows past MAX_SITE_REDIRECTS. Chains are flattened both ways:
+ * redirect to itself, one that would close a loop, and new rows past MAX_SITE_REDIRECTS. Loops are looked for as
+ * visitors would follow the hops — from every rule that can reach the new one, with only its own params and with every
+ * param any rule uses (carried over) — through all rules, also those a live page overrides now (it may be hidden
+ * later); the proxy also never answers a looping chain. Chains are flattened both ways:
  * a new A → B where B → C exists is stored as A → C, and a new B → C moves existing X → B rows to X → C. `dryRun` (the
  * import Preview) reports the same outcome without writing.
  */
@@ -113,11 +125,14 @@ export async function saveSiteRedirects(
   const live = await livePaths(tx, tenantId)
   const all = new Map<string, Entry>()
   const byPath = new Map<string, Map<string, Entry>>()
+  /** Every source param any rule uses (encoded `k=v`): a visitor may bring them all. */
+  const used = new Set<string>()
   const put = (e: Entry) => {
     const k = keyOf(e.from, e.query)
     all.set(k, e)
     if (!byPath.has(e.from)) byPath.set(e.from, new Map())
     byPath.get(e.from)!.set(k, e)
+    for (const p of e.query.split('&')) if (p) used.add(p)
   }
   const drop = (e: Entry) => {
     const k = keyOf(e.from, e.query)
@@ -126,34 +141,52 @@ export async function saveSiteRedirects(
   }
   for (const r of existing)
     put({ id: r.id, from: r.fromPath, query: r.fromQuery, to: r.toPath, stored: r.toPath })
-  // A path-only rule at a live page's address doesn't apply: chains never pass through it.
-  const active = (e: Entry) => Boolean(e.query) || !live.has(e.from)
-  /** Where `e` finally lands through the other redirects; null = back to an address of the chain (a loop). */
-  const resolve = (e: Entry): string | null => {
-    let to = e.to
-    const seen = new Set([keyOf(e.from, e.query)])
-    for (let hop = 0; hop < 100; hop++) {
-      const at = redirectTargetKey(to)
-      const hit = matchRedirect(
-        [...(byPath.get(at)?.values() ?? [])].filter(active),
-        at,
-        new URL(to, 'http://site.invalid').search,
-      )
-      if (!hit) return to
-      const k = keyOf(hit.rule.from, hit.rule.query)
-      if (seen.has(k)) return null
-      seen.add(k)
-      to = hit.to
-    }
-    return null
+  const allAt = (key: string) => [...(byPath.get(key)?.values() ?? [])]
+  // A rule at a live page's address doesn't apply now: the flattened chains never pass through it.
+  const active = (e: Entry) => !pageWins(e.from, live)
+  const activeAt = (key: string) => allAt(key).filter(active)
+  /** Where `e` finally lands through the redirects that apply now; null = a loop. */
+  const resolve = (e: Entry) => redirectChainEnd(activeAt, e.to, 100)
+  /** `e`'s old address comes back to itself (see above), through `at`'s rules. */
+  const loops = (e: Entry, at = allAt) => {
+    const href = redirectSourceHref(e.from, e.query)
+    const own = new Set(e.query.split('&'))
+    const extra = [...used].filter((p) => !own.has(p)).join('&')
+    return (
+      redirectChainEnd(at, href) === null ||
+      (extra !== '' && redirectChainEnd(at, `${href}${e.query ? '&' : '?'}${extra}`) === null)
+    )
   }
+  const targetKeys = new Map<string, string>()
+  const targetKey = (to: string) => {
+    const known = targetKeys.get(to)
+    if (known !== undefined) return known
+    const key = redirectTargetKey(to)
+    targetKeys.set(to, key)
+    return key
+  }
+  /** The rules whose chain can pass through `path` (by path alone): the ones a new rule there can change. */
+  const reaching = (path: string) => {
+    const found = new Set<Entry>()
+    const paths = [path]
+    for (let i = 0; i < paths.length; i++)
+      for (const e of all.values())
+        if (!found.has(e) && targetKey(e.to) === paths[i]) {
+          found.add(e)
+          if (!paths.includes(e.from)) paths.push(e.from)
+        }
+    return found
+  }
+  // Loops already stored (none unless saved before these checks) don't block other saves.
+  const looping = new Set([...all.values()].filter((e) => loops(e)).map((e) => keyOf(e.from, e.query)))
 
   const skipped: SiteRedirectSkip[] = []
   const touched = new Map<string, Entry>()
   for (const input of inputs) {
     const shown = label(input.from, input.query ?? '')
     const skip = (reason: string) => skipped.push({ line: input.line, from: shown, reason })
-    const source = normalizeRedirectSource(input.query ? `${input.from}?${input.query}` : input.from, {
+    // Re-encoded first: `from` is decoded (a literal %, ? or # in it is part of the path).
+    const source = normalizeRedirectSource(redirectSourceHref(input.from, input.query ?? ''), {
       addresses: [],
     })
     if ('error' in source) {
@@ -166,7 +199,7 @@ export async function saveSiteRedirects(
       continue
     }
     const rule = { from: source.path, query: source.query, to: target.to }
-    if (!rule.query && live.has(rule.from)) {
+    if (pageWins(rule.from, live)) {
       skip('A live page uses this address — the page wins. Unpublish or rename the page first.')
       continue
     }
@@ -182,10 +215,18 @@ export async function saveSiteRedirects(
     }
     const entry: Entry = { ...prev, ...rule, line: input.line }
     put(entry)
-    if (resolve(entry) === null) {
+    const loop = [entry, ...reaching(entry.from)].find(
+      (e) => (e === entry || !looping.has(keyOf(e.from, e.query))) && loops(e),
+    )
+    if (loop) {
+      const now = loops(loop, activeAt)
       if (prev) put(prev)
       else drop(entry)
-      skip('That would make a redirect loop.')
+      skip(
+        now
+          ? 'That would make a redirect loop.'
+          : 'That would make a redirect loop once a page that overrides another redirect now is hidden or unpublished.',
+      )
       continue
     }
     touched.set(k, entry)
@@ -211,10 +252,14 @@ export async function saveSiteRedirects(
     status: !e.id ? ('new' as const) : e.to !== e.stored ? ('updated' as const) : ('unchanged' as const),
   }))
   const count = (status: string) => saved.filter((s) => s.status === status).length
+  const moved = [...all.values()]
+    .filter((e) => e.id && e.to !== e.stored && !touched.has(keyOf(e.from, e.query)))
+    .map((e) => ({ from: e.from, query: e.query, before: e.stored ?? '', after: e.to }))
   const result: SiteRedirectSave = {
     added: count('new'),
     updated: count('updated'),
     flattened,
+    moved,
     unchanged: count('unchanged'),
     skipped,
     saved,
@@ -271,8 +316,9 @@ export async function deleteAllSiteRedirects(tx: Tx, tenantId: string): Promise<
 
 /**
  * The proxy's lookup (platform role, one query): the redirects that apply on a spa's site, found by its slug or an
- * active custom domain (a cancelled spa: none). A path-only redirect at the address of a visible page with a published
- * version, or of a published post, is left out — the page always wins, also when it is published later.
+ * active custom domain (a cancelled spa: none). A redirect at the address of a visible page with a published version,
+ * or of a published post, is left out, with or without a ?query (= pageWins; the home page's all have one) — the page
+ * always wins, also when it is published later.
  */
 export async function siteRedirectRules(
   db: DbOrTx,
@@ -287,7 +333,7 @@ export async function siteRedirectRules(
     from tenants t
     join site_redirects r on r.tenant_id = t.id
     where t.status <> 'cancelled' and ${tenant}
-      and (r.from_query <> '' or (
+      and (r.from_path = '/' or (
         not exists (
           select 1 from site_pages sp
           where sp.tenant_id = t.id and sp.visible and ('/' || sp.slug) = r.from_path

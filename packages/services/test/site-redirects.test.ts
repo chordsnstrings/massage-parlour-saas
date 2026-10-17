@@ -96,6 +96,28 @@ describe('site redirects (R33)', () => {
     expect(await rules()).not.toHaveProperty('/dry')
   })
 
+  it('a literal %, ? or # in an old path is kept; the site’s own ?lang= is dropped', async () => {
+    const r = await save([
+      { from: '/50%-off', to: '/services' },
+      { from: '/old?page', to: '/services' },
+      { from: '/a#b', to: '/services' },
+      { from: '/old-ar', query: 'lang=ar', to: '/services' },
+    ])
+    expect(r).toMatchObject({ added: 4, skipped: [] })
+    expect(r.saved.map((s) => [s.from, s.query])).toEqual([
+      ['/50%-off', ''],
+      ['/old?page', ''],
+      ['/a#b', ''],
+      ['/old-ar', ''],
+    ])
+    await tx((db) =>
+      deleteSiteRedirects(
+        db,
+        r.saved.map((s) => s.id!),
+      ),
+    )
+  })
+
   it('flattens chains both ways and refuses loops', async () => {
     // A new A → B where B → C exists is stored as A → C.
     await save([{ from: '/b', to: '/services' }])
@@ -106,12 +128,19 @@ describe('site redirects (R33)', () => {
     await save([{ from: '/c', to: '/old-c' }])
     const d = await save([{ from: '/old-c', to: '/services' }])
     expect(d.flattened).toBe(1)
+    expect(d.moved).toEqual([{ from: '/c', query: '', before: '/old-c', after: '/services' }])
     expect((await rules())['/c']).toBe('/services')
     // Closing a loop is refused (B → A while A → B's end … → B).
     await save([{ from: '/l1', to: '/l2' }])
     const loop = await save([{ from: '/l2', to: '/l1' }])
     expect(loop.skipped[0]!.reason).toMatch(/loop/)
     expect(await rules()).not.toHaveProperty('/l2')
+    // A loop only for visitors bringing a param: `/q1 → /q2` with `/q2?x=1 → /q1?x=1` (`/q1?x=1` → `/q2?x=1` → …).
+    expect((await save([{ from: '/q2', query: 'x=1', to: '/q1?x=1' }])).added).toBe(1)
+    expect((await save([{ from: '/q1', to: '/q2' }])).skipped[0]!.reason).toBe(
+      'That would make a redirect loop.',
+    )
+    expect(await rules()).not.toHaveProperty('/q1')
   })
 
   it('RLS: each spa sees and writes only its own (the same old address twice is fine)', async () => {
@@ -143,9 +172,9 @@ describe('site redirects (R33)', () => {
     await platform.update(tenants).set({ status: 'active' }).where(eq(tenants.id, ids.tenant!))
   })
 
-  it('a page published later at the old address wins (lookup + console status); query rules still apply', async () => {
+  it('a page published later at the old address wins, with or without a query (lookup + console status)', async () => {
     await save([
-      { from: '/about', to: '/services' },
+      { from: '/about', to: '/about-us' },
       { from: '/about', query: 'old=1', to: '/services' },
     ])
     const has = async (from: string, query = '') =>
@@ -153,14 +182,28 @@ describe('site redirects (R33)', () => {
         (r) => r.from === from && r.query === query,
       )
     expect(await has('/about')).toBe(true)
+    expect(await has('/about', 'old=1')).toBe(true)
     await tx((db) => publishPage(db, { tenantId: ids.tenant!, pageId: ids.about! }))
     expect(await has('/about')).toBe(false)
-    expect(await has('/about', 'old=1')).toBe(true)
+    expect(await has('/about', 'old=1')).toBe(false)
+    // The home page is always live: its rules (all with a query) apply.
+    expect(await has('/', 'p=12')).toBe(true)
     const view = await tx((db) => listSiteRedirects(db, ids.tenant!))
-    expect(view.find((r) => r.fromPath === '/about' && !r.fromQuery)).toMatchObject({ inactive: true })
+    expect(view.filter((r) => r.fromPath === '/about').map((r) => r.inactive)).toEqual([true, true])
+    expect(view.find((r) => r.fromPath === '/')).toMatchObject({ inactive: false })
     expect(view.find((r) => r.fromPath === '/c')).toMatchObject({ inactive: false, targetMissing: false })
-    // Saving a source a live page uses is refused now.
-    expect((await save([{ from: '/about', to: '/' }])).skipped).toHaveLength(1)
+    // Saving a source a live page uses is refused now, with a query too.
+    const refused = await save([
+      { from: '/about', to: '/' },
+      { from: '/about', query: 'x=1', to: '/' },
+    ])
+    expect(refused.skipped.map((s) => s.reason)).toEqual([
+      expect.stringMatching(/live page/),
+      expect.stringMatching(/live page/),
+    ])
+    // Back through the overridden `/about → /about-us`: a loop once the page is hidden, so refused now.
+    const back = await save([{ from: '/about-us', to: '/about' }])
+    expect(back.skipped[0]!.reason).toMatch(/loop once a page/)
   })
 
   it('a target that is no live page is flagged; deletes; the per-spa limit', async () => {

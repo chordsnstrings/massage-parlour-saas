@@ -6,6 +6,7 @@
 import {
   matchRedirect,
   type RedirectRule,
+  redirectChainEnd,
   redirectPathProblem,
   redirectRequestKey,
   trimTrailingSlashes,
@@ -52,7 +53,8 @@ function rulesOf(kind: 'slug' | 'hostname', key: string): Promise<Rules> {
  * The spa's redirect for a GET/HEAD of `internalPath` (proxy.ts's rewrite: `/site/{slug}…` or `/domain/{host}…`):
  * `rest` = the site path as requested, `to` = the on-site path + query to send the visitor to. Null for no redirect —
  * also for the site's own routes (booking, vouchers, robots.txt, sitemap.xml, the design feed) and the home page
- * without a query. Never throws.
+ * without a query, and when the hops through the spa's redirects come back (a loop: the page is served instead).
+ * Never throws.
  */
 export async function siteRedirectTarget(
   internalPath: string,
@@ -65,8 +67,10 @@ export async function siteRedirectTarget(
   if (!key || (key === '/' ? search.length < 2 : redirectPathProblem(key))) return null
   try {
     const rules = await rulesOf(m[1] === 'site' ? 'slug' : 'hostname', m[2]!.toLowerCase())
-    const hit = matchRedirect(rules.get(key) ?? [], key, search)
-    return hit ? { rest, to: hit.to } : null
+    const at = (k: string) => rules.get(k) ?? []
+    const hit = matchRedirect(at(key), key, search)
+    // Saving refuses loops, but a page hidden later can bring a redirect back: never answer a chain that loops.
+    return hit && redirectChainEnd(at, hit.to) !== null ? { rest, to: hit.to } : null
   } catch {
     return null
   }

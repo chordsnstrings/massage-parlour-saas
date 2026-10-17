@@ -87,9 +87,13 @@ export function redirectTargetKey(to: string): string {
   }
 }
 
-/** Params sorted, empty keys dropped, values as typed. */
+// The site's own params (the Arabic switch `?lang=ar`, Next's `_rsc`) are never part of an old address: a path rule
+// keeps them (`/old?lang=ar` → `/new?lang=ar`), and a `?lang=ar` rule would take over a page's Arabic version.
+const SITE_PARAMS = new Set(['lang', '_rsc'])
+
+/** Params sorted, empty keys and the site's own dropped, values as typed. */
 function normaliseQuery(raw: string): string {
-  const params = [...new URLSearchParams(raw)].filter(([k]) => k !== '')
+  const params = [...new URLSearchParams(raw)].filter(([k]) => k !== '' && !SITE_PARAMS.has(k))
   params.sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0))
   return new URLSearchParams(params).toString()
 }
@@ -160,7 +164,8 @@ export function normalizeRedirectSource(input: string, opts: RedirectAddresses):
   if (path === '/') {
     if (!query)
       return {
-        error: 'The home page can’t be redirected — only an old address with a ?query on it (e.g. /?p=12).',
+        error:
+          'The home page can’t be redirected — only an old address with a ?query on it (e.g. /?p=12; ?lang= is the site’s own).',
       }
     return { path, query }
   }
@@ -241,6 +246,35 @@ export function matchRedirect(
   for (const [k, v] of rest) if (!own.has(k)) target.searchParams.append(k, v)
   if (redirectRequestKey(target.pathname) === key && matches(best.params, target.searchParams)) return null
   return { to: `${target.pathname}${target.search}${target.hash}`, rule: best.rule }
+}
+
+/**
+ * Where a visitor sent to `to` finally lands, hop by hop as the proxy answers (`rulesAt` = the rules at an old-address
+ * key); null when the hops come back to an address + query already passed (a loop) or run past `maxHops`.
+ */
+export function redirectChainEnd(
+  rulesAt: (key: string) => readonly RedirectRule[],
+  to: string,
+  maxHops = 20,
+): string | null {
+  const seen = new Set<string>()
+  for (let hop = 0; hop <= maxHops; hop++) {
+    let u: URL
+    try {
+      u = new URL(to, BASE)
+    } catch {
+      return to
+    }
+    const key = redirectRequestKey(u.pathname)
+    if (key === null) return to
+    const state = `${key}${u.search}`
+    if (seen.has(state)) return null
+    seen.add(state)
+    const hit = matchRedirect(rulesAt(key), key, u.search)
+    if (!hit) return to
+    to = hit.to
+  }
+  return null
 }
 
 /** The rule would send its own old address to itself (same path, its params kept). */
