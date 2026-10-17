@@ -40,6 +40,7 @@ import {
   TemplatesCard,
 } from './cards'
 import { ProfileLinksCard } from './profile-links-card'
+import { RedirectsCard } from './redirects-card'
 import { SeedOffer } from './seed-sheet'
 import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
@@ -292,6 +293,7 @@ export default async function SpaWebsitePage({
                 )}
                 <ProfileLinksCard slug={slug} tenantId={ctx.tenant.id} canEdit={canPublish} />
                 <BlogCard slug={slug} posts={posts} canEdit={canEdit} />
+                <RedirectsCard slug={slug} tenantId={ctx.tenant.id} />
                 {glance && (
                   <Card>
                     <CardHeader

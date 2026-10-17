@@ -7,6 +7,7 @@
     "./day-sheet-pdf": "./src/pdf/day-sheet-pdf.ts",
     "./intake-pdf": "./src/pdf/intake-pdf.ts",
     "./site-kit": "./src/site-kit/index.ts",
+    "./site-redirects": "./src/site-redirects.ts",
     "./tenant-slug": "./src/tenant-slug.ts",
     "./xlsx": "./src/xlsx.ts"
   },
