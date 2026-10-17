@@ -12,6 +12,7 @@ content hash, so never rename or delete them: published designs link them.
 | --- | --- | --- |
 | `be-relax-v2.6.html` | `6811917ddfc60018` | **Live** (rolled out by the owner 2026-10-14). v2.5 plus the phone scroll fix and the QA fixes. |
 | `be-relax-v2.7.html` | `525ddf4f56118c33` | **Next:** sent to the owner 2026-10-14, waiting for Upload + Roll out. Final v2.6 plus the Arabic fonts read from `CRM_DATA.inline_fonts` (Decision B, contract §11). |
+| `be-relax-v2.8.html` | `d6d9189a4f30eeaa` | **Ready to upload, not live yet.** v2.7 plus `"prefill":1` in its contract (nothing else changes): the platform fills the address, hours, phone numbers and links into the page's HTML for search engines (contract §12). |
 
 `qa-2026-10-14.md` is the full desktop, tablet, phone and functional QA of the live site (v2.4 at the time). The fixes went
 into v2.6 and the platform (PLAN §14.8). Its screenshot paths pointed to a temporary folder that was not kept.

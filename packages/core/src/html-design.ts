@@ -1860,6 +1860,9 @@ function decodeText(s: string): string | null {
 const textOf = (s: string) => decodeText(s) ?? s
 /** Markup text or an attribute value as a visitor reads it (an unreadable reference kept as written). */
 export const htmlTextOf = textOf
+/** The tokenizer's element sets and link check, for the other passes over a design (contract §12 server prefill). */
+export { RAW_TEXT as HTML_RAW_TEXT, SAFE_HREF as HTML_SAFE_HREF, VOID as HTML_VOID }
+
 /** A `javascript:` URL runs its percent-decoded text, after the URL parser dropped tabs and newlines. */
 const urlScript = (s: string) =>
   s
