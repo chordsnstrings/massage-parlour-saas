@@ -10,9 +10,10 @@ the existing flow.
   https://spamanagement.co:
   - phases P1–P3;
   - the spa dashboard redesign;
-  - owner requests R1–R32, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
+  - owner requests R1–R33, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
   - fix backlog F1–F32.
-- The last release is PR #55 (R32: booking ↔ sale order + daily sales sheet PDF), live 2026-10-15.
+- The last release is PR #58 (R33: crawler text for HTML designs, schema profile links, per-spa redirects), live
+  2026-10-18; before it PR #57 (custom domain go-live fix) and PR #55 (R32).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
 - All older feature branches were squash-merged and released. The only unmerged work is the two branches below, plus

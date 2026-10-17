@@ -1528,7 +1528,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   hostname; `CUSTOM_DOMAIN_TLS=on-demand` (deploy/droplet/compose.yml) makes the spa Domains page show SSL as on
   (Caddy issues every custom-domain certificate on first visit; the old note waited for Cloudflare for SaaS).
 - **R33 Crawler-visible HTML designs + schema extras + per-spa Redirects (owner, 2026-10-17, after the BE RELAX SEO
-  report) — built 2026-10-17 (PR pending):** BE RELAX title + description set as a Website content draft (EN + AR,
+  report) — ✅ live 2026-10-18 03:38 Dubai, PR #58 (d129140):** BE RELAX title + description set as a Website content draft (EN + AR,
   ≤ 60 / 50–160 chars; the owner publishes). **Crawler text (Option A, owner):** the live page of a design that opts
   in with `contract.prefill: 1` gets the CRM values (address, phones, hours, links) written into its HTML by the
   server, the same values the design's script writes (R24 invisible change; CODEMAP "Live page of an exact design",
