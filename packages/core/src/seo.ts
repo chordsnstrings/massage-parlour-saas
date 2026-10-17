@@ -1,6 +1,6 @@
 // Search + social data for public pages (PLAN §17 F12): schema.org JSON-LD, robots.txt and sitemap.xml. Pure; no DB.
 import type { OpeningHours, Weekday } from './booking'
-import { EMIRATE_NAMES } from './emirates'
+import { EMIRATE_NAMES, type UaeEmirate } from './emirates'
 import { crmAddress, crmName } from './html-crm'
 import { normalizeGoogleMapsUrl } from './maps'
 
@@ -142,6 +142,30 @@ function emirateIn(address: string): string | undefined {
   return Object.values(EMIRATE_NAMES).find((n) => lower.includes(n.toLowerCase()))
 }
 
+/** UAE_CITIES that are not emirates: their spelling and emirate (Dibba is split between Fujairah, Sharjah and Oman). */
+const TOWNS: Record<string, { name: string; emirate?: UaeEmirate }> = {
+  'al ain': { name: 'Al Ain', emirate: 'abu_dhabi' },
+  ruwais: { name: 'Ruwais', emirate: 'abu_dhabi' },
+  'madinat zayed': { name: 'Madinat Zayed', emirate: 'abu_dhabi' },
+  'khor fakkan': { name: 'Khor Fakkan', emirate: 'sharjah' },
+  kalba: { name: 'Kalba', emirate: 'sharjah' },
+  hatta: { name: 'Hatta', emirate: 'dubai' },
+  dibba: { name: 'Dibba' },
+}
+
+/**
+ * The city of a free-text UAE address (crmAddress: the last UAE city part) in its own spelling, with its emirate
+ * ("…, Al Ain." → Al Ain, Abu Dhabi), so addressLocality and addressRegion agree.
+ */
+export function cityIn(address: string): { locality: string; region?: string } | undefined {
+  const city = crmName(crmAddress(address).city)
+  if (!city) return undefined
+  const emirate = Object.values(EMIRATE_NAMES).find((n) => crmName(n) === city)
+  if (emirate) return { locality: emirate, region: emirate }
+  const town = TOWNS[city]
+  return town && { locality: town.name, region: town.emirate && EMIRATE_NAMES[town.emirate] }
+}
+
 /** "AED 150–450" from the public prices; undefined when every price is hidden. */
 function priceRange(services: SeoService[]): string | undefined {
   const prices = services.flatMap((s) => s.variants.map((v) => money(v.priceAed))).filter((p) => p !== null)
@@ -227,13 +251,13 @@ export function spaJsonLd(input: SpaJsonLdInput): Json {
   if (text(b?.phone)) spa.telephone = text(b?.phone)
   const address = text(b?.address)
   if (address) {
-    const region = emirateIn(address)
-    // The city part of the free text (crmAddress: the last UAE city named, e.g. "Al Ain"); the street keeps it all.
-    const city = crmAddress(address).city
+    // The city's emirate when the address names a city (else the first emirate named); the street keeps it all.
+    const city = cityIn(address)
+    const region = city?.region ?? emirateIn(address)
     spa.address = {
       '@type': 'PostalAddress',
       streetAddress: address,
-      ...(city ? { addressLocality: city } : {}),
+      ...(city ? { addressLocality: city.locality } : {}),
       ...(region ? { addressRegion: region } : {}),
       addressCountry: 'AE',
     }

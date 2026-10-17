@@ -2,7 +2,7 @@ import { robotsTxt, type SitemapEntry, siteIndexable, sitemapXml } from '@spa/co
 import { sites, socialAccounts, type Tx, tenants, withTenant } from '@spa/db'
 import { fileUrl, getSiteProfiles, listPublishedPages, listPublishedPosts } from '@spa/services'
 import { imageSrc, walkNodes } from '@spa/services/site-kit'
-import { and, asc, eq, inArray, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { cache } from 'react'
 import { publicSiteUrl } from '@/server/sites'
 
@@ -40,8 +40,9 @@ export type AutoProfile = { source: 'instagram' | 'facebook'; url: string }
 /**
  * R33: the spa's public profiles for the JSON-LD sameAs. `manual` = the console's Profile links (services
  * setSiteProfiles); `automatic` = the connected Instagram account (its own connection, else the one linked to the
- * connected Facebook Page) and that Page. Connections count until disconnected (like the Instagram link before R33);
- * only ids and names are read, never the token columns. `profiles` = manual first, then automatic, each once.
+ * connected Facebook Page) and that Page. Only 'connected' rows count: the ones the one-spa-per-Meta-account rule
+ * guards (an expired row's account may since belong to another spa); only ids and names are read, never the token
+ * columns. `profiles` = manual first, then automatic, each once.
  */
 export async function spaProfiles(tx: Tx, tenantId: string) {
   const manual = await getSiteProfiles(tx, tenantId)
@@ -57,7 +58,7 @@ export async function spaProfiles(tx: Tx, tenantId: string) {
       and(
         eq(socialAccounts.tenantId, tenantId),
         inArray(socialAccounts.platform, ['instagram', 'facebook']),
-        ne(socialAccounts.status, 'disconnected'),
+        eq(socialAccounts.status, 'connected'),
       ),
     )
     .orderBy(asc(socialAccounts.createdAt))

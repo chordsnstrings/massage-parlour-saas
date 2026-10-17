@@ -103,7 +103,44 @@ test('Profile links: saved in the console, listed in the public JSON-LD sameAs w
     expect(spa.address).toMatchObject({
       streetAddress: 'Villa 9, Al Jimi, Al Ain, UAE',
       addressLocality: 'Al Ain',
+      addressRegion: 'Abu Dhabi',
       addressCountry: 'AE',
     })
+  })
+
+  await test.step("only connected accounts count: the spa's own Instagram; no expired/pending Page, no disconnected account", async () => {
+    await db
+      .update(socialAccounts)
+      .set({ status: 'expired' })
+      .where(and(eq(socialAccounts.tenantId, seed.tenantId), eq(socialAccounts.platform, 'facebook')))
+    const run = Date.now()
+    await db.insert(socialAccounts).values([
+      { tenantId: seed.tenantId, platform: 'facebook', externalId: 'pending', status: 'pending_page' },
+      {
+        tenantId: seed.tenantId,
+        platform: 'instagram',
+        externalId: `${run}1`,
+        username: 'old_handle',
+        status: 'disconnected',
+      },
+      {
+        tenantId: seed.tenantId,
+        platform: 'instagram',
+        externalId: `${run}2`,
+        username: '@profile.links',
+        status: 'connected',
+      },
+    ])
+    const own = 'https://www.instagram.com/profile.links/'
+    await page.reload()
+    const raw = await page.locator('script[type="application/ld+json"]').first().textContent()
+    const spa = (JSON.parse(raw ?? '') as { '@graph': Record<string, unknown>[] })['@graph'][0]!
+    expect(spa.sameAs).toEqual([GBP, TIKTOK, own, PIN])
+    await studio.reload()
+    const list = card.getByRole('list', { name: 'Profile links' })
+    await expect(list.getByRole('link', { name: own })).toBeVisible()
+    await expect(list.getByRole('listitem')).toHaveCount(3)
+    await expect(list).not.toContainText('Facebook Page')
+    await expect(list).not.toContainText('old_handle')
   })
 })

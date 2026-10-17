@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { UAE_CITIES } from '../src/html-crm'
 import {
+  cityIn,
   geoFromMapsUrl,
   jsonLdString,
   openingHoursSpecification,
@@ -294,6 +296,44 @@ describe('spaJsonLd', () => {
       addressLocality: 'Al Ain',
     })
     expect(at('Villa 9, Al Jimi')).not.toHaveProperty('addressLocality')
+  })
+
+  it("takes the region from the city (no contradiction) and the city's own spelling", () => {
+    const at = (address: string) =>
+      (spaJsonLd({ ...base, branch: { address } }) as Graph)['@graph'][0]!.address
+    expect(at('Al Khan, opp. Dubai Islamic Bank, Sharjah')).toMatchObject({
+      addressLocality: 'Sharjah',
+      addressRegion: 'Sharjah',
+    })
+    expect(at('Dubai-Al Ain Road, Al Ain')).toMatchObject({
+      addressLocality: 'Al Ain',
+      addressRegion: 'Abu Dhabi',
+    })
+    expect(at('Corniche, abu dhabi.')).toMatchObject({
+      streetAddress: 'Corniche, abu dhabi.',
+      addressLocality: 'Abu Dhabi',
+      addressRegion: 'Abu Dhabi',
+    })
+    expect(at('Shop 4, Khor Fakkan')).toMatchObject({
+      addressLocality: 'Khor Fakkan',
+      addressRegion: 'Sharjah',
+    })
+    // Dibba spans Fujairah and Sharjah: the region only when the address names the emirate.
+    expect(at('Corniche Rd, Dibba')).toEqual({
+      '@type': 'PostalAddress',
+      streetAddress: 'Corniche Rd, Dibba',
+      addressLocality: 'Dibba',
+      addressCountry: 'AE',
+    })
+    expect(at('Fujairah Rd, Dibba')).toMatchObject({ addressLocality: 'Dibba', addressRegion: 'Fujairah' })
+    // No city part: the first emirate named, as before.
+    expect(at('Near Dubai Mall')).toMatchObject({ addressRegion: 'Dubai' })
+    expect(at('Near Dubai Mall')).not.toHaveProperty('addressLocality')
+  })
+
+  it('knows the spelling of every UAE city an address can name', () => {
+    for (const city of UAE_CITIES)
+      expect(cityIn(`Shop 1, ${city.toUpperCase()}`)?.locality.toLowerCase()).toBe(city)
   })
 
   it('lists profile links first in sameAs: https only, each once', () => {
