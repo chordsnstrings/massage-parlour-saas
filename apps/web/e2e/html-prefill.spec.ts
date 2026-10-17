@@ -16,6 +16,10 @@ const LATE = { open: '11:00', close: '02:00' }
 const LATER = { open: '11:00', close: '03:00' }
 const HOURS = { mon: [LATE], tue: [LATE], wed: [LATE], thu: [LATE], fri: [LATER], sat: [LATER], sun: [] }
 
+// The raw page writes the spa's (Dubai) year, the script the browser's: a Dubai browser, so the footer year agrees
+// on New Year's Eve too.
+test.use({ timezoneId: 'Asia/Dubai' })
+
 /** A request to a spa host as a crawler sends it (Node can't resolve *.localhost: 127.0.0.1 + Host). */
 async function raw(page: Page, url: string) {
   const u = new URL(url)

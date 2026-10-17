@@ -215,18 +215,34 @@ const FILLED = new Set([
 ])
 /** The lists whose rows are rendered (the owner's scope: phone numbers and opening hours). */
 const ROW_LISTS = new Set(['phones', 'whatsapp-phones', 'hours-rows'])
-/** Containers whose rows the parser would move or drop outside a template (tables, selects). */
-const NO_ROWS = new Set([
-  'table',
-  'thead',
-  'tbody',
-  'tfoot',
-  'tr',
-  'colgroup',
-  'select',
-  'datalist',
-  'optgroup',
-])
+const tags = (names: string) => new Set(names.split(' '))
+/** Slots whose own text the parser moves out (tables) or the select parts: never filled. */
+const NO_TEXT = tags('table thead tbody tfoot tr colgroup select datalist optgroup')
+// Rendered rows stand in the document, where the parser's closing rules reach them (template content is walled off):
+// they go only into a container no row tag closes, with no open element above it that one could close or that parses
+// its content differently, and only from a template whose tree the parser keeps as this module reads it (rowsKept).
+const ROW_BOXES = tags('div section article aside nav main header footer ul ol')
+/** Open elements above a container that rule rows out (a block closes a <p>, <li> an <li>, <a> an <a>, …). */
+const ROW_ABOVE = tags(
+  'p a button li dd dt h1 h2 h3 h4 h5 h6 math table caption colgroup thead tbody tfoot tr td th select datalist optgroup option',
+)
+/** Tags no rendered row holds: active or loading in the document (inert in a template), or parsed differently. */
+const ROW_DENY = tags(
+  'script style link meta base title noscript noembed noframes plaintext xmp iframe frame frameset object embed applet ' +
+    'img image picture video audio source track html head body form nobr select datalist optgroup option ' +
+    'table caption col colgroup thead tbody tfoot tr td th math rb rp rt rtc',
+)
+/** Start tags that close an open <p>. */
+const CLOSES_P = tags(
+  'address article aside blockquote center details dialog dir div dl fieldset figcaption figure footer header hgroup ' +
+    'main menu nav ol p search section summary ul h1 h2 h3 h4 h5 h6 pre listing hr li dd dt',
+)
+/** In <svg>: tags that act or load, or HTML start tags that end svg content (the parser closes the svg). */
+const SVG_DENY = tags(
+  'script style image foreignobject b big blockquote body br center code dd div dl dt em embed font h1 h2 h3 h4 h5 h6 ' +
+    'head hr i img li listing menu meta nobr ol p pre ruby s small span strong strike sub sup table tt u ul var',
+)
+const HEADING = /^h[1-6]$/
 const ATTR_NAME = /^[A-Za-z_:][-A-Za-z0-9_:.]*$/
 const isWs = (c: string | undefined) => c === ' ' || c === '\t' || c === '\n' || c === '\f' || c === '\r'
 const TEXT_ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '{': '&#123;' }
@@ -285,13 +301,12 @@ export function prefillCrmMarkup(html: string, opts: { now?: Date } = {}): strin
   const found = htmlCrmContractOf(html)
   const data = found?.literal?.data
   if (!data || found.version !== 2 || rec(data.contract).prefill !== CRM_PREFILL_FORMAT) return html
-  let model: Model
+  let edits: Edit[]
   try {
-    model = buildModel(data, opts.now ?? new Date())
+    edits = prefillEdits(html, buildModel(data, opts.now ?? new Date()))
   } catch {
-    return html // the script fails on this data too
+    return html // the script fails on this data too (e.g. a lone surrogate in the WhatsApp message)
   }
-  const edits = prefillEdits(html, model)
   if (!edits.length) return html
   edits.sort((a, b) => a.start - b.start)
   let out = ''
@@ -385,7 +400,15 @@ function prefillEdits(html: string, m: Model): Edit[] {
         frame.content = parent.box
       } else parent.box.pure = false
     }
-    if (listName !== null && !tpl && !inList && opens && ROW_LISTS.has(listName) && !NO_ROWS.has(name)) {
+    if (
+      listName !== null &&
+      !tpl &&
+      !inList &&
+      !svg &&
+      ROW_LISTS.has(listName) &&
+      ROW_BOXES.has(name) &&
+      !stack.some((e) => ROW_ABOVE.has(e.name))
+    ) {
       frame.box = { name: listName, pure: true, at: -1, from: -1, to: -1, hidden }
       boxes.push(frame.box)
     }
@@ -396,6 +419,7 @@ function prefillEdits(html: string, m: Model): Edit[] {
       FILLED.has(crm) &&
       opens &&
       !HTML_RAW_TEXT.has(name) &&
+      !NO_TEXT.has(name) &&
       val('data-crm-text') === null &&
       val('data-crm-tpl') === null &&
       !(crm === 'address' && name === 'a')
@@ -429,6 +453,7 @@ function prefillEdits(html: string, m: Model): Edit[] {
     const items = m.rows[box.name] ?? []
     if (!box.pure || box.to < 0 || box.hidden || !items.length) continue
     const nodes = parseFragment(html, box.from, box.to)
+    if (!rowsKept(nodes, NONE_OPEN)) continue
     const prev = { crm: null as string | null }
     const rows = items.map((item) =>
       nodes.map((x) => (typeof x === 'string' ? '' : row(html, x, item, m, prev))),
@@ -534,6 +559,53 @@ function parseFragment(html: string, from: number, to: number): FNode[] {
   return top
 }
 
+type Open = { p: boolean; li: boolean; dd: boolean; h: boolean; a: boolean; button: boolean; svg: boolean }
+const NONE_OPEN: Open = { p: false, li: false, dd: false, h: false, a: false, button: false, svg: false }
+
+/**
+ * Whether the parser keeps a template's content as this tree once it stands in the document as rows: no tag that
+ * acts or loads there (ROW_DENY, SVG_DENY, custom elements, `on*` handlers, autofocus) and none the parser closes early, which
+ * this tree does not model (a block in a <p>, <li> in <li>, <dd>/<dt> in either, a heading in a heading, <a> in <a>,
+ * <button> in <button>, HTML in <svg>, markup in an svg <title>/<desc>). A nested <template>'s content stays inert.
+ */
+function rowsKept(nodes: FNode[], o: Open): boolean {
+  for (const x of nodes) {
+    if (typeof x === 'string') continue
+    const n = x.name
+    const bad = o.svg
+      ? SVG_DENY.has(n) ||
+        ((n === 'title' || n === 'desc') && x.kids.some((k) => typeof k !== 'string' || k.includes('<')))
+      : ROW_DENY.has(n) ||
+        (o.p && CLOSES_P.has(n)) ||
+        (o.li && n === 'li') ||
+        (o.dd && (n === 'dd' || n === 'dt')) ||
+        (o.h && HEADING.test(n)) ||
+        (o.a && n === 'a') ||
+        (o.button && n === 'button')
+    if (
+      bad ||
+      n.includes('-') ||
+      x.attrs.some((a) => /^on/i.test(a.name) || a.name === 'is' || a.name === 'autofocus')
+    )
+      return false
+    if (n === 'template') continue
+    const inner: Open =
+      o.svg || n === 'svg'
+        ? { ...o, svg: true }
+        : {
+            p: o.p || n === 'p',
+            li: n === 'li' || (o.li && n !== 'ul' && n !== 'ol'),
+            dd: n === 'dd' || n === 'dt' || (o.dd && n !== 'dl'),
+            h: o.h || HEADING.test(n),
+            a: o.a || n === 'a',
+            button: o.button || n === 'button',
+            svg: false,
+          }
+    if (!rowsKept(x.kids, inner)) return false
+  }
+  return true
+}
+
 /**
  * One element of a list row as the script leaves it: fillPlaceholders + bindItemFields (renderLists), then the
  * bindValues and bindUi effects on it. `prev` = data-crm of its previous element sibling; a nested <template>'s
@@ -590,7 +662,9 @@ function row(
     const itemPath = read('data-item')
     if (itemPath !== null) content = escText(String(get(item, itemPath) ?? ''))
     const altPath = read('data-item-alt')
-    if (altPath !== null) set('alt', str(get(item, altPath)))
+    // `el.alt =` reflects on these only
+    if (altPath !== null && (el.name === 'img' || el.name === 'input' || el.name === 'area'))
+      set('alt', str(get(item, altPath)))
     const copyPath = read('data-item-copy')
     if (copyPath !== null) set('data-copy', str(get(item, copyPath)))
     // bindValues

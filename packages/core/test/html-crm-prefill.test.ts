@@ -134,6 +134,12 @@ describe('prefillCrmMarkup: only designs that opt in', () => {
     expect(prefillCrmMarkup(html)).toBe(html)
   })
 
+  it('a lone surrogate the rows meet (no main WhatsApp number, a per-phone link) → unchanged, no throw', () => {
+    const contact = { whatsapp_number: '', whatsapp_message: 'Hi \uD800', phones: [LANDLINE] }
+    const html = page(crm({ contact }), `<span data-crm="spa-name"></span>${CALLS}`)
+    expect(prefillCrmMarkup(html, { now: NOW })).toBe(html)
+  })
+
   it('the real BE RELAX v2.7 file is unchanged; v2.8 (the opt-in) is filled', () => {
     const dir = new URL('../../../docs/design/be-relax-site/', import.meta.url)
     const v27 = readFileSync(new URL('be-relax-v2.7.html', dir), 'utf8')
@@ -344,6 +350,10 @@ describe('what is never filled', () => {
       '<!-- <span data-crm="spa-name"></span> --><script>"<span data-crm=\\"city\\"></span>"</script>',
     ],
     ['a void element', '<input data-crm="spa-name">'],
+    [
+      'table and select parts (the parser moves their text out)',
+      '<table><tbody data-crm="city"><tr data-crm="phone"></tr></tbody></table><select data-crm="city"></select>',
+    ],
     ['an unclosed element', '<span data-crm="spa-name"> <div></div>'],
     [
       'links inside a template or a list',
@@ -442,18 +452,75 @@ describe('list rows: phones, whatsapp-phones, hours-rows before their template',
     expect(run(crm(), table)).toBe(table)
   })
 
+  // Rows stand in the document, where the parser closes a <p> before a block, an <a> before an <a>, … (in a
+  // template they were walled off): such a list keeps its template only, as do rows that would act there.
+  const wa = (row: string) => `<div data-crm-list="whatsapp-phones"><template>${row}</template></div>`
+  it.each([
+    [
+      'a <p> container with block rows',
+      PHONES.replaceAll('<div class="nums"', '<p class="nums"').replace(/<\/div>$/, '</p>'),
+    ],
+    [
+      'an <a> above <a> rows',
+      `<a href="#x">${wa('<a href="[crm-whatsapp-link]" data-phone="[phone-index]">x</a>')}</a>`,
+    ],
+    [
+      'an <li> above <li> rows',
+      `<ul><li>${wa('<li><b data-crm="phone" data-phone="[phone-index]"></b></li>')}</li></ul>`,
+    ],
+    ['a <p> above', `<p><span>${wa('<span data-crm="phone"></span>')}</span></p>`],
+    [
+      'a container the parser does not close for rows only (span)',
+      '<span data-crm-list="phones"><template><i></i></template></span>',
+    ],
+    ['a container inside svg', '<svg><g data-crm-list="phones"><template><path/></template></g></svg>'],
+    ['a block in a row’s <p>', wa('<p><span><div data-crm="phone"></div></span></p>')],
+    ['<li> in a row’s <li>', wa('<li><div><li></li></div></li>')],
+    ['<dt> in a row’s <dd>', wa('<dl><dd><dt></dt></dd></dl>')],
+    ['a heading in a heading', wa('<h3><span><h4></h4></span></h3>')],
+    ['<a> in a row’s <a>', wa('<a href="#a"><div><a href="#b">x</a></div></a>')],
+    ['<button> in a <button>', wa('<button><button></button></button>')],
+    ['HTML in svg', wa('<svg><g><span></span></g></svg>')],
+    ['an element in an svg title', wa('<svg><title><i>x</i></title></svg>')],
+    ['a script', wa('<span data-crm="phone"></span><script>count++</script>')],
+    ['a script in svg', wa('<svg><script>count++</script></svg>')],
+    ['a picture', wa('<span><img src="/a.png" alt=""></span>')],
+    ['an iframe', wa('<iframe src="/x"></iframe>')],
+    ['a style', wa('<style>b{}</style><b></b>')],
+    ['a form', wa('<form><b></b></form>')],
+    [
+      'table rows',
+      '<div data-crm-list="phones"><template><tr><td data-crm="phone"></td></tr></template></div>',
+    ],
+    ['an event handler', wa('<span onclick="go()"></span>')],
+    ['a custom element', wa('<x-icon></x-icon>')],
+    ['autofocus', wa('<button autofocus>Copy</button>')],
+  ])('no rows: %s', (_, body) => {
+    expect(run(crm(), body)).toBe(body)
+  })
+
+  it('rows next to a nested template’s inert content and an svg title text are still rendered', () => {
+    const body = wa(
+      '<span data-crm="phone" data-phone="[phone-index]"></span><svg><title>WhatsApp</title><path d="M0 0"/></svg><template><p><div></div></p><script>x</script></template>',
+    )
+    const out = run(crm(), body)
+    expect(out).toContain(
+      '<span data-crm="phone" data-phone="1">052 510 8633</span><svg><title>WhatsApp</title><path d="M0 0"/></svg><template><p><div></div></p><script>x</script></template><template>',
+    )
+  })
+
   it('row markup: placeholders, data-item / data-crm-attr / data-crm-tpl / nested templates / svg', () => {
     const tpl =
       '<ol data-crm-list="phones"><template>' +
       '<li data-x="[phone-index]" data-y="[service-id]"><svg viewBox="0 0 1 1"><path d="M0 0"/></svg>' +
-      '<i data-item="label"></i><i data-item="whatsapp"></i><img data-item-alt="display" alt="old">' +
+      '<i data-item="label"></i><i data-item="whatsapp"></i><input data-item-alt="display" alt="old"><b data-item-alt="display"></b>' +
       '<span data-crm-attr="title:ui.contact.copy; aria-label:ui.nope; bad name:ui.contact.copy"></span>' +
       '<em data-crm-text="ui.hours.form_note" data-crm-tpl></em><span data-crm="city">x</span>' +
       '<template><b data-crm="phone"></b></template></li></template></ol>'
     const out = run(crm({ contact: { whatsapp_number: '', phones: [LANDLINE] } }), tpl)
     expect(out).toBe(
       '<ol data-crm-list="phones"><li data-x="0" data-y="[service-id]"><svg viewBox="0 0 1 1"><path d="M0 0"/></svg>' +
-        '<i data-item="label"></i><i data-item="whatsapp">false</i><img data-item-alt="display" alt="02 557 6533">' +
+        '<i data-item="label"></i><i data-item="whatsapp">false</i><input data-item-alt="display" alt="02 557 6533"><b data-item-alt="display"></b>' +
         '<span data-crm-attr="title:ui.contact.copy; aria-label:ui.nope; bad name:ui.contact.copy" title="Copy"></span>' +
         '<em data-crm-text="ui.hours.form_note" data-crm-tpl>Open <span>every day</span>, <span>11 AM – 2 AM</span></em><span data-crm="city">Abu Dhabi</span>' +
         '<template><b data-crm="phone"></b></template></li>' +
