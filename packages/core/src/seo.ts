@@ -1,7 +1,7 @@
 // Search + social data for public pages (PLAN §17 F12): schema.org JSON-LD, robots.txt and sitemap.xml. Pure; no DB.
 import type { OpeningHours, Weekday } from './booking'
 import { EMIRATE_NAMES } from './emirates'
-import { crmName } from './html-crm'
+import { crmAddress, crmName } from './html-crm'
 import { normalizeGoogleMapsUrl } from './maps'
 
 type Json = Record<string, unknown>
@@ -128,7 +128,7 @@ export type SpaJsonLdInput = {
     openingHours?: OpeningHours | null
   } | null
   services?: SeoService[]
-  /** Public profiles (Instagram, Google Maps place …). */
+  /** Public profiles (the spa's Profile links, connected Instagram / Facebook, Google Maps place …); https only. */
   sameAs?: (string | null | undefined)[]
   /** The offer catalog's name in the page's language (default "Treatments"). */
   catalogName?: string
@@ -228,9 +228,12 @@ export function spaJsonLd(input: SpaJsonLdInput): Json {
   const address = text(b?.address)
   if (address) {
     const region = emirateIn(address)
+    // The city part of the free text (crmAddress: the last UAE city named, e.g. "Al Ain"); the street keeps it all.
+    const city = crmAddress(address).city
     spa.address = {
       '@type': 'PostalAddress',
       streetAddress: address,
+      ...(city ? { addressLocality: city } : {}),
       ...(region ? { addressRegion: region } : {}),
       addressCountry: 'AE',
     }

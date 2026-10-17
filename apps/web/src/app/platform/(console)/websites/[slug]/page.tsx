@@ -39,6 +39,7 @@ import {
   SeoCheckCard,
   TemplatesCard,
 } from './cards'
+import { ProfileLinksCard } from './profile-links-card'
 import { SeedOffer } from './seed-sheet'
 import { PublishSiteSheet, ThemeSheet, UndoTemplateBar, WriteTextsSheet } from './website-client'
 
@@ -289,6 +290,7 @@ export default async function SpaWebsitePage({
                     ready={aiEditReady()}
                   />
                 )}
+                <ProfileLinksCard slug={slug} tenantId={ctx.tenant.id} canEdit={canPublish} />
                 <BlogCard slug={slug} posts={posts} canEdit={canEdit} />
                 {glance && (
                   <Card>
