@@ -27,6 +27,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - **Fix backlog reminder:** PLAN §17: F1–F32 released 2026-10-10, nothing open (owner 2026-10-09: "always remind me"). While any is open,
   remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
   the next one in order. Don't fix them until the owner says so.
+- **SEO agent upgrade reminder (owner 2026-10-17: "dont start the SEO thing till i say so just remind me each time"):**
+  R34 (PLAN §14.8) is decided but must not start until the owner says so. Remind in one line in the first reply of
+  every session and at the end of every task, next to the fix backlog line.
 - **Ask before coding (owner 2026-10-15: "ask me before start coding"):** for a new feature or change request, explain the
   plan and ask the open questions first; code only after the owner's go. Docs/memory upkeep and fixes to Claude's own
   in-flight work are exempt.

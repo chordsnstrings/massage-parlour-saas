@@ -1533,7 +1533,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   HTML design before sending it, the same values the design's script writes (R24 invisible change). Schema: the saved
   map link + the spa's Google Business and Instagram links. Redirects: console Websites → spa → Redirects (old path →
   new page, 301 on the spa's addresses); the owner sends the Search Console 404 export for BE RELAX.
-- **R34 SEO agent upgrade (owner, 2026-10-17; starts after R33 is live):** all seven items — local checks (website
+- **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform
   account), 404 → redirect suggestions approved in one click, content drafts (service texts + FAQ with FAQ schema,
