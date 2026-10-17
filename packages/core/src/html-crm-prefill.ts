@@ -430,15 +430,21 @@ function prefillEdits(html: string, m: Model): Edit[] {
       if (value && k >= 0 && closes(html, k, name) && blank(html, end, k))
         edits.push({ start: end, end: k, text: escText(value) })
     }
-    if (bound && name === 'a') {
+    // In a <template> only the in-page booking link: every clone gets that same href from the script anyway, and
+    // crawlers that don't treat template content as inert then see no token (the per-phone links stay the script's).
+    if ((bound || frame.tpl) && name === 'a') {
       const href = attrs.find((x) => x.name === 'href')
       const q = href && href.start > 0 ? html[href.start - 1]! : ''
       if (href && (q === '"' || q === "'")) {
-        const to = tokenHref(
-          m,
-          htmlTextOf(html.slice(href.start, href.end)),
-          attrs.some((x) => x.name === 'data-phone'),
-        )
+        const token = htmlTextOf(html.slice(href.start, href.end))
+        const to =
+          bound || token === '[crm-booking-url]'
+            ? tokenHref(
+                m,
+                token,
+                attrs.some((x) => x.name === 'data-phone'),
+              )
+            : null
         if (to) edits.push({ start: href.start, end: href.end, text: escAttr(to, q) })
       }
     }

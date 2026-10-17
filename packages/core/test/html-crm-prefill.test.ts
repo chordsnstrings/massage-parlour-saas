@@ -356,12 +356,22 @@ describe('what is never filled', () => {
     ],
     ['an unclosed element', '<span data-crm="spa-name"> <div></div>'],
     [
-      'links inside a template or a list',
-      '<template><a href="[crm-booking-url]">x</a></template><div data-crm-list="services"><a href="[crm-booking-url]">x</a></div>',
+      'links inside a list (outside its template) and other links inside a template',
+      '<div data-crm-list="services"><a href="[crm-booking-url]">x</a></div><template><a href="[crm-whatsapp-link]">w</a><a href="[crm-maps-link]">m</a></template>',
     ],
   ])('%s', (_, body) => {
     const html = page(crm(), body)
     expect(prefillCrmMarkup(html, { now: NOW })).toBe(html)
+  })
+
+  it('an in-page booking link inside a template gets its href (an https booking url stays the script’s)', () => {
+    const body =
+      '<div data-crm-list="services"><template><a class="book-link" href="[crm-booking-url]" data-book-service="[service-id]">Book</a></template></div>'
+    expect(prefillCrmMarkup(page(crm(), body), { now: NOW })).toBe(
+      page(crm(), body.replace('[crm-booking-url]', '#book')),
+    )
+    const https = page(crm({ booking: { url: 'https://book.example/x' } }), body)
+    expect(prefillCrmMarkup(https, { now: NOW })).toBe(https)
   })
 
   it('data-if: nothing in a part the script hides (no hours / no address)', () => {

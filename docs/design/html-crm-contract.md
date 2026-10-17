@@ -402,6 +402,8 @@ address, map and opening hours; this puts the same facts into the visible slots.
   script hides it); `[crm-maps-link]` → the maps link when it is a plain http(s) link; `[crm-booking-url]` → only an
   in-page `#` target (an http(s) url needs the script's `target` / `rel`); `[crm-booking-endpoint]` never. The script
   finds these links by the token, so a replaced one is simply no longer rewired: the value is the one it would set.
+  Inside a `<template>` only the in-page `#` booking link is replaced (every clone would get that href anyway); the
+  template's other tokens (per-phone WhatsApp links, empty phone slots) stay, inert until the script clones them.
 - **List rows:** for `data-crm-list="phones" | "whatsapp-phones" | "hours-rows"` containers whose only children are
   whitespace and one direct `<template>` (not hidden by `data-if`, items present) and where the parser keeps the rows
   as written (they stand in the document, where its closing rules reach them; in the template they were walled off):
