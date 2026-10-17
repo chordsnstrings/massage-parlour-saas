@@ -963,24 +963,35 @@ const profileList = (v: unknown): string[] =>
     : []
 
 /**
+ * The Profile links lines checked and cleaned. The messages are English only: only the console (R23) edits these
+ * links, so they are not in the spa's error catalogue.
+ */
+export function parseSiteProfiles(lines: string[]): { links: string[] } | { error: string } {
+  const links: string[] = []
+  for (const [i, raw] of lines.entries()) {
+    const line = raw.trim()
+    if (!line) continue
+    const href = siteProfileUrl(line)
+    if (!href)
+      return {
+        error: `Line ${i + 1} is not a full https:// link: ${line.length > 80 ? `${line.slice(0, 80)}…` : line}`,
+      }
+    if (!links.includes(href)) links.push(href)
+  }
+  if (links.length > MAX_SITE_PROFILES)
+    return { error: `Up to ${MAX_SITE_PROFILES} profile links (${links.length} given)` }
+  return { links }
+}
+
+/**
  * R33 Profile links (console, super-admins): the spa's official profiles for the JSON-LD sameAs (Google Business
  * Profile share link, Instagram, Facebook, TikTok …). Lines are trimmed, blank ones dropped and each link kept once
  * (by URL) in the given order; an empty list removes them. Live at once (spa pages render per request).
  */
 export async function setSiteProfiles(tx: Tx, tenantId: string, urls: string[]): Promise<SiteRow> {
-  const profiles: string[] = []
-  for (const [i, raw] of urls.entries()) {
-    const line = raw.trim()
-    if (!line) continue
-    const href = siteProfileUrl(line)
-    if (!href)
-      throw new DomainError(
-        `Line ${i + 1} is not a full https:// link: ${line.length > 80 ? `${line.slice(0, 80)}…` : line}`,
-      )
-    if (!profiles.includes(href)) profiles.push(href)
-  }
-  if (profiles.length > MAX_SITE_PROFILES)
-    throw new DomainError(`Up to ${MAX_SITE_PROFILES} profile links (${profiles.length} given)`)
+  const parsed = parseSiteProfiles(urls)
+  if ('error' in parsed) throw new DomainError(parsed.error)
+  const profiles = parsed.links
   const [site] = await tx
     .update(sites)
     .set({
