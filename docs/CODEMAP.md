@@ -153,6 +153,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    - R20: a custom-domain host never answers platform-only endpoints (core `platformOnlyPath`: `/api/auth`,
      `/api/mcp`, `/api/integrations`, `/.well-known` — extra matcher entries → 404 there, `NextResponse.next()` on
      platform hosts, no rewrite/page headers). Its pages are always `/domain/{host}/…` (no /login, /dashboard, …).
+   - R33 per-spa redirects (old website addresses → the spa's pages): inside the GET/HEAD block after F23, before the
+     crm-feed and exact-design rewrites, `server/site-redirect.ts` `siteRedirectTarget(internalPath, search)` → 301
+     `{proto}://{host}{/s/{slug} in path mode}{to}{search}`, `cache-control: private, max-age=300`; other methods never.
+     One hop: `withSiteRedirect(url)` is applied to the R20 own-domain target, the www-twin target (GET/HEAD), and the
+     old path-routed / R29 extra-domain `own` targets. Lookup = LRU `__spaSiteRedirects` (5000 keys `s:{slug}` /
+     `h:{hostname}`, 30 s, empty sets cached, fails open) over `@spa/services/site-redirects` `siteRedirectRules`
+     (one query; cancelled spas none; path-only rules at a live page's path or a published post are left out — the
+     page wins; query rules such as `/?p=12` are kept). `forgetSiteRedirects()` from `revalidateStudio`,
+     `invalidateSiteHost`, `forgetSiteTenants`. Rules: core `redirects.ts` (`normalizeRedirectSource` decode + NFC +
+     lowercase + trailing slash + sorted query without `lang`/`_rsc`; `normalizeRedirectTarget` on-site paths only,
+     full URLs on the spa's own addresses stripped; `matchRedirect` most params wins, visitor params carried over,
+     target params win; `parseRedirectLines` Search Console exports / CSV / `old new` pairs, ≤ 500 lines;
+     `redirectPathProblem` refuses `/`, `/book*`, `/voucher/*`, robots/sitemap/manifest, crm-data.json/crm-enquiry,
+     `/api`, `/_next`, `/files`, `/.well-known` and the matcher's static extensions, which never reach the proxy).
+     Next's own trailing-slash 308 runs first (old `/x/` = 308 then 301). Table `site_redirects` (migration 0060,
+     RLS, unique tenant + from_path + from_query, source manual|import); services `site-redirects.ts` (≤ 1000 per spa,
+     site lock, chains flattened both ways, loops refused, `dryRun` preview). Console: see "Website Studio". e2e
+     `site-redirects.spec` (both routing modes).
    - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
      lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
@@ -362,8 +380,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - Public prices: services `publicPrice(priceAed, showPrice, spaHides)` is the only gate for every public price
   (websiteServices → blocks / JSON-LD / CRM feed, online booking + its confirmation): null = "price on request" when
   hidden (R4) or not > 0 (QA M6, 2026-10-14). Public AI agents apply the same rule in `ai` agents/context.ts, the website copywriter facts in site-edit.ts `loadSiteFacts`.
+- R33 sameAs + address: `spaJsonLd` sameAs = `siteSeo().profiles` (manual **Profile links** first — `sites.seo.profiles`
+  jsonb, ≤ 10 https links, services `parseSiteProfiles`/`setSiteProfiles`/`getSiteProfiles`, console Websites → spa
+  "Profile links" card, `site.publish`, audit `site.profiles_updated` — then the automatic ones from `spaProfiles`:
+  connected Instagram row or the connected Facebook Page's `meta.igUsername`, the Facebook Page URL; status
+  `connected` only, token columns never selected) + the branch map link; `addressLocality` = `crmAddress(address)`
+  city (and `addressRegion` its emirate). No Google API use for the Business Profile link (paste its share link).
 - Spa sites: `server/seo.ts` `siteSeo(tenant)` (React-cached): canonical base = `publicSiteUrl` (primary active custom
-  domain, else free address), logo/Instagram, published pages, `indexable` = not suspended and ≥ 1 published page.
+  domain, else free address), logo/profiles, published pages, `indexable` = not suspended and ≥ 1 published page.
   Routes `site/[slug]/{robots.txt,sitemap.xml}` + `domain/[hostname]/…`; robots disallow `/book/embed`, `/api/`.
   Not indexable → robots without Sitemap, empty sitemap, pages `noindex` (crawlable, so search drops them).
   `publicSiteMetadata` / `bookingMetadata`: canonical + hreflang (`?lang=ar` when the site has `ar`), og/twitter image
@@ -605,6 +629,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     allow-same-origin; no COOP; Permissions-Policy without the motion sensors). Body = `htmlDesignDocument(…, { top:
     true })` + JSON-LD, canonical / `<title>` only if the design has none, `t.js` (`text/plain` beacons from the opaque
     origin); `x-robots-tag` when not indexable. Not an exact design any more → 307 to `?__page=1` (normal page, no lookup).
+    R33 crawler text: right after `htmlDesignDocument` (so page-text `txt-n` ids never shift) the route runs core
+    `html-crm-prefill.ts` `prefillCrmMarkup(html)`: only designs whose served CRM_DATA literal declares contract
+    version 2 + `"prefill": 1` (BE RELAX v2.8+); anything else = the very same string. It writes the values the
+    design's own script would (exact port of the v2.x binder's formats) into empty `data-crm` slots (spa-name, city,
+    booking-label, year = Dubai, working-hours, operating-days, address, address-line1, phone; never live-status,
+    never inside templates/lists or hidden `data-if` parts), the `[crm-whatsapp-link]` / `[crm-maps-link]` /
+    `#…` `[crm-booking-url]` hrefs, and server-rendered rows of the `phones`, `whatsapp-phones` and `hours-rows`
+    lists (only where the HTML parser keeps them; the script's renderLists replaces them). Rules + proof:
+    docs/design/html-crm-contract.md §12; tests core/test/html-crm-prefill.test.ts, e2e `html-prefill.spec`.
     QA M11/M2 (Decision A, owner-approved 2026-10-14): + core `html-design-head.ts` `htmlDesignHeadTags`
     (tests: core/test/html-design-head.test.ts) = what block sites get from `publicSiteMetadata`, read off the
     design's head as a parser sees it (up to the real `</head>` / `<body>`, else the first body-only tag; comments and
@@ -990,7 +1023,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `websites/[slug]/page.tsx` (+ `cards.tsx`, `website-client.tsx`) = everything of the studio; actions in that folder
   (`actions.ts`, `studio-actions.ts`, `blog-actions.ts`, `import-actions.ts`, `write-texts-actions.ts`,
   `editor/*-actions.ts`) are `studioGuard`ed and refresh both sides via `server/studio.ts` `revalidateStudio`;
-  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. Editor + preview: `platform/(studio)/
+  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. R33 cards (own files, own reads):
+  `profile-links-card.tsx` (+ `profile-links-form.tsx`, `profile-actions.ts`) and `redirects-card.tsx` → subpage
+  `redirects/page.tsx` (+ `redirects-client.tsx`: Add redirect, Import list with Preview → "Add N redirects", Delete,
+  Clear all; `redirect-actions.ts`, `site.publish`, audit `site.redirect.added|deleted`, `site.redirects.imported|cleared`).
+  Editor + preview: `platform/(studio)/
   websites/[slug]/{editor/[pageId],preview}` ("Back to console"; preview shared with the CRM via
   `components/site/draft-preview.tsx`); English-only text provider `components/site/studio-i18n.tsx` for the shared
   media/image fields. No review step: `sites.studio_status` is deprecated (kept for zero-downtime deploys, never read).

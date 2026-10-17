@@ -1528,11 +1528,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   hostname; `CUSTOM_DOMAIN_TLS=on-demand` (deploy/droplet/compose.yml) makes the spa Domains page show SSL as on
   (Caddy issues every custom-domain certificate on first visit; the old note waited for Cloudflare for SaaS).
 - **R33 Crawler-visible HTML designs + schema extras + per-spa Redirects (owner, 2026-10-17, after the BE RELAX SEO
-  report) — in progress:** BE RELAX title + description set as a Website content draft (EN + AR, ≤ 60 / 50–160 chars;
-  the owner publishes). Option A (owner): the server writes the CRM values (address, phone, hours, links) into the
-  HTML design before sending it, the same values the design's script writes (R24 invisible change). Schema: the saved
-  map link + the spa's Google Business and Instagram links. Redirects: console Websites → spa → Redirects (old path →
-  new page, 301 on the spa's addresses); the owner sends the Search Console 404 export for BE RELAX.
+  report) — built 2026-10-17 (PR pending):** BE RELAX title + description set as a Website content draft (EN + AR,
+  ≤ 60 / 50–160 chars; the owner publishes). **Crawler text (Option A, owner):** the live page of a design that opts
+  in with `contract.prefill: 1` gets the CRM values (address, phones, hours, links) written into its HTML by the
+  server, the same values the design's script writes (R24 invisible change; CODEMAP "Live page of an exact design",
+  contract doc §12). BE RELAX v2.8 = live v2.7 + that one key: the owner uploads + rolls it out. Not covered (ask
+  the owner first): treatments, team and hero texts (still script-only; Google renders them, other crawlers don't).
+  **Schema:** the saved map link was already in hasMap/sameAs; new console "Profile links" (Google Business share
+  link, Instagram, …, ≤ 10 https) + the connected Instagram / Facebook Page added automatically, `addressLocality`.
+  No Google Business link was stored anywhere: the owner pastes BE RELAX's links in the card. **Redirects:** console
+  Websites → spa → Redirects (add, import a Search Console export with preview, delete, clear; 301 on every address
+  of the spa in one hop; a live page always wins; ≤ 1000 per spa) — CODEMAP "Request flow" R33. Later (owner to
+  decide): automatic redirect when a page's address is renamed, hit counts (R34 does 404 suggestions).
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform

@@ -81,7 +81,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   CRM_DATA — owner 2026-10-13 "no delay when I reload", contract doc §10; `contract.inline_fonts` woff2 fonts as
   data: URIs in CRM_DATA `inline_fonts`, declared locale only — owner 2026-10-14 Decision B, contract doc §11; og:*/twitter:* share tags, icon +
   apple-touch-icon links (spa logo) and hreflang links, each only when the design has none — owner 2026-10-14
-  Decision A, core `htmlDesignHeadTags`, never `<html lang>`); the live page is the design document itself (CSP sandbox, never
+  Decision A, core `htmlDesignHeadTags`, never `<html lang>`; R33 crawler text: CRM values written into empty `data-crm`
+  slots, the `[crm-*]` link hrefs and phones/hours rows, only for designs declaring `contract.prefill: 1`, live page
+  only — contract doc §12); the live page is the design document itself (CSP sandbox, never
   allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
   **CRM feed for contract designs (R26, 2026-10-12):** a design with `window.CRM_DATA` / `<meta name=crm-endpoint>`
   gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's
