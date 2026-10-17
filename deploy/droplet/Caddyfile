@@ -1,0 +1,79 @@
+{
+	email {$ACME_EMAIL:ask@spamanagement.co}
+	# Spa custom domains: certificates are issued on first visit, only for hostnames the app has registered.
+	on_demand_tls {
+		ask http://web:3000/api/domains/allowed
+	}
+	# Client IP (F26): port 443 is open to everyone (our own domains are not proxied; a spa's custom domain may sit behind
+	# its own Cloudflare), so Cf-Connecting-Ip is trusted only from Cloudflare's edge (ranges below; refresh: deploy/droplet/cloudflare-ips.sh --write). From any other
+	# peer {client_ip} is the TCP peer itself. Every proxied request overwrites Cf-Connecting-Ip with that resolved IP
+	# (proxy_to_web), the one header the app reads (@spa/core clientIpFrom), so per-IP rate limits and audit IPs can't
+	# be forged by a client that reaches the droplet directly. X-Forwarded-For is not a source: behind Cloudflare its
+	# first entry is whatever the client sent. Tested by deploy/droplet/test-caddy-ip.sh (CI).
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		trusted_proxies_strict
+		client_ip_headers Cf-Connecting-Ip
+	}
+}
+
+(proxy_to_web) {
+	reverse_proxy web:3000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up Cf-Connecting-Ip {client_ip}
+		# Other client-IP headers some libraries read: never forwarded (X-Forwarded-For is rebuilt by Caddy).
+		header_up -Do-Connecting-Ip
+		header_up -X-Real-Ip
+		header_up -True-Client-Ip
+	}
+}
+
+# Deploy status + recent logs for the operator (basic auth; no secrets are written there).
+(status_page) {
+	basic_auth {
+		{$STATUS_USER:ops} {$STATUS_HASH}
+	}
+	root * /srv
+	file_server
+}
+
+{$SITE_HOST} {
+	encode zstd gzip
+	# Largest legitimate body is a 20 MB image upload; the app enforces exact limits per route.
+	request_body {
+		max_size 25MB
+	}
+
+	handle /_status/* {
+		import status_page
+	}
+
+	handle {
+		import proxy_to_web
+	}
+}
+
+# Any other hostname = a spa's custom domain (the app routes it to that spa's site).
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	# Largest legitimate body is a 20 MB image upload; the app enforces exact limits per route.
+	request_body {
+		max_size 25MB
+	}
+	# The droplet's own <ip>.sslip.io (an EXTRA_ROOT_DOMAINS fallback once SITE_HOST is a real domain) keeps the status
+	# page too: a way to read deploy.json if the main domain is broken. `*.sslip.io` matches one label only, so
+	# app./admin./{slug}.<ip>.sslip.io still reach the app.
+	@status_fallback {
+		host *.sslip.io
+		path /_status/*
+	}
+	handle @status_fallback {
+		import status_page
+	}
+	handle {
+		import proxy_to_web
+	}
+}
