@@ -25,15 +25,17 @@
 <script>
   (function () {
     var SEND_TO = {
-      phone: '',            /* Google Ads → Goals → Conversions: "Phone call click" label */
-      whatsapp: '',         /* "WhatsApp click" label */
-      book: '',             /* "Book click" label */
-      booking_request: ''   /* optional: "Booking request sent" label (the form's request reached the spa) */
+      phone: 'AW-18204116059/Ti9ZCP_t5p8dENuIs-hD',           /* Google Ads "Phone Call" */
+      whatsapp: 'AW-18204116059/9PUCCPzt5p8dENuIs-hD',        /* Google Ads "WhatsApp Click" */
+      book: '',                                                 /* Book button clicks: event only (no conversion) */
+      booking_request: 'AW-18204116059/kFLlCPnt5p8dENuIs-hD'  /* Google Ads "Completed Booking": the booking request reached the spa */
     };
     var EVENT = { phone: 'phone_call_click', whatsapp: 'whatsapp_click', book: 'book_click', booking_request: 'booking_request_sent' };
     function track(kind, link) {
       try {
-        gtag('event', EVENT[kind], { event_category: 'contact', link_url: link || '' });
+        /* send_to = the account only: without it the event would also reach the call-conversion target configured
+           above and count as a "Phone Call" conversion. */
+        gtag('event', EVENT[kind], { send_to: 'AW-18204116059', event_category: 'contact', link_url: link || '' });
         if (SEND_TO[kind]) gtag('event', 'conversion', { send_to: SEND_TO[kind] });
       } catch (e) {}
     }
