@@ -23,7 +23,7 @@ the existing flow.
 
 | Branch | What it is | Status | Before merging |
 | --- | --- | --- | --- |
-| `claude/held-google-fixes-review-replies` | R29 Google Business Profile setup fixes: shared Google account, one spa per location, 30-day review cache, reconnect after the OAuth client changes, privacy wording. Also "Review replies" dropped for now: the dashboard Reviews page shows "Coming soon" (owner 2026-10-13). | Built and reviewed, **held until the owner approves the privacy wording**. | Merge the default branch in. Then delete the branch's own migrations 0057/0058 (SQL files + `meta/*_snapshot.json` + their `_journal.json` entries) and run `pnpm db:generate` again, because the default branch already has 0057–0059. Never renumber migrations by hand (PLAN §14.8 "Migration order"). |
+| `claude/held-google-fixes-review-replies` | R29 Google Business Profile setup fixes: shared Google account, one spa per location, 30-day review cache, reconnect after the OAuth client changes, privacy wording. Also "Review replies" dropped for now: the dashboard Reviews page shows "Coming soon" (owner 2026-10-13). | Built and reviewed, **held until the owner approves the privacy wording**. | Merge the default branch in. Then delete the branch's own migrations 0057/0058 (SQL files + `meta/*_snapshot.json` + their `_journal.json` entries) and run `pnpm db:generate` again, because the default branch already has 0057–0060. Never renumber migrations by hand (PLAN §14.8 "Migration order"). |
 | `claude/paused-r22-console-arabic` | R22: super-admin console in Arabic. An unfinished foundation. | **Paused by the owner** 2026-10-10 ("console keep english for now"). | Don't merge. Restart from it only if the owner asks. |
 
 ## Open items
@@ -50,7 +50,10 @@ the existing flow.
 - **AI key:** add `ARK_API_KEY` to the server secrets (`deploy/droplet/README.md` → "Secrets without SSH"). This needs the
   droplet's `/opt/spa/secrets.key`, and the new file must keep every key the current one holds. AI is a Premium feature.
 - **BE RELAX:**
-  - upload design v2.7: Console → Site templates → its row → Upload new version → Roll out (`docs/design/be-relax-site/`);
+  - v2.7 (Google Ads tag) is live; once R33 is live, upload design v2.8 (crawler text): Console → Site templates → its
+    row → Upload new version → Roll out (`docs/design/be-relax-site/`);
+  - publish the title/description draft (Console → Websites → BE RELAX), paste its Google Business + Instagram links
+    in the Profile links card, and import the Search Console 404 list in Redirects (R33);
   - in the spa's Settings → Profile → Daily sales sheet, enter the 4 phone lines;
   - rename the 11 staff currently called "Therapist".
 - **Native review:** the new Thai strings (list in PLAN §14.8, R32 entry).
@@ -111,7 +114,7 @@ never with force. Anything else, config included, goes through a PR. CI runs and
 
 ## What is in the repo besides the code
 
-- `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.6 live, v2.7 next) and the 2026-10-14 QA report.
+- `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.7 live, v2.8 next) and the 2026-10-14 QA report.
 - `docs/manuals/`: Markdown sources of the four owner's manuals (Platform EN/AR, Spa EN/TH) and the scripts that
   typeset them. The PDFs (16–27 MB each) and the 234 screenshots (58 MB) are not in git; the owner has the PDFs.
 

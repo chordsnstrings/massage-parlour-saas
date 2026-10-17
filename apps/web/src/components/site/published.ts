@@ -56,7 +56,7 @@ export async function siteJsonLd(
         category: tr(s.category, ctx) || null,
         variants: s.variants,
       })),
-      sameAs: [seo.instagram, normalizeGoogleMapsUrl(branch?.mapsUrl)],
+      sameAs: [...seo.profiles, normalizeGoogleMapsUrl(branch?.mapsUrl)],
       catalogName: locale === 'ar' ? 'العلاجات' : 'Treatments',
     }),
   )
