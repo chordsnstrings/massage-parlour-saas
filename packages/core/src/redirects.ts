@@ -3,7 +3,7 @@
 // Pure helpers shared by the console (parse + check), services (save: chains, loops) and the proxy (match). Old
 // addresses are stored and matched decoded, lower-case and without a trailing slash, so `/Old%20Page/`, `/old page`
 // and `/OLD PAGE` are one address; a source `?query` matches when all of its params are on the request.
-import { trimTrailingSlashes } from './hosts'
+import { trimTrailing, trimTrailingSlashes } from './hosts'
 
 /** Longest old address path (decoded) or query kept. */
 export const REDIRECT_PATH_MAX = 512
@@ -98,7 +98,7 @@ function normaliseQuery(raw: string): string {
   return new URLSearchParams(params).toString()
 }
 
-const hostOf = (h: string) => h.trim().toLowerCase().replace(/:\d+$/, '').replace(/\.+$/, '')
+const hostOf = (h: string) => trimTrailing(h.trim().toLowerCase().replace(/:\d+$/, ''), '.')
 
 /** `rest` ('/…') when `hostname` + `pathname` is on one of the spa's addresses, else null. */
 function onAddress(hostname: string, pathname: string, addresses: readonly string[]): string | null {
@@ -318,7 +318,7 @@ function csvCells(line: string): string[] {
 
 /** Tab, `->` / `→` / `=>`, comma (CSV quotes respected) or whitespace separated. */
 function cellsOf(line: string): string[] {
-  const arrow = line.split(/\s*(?:->|→|=>)\s*/)
+  const arrow = line.split(/->|→|=>/) // cells are trimmed below (no \s* around: linear on long blank runs)
   const cells = line.includes('\t')
     ? line.split('\t')
     : arrow.length > 1

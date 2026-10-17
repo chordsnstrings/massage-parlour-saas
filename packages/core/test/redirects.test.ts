@@ -282,4 +282,15 @@ describe('import lines', () => {
     expect(capped.errors[0]!.error).toMatch(/At most 500 lines/)
     expect(parse(many.split('\n').slice(1).join('\n')).rows).toHaveLength(REDIRECT_IMPORT_MAX_LINES)
   })
+
+  it('long blank runs and dotted hosts stay linear (CodeQL polynomial regex)', () => {
+    const started = performance.now()
+    const blanks = parse(`/old${' '.repeat(100_000)}x`)
+    const dots = parse(`https://theirspa.ae${'.'.repeat(100_000)}x/old`)
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(blanks.errors.length + blanks.rows.length).toBe(1)
+    expect(dots.rows).toEqual([])
+    // A trailing-dot host is still the spa's own.
+    expect(parse('https://theirspa.ae./old').rows[0]).toMatchObject({ from: '/old', to: '/' })
+  })
 })
