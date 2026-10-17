@@ -115,7 +115,14 @@ export const sites = pgTable(
     themeDraft: jsonb('theme_draft').$type<ThemeTokens>(),
     locales: text('locales').array().notNull().default(['en']),
     defaultLocale: text('default_locale').notNull().default('en'),
-    seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
+    /**
+     * `profiles` (R33): the spa's official profile links (Google Business Profile, Instagram …) for the JSON-LD
+     * sameAs, set by super-admins in the console (services setSiteProfiles: https only, ≤ 10).
+     */
+    seo: jsonb('seo')
+      .$type<{ title?: string; description?: string; profiles?: string[] }>()
+      .notNull()
+      .default({}),
     /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
     templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
     /** R28 P5 (D5): the Write texts run queued by a template apply / upgrade (null = none). */
