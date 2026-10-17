@@ -1527,6 +1527,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   the www twin of an active custom domain gets a certificate and 301s (GET/HEAD; 308 otherwise) to the connected
   hostname; `CUSTOM_DOMAIN_TLS=on-demand` (deploy/droplet/compose.yml) makes the spa Domains page show SSL as on
   (Caddy issues every custom-domain certificate on first visit; the old note waited for Cloudflare for SaaS).
+- **R33 Crawler-visible HTML designs + schema extras + per-spa Redirects (owner, 2026-10-17, after the BE RELAX SEO
+  report) — in progress:** BE RELAX title + description set as a Website content draft (EN + AR, ≤ 60 / 50–160 chars;
+  the owner publishes). Option A (owner): the server writes the CRM values (address, phone, hours, links) into the
+  HTML design before sending it, the same values the design's script writes (R24 invisible change). Schema: the saved
+  map link + the spa's Google Business and Instagram links. Redirects: console Websites → spa → Redirects (old path →
+  new page, 301 on the spa's addresses); the owner sends the Search Console 404 export for BE RELAX.
+- **R34 SEO agent upgrade (owner, 2026-10-17; starts after R33 is live):** all seven items — local checks (website
+  NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
+  (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform
+  account), 404 → redirect suggestions approved in one click, content drafts (service texts + FAQ with FAQ schema,
+  optional monthly blog draft), monthly report. Results: console + a summary for the spa owner in the AI studio
+  (EN + TH). AI stays drafts-only; Premium (`ai`) only. Estimate about 5–6 working days + Google's approval time.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly
