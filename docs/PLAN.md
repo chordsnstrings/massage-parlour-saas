@@ -1540,6 +1540,15 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Websites → spa → Redirects (add, import a Search Console export with preview, delete, clear; 301 on every address
   of the spa in one hop; a live page always wins; ≤ 1000 per spa) — CODEMAP "Request flow" R33. Later (owner to
   decide): automatic redirect when a page's address is renamed, hit counts (R34 does 404 suggestions).
+- **R35 BE RELAX SEO content + design v2.9 (owner, 2026-10-20, answers to the SEO list):** home title "Massage & Spa
+  in Abu Dhabi (Al Zahiyah) | Be Relax Spa" (draft); services page = only the 7 treatments in the system (no Thai /
+  Swedish / Deep Tissue), title "Massage Prices in Abu Dhabi | Be Relax Spa, Al Zahiyah", ~100 words per treatment +
+  FAQ (prices stay hidden: ask on WhatsApp; hours 11 AM – 2 AM; paid street parking (Mawaqif); cash, card, bank
+  transfer; walk-ins welcome, booking advised), EN + AR drafts. v2.9 = v2.8 + visible H1 "Massage & Spa in Al
+  Zahiyah, Abu Dhabi" (plain page text, so crawlers see it), a moving, eye-catching offer bar at the very top
+  ("20% off all treatments", runs 30 days from the roll out: end date set in Website content, the bar hides itself
+  after it), a big WhatsApp button, a price line (shown only when prices are public), a "Prices & treatments" link to
+  /services, phone speed work. One WhatsApp number (056 187 5596) = the owner's Settings → Profile step.
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform
