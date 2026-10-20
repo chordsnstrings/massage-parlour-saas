@@ -1540,7 +1540,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   Websites → spa → Redirects (add, import a Search Console export with preview, delete, clear; 301 on every address
   of the spa in one hop; a live page always wins; ≤ 1000 per spa) — CODEMAP "Request flow" R33. Later (owner to
   decide): automatic redirect when a page's address is renamed, hit counts (R34 does 404 suggestions).
-- **R35 BE RELAX SEO content + design v2.9 (owner, 2026-10-20, answers to the SEO list):** home title "Massage & Spa
+- **R35 BE RELAX SEO content + design v2.9 (owner, 2026-10-20, answers to the SEO list) — drafts saved + v2.9 ready 2026-10-20 (services title became "Massage Treatments & Prices in Abu Dhabi | Be Relax Spa" after review: the page shows "Price on request", no prices):** home title "Massage & Spa
   in Abu Dhabi (Al Zahiyah) | Be Relax Spa" (draft); services page = only the 7 treatments in the system (no Thai /
   Swedish / Deep Tissue), title "Massage Prices in Abu Dhabi | Be Relax Spa, Al Zahiyah", ~100 words per treatment +
   FAQ (prices stay hidden: ask on WhatsApp; hours 11 AM – 2 AM; paid street parking (Mawaqif); cash, card, bank

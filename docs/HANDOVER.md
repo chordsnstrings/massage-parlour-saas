@@ -51,8 +51,10 @@ the existing flow.
 - **AI key:** add `ARK_API_KEY` to the server secrets (`deploy/droplet/README.md` → "Secrets without SSH"). This needs the
   droplet's `/opt/spa/secrets.key`, and the new file must keep every key the current one holds. AI is a Premium feature.
 - **BE RELAX:**
-  - v2.7 (Google Ads tag) is live; once R33 is live, upload design v2.8 (crawler text): Console → Site templates → its
-    row → Upload new version → Roll out (`docs/design/be-relax-site/`);
+  - v2.8 is live; upload design v2.9 (R35: h1, 20% offer bar, big WhatsApp): Console → Site templates → its row →
+    Upload new version → Roll out (`docs/design/be-relax-site/`), then Claude sets the Arabic h1 (txt-14) and the
+    welcome line (`journey[welcome].eyebrow` = "{hours}") as drafts; offer end date `offer.ends` = roll-out day + 30;
+  - set the one WhatsApp number 056 187 5596 (Settings → Profile); publish the home + services drafts (R35 texts);
   - publish the title/description draft (Console → Websites → BE RELAX), paste its Google Business + Instagram links
     in the Profile links card, and import the Search Console 404 list in Redirects (R33);
   - in the spa's Settings → Profile → Daily sales sheet, enter the 4 phone lines;
