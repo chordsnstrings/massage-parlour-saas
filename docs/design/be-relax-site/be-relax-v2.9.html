@@ -190,6 +190,9 @@ if (window.clOffer(window.CRM_DATA)) document.documentElement.classList.add('has
   button, a "from" price line (only when a treatment has a public price) and a "Prices & treatments" link (/services) in
   the first scene; on phones a floating WhatsApp button after the first screen. Phone speed: the candle-light background
   waits for the page to settle and draws 30 frames a second on small or touch screens; one date formatter per zone.
+  Section addresses (owner 2026-10-20): #welcome, #our-services, #your-visit, #our-team, #book, #find-us (the old #top,
+  #treatments, #experience, #team, #visit open their section under the new name); a page opened at one lands there as the
+  menu does, and the address bar follows the reader (history.replaceState; no # in the journey).
 
   CRM ATTRIBUTE FORMAT (site-builder spec)
     data-service-title|-duration|-description|-price="[service-id]"   service name, lengths, description, price
@@ -834,17 +837,17 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
 })();
 </script>
 <header class="nav" id="nav">
-  <a class="brand" href="#top" data-crm-aria="spa-name">
+  <a class="brand" href="#welcome" data-crm-aria="spa-name">
     <img class="on-dark" data-crm-src="logo-on-dark" alt="">
     <img decoding="async" class="on-light" data-crm-src="logo-on-light" alt="">
   </a>
   <ul class="nav-links" id="navLinks">
-    <li><a href="#top" data-spy="top" data-crm-text="ui.nav.journey">Journey</a></li>
-    <li data-if="services"><a href="#treatments" data-spy="treatments" data-crm-text="ui.nav.treatments">Treatments</a></li>
-    <li data-if="experience"><a href="#experience" data-spy="experience" data-crm-text="ui.nav.visit">Your visit</a></li>
-    <li data-if="staff"><a href="#team" data-spy="team" data-crm-text="ui.nav.team">Our team</a></li>
+    <li><a href="#welcome" data-spy="welcome" data-crm-text="ui.nav.journey">Journey</a></li>
+    <li data-if="services"><a href="#our-services" data-spy="our-services" data-crm-text="ui.nav.treatments">Treatments</a></li>
+    <li data-if="experience"><a href="#your-visit" data-spy="your-visit" data-crm-text="ui.nav.visit">Your visit</a></li>
+    <li data-if="staff"><a href="#our-team" data-spy="our-team" data-crm-text="ui.nav.team">Our team</a></li>
     <li><a href="#book" data-spy="book" data-crm-text="ui.nav.book">Book</a></li>
-    <li><a href="#visit" data-spy="visit" data-crm-text="ui.nav.find">Find us</a></li>
+    <li><a href="#find-us" data-spy="find-us" data-crm-text="ui.nav.find">Find us</a></li>
   </ul>
   <div class="nav-right">
     <span class="live" data-crm="live-status"></span>
@@ -868,7 +871,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
     <button class="icon-btn" id="sheetClose" type="button" aria-label="Close menu" data-crm-attr="aria-label:ui.aria.menu_close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
   <nav aria-label="Sections" data-crm-attr="aria-label:ui.nav.sections">
-    <a href="#top" data-crm-text="ui.nav.journey">Journey</a><a href="#treatments" data-if="services" data-crm-text="ui.nav.treatments">Treatments</a><a href="#experience" data-if="experience" data-crm-text="ui.nav.visit">Your visit</a><a href="#team" data-if="staff" data-crm-text="ui.nav.team">Our team</a><a href="#book" data-crm-text="ui.nav.book">Book</a><a href="#visit" data-crm-text="ui.nav.find">Find us</a>
+    <a href="#welcome" data-crm-text="ui.nav.journey">Journey</a><a href="#our-services" data-if="services" data-crm-text="ui.nav.treatments">Treatments</a><a href="#your-visit" data-if="experience" data-crm-text="ui.nav.visit">Your visit</a><a href="#our-team" data-if="staff" data-crm-text="ui.nav.team">Our team</a><a href="#book" data-crm-text="ui.nav.book">Book</a><a href="#find-us" data-crm-text="ui.nav.find">Find us</a>
   </nav>
   <div class="foot">
     <span class="live" data-crm="live-status"></span>
@@ -877,7 +880,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
   </div>
 </div>
 
-<div id="top"></div>
+<div id="welcome"></div>
 <div id="world" aria-label="A scroll journey through the spa" data-crm-attr="aria-label:ui.aria.journey"></div>
 <div class="hero-src">
   <h1 class="hero-h1">Massage &amp; Spa in Al Zahiyah, Abu Dhabi</h1>
@@ -891,7 +894,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
 </div>
 
 <main class="after" id="after">
-  <section id="treatments" class="wrap" data-if="services">
+  <section id="our-services" class="wrap" data-if="services">
     <div class="treat-head" data-reveal>
       <span class="mono eyebrow" data-crm-text="ui.sections.treatments_eyebrow">// treatments</span>
       <h2 data-crm-text="ui.sections.treatments_title">Choose your treatment.</h2>
@@ -918,7 +921,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
     </div>
   </section>
 
-  <section id="experience" class="wrap" style="padding-top:0" data-if="experience">
+  <section id="your-visit" class="wrap" style="padding-top:0" data-if="experience">
     <div data-reveal>
       <span class="mono eyebrow" data-crm-text="ui.sections.visit_eyebrow">// your visit</span>
       <h2 data-crm-text="ui.sections.visit_title">An hour that's all yours.</h2>
@@ -931,7 +934,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
     </div>
   </section>
 
-  <section id="team" style="padding-top:0" data-if="staff">
+  <section id="our-team" style="padding-top:0" data-if="staff">
     <div class="wrap team-head" data-reveal>
       <div>
         <span class="mono eyebrow" data-crm-text="ui.sections.team_eyebrow">// our team</span>
@@ -1028,7 +1031,7 @@ html:lang(ar) .hero-prices:hover::after{transform:translateX(-3px)}
     </div>
   </section>
 
-  <section id="visit" class="wrap" style="padding-top:0">
+  <section id="find-us" class="wrap" style="padding-top:0">
     <span class="mono eyebrow" data-crm-text="ui.sections.find_eyebrow">// find us</span>
     <div class="visit" data-reveal>
       <div data-if="has-hours">
@@ -1562,22 +1565,117 @@ function injectCSS() {
       }
       scrollTo(0, current);
     }
-    return {to, frame, lock(v) { locked = v; active = false; anim = null; }};
+    return {to, frame, lock(v) { locked = v; active = false; anim = null; }, busy: () => !!anim};
   })();
-  document.addEventListener('click', e => {
-    const a = e.target.closest('a[href^="#"]');
-    if (!a) return;
-    const id = a.getAttribute('href').slice(1);
-    const target = id === 'top' ? null : document.getElementById(id);
-    if (id !== 'top' && !target) return;
-    e.preventDefault();
+
+  /* ---------- v2.9 (owner 2026-10-20): every section has its own address, named after the menu ----------
+     #welcome (the journey, the top of the page), #our-services, #your-visit, #our-team, #book, #find-us: real <a href="#…">
+     links. The names used up to v2.9 (#top, #treatments, #experience, #team, #visit) still open their section and the address
+     bar then shows the new name. The address bar follows the reader: the section the menu marks (the scroll spy) is written
+     with history.replaceState (no new history entries, so Back is not filled with sections; ?lang=ar is kept); in the
+     journey the address has no #. The page runs in the CSP sandbox (opaque origin), where replaceState may change only the
+     query and the # of the page's own address: always the page's absolute address (location.href, never a relative one,
+     which a <base> would point elsewhere); should a write be refused (a browser's rate limit, a browser that doesn't allow
+     it there), the address stays as it is: never a jump */
+  const OLD_IDS = {top: 'welcome', treatments: 'our-services', experience: 'your-visit', team: 'our-team', visit: 'find-us'};
+  const SECTION_IDS = ['welcome', 'our-services', 'your-visit', 'our-team', 'book', 'find-us'];
+  const sectionOf = h => { let id = String(h || '').replace(/^#/, ''); try { id = decodeURIComponent(id); } catch (e) { /* as typed */ } id = OLD_IDS[id] || id; return SECTION_IDS.indexOf(id) >= 0 ? id : null; };
+  const maxScroll = () => Math.max(0, document.documentElement.scrollHeight - innerHeight);
+  /* where the menu puts a section: below the top bar (96 px) and the offer bar */
+  const sectionY = target => target ? target.getBoundingClientRect().top + scrollY - 96 - offerH() : 0;
+  const addr = (() => {
+    let want = null, timer = 0, last = 0, navY = null, holding = false;
+    function write(id) {
+      const url = location.href.replace(/#.*$/, '') + (id && id !== 'welcome' ? '#' + id : '');
+      if (url === location.href) return;
+      try { history.replaceState(history.state, '', url); } catch (e) { /* refused: the address stays */ }
+    }
+    function put(id) {   /* at most one write per 200 ms; the last one always lands */
+      want = id;
+      if (timer) return;
+      timer = setTimeout(() => { timer = 0; last = performance.now(); write(want); }, Math.max(0, 200 - (performance.now() - last)));
+    }
+    return {
+      write,
+      hold(v) { holding = v; },
+      /* a menu tap, an address typed or a landing: that section's name now; the reader's own scrolling takes over again once
+         they leave the place it brought them to (a glide the visitor stops counts as their scrolling) */
+      went(id, y) { clearTimeout(timer); timer = 0; navY = Math.round(Math.min(Math.max(0, y), maxScroll())); write(id); },
+      spy(id) {
+        if (holding || glide.busy()) return;
+        if (navY !== null && Math.abs(scrollY - navY) < 4) return;
+        navY = null;
+        put(id);
+      }
+    };
+  })();
+  function goTo(id) {
+    const target = id === 'welcome' ? null : document.getElementById(id);
+    if (id !== 'welcome' && !target) return;
     closeSheet();
-    const y = target ? target.getBoundingClientRect().top + scrollY - 96 - offerH() : 0;   /* v2.9: below the offer bar too */
+    const y = sectionY(target);   /* v2.9: below the offer bar too */
     /* v2.2: the destination's own pictures first, ahead of those the glide passes; the scene stills on the way */
     if (target) target.querySelectorAll('img[loading="lazy"]').forEach(i => { i.loading = 'eager'; i.fetchPriority = 'high'; });
     if (world) world.preloadTo(y);
     glide.to(y);
+    addr.went(id, y);
+  }
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    const raw = a.getAttribute('href').slice(1), id = OLD_IDS[raw] || raw;
+    if (id !== 'welcome' && !document.getElementById(id)) return;
+    e.preventDefault();
+    goTo(id);
   });
+  /* an address typed or changed in the bar (a new # only): to that section like a menu tap, an old name under its new one */
+  addEventListener('hashchange', () => { const id = sectionOf(location.hash); if (id) goTo(id); });
+  /* opened at a section's address (/#our-team, /?lang=ar#our-team, an old name): the browser's own jump would come before the
+     page is ready and use the CSS scroll padding (76 px on phones, not the menu's 96), so the # waits off the address until
+     land() below has opened the page there */
+  const landId = sectionOf(location.hash);
+  if (landId) addr.write('');
+  let landed = false, spy = null;
+  /* after the journey has mounted and the lists, booking card and team are drawn: the section exactly where the menu puts it,
+     its pictures first, held there while late layout settles (the page's load, its pictures, the journey's load-time layout)
+     until the page has settled or the visitor scrolls themselves; then the address names it */
+  function land() {
+    if (!landId || landed) return;
+    landed = true;
+    const target = landId === 'welcome' ? null : document.getElementById(landId);
+    if (target && (target.hidden || !target.getClientRects().length)) return;   /* a section this spa doesn't show: the top, no # */
+    if (target) target.querySelectorAll('img[loading="lazy"]').forEach(i => { i.loading = 'eager'; i.fetchPriority = 'high'; });
+    const put = () => { const y = Math.round(Math.min(Math.max(0, sectionY(target)), maxScroll())); if (Math.abs(scrollY - y) > 1) scrollTo(0, y); };
+    addr.hold(true);
+    put();
+    if (world) world.preloadTo(scrollY);
+    /* the name goes back on the address once the page is read (then the browser no longer jumps to it itself) */
+    const named = () => { if (!done) addr.write(landId); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(named, 0), {once: true}); else setTimeout(named, 0);
+    const t0 = performance.now(), STOP = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+    let loadedAt = document.readyState === 'complete' ? t0 : 0, done = false;
+    if (!loadedAt) addEventListener('load', () => { loadedAt = performance.now(); }, {once: true});
+    const finish = byVisitor => {
+      if (done) return;
+      done = true;
+      STOP.forEach(ev => removeEventListener(ev, stop, true));
+      if (ro) ro.disconnect();
+      addr.hold(false);
+      if (byVisitor) addr.write(spy ? spy.active() : landId); else addr.went(landId, scrollY);
+    };
+    const stop = () => finish(true);
+    STOP.forEach(ev => addEventListener(ev, stop, {capture: true, passive: true}));
+    /* a size change above it (fonts, pictures, the journey's layout, the offer bar) is caught after layout, before that
+       frame is painted: the section never shows out of place */
+    const ro = window.ResizeObserver ? new ResizeObserver(() => { if (!done) put(); }) : null;
+    if (ro) [document.body, navEl, offerEl, document.getElementById('world'), ...document.querySelectorAll('#after > section')].forEach(n => { if (n) ro.observe(n); });
+    const tick = now => {
+      if (done) return;
+      put();
+      if ((loadedAt && now - loadedAt > 600 && now - t0 > 800) || now - t0 > 10000) finish(false); else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
 
   /* ---------- theme: follows the device, the button overrides ---------- */
   /* v2.6 (owner 2026-10-14): QA m14: the page runs in the CSP sandbox with an opaque origin, where storage lasts only as long as the
@@ -1819,7 +1917,7 @@ function injectCSS() {
       id: j.id, label: j.label, still: j.image, clip: j.clip || null, clipMobile: j.clipMobile || null, focus: j.focus, accent: j.accent,
       eyebrow: fillText(j.eyebrow), title: fillText(j.title), body: fillText(j.body),
       tags: (j.tags || []).map(fillText),
-      cta: j.cta ? {primary: {label: booking.label || T('ui.cta.book_now'), href: links.booking}, secondary: {label: T('ui.cta.see_treatments'), href: '#treatments'}} : null,
+      cta: j.cta ? {primary: {label: booking.label || T('ui.cta.book_now'), href: links.booking}, secondary: {label: T('ui.cta.see_treatments'), href: '#our-services'}} : null,
       scroll: j.cta ? 1.5 : 1.35, linger: .35
     }));
     /* team cards and the therapist select: only people with a photo (no empty frames) */
@@ -2194,21 +2292,26 @@ function injectCSS() {
     els.forEach(e => io.observe(e));
   }
 
-  function initSpy(getJourneyEnd) {
+  function initSpy(getJourneyEnd, onChange) {
     const nav = document.getElementById('nav');
     const links = [...document.querySelectorAll('#navLinks a[data-spy]')];
-    const ids = links.map(a => a.dataset.spy).filter(id => id !== 'top');
+    const ids = links.map(a => a.dataset.spy).filter(id => id !== 'welcome');
+    let cur = null;   /* v2.9: the section marked now (onChange: on every update, so the address also catches up after a stopped glide) */
     function update() {
       const y = scrollY;
       nav.classList.toggle('solid', y > getJourneyEnd() - 40);
-      let active = 'top';
+      let active = 'welcome';
       if (y >= getJourneyEnd() - innerHeight * .3) {
         ids.forEach(id => { const el = document.getElementById(id); if (el && !el.hidden && el.getBoundingClientRect().top < innerHeight * .4) active = id; });
+        /* v2.9: at the foot of the page the last section is marked (on a tall screen Find us never reaches the 40% line) */
+        if (y > 0 && y >= document.documentElement.scrollHeight - innerHeight - 2) for (let i = ids.length - 1; i >= 0; i--) { const el = document.getElementById(ids[i]); if (el && !el.hidden && el.getClientRects().length) { active = ids[i]; break; } }
       }
       links.forEach(a => a.classList.toggle('active', a.dataset.spy === active));
+      const first = cur === null; cur = active; if (!first && onChange) onChange(active);
     }
     addEventListener('scroll', update, {passive: true});
     update();
+    return {active: () => cur};
   }
 
   function wireStatic(model) {
@@ -2436,7 +2539,7 @@ function injectCSS() {
     addEventListener('scroll', onScroll, {passive: true});
     if ('IntersectionObserver' in window) {
       const io = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) seen.add(e.target); else seen.delete(e.target); }); set(); });
-      [document.getElementById('book'), document.getElementById('visit'), document.querySelector('footer')].forEach(n => { if (n) io.observe(n); });
+      [document.getElementById('book'), document.getElementById('find-us'), document.querySelector('footer')].forEach(n => { if (n) io.observe(n); });
     }
     if (small.addEventListener) small.addEventListener('change', set);
     onScroll(); set();
@@ -2492,15 +2595,17 @@ function injectCSS() {
     initBooking(model);
     orbit = initOrbit();
     initReveal();
-    initSpy(() => world ? world.endY() : 0);
+    spy = initSpy(() => world ? world.endY() : 0, id => addr.spy(id));   /* v2.9: the address bar follows the reader */
     initFab(wa.whatsapp);   /* v2.9 */
     /* v2.9: the end date passing while the page is open: the bar goes, the buttons take the page's own message */
     if (wa.on && wa.on.ends) { let ended = false; setInterval(() => { if (ended || window.clOffer(CRM)) return; ended = true; html.classList.remove('has-offer'); setNavH(); const href = offerLinks(model).whatsapp; if (href) document.querySelectorAll('.hero-wa, #waFab').forEach(a => { a.href = href; }); }, 60000); }
     rootEl.classList.remove('crm-loading');
+    land();   /* v2.9: opened at a section's address */
   }).catch(err => {
     console.error(err);
     rootEl.classList.remove('crm-loading');
     document.getElementById('crmError').hidden = false;
+    land();
   });
 })();
 </script>
