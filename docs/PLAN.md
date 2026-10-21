@@ -1559,7 +1559,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `pos.use`; (4) **From the website** card next to it (online bookings waiting for confirmation + new website
   enquiries with Reply on WhatsApp / Make booking, phone-alerts switch, refreshes itself ~30 s) **plus a pop-up with a
   short sound anywhere in the CRM** when a website booking or enquiry arrives (per-device mute).
-  **As built (2026-10-21, branch `claude/laughing-faraday-fjgrsu`; PR + live pending; CODEMAP "Dashboard home (R36)"):**
+  **As built (live 2026-10-21 19:32 Dubai, PR #60, 788e0c0; CODEMAP "Dashboard home (R36)"):**
   - Stages: cancelled / no-show first; then the live sale: open = Not paid, paid **or refunded** = Paid (shown as
     Refunded, out of the Paid total); a **voided** sale counts as no sale; no sale: pending = To confirm, completed =
     Not paid, else To finish. **Paid total = the Revenue KPI** of that date (paid sales on the date in scope).
