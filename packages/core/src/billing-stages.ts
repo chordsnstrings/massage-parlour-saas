@@ -1,8 +1,9 @@
 // F22 automatic billing transitions for platform invoices (PLAN §14.3, §18.8, §17). Manual billing: nothing here
 // moves money. An unpaid invoice is *late* `overdueAfterDays` after its due date. The first day a spa is found late
 // it enters `overdue` (the grace clock starts: `overdueSince`), the next day `grace`, and `graceDays` after
-// `overdueSince` the dashboard becomes `read_only`. Paying every late invoice lifts it. Pure rules only; the
-// worker job and the payment paths apply them (services billing-transitions.ts).
+// `overdueSince` the dashboard becomes `read_only`. Paying every late invoice lifts it. A spa moves up at most one
+// stage at a time (R37: missed runs never skip a stage). Pure rules only; the worker job and the payment paths apply
+// them (services billing-transitions.ts).
 import { addDays } from './booking'
 
 export const BILLING_STAGES = ['overdue', 'grace', 'read_only'] as const
@@ -34,12 +35,17 @@ export function stageFor(overdueSince: string, today: string, rules: BillingRule
   return today > overdueSince ? 'grace' : 'overdue'
 }
 
+/** The stages a late spa passes through under these rules (`overdue` needs ≥ 1 grace day, `grace` ≥ 2). */
+export const billingSteps = (rules: BillingRules) =>
+  BILLING_STAGES.filter((s) => s === 'read_only' || rules.graceDays >= RANK[s])
+
 export type BillingState = { stage: BillingStage | null; overdueSince: string | null }
 
 /**
  * The next state of one spa. `late` = it has an unpaid invoice past `lateFrom`. `paused` (console, per spa or
  * globally) and `liftOnly` (payment paths) never escalate; lifting — fewer restrictions — always applies. A
- * longer grace period set later can step a spa back (read_only → grace).
+ * longer grace period set later can step a spa back (read_only → grace). Escalation goes one step of `billingSteps`
+ * per call (R37), so after missed runs (a worker outage) a spa still passes every stage, warnings first.
  */
 export function nextBillingState(
   current: BillingState,
@@ -55,6 +61,33 @@ export function nextBillingState(
     return { stage: stageFor(today, today, rules), overdueSince: today }
   }
   const target = stageFor(current.overdueSince, today, rules)
-  if (RANK[target] > RANK[current.stage] && hold) return current
-  return { stage: target, overdueSince: current.overdueSince }
+  const rank = RANK[current.stage]
+  if (RANK[target] <= rank) return { stage: target, overdueSince: current.overdueSince }
+  if (hold) return current
+  return {
+    stage: billingSteps(rules).find((s) => RANK[s] > rank) ?? target,
+    overdueSince: current.overdueSince,
+  }
+}
+
+/**
+ * The first day a late spa can really be read-only (R37): `readOnlyFrom`, or later while the one-step rule still
+ * has stages to pass (after an outage). `steppedToday` = its stage changed today, so its next step is tomorrow at
+ * the earliest; otherwise today's run may take it. Read-only (or no stage): `readOnlyFrom`.
+ */
+export function effectiveReadOnlyFrom(
+  state: BillingState,
+  today: string,
+  rules: BillingRules,
+  steppedToday = false,
+): string | null {
+  if (!state.overdueSince) return null
+  const from = readOnlyFrom(state.overdueSince, rules)
+  if (!state.stage || state.stage === 'read_only') return from
+  const rank = RANK[state.stage]
+  const earliest = addDays(
+    today,
+    billingSteps(rules).filter((s) => RANK[s] > rank).length - (steppedToday ? 0 : 1),
+  )
+  return earliest > from ? earliest : from
 }

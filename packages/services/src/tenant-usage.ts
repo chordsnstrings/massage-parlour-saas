@@ -81,6 +81,7 @@ export async function tenantUsageList(
       deletedAt: tenants.deletedAt,
       billingStage: tenants.billingStage,
       billingOverdueSince: tenants.billingOverdueSince,
+      billingStageAt: tenants.billingStageAt,
       featureTier: tenants.featureTier,
       plan: plans.name,
       planLimits: plans.limits,

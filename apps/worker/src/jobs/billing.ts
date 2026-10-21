@@ -1,12 +1,17 @@
 // F22: automatic billing transitions for platform invoices (PLAN §17; services billing-transitions.ts). Daily,
 // before the 09:20 billing notifications; idempotent (the same day gives the same state), every change audited,
 // notified in the spa dashboard and emailed to the spa's owners + super-admins when staff email is configured.
+// R37: the first run after a worker outage is held (no changes that day); then one stage per spa per day.
 import { platformDb } from '@spa/db'
 import { dubaiToday, runBillingTransitions } from '@spa/services'
 import { log } from '../log'
 
 export async function billingTransitions(now = new Date()) {
-  const res = await runBillingTransitions(platformDb(), dubaiToday(now))
+  const res = await runBillingTransitions(platformDb(), dubaiToday(now), { now })
+  if (res.held) {
+    log('warn', 'billing transitions held after an outage', { previousRun: res.previousDay })
+    return { held: true, previousRun: res.previousDay }
+  }
   const changed = res.changed.map((t) => ({ spa: t.slug, from: t.from.stage, to: t.to.stage }))
   if (changed.length || res.failed.length)
     log(res.failed.length ? 'error' : 'info', 'billing transitions', {

@@ -123,13 +123,18 @@ test('console: tenant usage columns and automatic billing transitions', async ({
   })
 
   await test.step('after the grace period: read-only; the Billing page still opens', async () => {
+    // One stage per day (R37): in grace since yesterday, overdue for 8 days.
     await db
       .update(tenants)
-      .set({ billingOverdueSince: daysAgo(8) })
+      .set({
+        billingStage: 'grace',
+        billingOverdueSince: daysAgo(8),
+        billingStageAt: new Date(Date.now() - 86_400_000),
+      })
       .where(eq(tenants.id, id))
     await ops.reload()
     await ops.getByRole('button', { name: 'Check now' }).click()
-    await expect(ops.getByText('Billing stage: overdue → read_only')).toBeVisible()
+    await expect(ops.getByText('Billing stage: grace → read_only')).toBeVisible()
     await owner.goto(dashboard)
     await expect(owner.getByText(/Read-only: an invoice is unpaid past the grace period/)).toBeVisible()
     await owner.goto(`${dashboard}/billing`)

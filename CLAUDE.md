@@ -165,6 +165,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
   EXTRA_ROOT_DOMAINS would loop the old-domain → bare canonical redirect); CNAME target = CF_CNAME_TARGET
   (site.env move block: customers.spamanagement.co; unset = APP_URL host); worker jobs use APP_URL.
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
+- Worker bundle (R37): esbuild single file, banner `createRequire as __workerCreateRequire`, `--external:sharp` (run
+  image has no node_modules: no image processing in worker jobs). CI "Worker bundle starts" + update.sh
+  `worker_health` guard it; a crash there once went unnoticed 10 days (web stays up, alerts live in the worker).
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
 - Deploys: the droplet's `spa-update` timer deploys **`deploy/green`** every 2 min and rebuilds: CI's `promote` job moves

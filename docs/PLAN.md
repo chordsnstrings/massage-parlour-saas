@@ -1579,6 +1579,26 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R37 Worker outage fix (found 2026-10-21 from the console Server health screen; owner "Fix + safety checks", billing
+  "Hold it for 1 day"):** the production worker has crash-looped since the R24 deploy (2026-10-11 ~22:46 UTC, last
+  heartbeat): R24 brought `sharp` into the worker bundle (`import('sharp')` via services media/site-import/ai add_image);
+  sharp's ESM declares `createRequire`, the worker build banner (apps/worker/package.json) declares it too → `SyntaxError:
+  Identifier 'createRequire' has already been declared` before any code runs. Web, migrate and seed were unaffected, the
+  deploy health check only tests web, CI never built/started the worker bundle, and all alerting lives in the worker, so
+  nothing flagged it. Console rows Disk / Last deploy / "worker sees it missing" were the frozen 10-11 heartbeat.
+  Owner-approved scope: (1) fix the bundle; (2) a broken worker can't ship silently again (CI builds + starts the worker
+  bundle; the droplet deploy fails/rolls back when the worker doesn't come up healthy); (3) the console marks
+  heartbeat-derived figures as old when the worker is stale; (4) billing: after an outage the first billing-transitions
+  run makes no stage changes (hold one day, payments can be recorded), then stages advance normally with the warnings
+  first (no jump straight to read-only). Missed scheduled runs are not replayed (pg-boss `missed` = skip).
+  **As built (2026-10-21):** worker banner rename + `--external:sharp` (no worker job processes images); CI "Worker
+  bundle starts"; update.sh `worker_health` (exit 14, rollback; known gap: a worker that beats once then crash-loops
+  can still pass, the heartbeat file survives a restart in the same container); console "As of …" rows; billing:
+  every run recorded, held when the previous run is > 2 days back or none is recorded (so production's first run
+  after the fix is held), one stage per spa per day, effective read-only date shown. `/api/health` unchanged (review:
+  public on spa sites, no worker state). Not replayed while down (owner to check): staff document reminders
+  10-12..10-21, membership renewals/package expiries (expire with income on the restart date), weekly insights /
+  SEO check / digests, Google review sync.
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform

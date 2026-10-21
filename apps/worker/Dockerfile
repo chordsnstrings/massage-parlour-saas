@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Build from the repo root: docker build -f apps/worker/Dockerfile .
-# One self-contained bundle: dist/index.js (worker), dist/migrate.js, dist/seed.js.
+# One self-contained bundle: dist/index.js (worker), dist/migrate.js, dist/seed.js. sharp stays external (R37): no
+# worker job processes images, so it isn't installed here; services' lazy `import('sharp')` would throw if one did.
+# CI starts the bundle from a copy without node_modules (ci.yml "Worker bundle starts").
 FROM node:22-alpine AS base
 RUN corepack enable
 WORKDIR /repo

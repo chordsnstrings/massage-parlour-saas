@@ -1600,7 +1600,7 @@ integrations note,
 | `document-reminders` | 09:00 |
 | `weekly-insights` | Mon 08:00 |
 | `daily-digest` | 09:30 |
-| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
+| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); R37: every run recorded in `platform_job_runs` (`details.day`), the first run after an outage (previous run > 2 days back, or none recorded) is held = no changes that day, and a spa moves up at most one stage per day (`billingStageAt` = today pauses it; banner/console date = core `effectiveReadOnlyFrom`); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
 
 Integration jobs do nothing until their credentials are configured.
 
@@ -1629,7 +1629,13 @@ i18n namespace `automations`.
   - `migrate` (worker image: migrate + seed);
   - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`, also set at run time for web + worker: services
     `freeSiteUrl` reads it from `process.env`, which Next doesn't inline);
-  - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`);
+  - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`;
+    R37: esbuild bundle whose banner imports `createRequire as __workerCreateRequire` (a bundled ESM dep declaring
+    `createRequire` crashed it 10-11..10-21) and `--external:sharp` — no worker job may process images (run image
+    has no node_modules); CI step "Worker bundle starts" runs the bundle from a bare copy and expects the
+    DATABASE_URL_OWNER error; the console marks heartbeat-derived rows (Disk, Last deploy, worker key notes) "As of …"
+    with an amber badge when the beat is > 10 min old; `/api/health` stays `{ok, release}` — public on every host,
+    so no worker state there);
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
   - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
@@ -1649,7 +1655,10 @@ i18n namespace `automations`.
     tip. Steps: build → `pg_dump -Fc` `/opt/spa/backups/pre-migrate-<sha12>.dump` (keep 5) → `up` (migrate with
     `lock_timeout`/`statement_timeout`, `migrationUrl` in packages/db/src/migrate.ts) → `/api/health`; any failure →
     redeploy `/opt/spa/last-good`, `deploy.json` state `failed`, commit in `status/failed` (not retried without
-    `--force`). Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
+    `--force`). R37: after web, `worker_health` (≤ ~90 s) needs the worker container `running` and a fresh
+    `/tmp/worker-heartbeat` (< 7 min) else exit 14 → "worker restarting / not running / running but no heartbeat",
+    last 40 worker log lines in `build.log`, rollback (from the deploy after the one shipping a changed update.sh).
+    Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
     (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
     file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
     Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.
