@@ -35,6 +35,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pg_dump / pg_restore must match the server major (16), like the worker image: the runner's newer client
+      # emits `SET transaction_timeout`, which a 16 server rejects (restore drill test).
+      - name: PostgreSQL 16 client tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends postgresql-client-16
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - name: Bootstrap test database
         run: >-
           psql -h localhost -U postgres -d postgres -v db_name=spa_test
