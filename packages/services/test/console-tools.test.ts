@@ -1,5 +1,12 @@
-// F20 (feature flags, announcements), F21 (console tenant usage list), F22 (automatic billing transitions).
-import { DEFAULT_BILLING_RULES, nextBillingState, readOnlyFrom, stageFor } from '@spa/core'
+// F20 (feature flags, announcements), F21 (console tenant usage list), F22 (automatic billing transitions), R37 hold.
+import {
+  billingSteps,
+  DEFAULT_BILLING_RULES,
+  effectiveReadOnlyFrom,
+  nextBillingState,
+  readOnlyFrom,
+  stageFor,
+} from '@spa/core'
 import {
   aiUsage,
   announcementDismissals,
@@ -10,6 +17,8 @@ import {
   members,
   notifications,
   plans,
+  platformInvoices,
+  platformJobRuns,
   platformSettings,
   roles,
   session,
@@ -26,6 +35,7 @@ import {
   activeAnnouncements,
   applyBillingTransition,
   type BillingTransition,
+  billingStageSummary,
   billingTransitionEffects,
   createPlatformInvoice,
   DomainError,
@@ -74,6 +84,43 @@ describe('billing stage rules (pure)', () => {
       stage: 'grace',
       overdueSince: '2026-10-11',
     })
+  })
+  it('R37: one stage per call through every stage the rules give', () => {
+    const overdue = { stage: 'overdue' as const, overdueSince: '2026-10-01' }
+    expect(nextBillingState(overdue, true, '2026-10-20', rules)).toEqual({ ...overdue, stage: 'grace' })
+    expect(nextBillingState({ ...overdue, stage: 'grace' }, true, '2026-10-21', rules)).toEqual({
+      ...overdue,
+      stage: 'read_only',
+    })
+    // Under 2 grace days there is no grace day; with none a spa is read-only the first late day.
+    const short = { overdueAfterDays: 1, graceDays: 1 }
+    expect(billingSteps(short)).toEqual(['overdue', 'read_only'])
+    expect(nextBillingState(overdue, true, '2026-10-20', short).stage).toBe('read_only')
+    const none = { overdueAfterDays: 1, graceDays: 0 }
+    expect(billingSteps(none)).toEqual(['read_only'])
+    expect(nextBillingState({ stage: null, overdueSince: null }, true, '2026-10-20', none)).toEqual({
+      stage: 'read_only',
+      overdueSince: '2026-10-20',
+    })
+  })
+  it('R37: the effective read-only date is never already past while a stage is left', () => {
+    const late = (stage: 'overdue' | 'grace' | 'read_only') => ({ stage, overdueSince: '2026-10-11' })
+    // On time: the rule date (also before the run on the read-only day itself).
+    expect(effectiveReadOnlyFrom(late('overdue'), '2026-10-11', rules, true)).toBe('2026-10-18')
+    expect(effectiveReadOnlyFrom(late('grace'), '2026-10-18', rules)).toBe('2026-10-18')
+    // After an outage (rule date 18 Oct): grace tomorrow at the earliest, read-only the day after that.
+    expect(effectiveReadOnlyFrom(late('overdue'), '2026-10-22', rules)).toBe('2026-10-23')
+    expect(effectiveReadOnlyFrom(late('grace'), '2026-10-23', rules, true)).toBe('2026-10-24')
+    expect(effectiveReadOnlyFrom(late('read_only'), '2026-10-24', rules, true)).toBe('2026-10-18')
+    expect(effectiveReadOnlyFrom({ stage: null, overdueSince: null }, '2026-10-24', rules)).toBeNull()
+    const at = new Date('2026-10-23T08:00:00Z')
+    expect(
+      billingStageSummary(
+        { billingStage: 'grace', billingOverdueSince: '2026-10-11', billingStageAt: at },
+        rules,
+        '2026-10-23',
+      ),
+    ).toEqual({ stage: 'grace', rank: 2, readOnlyFrom: '2026-10-24' })
   })
 })
 
@@ -313,8 +360,13 @@ describe('console tools (db)', () => {
     const send = async (n: NewNotification) => {
       sent.push(n)
     }
+    // The job's clock on a simulated day (noon Dubai): stage timestamps match `today`.
+    const at = (day: string) => new Date(`${day}T08:00:00Z`)
+    const run = (day: string) => runBillingTransitions(platform, day, { now: at(day) })
     const step = async (today: string, opts: { paused?: boolean } = {}) => {
-      const t = await platform.transaction((tx) => applyBillingTransition(tx, ids.a!, today, opts))
+      const t = await platform.transaction((tx) =>
+        applyBillingTransition(tx, ids.a!, today, { ...opts, now: at(today) }),
+      )
       if (t) await billingTransitionEffects(platform, t, { send })
       return t
     }
@@ -444,16 +496,86 @@ describe('console tools (db)', () => {
         enabled: false,
         userId: 'u-admin',
       })
-      // Due 1 Jan + 3 days → late from 4 Jan.
-      expect((await runBillingTransitions(platform, '2027-01-03')).changed).toHaveLength(0)
-      const run = await runBillingTransitions(platform, '2027-01-04')
-      expect(run.changed.map((t) => [t.slug, t.to.stage])).toEqual([['tools-a', 'overdue']])
-      expect((await runBillingTransitions(platform, '2027-01-06')).changed.map((t) => t.to.stage)).toEqual([
-        'read_only',
-      ])
+      // Due 1 Jan + 3 days → late from 4 Jan; 2 grace days → read-only from 6 Jan. No run recorded yet: held (R37).
+      expect((await run('2027-01-02')).held).toBe(true)
+      expect((await run('2027-01-03')).changed).toHaveLength(0)
+      const first = await run('2027-01-04')
+      expect(first.changed.map((t) => [t.slug, t.to.stage])).toEqual([['tools-a', 'overdue']])
+      expect((await run('2027-01-05')).changed.map((t) => t.to.stage)).toEqual(['grace'])
+      expect((await run('2027-01-06')).changed.map((t) => t.to.stage)).toEqual(['read_only'])
       const [b] = await platform.select().from(tenants).where(eq(tenants.id, ids.b!))
       expect([b!.status, b!.billingStage]).toEqual(['active', null])
       await saveBillingRules(platform, DEFAULT_BILLING_RULES, 'u-admin')
+    })
+
+    it('R37: held a day after an outage, then one stage per day; payments lift meanwhile', async () => {
+      await platform.delete(platformJobRuns).where(eq(platformJobRuns.job, 'billing-transitions'))
+      // Long overdue (read-only was due 8 Mar) when the worker comes back on 20 Mar; no run recorded before R37.
+      await platform
+        .update(tenants)
+        .set({
+          billingStage: 'overdue',
+          billingOverdueSince: '2031-03-01',
+          billingStageAt: at('2031-03-01'),
+          status: 'past_due',
+        })
+        .where(eq(tenants.id, ids.a!))
+      const held = await run('2031-03-20')
+      expect([held.held, held.previousDay, held.changed]).toEqual([true, null, []])
+      expect((await run('2031-03-20')).held).toBe(true) // the hold lasts the whole day
+      expect([(await tenant()).billingStage, (await tenant()).status]).toEqual(['overdue', 'past_due'])
+      // Next day: one stage, not straight to read-only; a rerun the same day doesn't climb further.
+      const resumed = await run('2031-03-21')
+      expect([resumed.held, resumed.changed.map((t) => [t.slug, t.to.stage, t.readOnlyFrom])]).toEqual([
+        false,
+        [['tools-a', 'grace', '2031-03-22']], // the effective date, not the rule date (8 Mar)
+      ])
+      expect(billingStageSummary(await tenant(), DEFAULT_BILLING_RULES, '2031-03-21')?.readOnlyFrom).toBe(
+        '2031-03-22',
+      )
+      expect((await run('2031-03-21')).changed).toEqual([])
+      expect((await step('2031-03-21'))?.to.stage).toBeUndefined()
+      expect((await run('2031-03-22')).changed.map((t) => t.to.stage)).toEqual(['read_only'])
+      // Down again 23–25 Mar (> 48 h): held on the 26th, and the payment recorded that day lifts as usual.
+      const again = await run('2031-03-26')
+      expect([again.held, again.previousDay]).toEqual([true, '2031-03-22'])
+      expect((await tenant()).billingStage).toBe('read_only')
+      const open = await platform
+        .select({ id: platformInvoices.id })
+        .from(platformInvoices)
+        .where(and(eq(platformInvoices.tenantId, ids.a!), eq(platformInvoices.status, 'issued')))
+      for (const inv of open)
+        await setInvoicePaid(platform, {
+          tenantId: ids.a!,
+          invoiceId: inv.id,
+          paid: true,
+          userId: 'u-admin',
+          today: '2031-03-26',
+        })
+      expect([(await tenant()).status, (await tenant()).billingStage]).toEqual(['active', null])
+      expect((await run('2031-03-27')).held).toBe(false)
+      const runs = await platform
+        .select({ status: platformJobRuns.status, details: platformJobRuns.details })
+        .from(platformJobRuns)
+        .where(eq(platformJobRuns.job, 'billing-transitions'))
+        .orderBy(platformJobRuns.id)
+      expect(runs.map((r) => [r.status, r.details.day, r.details.held ?? false])).toEqual([
+        ['skipped', '2031-03-20', true],
+        ['skipped', '2031-03-20', true],
+        ['ok', '2031-03-21', false],
+        ['ok', '2031-03-21', false],
+        ['ok', '2031-03-22', false],
+        ['skipped', '2031-03-26', true],
+        ['ok', '2031-03-27', false],
+      ])
+    })
+
+    it('R37: the first run ever is held (nothing to lose on a fresh install); one missed day is not', async () => {
+      await platform.delete(platformJobRuns).where(eq(platformJobRuns.job, 'billing-transitions'))
+      expect((await run('2031-04-10')).held).toBe(true)
+      expect((await run('2031-04-11')).held).toBe(false)
+      expect((await run('2031-04-13')).held).toBe(false) // 48 h: one daily run missed
+      expect((await run('2031-04-16')).held).toBe(true)
     })
   })
 

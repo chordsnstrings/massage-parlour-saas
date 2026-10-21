@@ -1591,6 +1591,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   heartbeat-derived figures as old when the worker is stale; (4) billing: after an outage the first billing-transitions
   run makes no stage changes (hold one day, payments can be recorded), then stages advance normally with the warnings
   first (no jump straight to read-only). Missed scheduled runs are not replayed (pg-boss `missed` = skip).
+  **As built (2026-10-21):** worker banner rename + `--external:sharp` (no worker job processes images); CI "Worker
+  bundle starts"; update.sh `worker_health` (exit 14, rollback; known gap: a worker that beats once then crash-loops
+  can still pass, the heartbeat file survives a restart in the same container); console "As of …" rows; billing:
+  every run recorded, held when the previous run is > 2 days back or none is recorded (so production's first run
+  after the fix is held), one stage per spa per day, effective read-only date shown. `/api/health` unchanged (review:
+  public on spa sites, no worker state). Not replayed while down (owner to check): staff document reminders
+  10-12..10-21, membership renewals/package expiries (expire with income on the restart date), weekly insights /
+  SEO check / digests, Google review sync.
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform

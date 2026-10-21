@@ -25,7 +25,7 @@ import { PageBody, PageHeader } from '@/components/ui/page'
 import { StatCard } from '@/components/ui/stat-card'
 import { DataTable } from '@/components/ui/table'
 import { adminPath } from '@/lib/paths'
-import { formatAed, formatDate, todayDubai } from '@/lib/utils'
+import { formatAed, formatDate, formatDateTime, todayDubai } from '@/lib/utils'
 import { registerEmailSettings } from '@/server/email-settings'
 import { currentTurnstile } from '@/server/turnstile'
 import { pauseTenantAction } from './actions'
@@ -109,6 +109,9 @@ export default async function PlatformOverview() {
     .limit(1)
   const beatAgeMin = beat ? Math.round((Date.now() - beat.finishedAt.getTime()) / 60_000) : null
   const beatStale = beatAgeMin === null || beatAgeMin > 10
+  // R37: a stale beat's figures (disk, deploy, the worker's config flags) are shown as of that beat, never green.
+  const beatAt = beat && beatStale ? formatDateTime(beat.finishedAt) : null
+  const asOf = beatAt ? `As of ${beatAt} (worker not reporting): ` : ''
   const disk = beat?.details.disk as { usedPct: number; freeGb: number } | null | undefined
   const deploy = beat?.details.deploy as
     | { state: string; commit?: string; message?: string }
@@ -202,14 +205,15 @@ export default async function PlatformOverview() {
               text={
                 beatAgeMin === null
                   ? 'No heartbeat yet: the worker is not running'
-                  : `Last heartbeat ${beatAgeMin} min ago${beatStale ? ': the worker looks down' : ''}`
+                  : `Last heartbeat ${beatAgeMin} min ago${beatAt ? ` (${beatAt})` : ''}${beatStale ? ': the worker looks down' : ''}`
               }
             />
             <HealthRow
               testId="health-disk"
               label="Disk"
               ok={Boolean(disk) && (disk?.usedPct ?? 100) <= 85}
-              text={disk ? `${disk.usedPct}% used · ${disk.freeGb} GB free` : 'Unknown'}
+              stale={Boolean(beatAt)}
+              text={disk ? `${asOf}${disk.usedPct}% used · ${disk.freeGb} GB free` : 'Unknown'}
             />
             <HealthRow
               testId="health-csp"
@@ -232,7 +236,8 @@ export default async function PlatformOverview() {
                 testId="health-deploy"
                 label="Last deploy"
                 ok={deploy.state !== 'failed'}
-                text={`${deploy.state}${deploy.commit ? ` · ${deploy.commit.slice(0, 7)}` : ''}${deploy.message ? ` · ${deploy.message}` : ''}`}
+                stale={Boolean(beatAt)}
+                text={`${asOf}${deploy.state}${deploy.commit ? ` · ${deploy.commit.slice(0, 7)}` : ''}${deploy.message ? ` · ${deploy.message}` : ''}`}
               />
             )}
           </ul>
@@ -263,7 +268,7 @@ export default async function PlatformOverview() {
                 warnOnly={!c.required}
                 text={`${c.ok ? 'Set' : `Missing: ${c.effect}`}${c.detail ? ` · ${c.detail}` : ''}${
                   workerConfig && c.key in workerConfig && workerConfig[c.key] !== c.ok
-                    ? ` · worker sees it ${workerConfig[c.key] ? 'set' : 'missing'}`
+                    ? ` · worker ${beatAt ? 'saw' : 'sees'} it ${workerConfig[c.key] ? 'set' : 'missing'}${beatAt ? ` as of ${beatAt} (worker not reporting)` : ''}`
                     : ''
                 }`}
               />
@@ -464,19 +469,23 @@ function HealthRow(p: {
   text: string
   warnOnly?: boolean
   strong?: boolean
+  /** R37: the figure is from a stale worker heartbeat: amber "old" instead of a green ok (a bad figure keeps its colour). */
+  stale?: boolean
 }) {
-  const tone = p.ok ? 'success' : p.warnOnly ? 'warning' : 'danger'
+  const old = p.ok && p.stale
+  const tone = old ? 'warning' : p.ok ? 'success' : p.warnOnly ? 'warning' : 'danger'
   return (
     <li
       data-testid={p.testId}
       data-ok={p.ok}
+      data-stale={p.stale || undefined}
       className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-[var(--ui-card-pad,1.25rem)] py-2.5 sm:px-[var(--ui-card-pad-sm,1.5rem)] md:grid-cols-[16rem_minmax(0,1fr)_auto] lg:grid-cols-[18.5rem_minmax(0,1fr)_auto]"
     >
       {/* Phones: label + status on one line, the text below; md+: one row with an aligned text column. */}
       <span className={p.strong ? 'font-semibold' : 'font-medium'}>{p.label}</span>
       <span className="col-span-2 row-start-2 text-muted md:col-span-1 md:row-start-auto">{p.text}</span>
       <Badge tone={tone} className="justify-self-end">
-        {p.ok ? 'ok' : p.warnOnly ? 'off' : 'problem'}
+        {old ? 'old' : p.ok ? 'ok' : p.warnOnly ? 'off' : 'problem'}
       </Badge>
     </li>
   )

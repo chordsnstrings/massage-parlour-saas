@@ -3,15 +3,17 @@
 // record payment, Stripe Checkout) runs `liftBillingHold` in its transaction and `billingTransitionEffects` after
 // commit. Read-only = tenant status `read_only` (server/access.ts `guard` blocks staff writes; the Billing page,
 // the public site and online booking keep working). A manual pause (status read_only without the stage) is left
-// to the super-admin. Legacy yearly spas are included (their invoices are ordinary platform invoices).
+// to the super-admin. Legacy yearly spas are included (their invoices are ordinary platform invoices). R37: a spa
+// moves up at most one stage per day, and the first job run after a worker outage changes nothing (held one day).
 import {
   addDays,
   type BillingRules,
   type BillingState,
   billingStageRank,
+  businessDateOf,
   DEFAULT_BILLING_RULES,
+  effectiveReadOnlyFrom,
   nextBillingState,
-  readOnlyFrom,
   resolveEmailConfig,
   sendStaffEmail,
 } from '@spa/core'
@@ -22,6 +24,7 @@ import {
   members,
   platformAdmins,
   platformInvoices,
+  platformJobRuns,
   platformPayments,
   platformSettings,
   roles,
@@ -29,7 +32,7 @@ import {
   tenants,
   user,
 } from '@spa/db'
-import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm'
 import { DomainError } from './errors'
 import { flagValues } from './feature-flags'
 import { type NewNotification, notify } from './notifications'
@@ -85,7 +88,7 @@ export type BillingTransition = {
   statusFrom: TenantStatus
   statusTo: TenantStatus
   invoice: LateInvoice | null
-  /** First read-only day while late (null once lifted). */
+  /** First read-only day while late (null once lifted; R37: never before tomorrow while a step is left). */
   readOnlyFrom: string | null
   trigger: 'job' | 'payment'
 }
@@ -95,13 +98,14 @@ const SKIP: TenantStatus[] = ['suspended', 'cancelled']
 /**
  * Applies the rules to one spa inside the caller's platform transaction (tenant row locked). Returns what changed,
  * or null (no change, deleted / suspended / cancelled spa). `paused` = transitions paused for this spa (console
- * flag); `liftOnly` = payment paths. Idempotent: the same day gives the same state.
+ * flag); `liftOnly` = payment paths; `now` = the caller's clock (stage timestamp). Idempotent: the same day gives
+ * the same state (a stage changed on `today` doesn't move up again until the next day).
  */
 export async function applyBillingTransition(
   tx: DbOrTx,
   tenantId: string,
   today: string,
-  opts: { rules?: BillingRules; paused?: boolean; liftOnly?: boolean } = {},
+  opts: { rules?: BillingRules; paused?: boolean; liftOnly?: boolean; now?: Date } = {},
 ): Promise<BillingTransition | null> {
   const [t] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).for('update')
   if (!t || t.deletedAt || SKIP.includes(t.status)) return null
@@ -109,9 +113,13 @@ export async function applyBillingTransition(
   // Paused by hand (R12 "Pause spa"): the super-admin decides; the stage may still be cleared once paid.
   const manualPause = t.status === 'read_only' && t.billingStage !== 'read_only'
   const current: BillingState = { stage: t.billingStage, overdueSince: t.billingOverdueSince }
+  // One step up per day (R37): reruns the same day (job retry, console "Check now") don't climb further.
+  const steppedToday = Boolean(
+    t.billingStage && t.billingStageAt && businessDateOf(t.billingStageAt, '00:00') === today,
+  )
   const invoice = await oldestLateInvoice(tx, tenantId, today, rules)
   const next = nextBillingState(current, Boolean(invoice), today, rules, {
-    paused: opts.paused || manualPause,
+    paused: opts.paused || manualPause || steppedToday,
     liftOnly: opts.liftOnly,
   })
   if (next.stage === current.stage && next.overdueSince === current.overdueSince) return null
@@ -134,7 +142,7 @@ export async function applyBillingTransition(
     .set({
       billingStage: next.stage,
       billingOverdueSince: next.overdueSince,
-      billingStageAt: new Date(),
+      billingStageAt: opts.now ?? new Date(),
       status,
     })
     .where(eq(tenants.id, tenantId))
@@ -147,7 +155,7 @@ export async function applyBillingTransition(
     statusFrom: t.status,
     statusTo: status,
     invoice,
-    readOnlyFrom: next.overdueSince ? readOnlyFrom(next.overdueSince, rules) : null,
+    readOnlyFrom: effectiveReadOnlyFrom(next, today, rules, true),
     trigger: opts.liftOnly ? 'payment' : 'job',
   }
 }
@@ -254,11 +262,36 @@ export async function billingTransitionEffects(
   return { kind, emailed }
 }
 
+const BILLING_JOB = 'billing-transitions'
+
 /**
  * The daily job: every spa with an unpaid invoice or a billing stage, one transaction each; one failing spa never
  * stops the others. Transitions paused by the `billing.autoTransitions` flag (default or per-spa override) only lift.
+ * R37 (owner "Hold it for 1 day"): every run is recorded (platform_job_runs `billing-transitions`, `details.day`).
+ * After an outage — the previous run more than 2 days before `today` (> 48 h at the daily slot), or no record at all
+ * (runs before R37 weren't recorded; a fresh install has nothing late yet) — the run changes nothing and is recorded
+ * as held (all day): payments recorded meanwhile lift as usual, and the next run moves spas on one stage at a time.
  */
-export async function runBillingTransitions(db: Db, today: string) {
+export async function runBillingTransitions(db: Db, today: string, opts: { now?: Date } = {}) {
+  const now = opts.now ?? new Date()
+  const [prev] = await db
+    .select({ details: platformJobRuns.details })
+    .from(platformJobRuns)
+    .where(eq(platformJobRuns.job, BILLING_JOB))
+    .orderBy(desc(platformJobRuns.finishedAt), desc(platformJobRuns.id))
+    .limit(1)
+  const last = prev?.details as { day?: string; held?: boolean } | undefined
+  const previousDay = last?.day ?? null
+  const held = !last || (last.day ?? '') < addDays(today, -2) || (last.held === true && last.day === today)
+  if (held) {
+    await db.insert(platformJobRuns).values({
+      job: BILLING_JOB,
+      status: 'skipped',
+      details: { day: today, held: true, previousDay },
+      startedAt: now,
+    })
+    return { checked: 0, changed: [] as BillingTransition[], failed: [] as string[], held, previousDay }
+  }
   const rules = await billingRules(db)
   const auto = await flagValues(db, 'billing.autoTransitions')
   const candidates = await db
@@ -274,7 +307,7 @@ export async function runBillingTransitions(db: Db, today: string) {
   for (const c of candidates) {
     try {
       const t = await db.transaction((tx) =>
-        applyBillingTransition(tx, c.id, today, { rules, paused: !auto.on(c.id) }),
+        applyBillingTransition(tx, c.id, today, { rules, paused: !auto.on(c.id), now }),
       )
       if (t) {
         changed.push(t)
@@ -285,7 +318,13 @@ export async function runBillingTransitions(db: Db, today: string) {
       console.error('billing transition failed', c.id, error)
     }
   }
-  return { checked: candidates.length, changed, failed }
+  await db.insert(platformJobRuns).values({
+    job: BILLING_JOB,
+    status: failed.length ? 'failed' : 'ok',
+    details: { day: today, checked: candidates.length, changed: changed.length, failed: failed.length },
+    startedAt: now,
+  })
+  return { checked: candidates.length, changed, failed, held, previousDay }
 }
 
 /** Console "Billing rules" save (bounds: core BILLING_RULE_LIMITS, checked by the action's zod). */
@@ -311,15 +350,28 @@ export async function saveBillingRules(db: DbOrTx, rules: BillingRules, userId: 
   return { before, after: rules }
 }
 
-/** Console list/detail label: "Grace · read-only from 2026-10-18" etc. */
+/**
+ * Console list/detail + dashboard banner: "Grace · read-only from 2026-10-18" etc. The date is the effective one
+ * (R37, core effectiveReadOnlyFrom; `billingStageAt` tells a step taken today).
+ */
 export const billingStageSummary = (
-  t: { billingStage: BillingState['stage']; billingOverdueSince: string | null },
+  t: {
+    billingStage: BillingState['stage']
+    billingOverdueSince: string | null
+    billingStageAt?: Date | null
+  },
   rules: BillingRules,
+  today = businessDateOf(new Date(), '00:00'),
 ) =>
   t.billingStage && t.billingOverdueSince
     ? {
         stage: t.billingStage,
         rank: billingStageRank(t.billingStage),
-        readOnlyFrom: readOnlyFrom(t.billingOverdueSince, rules),
+        readOnlyFrom: effectiveReadOnlyFrom(
+          { stage: t.billingStage, overdueSince: t.billingOverdueSince },
+          today,
+          rules,
+          Boolean(t.billingStageAt && businessDateOf(t.billingStageAt, '00:00') === today),
+        )!,
       }
     : null

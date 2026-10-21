@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # CI (job guards): update.sh build_env, which rebuilds /opt/spa/.env as .env.base < secrets.env.enc < site.env,
 # against fixtures in a temp dir; then the committed deploy/droplet/site.env (allowed keys only, no duplicates, and
-# SITE_HOST / ROUTING / APP_URL / ADMIN_URL set together and matching). Needs bash, openssl, grep, sed.
+# SITE_HOST / ROUTING / APP_URL / ADMIN_URL set together and matching); then (R37) the deploy itself with stub git +
+# docker: a worker that is restarting or writes no heartbeat fails the deploy and rolls back. Needs bash, openssl,
+# grep, sed, flock, sha256sum.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
@@ -163,8 +165,75 @@ keys=${keys% }
 [ -z "$problems" ] && ok "valid (sets: ${keys:-nothing})" ||
   bad "deploy/droplet/site.env: $problems"
 
+echo "== deploy flow (R37): web + worker health, rollback"
+# Stubs on PATH for update.sh run as on the droplet: git (origin + deploy/green = $FAKE_NEW, reset records the
+# checkout), docker (`docker compose --env-file F …`; the worker of $FAKE_BAD acts as $FAKE_WORKER) and sleep.
+mkdir -p "$work/bin"
+cat >"$work/bin/git" <<'SH'
+#!/usr/bin/env bash
+case $1 in
+  fetch | merge-base) exit 0 ;;
+  rev-parse) echo "$FAKE_NEW" ;;
+  reset) echo "${*: -1}" >"$SPA_ROOT/head" ;;
+  *) exit 1 ;;
+esac
+SH
+cat >"$work/bin/docker" <<'SH'
+#!/usr/bin/env bash
+[ "$1" = compose ] || exit 0 # docker image prune
+shift 3
+worker=ok
+[ "$(cat "$SPA_ROOT/head")" = "${FAKE_BAD:-}" ] && worker=$FAKE_WORKER
+case $1 in
+  ps) if [ "$3" = '{{.State}}' ]; then [ "$worker" = restarting ] && echo restarting || echo running; fi ;;
+  logs) echo "${*: -1} log"; [ "${*: -1}" = worker ] && [ "$worker" != ok ] && echo "SyntaxError: x token=abc" ;;
+  exec) case $3 in
+    postgres) f=${*: -1} && [ "$4" = pg_dump ] && : >"$SPA_ROOT/backups/${f#/backups/}" ;;
+    caddy) [ "$4" = sha256sum ] && sha256sum Caddyfile ;;
+    worker) [ "$worker" = ok ] && echo /tmp/worker-heartbeat ;;
+  esac ;;
+esac
+exit 0
+SH
+printf '#!/bin/sh\nexit 0\n' >"$work/bin/sleep"
+chmod +x "$work/bin/"*
+G1=$(printf '1%.0s' {1..40}) G2=$(printf '2%.0s' {1..40}) B1=$(printf 'b%.0s' {1..40})
+# deploy <new> [bad worker mode]: one updater run from a stack at $(cat status/deployed); rc, out, json set.
+deploy() {
+  rc=0
+  PATH="$work/bin:$PATH" SPA_LOCK="$work/lock" DOCKER_DAEMON_JSON="$work/daemon.json" FAKE_NEW=$1 FAKE_BAD=$1 \
+    FAKE_WORKER=${2:-ok} bash "$here/update.sh" >"$work/out" 2>&1 || rc=$?
+  json=$(cat "$R/status/deploy.json")
+}
+flow() { # flow <deployed sha>: a droplet with that commit live
+  reset
+  mkdir -p "$R/backups"
+  echo test >"$R/branch"
+  : >"$R/.env"
+  printf ':80\n' >"$R/repo/deploy/droplet/Caddyfile"
+  echo "$1" >"$R/status/deployed"
+  echo "$1" >"$R/last-good"
+}
+flow "$G1"
+deploy "$G2"
+[ "$rc" = 0 ] && [[ $json == *'"state":"ok"'*"deployed 2222222"* ]] && [ "$(cat "$R/status/deployed")" = "$G2" ] &&
+  [ "$(cat "$R/last-good")" = "$G2" ] && ok "healthy web + worker: deployed" || bad "healthy web + worker: rc=$rc $json"
+for mode in restarting silent; do
+  flow "$G2"
+  deploy "$B1" "$mode"
+  want="worker restarting"
+  [ "$mode" = silent ] && want="worker running but no heartbeat"
+  [ "$rc" = 1 ] && [[ $json == *'"state":"failed"'*"$want for bbbbbbb; rolled back to 2222222"* ]] &&
+    [ "$(cat "$R/head")" = "$G2" ] && [ "$(cat "$R/status/deployed")" = "$G2" ] &&
+    [ "$(cat "$R/status/failed")" = "$B1" ] && [ "$(cat "$R/last-good")" = "$G2" ] &&
+    ok "$want: failed + rolled back" || bad "$want: failed + rolled back (rc=$rc $json)"
+  log=$(cat "$R/status/build.log")
+  [[ $log == *"== $want (last 40 lines) =="*"SyntaxError: x token=***"* ]] &&
+    ok "$want: worker log lines in build.log, redacted" || bad "$want: worker log in build.log: $log"
+done
+
 if [ "$fails" != 0 ]; then
-  echo "$fails updater env check(s) failed." >&2
+  echo "$fails updater check(s) failed." >&2
   exit 1
 fi
-echo "Updater env checks passed."
+echo "Updater checks passed."
