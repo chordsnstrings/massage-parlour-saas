@@ -12,6 +12,7 @@ import { PushAlertsRow } from '@/components/push/enable-notifications'
 import { Button } from '@/components/ui/button'
 import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
+import { cn } from '@/lib/utils'
 import { can, type MemberContext } from '@/server/access'
 
 const noon = (date: string) => `${date}T12:00:00+04:00`
@@ -58,11 +59,11 @@ export async function WebsiteCard({
     <Card title={t('overview.web.title')} actions={live} data-testid="website-inbox">
       <div className="space-y-5">
         {/* Two columns while the card spans the page (stacked layout), one beside the bookings card. */}
-        <div className="grid gap-5 md:grid-cols-2 min-[90rem]:grid-cols-1">
+        <div className={cn('grid gap-5', online && enquiries && 'md:grid-cols-2 min-[90rem]:grid-cols-1')}>
           {online && (
             <section aria-labelledby="web-online" className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <h4 id="web-online" className="text-[13px] font-semibold">
+                <h4 id="web-online" tabIndex={-1} className="text-[13px] font-semibold outline-none">
                   {t('overview.web.online.title')}
                 </h4>
                 <Pill tone={inbox.pendingOnlineCount ? 'warn' : undefined}>
@@ -102,6 +103,7 @@ export async function WebsiteCard({
                             bookingId={b.bookingId}
                             name={name}
                             description={[name, service, when(b.businessDate, b.startsAt)].join(' · ')}
+                            focusAfter={['#web-online']}
                           />
                           {seeCalendar && (
                             <Button size="sm" variant="ghost" asChild>

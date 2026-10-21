@@ -121,7 +121,7 @@ export const overview = {
     note: {
       bookedOnline: 'Booked online {time}',
       walkIn: 'Walk-in booking',
-      via: 'Booked by {source}',
+      via: 'Booked via {source}',
       regular: 'Regular client',
       newClient: 'New client',
       finished: 'Finished {time}',
@@ -140,6 +140,7 @@ export const overview = {
     },
     confirmTitle: 'Confirm booking {ref}',
     confirmLabel: 'Confirm the booking of {name}',
+    confirmGone: 'Already confirmed or cancelled',
     loading: 'Loading…',
     emptyTitle: 'Nothing on this day',
     emptyText: 'Bookings and sales of this business day show up here.',

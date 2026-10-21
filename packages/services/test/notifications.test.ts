@@ -336,6 +336,15 @@ describe('producers', () => {
     )
     expect([...out]).toEqual([ids.pending])
     expect(await tx((db) => pendingBookingIds(db, []))).toEqual(new Set())
+    // Only the viewer's branches (as the Confirm checks): null = any, [] = none.
+    expect([...(await tx((db) => pendingBookingIds(db, [ids.pending!], [ids.branch!])))]).toEqual([
+      ids.pending,
+    ])
+    const elsewhere = await tx((db) =>
+      pendingBookingIds(db, [ids.pending!], ['00000000-0000-0000-0000-000000000000']),
+    )
+    expect(elsewhere).toEqual(new Set())
+    expect(await tx((db) => pendingBookingIds(db, [ids.pending!], []))).toEqual(new Set())
   })
 
   it('low stock: one per location, warehouse named by key, deduped per day', async () => {

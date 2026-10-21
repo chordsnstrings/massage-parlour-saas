@@ -37,6 +37,8 @@ export function NotificationBell({
     after: initial.items.reduce((max, n) => (n.at > max ? n.at : max), ''),
   }))
   const [toasts, setToasts] = useState<BellItem[]>([])
+  // The toast whose Confirm form is open stays when a newer alert arrives (its typed fee would be lost).
+  const pinned = useRef(new Set<string>())
   const [sound, setSound] = useState(true)
   const soundRef = useRef(true)
 
@@ -50,13 +52,11 @@ export function NotificationBell({
     setSound(on)
   }, [])
 
-  // Browsers start audio only after a gesture: unlock on the first press while the sound is on.
+  // Browsers start audio only after a gesture: unlock on presses while the sound is on — every press, since iOS
+  // suspends / interrupts the audio again when the app goes to the background or the screen locks.
   useEffect(() => {
     const unlock = () => {
-      if (soundRef.current && unlockChime()) {
-        window.removeEventListener('pointerdown', unlock, true)
-        window.removeEventListener('keydown', unlock, true)
-      }
+      if (soundRef.current) unlockChime()
     }
     window.addEventListener('pointerdown', unlock, true)
     window.addEventListener('keydown', unlock, true)
@@ -79,7 +79,11 @@ export function NotificationBell({
     const unshown = takeUnshown(fresh.map((n) => n.id))
     const show = fresh.filter((n) => unshown.has(n.id))
     if (!show.length) return
-    setToasts((ts) => [...show, ...ts.filter((x) => !unshown.has(x.id))].slice(0, 3))
+    setToasts((ts) => {
+      const next = [...show, ...ts.filter((x) => !unshown.has(x.id))]
+      let room = 3 - next.filter((x) => pinned.current.has(x.id)).length
+      return next.filter((x) => pinned.current.has(x.id) || room-- > 0)
+    })
     if (soundRef.current) chime()
   }, [data, seen])
 
@@ -148,6 +152,10 @@ export function NotificationBell({
           open(n)
         }}
         onDismiss={dismiss}
+        onFormOpen={(id, o) => {
+          if (o) pinned.current.add(id)
+          else pinned.current.delete(id)
+        }}
         onConfirmed={(n) => {
           // Handled: read (the Confirm form already refreshed the page).
           if (!n.read) {

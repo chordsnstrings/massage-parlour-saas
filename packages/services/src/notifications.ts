@@ -125,14 +125,27 @@ export async function listNotifications(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** R36: which of these bookings (ids from notification params) are still pending — the pop-up's one-tap Confirm. */
-export async function pendingBookingIds(tx: Tx, ids: string[]): Promise<Set<string>> {
+/**
+ * R36: which of these bookings (ids from notification params) are still pending — the pop-up's one-tap Confirm — in
+ * these branches (null = any branch; the viewer's, as the Confirm itself checks).
+ */
+export async function pendingBookingIds(
+  tx: Tx,
+  ids: string[],
+  branchIds: string[] | null = null,
+): Promise<Set<string>> {
   const list = [...new Set(ids.filter((id) => UUID.test(id)))]
-  if (!list.length) return new Set()
+  if (!list.length || branchIds?.length === 0) return new Set()
   const rows = await tx
     .select({ id: bookings.id })
     .from(bookings)
-    .where(and(inArray(bookings.id, list), eq(bookings.status, 'pending')))
+    .where(
+      and(
+        inArray(bookings.id, list),
+        eq(bookings.status, 'pending'),
+        branchIds ? inArray(bookings.branchId, branchIds) : undefined,
+      ),
+    )
   return new Set(rows.map((r) => r.id))
 }
 

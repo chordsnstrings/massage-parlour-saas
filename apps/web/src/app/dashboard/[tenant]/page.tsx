@@ -107,6 +107,8 @@ export default async function TenantHome({
   // R36: money on "Today's bookings & sales" for whoever sees money elsewhere (owner, manager, reception); the
   // "From the website" sections with the permission of their notifications.
   const money = showRevenue || can(ctx, 'pos.use')
+  // Typed notes, cancel reasons, client type: only for those who may open the calendar (as before R36).
+  const showDetails = can(ctx, 'calendar.view')
   const showOnline = can(ctx, 'calendar.manage')
   const showEnquiries = showClients
   const now = new Date()
@@ -116,6 +118,9 @@ export default async function TenantHome({
     const scope = await homeScope(tx, ctx, { branch: branchParam, day: dayParam, now })
     const { allowed, picked, branchId, branchIds, branch, cutoff, today: to, day } = scope
     const from = addDays(to, 1 - days)
+    // Before the cards' own reads (each statement its own snapshot): a write landing in between then only costs one
+    // extra refresh instead of a pulse that already counts what the cards miss.
+    const pulse = await dashboardPulse(tx, { branchIds, date: day, today: to })
     const [team] = await tx.select({ n: count() }).from(members)
     const [sub] = await tx.select().from(subscriptions).limit(1)
     const [svc] = await tx.select({ n: count() }).from(services)
@@ -148,12 +153,11 @@ export default async function TenantHome({
     const series =
       period === 'today' ? await revenueSeries(tx, { branchId, from: addDays(to, -6), to }) : k.daily
     const heat = period === '30d' ? k : await peakHours(tx, { branchId, from: addDays(to, -29), to })
-    const orders = await todayOrders(tx, { branchIds, date: day, now, money })
+    const orders = await todayOrders(tx, { branchIds, date: day, now, money, details: showDetails })
     const inbox =
       showOnline || showEnquiries
         ? await websiteInbox(tx, { branchIds, today: to, online: showOnline, enquiries: showEnquiries })
         : null
-    const pulse = await dashboardPulse(tx, { branchIds, date: day, today: to })
     return {
       scoped: scope.scoped,
       today: to,

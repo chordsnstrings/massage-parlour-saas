@@ -9,6 +9,7 @@ import {
   unreadNotificationCount,
   type Viewer,
 } from '@spa/services'
+import { allowedBranches } from '@/app/dashboard/[tenant]/calendar/data'
 import { appPath } from '@/lib/paths'
 import { can, type MemberContext } from '@/server/access'
 
@@ -20,7 +21,10 @@ export type BellItem = {
   href: string | null
   at: string
   read: boolean
-  /** R36: an unread booking.online whose booking is still pending, for a viewer with calendar.manage (pop-up Confirm). */
+  /**
+   * R36: an unread booking.online whose booking is still pending in one of the viewer's branches, for a viewer with
+   * calendar.manage (pop-up Confirm).
+   */
   confirm?: { bookingId: string; name: string }
 }
 export type BellData = { unread: number; items: BellItem[] }
@@ -51,7 +55,13 @@ export async function bellData(ctx: MemberContext, t: Translator, fmt: Format, l
   const [items, unread, pending] = await withTenant(ctx.tenant.id, async (tx) => {
     const list = await listNotifications(tx, viewer, { limit })
     const ids = can(ctx, 'calendar.manage') ? list.flatMap((n) => bookingOf(n) ?? []) : []
-    return [list, await unreadNotificationCount(tx, viewer), await pendingBookingIds(tx, ids)] as const
+    // Only bookings of the viewer's (open) branches: the same check the Confirm itself makes.
+    const branchIds = ids.length ? (await allowedBranches(tx, ctx)).map((b) => b.id) : []
+    return [
+      list,
+      await unreadNotificationCount(tx, viewer),
+      await pendingBookingIds(tx, ids, branchIds),
+    ] as const
   })
   return {
     unread,

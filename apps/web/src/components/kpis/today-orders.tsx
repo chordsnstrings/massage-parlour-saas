@@ -149,6 +149,10 @@ export function TodayOrdersCard({
           bookingId={r.bookingId}
           name={name}
           description={[name, service, fmt.time(r.startsAt)].filter(Boolean).join(' · ')}
+          focusAfter={[
+            `[data-order="${r.key}"] td:last-child :is(a, button)`,
+            '[data-testid="today-orders"] [aria-pressed="true"]',
+          ]}
         />
       ) : null
     const link = (href: string, label: string, primary: boolean) => (
@@ -259,12 +263,13 @@ export function TodayOrdersCard({
             label={t('overview.today.filter')}
             value={filter}
             onChange={(v) => setFilter(v as Filter)}
-            items={FILTERS.map((f) => ({
+            // Without money the stages don't say whether anything is paid (completed rows stay under All).
+            items={FILTERS.filter((f) => money || (f !== 'not_paid' && f !== 'paid')).map((f) => ({
               value: f,
               label: (
                 <>
                   {t(`overview.today.chip.${f}`)}
-                  <span className="tabular opacity-70">{fmt.number(orders.counts[f])}</span>
+                  <span className="tabular font-normal">{fmt.number(orders.counts[f])}</span>
                 </>
               ),
             }))}
@@ -281,7 +286,8 @@ export function TodayOrdersCard({
           <p className="crm-muted py-6 text-center text-sm">{t('overview.today.emptyFilter')}</p>
         ) : (
           <div className="crm-tbl-wrap">
-            <table className="crm-tbl min-w-[34rem]">
+            {/* Phones: rows stack as cards (kit data-stack), so Status / Fee / Paid / the action stay in view. */}
+            <table className="crm-tbl md:min-w-[34rem]" data-stack="true">
               <thead>
                 <tr>
                   <th>{t('overview.today.col.time')}</th>
@@ -312,8 +318,8 @@ export function TodayOrdersCard({
                     <tr
                       key={r.key}
                       data-order={r.key}
-                      data-stage={r.stage}
-                      className={cn(cancelled && 'opacity-60')}
+                      data-stage={money ? r.stage : undefined}
+                      className={cn(cancelled && 'crm-muted')}
                     >
                       <td className="align-top">
                         <span className="crm-num block font-semibold">{fmt.time(r.startsAt)}</span>
@@ -323,48 +329,61 @@ export function TodayOrdersCard({
                           </span>
                         )}
                       </td>
-                      <td className="align-top">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium" dir="auto">
-                            {name}
+                      <td className="align-top" data-label={t('overview.today.col.client')}>
+                        <div className="min-w-0">
+                          <span className="flex flex-wrap items-center gap-1.5 max-md:justify-end">
+                            <span className="font-medium" dir="auto">
+                              {name}
+                            </span>
+                            {r.source === 'online' && <Pill tone="info">{t('overview.today.website')}</Pill>}
                           </span>
-                          {r.source === 'online' && <Pill tone="info">{t('overview.today.website')}</Pill>}
-                        </span>
-                        {lines && (
-                          <span className="crm-muted line-clamp-2 block max-w-[16rem] text-xs" dir="auto">
-                            {lines}
-                          </span>
-                        )}
+                          {lines && (
+                            <span className="crm-muted line-clamp-2 max-w-[16rem] text-xs" dir="auto">
+                              {lines}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="align-top">
-                        <span className="line-clamp-2 block max-w-[16rem]">{services || '—'}</span>
-                        {minutes > 0 && (
-                          <span className="crm-muted block text-xs">
-                            {t('overview.today.minutes', { min: fmt.number(minutes) })}
-                          </span>
-                        )}
+                      <td className="align-top" data-label={t('overview.today.col.service')}>
+                        <div className="min-w-0">
+                          <span className="line-clamp-2 max-w-[16rem]">{services || '—'}</span>
+                          {minutes > 0 && (
+                            <span className="crm-muted block text-xs">
+                              {t('overview.today.minutes', { min: fmt.number(minutes) })}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="crm-muted align-top">{r.staff.join(', ') || '—'}</td>
-                      <td className="align-top">
+                      <td className="crm-muted align-top" data-label={t('overview.today.col.therapist')}>
+                        {r.staff.join(', ') || '—'}
+                      </td>
+                      <td className="align-top" data-label={t('overview.today.col.status')}>
                         <Pill tone={p.tone} dot>
                           {p.label}
                         </Pill>
                       </td>
                       {money && (
-                        <td className="crm-num-c align-top">
-                          <span
-                            className={cn('crm-num block whitespace-nowrap', cancelled && 'line-through')}
-                          >
-                            {fmt.aed(r.feeAed)}
-                          </span>
-                          {r.feeMissing && !cancelled && (
-                            <span className="block whitespace-nowrap text-xs text-[var(--crm-warn)]">
-                              {t('overview.today.feeMissing')}
+                        <td className="crm-num-c align-top" data-label={t('overview.today.col.fee')}>
+                          <div>
+                            <span
+                              className={cn('crm-num block whitespace-nowrap', cancelled && 'line-through')}
+                            >
+                              {fmt.aed(r.feeAed)}
                             </span>
-                          )}
+                            {r.feeMissing && !cancelled && (
+                              <span className="block whitespace-nowrap text-xs text-[var(--crm-warn)]">
+                                {t('overview.today.feeMissing')}
+                              </span>
+                            )}
+                          </div>
                         </td>
                       )}
-                      {money && <td className="align-top">{paid(r)}</td>}
+                      {money && (
+                        <td className="align-top" data-label={t('overview.today.col.paid')}>
+                          {paid(r)}
+                        </td>
+                      )}
+                      {/* No label on phones: the button sits at the card's end. */}
                       <td className="align-top text-end">{action(r, name, services)}</td>
                     </tr>
                   )

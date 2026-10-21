@@ -143,6 +143,7 @@ export const overview: Messages['overview'] = {
     },
     confirmTitle: 'ยืนยันการจอง {ref}',
     confirmLabel: 'ยืนยันการจองของ {name}',
+    confirmGone: 'การจองนี้ได้รับการยืนยันหรือยกเลิกไปแล้ว',
     loading: 'กำลังโหลด…',
     emptyTitle: 'ไม่มีรายการในวันนี้',
     emptyText: 'การจองและการขายของวันทำการนี้จะแสดงที่นี่',

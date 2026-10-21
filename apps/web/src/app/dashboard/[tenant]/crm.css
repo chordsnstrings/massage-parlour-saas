@@ -639,6 +639,19 @@
     inset-inline-end: 12px;
   }
 }
+/* Touch: Sound + Dismiss as big as the other controls (≥ 40 px, PLAN §14.6). */
+@media (pointer: coarse) {
+  .crm-pop {
+    padding-inline-end: 50px;
+  }
+  .crm-pop-sound {
+    height: var(--crm-h-ctl);
+  }
+  .crm-pop-x {
+    width: var(--crm-h-ctl);
+    height: var(--crm-h-ctl);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .crm-pop {
     animation: none;

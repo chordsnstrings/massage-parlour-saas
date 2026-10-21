@@ -331,7 +331,19 @@ describe('R36 todayOrders — stages, sale rows, other days, branches', () => {
     expect(day.rows.every((r) => r.saleId === null)).toBe(true)
     expect(day.totals.paid).toEqual({ aed: 0, cash: 0, card: 0, other: 0 })
     expect(day.totals.booked).toEqual({ aed: 0, count: 6 })
-    expect(day.counts).toMatchObject({ all: 8, paid: 2, to_confirm: 1 })
+    // Stages from the booking status alone: nothing says paid / not paid by the sale.
+    expect(day.rows.every((r) => r.stage === todayStage(r.status, null))).toBe(true)
+    expect(day.counts).toMatchObject({ all: 8, paid: 0, to_confirm: 1 })
+  })
+
+  it('details: false (no calendar.view) leaves out typed notes, cancel reasons and the client type', async () => {
+    const day = await run((tx) =>
+      todayOrders(tx, { branchIds: [ids.branch!], date: E, now: NOW, details: false }),
+    )
+    expect(day.rows.length).toBeGreaterThan(0)
+    expect(day.rows.every((r) => r.notes === null && r.cancelReason === null && r.clientType === null)).toBe(
+      true,
+    )
   })
 
   it('pulse changes with bookings, fees, sales and enquiries, and only then', async () => {
@@ -470,5 +482,29 @@ describe('R36 websiteInbox', () => {
       enquiries: [],
       enquiriesNewCount: 0,
     })
+  })
+
+  it('pulse follows the date, pending bookings’ items and the booking made from a request', async () => {
+    const X = '2030-01-01'
+    const pulse = (date: string, today = date) =>
+      run((tx) => dashboardPulse(tx, { branchIds: [ids.branch!], date, today }))
+    // Two empty days (nothing pending from then on): only the date differs — a quiet spa still rolls over.
+    expect(await pulse(X)).not.toBe(await pulse('2030-01-02'))
+    // A pending online booking on another day: its fee changes without touching the booking row.
+    const p0 = await pulse(X, G)
+    await run((tx) =>
+      tx.update(bookingItems).set({ priceAed: '150' }).where(eq(bookingItems.bookingId, online[1]!)),
+    )
+    expect(await pulse(X, G)).not.toBe(p0)
+    // The booking made from a request (confirmed, not on the day): moving it changes the reply text.
+    await run((tx) => setBookingStatus(tx, online[0]!, 'confirmed'))
+    const p1 = await pulse(X)
+    await run((tx) =>
+      tx
+        .update(bookings)
+        .set({ startsAt: dubaiInstant(G, 18 * 60), endsAt: dubaiInstant(G, 19 * 60) })
+        .where(eq(bookings.id, online[0]!)),
+    )
+    expect(await pulse(X)).not.toBe(p1)
   })
 })

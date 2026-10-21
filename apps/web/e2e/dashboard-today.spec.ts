@@ -286,8 +286,17 @@ test('home: today’s bookings & sales + from the website (owner), money hidden 
   await test.step('the cards refresh themselves: a new enquiry shows within 30 s, no reload', async () => {
     const reem = await enquiry(seed, 'Reem Odeh', '+971507654321', 'Do you have a slot tonight?')
     await expect(web.locator(`[data-web-enquiry="${reem.id}"]`)).toHaveCount(0)
-    await page.clock.fastForward('00:31')
-    await expect(web.locator(`[data-web-enquiry="${reem.id}"]`)).toContainText('Do you have a slot tonight?')
+    // The clock also runs in real time: a check already in flight (read before the insert) can swallow one forwarded
+    // tick, so forward again until the card shows it.
+    await expect(async () => {
+      await page.clock.fastForward('00:31')
+      await expect(web.locator(`[data-web-enquiry="${reem.id}"]`)).toContainText(
+        'Do you have a slot tonight?',
+        {
+          timeout: 2000,
+        },
+      )
+    }).toPass()
   })
 
   await test.step('Reply on WhatsApp (click-to-send) marks the enquiry replied and leaves the card', async () => {
@@ -372,6 +381,10 @@ test('home: today’s bookings & sales + from the website (owner), money hidden 
     await expect(c).not.toContainText('AED')
     await expect(c.locator('tbody').getByRole('link')).toHaveCount(0)
     await expect(c.locator('tbody').getByRole('button')).toHaveCount(0)
+    // No paid / not-paid state (chips or stages) and no typed notes / cancel reasons (no calendar.view).
+    await expect(c.getByRole('button', { name: /^(Not paid|Paid)\s*\d+$/ })).toHaveCount(0)
+    await expect(c.locator(`tr[data-order="b:${paid.id}"]`)).not.toHaveAttribute('data-stage')
+    await expect(c.locator(`tr[data-order="b:${cancelled.id}"]`)).not.toContainText('Client called to cancel')
     // Neither website section (calendar.manage / clients.view): no card.
     await expect(p.getByTestId('website-inbox')).toHaveCount(0)
     await ctx.close()
@@ -426,7 +439,7 @@ test('CRM pop-up: a website booking / enquiry arriving later shows once, with Co
           (await db.select().from(notifications).where(eq(notifications.tenantId, seed.tenantId))).length,
       )
       .toBe(1)
-    await expect(toast).toHaveCount(0)
+    // (No "not yet" check here: a real-time bell tick may already have shown it.)
     await page.clock.fastForward('00:31')
     await expect(stack.getByTestId('website-toast')).toHaveCount(1)
     await expect(toast).toContainText('New online booking')

@@ -171,15 +171,17 @@ async function bookingDetails(tx: Tx, bookingIds: string[], extraStaff: string[]
  * per booking of the date (every status) and one per live sale of the date that is not on one of those bookings
  * (shop / walk-in sales, or a sale of another day's booking), in time order. `branchIds` as the Revenue KPI's branch:
  * null = the whole spa, else those branches. `money: false` (no dashboard.revenue / pos.use) leaves out sale rows,
- * fees, sales and money totals (counts stay).
+ * fees, sales and money totals (counts stay), and stages come from the booking status alone (no paid / not paid).
+ * `details: false` (no calendar.view) leaves out typed notes, cancel reasons and the client type.
  */
 export async function todayOrders(
   tx: Tx,
-  o: { branchIds: string[] | null; date: string; now?: Date; money?: boolean },
+  o: { branchIds: string[] | null; date: string; now?: Date; money?: boolean; details?: boolean },
 ): Promise<TodayOrders> {
   const { date } = o
   const now = o.now ?? new Date()
   const money = o.money ?? true
+  const details = o.details ?? true
   const list = await tx
     .select({
       id: bookings.id,
@@ -314,11 +316,11 @@ export async function todayOrders(
       clientFirstName: firstName(b.client),
       source: b.source,
       status: b.status,
-      stage: todayStage(b.status, s),
+      stage: todayStage(b.status, money ? s : null),
       bookedAt: b.createdAt,
-      clientType: b.clientType,
-      cancelReason: b.cancelReason,
-      notes: b.notes,
+      clientType: details ? b.clientType : null,
+      cancelReason: details ? b.cancelReason : null,
+      notes: details ? b.notes : null,
       services: d?.services ?? [],
       staff: d?.staff ?? [],
       feeAed: money ? aed(d?.fee ?? 0) : 0,
@@ -512,10 +514,10 @@ export async function websiteInbox(
 }
 
 /**
- * R36: a short fingerprint (md5 hex) of everything the two dashboard cards show, in one query: the date's bookings
- * (status, client, items: fee, therapists, times), the live sales of the date or of those bookings (status, total,
- * payments), new website enquiries (and their booking's status) and pending online bookings from `today` (default
- * `date`) on. The page polls it and refreshes when it changes.
+ * R36: a short fingerprint (md5 hex) of everything the two dashboard cards show, in one query: the date and today,
+ * the date's bookings (status, client, items: fee, therapists, times), the live sales of the date or of those
+ * bookings (status, total, payments), new website enquiries (and their booking's status, time and branch) and pending
+ * online bookings from `today` (default `date`) on (client, items). The page polls it and refreshes when it changes.
  */
 export async function dashboardPulse(
   tx: Tx,
@@ -525,22 +527,27 @@ export async function dashboardPulse(
     o.branchIds === null ? sql`true` : o.branchIds.length ? sql`${col} in ${o.branchIds}` : sql`false`
   const today = o.today ?? o.date
   const dayBookings = sql`select b.id from ${bookings} b where b.business_date = ${asDate(o.date)} and ${br(sql`b.branch_id`)}`
-  const res = await tx.execute<{ pulse: string }>(sql`select md5(concat_ws('|',
+  const items = (booking: SQL) =>
+    sql`select string_agg(concat_ws(',', bi.id, bi.price_aed, bi.staff_ids::text, bi.starts_at, bi.duration_min, bi.service_name), ';' order by bi.id)
+      from ${bookingItems} bi where bi.booking_id in (${booking})`
+  const res = await tx.execute<{
+    pulse: string
+  }>(sql`select md5(concat_ws('|', ${asDate(o.date)}, ${asDate(today)},
     coalesce((select string_agg(concat_ws(',', b.id, b.status, b.updated_at, b.client_id, c.name, b.notes, b.cancel_reason), ';' order by b.id)
       from ${bookings} b left join ${clients} c on c.id = b.client_id
       where b.business_date = ${asDate(o.date)} and ${br(sql`b.branch_id`)}), ''),
-    coalesce((select string_agg(concat_ws(',', bi.id, bi.price_aed, bi.staff_ids::text, bi.starts_at, bi.duration_min, bi.service_name), ';' order by bi.id)
-      from ${bookingItems} bi where bi.booking_id in (${dayBookings})), ''),
+    coalesce((${items(dayBookings)}), ''),
     coalesce((select string_agg(concat_ws(',', s.id, s.status, s.total_aed, s.business_date,
         (select string_agg(concat_ws(':', p.method, p.amount_aed), ',' order by p.id) from ${payments} p where p.sale_id = s.id)), ';' order by s.id)
       from ${sales} s where s.status <> 'void'
         and ((s.business_date = ${asDate(o.date)} and ${br(sql`s.branch_id`)}) or s.booking_id in (${dayBookings}))), ''),
-    coalesce((select concat_ws(',', count(*), max(e.updated_at), string_agg(lb.status::text, ',' order by e.id))
+    coalesce((select concat_ws(',', count(*), max(e.updated_at), string_agg(concat_ws(':', lb.status, lb.starts_at, lb.business_date, lb.branch_id), ',' order by e.id))
       from ${siteEnquiries} e
       left join ${bookings} lb on lb.id = case when e.booking->>'bookingId' ~ '^[0-9a-fA-F-]{36}$' then (e.booking->>'bookingId')::uuid end
       where e.status = 'new'), ''),
-    coalesce((select string_agg(concat_ws(',', b.id, b.updated_at), ';' order by b.id)
-      from ${bookings} b where b.source = 'online' and b.status = 'pending' and b.business_date >= ${asDate(today)}
+    coalesce((select string_agg(concat_ws(',', b.id, b.updated_at, c.name, (${items(sql`b.id`)})), ';' order by b.id)
+      from ${bookings} b left join ${clients} c on c.id = b.client_id
+      where b.source = 'online' and b.status = 'pending' and b.business_date >= ${asDate(today)}
         and ${br(sql`b.branch_id`)}), '')
   )) as pulse`)
   return res.rows[0]?.pulse ?? ''

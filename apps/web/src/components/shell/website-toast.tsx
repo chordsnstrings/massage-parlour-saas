@@ -61,6 +61,7 @@ export function WebsiteToasts({
   onOpen,
   onDismiss,
   onConfirmed,
+  onFormOpen,
 }: {
   slug: string
   /** Newest first, at most 3 (latest text from the bell's data). */
@@ -70,6 +71,8 @@ export function WebsiteToasts({
   onOpen: (n: BellItem) => void
   onDismiss: (id: string) => void
   onConfirmed: (n: BellItem) => void
+  /** Its Confirm form opened / closed: the bell keeps that toast while a newer alert arrives. */
+  onFormOpen: (id: string, open: boolean) => void
 }) {
   const t = useT()
   const [mounted, setMounted] = useState(false)
@@ -98,8 +101,13 @@ export function WebsiteToasts({
             </span>
             <div className="crm-pop-b">
               <b>{n.title}</b>
-              {n.body && <span>{n.body}</span>}
-              {done && <p className="crm-pop-msg">{t('notifications.toast.confirmed')}</p>}
+              {/* The stored body says "waiting for confirmation": gone once confirmed here. */}
+              {n.body && !done && <span>{n.body}</span>}
+              {done && (
+                <p className="crm-pop-msg" tabIndex={-1} data-toast-confirmed={n.id}>
+                  {t('notifications.toast.confirmed')}
+                </p>
+              )}
               <div className="crm-pop-a">
                 {n.confirm && !done && (
                   <ConfirmBookingButton
@@ -111,6 +119,8 @@ export function WebsiteToasts({
                       setConfirmed((c) => new Set(c).add(n.id))
                       onConfirmed(n)
                     }}
+                    onOpenChange={(open) => onFormOpen(n.id, open)}
+                    focusAfter={[`[data-toast-confirmed="${CSS.escape(n.id)}"]`]}
                   />
                 )}
                 {n.href && (
