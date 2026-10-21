@@ -319,7 +319,14 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
       notify({
         tenantId: tenant.id,
         kind: 'booking.online',
-        params: { name: v.name, service: result.serviceEn, at: result.done.start },
+        // R36: bookingId = the pop-up's Confirm; status picks the text (auto-confirmed vs waiting).
+        params: {
+          name: v.name,
+          service: result.serviceEn,
+          at: result.done.start,
+          bookingId: result.bookingId,
+          status: result.done.confirmed ? 'confirmed' : 'pending',
+        },
         url: `/${tenant.slug}/calendar?date=${result.date}`,
         dedupeKey: `booking.online:${result.bookingId}`,
       }).catch((e) => console.error('booking notification failed', e)),

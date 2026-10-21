@@ -1549,6 +1549,36 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   ("20% off all treatments", runs 30 days from the roll out: end date set in Website content, the bar hides itself
   after it), a big WhatsApp button, a price line (shown only when prices are public), a "Prices & treatments" link to
   /services, phone speed work. One WhatsApp number (056 187 5596) = the owner's Settings → Profile step.
+- **R36 Dashboard: bookings + sales together, website alerts (owner, 2026-10-21; sample approved, "go ahead"):** sample
+  = artifact "Dashboard bookings & sales sample". Owner answers: (1) **Today's bookings & sales** card right under the
+  KPI row, replaces Up next: one row per booking of the business day (all statuses) + sales of that day not on one of
+  its bookings (shop sales, bookings of another day), fee, paid amount + method or Not paid, Confirm / Finish / Take
+  payment / Open sale, filters All · To confirm · To finish · Not paid · Paid · Cancelled, totals Booked · Paid (cash /
+  card / other) · Finished not paid · Still to finish; (2) **today with ‹ › day arrows** (not the Today/7/30 switch);
+  (3) **money (fees, paid, totals, sale-only rows) for owner, manager and reception** = `dashboard.revenue` or
+  `pos.use`; (4) **From the website** card next to it (online bookings waiting for confirmation + new website
+  enquiries with Reply on WhatsApp / Make booking, phone-alerts switch, refreshes itself ~30 s) **plus a pop-up with a
+  short sound anywhere in the CRM** when a website booking or enquiry arrives (per-device mute).
+  **As built (2026-10-21, branch `claude/laughing-faraday-fjgrsu`; PR + live pending; CODEMAP "Dashboard home (R36)"):**
+  - Stages: cancelled / no-show first; then the live sale: open = Not paid, paid **or refunded** = Paid (shown as
+    Refunded, out of the Paid total); a **voided** sale counts as no sale; no sale: pending = To confirm, completed =
+    Not paid, else To finish. **Paid total = the Revenue KPI** of that date (paid sales on the date in scope).
+  - Scope = the home branch picker: `branchIds` null = whole spa, else that branch (scoped member without an open
+    branch sees nothing). ‹ › days within ±366 days of today (`?day=`).
+  - Money (fees, Paid column, totals, sale-only rows, Not paid / Paid chips + stages) only with `dashboard.revenue` or
+    `pos.use`; without it stages come from the booking status alone. Typed notes, cancel reasons and client type only
+    with `calendar.view` (as the calendar).
+  - Actions: Confirm (calendar.manage) opens the R32 Confirm (fee + commission) sheet inline, also in the pop-up;
+    Finish / Take payment of a booking without a sale → the booking page (pos.use + calendar.view); a sale → its sale.
+    The two cards sit side by side only from 90rem (stacked below); the table stacks as cards ≤ 768 px.
+  - Refresh: the home polls a fingerprint (`dashboardPulse`) every 30 s while visible and refreshes on change; the
+    bell polls every 30 s (+ when the tab comes back). Pop-ups: `POPUP_NOTIFICATION_KINDS` (booking.online,
+    enquiry.site) arriving after the page loaded, newest 3 (one with its Confirm form open stays), shown once per
+    device; `booking.online` params carry `bookingId` + `status` (body "confirmed automatically" vs "waiting for
+    confirmation"); Confirm only for still-pending bookings in the viewer's branches. Per-device localStorage keys
+    `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
+  - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
+    owner team's native review.
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform

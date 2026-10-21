@@ -64,7 +64,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
   `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
   10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
-  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest (`jobs/engage.ts`)
+  30 s while visible + when the tab comes back, R36), `/[tenant]/notifications`, `server/notifications.ts` (`bellData`:
+  `confirm` on an unread `booking.online` still pending in the viewer's `allowedBranches`, services
+  `pendingBookingIds`). **R36 pop-ups:** core `POPUP_NOTIFICATION_KINDS` (booking.online, enquiry.site) arriving after
+  load → `components/shell/website-toast.tsx` (top end corner, newest 3, Open / Confirm / Dismiss / Sound;
+  localStorage `crm.popup.sound`, `crm.popup.shown`) + `lib/chime.ts` (WebAudio, no file); `booking.online` params
+  `bookingId` + `status` (`notificationText` picks `body_<status>`, e.g. `body_confirmed`). Weekly insights / daily digest (`jobs/engage.ts`)
   write `weekly_insights` / `daily_digest` rows (dedupe per week Monday / business date) via `notify()`.
   **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
   expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
@@ -261,6 +266,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
     `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG
     + new website enquiries (`enquiriesNew`, F15).
+  - **Dashboard home (R36, PLAN §14.8 "R36" as built)** `page.tsx` (+ `home-scope.ts` `homeScope`/`pickDay`: branch
+    picker, business today, `?day=` ±366 d; shared with the refresh action): KPI row, then **Today's bookings & sales**
+    (replaces Up next) = services `dashboard-today.ts` `todayOrders` (`money` = dashboard.revenue | pos.use, `details`
+    = calendar.view; `todayStage`) → `components/kpis/today-orders.tsx` (client: chips, totals, day arrows, stacked table
+    ≤ 768 px), and **From the website** = `websiteInbox` (pending online from today on, newest new enquiries) →
+    `components/kpis/website-card.tsx` (server; Reply / Make booking from the Enquiries page, `PushAlertsRow`). Inline
+    Confirm = `components/bookings/confirm-booking.tsx` + `confirm-actions.ts` (`confirmTermsAction`: R32 terms prefill,
+    pending + allowed branch only) → `TermsForm confirm`. Refresh: `dashboardPulse` (one md5 query: date, today, day
+    bookings + items + sales + payments, new enquiries + linked booking, pending online + items; computed first on the
+    page) ← `components/kpis/today-actions.ts` `dashboardPulseAction` ← `dashboard-live.tsx` (30 s while visible,
+    `router.refresh()` on change). e2e `e2e/dashboard-today.spec.ts` (+ pop-up test); unit
+    `services/test/dashboard-today.test.ts`.
   - **Reports (F31)** `reports/` (`reports.view`; RevPATH card also `dashboard.revenue`, liability `accounting.view`):
     `data.ts` `loadReports` (branch scoping as on Home, `performanceRange` keys 7/30/90/month/last-month, today =
     business date at the branch cutoff, `?rebook=30|60|90`, `?asOf=` ≤ today) → services `kpi-reports.ts`, one query

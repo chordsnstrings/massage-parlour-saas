@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 24.04: its archive has postgresql-client-16 (the client must match the 16 server; newer images ship only newer).
+    runs-on: ubuntu-24.04
     # R24: the e2e suite (129 tests on one worker, incl. the HTML design fidelity / 4.6 MB upload proofs) needs
     # ~23 min on the 2-vCPU runner after ~6 min of install, unit tests and build. R32 (order-flow + day-sheet, 145
     # tests) pushed the job past 35 min, so it gets 50.
@@ -35,6 +36,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pg_dump / pg_restore must match the server major (16), like the worker image: the runner's newer client
+      # emits `SET transaction_timeout`, which a 16 server rejects (restore drill test).
+      - name: PostgreSQL 16 client tools
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/pg_restore ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends postgresql-client-16
+          fi
+          /usr/lib/postgresql/16/bin/pg_restore --version
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - name: Bootstrap test database
         run: >-
           psql -h localhost -U postgres -d postgres -v db_name=spa_test

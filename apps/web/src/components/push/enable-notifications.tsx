@@ -45,8 +45,8 @@ async function currentSubscription() {
   return (await reg?.pushManager.getSubscription()) ?? null
 }
 
-/** "Enable notifications on this device": permission prompt → push subscription → saved for this user. */
-export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
+/** This device's push state + enable / disable / test (Account → Notifications card, R36 dashboard row). */
+function usePushDevice(publicKey: string | null) {
   const t = useT()
   const [state, setState] = useState<State>(publicKey ? 'loading' : 'unconfigured')
   const [busy, setBusy] = useState<'enable' | 'disable' | 'test' | null>(null)
@@ -132,6 +132,13 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
     }
   }
 
+  return { state, busy, enable, disable, test }
+}
+
+/** "Enable notifications on this device": permission prompt → push subscription → saved for this user. */
+export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
+  const t = useT()
+  const { state, busy, enable, disable, test } = usePushDevice(publicKey)
   return (
     <Card>
       <CardHeader
@@ -188,5 +195,29 @@ export function NotificationsCard({ publicKey }: { publicKey: string | null }) {
         </motion.div>
       </CardBody>
     </Card>
+  )
+}
+
+/**
+ * R36 dashboard "From the website": a one-line "Phone alerts for website bookings · Turn on", only while this device
+ * supports push and it isn't on yet (nothing while loading, unconfigured, unsupported, blocked or on).
+ */
+export function PushAlertsRow({ publicKey }: { publicKey: string | null }) {
+  const t = useT()
+  const { state, busy, enable } = usePushDevice(publicKey)
+  if (state !== 'off') return null
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-[var(--crm-radius-sm)] bg-[var(--crm-surface2)] px-3 py-2.5">
+      <p className="flex min-w-0 items-center gap-2.5">
+        <BellRing className="size-4 shrink-0 text-[var(--crm-accent)]" strokeWidth={1.5} aria-hidden />
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium">{t('overview.web.push.title')}</span>
+          <span className="crm-muted block text-xs">{t('overview.web.push.off')}</span>
+        </span>
+      </p>
+      <Button size="sm" variant="secondary" onClick={enable} pending={busy === 'enable'} className="shrink-0">
+        {t('overview.web.push.enable')}
+      </Button>
+    </div>
   )
 }

@@ -12,6 +12,7 @@ export function Sheet({
   children,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   className,
 }: {
   trigger?: React.ReactNode
@@ -20,6 +21,8 @@ export function Sheet({
   children: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Where focus goes on close (preventDefault + focus). Needed without `trigger`: Radix has nothing to return to. */
+  onCloseAutoFocus?: (event: Event) => void
   className?: string
 }) {
   const t = useT()
@@ -29,6 +32,7 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px] data-[state=closed]:pointer-events-none data-[state=closed]:anim-fade-out data-[state=open]:anim-fade-in" />
         <Dialog.Content
+          onCloseAutoFocus={onCloseAutoFocus}
           className={cn(
             // While it animates out a closed sheet ignores clicks, so a quick second click can't resubmit its form.
             'fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-[var(--ui-sheet-radius,1rem)] border bg-surface pb-safe shadow-pop data-[state=closed]:pointer-events-none data-[state=closed]:anim-sheet-down data-[state=open]:anim-sheet-up',

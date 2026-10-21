@@ -145,8 +145,15 @@ describe('prefillCrmMarkup: only designs that opt in', () => {
     const v27 = readFileSync(new URL('be-relax-v2.7.html', dir), 'utf8')
     const v28 = readFileSync(new URL('be-relax-v2.8.html', dir), 'utf8')
     expect(prefillCrmMarkup(v27, { now: NOW })).toBe(v27)
-    // v2.8 = v2.7 + "prefill":1 in its contract, nothing else.
-    expect(v28.replace('"version":2,"prefill":1,', '"version":2,')).toBe(v27)
+    // v2.8 = v2.7 + "prefill":1 in its contract + the Search Console verification meta, nothing else.
+    expect(
+      v28
+        .replace('"version":2,"prefill":1,', '"version":2,')
+        .replace(
+          /<!-- Google Search Console ownership[^\n]*\n<meta name="google-site-verification"[^>]*>\n/,
+          '',
+        ),
+    ).toBe(v27)
     const head = 'window.CRM_DATA = '
     const s = v28.indexOf(head) + head.length
     const e = v28.indexOf(';</script>', s)

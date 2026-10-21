@@ -16,7 +16,7 @@ the existing flow.
   2026-10-18; before it PR #57 (custom domain go-live fix) and PR #55 (R32).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
-- All older feature branches were squash-merged and released. The only unmerged work is the two branches below, plus
+- All older feature branches were squash-merged and released. The only unmerged work is the branches below, plus
   open Dependabot PRs #39 (GitHub Actions), #40 (npm minor/patch) and #41 (TypeScript 5.9 → 7.0: risky, test before
   merging), and the old initial PR #1 into `main`, which can be closed.
 
@@ -25,6 +25,7 @@ the existing flow.
 | Branch | What it is | Status | Before merging |
 | --- | --- | --- | --- |
 | `claude/held-google-fixes-review-replies` | R29 Google Business Profile setup fixes: shared Google account, one spa per location, 30-day review cache, reconnect after the OAuth client changes, privacy wording. Also "Review replies" dropped for now: the dashboard Reviews page shows "Coming soon" (owner 2026-10-13). | Built and reviewed, **held until the owner approves the privacy wording**. | Merge the default branch in. Then delete the branch's own migrations 0057/0058 (SQL files + `meta/*_snapshot.json` + their `_journal.json` entries) and run `pnpm db:generate` again, because the default branch already has 0057–0060. Never renumber migrations by hand (PLAN §14.8 "Migration order"). |
+| `claude/laughing-faraday-fjgrsu` | R36 dashboard home: Today's bookings & sales (replaces Up next), From the website card, CRM pop-up with a chime for website bookings / enquiries (PLAN §14.8 R36 "as built"). | Built + review fixes, **PR pending**. | Normal PR into the default branch; the new Thai strings need native review. |
 | `claude/paused-r22-console-arabic` | R22: super-admin console in Arabic. An unfinished foundation. | **Paused by the owner** 2026-10-10 ("console keep english for now"). | Don't merge. Restart from it only if the owner asks. |
 
 ## Open items
@@ -59,7 +60,7 @@ the existing flow.
     in the Profile links card, and import the Search Console 404 list in Redirects (R33);
   - in the spa's Settings → Profile → Daily sales sheet, enter the 4 phone lines;
   - rename the 11 staff currently called "Therapist".
-- **Native review:** the new Thai strings (list in PLAN §14.8, R32 entry).
+- **Native review:** the new Thai strings (list in PLAN §14.8, R32 and R36 entries).
 
 ## Access a new developer needs (the owner gives these privately, never in git or chat)
 
