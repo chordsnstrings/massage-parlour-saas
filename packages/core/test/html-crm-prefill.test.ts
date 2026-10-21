@@ -149,7 +149,10 @@ describe('prefillCrmMarkup: only designs that opt in', () => {
     expect(
       v28
         .replace('"version":2,"prefill":1,', '"version":2,')
-        .replace(/<meta name="google-site-verification"[^>]*>\n/, ''),
+        .replace(
+          /<!-- Google Search Console ownership[^\n]*\n<meta name="google-site-verification"[^>]*>\n/,
+          '',
+        ),
     ).toBe(v27)
     const head = 'window.CRM_DATA = '
     const s = v28.indexOf(head) + head.length
