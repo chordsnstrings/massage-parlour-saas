@@ -20,6 +20,7 @@ export function EnquiryActions({
   bookHref = null,
   booked = false,
   bookedHref = null,
+  compact = false,
 }: {
   slug: string
   id: string
@@ -33,6 +34,8 @@ export function EnquiryActions({
   booked?: boolean
   /** The booking in the calendar (null without calendar access). */
   bookedHref?: string | null
+  /** R36 dashboard card: Make booking / Booked / Reply only (no Mark replied, Close, Reopen), start-aligned. */
+  compact?: boolean
 }) {
   const t = useT()
   const router = useRouter()
@@ -44,7 +47,7 @@ export function EnquiryActions({
       () => router.refresh(),
     )
   return (
-    <span className="flex flex-wrap justify-end gap-2">
+    <span className={compact ? 'flex flex-wrap gap-2' : 'flex flex-wrap justify-end gap-2'}>
       {bookHref && (
         <Button size="sm" variant="secondary" asChild>
           <Link href={bookHref} aria-label={t('enquiries.make.label', { name })} data-enquiry-book="">
@@ -84,17 +87,17 @@ export function EnquiryActions({
           </a>
         </Button>
       )}
-      {canManage && status === 'new' && (
+      {!compact && canManage && status === 'new' && (
         <Button size="sm" variant="secondary" pending={pending} onClick={() => move('replied')}>
           <Check /> {t('enquiries.markReplied')}
         </Button>
       )}
-      {canManage && status !== 'closed' && (
+      {!compact && canManage && status !== 'closed' && (
         <Button size="sm" variant="ghost" pending={pending} onClick={() => move('closed')}>
           <X /> {t('enquiries.close')}
         </Button>
       )}
-      {canManage && status === 'closed' && (
+      {!compact && canManage && status === 'closed' && (
         <Button size="sm" variant="ghost" pending={pending} onClick={() => move('new')}>
           <RotateCcw /> {t('enquiries.reopen')}
         </Button>

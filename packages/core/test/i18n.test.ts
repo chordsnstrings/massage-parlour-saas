@@ -178,6 +178,21 @@ describe('notification kinds', () => {
       title: 'New online booking',
       body: 'Mia \u00b7 Thai \u00b7 9 Oct, 14:00 \u2014 waiting for confirmation',
     })
+    // R36: the booking's status picks the body; pending (and rows from before R36, without it) wait for confirmation.
+    const online = (status: string) =>
+      notificationText(t, f, {
+        kind: 'booking.online',
+        params: { name: 'Mia', service: 'Thai', at: '2026-10-09T10:00:00Z', bookingId: 'b1', status },
+      }).body
+    expect(online('confirmed')).toBe('Mia \u00b7 Thai \u00b7 9 Oct, 14:00 \u2014 confirmed automatically')
+    expect(online('pending')).toBe('Mia \u00b7 Thai \u00b7 9 Oct, 14:00 \u2014 waiting for confirmation')
+    expect(online('no.such')).toBe('Mia \u00b7 Thai \u00b7 9 Oct, 14:00 \u2014 waiting for confirmation')
+    expect(
+      notificationText(translator('th'), createFormat('th'), {
+        kind: 'booking.online',
+        params: { name: 'Mia', service: 'Thai', at: '2026-10-09T10:00:00Z', status: 'confirmed' },
+      }).body,
+    ).toContain('ยืนยันโดยอัตโนมัติแล้ว')
     expect(
       notificationText(t, f, {
         kind: 'stock.low',

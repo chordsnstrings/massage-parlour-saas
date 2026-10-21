@@ -33,6 +33,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   notify,
+  pendingBookingIds,
   pendingBookingNotices,
   pruneNotifications,
   unreadNotificationCount,
@@ -116,7 +117,7 @@ beforeAll(async () => {
     const old = new Date(now.getTime() - 3600_000)
     ids.pending = await booking('pending', old, new Date(now.getTime() + 4 * 3600_000), 'P1')
     await booking('pending', new Date(now.getTime() - 5 * 60_000), new Date(now.getTime() + 3600_000), 'P2') // too fresh
-    await booking('confirmed', old, new Date(now.getTime() + 3600_000), 'P3')
+    ids.confirmed = await booking('confirmed', old, new Date(now.getTime() + 3600_000), 'P3')
     await booking('pending', old, new Date(now.getTime() - 3600_000), 'P4') // already started
     const [oil] = await db
       .insert(products)
@@ -327,6 +328,14 @@ describe('producers', () => {
       params: { name: 'Mia', service: 'Thai massage' },
       url: '/notif/calendar?date=2026-10-08',
     })
+  })
+
+  it('R36 pendingBookingIds: only still-pending bookings; junk ids are ignored', async () => {
+    const out = await tx((db) =>
+      pendingBookingIds(db, [ids.pending!, ids.confirmed!, ids.pending!, 'not-a-uuid']),
+    )
+    expect([...out]).toEqual([ids.pending])
+    expect(await tx((db) => pendingBookingIds(db, []))).toEqual(new Set())
   })
 
   it('low stock: one per location, warehouse named by key, deduped per day', async () => {

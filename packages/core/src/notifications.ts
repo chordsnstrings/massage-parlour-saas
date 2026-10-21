@@ -1,6 +1,7 @@
 // Notification kinds (PLAN §14.7 B2): who may see each kind and how a row's params become text.
 // Text lives in the `notifications` i18n namespace (`notifications.kind.<kind>.{title,body}`), rendered in the
-// reader's locale. Param conventions: `at` = ISO instant → date + time, `date` = YYYY-MM-DD → date, `amount` = AED.
+// reader's locale. Param conventions: `at` = ISO instant → date + time, `date` = YYYY-MM-DD → date, `amount` = AED;
+// `status` picks `body_<status>` when the kind has one (R36: an auto-confirmed online booking), else `body`.
 import type { Format } from './i18n/format'
 import type { Translator } from './i18n/translate'
 import type { MessageKey, Params } from './i18n/types'
@@ -29,6 +30,9 @@ export const NOTIFICATION_KINDS = {
 } as const satisfies Record<string, { permission: Permission }>
 
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS
+
+/** R36: kinds that pop up (with a short chime) anywhere in the spa CRM when they arrive — the website's leads. */
+export const POPUP_NOTIFICATION_KINDS: readonly NotificationKind[] = ['booking.online', 'enquiry.site']
 
 export const isNotificationKind = (kind: string): kind is NotificationKind => kind in NOTIFICATION_KINDS
 
@@ -60,6 +64,10 @@ export function notificationText(
   const title = isNotificationKind(n.kind) ? t.maybe(`${base}.title`, p) : undefined
   return {
     title: title ?? t('notifications.unknown' as MessageKey),
-    body: (isNotificationKind(n.kind) && t.maybe(`${base}.body`, p)) || '',
+    body:
+      (isNotificationKind(n.kind) &&
+        ((typeof p.status === 'string' && /^\w+$/.test(p.status) && t.maybe(`${base}.body_${p.status}`, p)) ||
+          t.maybe(`${base}.body`, p))) ||
+      '',
   }
 }

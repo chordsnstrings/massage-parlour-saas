@@ -15,12 +15,16 @@ import {
 import {
   type AgendaItem,
   campaignConsentWithdrawn,
+  dashboardPulse,
   kpis,
   outboxBookingLive,
   peakHours,
+  pushConfig,
   revenueSeries,
   staffEarnings,
+  todayOrders,
   upcomingItems,
+  websiteInbox,
 } from '@spa/services'
 import { and, count, eq, inArray, isNull, lte, not, or } from 'drizzle-orm'
 import {
@@ -52,9 +56,12 @@ import {
   Stat,
   statusTone,
 } from '@/components/crm'
+import { DashboardLive } from '@/components/kpis/dashboard-live'
 import { InsightsCard } from '@/components/kpis/insights-card'
 import { Sparkline } from '@/components/kpis/sparkline'
-import { AgendaList, PeakHeatmap, RankedList, UpNextTable } from '@/components/kpis/widgets'
+import { TodayOrdersCard } from '@/components/kpis/today-orders'
+import { WebsiteCard } from '@/components/kpis/website-card'
+import { AgendaList, PeakHeatmap, RankedList } from '@/components/kpis/widgets'
 import { InstallTip } from '@/components/pwa/install-app'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageBody, PageHeader } from '@/components/ui/page'
@@ -63,10 +70,7 @@ import { appPath } from '@/lib/paths'
 import { can, type MemberContext, requireMember } from '@/server/access'
 import { pwaFor } from '@/server/pwa'
 import { publicSiteUrl } from '@/server/sites'
-import { allowedBranches } from './calendar/data'
-
-/** Matches no branch: a member scoped to branches that are all archived sees empty figures, not the whole spa. */
-const NO_BRANCH = '00000000-0000-0000-0000-000000000000'
+import { homeScope } from './home-scope'
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())('overview.metaTitle') }
@@ -86,13 +90,13 @@ export default async function TenantHome({
   searchParams,
 }: {
   params: Promise<{ tenant: string }>
-  searchParams: Promise<{ period?: string; branch?: string }>
+  searchParams: Promise<{ period?: string; branch?: string; day?: string }>
 }) {
   const ctx = await requireMember((await params).tenant)
   if (!can(ctx, 'dashboard.view')) return <TherapistHome ctx={ctx} />
   const { t, fmt } = await getI18n()
 
-  const { period: periodParam, branch: branchParam } = await searchParams
+  const { period: periodParam, branch: branchParam, day: dayParam } = await searchParams
   const period: PeriodKey =
     periodParam && Object.hasOwn(PERIODS, periodParam) ? (periodParam as PeriodKey) : 'today'
   const days = PERIODS[period].days
@@ -100,21 +104,17 @@ export default async function TenantHome({
   const showRevenue = can(ctx, 'dashboard.revenue')
   const showClients = can(ctx, 'clients.view')
   const showMessages = can(ctx, 'marketing.send')
-  // Branch picker (G22): members scoped to branches pick one of theirs (first by default); everyone else sees
-  // the whole spa or picks a branch. A scoped member without an open branch sees nothing.
-  const scoped = Boolean(ctx.member && !ctx.member.allBranches)
+  // R36: money on "Today's bookings & sales" for whoever sees money elsewhere (owner, manager, reception); the
+  // "From the website" sections with the permission of their notifications.
+  const money = showRevenue || can(ctx, 'pos.use')
+  const showOnline = can(ctx, 'calendar.manage')
+  const showEnquiries = showClients
   const now = new Date()
 
   const data = await withTenant(tenant.id, async (tx) => {
-    const allowed = await allowedBranches(tx, ctx)
-    const picked = allowed.find((b) => b.id === branchParam) ?? (scoped ? allowed[0] : undefined)
-    const branchId = picked?.id ?? (scoped ? NO_BRANCH : undefined)
-    const branch =
-      picked ??
-      (await tx.select().from(branches).where(eq(branches.isDefault, true)).limit(1))[0] ??
-      allowed[0]
-    const cutoff = branch?.businessDayCutoff.slice(0, 5) ?? '05:00'
-    const to = businessDateOf(now, cutoff)
+    // Branch picker (G22) + business dates: home-scope.ts (shared with the cards' 30 s refresh).
+    const scope = await homeScope(tx, ctx, { branch: branchParam, day: dayParam, now })
+    const { allowed, picked, branchId, branchIds, branch, cutoff, today: to, day } = scope
     const from = addDays(to, 1 - days)
     const [team] = await tx.select({ n: count() }).from(members)
     const [sub] = await tx.select().from(subscriptions).limit(1)
@@ -148,12 +148,19 @@ export default async function TenantHome({
     const series =
       period === 'today' ? await revenueSeries(tx, { branchId, from: addDays(to, -6), to }) : k.daily
     const heat = period === '30d' ? k : await peakHours(tx, { branchId, from: addDays(to, -29), to })
-    const upToday = await upcomingItems(tx, { date: to, after: now, branchId, limit: 8 })
-    const upTomorrow =
-      upToday.length < 8
-        ? await upcomingItems(tx, { date: addDays(to, 1), after: now, branchId, limit: 8 - upToday.length })
-        : []
+    const orders = await todayOrders(tx, { branchIds, date: day, now, money })
+    const inbox =
+      showOnline || showEnquiries
+        ? await websiteInbox(tx, { branchIds, today: to, online: showOnline, enquiries: showEnquiries })
+        : null
+    const pulse = await dashboardPulse(tx, { branchIds, date: day, today: to })
     return {
+      scoped: scope.scoped,
+      today: to,
+      day,
+      orders,
+      inbox,
+      pulse,
       branch,
       branchId: picked?.id,
       branchOptions: allowed.map((b) => ({ id: b.id, name: b.name })),
@@ -170,7 +177,6 @@ export default async function TenantHome({
       prev,
       series,
       heat,
-      upNext: [...upToday, ...upTomorrow.map((i) => ({ ...i, tomorrow: true }))],
     }
   })
 
@@ -221,10 +227,14 @@ export default async function TenantHome({
   const live = k.bookings - (k.byStatus.cancelled ?? 0)
   const prevLive = prev.bookings - (prev.byStatus.cancelled ?? 0)
   const walkIns = k.bySource.find((s) => s.source === 'walk_in')?.count ?? 0
-  const homeHref = (key: PeriodKey, branch = data.branchId) => {
+  const { scoped } = data
+  // R36 card day (?day=, kept across the period / branch switches; today = no param).
+  const dayKey = data.day === data.today ? undefined : data.day
+  const homeHref = (key: PeriodKey, branch = data.branchId, day = dayKey) => {
     const q = new URLSearchParams()
     if (key !== 'today') q.set('period', key)
     if (branch) q.set('branch', branch)
+    if (day && day !== data.today) q.set('day', day)
     return appPath(q.size ? `/${slug}?${q}` : `/${slug}`)
   }
   const periodHref = (key: PeriodKey) => homeHref(key)
@@ -282,6 +292,50 @@ export default async function TenantHome({
   }))
   // F13: online bookings split by the booker's website source (Instagram, Google, QR, …).
   const onlineTotal = k.byAttribution.reduce((s, r) => s + r.count, 0)
+
+  // R36: Today's bookings & sales + From the website (right under the KPI row; replaces Up next).
+  const seeCalendar = can(ctx, 'calendar.view')
+  const canPos = can(ctx, 'pos.use')
+  const isToday = data.day === data.today
+  const branchQuery = data.branchId ? `&branch=${data.branchId}` : ''
+  const liveNote = (label?: string) => (
+    <DashboardLive slug={slug} branch={data.branchId} day={dayKey} pulse={data.pulse} label={label} />
+  )
+  const ordersCard = (
+    <TodayOrdersCard
+      slug={slug}
+      orders={data.orders}
+      isToday={isToday}
+      money={money}
+      branchNames={
+        data.branchOptions.length > 1 && !data.branchId
+          ? Object.fromEntries(data.branchOptions.map((b) => [b.id, b.name]))
+          : null
+      }
+      nav={{
+        prev: homeHref(period, data.branchId, addDays(data.day, -1)),
+        next: homeHref(period, data.branchId, addDays(data.day, 1)),
+        today: isToday ? null : homeHref(period, data.branchId, data.today),
+      }}
+      calendarHref={seeCalendar ? appPath(`/${slug}/calendar?date=${data.day}${branchQuery}`) : null}
+      bookingsHref={
+        seeCalendar ? appPath(`/${slug}/bookings?from=${data.day}&to=${data.day}${branchQuery}`) : null
+      }
+      allow={{ confirm: showOnline, finish: canPos && seeCalendar, pos: canPos }}
+    />
+  )
+  const webCard = data.inbox && (
+    <WebsiteCard
+      ctx={ctx}
+      inbox={data.inbox}
+      today={data.today}
+      money={money}
+      online={showOnline}
+      enquiries={showEnquiries}
+      live={liveNote(t('overview.web.live'))}
+      publicKey={pushConfig()?.publicKey ?? null}
+    />
+  )
 
   const checklist = (
     <Card
@@ -439,6 +493,19 @@ export default async function TenantHome({
             )}
           </Grid>
 
+          {webCard ? (
+            // Side by side only where the table fits next to it (≥ 1440 px); stacked below that.
+            <div className="crm-grid min-[90rem]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              {ordersCard}
+              {webCard}
+            </div>
+          ) : (
+            <>
+              {ordersCard}
+              {liveNote()}
+            </>
+          )}
+
           {showRevenue && (
             <Grid cols="g4">
               <Stat
@@ -517,29 +584,6 @@ export default async function TenantHome({
               )}
             </Card>
           </Grid>
-
-          <Card
-            title={t('overview.upNext.title')}
-            sub={t('overview.upNext.sub')}
-            flush={data.upNext.length > 0}
-            actions={
-              can(ctx, 'calendar.view') && (
-                <Button size="sm" asChild>
-                  <Link href={appPath(`/${slug}/calendar`)}>{t('overview.upNext.openCalendar')}</Link>
-                </Button>
-              )
-            }
-          >
-            {data.upNext.length ? (
-              <UpNextTable items={data.upNext} />
-            ) : (
-              <EmptyState
-                icon={<CalendarDays className="size-5" />}
-                title={t('overview.upNext.emptyTitle')}
-                description={t('overview.upNext.emptyText')}
-              />
-            )}
-          </Card>
 
           <Grid cols="g3">
             <Card

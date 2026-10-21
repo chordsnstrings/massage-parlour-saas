@@ -2,10 +2,13 @@ import { expect, test } from '@playwright/test'
 import { payments, saleLines, sales } from '@spa/db'
 import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb, today } from './helpers'
 
-test('owner sees today’s revenue, KPIs and the upcoming booking on the home dashboard', async ({ page }) => {
+test('owner sees today’s revenue, KPIs and today’s bookings & sales on the home dashboard', async ({
+  page,
+}) => {
   const { slug } = await signUpOwner(page)
   const seed = await seedCatalog(slug)
-  await seedBooking(seed)
+  // A fixed time on today's business date (2 h from now can fall on the next one in the small hours).
+  await seedBooking(seed, '12:00')
 
   // A paid AED 350 sale for today (sale + line + cash payment).
   const db = testDb()
@@ -57,12 +60,19 @@ test('owner sees today’s revenue, KPIs and the upcoming booking on the home da
     await expect(page.getByRole('link', { name: 'Review your website' })).toBeVisible()
   })
 
-  await test.step('up next lists today’s booking (first name only)', async () => {
-    const upNext = page.locator('section', { has: page.getByRole('heading', { name: 'Up next' }) })
-    await expect(upNext).toContainText('Fatima')
-    await expect(upNext).not.toContainText('Al Mansoori')
-    await expect(upNext).toContainText('Swedish massage')
-    await expect(upNext).toContainText('Maya')
+  await test.step('today’s bookings & sales lists the booking (first name only) and the sale without one', async () => {
+    const card = page.getByTestId('today-orders')
+    await expect(card.getByRole('heading', { name: 'Today’s bookings & sales' })).toBeVisible()
+    const booking = card.locator('tr[data-order^="b:"]')
+    await expect(booking).toContainText('Fatima')
+    await expect(booking).toContainText('Swedish massage')
+    await expect(booking).toContainText('Maya')
+    await expect(card).not.toContainText('Al Mansoori')
+    // The paid sale is on no booking: its own row, paid in cash; Paid today = the Revenue KPI.
+    const sale = card.locator('tr[data-order^="s:"]')
+    await expect(sale).toContainText('AED 350')
+    await expect(sale).toContainText('Cash')
+    await expect(card.locator('.crm-stat', { hasText: 'Paid today' })).toContainText('AED 350')
   })
 
   await screenshotAt(page, 'kpis')

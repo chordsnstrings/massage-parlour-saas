@@ -16,10 +16,20 @@ export const notifications: Messages['notifications'] = {
   unread: 'ยังไม่อ่าน',
   filter: { all: 'ทั้งหมด', unread: 'ยังไม่อ่าน' },
   warehouse: 'คลังสินค้า',
+  toast: {
+    label: 'การแจ้งเตือนจากเว็บไซต์',
+    open: 'เปิด',
+    sound: 'เสียง',
+    confirmed: 'ยืนยันการจองแล้ว',
+  },
   unknown: 'การแจ้งเตือน',
   kind: {
     booking: {
-      online: { title: 'มีการจองออนไลน์ใหม่', body: '{name} · {service} · {at} — รอการยืนยัน' },
+      online: {
+        title: 'มีการจองออนไลน์ใหม่',
+        body: '{name} · {service} · {at} — รอการยืนยัน',
+        body_confirmed: '{name} · {service} · {at} — ยืนยันโดยอัตโนมัติแล้ว',
+      },
       pending: { title: 'การจองรอการยืนยัน', body: '{name} · {service} · {at} — ยืนยันทาง WhatsApp' },
     },
     enquiry: {
