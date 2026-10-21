@@ -1549,6 +1549,16 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   ("20% off all treatments", runs 30 days from the roll out: end date set in Website content, the bar hides itself
   after it), a big WhatsApp button, a price line (shown only when prices are public), a "Prices & treatments" link to
   /services, phone speed work. One WhatsApp number (056 187 5596) = the owner's Settings → Profile step.
+- **R36 Dashboard: bookings + sales together, website alerts (owner, 2026-10-21; sample approved, "go ahead"):** sample
+  = artifact "Dashboard bookings & sales sample". Owner answers: (1) **Today's bookings & sales** card right under the
+  KPI row, replaces Up next: one row per booking of the business day (all statuses) + sales of that day not on one of
+  its bookings (shop sales, bookings of another day), fee, paid amount + method or Not paid, Confirm / Finish / Take
+  payment / Open sale, filters All · To confirm · To finish · Not paid · Paid · Cancelled, totals Booked · Paid (cash /
+  card / other) · Finished not paid · Still to finish; (2) **today with ‹ › day arrows** (not the Today/7/30 switch);
+  (3) **money (fees, paid, totals, sale-only rows) for owner, manager and reception** = `dashboard.revenue` or
+  `pos.use`; (4) **From the website** card next to it (online bookings waiting for confirmation + new website
+  enquiries with Reply on WhatsApp / Make booking, phone-alerts switch, refreshes itself ~30 s) **plus a pop-up with a
+  short sound anywhere in the CRM** when a website booking or enquiry arrives (per-device mute).
 - **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
   NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
   (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform
