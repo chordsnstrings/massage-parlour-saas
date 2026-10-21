@@ -1591,7 +1591,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   heartbeat-derived figures as old when the worker is stale; (4) billing: after an outage the first billing-transitions
   run makes no stage changes (hold one day, payments can be recorded), then stages advance normally with the warnings
   first (no jump straight to read-only). Missed scheduled runs are not replayed (pg-boss `missed` = skip).
-  **As built (2026-10-21):** worker banner rename + `--external:sharp` (no worker job processes images); CI "Worker
+  **As built (live 2026-10-22 01:51 Dubai, PR #62, 6401dc4):** worker banner rename + `--external:sharp` (no worker job processes images); CI "Worker
   bundle starts"; update.sh `worker_health` (exit 14, rollback; known gap: a worker that beats once then crash-loops
   can still pass, the heartbeat file survives a restart in the same container); console "As of …" rows; billing:
   every run recorded, held when the previous run is > 2 days back or none is recorded (so production's first run
