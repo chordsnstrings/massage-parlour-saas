@@ -1588,7 +1588,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   unchanged (E.164 digits, no `+`), no migration; WhatsApp links already work for any country. Also fix: client edit
   prefill (`0${phone.slice(3)}` corrupts foreign numbers), duplicate suggestions (last-9 only for 971), masks/display
   for non-971 numbers, export non-UAE as `+digits`.
-  **As built (2026-10-22):** core `toClientE164` + `phoneDisplay`; labels "Mobile (WhatsApp)" + hint "UAE: 05X XXX XXXX ·
+  **As built (live 2026-10-22, PR #63, db62c51):** core `toClientE164` + `phoneDisplay`; labels "Mobile (WhatsApp)" + hint "UAE: 05X XXX XXXX ·
   other countries: + and the country code" (EN/TH, booking widget EN/AR; new Thai/Arabic need native review);
   website enquiry forms use the same rule (so Make booking always works: UAE landlines and bare foreign digits
   refused there too); '+'/'00' + 9 digits starting with 5 (e.g. '+50 123 4567') refused as a likely UAE typo;
