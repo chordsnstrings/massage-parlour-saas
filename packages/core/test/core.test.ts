@@ -20,6 +20,7 @@ import {
   toUaeE164,
   trimTrailing,
   trimTrailingSlashes,
+  uaePhoneDisplay,
   whatsappLink,
 } from '../src'
 
@@ -228,7 +229,40 @@ describe('whatsapp', () => {
     ['++44 7700 900123', null],
     ['+44 +7700 900123', null],
     ['', null],
+    // +971 keeps toUaeE164's leniency for stray text (imports, pasted contacts)
+    ['+971 50 123 4567 (home)', '971501234567'],
+    ['+971501234567,', '971501234567'],
+    ['00971501234567 mobile', '971501234567'],
+    ['+971-50-123-4567 ext', '971501234567'],
+    ['+971 50 123 4567;', '971501234567'],
+    ['+971 4 123 4567 (office)', null],
+    // + / 00 and 9 digits from 5: a UAE mobile without 971, or +508 / +597: refused, never guessed as UAE
+    ['+597 412345', null],
+    ['+508 41 23 45', null],
+    ['00597412345', null],
+    ['+50 123 4567', null],
+    ['+597 123 4567', '5971234567'],
+    // trunk 0 right after the code; bracketed codes
+    ['+4407700900123', '447700900123'],
+    ['+390612345678', '390612345678'],
+    ['(+44) 7700 900123', '447700900123'],
+    ['(0044) 7700 900123', '447700900123'],
+    ['(+1) 202-555-0123', '12025550123'],
+    ['(+966) 50 123 4567', '966501234567'],
+    ['(+971) 50 123 4567', '971501234567'],
   ])('toClientE164(%s)', (input, out) => expect(toClientE164(input)).toBe(out))
+
+  it('reads back every edit prefill (uaePhoneDisplay) as the same client phone', () => {
+    for (const e of [
+      '971501234567',
+      '447700900123',
+      '12025550123',
+      '390612345678',
+      '49301234567',
+      '966501234567',
+    ])
+      expect(toClientE164(uaePhoneDisplay(e))).toBe(e)
+  })
 
   it('splits calling codes and shows / masks any number, UAE as before', () => {
     expect(

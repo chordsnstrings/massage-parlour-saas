@@ -7,7 +7,5 @@ export const validation: Messages['validation'] = {
   email: 'โปรดกรอกอีเมลให้ถูกต้อง',
   number: 'โปรดกรอกตัวเลข',
   uaeMobile: 'โปรดกรอกเบอร์มือถือ UAE เช่น 050 123 4567',
-  clientPhone: 'กรอกเบอร์มือถือ UAE (05X XXX XXXX) หรือเบอร์ที่ขึ้นต้นด้วย + และรหัสประเทศ',
   clientPhoneHint: 'UAE: 05X XXX XXXX · ประเทศอื่น: ใส่ + ตามด้วยรหัสประเทศ เช่น +44 7700 900123',
-  clientPhoneLabel: 'เบอร์มือถือ (WhatsApp)',
 }

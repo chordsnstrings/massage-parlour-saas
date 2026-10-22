@@ -146,6 +146,18 @@ describe('website enquiries', () => {
       page: 'contact',
     })
     expect(siteEnquirySchema.parse({ ...good, page: '../x' }).page).toBe('')
+    // R38: the client rules (Make booking makes it a client): a foreign number needs + / 00; UAE mobiles only.
+    const phone = (p: string) => siteEnquirySchema.safeParse({ ...good, phone: p }).data?.phone ?? null
+    expect(
+      [
+        '50 123 456',
+        '447700900123',
+        '04 123 4567',
+        '971 4 123 4567',
+        '+44 7700 900123',
+        '0044 7700 900123',
+      ].map(phone),
+    ).toEqual([null, null, null, null, '+447700900123', '+447700900123'])
   })
 
   it('stores per spa, lists newest first with counts + search, moves status, counts new in the sidebar', async () => {

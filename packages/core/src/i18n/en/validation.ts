@@ -6,7 +6,5 @@ export const validation = {
   number: 'Enter a number',
   uaeMobile: 'Enter a UAE mobile, e.g. 050 123 4567',
   /** Client (customer) phones, R38: UAE mobile or any number with + and its country code. */
-  clientPhone: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
   clientPhoneHint: 'UAE: 05X XXX XXXX · other countries: + and the country code, e.g. +44 7700 900123',
-  clientPhoneLabel: 'Mobile (WhatsApp)',
 } as const

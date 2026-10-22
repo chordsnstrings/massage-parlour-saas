@@ -47,7 +47,7 @@ test('data: xlsx template, CSV + xlsx import with column mapping, xlsx client ex
     await expect(page.getByText('Mariam Al Hashimi').first()).toBeVisible()
     await expect(page.getByText(/3 rows · 1 with errors · 0 already exist/)).toBeVisible()
     await expect(
-      page.getByText(/not a UAE mobile \(050 123 4567\) or a number with \+ and its country code/).first(),
+      page.getByText(/not a UAE mobile \(05X XXX XXXX\) or a number with \+ and its country code/).first(),
     ).toBeVisible()
     await screenshotAt(page, 'data-import')
   })

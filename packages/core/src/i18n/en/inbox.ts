@@ -75,7 +75,7 @@ export const inbox = {
     submit: 'Link client',
     trigger: 'Link client',
     name: 'Name',
-    phone: 'WhatsApp mobile (optional)',
+    phone: 'Mobile (WhatsApp, optional)',
     phoneHint: 'UAE: 05X XXX XXXX · other countries: + and the country code, e.g. +44 7700 900123',
   },
   actions: {

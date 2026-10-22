@@ -241,7 +241,7 @@ export const IMPORT_TEMPLATES: Record<ImportKind, string[][]> = {
       'Prefers medium pressure',
       'ar',
     ],
-    ['Sara Khan', '+971 55 765 4321', 'female', '1988-11-02', '', '', 'en'],
+    ['Sara Khan', '+44 7700 900123', 'female', '1988-11-02', '', '', 'en'],
   ],
   menu: [
     ['Category', 'Service name (English)', 'Service name (Arabic)', 'Duration (min)', 'Price (AED)'],
@@ -693,7 +693,7 @@ function validateClient(get: (k: string) => string, order: DateOrder) {
     phone = normalisePhone(rawPhone)
     display.phone = phone ? formatUaePhone(phone) : rawPhone
     if (!phone)
-      errors.push(`“${rawPhone}” is not a UAE mobile (050 123 4567) or a number with + and its country code`)
+      errors.push(`“${rawPhone}” is not a UAE mobile (05X XXX XXXX) or a number with + and its country code`)
   }
   let gender: ClientRecord['gender'] = null
   const rawGender = get('gender')

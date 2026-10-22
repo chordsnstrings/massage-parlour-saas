@@ -277,7 +277,7 @@ describe('database import and export', () => {
       {
         row: 4,
         message: expect.stringContaining(
-          'not a UAE mobile (050 123 4567) or a number with + and its country code',
+          'not a UAE mobile (05X XXX XXXX) or a number with + and its country code',
         ),
       },
     ])
