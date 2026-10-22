@@ -1,5 +1,5 @@
 'use server'
-import { bookingAttribution, businessDateOf, ipRateLimitKey, toUaeE164, whatsappLink } from '@spa/core'
+import { bookingAttribution, businessDateOf, ipRateLimitKey, toClientE164, whatsappLink } from '@spa/core'
 import { services, serviceVariants, staff, type Tx, withTenant } from '@spa/db'
 import {
   availableSlots,
@@ -140,7 +140,7 @@ const bookingInput = z.object({
   phone: z
     .string()
     .trim()
-    .refine((v) => toUaeE164(v) !== null, 'Enter a UAE mobile number, e.g. 050 123 4567'),
+    .refine((v) => toClientE164(v) !== null, t('phoneInvalid', 'en')),
   notes: z.string().trim().max(500).optional().default(''),
   /** Honeypot: humans never see this field. */
   website: z.string().optional().default(''),
@@ -184,7 +184,12 @@ function confirmText(
 export async function bookOnline(input: z.input<typeof bookingInput>): Promise<ActionResult> {
   const parsed = bookingInput.safeParse(input)
   const lang: Locale = input?.lang === 'ar' ? 'ar' : 'en'
-  if (!parsed.success) return fromZod(parsed.error)
+  if (!parsed.success) {
+    const res = fromZod(parsed.error)
+    // R38: the phone message in the visitor's language (EN + AR).
+    if (res && !res.ok && res.fieldErrors?.phone) res.fieldErrors.phone = t('phoneInvalid', lang)
+    return res
+  }
   const v = parsed.data
   const ip = ipRateLimitKey(await clientIp())
   const tooMany = recent(attempts, ip).length >= MAX_ATTEMPTS || recent(successes, ip).length >= MAX_BOOKINGS

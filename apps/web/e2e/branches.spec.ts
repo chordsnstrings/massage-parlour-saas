@@ -105,7 +105,7 @@ test('owner adds a second branch, scopes a receptionist to it, and a client book
   await expect(firstTime).toBeVisible()
   await firstTime.click()
   await page.getByLabel('Your name').fill('Layla Branch')
-  await page.getByLabel('UAE mobile').fill('050 765 4321')
+  await page.getByLabel('Mobile (WhatsApp)').fill('050 765 4321')
   await page.getByRole('button', { name: 'Request booking' }).click()
   await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
   const ref = (await page.getByTestId('booking-ref').textContent())?.trim() ?? ''

@@ -69,7 +69,7 @@ export const waitlist: Messages['waitlist'] = {
     date: 'เลือกวัน',
     time: 'ใช้รูปแบบ HH:MM',
     name: 'กรอกชื่อลูกค้า',
-    phone: 'กรอกเบอร์มือถือในยูเออี',
+    phone: 'กรอกเบอร์มือถือ UAE (05X XXX XXXX) หรือเบอร์ที่ขึ้นต้นด้วย + และรหัสประเทศ',
     variant: 'เลือกทรีตเมนต์',
   },
 }

@@ -53,7 +53,7 @@ export const domain: Messages['errors']['domain'] = {
   rebookCancelled: 'นัดที่ยกเลิกแล้วต้องจองใหม่เป็นการจองใหม่ เพื่อให้ระบบตรวจสอบเวลาอีกครั้ง',
   bookingCantMove: 'ไม่สามารถย้ายการจองนี้ได้แล้ว',
   bookingStatusChange: 'ไม่สามารถเปลี่ยนการจองจาก “{from}” เป็น “{to}” ได้',
-  uaeMobile: 'กรอกเบอร์มือถือ UAE เช่น 050 123 4567',
+  clientPhone: 'กรอกเบอร์มือถือ UAE (05X XXX XXXX) หรือเบอร์ที่ขึ้นต้นด้วย + และรหัสประเทศ',
   addItem: 'เพิ่มอย่างน้อยหนึ่งรายการ',
   amountsNegative: 'จำนวนเงินต้องไม่ติดลบ',
   pricesNegative: 'ราคาต้องไม่ติดลบ',
@@ -250,7 +250,7 @@ export const domain: Messages['errors']['domain'] = {
   metaNoPage: 'ยังไม่ได้เชื่อมต่อเพจ Facebook',
   metaImageNotPublic: 'รูปภาพไม่ได้อยู่บนลิงก์ https สาธารณะ',
   metaReplyFirst: 'เขียนคำตอบก่อน',
-  metaPhoneNeeded: 'ต้องมีเบอร์มือถือ UAE หรือลูกค้าที่มีเบอร์',
+  metaPhoneNeeded: 'ต้องมีเบอร์มือถือ (UAE หรือ + ตามด้วยรหัสประเทศ) หรือลูกค้าที่มีเบอร์',
   // Branches + tax invoice (G22, G16)
   branchPlanLimit: 'แพ็กเกจของคุณมี {limit} สาขา',
   branchArchiveMain: 'ไม่สามารถเก็บถาวรสาขาหลักได้',

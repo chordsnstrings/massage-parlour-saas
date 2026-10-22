@@ -1,6 +1,6 @@
 'use server'
 import { randomUUID } from 'node:crypto'
-import { clientIpFrom, reportError, toUaeE164 } from '@spa/core'
+import { clientIpFrom, reportError, toClientE164 } from '@spa/core'
 import {
   bookings,
   clients,
@@ -40,7 +40,7 @@ const phoneField = z
   .optional()
   .transform((v, c) => {
     if (!v) return null
-    const e164 = toUaeE164(v)
+    const e164 = toClientE164(v)
     if (!e164) {
       c.addIssue({ code: 'custom', message: 'clients.error.phone' })
       return z.NEVER

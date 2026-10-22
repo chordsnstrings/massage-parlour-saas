@@ -16,6 +16,7 @@ import {
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { domainErrorRef } from '@/i18n/domain-errors'
 import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
 import { can, guard } from '@/server/access'
 import { fixtureClient } from '@/server/ai-fixture'
@@ -256,7 +257,11 @@ export async function linkClientAction(
       }),
     )
   } catch (e) {
-    if (e instanceof DomainError) return failDomain(e, { phone: e.message })
+    if (e instanceof DomainError) {
+      // The field shows its catalogue key (Thai under the field too), the text only for messages with parameters.
+      const ref = e.i18n ?? domainErrorRef(e.message)
+      return failDomain(e, { phone: ref && !ref.params ? ref.key : e.message })
+    }
     throw e
   }
   await audit({

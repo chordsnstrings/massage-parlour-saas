@@ -429,7 +429,7 @@ test('CRM pop-up: a website booking / enquiry arriving later shows once, with Co
     await v.getByRole('button', { name: /^Tomorrow/ }).click()
     await v.getByTestId('slots').getByRole('button').first().click()
     await v.getByLabel('Your name').fill('Noura Haddad')
-    await v.getByLabel('UAE mobile').fill('050 765 4321')
+    await v.getByLabel('Mobile (WhatsApp)').fill('050 765 4321')
     await v.getByRole('button', { name: 'Request booking' }).click()
     await expect(v.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
     await ctx.close()

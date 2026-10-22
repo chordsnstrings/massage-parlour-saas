@@ -1,3 +1,4 @@
+import { phoneDisplay } from '@spa/core'
 import type { BookingStatus } from './types'
 
 /** Grid minute (minutes since 00:00 of the business date, may exceed 1440) → "HH:MM". */
@@ -40,11 +41,8 @@ export const STATUS_TONE: Record<BookingStatus, 'neutral' | 'accent' | 'success'
 
 export const isHiddenStatus = (s: BookingStatus) => s === 'cancelled' || s === 'no_show'
 
-/** Masks a UAE E.164 number: 971501234567 → +971 50 ••• 4567. */
-export const maskPhone = (e164: string) =>
-  e164.length >= 8 ? `+${e164.slice(0, 3)} ${e164.slice(3, 5)} ••• ${e164.slice(-4)}` : '•••'
+/** Masks a stored number (any country, R38): 971501234567 → +971 50 ••• 4567, 447700900123 → +44 ••• 0123. */
+export const maskPhone = (e164: string) => phoneDisplay(e164, { mask: 'last4' })
 
-export const formatPhone = (e164: string) =>
-  e164.startsWith('971') && e164.length === 12
-    ? `+971 ${e164.slice(3, 5)} ${e164.slice(5, 8)} ${e164.slice(8)}`
-    : `+${e164}`
+/** +971 50 123 4567 for UAE mobiles, +digits for other countries. */
+export const formatPhone = (e164: string) => phoneDisplay(e164)

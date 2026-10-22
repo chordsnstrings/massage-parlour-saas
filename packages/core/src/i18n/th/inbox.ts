@@ -73,8 +73,8 @@ export const inbox: Messages['inbox'] = {
     submit: 'เชื่อมลูกค้า',
     trigger: 'เชื่อมลูกค้า',
     name: 'ชื่อ',
-    phone: 'เบอร์มือถือ UAE (ไม่บังคับ)',
-    phoneHint: 'เช่น 050 123 4567',
+    phone: 'เบอร์มือถือ (WhatsApp, ไม่บังคับ)',
+    phoneHint: 'UAE: 05X XXX XXXX · ประเทศอื่น: ใส่ + ตามด้วยรหัสประเทศ เช่น +44 7700 900123',
   },
   actions: {
     takeOver: 'รับช่วงต่อ',

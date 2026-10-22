@@ -46,8 +46,15 @@ const T = {
     ar: 'جرّب يوماً آخر أو معالجاً آخر.',
   },
   name: { en: 'Your name', ar: 'الاسم' },
-  phone: { en: 'UAE mobile', ar: 'رقم الجوال (الإمارات)' },
-  phoneHint: { en: 'We will confirm on WhatsApp.', ar: 'سنؤكد الحجز عبر واتساب.' },
+  phone: { en: 'Mobile (WhatsApp)', ar: 'رقم الجوال (واتساب)' },
+  phoneHint: {
+    en: 'We will confirm on WhatsApp. Outside the UAE? Start with + and the country code, e.g. +44 7700 900123.',
+    ar: 'سنؤكد الحجز عبر واتساب. من خارج الإمارات؟ ابدأ بـ + ورمز الدولة، مثل \u2066+44 7700 900123\u2069.',
+  },
+  phoneInvalid: {
+    en: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
+    ar: 'أدخل رقم جوال إماراتياً (05X XXX XXXX) أو رقماً يبدأ بـ + ورمز الدولة',
+  },
   notes: { en: 'Notes (optional)', ar: 'ملاحظات (اختياري)' },
   notesHint: {
     en: 'Pressure preference, areas to avoid, anything we should know.',

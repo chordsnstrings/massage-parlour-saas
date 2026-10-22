@@ -168,7 +168,7 @@ const DEFS: Record<MetaToolName, ToolDef> = {
   },
   'whatsapp.draft_message': {
     description:
-      'Draft a WhatsApp message into the outbox for a client (client_id) or UAE mobile (phone). Staff tap to send it; this tool never sends.',
+      'Draft a WhatsApp message into the outbox for a client (client_id) or a phone number (phone: UAE mobile like 050 123 4567, or + and the country code). Staff tap to send it; this tool never sends.',
     input: {
       client_id: z.string().uuid().optional(),
       phone: z.string().max(30).optional(),

@@ -418,10 +418,12 @@ export function Checkout({
                       id="ncPhone"
                       value={newClient.phone}
                       onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                      type="tel"
                       inputMode="tel"
                       placeholder="050 123 4567"
                       className="h-11 tabular"
                     />
+                    <p className="text-[13px] text-muted">{t('validation.clientPhoneHint')}</p>
                   </div>
                 </div>
               </div>

@@ -18,7 +18,7 @@ async function bookTomorrow(page: Page, name: string, phone: string) {
   await page.getByRole('button', { name: /^Tomorrow/ }).click()
   await page.getByTestId('slots').getByRole('button').first().click()
   await page.getByLabel('Your name').fill(name)
-  await page.getByLabel('UAE mobile').fill(phone)
+  await page.getByLabel('Mobile (WhatsApp)').fill(phone)
   await page.getByRole('button', { name: 'Request booking' }).click()
   await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
   return (await page.getByTestId('booking-ref').textContent())?.trim() ?? ''

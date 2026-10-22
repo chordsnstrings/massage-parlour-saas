@@ -1,7 +1,7 @@
 // F15 enquiry form: leads from a spa's website (EnquiryForm block) → the spa's dashboard (Inbox → Enquiries), answered
 // by WhatsApp click-to-send (never emailed). Callers run these inside withTenant(); bot check, rate limit,
 // permission and audit stay in the caller.
-import { addDays, afterMidnight, dubaiParts, type OpeningHours, toE164 } from '@spa/core'
+import { addDays, afterMidnight, dubaiParts, type OpeningHours, toClientE164 } from '@spa/core'
 import {
   bookingItems,
   bookings,
@@ -58,7 +58,8 @@ export const siteEnquirySchema = z.object({
     .min(1, 'required:phone')
     .max(40, 'phone')
     .transform((v) => {
-      const e164 = toE164(v)
+      // R38: the client rules (Make booking turns it into a client): UAE mobile, or + / 00 and the country code.
+      const e164 = toClientE164(v)
       return e164 ? `+${e164}` : null
     })
     .refine((v): v is string => v !== null, 'phone'),

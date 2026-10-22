@@ -1579,6 +1579,20 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R38 International client phones (owner 2026-10-22: "make it accept any phone number with the country code"):**
+  owner answers: (1) **every customer phone** (CRM clients, online booking, calendar new booking / walk-in / Make
+  booking, sales quick add, vouchers, waitlist, Instagram link + DM agent, imports, AI assistant); staff, spa, branch
+  and signup phones stay UAE-only; (2) **no country code = UAE** (05…/5… as today); another country needs `+` or `00`
+  first (bare foreign digits are refused, so a mistyped UAE number is never saved as foreign); (3) **UAE numbers stay
+  mobiles only** (no 04/02 landlines: WhatsApp); other countries accept any valid number with the code. Stored format
+  unchanged (E.164 digits, no `+`), no migration; WhatsApp links already work for any country. Also fix: client edit
+  prefill (`0${phone.slice(3)}` corrupts foreign numbers), duplicate suggestions (last-9 only for 971), masks/display
+  for non-971 numbers, export non-UAE as `+digits`.
+  **As built (2026-10-22):** core `toClientE164` + `phoneDisplay`; labels "Mobile (WhatsApp)" + hint "UAE: 05X XXX XXXX ·
+  other countries: + and the country code" (EN/TH, booking widget EN/AR; new Thai/Arabic need native review);
+  website enquiry forms use the same rule (so Make booking always works: UAE landlines and bare foreign digits
+  refused there too); '+'/'00' + 9 digits starting with 5 (e.g. '+50 123 4567') refused as a likely UAE typo;
+  client import template example '+44 7700 900123'; duplicate key last-9 only for 971/0-prefixed numbers.
 - **R37 Worker outage fix (found 2026-10-21 from the console Server health screen; owner "Fix + safety checks", billing
   "Hold it for 1 day"):** the production worker has crash-looped since the R24 deploy (2026-10-11 ~22:46 UTC, last
   heartbeat): R24 brought `sharp` into the worker bundle (`import('sharp')` via services media/site-import/ai add_image);

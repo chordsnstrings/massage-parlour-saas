@@ -386,7 +386,7 @@ export function fullExportReadme(opts: {
     '- Date-times are Asia/Dubai local time; business dates (YYYY-MM-DD) follow your branch business day.',
     '- Money columns are AED and VAT-inclusive unless the column says otherwise (e.g. vat_aed).',
     '- Bilingual text, preferences and settings are JSON, e.g. {"en":"Swedish massage","ar":"..."}.',
-    '- Phone numbers are E.164 digits without "+" (971501234567).',
+    '- Phone numbers are E.164 digits without "+" (971501234567, 447700900123).',
     '- Every cell is a plain value (no formulas). Values longer than an Excel cell holds (32,767 characters) are cut',
     '  and kept in full, in parts, on the long_values sheet.',
     '- Access tokens, invitation/session hashes and uploaded file bytes are not included.',

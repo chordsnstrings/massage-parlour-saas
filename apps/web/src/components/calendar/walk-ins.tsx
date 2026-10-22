@@ -150,7 +150,12 @@ export function WalkInSheet({
           <Field
             label={t('calendar.fields.mobile')}
             name="clientPhone"
-            hint={t('calendar.walkIns.phoneHint')}
+            hint={
+              <>
+                {t('calendar.walkIns.phoneHint')}
+                <span className="block">{t('validation.clientPhoneHint')}</span>
+              </>
+            }
           >
             <Input
               id="clientPhone"
