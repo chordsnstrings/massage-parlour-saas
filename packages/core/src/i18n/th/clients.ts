@@ -61,8 +61,8 @@ export const clients: Messages['clients'] = {
   },
   field: {
     name: 'ชื่อ',
-    phone: 'เบอร์มือถือ UAE',
-    phoneHint: 'ใช้สำหรับ WhatsApp เช่น 050 123 4567',
+    phone: 'เบอร์มือถือ (WhatsApp)',
+    phoneHint: 'UAE: 05X XXX XXXX · ประเทศอื่น: ใส่ + ตามด้วยรหัสประเทศ เช่น +44 7700 900123',
     gender: 'เพศ',
     notSet: 'ไม่ระบุ',
     language: 'ภาษา',
@@ -208,7 +208,7 @@ export const clients: Messages['clients'] = {
   },
   error: {
     name: 'กรอกชื่อลูกค้า',
-    phone: 'กรอกเบอร์มือถือ UAE เช่น 050 123 4567',
+    phone: 'กรอกเบอร์มือถือ UAE (05X XXX XXXX) หรือเบอร์ที่ขึ้นต้นด้วย + และรหัสประเทศ',
     date: 'กรอกวันที่ให้ถูกต้อง',
     dupPhone: 'ลูกค้าคนอื่นใช้เบอร์นี้แล้ว',
     reason: 'ใส่เหตุผลเพื่อให้ทีมงานทราบ',

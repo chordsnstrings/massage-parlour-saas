@@ -1,4 +1,4 @@
-import { whatsappLink } from '@spa/core'
+import { uaePhoneDisplay, whatsappLink } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import {
   bookingItems,
@@ -253,7 +253,7 @@ export default async function ClientPage({ params }: { params: Promise<{ tenant:
                 showPhone={seePhone}
                 value={{
                   name: client.name,
-                  phone: phone && seePhone ? `0${phone.slice(3)}` : '',
+                  phone: phone && seePhone ? uaePhoneDisplay(phone) : '', // 050 123 4567, other countries +digits (R38)
                   email: client.email ?? '',
                   gender: client.gender ?? '',
                   language: client.language,

@@ -35,7 +35,7 @@ test('visitor books online: service → tomorrow → first time → details → 
 
   await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
   await page.getByLabel('Your name').fill('Noura Haddad')
-  await page.getByLabel('UAE mobile').fill('050 123 4567')
+  await page.getByLabel('Mobile (WhatsApp)').fill('050 123 4567')
   await page.getByRole('button', { name: 'Request booking' }).click()
 
   await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
@@ -110,7 +110,7 @@ test('G21: a returning client is auto-confirmed online and gets the WhatsApp con
     await page.getByRole('button', { name: /^Tomorrow/ }).click()
     await page.getByTestId('slots').getByRole('button').first().click()
     await page.getByLabel('Your name').fill('Fatima')
-    await page.getByLabel('UAE mobile').fill('050 123 4567')
+    await page.getByLabel('Mobile (WhatsApp)').fill('050 123 4567')
     await page.getByRole('button', { name: 'Request booking' }).click()
     await expect(page.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Message us on WhatsApp' })).toBeVisible()
@@ -136,7 +136,7 @@ test('G21: a returning client is auto-confirmed online and gets the WhatsApp con
     await page.getByRole('button', { name: /^Tomorrow/ }).click()
     await page.getByTestId('slots').getByRole('button').last().click()
     await page.getByLabel('Your name').fill('Noura Haddad')
-    await page.getByLabel('UAE mobile').fill('050 765 4321')
+    await page.getByLabel('Mobile (WhatsApp)').fill('050 765 4321')
     await page.getByRole('button', { name: 'Request booking' }).click()
     await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
   })
@@ -151,9 +151,50 @@ async function bookTomorrow(page: Page, name: string, phone: string) {
   await page.getByRole('button', { name: /^Tomorrow/ }).click()
   await page.getByTestId('slots').getByRole('button').first().click()
   await page.getByLabel('Your name').fill(name)
-  await page.getByLabel('UAE mobile').fill(phone)
+  await page.getByLabel('Mobile (WhatsApp)').fill(phone)
   await page.getByRole('button', { name: 'Request booking' }).click()
 }
+
+test('R38: a visitor from abroad books with + and the country code; a UAE landline is refused (EN + AR)', async ({
+  page,
+}) => {
+  const { slug } = await signUpOwner(page)
+  const seed = await seedCatalog(slug)
+  const db = testDb()
+
+  await test.step('Arabic: a landline gets the Arabic message', async () => {
+    await page.goto(`${site(slug)}/book?lang=ar`)
+    await page.getByRole('region', { name: 'مساج سويدي' }).getByRole('button').first().click()
+    await page.getByRole('button', { name: /^غداً/ }).click()
+    await page.getByTestId('slots').getByRole('button').first().click()
+    await page.getByLabel('الاسم').fill('Emily Clarke')
+    await page.getByLabel('رقم الجوال (واتساب)').fill('04 123 4567')
+    await page.getByRole('button', { name: 'طلب الحجز' }).click()
+    await expect(
+      page.getByText('أدخل رقم جوال إماراتياً (05X XXX XXXX) أو رقماً يبدأ بـ + ورمز الدولة'),
+    ).toBeVisible()
+  })
+
+  await test.step('English: the landline is refused, +44 7700 900123 books', async () => {
+    await page.goto(`${site(slug)}/book`)
+    await bookTomorrow(page, 'Emily Clarke', '04 123 4567')
+    await expect(
+      page.getByText('Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code'),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
+    await page.getByLabel('Your name').fill('Emily Clarke')
+    await page.getByLabel('Mobile (WhatsApp)').fill('+44 7700 900123')
+    await page.getByRole('button', { name: 'Request booking' }).click()
+    await expect(page.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
+    const ref = (await page.getByTestId('booking-ref').textContent())?.trim() ?? ''
+    const [row] = await db
+      .select({ phone: clients.phoneE164 })
+      .from(bookings)
+      .innerJoin(clients, eq(clients.id, bookings.clientId))
+      .where(and(eq(bookings.tenantId, seed.tenantId), eq(bookings.refCode, ref)))
+    expect(row).toEqual({ phone: '447700900123' })
+  })
+})
 
 test('F13: a visitor from Instagram (?src=ig) books online; the booking and the KPIs show Instagram', async ({
   page,

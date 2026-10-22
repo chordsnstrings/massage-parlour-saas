@@ -69,7 +69,7 @@ export const waitlist = {
     date: 'Pick a day',
     time: 'Use HH:MM',
     name: 'Enter the client’s name',
-    phone: 'Enter a UAE mobile number',
+    phone: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
     variant: 'Choose a treatment',
   },
 } as const

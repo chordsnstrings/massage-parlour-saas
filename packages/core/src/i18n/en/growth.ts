@@ -27,7 +27,7 @@ export const growth = {
     saved: 'Voucher saved',
     notFound: 'Gift card not found.',
     redeemHint: 'To use it, choose “Gift card” as the payment at checkout and type the code or scan the QR.',
-    v: { phone: 'Enter a UAE mobile number, e.g. 050 123 4567' },
+    v: { phone: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code' },
   },
   poster: {
     title: 'QR posters',

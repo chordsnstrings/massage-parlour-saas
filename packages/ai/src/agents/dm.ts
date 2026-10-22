@@ -37,7 +37,7 @@ const tools: ToolDef[] = [
     function: {
       name: 'book',
       description:
-        'Create a booking request (the spa confirms it). Only after the customer chose a time and gave name + UAE mobile.',
+        'Create a booking request (the spa confirms it). Only after the customer chose a time and gave name + mobile number.',
       parameters: {
         type: 'object',
         properties: {
@@ -45,7 +45,11 @@ const tools: ToolDef[] = [
           date: { type: 'string', description: 'YYYY-MM-DD' },
           time: { type: 'string', description: 'HH:MM (Dubai)' },
           name: { type: 'string' },
-          phone: { type: 'string', description: 'UAE mobile, e.g. 050 123 4567' },
+          phone: {
+            type: 'string',
+            description:
+              'Mobile number: UAE as 050 123 4567; any other country with + and the country code, e.g. +44 7700 900123',
+          },
         },
         required: ['variant_id', 'date', 'time', 'name', 'phone'],
       },
@@ -85,7 +89,7 @@ Menu (prices in AED, VAT included):
 ${menu || '- (no online menu yet — hand off to staff for bookings)'}
 
 How to help: answer questions about services, prices, hours and location from the facts above. To book, find out the service and preferred day/time,
-call check_availability, offer up to 3 times, then collect the customer's name and UAE mobile and call book. After booking, tell them the reference and what the book tool's status says (pending: the spa will confirm on WhatsApp; confirmed: they are booked).
+call check_availability, offer up to 3 times, then collect the customer's name and mobile number (a UAE mobile like 050 123 4567, or + and the country code for any other country) and call book. After booking, tell them the reference and what the book tool's status says (pending: the spa will confirm on WhatsApp; confirmed: they are booked).
 Keep replies under 600 characters, friendly and clear. ${ctx.rules}
 ${SAFETY}`
 }

@@ -1,7 +1,7 @@
 // Import/export helpers (pure): decoding, delimiter + date detection, header-row detection, column auto-mapping and
 // row validation/normalisation. CSV parsing (papaparse) happens in the web app; .xlsx output/input lives in
 // xlsx.ts (server-only subpath); the database side lives in data-import.ts / data-export.ts.
-import { asciiDigits, toUaeE164 } from '@spa/core'
+import { asciiDigits, toClientE164 } from '@spa/core'
 
 export const IMPORT_KINDS = ['clients', 'menu', 'products'] as const
 export type ImportKind = (typeof IMPORT_KINDS)[number]
@@ -48,7 +48,7 @@ export const IMPORT_FIELDS: Record<ImportKind, ImportField[]> = {
     {
       key: 'phone',
       label: 'Mobile',
-      hint: 'UAE mobile; used to find existing clients',
+      hint: 'UAE mobile, or + and the country code; used to find existing clients',
       aliases: [
         'mobile',
         'phone',
@@ -468,16 +468,16 @@ export function parseDuration(input: string): number | null {
   return null
 }
 
-/** UAE mobile → E.164 digits (971…) with Arabic digits accepted. */
-export const normalisePhone = (input: string) => toUaeE164(asciiDigits(cleanCell(input)))
+/** Client phone → E.164 digits (`toClientE164`: UAE mobile, or + / 00 and a country code), Arabic digits accepted. */
+export const normalisePhone = (input: string) => toClientE164(asciiDigits(cleanCell(input)))
 
 /** +971 50 123 4567 */
 export const formatUaePhone = (e164: string) =>
   /^9715\d{8}$/.test(e164) ? `+971 ${e164.slice(3, 5)} ${e164.slice(5, 8)} ${e164.slice(8)}` : `+${e164}`
 
-/** 050 123 4567 — spreadsheet-safe (stays text, keeps the leading zero) and re-imports cleanly. */
+/** 050 123 4567, other countries +447700900123 — spreadsheet-safe (stays text) and re-imports cleanly. */
 export const formatLocalPhone = (e164: string) =>
-  /^9715\d{8}$/.test(e164) ? `0${e164.slice(3, 5)} ${e164.slice(5, 8)} ${e164.slice(8)}` : e164
+  /^9715\d{8}$/.test(e164) ? `0${e164.slice(3, 5)} ${e164.slice(5, 8)} ${e164.slice(8)}` : `+${e164}`
 
 const GENDERS: Record<string, 'female' | 'male' | 'other' | null> = {
   f: 'female',
@@ -692,7 +692,8 @@ function validateClient(get: (k: string) => string, order: DateOrder) {
   if (rawPhone) {
     phone = normalisePhone(rawPhone)
     display.phone = phone ? formatUaePhone(phone) : rawPhone
-    if (!phone) errors.push(`“${rawPhone}” is not a UAE mobile number (e.g. 050 123 4567)`)
+    if (!phone)
+      errors.push(`“${rawPhone}” is not a UAE mobile (050 123 4567) or a number with + and its country code`)
   }
   let gender: ClientRecord['gender'] = null
   const rawGender = get('gender')

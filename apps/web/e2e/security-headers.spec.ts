@@ -410,7 +410,7 @@ test('F10: CSP reports are counted and shown in the console; F9: Turnstile keys 
     await page.getByRole('button', { name: /^Tomorrow/ }).click()
     await page.getByTestId('slots').getByRole('button').first().click()
     await page.getByLabel('Your name').fill('Console Key')
-    await page.getByLabel('UAE mobile').fill('050 777 6655')
+    await page.getByLabel('Mobile (WhatsApp)').fill('050 777 6655')
     await page.getByRole('button', { name: 'Request booking' }).click()
     await expect(page.getByText("We couldn't confirm you're not a robot").first()).toBeVisible({
       timeout: 30_000,

@@ -19,6 +19,7 @@ import {
   detectDelimiter,
   existingRows,
   exportRows,
+  formatLocalPhone,
   fullExportReadme,
   fullExportTables,
   headerRowIndex,
@@ -103,11 +104,18 @@ describe('value parsing', () => {
     expect(parseDuration('01:30:00')).toBe(90)
     expect(parseDuration('long')).toBeNull()
   })
-  it('normalises UAE mobiles in every common shape', () => {
+  it('normalises UAE mobiles in every common shape, other countries only with + or 00 (R38)', () => {
     for (const v of ['050 123 4567', '+971 50 123 4567', '00971501234567', '501234567', '٠٥٠١٢٣٤٥٦٧'])
       expect(normalisePhone(v)).toBe('971501234567')
-    expect(normalisePhone('+44 7700 900123')).toBeNull()
-    expect(normalisePhone('9.71501E+11')).toBeNull()
+    expect(normalisePhone('+44 7700 900123')).toBe('447700900123')
+    expect(normalisePhone('\u200e0044 7700 900123')).toBe('447700900123')
+    expect(normalisePhone(formatLocalPhone('447700900123'))).toBe('447700900123')
+    for (const v of ['447700900123', '04 123 4567', '+971 4 123 4567', '9.71501E+11'])
+      expect(normalisePhone(v)).toBeNull()
+  })
+  it('exports UAE mobiles locally and other countries as +digits (text, re-imports)', () => {
+    expect(formatLocalPhone('971501234567')).toBe('050 123 4567')
+    expect(formatLocalPhone('447700900123')).toBe('+447700900123')
   })
 })
 
@@ -159,7 +167,8 @@ describe('mapping and validation', () => {
     })
     expect(rows[0]!.record).not.toHaveProperty('email')
     expect(rows[1]!.errors).toEqual(['Name is missing'])
-    expect(rows[2]!.errors).toHaveLength(3)
+    expect(rows[2]).toMatchObject({ key: '447700900123' })
+    expect(rows[2]!.errors).toHaveLength(2) // gender + birthday; +44 is a valid client phone (R38)
     expect(rows[3]).toMatchObject({ row: 5, dupOfRow: 2 })
     expect(rows[4]).toMatchObject({ key: 'name:no phone', errors: [] })
   })
@@ -264,7 +273,14 @@ describe('database import and export', () => {
       db: app,
     })
     expect(skip).toMatchObject({ total: 5, created: 2, updated: 0, skipped: 2 })
-    expect(skip.errors).toEqual([{ row: 4, message: expect.stringContaining('not a UAE mobile') }])
+    expect(skip.errors).toEqual([
+      {
+        row: 4,
+        message: expect.stringContaining(
+          'not a UAE mobile (050 123 4567) or a number with + and its country code',
+        ),
+      },
+    ])
     const [kept] = await platform.select().from(clients).where(eq(clients.phoneE164, '971501234567'))
     expect(kept).toMatchObject({ name: 'Existing', tags: ['vip'] })
 
@@ -418,5 +434,19 @@ describe('database import and export', () => {
         phones: false,
       }),
     ).toContain('clients ')
+  })
+
+  it('exports other countries as +digits: text in the .xlsx, and it imports back as the same client (R38)', async () => {
+    await platform
+      .insert(clients)
+      .values({ tenantId: ids.tenant!, name: 'Abroad', phoneE164: '447700900123' })
+    const rows = await tx((t) => exportRows(t, 'clients', {}, { phones: true }))
+    expect(rows.flat()).toContain('+447700900123')
+    const book = await readXlsx(await toXlsx({ sheets: [{ name: 'Clients', title: 'T', rows }] }))
+    const cell = book.flat().find((v) => String(v).includes('447700900123'))
+    expect(cell).toBe('+447700900123')
+    const back = clientRows(['name', 'phone'], [['Abroad', String(cell)]])
+    expect(back[0]).toMatchObject({ key: '447700900123', errors: [] })
+    expect(await tx((t) => existingRows(t, 'clients', back))).toEqual(new Set([2]))
   })
 })

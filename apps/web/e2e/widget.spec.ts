@@ -59,7 +59,7 @@ test('booking widget: snippet in settings, frameable embed route, booking throug
   await frame.getByRole('button', { name: /^Tomorrow/ }).click()
   await frame.getByTestId('slots').getByRole('button').first().click()
   await frame.getByLabel('Your name').fill('Layla Widget')
-  await frame.getByLabel('UAE mobile').fill('050 765 4321')
+  await frame.getByLabel('Mobile (WhatsApp)').fill('050 765 4321')
   await frame.getByRole('button', { name: 'Request booking' }).click()
   await expect(frame.getByRole('heading', { name: 'Booking requested' })).toBeVisible()
   const ref = (await frame.getByTestId('booking-ref').textContent())?.trim() ?? ''

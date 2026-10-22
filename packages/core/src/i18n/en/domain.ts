@@ -57,7 +57,7 @@ export const domain = {
   bookingCantMove: 'This booking can no longer be moved',
   bookingStatusChange: "Can't change a {from} booking to {to}",
   // Clients
-  uaeMobile: 'Enter a UAE mobile number, e.g. 050 123 4567',
+  clientPhone: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
   // Sales / POS
   addItem: 'Add at least one item',
   amountsNegative: 'Amounts cannot be negative',
@@ -277,7 +277,7 @@ export const domain = {
   metaNoPage: 'No Facebook Page is connected.',
   metaImageNotPublic: 'The image is not on a public https link.',
   metaReplyFirst: 'Write a reply first',
-  metaPhoneNeeded: 'A UAE mobile number or a client with one is needed',
+  metaPhoneNeeded: 'A mobile number (UAE, or + and the country code) or a client with one is needed',
   // Branches + tax invoice (G22, G16)
   branchPlanLimit: 'Your plan includes {limit} branches',
   branchArchiveMain: "The main branch can't be archived",

@@ -3,16 +3,19 @@ import {
   ALL_PERMISSIONS,
   asciiDigits,
   CUSTOM_ROLE_PERMISSIONS,
+  callingCode,
   checkSlug,
   DEFAULT_EMAIL_FROM,
   matchRoot,
   normalizeSlug,
   PHONE_ROLES,
   parseRoots,
+  phoneDisplay,
   resolvePermissions,
   resolveSurface,
   roleMayHold,
   SYSTEM_ROLES,
+  toClientE164,
   toE164,
   toUaeE164,
   trimTrailing,
@@ -191,6 +194,77 @@ describe('whatsapp', () => {
     ['\ufeff04 123 4567', '97141234567'],
     ['\u202bcall me\u202c', null],
   ])('toE164(%s)', (input, out) => expect(toE164(input)).toBe(out))
+
+  // R38 client phones: no + / 00 = UAE mobile (as toUaeE164); + / 00 = any country, UAE still mobiles only.
+  it.each([
+    ['050 123 4567', '971501234567'],
+    ['501234567', '971501234567'],
+    ['971 50 123 4567', '971501234567'],
+    ['+971 50 123 4567', '971501234567'],
+    ['00971 50 123 4567', '971501234567'],
+    ['+971 (0)50 123 4567', '971501234567'],
+    ['٠٥٠ ١٢٣ ٤٥٦٧', '971501234567'],
+    ['+٩٧١ ٥٠ ١٢٣ ٤٥٦٧', '971501234567'],
+    ['‪+971 50 123 4567‬', '971501234567'],
+    ['04 123 4567', null],
+    ['+971 4 123 4567', null],
+    ['+971 04 123 4567', null],
+    ['0097141234567', null],
+    ['447700900123', null],
+    ['07700 900123', null],
+    ['+44 7700 900123', '447700900123'],
+    ['0044 7700 900123', '447700900123'],
+    ['+44 (0)20 7946 0958', '442079460958'],
+    ['+44 07700 900123', '447700900123'],
+    ['0049 030 1234567', '49301234567'],
+    ['+39 06 1234 5678', '390612345678'],
+    ['+1 202-555-0123', '12025550123'],
+    ['+966 50 123 4567', '966501234567'],
+    ['+٤٤ ٧٧٠٠ ٩٠٠١٢٣', '447700900123'],
+    ['+44 7700', null],
+    ['+44 7700 900123 456789', null],
+    ['+44 7700 9OO123', null],
+    ['call me', null],
+    ['++44 7700 900123', null],
+    ['+44 +7700 900123', null],
+    ['', null],
+  ])('toClientE164(%s)', (input, out) => expect(toClientE164(input)).toBe(out))
+
+  it('splits calling codes and shows / masks any number, UAE as before', () => {
+    expect(
+      ['12025550123', '79161234567', '447700900123', '390612345678', '966501234567', '971501234567'].map(
+        callingCode,
+      ),
+    ).toEqual(['1', '7', '44', '39', '966', '971'])
+    expect(phoneDisplay('971501234567')).toBe('+971 50 123 4567')
+    expect(phoneDisplay('447700900123')).toBe('+447700900123')
+    expect(phoneDisplay('')).toBe('')
+    expect(phoneDisplay('971501234567', { mask: 'last4' })).toBe('+971 50 ••• 4567')
+    expect(phoneDisplay('971501234567', { mask: 'last2' })).toBe('+971 50 ••• ••67')
+    expect(phoneDisplay('447700900123', { mask: 'last4' })).toBe('+44 ••• 0123')
+    expect(phoneDisplay('12025550123', { mask: 'last4' })).toBe('+1 ••• 0123')
+    expect(phoneDisplay('966501234567', { mask: 'last2' })).toBe('+966 ••• ••67')
+    expect(phoneDisplay('97141234567', { mask: 'last4' })).toBe('+971 ••• 4567')
+    expect(phoneDisplay('3545551234', { mask: 'last4' })).toBe('+354 ••• 1234') // 7-digit national: 3 hidden
+    expect(phoneDisplay('35412345', { mask: 'last4' })).toBe('+354 ••• 45') // 5-digit national: 3 hidden
+    expect(phoneDisplay('1234567', { mask: 'last4' })).toBe('•••')
+    // At least 3 national digits always hidden, whatever the length.
+    for (const n of [
+      '447700900123',
+      '12025550123',
+      '919876543210',
+      '35412345',
+      '6012345678',
+      '4930123456789',
+    ])
+      for (const mask of ['last4', 'last2'] as const) {
+        const cc = callingCode(n)
+        const shown = phoneDisplay(n, { mask })
+          .slice(cc.length + 1)
+          .replace(/\D/g, '')
+        expect(n.length - cc.length - shown.length).toBeGreaterThanOrEqual(3)
+      }
+  })
 
   it('maps Arabic-Indic digits to ASCII and leaves the rest', () => {
     expect(asciiDigits('٠١٢٣٤٥٦٧٨٩ ۰۱۲۳۴۵۶۷۸۹ +971')).toBe('0123456789 0123456789 +971')

@@ -1,5 +1,5 @@
 'use server'
-import { toUaeE164 } from '@spa/core'
+import { toClientE164 } from '@spa/core'
 import { withTenant } from '@spa/db'
 import { DomainError, updateVoucher } from '@spa/services'
 import { revalidatePath } from 'next/cache'
@@ -31,7 +31,7 @@ export async function saveVoucherAction(
       id: z.uuid(),
       recipientName: optional(80),
       recipientPhone: optional(30).refine(
-        (v) => v === null || toUaeE164(v) !== null,
+        (v) => v === null || toClientE164(v) !== null,
         'growth.voucher.v.phone',
       ),
       message: optional(200),
@@ -52,7 +52,7 @@ export async function saveVoucherAction(
         recipientName: d.recipientName,
         message: d.message,
         voucherServiceId: d.voucherServiceId,
-        ...(phoneAllowed ? { recipientPhone: d.recipientPhone ? toUaeE164(d.recipientPhone) : null } : {}),
+        ...(phoneAllowed ? { recipientPhone: d.recipientPhone ? toClientE164(d.recipientPhone) : null } : {}),
       }),
     )
     await audit({
