@@ -155,7 +155,11 @@ export function NewBookingSheet({
                         defaultValue={pre?.newClient?.name}
                       />
                     </Field>
-                    <Field label={t('calendar.fields.mobile')} name="clientPhone">
+                    <Field
+                      label={t('calendar.fields.mobile')}
+                      name="clientPhone"
+                      hint={t('validation.clientPhoneHint')}
+                    >
                       <Input
                         id="clientPhone"
                         name="clientPhone"

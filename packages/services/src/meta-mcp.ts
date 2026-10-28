@@ -331,7 +331,8 @@ export async function draftWhatsAppMessage(
   } else if (p.phone) {
     phone = normalisePhone(p.phone)
   }
-  if (!phone) throw new DomainError('A UAE mobile number or a client with one is needed')
+  if (!phone)
+    throw new DomainError('A mobile number (UAE, or + and the country code) or a client with one is needed')
   const [row] = await tx
     .insert(outbox)
     .values({ tenantId: p.tenantId, clientId, kind: 'custom', phoneE164: phone, text, status: 'queued' })

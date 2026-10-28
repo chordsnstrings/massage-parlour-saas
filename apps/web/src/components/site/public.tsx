@@ -361,7 +361,7 @@ async function PostPage({
         pageUrl: url,
         logo: seo.logo,
         branch: live.branch,
-        sameAs: [seo.instagram, normalizeGoogleMapsUrl(live.branch?.mapsUrl)],
+        sameAs: [...seo.profiles, normalizeGoogleMapsUrl(live.branch?.mapsUrl)],
       },
       {
         url,

@@ -1,8 +1,8 @@
 import { robotsTxt, type SitemapEntry, siteIndexable, sitemapXml } from '@spa/core'
-import { sites, socialAccounts, tenants, withTenant } from '@spa/db'
-import { fileUrl, listPublishedPages, listPublishedPosts } from '@spa/services'
+import { sites, socialAccounts, type Tx, tenants, withTenant } from '@spa/db'
+import { fileUrl, getSiteProfiles, listPublishedPages, listPublishedPosts } from '@spa/services'
 import { imageSrc, walkNodes } from '@spa/services/site-kit'
-import { and, eq, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { cache } from 'react'
 import { publicSiteUrl } from '@/server/sites'
 
@@ -33,6 +33,51 @@ export const hreflang = (base: string, slug: string, arabic: boolean): Record<st
       }
     : undefined
 
+const IG_USERNAME = /^[A-Za-z0-9._]{1,30}$/
+
+export type AutoProfile = { source: 'instagram' | 'facebook'; url: string }
+
+/**
+ * R33: the spa's public profiles for the JSON-LD sameAs. `manual` = the console's Profile links (services
+ * setSiteProfiles); `automatic` = the connected Instagram account (its own connection, else the one linked to the
+ * connected Facebook Page) and that Page. Only 'connected' rows count: the ones the one-spa-per-Meta-account rule
+ * guards (an expired row's account may since belong to another spa); only ids and names are read, never the token
+ * columns. `profiles` = manual first, then automatic, each once.
+ */
+export async function spaProfiles(tx: Tx, tenantId: string) {
+  const manual = await getSiteProfiles(tx, tenantId)
+  const rows = await tx
+    .select({
+      platform: socialAccounts.platform,
+      username: socialAccounts.username,
+      externalId: socialAccounts.externalId,
+      meta: socialAccounts.meta,
+    })
+    .from(socialAccounts)
+    .where(
+      and(
+        eq(socialAccounts.tenantId, tenantId),
+        inArray(socialAccounts.platform, ['instagram', 'facebook']),
+        eq(socialAccounts.status, 'connected'),
+      ),
+    )
+    .orderBy(asc(socialAccounts.createdAt))
+  const ig = rows.find((r) => r.platform === 'instagram')
+  // A chosen Page (the row's id is 'pending' until then).
+  const page = rows.find((r) => r.platform === 'facebook' && /^\d{1,30}$/.test(r.externalId))
+  const username = [ig?.username, page?.meta.igUsername]
+    .map((u) => (typeof u === 'string' ? u.replace(/^@/, '') : ''))
+    .find((u) => IG_USERNAME.test(u))
+  const automatic: AutoProfile[] = [
+    ...(username ? [{ source: 'instagram' as const, url: `https://www.instagram.com/${username}/` }] : []),
+    ...(page ? [{ source: 'facebook' as const, url: `https://www.facebook.com/${page.externalId}` }] : []),
+  ]
+  const profiles = [...new Set([...manual, ...automatic.map((a) => a.url)])].filter((u) =>
+    u.startsWith('https://'),
+  )
+  return { manual, automatic, profiles }
+}
+
 /** One request's SEO facts about a spa (shared by generateMetadata and the page through React cache). */
 export const siteSeo = cache(async (tenant: SiteTenant) => {
   const base = (await publicSiteUrl(tenant)).replace(/\/$/, '')
@@ -43,35 +88,24 @@ export const siteSeo = cache(async (tenant: SiteTenant) => {
       .select({ locales: sites.locales })
       .from(sites)
       .where(eq(sites.tenantId, tenant.id))
-    const [ig] = await tx
-      .select({ username: socialAccounts.username })
-      .from(socialAccounts)
-      .where(
-        and(
-          eq(socialAccounts.tenantId, tenant.id),
-          eq(socialAccounts.platform, 'instagram'),
-          ne(socialAccounts.status, 'disconnected'),
-        ),
-      )
-      .limit(1)
     return {
       logo: t?.logo ?? null,
       locales: site?.locales ?? ['en'],
-      ig,
+      links: await spaProfiles(tx, tenant.id),
       pages: await listPublishedPages(tx, tenant.id),
       // F15 blog posts (sitemap entries at /blog/{slug}).
       posts: await listPublishedPosts(tx, 1000),
     }
   })
-  const username = facts.ig?.username?.replace(/^@/, '')
   return {
     base,
     origin,
     home: sitePageUrl(base, ''),
     arabic: facts.locales.includes('ar'),
     logo: facts.logo ? `${origin}${fileUrl(facts.logo)}` : null,
-    instagram:
-      username && /^[A-Za-z0-9._]{1,30}$/.test(username) ? `https://www.instagram.com/${username}/` : null,
+    /** R33: every public profile for the JSON-LD sameAs (spaProfiles: Profile links, then connected accounts). */
+    profiles: facts.links.profiles,
+    instagram: facts.links.automatic.find((a) => a.source === 'instagram')?.url ?? null,
     pages: facts.pages.map((p) => ({ slug: p.slug, title: p.title, publishedAt: p.publishedAt })),
     posts: facts.posts.map((p) => ({ slug: p.slug, arabic: Boolean(p.title.ar), updatedAt: p.updatedAt })),
     /** Suspended spas and sites with nothing published stay out of search (pages say noindex; empty sitemap). */

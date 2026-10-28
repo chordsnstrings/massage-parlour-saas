@@ -75,7 +75,7 @@ test('Enquiries → Make booking: a website booking request becomes a booking in
     // The night's business date (cutoff 05:00); the URL drops ?enquiry= so a reload doesn't reopen it.
     await expect(page).toHaveURL(new RegExp(`/calendar\\?date=${night}`))
     await expect(sheet.getByLabel('Name')).toHaveValue('Layla Test')
-    await expect(sheet.getByLabel('UAE mobile')).toHaveValue('+971509876543')
+    await expect(sheet.getByLabel('Mobile (WhatsApp)')).toHaveValue('+971509876543')
     await expect(sheet.getByLabel('Service')).toHaveValue(sixty!)
     await expect(sheet.getByLabel('Time')).toHaveValue('00:30')
     await expect(sheet.getByLabel('Therapist')).toHaveValue(maya!)

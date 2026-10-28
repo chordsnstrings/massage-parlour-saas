@@ -15,10 +15,21 @@ export const notifications = {
   unread: 'Unread',
   filter: { all: 'All', unread: 'Unread' },
   warehouse: 'Warehouse',
+  // R36 pop-up (anywhere in the CRM) when a website booking or enquiry arrives.
+  toast: {
+    label: 'Website alerts',
+    open: 'Open',
+    sound: 'Sound',
+    confirmed: 'Booking confirmed',
+  },
   unknown: 'Notification',
   kind: {
     booking: {
-      online: { title: 'New online booking', body: '{name} · {service} · {at} — waiting for confirmation' },
+      online: {
+        title: 'New online booking',
+        body: '{name} · {service} · {at} — waiting for confirmation',
+        body_confirmed: '{name} · {service} · {at} — confirmed automatically',
+      },
       pending: {
         title: 'Booking waiting for confirmation',
         body: '{name} · {service} · {at} — confirm it on WhatsApp',

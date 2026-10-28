@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { UAE_CITIES } from '../src/html-crm'
 import {
+  cityIn,
   geoFromMapsUrl,
   jsonLdString,
   openingHoursSpecification,
@@ -142,6 +144,7 @@ describe('spaJsonLd', () => {
       address: {
         '@type': 'PostalAddress',
         streetAddress: 'Shop 4, Marina Walk, Dubai',
+        addressLocality: 'Dubai',
         addressRegion: 'Dubai',
         addressCountry: 'AE',
       },
@@ -275,6 +278,87 @@ describe('spaJsonLd', () => {
     const ar = spaJsonLd({ ...base, services, catalogName: 'العلاجات' }) as Graph
     expect(en['@graph'][0]!.hasOfferCatalog.name).toBe('Treatments')
     expect(ar['@graph'][0]!.hasOfferCatalog.name).toBe('العلاجات')
+  })
+
+  it('names the city (addressLocality) when the address has one; the street keeps the full text', () => {
+    const at = (address: string) =>
+      (spaJsonLd({ ...base, branch: { address } }) as Graph)['@graph'][0]!.address
+    expect(at('Al Zahiyah (Al Mina), E14, Abu Dhabi')).toEqual({
+      '@type': 'PostalAddress',
+      streetAddress: 'Al Zahiyah (Al Mina), E14, Abu Dhabi',
+      addressLocality: 'Abu Dhabi',
+      addressRegion: 'Abu Dhabi',
+      addressCountry: 'AE',
+    })
+    // Al Ain is a city in the Abu Dhabi emirate; a trailing country part is skipped.
+    expect(at('Villa 9, Al Jimi, Al Ain, UAE')).toMatchObject({
+      streetAddress: 'Villa 9, Al Jimi, Al Ain, UAE',
+      addressLocality: 'Al Ain',
+    })
+    expect(at('Villa 9, Al Jimi')).not.toHaveProperty('addressLocality')
+  })
+
+  it("takes the region from the city (no contradiction) and the city's own spelling", () => {
+    const at = (address: string) =>
+      (spaJsonLd({ ...base, branch: { address } }) as Graph)['@graph'][0]!.address
+    expect(at('Al Khan, opp. Dubai Islamic Bank, Sharjah')).toMatchObject({
+      addressLocality: 'Sharjah',
+      addressRegion: 'Sharjah',
+    })
+    expect(at('Dubai-Al Ain Road, Al Ain')).toMatchObject({
+      addressLocality: 'Al Ain',
+      addressRegion: 'Abu Dhabi',
+    })
+    expect(at('Corniche, abu dhabi.')).toMatchObject({
+      streetAddress: 'Corniche, abu dhabi.',
+      addressLocality: 'Abu Dhabi',
+      addressRegion: 'Abu Dhabi',
+    })
+    expect(at('Shop 4, Khor Fakkan')).toMatchObject({
+      addressLocality: 'Khor Fakkan',
+      addressRegion: 'Sharjah',
+    })
+    // Dibba spans Fujairah and Sharjah: the region only when the address names the emirate.
+    expect(at('Corniche Rd, Dibba')).toEqual({
+      '@type': 'PostalAddress',
+      streetAddress: 'Corniche Rd, Dibba',
+      addressLocality: 'Dibba',
+      addressCountry: 'AE',
+    })
+    expect(at('Fujairah Rd, Dibba')).toMatchObject({ addressLocality: 'Dibba', addressRegion: 'Fujairah' })
+    // No city part: the first emirate named, as before.
+    expect(at('Near Dubai Mall')).toMatchObject({ addressRegion: 'Dubai' })
+    expect(at('Near Dubai Mall')).not.toHaveProperty('addressLocality')
+  })
+
+  it('knows the spelling of every UAE city an address can name', () => {
+    for (const city of UAE_CITIES)
+      expect(cityIn(`Shop 1, ${city.toUpperCase()}`)?.locality.toLowerCase()).toBe(city)
+  })
+
+  it('lists profile links first in sameAs: https only, each once', () => {
+    const spa = (
+      spaJsonLd({
+        ...base,
+        sameAs: [
+          'https://g.page/r/birch-spa',
+          'https://www.instagram.com/birchspa/',
+          'http://www.facebook.com/birchspa',
+          'https://www.instagram.com/birchspa/',
+          '',
+          undefined,
+          'https://maps.app.goo.gl/BirchPin',
+        ],
+      }) as Graph
+    )['@graph'][0]!
+    expect(spa.sameAs).toEqual([
+      'https://g.page/r/birch-spa',
+      'https://www.instagram.com/birchspa/',
+      'https://maps.app.goo.gl/BirchPin',
+    ])
+    expect((spaJsonLd({ ...base, sameAs: ['ftp://x.ae', null] }) as Graph)['@graph'][0]).not.toHaveProperty(
+      'sameAs',
+    )
   })
 
   it('stays valid JSON with hostile spa text', () => {

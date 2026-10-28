@@ -20,7 +20,8 @@ import {
   HTML_ROUTE_HEADER,
   htmlRouteKey,
 } from '@/server/html-design-route'
-import { ownDomainTarget } from '@/server/own-domain'
+import { ownDomainTarget, wwwTwinTarget } from '@/server/own-domain'
+import { siteRedirectPath, siteRedirectTarget, withSiteRedirect } from '@/server/site-redirect'
 import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
 
 const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
@@ -104,10 +105,10 @@ export async function proxy(req: NextRequest) {
   const safe = req.method === 'GET' || req.method === 'HEAD'
   const old = pathRoutedAddress(host, req.nextUrl.pathname, ROOTS, { pathRouting: PATH_ROUTING })
   if (old) {
-    // R20: a spa site with its own domain primary goes straight there (one hop), as below.
+    // R20: a spa site with its own domain primary goes straight there (one hop, R33 redirect applied), as below.
     const own =
       safe && old.surface === 'site'
-        ? await ownDomainTarget(`/site/${old.slug}${old.rest}`, req.nextUrl.search)
+        ? await ownDomainTarget(`/site/${old.slug}${old.rest}`, req.nextUrl.search).then(withSiteRedirect)
         : null
     const current = old.slug ? await currentSlugFor(old.slug) : null
     const target =
@@ -129,7 +130,7 @@ export async function proxy(req: NextRequest) {
       extra.surface === 'site'
         ? `/site/${extra.slug}${req.nextUrl.pathname === '/' ? '' : req.nextUrl.pathname}`
         : null
-    const own = site ? await ownDomainTarget(site, req.nextUrl.search) : null
+    const own = site ? await ownDomainTarget(site, req.nextUrl.search).then(withSiteRedirect) : null
     const current = extra.surface === 'site' ? await currentSlugFor(extra.slug) : null
     const target =
       own ??
@@ -147,6 +148,19 @@ export async function proxy(req: NextRequest) {
     if (site && crmFeedPath(site)) res.headers.set('access-control-allow-origin', '*')
     return res
   }
+  // A connected custom domain's www twin (www.theirspa.ae ↔ theirspa.ae) → the connected hostname, path + query kept,
+  // one hop: GET/HEAD 301 (the spa's own redirect applied, R33), other methods 308. Short browser cache, like R20: a
+  // domain change applies within minutes.
+  const custom = customHost(host)
+  const twin = custom ? await wwwTwinTarget(custom, req.nextUrl.pathname, req.nextUrl.search) : null
+  if (twin) {
+    const res = NextResponse.redirect(safe ? await withSiteRedirect(twin) : twin, safe ? 301 : 308)
+    res.headers.set('cache-control', 'private, max-age=300')
+    // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+    if (crmFeedPath(internalPath(host, req.nextUrl.pathname)))
+      res.headers.set('access-control-allow-origin', '*')
+    return res
+  }
   const url = req.nextUrl.clone()
   const originalPath = url.pathname
   url.pathname = internalPath(host, originalPath)
@@ -159,9 +173,10 @@ export async function proxy(req: NextRequest) {
     // there, path + query kept, one hop (a renamed slug too). Not: other methods (forms/server actions started here),
     // the widget iframe /book/embed, robots.txt; /api and /.well-known (only the platform-only check above sees them),
     // /files, _next and static files never get here. Short browser cache, like F23: a domain change applies in minutes.
+    // R33: an old address goes straight to its new page there (the own domain's redirect applied, one hop).
     const own = await ownDomainTarget(url.pathname, req.nextUrl.search)
     if (own) {
-      const res = NextResponse.redirect(own, 301)
+      const res = NextResponse.redirect(await withSiteRedirect(own), 301)
       res.headers.set('cache-control', 'private, max-age=300')
       // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
       if (feed) res.headers.set('access-control-allow-origin', '*')
@@ -174,6 +189,17 @@ export async function proxy(req: NextRequest) {
       // Short browser cache: the address may be taken back (or, after the cooling period, by another spa).
       res.headers.set('cache-control', 'private, max-age=300')
       if (feed) res.headers.set('access-control-allow-origin', '*')
+      return res
+    }
+    // R33: the spa's own redirects (console Websites → spa → Redirects): an old website address → a page of the site,
+    // 301 on the address the visitor used (path routing keeps /s/{slug}), the visitor's other params kept. Location =
+    // the request's host + a validated on-site path only. Never the design feed, the site's own routes or a live page
+    // / published post at the same address (the lookup leaves those out: the page wins); other methods fall through.
+    // Next's trailing-slash 308 runs before the proxy: `/old/` takes 308 → 301. Short browser cache, like F23.
+    const redirect = feed ? null : await siteRedirectTarget(url.pathname, req.nextUrl.search)
+    if (redirect) {
+      const res = NextResponse.redirect(`${proto}://${host}${siteRedirectPath(originalPath, redirect)}`, 301)
+      res.headers.set('cache-control', 'private, max-age=300')
       return res
     }
   }

@@ -1,6 +1,6 @@
 // F15: printable / shareable gift voucher (A6 or A5, HTML print view — no PNG/PDF). The QR (server-side SVG, qrcode
 // lib) opens the public check page on the spa's site; redemption stays in POS (type the code or scan the QR).
-import { voucherPath, whatsappLink } from '@spa/core'
+import { uaePhoneDisplay, voucherPath, whatsappLink } from '@spa/core'
 import { enumLabel } from '@spa/core/i18n'
 import { services, withTenant } from '@spa/db'
 import { logoUrl, voucherDetails, voucherShareText, voucherStatus } from '@spa/services'
@@ -267,12 +267,17 @@ export default async function VoucherPage({
                 <Input id="recipientName" name="recipientName" defaultValue={card.recipientName ?? ''} />
               </Field>
               {phoneOk && (
-                <Field label={t('growth.voucher.recipientPhone')} name="recipientPhone">
+                <Field
+                  label={t('growth.voucher.recipientPhone')}
+                  name="recipientPhone"
+                  hint={t('validation.clientPhoneHint')}
+                >
                   <Input
                     id="recipientPhone"
                     name="recipientPhone"
+                    type="tel"
                     inputMode="tel"
-                    defaultValue={card.recipientPhone ?? ''}
+                    defaultValue={card.recipientPhone ? uaePhoneDisplay(card.recipientPhone) : ''}
                   />
                 </Field>
               )}

@@ -115,7 +115,14 @@ export const sites = pgTable(
     themeDraft: jsonb('theme_draft').$type<ThemeTokens>(),
     locales: text('locales').array().notNull().default(['en']),
     defaultLocale: text('default_locale').notNull().default('en'),
-    seo: jsonb('seo').$type<{ title?: string; description?: string }>().notNull().default({}),
+    /**
+     * `profiles` (R33): the spa's official profile links (Google Business Profile, Instagram …) for the JSON-LD
+     * sameAs, set by super-admins in the console (services setSiteProfiles: https only, ≤ 10).
+     */
+    seo: jsonb('seo')
+      .$type<{ title?: string; description?: string; profiles?: string[] }>()
+      .notNull()
+      .default({}),
     /** Snapshot taken by the last template switch, for one-click undo (cleared by undo). */
     templateUndo: jsonb('template_undo').$type<TemplateUndo>(),
     /** R28 P5 (D5): the Write texts run queued by a template apply / upgrade (null = none). */
@@ -236,6 +243,33 @@ export const sitePosts = pgTable(
     index('site_posts_published').on(t.tenantId, t.status, t.publishedAt),
     ...tenantPolicies(),
   ],
+)
+
+/** R33: how a redirect was added (console "Add redirect" or "Import list"). */
+export const siteRedirectSource = pgEnum('site_redirect_source', ['manual', 'import'])
+
+/**
+ * R33 (owner 2026-10-17): the spa's own redirects — an address of its old website (Google still lists it, now a 404)
+ * → a page of the site, a 301 on every public address of the spa (web proxy, server/site-redirect.ts). Managed by
+ * super-admins in the console (Websites → spa → Redirects). `from_path` is decoded, lower-case, no trailing slash;
+ * `from_query` = sorted source params ('' = any query); `to_path` = an on-site path [?query][#hash] (core
+ * redirects.ts). A live page or published post at `from_path` wins (path-only rules); chains are flattened on save.
+ */
+export const siteRedirects = pgTable(
+  'site_redirects',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fromPath: text('from_path').notNull(),
+    fromQuery: text('from_query').notNull().default(''),
+    toPath: text('to_path').notNull(),
+    source: siteRedirectSource('source').notNull().default('manual'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [unique('site_redirects_from').on(t.tenantId, t.fromPath, t.fromQuery), ...tenantPolicies()],
 )
 
 /**

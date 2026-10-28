@@ -3,7 +3,8 @@
 Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** — read the relevant section, not the whole file.
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R30 (§14.8; R28 dynamic HTML designs ✅ 2026-10-13, P0–P6; R29 console Google/Meta keys,
 R30 weekly SEO check, Enquiries → Make booking, BE RELAX v2.2 lazy loading ✅ 2026-10-13; R32 booking ↔ sale order + daily sales
-sheet PDF ✅ live 2026-10-15, PR #55);
+sheet PDF ✅ live 2026-10-15, PR #55; R33 crawler text + profile links + per-spa redirects ✅ live 2026-10-18, PR #58;
+R36 dashboard bookings + sales + website pop-up ✅ live 2026-10-21, PR #60; R37 worker outage fix ✅ live 2026-10-22, PR #62; R38 international client phones ✅ live 2026-10-22, PR #63);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 
@@ -27,6 +28,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - **Fix backlog reminder:** PLAN §17: F1–F32 released 2026-10-10, nothing open (owner 2026-10-09: "always remind me"). While any is open,
   remind the owner in one line in the first reply of every session and at the end of every task. Name the open items and
   the next one in order. Don't fix them until the owner says so.
+- **SEO agent upgrade reminder (owner 2026-10-17: "dont start the SEO thing till i say so just remind me each time"):**
+  R34 (PLAN §14.8) is decided but must not start until the owner says so. Remind in one line in the first reply of
+  every session and at the end of every task, next to the fix backlog line.
 - **Ask before coding (owner 2026-10-15: "ask me before start coding"):** for a new feature or change request, explain the
   plan and ask the open questions first; code only after the owner's go. Docs/memory upkeep and fixes to Claude's own
   in-flight work are exempt.
@@ -78,7 +82,9 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
   CRM_DATA — owner 2026-10-13 "no delay when I reload", contract doc §10; `contract.inline_fonts` woff2 fonts as
   data: URIs in CRM_DATA `inline_fonts`, declared locale only — owner 2026-10-14 Decision B, contract doc §11; og:*/twitter:* share tags, icon +
   apple-touch-icon links (spa logo) and hreflang links, each only when the design has none — owner 2026-10-14
-  Decision A, core `htmlDesignHeadTags`, never `<html lang>`); the live page is the design document itself (CSP sandbox, never
+  Decision A, core `htmlDesignHeadTags`, never `<html lang>`; R33 crawler text: CRM values written into empty `data-crm`
+  slots, the `[crm-*]` link hrefs and phones/hours rows, only for designs declaring `contract.prefill: 1`, live page
+  only — contract doc §12); the live page is the design document itself (CSP sandbox, never
   allow-same-origin); proof `e2e/html-fidelity.spec.ts` must stay green. Uploads ≤ 5 MB via `/files/templates`.
   **CRM feed for contract designs (R26, 2026-10-12):** a design with `window.CRM_DATA` / `<meta name=crm-endpoint>`
   gets operational keys live from the CRM (only that JSON changes); an empty CRM value or list keeps the design's
@@ -159,6 +165,9 @@ Next.js 16 (`proxy.ts`, not `middleware.ts`) · Tailwind 4 (logical utilities fo
   EXTRA_ROOT_DOMAINS would loop the old-domain → bare canonical redirect); CNAME target = CF_CNAME_TARGET
   (site.env move block: customers.spamanagement.co; unset = APP_URL host); worker jobs use APP_URL.
 - `@spa/db` main entry must stay bundle-safe; use `@spa/db/migrate`, `@spa/db/seed`, `@spa/db/testing` subpaths.
+- Worker bundle (R37): esbuild single file, banner `createRequire as __workerCreateRequire`, `--external:sharp` (run
+  image has no node_modules: no image processing in worker jobs). CI "Worker bundle starts" + update.sh
+  `worker_health` guard it; a crash there once went unnoticed 10 days (web stays up, alerts live in the worker).
 - `platformDb()` only in platform code paths (auth, super-admin, host lookup, signup, invitations, cross-tenant member lists);
   tenant data always via `withTenant()`. Never import client-module helpers into server components.
 - Deploys: the droplet's `spa-update` timer deploys **`deploy/green`** every 2 min and rebuilds: CI's `promote` job moves

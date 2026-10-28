@@ -36,11 +36,6 @@ export const CLIENT_REFERENCES = {
 export type ClientReference = keyof typeof CLIENT_REFERENCES
 export type MergeCounts = Record<ClientReference, number>
 
-/** UAE mobile key: last 9 digits (5XXXXXXXX), so 050…, +97150… and 97150… compare equal. */
-export const phoneKey = (phone: string | null | undefined) => {
-  const d = (phone ?? '').replace(/\D/g, '')
-  return d.length >= 7 ? d.slice(-9) : null
-}
 export const nameKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ')
 
 type ClientRow = typeof clients.$inferSelect
@@ -51,7 +46,10 @@ export type DuplicatePair = { keep: ClientRow; merge: ClientRow; reason: 'phone'
  * OR self-join, so it stays cheap on large client lists.
  */
 export async function duplicateClientPairs(tx: Tx, limit = 50): Promise<DuplicatePair[]> {
-  const phone = sql`right(regexp_replace(coalesce(phone_e164, ''), '\\D', '', 'g'), 9)`
+  // UAE numbers (971…, or an old un-normalised 0… import) compare on the last 9 digits (050…, +97150…, 97150…);
+  // other countries on the whole number, so +966 50… and +971 50… are not suggested as one person (R38).
+  const digits = sql`regexp_replace(coalesce(phone_e164, ''), '\\D', '', 'g')`
+  const phone = sql`case when ${digits} ~ '^(971|0)' then right(${digits}, 9) else ${digits} end`
   const name = sql`lower(regexp_replace(btrim(name), '\\s+', ' ', 'g'))`
   const { rows } = await tx.execute<{ a: string; b: string; reason: 'phone' | 'name' }>(sql`
     with c as (select id, created_at, ${phone} as pk, ${name} as nk from clients),

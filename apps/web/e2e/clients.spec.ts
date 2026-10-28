@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner } from './helpers'
+import { clients, tenants } from '@spa/db'
+import { and, eq } from 'drizzle-orm'
+import { app, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
 test('client profile: preferences, treatment note, intake template and a signed intake', async ({ page }) => {
   test.setTimeout(180_000) // + the F27 PDF, regenerate and zip steps
@@ -170,5 +172,56 @@ test('client profile: preferences, treatment note, intake template and a signed 
       (await zipLink.getAttribute('href'))!,
     )
     expect(zip).toEqual({ status: 200, type: 'application/zip', sig: [0x50, 0x4b, 0x03, 0x04] })
+  })
+})
+
+test('R38: a client with a UK number saves, lists as +447700900123 and survives an edit', async ({
+  page,
+}) => {
+  const { slug } = await signUpOwner(page)
+  const sheet = page.getByRole('dialog')
+  const phone = sheet.getByLabel('Mobile (WhatsApp)')
+
+  await test.step('a UAE landline is refused; +44 7700 900123 is saved', async () => {
+    await page.goto(`${app}/${slug}/clients`)
+    await page.getByRole('button', { name: 'New client' }).click()
+    await sheet.getByLabel('Name', { exact: true }).fill('Emily Clarke')
+    await phone.fill('04 123 4567')
+    await sheet.getByRole('button', { name: 'Add client' }).click()
+    await expect(
+      sheet.getByText('Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code'),
+    ).toBeVisible()
+    await sheet.getByLabel('Name', { exact: true }).fill('Emily Clarke')
+    await phone.fill('+44 7700 900123')
+    await sheet.getByRole('button', { name: 'Add client' }).click()
+    await expect(page.getByRole('heading', { name: 'Emily Clarke', level: 1 })).toBeVisible()
+    await expect(page.getByText('+447700900123').first()).toBeVisible()
+  })
+
+  await test.step('the list shows +447700900123', async () => {
+    await page.goto(`${app}/${slug}/clients`)
+    await expect(page.getByRole('link', { name: /Emily Clarke/ }).first()).toBeVisible()
+    await expect(page.getByText('+447700900123').first()).toBeVisible()
+  })
+
+  await test.step('the edit form prefills +447700900123 and saves it unchanged', async () => {
+    await page
+      .getByRole('link', { name: /Emily Clarke/ })
+      .first()
+      .click()
+    await expect(page.getByRole('heading', { name: 'Emily Clarke', level: 1 })).toBeVisible()
+    await page.getByRole('button', { name: 'Edit', exact: true }).first().click()
+    await expect(sheet.getByRole('heading', { name: 'Edit client' })).toBeVisible()
+    await expect(phone).toHaveValue('+447700900123')
+    await sheet.getByRole('button', { name: 'Save' }).click()
+    await expect(sheet).toBeHidden()
+    await expect(page.getByText('+447700900123').first()).toBeVisible()
+    const db = testDb()
+    const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, slug))
+    const rows = await db
+      .select({ phone: clients.phoneE164 })
+      .from(clients)
+      .where(and(eq(clients.tenantId, tenant!.id), eq(clients.name, 'Emily Clarke')))
+    expect(rows).toEqual([{ phone: '447700900123' }])
   })
 })

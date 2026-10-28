@@ -8,7 +8,7 @@ Where things live and how a request flows. Verified against the code on 2026-10-
 | Package | Role |
 |---|---|
 | `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager). `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `whatsappLink` (desktop/web/mobile). `email.ts`: `sendStaffEmail` (Resend; settings from `resolveEmailConfig`: console source registered via `setEmailSettingsSource` (globalThis registry; web instrumentation + worker start), then env; `setEmailTransport` = e2e outbox only). `resend-domains.ts` (R18): `resendDomains(key, {fetch, baseUrl})` (tests only inject; base URL never from env), `setUpSendingDomain`/`checkSendingDomain`, `namecheapHost`, `ResendDomainError` codes. `config-health.ts`: `configChecks`/`configFlags` (presence only, console overview; `TURNSTILE` is web-only, left out of the worker flags). `turnstile.ts` (F9): `turnstileConfig` (both keys or off), `turnstileOnCustomDomains`, `verifyTurnstileToken` (siteverify, fail closed). `attribution.ts` (F13): `webEntrySource` (raw web_events.source), `attributionOf`/`bookingAttribution` → `BOOKING_ATTRIBUTIONS` (= db `booking_attribution` enum); `staffBookingAttribution` = `website` for a staff Website (`online`) booking (createBookingAction; reports `onlineSourceSql`: null + `created_by` → `website`, else `unknown`). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
-| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14); `pos.correct` (R32, "Correct closed days") only through `ALL_PERMISSIONS` (owners, managers). `day-sheet.ts` (R32): `sheetCode` (P1–P4 / W / B + /R /N), `turnNumbers` (Q; own leads 0), `sheetTotals`, `phoneLineOptions`, `daySheetColumns`. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164`, `toE164`, `whatsappLink` (desktop/web/mobile), `asciiDigits` (Arabic-Indic/Persian → ASCII; both phone parsers apply it first, `toE164` also drops bidi/zero-width marks, QA M3). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
+| `@spa/core` (packages/core) | Pure helpers, no DB. `booking.ts`: Dubai time, `businessDateOf`/`businessDayWindow` (cutoff default `'05:00'`), `openIntervals`, `findSlots`, `pickStaff`, `newRefCode`, `includedVat`, `BOOKING_TRANSITIONS`. `permissions.ts`: `resource.action` catalogue + `SYSTEM_ROLES` (owner, manager, receptionist, therapist, accountant, content_editor); system roles resolve from code, custom roles from the DB list; `clients.phone` only ever for `PHONE_ROLES` (owner, manager, receptionist — stripped from every other role, custom roles can't get it: `roleMayHold`, `CUSTOM_ROLE_PERMISSIONS`); `TWO_FACTOR_POLICY_ROLES` (owner, manager), `requires2fa(settings)` (missing = on, G23); therapist has `calendar.ownStatus` (G14); `pos.correct` (R32, "Correct closed days") only through `ALL_PERMISSIONS` (owners, managers). `day-sheet.ts` (R32): `sheetCode` (P1–P4 / W / B + /R /N), `turnNumbers` (Q; own leads 0), `sheetTotals`, `phoneLineOptions`, `daySheetColumns`. `hosts.ts`: `parseRoots`, `matchRoot`, `resolveSurface`. `slug.ts`: `RESERVED_SLUGS`, `checkSlug`. `whatsapp.ts`: `toUaeE164` (staff/spa/branch/signup), `toE164` (platform contact form, branch phones), R38 `toClientE164` (every CUSTOMER phone incl. website enquiries: no + / 00 = UAE mobile as `toUaeE164`; + / 00 = any country, a 971 result must be a 9715 mobile; '+' / '00' + 9 digits starting with 5 refused as a likely UAE typo; trunk 0 after the code dropped unless the country keeps it), `callingCode`, `phoneDisplay(e164, {mask: 'last4'|'last2'})` (UAE grouped, others '+digits', ≥ 3 digits hidden; web maskPhone / maskClientPhone / formatPhone use it), `whatsappLink` (desktop/web/mobile), `asciiDigits` (Arabic-Indic/Persian → ASCII; both phone parsers apply it first, `toE164` also drops bidi/zero-width marks, QA M3). `email.ts`: `sendStaffEmail` (Resend). `turnstile.ts` (F9) + `attribution.ts` (F13): see the row above. `client-drafts.ts` (F15): `clientDraftSettings` (defaults for `tenants.settings.clientDrafts`), `CLIENT_DRAFT_LIMITS` (caps), `inQuietHours`/`afterQuietHours` (Dubai). `vouchers.ts` (F15/F16): `VOUCHER_TOKEN`, `voucherPath`, `giftCardInput` (scanned check URL → token, else code), `PARTNER_CODE`/`newPartnerCode`, `posterBookingUrl`. `hosts.ts` `freeSiteUrl(slug, env)` = worker-side free site address (path routing when APP_URL's host is the root); `pathRoutedAddress`/`hostRoutedUrl`/`canonicalScheme` = old path address → host-routed URL (proxy, see Request flow). `report.ts`: Sentry-compatible `reportError`, no SDK. `i18n/` (subpath `@spa/core/i18n`, spa dashboard EN + TH): `en.ts` source catalogue (`en-ui.ts` = UI-kit strings), `th.ts` typed `Messages` (missing key = type error), `translate.ts` (`createTranslator`: dotted keys, `{param}`, `{one,other}` plurals, `t.has`/`t.maybe` for runtime keys), `format.ts` (`createFormat(locale)`: Dubai dates, Thai = `th-TH-u-ca-gregory-nu-latn`, AED stays `AED 1,234`); client code imports the narrow subpaths. |
 | `@spa/db` (packages/db) | Drizzle schema (`src/schema/`: auth, platform, tenant, operations, commerce, finance, inventory, growth, site, files), `client.ts` (`platformDb`, `appDb`, `withTenant`; `poolConfig`: idle connections kept 10 min (`POOL_IDLE_MS`) + TCP keepAlive probing after 60 s; `createDb` logs a pool `error` (idle client lost its backend) instead of crashing — pg's 10 s default cost ~100 ms to reconnect after a quiet minute; per process `DB_POOL_MAX` web 10 + 10, worker 4 + 4, pg-boss 3 = 31 of the droplet's `max_connections=60`), migrations `drizzle/0000–0033` (hand-written SQL inside; `runMigrations` refuses a journal entry older than the newest applied row — Drizzle would silently skip it — and `test/migrate.test.ts` checks idx/tag/`when` order + the snapshot prevId chain: a parallel branch merging second deletes its migration and re-runs `pnpm db:generate`), `sql/bootstrap.sql` (roles + extensions btree_gist, citext). Subpaths `/migrate`, `/seed`, `/testing`. |
 | `@spa/auth` (packages/auth) | Better Auth on `platformDb`: email + password (min 10), TOTP plugin, dynamic `baseURL` (allowed hosts = platform domains, fallback `APP_URL`), rate limits in production only (per-IP `customRules`, proven by `test/rate-limit.test.ts` in production mode); a password reset signs the login out everywhere (`revokeSessionsOnPasswordReset`). `user.locale` ('en' | 'th') is an `additionalFields` entry (validated), written via `updateUser`. `./client` for the browser. |
 | `@spa/services` (packages/services) | All domain logic that touches the DB. Functions take the caller's `tx: Tx`; services do **not** check permissions or write `audit_log` (callers do). `./site-kit` is client-safe (preflight, contrast, scoped CSS ≤ 4 KB, schedule, Puck tree helpers). `./intake-pdf` is server-only (pdfkit, external in next.config; F27 "Intake PDFs" below). |
@@ -64,7 +64,12 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   markAll take a `Viewer {userId, permissions}`) + `notification-scans.ts` (producers). Worker
   `jobs/notifications.ts`: pending bookings */15, low stock 09:15 (per location/day), documents 09:00, AI drafts
   10:00, billing overdue/reminders 09:20, prune >90 d 04:50. Web: `NotificationBell` (SpaShell `bell` slot, polls
-  60 s), `/[tenant]/notifications`, `server/notifications.ts`. Weekly insights / daily digest (`jobs/engage.ts`)
+  30 s while visible + when the tab comes back, R36), `/[tenant]/notifications`, `server/notifications.ts` (`bellData`:
+  `confirm` on an unread `booking.online` still pending in the viewer's `allowedBranches`, services
+  `pendingBookingIds`). **R36 pop-ups:** core `POPUP_NOTIFICATION_KINDS` (booking.online, enquiry.site) arriving after
+  load → `components/shell/website-toast.tsx` (top end corner, newest 3, Open / Confirm / Dismiss / Sound;
+  localStorage `crm.popup.sound`, `crm.popup.shown`) + `lib/chime.ts` (WebAudio, no file); `booking.online` params
+  `bookingId` + `status` (`notificationText` picks `body_<status>`, e.g. `body_confirmed`). Weekly insights / daily digest (`jobs/engage.ts`)
   write `weekly_insights` / `daily_digest` rows (dedupe per week Monday / business date) via `notify()`.
   **Switches (integration decision):** only producers that ARE an automation respect the B3 switch — document
   expiry (`documentAlerts`, logged to `job_runs` as `document-reminders`). Core alerts (online/pending booking, low
@@ -122,6 +127,23 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
      to crawlers that don't follow a robots.txt redirect; its Sitemap line already names the own domain), and
      `/api` (never rewritten, Caddy ask included; `/api/auth|mcp|integrations` + `/.well-known` reach the proxy only
      for the platform-only check, which returns before any redirect), `/files`, `_next`, `/widget.js`, `/t.js`.
+   - Custom domain checks (services `domains.ts`; 2026-10-16, PLAN §14.8 "Custom domain go-live fix"): `evaluateDomain`
+     = TXT `_spamanagement.{host}` (chunks joined + trimmed, contains the token) → routing (CNAME to `cnameTarget()` =
+     `CF_CNAME_TARGET`, or A/AAAA equal to the target's addresses; a leftover zone A/AAAA elsewhere = "wrong") →
+     Cloudflare for SaaS when configured. DNS = `verificationDns()`: the zone's own nameservers (NS + their IPv4 via
+     the public resolvers, public unicast only, ≤ 4, one Resolver each, tries 1) + `VERIFY_RESOLVERS` (1.1.1.1,
+     8.8.8.8, one Resolver each), all at once, `DNS_SOURCE_DEADLINE_MS` (4 s) per source; never the container's
+     resolver (negative caching). `askAll` merges (any answer wins) and attaches `DnsMeta` {partial, zone}; "missing"
+     only when no source failed (TXT: when the zone says so). Rules (owner 2026-10-16: SERVFAIL, ENOTFOUND, timeouts =
+     retry, never a permanent fail): only a **confirmed** wrong answer (the zone's own nameservers point elsewhere)
+     ends automatic checks after `GIVE_UP_AFTER_MS` or takes an active domain down; missing records / failed lookups
+     leave a note (never-verified domains past 7 days are checked daily, `isDomainCheckDue`). Worker
+     `verify-custom-domains` (10 min); "Check now" = `checkDomain`, 30 s cooldown (no DNS cache in the app).
+     www twin (core `wwwPair`, strict pair x ↔ www.x): proxy.ts 301s (GET/HEAD; 308 others) the twin to the active
+     connected hostname (`wwwTwinTarget`, own-domain.ts `state.active`, 30 s refresh); the ask endpoint allows the twin
+     only while the connected one is active (spa not cancelled) and the twin reaches us (`hostnameReachesUs`), so no
+     certificate order starts for a parked name. `customDomainTlsAutomatic()` = `CUSTOM_DOMAIN_TLS=on-demand` (droplet
+     Caddy) or Cloudflare for SaaS → the spa Domains page's SSL wording. e2e `own-domain-redirect.spec` (twin steps).
      `sitemap.xml` IS redirected (a sitemap belongs on its URLs' host). R26: `{site}/crm-enquiry` (POST/OPTIONS) is never
      redirected or platform-only (works on the temporary address and the own domain); a GET of `crm-data.json` 301s
      like a page, with `Access-Control-Allow-Origin: *` on the hop. Studio previews live on the console
@@ -136,6 +158,24 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
    - R20: a custom-domain host never answers platform-only endpoints (core `platformOnlyPath`: `/api/auth`,
      `/api/mcp`, `/api/integrations`, `/.well-known` — extra matcher entries → 404 there, `NextResponse.next()` on
      platform hosts, no rewrite/page headers). Its pages are always `/domain/{host}/…` (no /login, /dashboard, …).
+   - R33 per-spa redirects (old website addresses → the spa's pages): inside the GET/HEAD block after F23, before the
+     crm-feed and exact-design rewrites, `server/site-redirect.ts` `siteRedirectTarget(internalPath, search)` → 301
+     `{proto}://{host}{/s/{slug} in path mode}{to}{search}`, `cache-control: private, max-age=300`; other methods never.
+     One hop: `withSiteRedirect(url)` is applied to the R20 own-domain target, the www-twin target (GET/HEAD), and the
+     old path-routed / R29 extra-domain `own` targets. Lookup = LRU `__spaSiteRedirects` (5000 keys `s:{slug}` /
+     `h:{hostname}`, 30 s, empty sets cached, fails open) over `@spa/services/site-redirects` `siteRedirectRules`
+     (one query; cancelled spas none; path-only rules at a live page's path or a published post are left out — the
+     page wins; query rules such as `/?p=12` are kept). `forgetSiteRedirects()` from `revalidateStudio`,
+     `invalidateSiteHost`, `forgetSiteTenants`. Rules: core `redirects.ts` (`normalizeRedirectSource` decode + NFC +
+     lowercase + trailing slash + sorted query without `lang`/`_rsc`; `normalizeRedirectTarget` on-site paths only,
+     full URLs on the spa's own addresses stripped; `matchRedirect` most params wins, visitor params carried over,
+     target params win; `parseRedirectLines` Search Console exports / CSV / `old new` pairs, ≤ 500 lines;
+     `redirectPathProblem` refuses `/`, `/book*`, `/voucher/*`, robots/sitemap/manifest, crm-data.json/crm-enquiry,
+     `/api`, `/_next`, `/files`, `/.well-known` and the matcher's static extensions, which never reach the proxy).
+     Next's own trailing-slash 308 runs first (old `/x/` = 308 then 301). Table `site_redirects` (migration 0060,
+     RLS, unique tenant + from_path + from_query, source manual|import); services `site-redirects.ts` (≤ 1000 per spa,
+     site lock, chains flattened both ways, loops refused, `dryRun` preview). Console: see "Website Studio". e2e
+     `site-redirects.spec` (both routing modes).
    - F24: sets `x-internal-path` (the rewrite) → `server/surface.ts` `requestSurface()` = surface + document
      lang/dir + home link for the root layout's `<html>` and the status pages.
    - `/api`, `/files`, `_next` and static assets are not rewritten (so `/og/{page}.png` reaches `app/og/[page]`).
@@ -226,6 +266,18 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   - Nav count badges: `ShellItem.count` ← `server/nav-counts.ts` (`navBadgeCounts`, React cache) ← services
     `calendar.ts` `navCounts` (one query): Calendar today, Bookings pending today, Inbox = due outbox + unread IG
     + new website enquiries (`enquiriesNew`, F15).
+  - **Dashboard home (R36, PLAN §14.8 "R36" as built)** `page.tsx` (+ `home-scope.ts` `homeScope`/`pickDay`: branch
+    picker, business today, `?day=` ±366 d; shared with the refresh action): KPI row, then **Today's bookings & sales**
+    (replaces Up next) = services `dashboard-today.ts` `todayOrders` (`money` = dashboard.revenue | pos.use, `details`
+    = calendar.view; `todayStage`) → `components/kpis/today-orders.tsx` (client: chips, totals, day arrows, stacked table
+    ≤ 768 px), and **From the website** = `websiteInbox` (pending online from today on, newest new enquiries) →
+    `components/kpis/website-card.tsx` (server; Reply / Make booking from the Enquiries page, `PushAlertsRow`). Inline
+    Confirm = `components/bookings/confirm-booking.tsx` + `confirm-actions.ts` (`confirmTermsAction`: R32 terms prefill,
+    pending + allowed branch only) → `TermsForm confirm`. Refresh: `dashboardPulse` (one md5 query: date, today, day
+    bookings + items + sales + payments, new enquiries + linked booking, pending online + items; computed first on the
+    page) ← `components/kpis/today-actions.ts` `dashboardPulseAction` ← `dashboard-live.tsx` (30 s while visible,
+    `router.refresh()` on change). e2e `e2e/dashboard-today.spec.ts` (+ pop-up test); unit
+    `services/test/dashboard-today.test.ts`.
   - **Reports (F31)** `reports/` (`reports.view`; RevPATH card also `dashboard.revenue`, liability `accounting.view`):
     `data.ts` `loadReports` (branch scoping as on Home, `performanceRange` keys 7/30/90/month/last-month, today =
     business date at the branch cutoff, `?rebook=30|60|90`, `?asOf=` ≤ today) → services `kpi-reports.ts`, one query
@@ -345,8 +397,14 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
 - Public prices: services `publicPrice(priceAed, showPrice, spaHides)` is the only gate for every public price
   (websiteServices → blocks / JSON-LD / CRM feed, online booking + its confirmation): null = "price on request" when
   hidden (R4) or not > 0 (QA M6, 2026-10-14). Public AI agents apply the same rule in `ai` agents/context.ts, the website copywriter facts in site-edit.ts `loadSiteFacts`.
+- R33 sameAs + address: `spaJsonLd` sameAs = `siteSeo().profiles` (manual **Profile links** first — `sites.seo.profiles`
+  jsonb, ≤ 10 https links, services `parseSiteProfiles`/`setSiteProfiles`/`getSiteProfiles`, console Websites → spa
+  "Profile links" card, `site.publish`, audit `site.profiles_updated` — then the automatic ones from `spaProfiles`:
+  connected Instagram row or the connected Facebook Page's `meta.igUsername`, the Facebook Page URL; status
+  `connected` only, token columns never selected) + the branch map link; `addressLocality` = `crmAddress(address)`
+  city (and `addressRegion` its emirate). No Google API use for the Business Profile link (paste its share link).
 - Spa sites: `server/seo.ts` `siteSeo(tenant)` (React-cached): canonical base = `publicSiteUrl` (primary active custom
-  domain, else free address), logo/Instagram, published pages, `indexable` = not suspended and ≥ 1 published page.
+  domain, else free address), logo/profiles, published pages, `indexable` = not suspended and ≥ 1 published page.
   Routes `site/[slug]/{robots.txt,sitemap.xml}` + `domain/[hostname]/…`; robots disallow `/book/embed`, `/api/`.
   Not indexable → robots without Sitemap, empty sitemap, pages `noindex` (crawlable, so search drops them).
   `publicSiteMetadata` / `bookingMetadata`: canonical + hreflang (`?lang=ar` when the site has `ar`), og/twitter image
@@ -588,6 +646,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
     allow-same-origin; no COOP; Permissions-Policy without the motion sensors). Body = `htmlDesignDocument(…, { top:
     true })` + JSON-LD, canonical / `<title>` only if the design has none, `t.js` (`text/plain` beacons from the opaque
     origin); `x-robots-tag` when not indexable. Not an exact design any more → 307 to `?__page=1` (normal page, no lookup).
+    R33 crawler text: right after `htmlDesignDocument` (so page-text `txt-n` ids never shift) the route runs core
+    `html-crm-prefill.ts` `prefillCrmMarkup(html)`: only designs whose served CRM_DATA literal declares contract
+    version 2 + `"prefill": 1` (BE RELAX v2.8+); anything else = the very same string. It writes the values the
+    design's own script would (exact port of the v2.x binder's formats) into empty `data-crm` slots (spa-name, city,
+    booking-label, year = Dubai, working-hours, operating-days, address, address-line1, phone; never live-status,
+    never inside templates/lists or hidden `data-if` parts), the `[crm-whatsapp-link]` / `[crm-maps-link]` /
+    `#…` `[crm-booking-url]` hrefs, and server-rendered rows of the `phones`, `whatsapp-phones` and `hours-rows`
+    lists (only where the HTML parser keeps them; the script's renderLists replaces them). Rules + proof:
+    docs/design/html-crm-contract.md §12; tests core/test/html-crm-prefill.test.ts, e2e `html-prefill.spec`.
     QA M11/M2 (Decision A, owner-approved 2026-10-14): + core `html-design-head.ts` `htmlDesignHeadTags`
     (tests: core/test/html-design-head.test.ts) = what block sites get from `publicSiteMetadata`, read off the
     design's head as a parser sees it (up to the real `</head>` / `<body>`, else the first body-only tag; comments and
@@ -973,7 +1040,11 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `websites/[slug]/page.tsx` (+ `cards.tsx`, `website-client.tsx`) = everything of the studio; actions in that folder
   (`actions.ts`, `studio-actions.ts`, `blog-actions.ts`, `import-actions.ts`, `write-texts-actions.ts`,
   `editor/*-actions.ts`) are `studioGuard`ed and refresh both sides via `server/studio.ts` `revalidateStudio`;
-  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. Editor + preview: `platform/(studio)/
+  paths `lib/paths.ts` `studioPath`, absolute `server/studio.ts` `studioUrl`. R33 cards (own files, own reads):
+  `profile-links-card.tsx` (+ `profile-links-form.tsx`, `profile-actions.ts`) and `redirects-card.tsx` → subpage
+  `redirects/page.tsx` (+ `redirects-client.tsx`: Add redirect, Import list with Preview → "Add N redirects", Delete,
+  Clear all; `redirect-actions.ts`, `site.publish`, audit `site.redirect.added|deleted`, `site.redirects.imported|cleared`).
+  Editor + preview: `platform/(studio)/
   websites/[slug]/{editor/[pageId],preview}` ("Back to console"; preview shared with the CRM via
   `components/site/draft-preview.tsx`); English-only text provider `components/site/studio-i18n.tsx` for the shared
   media/image fields. No review step: `sites.studio_status` is deprecated (kept for zero-downtime deploys, never read).
@@ -1529,7 +1600,7 @@ integrations note,
 | `document-reminders` | 09:00 |
 | `weekly-insights` | Mon 08:00 |
 | `daily-digest` | 09:30 |
-| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
+| `billing-transitions` (F22: services `runBillingTransitions` — overdue → grace → read-only per console Billing rules, `billing.autoTransitions` flag off = paused (lift only); R37: every run recorded in `platform_job_runs` (`details.day`), the first run after an outage (previous run > 2 days back, or none recorded) is held = no changes that day, and a spa moves up at most one stage per day (`billingStageAt` = today pauses it; banner/console date = core `effectiveReadOnlyFrom`); one tx per spa, audited `platform.billing.stage`, `billing.late`/`read_only`/`restored` notices + owner/super-admin email when configured) | 09:05 |
 
 Integration jobs do nothing until their credentials are configured.
 
@@ -1558,11 +1629,18 @@ i18n namespace `automations`.
   - `migrate` (worker image: migrate + seed);
   - web (1200m; build arg `NEXT_PUBLIC_ROUTING=${ROUTING:-path}`, also set at run time for web + worker: services
     `freeSiteUrl` reads it from `process.env`, which Next doesn't inline);
-  - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`);
+  - worker (512m; healthcheck = age of `/tmp/worker-heartbeat`; `/opt/spa/status` mounted ro as `OPS_STATUS_DIR`;
+    R37: esbuild bundle whose banner imports `createRequire as __workerCreateRequire` (a bundled ESM dep declaring
+    `createRequire` crashed it 10-11..10-21) and `--external:sharp` — no worker job may process images (run image
+    has no node_modules); CI step "Worker bundle starts" runs the bundle from a bare copy and expects the
+    DATABASE_URL_OWNER error; the console marks heartbeat-derived rows (Disk, Last deploy, worker key notes) "As of …"
+    with an amber badge when the beat is > 10 min old; `/api/health` stays `{ok, release}` — public on every host,
+    so no worker state there);
   - `updater-sync` (one-shot alpine: copies `update.sh` to `/usr/local/bin/spa-update` on every `up`);
   - every service: json-file log rotation 5 × 10 MB (`x-logging`);
   - caddy: `{$SITE_HOST}` block (certificate at start) + `https://` catch-all with on-demand TLS that asks
-    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains), a 25 MB
+    `/api/domains/allowed` (www/app/admin/{slug} of every platform root, the extra roots, custom domains of spas not cancelled + the
+    www twin of an active one while it points at us), a 25 MB
     body cap, `/_status` behind basic auth (snippet `status_page`: on `SITE_HOST`, and on `*.sslip.io` in the
     catch-all so the droplet's own address keeps it after the move). `ACME_EMAIL` is never empty (an empty value
     stops Caddy).
@@ -1577,7 +1655,10 @@ i18n namespace `automations`.
     tip. Steps: build → `pg_dump -Fc` `/opt/spa/backups/pre-migrate-<sha12>.dump` (keep 5) → `up` (migrate with
     `lock_timeout`/`statement_timeout`, `migrationUrl` in packages/db/src/migrate.ts) → `/api/health`; any failure →
     redeploy `/opt/spa/last-good`, `deploy.json` state `failed`, commit in `status/failed` (not retried without
-    `--force`). Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
+    `--force`). R37: after web, `worker_health` (≤ ~90 s) needs the worker container `running` and a fresh
+    `/tmp/worker-heartbeat` (< 7 min) else exit 14 → "worker restarting / not running / running but no heartbeat",
+    last 40 worker log lines in `build.log`, rollback (from the deploy after the one shipping a changed update.sh).
+    Also writes `status/gate.json` and merges log-opts into `/etc/docker/daemon.json`. `caddy_sync`
     (F26) restarts caddy when the bind-mounted Caddyfile it runs differs from the checkout (the hard reset swaps the
     file's inode, so a running container never saw Caddyfile edits); Caddy not up again = deploy failure → rollback.
     Paths overridable (`SPA_ROOT`, `SPA_LOCK`, `DOCKER_DAEMON_JSON`) for shell tests only.

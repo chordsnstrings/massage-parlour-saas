@@ -931,6 +931,86 @@ export async function updateTheme(tx: Tx, tenantId: string, theme: ThemeTokens):
   return site
 }
 
+/** R33: most profile links one spa lists (JSON-LD sameAs). */
+export const MAX_SITE_PROFILES = 10
+
+/**
+ * One profile link as stored (`URL.href`), or null: https only, no user name / password, a real host name (dotted,
+ * never an IP address), at most 500 characters.
+ */
+export function siteProfileUrl(raw: string): string | null {
+  let url: URL
+  try {
+    url = new URL(raw.trim())
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) return null
+  const host = url.hostname
+  const labels = host.split('.')
+  if (labels.length < 2 || labels.some((l) => !l) || host.startsWith('[') || /^[\d.]+$/.test(host))
+    return null
+  return url.href.length <= 500 ? url.href : null
+}
+
+/** Saved profile links, each checked again on read (the column is free jsonb). */
+const profileList = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? v.flatMap((u) => {
+        const href = typeof u === 'string' ? siteProfileUrl(u) : null
+        return href ? [href] : []
+      })
+    : []
+
+/**
+ * The Profile links lines checked and cleaned. The messages are English only: only the console (R23) edits these
+ * links, so they are not in the spa's error catalogue.
+ */
+export function parseSiteProfiles(lines: string[]): { links: string[] } | { error: string } {
+  const links: string[] = []
+  for (const [i, raw] of lines.entries()) {
+    const line = raw.trim()
+    if (!line) continue
+    const href = siteProfileUrl(line)
+    if (!href)
+      return {
+        error: `Line ${i + 1} is not a full https:// link: ${line.length > 80 ? `${line.slice(0, 80)}…` : line}`,
+      }
+    if (!links.includes(href)) links.push(href)
+  }
+  if (links.length > MAX_SITE_PROFILES)
+    return { error: `Up to ${MAX_SITE_PROFILES} profile links (${links.length} given)` }
+  return { links }
+}
+
+/**
+ * R33 Profile links (console, super-admins): the spa's official profiles for the JSON-LD sameAs (Google Business
+ * Profile share link, Instagram, Facebook, TikTok …). Lines are trimmed, blank ones dropped and each link kept once
+ * (by URL) in the given order; an empty list removes them. Live at once (spa pages render per request).
+ */
+export async function setSiteProfiles(tx: Tx, tenantId: string, urls: string[]): Promise<SiteRow> {
+  const parsed = parseSiteProfiles(urls)
+  if ('error' in parsed) throw new DomainError(parsed.error)
+  const profiles = parsed.links
+  const [site] = await tx
+    .update(sites)
+    .set({
+      seo: profiles.length
+        ? sql`${sites.seo} || jsonb_build_object('profiles', ${JSON.stringify(profiles)}::jsonb)`
+        : sql`${sites.seo} - 'profiles'`,
+    })
+    .where(eq(sites.tenantId, tenantId))
+    .returning()
+  if (!site) throw new DomainError('Choose a template first', 'not_found')
+  return site
+}
+
+/** The spa's saved profile links (setSiteProfiles); [] without any or without a site. */
+export async function getSiteProfiles(tx: Tx, tenantId: string): Promise<string[]> {
+  const [site] = await tx.select({ seo: sites.seo }).from(sites).where(eq(sites.tenantId, tenantId)).limit(1)
+  return profileList(site?.seo.profiles)
+}
+
 /**
  * "Publish site": every page's current draft, every pending page rename and the draft theme go live. Returns how
  * many pages changed and whether the draft theme went live.

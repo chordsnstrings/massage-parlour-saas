@@ -39,6 +39,9 @@ x-app-env: &app-env
   CF_API_TOKEN: ${CF_API_TOKEN:-}
   CF_ZONE_ID: ${CF_ZONE_ID:-}
   CF_CNAME_TARGET: ${CF_CNAME_TARGET:-}
+  # Spa custom domains get HTTPS automatically here: Caddy issues each certificate on first visit (Caddyfile on_demand_tls,
+  # allowed by /api/domains/allowed), so the spa Domains page shows SSL as on.
+  CUSTOM_DOMAIN_TLS: on-demand
   NAMECHEAP_API_USER: ${NAMECHEAP_API_USER:-}
   NAMECHEAP_API_KEY: ${NAMECHEAP_API_KEY:-}
   NAMECHEAP_CLIENT_IP: ${NAMECHEAP_CLIENT_IP:-}

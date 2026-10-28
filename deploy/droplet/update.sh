@@ -2,8 +2,9 @@
 # Pull-based deploy (systemd timer, every 2 minutes). Deploys only commits whose CI passed: CI moves the branch
 # `deploy/green` to each green commit of the deploy branch (.github/workflows/ci.yml, job `promote`) and this script
 # deploys that ref, never the raw branch tip. Until deploy/green exists once, it falls back to the branch tip.
-# Each deploy: build → pg_dump (pre-migrate) → migrate + restart → health check; a failed deploy rolls back to the
-# last good commit (/opt/spa/last-good). `spa-update --force` redeploys (also retries a commit that failed).
+# Each deploy: build → pg_dump (pre-migrate) → migrate + restart → health check (web + worker); a failed deploy
+# rolls back to the last good commit (/opt/spa/last-good). `spa-update --force` redeploys (also retries a commit
+# that failed).
 # Status + recent logs → /opt/spa/status (served at /_status/, basic auth).
 set -uo pipefail
 # SPA_ROOT / SPA_LOCK / DOCKER_DAEMON_JSON exist for the shell test (deploy/droplet/test-update.sh) only.
@@ -21,6 +22,7 @@ status() { # state message
     > "$STATUS/deploy.json.tmp" && mv "$STATUS/deploy.json.tmp" "$STATUS/deploy.json"
 }
 compose() { (cd "$REPO/deploy/droplet" && docker compose --env-file "$ENV" "$@"); }
+redact() { sed -E 's/(password|secret|token|key)=[^ &"]+/\1=***/gI'; }
 snapshot() {
   {
     echo "== $(date -u +%FT%TZ) =="
@@ -28,7 +30,7 @@ snapshot() {
     echo; free -m | head -2; df -h / | tail -1
     for s in db-roles migrate web worker caddy; do
       echo; echo "== $s (last 60 lines) =="
-      compose logs --no-color --tail 60 "$s" 2>&1 | sed -E 's/(password|secret|token|key)=[^ &"]+/\1=***/gI'
+      compose logs --no-color --tail 60 "$s" 2>&1 | redact
     done
   } > "$STATUS/runtime.txt.tmp" 2>&1 && mv "$STATUS/runtime.txt.tmp" "$STATUS/runtime.txt"
 }
@@ -133,6 +135,23 @@ health() {
   return 1
 }
 
+# R37: web alone is not a healthy deploy (a crash-looping worker shipped unnoticed for 10 days): the worker container
+# must be running (not restarting) and have written its heartbeat file (first beat right after start, then every
+# 5 min, so 7 min also covers a worker compose didn't recreate). Up to ~90 s; else its last log lines → build.log.
+worker_health() {
+  for _ in $(seq 1 18); do
+    WORKER_STATE=$(compose ps --format '{{.State}}' worker 2>/dev/null)
+    [ "$WORKER_STATE" = running ] &&
+      [ -n "$(compose exec -T worker find /tmp/worker-heartbeat -mmin -7 2>/dev/null)" ] && return 0
+    sleep 5
+  done
+  WORKER_WHY="worker ${WORKER_STATE:-not running}"
+  [ "$WORKER_STATE" = running ] && WORKER_WHY="worker running but no heartbeat"
+  echo "== ${WORKER_WHY} (last 40 lines) ==" >>"$STATUS/build.log"
+  compose logs --no-color --tail 40 worker 2>&1 | redact >>"$STATUS/build.log"
+  return 1
+}
+
 # G7: custom-format dump before migrations run (keeps the newest 5). Restore: deploy/droplet/README.md.
 pre_migrate_dump() {
   local sha=$1
@@ -163,7 +182,7 @@ caddy_sync() {
   return 1
 }
 
-# deploy_commit <sha> [--no-dump] → 0 ok · 10 build · 11 dump · 12 start/migrate · 13 health
+# deploy_commit <sha> [--no-dump] → 0 ok · 10 build · 11 dump · 12 start/migrate · 13 health · 14 worker
 deploy_commit() {
   local sha=$1
   git reset -q --hard "$sha" || return 12
@@ -174,6 +193,7 @@ deploy_commit() {
   compose up -d --remove-orphans >>"$STATUS/build.log" 2>&1 || return 12
   caddy_sync || return 12
   health || return 13
+  worker_health || return 14
 }
 
 reason() {
@@ -181,6 +201,7 @@ reason() {
     10) echo "build failed" ;;
     11) echo "pre-migrate backup failed" ;;
     12) echo "start or migration failed" ;;
+    14) echo "${WORKER_WHY:-worker not healthy}" ;;
     *) echo "web not healthy (/api/health)" ;;
   esac
 }

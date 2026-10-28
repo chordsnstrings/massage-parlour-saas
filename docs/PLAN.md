@@ -171,8 +171,9 @@ Reception → "Walk-in" → service → "next in rotation" therapist + free room
 
 **Custom domain**
 Tenant enters `www.theirspa.ae` → UI shows `CNAME www → customers.spamanagement.co`
-+ ownership TXT → background job polls → active → becomes primary; apex redirect via registrar forwarding
-(many .ae registrars lack CNAME flattening). Caddy issues certificates on demand (Cloudflare for SaaS is optional code, unused),
++ ownership TXT → background job polls → active → becomes primary; a bare domain may instead use an A record equal
+to customers.spamanagement.co's address (cPanel can't CNAME the apex), and the www/apex twin of an active domain
+gets a certificate and 301s to it (2026-10-16, §14.8 "Custom domain go-live fix"); else registrar forwarding. Caddy issues certificates on demand (Cloudflare for SaaS is optional code, unused),
 asking `/api/domains/allowed` first; in path-routing mode any non-platform host is served as `/domain/{host}`.
 
 **Buy a domain (Namecheap)**
@@ -1513,6 +1514,111 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     manager; status changes on a closed day are locked only when they reverse commission). Small follow-ups (done in
     PR #55): the Daily close line reads "Cash in (sales + tips − refunds − drawer expenses)"; the PDF header shows the
     branch name only when it differs from the spa name.
+- **Custom domain go-live fix (owner task 2026-10-16, berelaxmassage.com for BE RELAX) — ✅ live 2026-10-16 23:54 Dubai,
+  PR #57 (www.berelaxmassage.com 301 → berelaxmassage.com over HTTPS, temporary address 301s to it):** the domain stayed "Pending":
+  the first check got `DNS ESERVFAIL`, then "couldn't find the TXT record" although public DNS had it. Cause: the checks
+  used the server's resolver (Docker → the droplet's provider), which had cached "no such record" from a check made
+  before the record existed (the zone's SOA allows 86400 s of negative caching); Google DNS also still served the old
+  apex A (148.251.64.158) and the old "no TXT" answer that day. www.berelaxmassage.com failed TLS: the Caddy ask
+  endpoint only knew the registered hostname. Fixed (services `verificationDns`, CODEMAP "Custom domain checks"):
+  every lookup asks the zone's own nameservers + 1.1.1.1 + 8.8.8.8 directly (any answer counts; a TXT is missing once
+  the zone's nameservers say so); SERVFAIL, ENOTFOUND and timeouts are always "try again" (owner): only a wrong answer
+  confirmed by the zone's own nameservers ends automatic checks after 7 days or takes an active domain down; routing = CNAME to `CF_CNAME_TARGET` **or** A/AAAA equal to its addresses (cPanel can't CNAME an apex);
+  the www twin of an active custom domain gets a certificate and 301s (GET/HEAD; 308 otherwise) to the connected
+  hostname; `CUSTOM_DOMAIN_TLS=on-demand` (deploy/droplet/compose.yml) makes the spa Domains page show SSL as on
+  (Caddy issues every custom-domain certificate on first visit; the old note waited for Cloudflare for SaaS).
+- **R33 Crawler-visible HTML designs + schema extras + per-spa Redirects (owner, 2026-10-17, after the BE RELAX SEO
+  report) — ✅ live 2026-10-18 03:38 Dubai, PR #58 (d129140):** BE RELAX title + description set as a Website content draft (EN + AR,
+  ≤ 60 / 50–160 chars; the owner publishes). **Crawler text (Option A, owner):** the live page of a design that opts
+  in with `contract.prefill: 1` gets the CRM values (address, phones, hours, links) written into its HTML by the
+  server, the same values the design's script writes (R24 invisible change; CODEMAP "Live page of an exact design",
+  contract doc §12). BE RELAX v2.8 = live v2.7 + that one key: the owner uploads + rolls it out. Not covered (ask
+  the owner first): treatments, team and hero texts (still script-only; Google renders them, other crawlers don't).
+  **Schema:** the saved map link was already in hasMap/sameAs; new console "Profile links" (Google Business share
+  link, Instagram, …, ≤ 10 https) + the connected Instagram / Facebook Page added automatically, `addressLocality`.
+  No Google Business link was stored anywhere: the owner pastes BE RELAX's links in the card. **Redirects:** console
+  Websites → spa → Redirects (add, import a Search Console export with preview, delete, clear; 301 on every address
+  of the spa in one hop; a live page always wins; ≤ 1000 per spa) — CODEMAP "Request flow" R33. Later (owner to
+  decide): automatic redirect when a page's address is renamed, hit counts (R34 does 404 suggestions).
+- **R35 BE RELAX SEO content + design v2.9 (owner, 2026-10-20, answers to the SEO list) — drafts saved + v2.9 ready 2026-10-20 (services title became "Massage Treatments & Prices in Abu Dhabi | Be Relax Spa" after review: the page shows "Price on request", no prices):** home title "Massage & Spa
+  in Abu Dhabi (Al Zahiyah) | Be Relax Spa" (draft); services page = only the 7 treatments in the system (no Thai /
+  Swedish / Deep Tissue), title "Massage Prices in Abu Dhabi | Be Relax Spa, Al Zahiyah", ~100 words per treatment +
+  FAQ (prices stay hidden: ask on WhatsApp; hours 11 AM – 2 AM; paid street parking (Mawaqif); cash, card, bank
+  transfer; walk-ins welcome, booking advised), EN + AR drafts. v2.9 = v2.8 + visible H1 "Massage & Spa in Al
+  Zahiyah, Abu Dhabi" (plain page text, so crawlers see it), a moving, eye-catching offer bar at the very top
+  ("20% off all treatments", runs 30 days from the roll out: end date set in Website content, the bar hides itself
+  after it), a big WhatsApp button, a price line (shown only when prices are public), a "Prices & treatments" link to
+  /services, phone speed work. One WhatsApp number (056 187 5596) = the owner's Settings → Profile step.
+- **R36 Dashboard: bookings + sales together, website alerts (owner, 2026-10-21; sample approved, "go ahead"):** sample
+  = artifact "Dashboard bookings & sales sample". Owner answers: (1) **Today's bookings & sales** card right under the
+  KPI row, replaces Up next: one row per booking of the business day (all statuses) + sales of that day not on one of
+  its bookings (shop sales, bookings of another day), fee, paid amount + method or Not paid, Confirm / Finish / Take
+  payment / Open sale, filters All · To confirm · To finish · Not paid · Paid · Cancelled, totals Booked · Paid (cash /
+  card / other) · Finished not paid · Still to finish; (2) **today with ‹ › day arrows** (not the Today/7/30 switch);
+  (3) **money (fees, paid, totals, sale-only rows) for owner, manager and reception** = `dashboard.revenue` or
+  `pos.use`; (4) **From the website** card next to it (online bookings waiting for confirmation + new website
+  enquiries with Reply on WhatsApp / Make booking, phone-alerts switch, refreshes itself ~30 s) **plus a pop-up with a
+  short sound anywhere in the CRM** when a website booking or enquiry arrives (per-device mute).
+  **As built (live 2026-10-21 19:32 Dubai, PR #60, 788e0c0; CODEMAP "Dashboard home (R36)"):**
+  - Stages: cancelled / no-show first; then the live sale: open = Not paid, paid **or refunded** = Paid (shown as
+    Refunded, out of the Paid total); a **voided** sale counts as no sale; no sale: pending = To confirm, completed =
+    Not paid, else To finish. **Paid total = the Revenue KPI** of that date (paid sales on the date in scope).
+  - Scope = the home branch picker: `branchIds` null = whole spa, else that branch (scoped member without an open
+    branch sees nothing). ‹ › days within ±366 days of today (`?day=`).
+  - Money (fees, Paid column, totals, sale-only rows, Not paid / Paid chips + stages) only with `dashboard.revenue` or
+    `pos.use`; without it stages come from the booking status alone. Typed notes, cancel reasons and client type only
+    with `calendar.view` (as the calendar).
+  - Actions: Confirm (calendar.manage) opens the R32 Confirm (fee + commission) sheet inline, also in the pop-up;
+    Finish / Take payment of a booking without a sale → the booking page (pos.use + calendar.view); a sale → its sale.
+    The two cards sit side by side only from 90rem (stacked below); the table stacks as cards ≤ 768 px.
+  - Refresh: the home polls a fingerprint (`dashboardPulse`) every 30 s while visible and refreshes on change; the
+    bell polls every 30 s (+ when the tab comes back). Pop-ups: `POPUP_NOTIFICATION_KINDS` (booking.online,
+    enquiry.site) arriving after the page loaded, newest 3 (one with its Confirm form open stays), shown once per
+    device; `booking.online` params carry `bookingId` + `status` (body "confirmed automatically" vs "waiting for
+    confirmation"); Confirm only for still-pending bookings in the viewer's branches. Per-device localStorage keys
+    `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
+  - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
+    owner team's native review.
+- **R38 International client phones (owner 2026-10-22: "make it accept any phone number with the country code"):**
+  owner answers: (1) **every customer phone** (CRM clients, online booking, calendar new booking / walk-in / Make
+  booking, sales quick add, vouchers, waitlist, Instagram link + DM agent, imports, AI assistant); staff, spa, branch
+  and signup phones stay UAE-only; (2) **no country code = UAE** (05…/5… as today); another country needs `+` or `00`
+  first (bare foreign digits are refused, so a mistyped UAE number is never saved as foreign); (3) **UAE numbers stay
+  mobiles only** (no 04/02 landlines: WhatsApp); other countries accept any valid number with the code. Stored format
+  unchanged (E.164 digits, no `+`), no migration; WhatsApp links already work for any country. Also fix: client edit
+  prefill (`0${phone.slice(3)}` corrupts foreign numbers), duplicate suggestions (last-9 only for 971), masks/display
+  for non-971 numbers, export non-UAE as `+digits`.
+  **As built (live 2026-10-22, PR #63, db62c51):** core `toClientE164` + `phoneDisplay`; labels "Mobile (WhatsApp)" + hint "UAE: 05X XXX XXXX ·
+  other countries: + and the country code" (EN/TH, booking widget EN/AR; new Thai/Arabic need native review);
+  website enquiry forms use the same rule (so Make booking always works: UAE landlines and bare foreign digits
+  refused there too); '+'/'00' + 9 digits starting with 5 (e.g. '+50 123 4567') refused as a likely UAE typo;
+  client import template example '+44 7700 900123'; duplicate key last-9 only for 971/0-prefixed numbers.
+- **R37 Worker outage fix (found 2026-10-21 from the console Server health screen; owner "Fix + safety checks", billing
+  "Hold it for 1 day"):** the production worker has crash-looped since the R24 deploy (2026-10-11 ~22:46 UTC, last
+  heartbeat): R24 brought `sharp` into the worker bundle (`import('sharp')` via services media/site-import/ai add_image);
+  sharp's ESM declares `createRequire`, the worker build banner (apps/worker/package.json) declares it too → `SyntaxError:
+  Identifier 'createRequire' has already been declared` before any code runs. Web, migrate and seed were unaffected, the
+  deploy health check only tests web, CI never built/started the worker bundle, and all alerting lives in the worker, so
+  nothing flagged it. Console rows Disk / Last deploy / "worker sees it missing" were the frozen 10-11 heartbeat.
+  Owner-approved scope: (1) fix the bundle; (2) a broken worker can't ship silently again (CI builds + starts the worker
+  bundle; the droplet deploy fails/rolls back when the worker doesn't come up healthy); (3) the console marks
+  heartbeat-derived figures as old when the worker is stale; (4) billing: after an outage the first billing-transitions
+  run makes no stage changes (hold one day, payments can be recorded), then stages advance normally with the warnings
+  first (no jump straight to read-only). Missed scheduled runs are not replayed (pg-boss `missed` = skip).
+  **As built (live 2026-10-22 01:51 Dubai, PR #62, 6401dc4):** worker banner rename + `--external:sharp` (no worker job processes images); CI "Worker
+  bundle starts"; update.sh `worker_health` (exit 14, rollback; known gap: a worker that beats once then crash-loops
+  can still pass, the heartbeat file survives a restart in the same container); console "As of …" rows; billing:
+  every run recorded, held when the previous run is > 2 days back or none is recorded (so production's first run
+  after the fix is held), one stage per spa per day, effective read-only date shown. `/api/health` unchanged (review:
+  public on spa sites, no worker state). Not replayed while down (owner to check): staff document reminders
+  10-12..10-21, membership renewals/package expiries (expire with income on the restart date), weekly insights /
+  SEO check / digests, Google review sync.
+- **R34 SEO agent upgrade (owner, 2026-10-17; on hold: starts only when the owner says so, remind every time):** all seven items — local checks (website
+  NAP vs Google Business, schema check, `[crm-…]` leftovers), fixes drafted automatically, phone speed check
+  (PageSpeed), **Search Console per spa: each spa connects its own Google account** (owner's choice over one platform
+  account), 404 → redirect suggestions approved in one click, content drafts (service texts + FAQ with FAQ schema,
+  optional monthly blog draft), monthly report. Results: console + a summary for the spa owner in the AI studio
+  (EN + TH). AI stays drafts-only; Premium (`ai`) only. Estimate about 5–6 working days + Google's approval time.
 
 **R3 / R11 / R12 / R14 as built** (services `platform-billing.ts`, console tenant page + overview, spa Billing page):
 - `subscriptions.price_aed` is always the **annual** price; `billing_interval` is the payment plan: `month` = 12 monthly

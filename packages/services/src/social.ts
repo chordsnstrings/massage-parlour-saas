@@ -1092,7 +1092,7 @@ export async function discardDraft(tx: Tx, messageId: string) {
   return rows.length > 0
 }
 
-/** Links the thread to a client: by UAE mobile when given, else an existing client with that exact name, else a new one. */
+/** Links the thread to a client: by phone (UAE mobile or + country code) when given, else an existing client with that exact name, else a new one. */
 export async function linkConversationClient(
   tx: Tx,
   tenantId: string,

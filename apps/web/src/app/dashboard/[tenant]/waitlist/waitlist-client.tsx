@@ -55,7 +55,12 @@ export function AddWaitlistSheet({
         <Field
           label={t('waitlist.sheet.clientPhone')}
           name="clientPhone"
-          hint={t('waitlist.sheet.clientPhoneHint')}
+          hint={
+            <>
+              {t('waitlist.sheet.clientPhoneHint')}
+              <span className="block">{t('validation.clientPhoneHint')}</span>
+            </>
+          }
         >
           <Input id="clientPhone" name="clientPhone" type="tel" inputMode="tel" required />
         </Field>

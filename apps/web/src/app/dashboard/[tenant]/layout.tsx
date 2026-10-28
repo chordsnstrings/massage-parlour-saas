@@ -4,16 +4,17 @@ import '@fontsource-variable/noto-sans-thai'
 import '@fontsource-variable/space-grotesk'
 import './crm.css'
 import './crm-kit.css'
-import {
-  type Feature,
-  isSystemRole,
-  monthlyAed,
-  type Permission,
-  PLATFORM_NAME,
-  readOnlyFrom,
-} from '@spa/core'
+import { type Feature, isSystemRole, monthlyAed, type Permission, PLATFORM_NAME } from '@spa/core'
 import { branches, plans, platformDb, subscriptions, withTenant } from '@spa/db'
-import { aiBudgetLevel, aiMonth, aiTenantTotals, billingAlert, billingRules, logoUrl } from '@spa/services'
+import {
+  aiBudgetLevel,
+  aiMonth,
+  aiTenantTotals,
+  billingAlert,
+  billingRules,
+  billingStageSummary,
+  logoUrl,
+} from '@spa/services'
 import { eq } from 'drizzle-orm'
 import type { Metadata, Viewport } from 'next'
 import { AskAi } from '@/components/assistant/ask-ai'
@@ -118,11 +119,12 @@ export default async function TenantLayout({
     getEntitlements(ctx.tenant.id),
     announcementsFor(ctx, locale),
   ])
-  // F22 automatic billing stage: the read-only date for the overdue / grace banner (rules are platform settings).
+  // F22 automatic billing stage: the read-only date for the overdue / grace banner (rules are platform settings;
+  // R37: the effective date, never already past while a stage is left).
   const stage = ctx.tenant.billingStage
   const lateUntil =
-    (stage === 'overdue' || stage === 'grace') && ctx.tenant.billingOverdueSince
-      ? readOnlyFrom(ctx.tenant.billingOverdueSince, await billingRules(platformDb()))
+    stage === 'overdue' || stage === 'grace'
+      ? (billingStageSummary(ctx.tenant, await billingRules(platformDb()))?.readOnlyFrom ?? null)
       : null
   const base = appPath(`/${ctx.tenant.slug}`)
   const app = pwaFor(ctx.tenant)

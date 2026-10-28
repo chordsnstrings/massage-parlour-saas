@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 24.04: its archive has postgresql-client-16 (the client must match the 16 server; newer images ship only newer).
+    runs-on: ubuntu-24.04
     # R24: the e2e suite (129 tests on one worker, incl. the HTML design fidelity / 4.6 MB upload proofs) needs
     # ~23 min on the 2-vCPU runner after ~6 min of install, unit tests and build. R32 (order-flow + day-sheet, 145
     # tests) pushed the job past 35 min, so it gets 50.
@@ -35,6 +36,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pg_dump / pg_restore must match the server major (16), like the worker image: the runner's newer client
+      # emits `SET transaction_timeout`, which a 16 server rejects (restore drill test).
+      - name: PostgreSQL 16 client tools
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/pg_restore ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends postgresql-client-16
+          fi
+          /usr/lib/postgresql/16/bin/pg_restore --version
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - name: Bootstrap test database
         run: >-
           psql -h localhost -U postgres -d postgres -v db_name=spa_test
@@ -45,6 +56,20 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm --filter @spa/web build
+      # R37: a worker bundle that can't load (duplicate `createRequire`, a missing external) crash-looped in production
+      # for 10 days. Build it as the image does and start a copy outside the repo (no node_modules, like the run image)
+      # with an empty env: it must reach its env check, not stop at a SyntaxError or a missing module.
+      - name: Worker bundle starts
+        run: |
+          pnpm --filter @spa/worker build
+          dir=$(mktemp -d) && cp -r apps/worker/dist "$dir/"
+          rc=0 && out=$(cd "$dir" && env -i "$(command -v node)" dist/index.js 2>&1) || rc=$?
+          printf '%s\n' "$out" | tail -n 15
+          if [ "$rc" != 1 ] || ! grep -q 'Error: DATABASE_URL_OWNER is not set' <<<"$out" ||
+            grep -qE 'SyntaxError|ERR_MODULE_NOT_FOUND|Cannot find (module|package)' <<<"$out"; then
+            echo "::error::worker bundle did not reach its env check (exit $rc)"
+            exit 1
+          fi
       - name: Install Playwright Chromium
         run: pnpm --filter @spa/web exec playwright install --with-deps chromium
       - name: End-to-end tests
@@ -80,7 +105,7 @@ jobs:
         run: pnpm audit --prod --audit-level=high
       - name: Caddyfile client-IP handling (validate + forged-header checks)
         run: bash deploy/droplet/test-caddy-ip.sh
-      - name: Updater env (.env.base < secrets overlay < site.env) + committed site.env
+      - name: Updater env (.env.base < secrets overlay < site.env) + committed site.env + deploy health/rollback
         run: bash deploy/droplet/test-update.sh
 
   # G7: the droplet deploys `deploy/green`, never the raw branch tip. Only a commit of the deploy branch whose checks

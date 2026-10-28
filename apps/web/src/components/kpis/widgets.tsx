@@ -1,6 +1,6 @@
 import { enumLabel } from '@spa/core/i18n'
 import type { AgendaItem } from '@spa/services'
-import { Pill, statusTone, TName } from '@/components/crm'
+import { Pill, statusTone } from '@/components/crm'
 import { Bar } from '@/components/kpis/bar'
 import { getI18n } from '@/i18n/server'
 import { cn } from '@/lib/utils'
@@ -99,63 +99,6 @@ export async function PeakHeatmap({ heatmap, cutoffHour = 5 }: { heatmap: number
           t('overview.peak.empty')
         )}
       </p>
-    </div>
-  )
-}
-
-/**
- * Up-next table (crm-spec §5.1 "Priority bookings"): client first name only — no surnames or phone numbers on the
- * dashboard. `tomorrow` marks rows from the next business date.
- */
-export async function UpNextTable({ items }: { items: (AgendaItem & { tomorrow?: boolean })[] }) {
-  const { t, fmt } = await getI18n()
-  const h = {
-    client: t('overview.upNext.client'),
-    service: t('overview.upNext.service'),
-    therapist: t('overview.upNext.therapist'),
-    when: t('overview.upNext.when'),
-    status: t('overview.upNext.status'),
-  }
-  return (
-    <div className="crm-tbl-wrap">
-      <table className="crm-tbl" data-stack="true">
-        <thead>
-          <tr>
-            <th>{h.client}</th>
-            <th>{h.service}</th>
-            <th>{h.therapist}</th>
-            <th>{h.when}</th>
-            <th>{h.status}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((it) => {
-            const name = firstName(it.clientName) ?? t('overview.upNext.walkIn')
-            const time = fmt.time(it.startsAt)
-            return (
-              <tr key={it.itemId}>
-                <td data-label={h.client}>
-                  <TName name={name} />
-                </td>
-                <td data-label={h.service} className="crm-muted">
-                  {t('overview.upNext.serviceLine', { service: it.serviceName, min: it.durationMin })}
-                </td>
-                <td data-label={h.therapist} className="crm-muted">
-                  {it.therapists.join(' & ') || '—'}
-                </td>
-                <td data-label={h.when} className="crm-num-c crm-muted">
-                  {t(it.tomorrow ? 'overview.upNext.tomorrow' : 'overview.upNext.today', { time })}
-                </td>
-                <td data-label={h.status}>
-                  <Pill tone={statusTone(it.status)} dot>
-                    {enumLabel(t, 'bookingStatus', it.status)}
-                  </Pill>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
     </div>
   )
 }

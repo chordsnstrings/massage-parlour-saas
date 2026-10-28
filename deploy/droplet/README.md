@@ -22,7 +22,10 @@ such as Namecheap.
   - **Each deploy:** rebuild `/opt/spa/.env` (first-boot env < secrets overlay < `site.env`, see "Hostname and public
     settings") → build the images → `pg_dump -Fc` to `/opt/spa/backups/pre-migrate-<sha>.dump` (newest 5 kept)
     → `migrate` service (with `lock_timeout=10s`, `statement_timeout=15min`; tune with `MIGRATE_LOCK_TIMEOUT` /
-    `MIGRATE_STATEMENT_TIMEOUT` in the env overlay) → restart → `/api/health` for up to 5 min.
+    `MIGRATE_STATEMENT_TIMEOUT` in the env overlay) → restart → `/api/health` for up to 5 min → the worker (R37):
+    its container running, not restarting, with a heartbeat file under 7 min old, for up to ~90 s (else
+    `worker restarting` / `worker running but no heartbeat` in `deploy.json` and its last 40 log lines in
+    `/_status/build.log`, then the rollback below). CI also starts the worker bundle (job `check`).
   - **Automatic rollback:** if any step fails, the updater redeploys the last good commit (`/opt/spa/last-good`) and
     reports `state: failed` with the reason in `deploy.json`; the failed commit is not retried every 2 minutes (push a
     fix or `sudo spa-update --force`). Migrations are not reverted (keep them additive). To restore data from before
@@ -74,6 +77,8 @@ such as Namecheap.
   `RESEND_API_KEY` first, with where it comes from: console / env / missing).
 - Alert email to every `PLATFORM_ADMIN_EMAILS` address once per incident (disk > 85 %, no successful off-site backup
   in 36 h, deploy failed); rows `ops-alert` record open/closed. A dead worker cannot email: the console shows it.
+  Since R37 a deploy whose worker doesn't come up fails and rolls back ("Each deploy" above; from the deploy after
+  the one that ships it, like any `update.sh` change).
 - Docker logs rotate (json-file, 5 × 10 MB): per service in `compose.yml` (immediate) and in
   `/etc/docker/daemon.json` (cloud-init; `update.sh` adds it on existing droplets, effective after the next Docker
   restart or reboot).
@@ -292,7 +297,8 @@ which domains are ours:
 **TLS (no Caddyfile edit):** Caddy gets the `SITE_HOST` certificate at start; every other host (`www.`, `app.`,
 `admin.`, `{slug}.`, the extra domains, spa custom domains) gets one **on demand** on its first visit, approved by
 `/api/domains/allowed` (hosts on `ROOT_DOMAIN` + `EXTRA_ROOT_DOMAINS`, existing and renamed spa slugs, custom
-domains that are pending, verifying or active; anything else is refused). `/_status/` is served on `SITE_HOST` and
+domains that are pending, verifying or active of spas not cancelled, and the www twin of an active custom domain
+while it points at the droplet — it 301s to the connected hostname; anything else is refused). `/_status/` is served on `SITE_HOST` and
 on the droplet's own `<ip>.sslip.io`.
 
 ### Move to spamanagement.co

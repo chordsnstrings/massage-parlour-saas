@@ -1,8 +1,8 @@
+import { phoneDisplay } from '@spa/core'
 import type { IntakeField } from '@spa/db'
 
-/** Masks a UAE E.164 number for members without `clients.phone`: 971501234567 → +971 50 ••• ••67. */
-export const maskClientPhone = (e164: string) =>
-  e164.length >= 8 ? `+${e164.slice(0, 3)} ${e164.slice(3, 5)} ••• ••${e164.slice(-2)}` : '•••'
+/** Masks a stored number for members without `clients.phone`: 971501234567 → +971 50 ••• ••67, 447700900123 → +44 ••• ••23. */
+export const maskClientPhone = (e164: string) => phoneDisplay(e164, { mask: 'last2' })
 
 /** Stored as these English values; shown via `clients.prefs.pressureOption.*`. */
 export const PRESSURE_OPTIONS = ['Light', 'Medium', 'Firm', 'Deep'] as const

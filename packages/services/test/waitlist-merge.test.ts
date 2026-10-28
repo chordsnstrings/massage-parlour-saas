@@ -239,6 +239,20 @@ describe('merge duplicate clients', () => {
     expect(has(a.id, c.id, 'phone')).toBe(true)
   })
 
+  it('compares other countries on the whole number: +966 50… and +971 50… are not one person (R38)', async () => {
+    const uae = await newClient('Layla Uae', '971509990002')
+    const ksa = await newClient('Layla Ksa', '966509990002')
+    const uk = await newClient('Tom Uk', '447700900123')
+    const uk2 = await newClient('Thomas Uk', '+447700900123') // stored un-normalised (old import)
+    const pairs = await tx((db) => duplicateClientPairs(db))
+    const phonePair = (x: string, y: string) =>
+      pairs.some(
+        (p) => p.reason === 'phone' && [p.keep.id, p.merge.id].sort().join() === [x, y].sort().join(),
+      )
+    expect(phonePair(uae.id, ksa.id)).toBe(false)
+    expect(phonePair(uk.id, uk2.id)).toBe(true)
+  })
+
   it('moves every client reference, combines stats, deletes the duplicate, leaves the ledger alone', async () => {
     const keep = await newClient('Keep Me', null)
     const dup = await newClient('Dup Me')

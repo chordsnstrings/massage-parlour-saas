@@ -61,8 +61,8 @@ export const clients = {
   },
   field: {
     name: 'Name',
-    phone: 'UAE mobile',
-    phoneHint: 'Used for WhatsApp, e.g. 050 123 4567.',
+    phone: 'Mobile (WhatsApp)',
+    phoneHint: 'UAE: 05X XXX XXXX · other countries: + and the country code, e.g. +44 7700 900123',
     gender: 'Gender',
     notSet: 'Not set',
     language: 'Language',
@@ -209,7 +209,7 @@ export const clients = {
   },
   error: {
     name: 'Enter the client’s name',
-    phone: 'Enter a UAE mobile number, e.g. 050 123 4567',
+    phone: 'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
     date: 'Enter a valid date',
     dupPhone: 'Already used by another client',
     reason: 'Add a reason so the team knows why',

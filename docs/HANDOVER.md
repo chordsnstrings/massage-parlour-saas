@@ -10,12 +10,13 @@ the existing flow.
   https://spamanagement.co:
   - phases P1–P3;
   - the spa dashboard redesign;
-  - owner requests R1–R32, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
+  - owner requests R1–R33, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
   - fix backlog F1–F32.
-- The last release is PR #55 (R32: booking ↔ sale order + daily sales sheet PDF), live 2026-10-15.
+- The last release is PR #58 (R33: crawler text for HTML designs, schema profile links, per-spa redirects), live
+  2026-10-18; before it PR #57 (custom domain go-live fix) and PR #55 (R32).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
-- All older feature branches were squash-merged and released. The only unmerged work is the two branches below, plus
+- All older feature branches were squash-merged and released. The only unmerged work is the branches below, plus
   open Dependabot PRs #39 (GitHub Actions), #40 (npm minor/patch) and #41 (TypeScript 5.9 → 7.0: risky, test before
   merging), and the old initial PR #1 into `main`, which can be closed.
 
@@ -23,7 +24,10 @@ the existing flow.
 
 | Branch | What it is | Status | Before merging |
 | --- | --- | --- | --- |
-| `claude/held-google-fixes-review-replies` | R29 Google Business Profile setup fixes: shared Google account, one spa per location, 30-day review cache, reconnect after the OAuth client changes, privacy wording. Also "Review replies" dropped for now: the dashboard Reviews page shows "Coming soon" (owner 2026-10-13). | Built and reviewed, **held until the owner approves the privacy wording**. | Merge the default branch in. Then delete the branch's own migrations 0057/0058 (SQL files + `meta/*_snapshot.json` + their `_journal.json` entries) and run `pnpm db:generate` again, because the default branch already has 0057–0059. Never renumber migrations by hand (PLAN §14.8 "Migration order"). |
+| `claude/held-google-fixes-review-replies` | R29 Google Business Profile setup fixes: shared Google account, one spa per location, 30-day review cache, reconnect after the OAuth client changes, privacy wording. Also "Review replies" dropped for now: the dashboard Reviews page shows "Coming soon" (owner 2026-10-13). | Built and reviewed, **held until the owner approves the privacy wording**. | Merge the default branch in. Then delete the branch's own migrations 0057/0058 (SQL files + `meta/*_snapshot.json` + their `_journal.json` entries) and run `pnpm db:generate` again, because the default branch already has 0057–0060. Never renumber migrations by hand (PLAN §14.8 "Migration order"). |
+| `claude/laughing-faraday-fjgrsu` | R36 dashboard home: Today's bookings & sales (replaces Up next), From the website card, CRM pop-up with a chime for website bookings / enquiries (PLAN §14.8 R36 "as built"). | **Merged + live** 2026-10-21 (PR #60, 788e0c0); the branch restarts from the default branch. | The new Thai strings need native review. |
+| `claude/laughing-faraday-fjgrsu` | R37 worker outage fix (worker crash-looped 2026-10-11..21): bundle fix, CI worker start check, update.sh worker health + rollback, console "As of" rows, billing 1-day hold after an outage (PLAN §14.8 R37). | **Merged + live** 2026-10-22 (PR #62, 6401dc4). | Confirm the worker beats in console Server health; the first billing run after it is held (by design). |
+| `claude/laughing-faraday-fjgrsu` | R38 international client phones: core `toClientE164` + `phoneDisplay`, every customer phone input (incl. website enquiries), masks/prefill/merge/export fixes (PLAN §14.8 R38). | **Merged + live** 2026-10-22 (PR #63, db62c51). | New Thai/Arabic strings need native review. |
 | `claude/paused-r22-console-arabic` | R22: super-admin console in Arabic. An unfinished foundation. | **Paused by the owner** 2026-10-10 ("console keep english for now"). | Don't merge. Restart from it only if the owner asks. |
 
 ## Open items
@@ -45,10 +49,15 @@ the existing flow.
 - **AI key:** add `ARK_API_KEY` to the server secrets (`deploy/droplet/README.md` → "Secrets without SSH"). This needs the
   droplet's `/opt/spa/secrets.key`, and the new file must keep every key the current one holds. AI is a Premium feature.
 - **BE RELAX:**
-  - upload design v2.7: Console → Site templates → its row → Upload new version → Roll out (`docs/design/be-relax-site/`);
+  - v2.8 is live; upload design v2.9 (R35: h1, 20% offer bar, big WhatsApp): Console → Site templates → its row →
+    Upload new version → Roll out (`docs/design/be-relax-site/`), then Claude sets the Arabic h1 (txt-14) and the
+    welcome line (`journey[welcome].eyebrow` = "{hours}") as drafts; offer end date `offer.ends` = roll-out day + 30;
+  - set the one WhatsApp number 056 187 5596 (Settings → Profile); publish the home + services drafts (R35 texts);
+  - publish the title/description draft (Console → Websites → BE RELAX), paste its Google Business + Instagram links
+    in the Profile links card, and import the Search Console 404 list in Redirects (R33);
   - in the spa's Settings → Profile → Daily sales sheet, enter the 4 phone lines;
   - rename the 11 staff currently called "Therapist".
-- **Native review:** the new Thai strings (list in PLAN §14.8, R32 entry), plus four in `th/settings.ts`
+- **Native review:** the new Thai strings (list in PLAN §14.8, R32 and R36 entries), plus four in `th/settings.ts`
   `integrations` (2026-10-16 Settings text fix: `gbp.notConfigured`, `ig.notConfigured`, `ig.metaHelp`, `fb.notConfigured`).
 
 ## Access a new developer needs (the owner gives these privately, never in git or chat)
@@ -107,7 +116,7 @@ never with force. Anything else, config included, goes through a PR. CI runs and
 
 ## What is in the repo besides the code
 
-- `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.6 live, v2.7 next) and the 2026-10-14 QA report.
+- `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.7 live, v2.8 next) and the 2026-10-14 QA report.
 - `docs/manuals/`: Markdown sources of the four owner's manuals (Platform EN/AR, Spa EN/TH) and the scripts that
   typeset them. The PDFs (16–27 MB each) and the 234 screenshots (58 MB) are not in git; the owner has the PDFs.
 

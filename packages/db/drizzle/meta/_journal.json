@@ -421,6 +421,13 @@
       "when": 1792021729923,
       "tag": "0059_r32_day_sheet_pdf",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1792270856899,
+      "tag": "0060_r33_site_redirects",
+      "breakpoints": true
     }
   ]
 }
