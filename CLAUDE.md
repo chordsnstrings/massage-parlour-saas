@@ -73,6 +73,7 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - Price (owner 2026-10-09, PLAN §18.8): **Premium** AED 14,000 setup + 3,000/month; **Standard** AED 9,000 setup + 2,000/month
   (no AI/Instagram automation, no marketing tools, one branch); excl. VAT, VAT optional; existing spas keep AED 24,000/yr
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
+  Hand-made client invoices (Be Relax = Premium at the Standard price), owner's invoice rules + Word templates: `docs/billing/README.md`.
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17; R24: ≤ 5 MB, stored byte for byte
   as a file, the page JSON only references it — CODEMAP "HTML designs"; PLAN §14.8).

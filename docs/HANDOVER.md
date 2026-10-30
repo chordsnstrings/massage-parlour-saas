@@ -10,10 +10,10 @@ the existing flow.
   https://spamanagement.co:
   - phases P1–P3;
   - the spa dashboard redesign;
-  - owner requests R1–R33, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
+  - owner requests R1–R38, except R22 (paused), R27 (not building), R31 (planned), R34 (on hold) and the held Google fixes below;
   - fix backlog F1–F32.
-- The last release is PR #58 (R33: crawler text for HTML designs, schema profile links, per-spa redirects), live
-  2026-10-18; before it PR #57 (custom domain go-live fix) and PR #55 (R32).
+- The last release is PR #63 (R38: international client phones), live 2026-10-22; before it PR #62 (R37 worker outage
+  fix) and PR #60 (R36 dashboard). Nothing was released since; 2026-10-28 work was client invoices (`docs/billing/`).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
 - All older feature branches were squash-merged and released. The only unmerged work is the branches below, plus
@@ -119,6 +119,9 @@ never with force. Anything else, config included, goes through a PR. CI runs and
   - uploaded HTML designs render exactly as built.
 
 ## What is in the repo besides the code
+
+- `docs/billing/`: client invoices issued by hand (Be Relax SM-INV-2026-001/002, next no. SM-INV-2026-003), the
+  owner's invoice rules, the editable Word templates and the HTML/PDF sources (README there).
 
 - `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.7 live, v2.8 next) and the 2026-10-14 QA report.
 - `docs/manuals/`: Markdown sources of the four owner's manuals (Platform EN/AR, Spa EN/TH) and the scripts that
