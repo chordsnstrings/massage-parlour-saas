@@ -162,6 +162,22 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
     await page.getByLabel(/Show cancelled/).check()
     await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toBeVisible()
   })
+
+  await test.step('R39: reception deletes the cancelled booking (no payment); it is gone for good', async () => {
+    const room1 = page.getByRole('group', { name: 'Room 1' })
+    const cancelled = () =>
+      testDb().select().from(bookings).where(eq(bookings.cancelReason, 'Client is travelling'))
+    expect(await cancelled()).toHaveLength(1)
+    await room1.getByRole('button', { name: /Fatima Al Mansoori/ }).click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByRole('button', { name: 'Delete' }).click()
+    await expect(sheet.getByText('Delete this booking?', { exact: false })).toBeVisible()
+    await sheet.getByRole('button', { name: 'Yes, delete' }).click()
+    await expect(page.getByText(/Booking .+ deleted/)).toBeVisible()
+    await expect(sheet).toBeHidden()
+    await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toHaveCount(0)
+    expect(await cancelled()).toHaveLength(0)
+  })
 })
 
 test('week + month views open the day; the sidebar counts today’s bookings', async ({ page }) => {

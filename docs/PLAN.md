@@ -1579,6 +1579,18 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R39 Delete booking (owner 2026-10-31: "yes i need a delete button for the bookings"; answers: owners, managers
+  and reception; only bookings without payment; simple confirm, no reason):** services `deleteBooking` (locks the row;
+  refused (catalogued `errors.domain.bookingDeleteHasMoney`) while a non-void sale, a package redemption or any `booking_commissions`
+  row points at it — commission rows are append-only, so a finished-then-voided booking can only be cancelled); the
+  delete cascades items, reservations and unsent outbox messages; notes, intake forms, waitlist entries, chats and a void
+  sale keep their rows unlinked (`set null`); a website enquiry made into it reopens (its booking id no longer resolves);
+  stock already consumed stays. Web `deleteBookingAction` (calendar actions, `calendar.manage`, booking's day lock via
+  `editDay`: a closed day needs `pos.correct`, is marked amended and its sheet PDF regenerated; audit `booking.deleted`
+  with a snapshot: ref, status, client, branch, date, start, items). UI: "Delete" in the calendar booking panel
+  (hidden once paid or on a locked day; inline "Yes, delete / Keep it") and on the booking page (browser confirm, then
+  back to the list). Tests: services booking-order (3), e2e calendar (delete a cancelled booking). New EN + TH strings
+  (`calendar.details.delete*`, `calendar.results.deleted`, `errors.domain.bookingDeleteHasMoney`) need native review.
 - **R38 International client phones (owner 2026-10-22: "make it accept any phone number with the country code"):**
   owner answers: (1) **every customer phone** (CRM clients, online booking, calendar new booking / walk-in / Make
   booking, sales quick add, vouchers, waitlist, Instagram link + DM agent, imports, AI assistant); staff, spa, branch

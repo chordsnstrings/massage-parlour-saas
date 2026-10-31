@@ -1,11 +1,20 @@
 'use client'
 import { canTransition, sheetCode } from '@spa/core'
 import { bookingSourceLabel, enumLabel } from '@spa/core/i18n'
-import { ArrowRightLeft, ClipboardList, MessageCircle, Phone, Receipt, SlidersHorizontal } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  ClipboardList,
+  MessageCircle,
+  Phone,
+  Receipt,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { useRef, useState, useTransition } from 'react'
 import {
+  deleteBookingAction,
   rescheduleFormAction,
   setOwnStatusAction,
   setStatusAction,
@@ -73,18 +82,29 @@ export function BookingSheet({
           : undefined
       }
     >
-      {first && <Details key={first.bookingId} data={data} items={shown} />}
+      {first && (
+        <Details key={first.bookingId} data={data} items={shown} onDeleted={() => onOpenChange(false)} />
+      )}
     </Sheet>
   )
 }
 
-function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
+function Details({
+  data,
+  items,
+  onDeleted,
+}: {
+  data: CalendarData
+  items: CalItem[]
+  onDeleted: () => void
+}) {
   const { t, fmt } = useI18n()
   const first = items[0]!
   const status = first.status
   const [pending, start] = useTransition()
   const [busy, setBusy] = useState<Target | OwnTarget | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [reason, setReason] = useState('')
   const [moving, setMoving] = useState(false)
   const [editing, setEditing] = useState<'terms' | 'details' | null>(null)
@@ -124,6 +144,21 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
       setBusy(null)
       if (r?.ok) toast.success(resultText(t, r) ?? t('calendar.updated'))
       else if (r) toast.error(resultText(t, r) ?? r.error ?? '')
+    })
+  }
+
+  // R39: same people as cancel; the server refuses a booking with a payment or commission.
+  const removable = data.canManage && !paid && !data.editLocked
+  const remove = () => {
+    start(async () => {
+      const r = await deleteBookingAction(data.slug, first.bookingId)
+      if (r?.ok) {
+        toast.success(resultText(t, r) ?? t('calendar.updated'))
+        onDeleted()
+      } else if (r) {
+        setDeleting(false)
+        toast.error(resultText(t, r) ?? r.error ?? '')
+      }
     })
   }
 
@@ -394,6 +429,30 @@ function Details({ data, items }: { data: CalendarData; items: CalItem[] }) {
           </Link>
         </Button>
       )}
+
+      {removable &&
+        (deleting ? (
+          <div className="space-y-2 rounded-md border border-danger/40 p-3">
+            <p className="text-sm">{t('calendar.details.deleteConfirm')}</p>
+            <div className="flex gap-2">
+              <Button variant="danger" pending={pending} disabled={pending} onClick={remove}>
+                {t('calendar.details.deleteYes')}
+              </Button>
+              <Button variant="secondary" disabled={pending} onClick={() => setDeleting(false)}>
+                {t('calendar.details.deleteNo')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDeleting(true)}
+            disabled={pending}
+            className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-danger hover:underline"
+          >
+            <Trash2 className="size-4" strokeWidth={1.5} /> {t('calendar.details.delete')}
+          </button>
+        ))}
     </div>
   )
 }
