@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Minimal Swedish modern — docs/PLAN.md §12. Semantic tokens; components use Tailwind names below. */
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --subtle: #f3f2ef;
+  --border: #e7e5e0;
+  --fg: #1c1c1a;
+  --muted: #6b6a66;
+  --accent: #5e7d6b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8eeea;
+  --success: #4f7a5a;
+  --warning: #a8823a;
+  --danger: #a5523f;
+  --danger-soft: #f6e9e5;
+  --warning-soft: #f5eedf;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211;
+    --surface: #1a1a19;
+    --subtle: #222220;
+    --border: #2c2c2a;
+    --fg: #ededea;
+    --muted: #9a9993;
+    --accent: #8fb09c;
+    --accent-fg: #10140f;
+    --accent-soft: #22302a;
+    --success: #8fb09c;
+    --warning: #d2b06b;
+    --danger: #d98b78;
+    --danger-soft: #3a2420;
+    --warning-soft: #352c1c;
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.14);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 0.06), 0 24px 48px -16px rgb(0 0 0 / 0.22);
+  --ease-calm: cubic-bezier(0.2, 0, 0, 1);
+  --breakpoint-xs: 22.5rem;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preference must win */
+    animation-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preference must win */
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Micro-animation keyframes (driven by Radix data-state attributes). */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@utility anim-fade-in {
+  animation: fade-in 200ms var(--ease-calm) both;
+}
+@utility anim-fade-out {
+  animation: fade-out 150ms var(--ease-calm) both;
+}
+@utility anim-pop-in {
+  animation: pop-in 220ms var(--ease-calm) both;
+}
+@utility anim-sheet-up {
+  animation: sheet-up 280ms var(--ease-calm) both;
+}
+@utility anim-sheet-down {
+  animation: sheet-down 200ms var(--ease-calm) both;
+}
+@utility anim-menu-in {
+  animation: menu-in 160ms var(--ease-calm) both;
+}
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}

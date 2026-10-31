@@ -1,0 +1,877 @@
+'use server'
+import {
+  type BookingClientType,
+  businessDateOf,
+  dubaiInstant,
+  holdInterval,
+  onLeave,
+  overlaps,
+  phoneLinesConfigured,
+  staffBookingAttribution,
+} from '@spa/core'
+import {
+  bookingItems,
+  bookings,
+  clients,
+  rooms,
+  services,
+  serviceVariants,
+  staff,
+  type Tx,
+  withTenant,
+} from '@spa/db'
+import {
+  createBooking,
+  DomainError,
+  deleteBooking,
+  findOrCreateClient,
+  linkSiteEnquiryBooking,
+  loadDay,
+  lockSiteEnquiryForBooking,
+  OWN_STATUS_TARGETS,
+  orderDay,
+  outboxLink,
+  planBookingMessages,
+  rescheduleItem,
+  rotationFor,
+  setBookingDetails,
+  setBookingStatus,
+  setBookingTerms,
+  setOwnBookingStatus,
+  takeTurn,
+} from '@spa/services'
+import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
+import { type ActionResult, fail, failDomain, formObject, fromZod, ok } from '@/lib/action'
+import { can, guard, type MemberContext } from '@/server/access'
+import { audit } from '@/server/audit'
+import { afterDayChange, editDay, periodLocked } from '@/server/day-lock'
+import { allowedBranches, ownStaffId } from './data'
+
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'calendar.errors.pickDate')
+const time = z.string().regex(/^\d{2}:\d{2}$/, 'calendar.errors.pickTime')
+const optionalId = z
+  .string()
+  .optional()
+  .transform((v) => (v ? v : undefined))
+  .pipe(z.uuid().optional())
+
+const revalidate = (slug: string) => revalidatePath(`/dashboard/${slug}/calendar`)
+
+const toMin = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return (h ?? 0) * 60 + (m ?? 0)
+}
+
+/** Resolves a branch the member may use; throws DomainError otherwise. */
+async function branchFor(tx: Tx, ctx: MemberContext, branchId: string) {
+  const branch = (await allowedBranches(tx, ctx)).find((b) => b.id === branchId)
+  if (!branch) throw new DomainError('Branch not found', 'not_found')
+  return branch
+}
+
+/** Start instant from a business date + "HH:MM" (times before the cutoff belong to the next calendar day). */
+const startFrom = (d: string, t: string, cutoff: string) =>
+  dubaiInstant(d, timeToGridMinute(t, toMin(cutoff)))
+
+async function assertStaffAndRoom(tx: Tx, staffIds: string[], roomId?: string) {
+  if (staffIds.length) {
+    const found = await tx.select({ id: staff.id }).from(staff).where(inArray(staff.id, staffIds))
+    if (found.length !== new Set(staffIds).size) throw new DomainError('Therapist not found', 'not_found')
+  }
+  if (roomId) {
+    const [room] = await tx.select({ id: rooms.id }).from(rooms).where(eq(rooms.id, roomId))
+    if (!room) throw new DomainError('Room not found', 'not_found', { key: 'calendar.errors.roomNotFound' })
+  }
+}
+
+const handle = (e: unknown): ActionResult => {
+  if (e instanceof DomainError) return failDomain(e)
+  if (periodLocked(e)) return fail('accounts.result.lockedDate')
+  throw e
+}
+
+// ---------------------------------------------------------------------------
+// R32 order fields: fee + commission (Confirm), phone line, client type, own client
+// ---------------------------------------------------------------------------
+
+const orderFields = {
+  feeAed: z.string().trim().max(20).optional(),
+  commissionAed: z.string().trim().max(20).optional(),
+  phoneLine: z.string().max(2).optional(),
+  clientType: z.enum(['regular', 'new', '']).optional(),
+  ownLead: z.string().max(5).optional(),
+}
+type OrderInput = { [K in keyof typeof orderFields]?: string }
+
+/** A typed AED amount 0–100,000 (2 decimals), or null when empty / invalid. */
+const parseAmount = (raw: string | undefined) => {
+  if (raw == null || raw.trim() === '') return null
+  const n = Number(raw.replace(/,/g, ''))
+  return Number.isFinite(n) && n >= 0 && n <= 100_000 ? Math.round(n * 100) / 100 : null
+}
+
+/**
+ * The R32 order fields of New booking / Walk-in. The fee is required; the commission too for members who may enter it
+ * (calendar.commission; others' typed value is ignored); a phone booking picks its line once lines are set in
+ * Settings; an own client needs her therapist.
+ */
+function orderTerms(
+  ctx: MemberContext,
+  v: OrderInput,
+  o: { source: string; staffId?: string },
+):
+  | { ok: false; error: ActionResult }
+  | {
+      ok: true
+      feeAed: number
+      commissionAed: number | null
+      phoneLine: number | null
+      clientType: BookingClientType | null
+      ownLead: boolean
+    } {
+  const fieldErrors: Record<string, string> = {}
+  const feeAed = parseAmount(v.feeAed)
+  if (feeAed === null) fieldErrors.feeAed = 'calendar.errors.fee'
+  const mayCommission = can(ctx, 'calendar.commission')
+  const commissionAed = mayCommission ? parseAmount(v.commissionAed) : null
+  if (mayCommission && commissionAed === null) fieldErrors.commissionAed = 'calendar.errors.commission'
+  const line = Number(v.phoneLine)
+  const phoneLine = o.source === 'phone' && line >= 1 && line <= 4 ? line : null
+  if (o.source === 'phone' && !phoneLine && phoneLinesConfigured(ctx.tenant.settings))
+    fieldErrors.phoneLine = 'calendar.errors.phoneLine'
+  const ownLead = v.ownLead === 'on'
+  if (ownLead && !o.staffId) fieldErrors.ownLead = 'calendar.errors.ownLeadTherapist'
+  if (Object.keys(fieldErrors).length) return { ok: false, error: fail('errors.checkFields', fieldErrors) }
+  return {
+    ok: true,
+    feeAed: feeAed!,
+    commissionAed,
+    phoneLine,
+    clientType: (v.clientType || null) as BookingClientType | null,
+    ownLead,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client search (for the new-booking sheet)
+// ---------------------------------------------------------------------------
+
+export async function searchClientsAction(slug: string, query: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const parsed = z.string().trim().min(2).max(60).safeParse(query)
+  if (!parsed.success) return ok(undefined, { clients: [] })
+  const q = parsed.data
+  const seePhone = can(ctx, 'clients.phone')
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+  const digits = q.replace(/\D/g, '').replace(/^0+/, '')
+  const rows = await withTenant(ctx.tenant.id, (tx) =>
+    tx
+      .select({ id: clients.id, name: clients.name, phone: clients.phoneE164, blocked: clients.blocklisted })
+      .from(clients)
+      .where(
+        seePhone && digits.length >= 3
+          ? or(ilike(clients.name, like), ilike(clients.phoneE164, `%${digits}%`))
+          : ilike(clients.name, like),
+      )
+      .orderBy(asc(clients.name))
+      .limit(8),
+  )
+  return ok(undefined, {
+    clients: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      phone: r.phone ? (seePhone ? `+${r.phone}` : maskPhone(r.phone)) : null,
+      blocked: r.blocked,
+    })),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// New booking
+// ---------------------------------------------------------------------------
+
+const bookingSchema = z
+  .object({
+    branchId: z.uuid(),
+    date,
+    time,
+    variantId: z.uuid('calendar.errors.chooseService'),
+    staffId: optionalId,
+    roomId: optionalId,
+    clientId: optionalId,
+    clientName: z.string().trim().max(120).optional(),
+    clientPhone: z.string().trim().max(30).optional(),
+    /** 'online' = Website (owner 2026-10-13): Make booking's default; records attribution 'website' (F13 reports). */
+    source: z.enum(['phone', 'whatsapp', 'walk_in', 'instagram', 'online']),
+    notes: z.string().trim().max(1000).optional(),
+    enquiryId: optionalId,
+    ...orderFields,
+  })
+  .superRefine((v, c) => {
+    if (v.ownLead === 'on' && !v.staffId)
+      c.addIssue({ code: 'custom', path: ['ownLead'], message: 'calendar.errors.ownLeadTherapist' })
+    if (v.clientId) return
+    if (!v.clientName)
+      c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
+    // A request's phone stays on the server for members without phone access.
+    if (!v.clientPhone && !v.enquiryId)
+      c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'calendar.errors.clientPhone' })
+  })
+
+export async function createBookingAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const parsed = bookingSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  // A website booking request is inbox data: the inbox's permission too.
+  if (v.enquiryId && !can(ctx, 'clients.view')) return fail('errors.forbidden')
+  const terms = orderTerms(ctx, v, { source: v.source, staffId: v.staffId })
+  if (!terms.ok) return terms.error
+  try {
+    const result = await withTenant(ctx.tenant.id, async (tx) => {
+      const branch = await branchFor(tx, ctx, v.branchId)
+      const start = startFrom(v.date, v.time, branch.businessDayCutoff.slice(0, 5))
+      await assertStaffAndRoom(tx, v.staffId ? [v.staffId] : [], v.roomId)
+      // Locked until this transaction ends: one booking per request, even with two people saving.
+      const enquiry = v.enquiryId ? await lockSiteEnquiryForBooking(tx, v.enquiryId) : null
+      let clientId = v.clientId
+      if (clientId) {
+        const [c] = await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId))
+        if (!c)
+          throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
+      } else {
+        clientId = (
+          await findOrCreateClient(tx, ctx.tenant.id, {
+            name: v.clientName!,
+            phone: v.clientPhone || enquiry!.phone,
+            source: v.source,
+            ...(enquiry ? { language: enquiry.locale } : {}),
+          })
+        ).id
+      }
+      const booking = await createBooking(tx, {
+        tenantId: ctx.tenant.id,
+        branchId: branch.id,
+        clientId,
+        source: v.source,
+        attribution: staffBookingAttribution(v.source),
+        status: 'confirmed',
+        notes: v.notes || null,
+        createdBy: ctx.user.id,
+        phoneLine: terms.phoneLine,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        items: [
+          {
+            serviceVariantId: v.variantId,
+            start,
+            staffIds: v.staffId ? [v.staffId] : undefined,
+            roomId: v.roomId,
+            feeAed: terms.feeAed,
+            commissionAed: terms.commissionAed,
+          },
+        ],
+      })
+      // The request shows "Booked" in the inbox (its booking jsonb; same transaction as the booking).
+      if (enquiry) await linkSiteEnquiryBooking(tx, enquiry.id, booking.id, ctx.user.id)
+      // createBooking already planned confirmation + reminders (G4); this returns them for the WhatsApp link.
+      const confirmation = (await planBookingMessages(tx, booking.id)).booking_confirmation ?? null
+      return { booking, confirmation }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.created',
+      entity: 'booking',
+      entityId: result.booking.id,
+      data: {
+        ref: result.booking.refCode,
+        source: v.source,
+        fee: terms.feeAed,
+        commission: terms.commissionAed,
+        phoneLine: terms.phoneLine,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        ...(v.enquiryId ? { enquiryId: v.enquiryId } : {}),
+      },
+    })
+    if (v.enquiryId) {
+      await audit({
+        tenantId: ctx.tenant.id,
+        actorUserId: ctx.user.id,
+        impersonatorUserId: ctx.impersonating ? ctx.user.id : undefined,
+        action: 'site.enquiry.booked',
+        entity: 'site_enquiry',
+        entityId: v.enquiryId,
+        data: { bookingId: result.booking.id, ref: result.booking.refCode },
+      })
+      revalidatePath(`/dashboard/${slug}/enquiries`)
+    }
+    revalidate(slug)
+    return ok(
+      { key: 'calendar.results.created', params: { ref: result.booking.refCode } },
+      {
+        ref: result.booking.refCode,
+        whatsapp: result.confirmation ? outboxLink(result.confirmation, 'mobile') : null,
+        whatsappWeb: result.confirmation ? outboxLink(result.confirmation, 'web') : null,
+      },
+    )
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status changes
+// ---------------------------------------------------------------------------
+
+const statusSchema = z.object({
+  bookingId: z.uuid(),
+  // Completed is set on the booking page with the therapist commission, or by a POS checkout.
+  status: z.enum(['confirmed', 'checked_in', 'in_service', 'no_show', 'cancelled']),
+  reason: z.string().trim().max(300).optional(),
+})
+
+/** Statuses a pending booking reaches only through Confirm (R32: fee + commission typed first). */
+const FORWARD: string[] = ['confirmed', 'checked_in', 'in_service', 'completed']
+
+export async function setStatusAction(
+  slug: string,
+  input: z.input<typeof statusSchema>,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const parsed = statusSchema.safeParse(input)
+  if (!parsed.success) return fromZod(parsed.error)
+  const { bookingId, status, reason } = parsed.data
+  if (status === 'cancelled' && !reason)
+    return fail('calendar.errors.reason', { reason: 'validation.required' })
+  try {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
+      const [b] = await tx
+        .select({ branchId: bookings.branchId, status: bookings.status, date: bookings.businessDate })
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+      if (!b) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, b.branchId)
+      // R32: a pending booking goes forward only through Confirm (reception types its fee + commission).
+      if (b.status === 'pending' && FORWARD.includes(status)) return null
+      // Leaving `completed` reverses commission: only from the booking page, with that permission, and the day
+      // lock of the booking's day (its commission rows) applies.
+      if (b.status === 'completed' && !can(ctx, 'calendar.commission'))
+        throw new DomainError('Booking not found', 'not_found')
+      const lock = b.status === 'completed' ? await editDay(tx, ctx, b.branchId, b.date) : null
+      const updated = await setBookingStatus(tx, bookingId, status, reason, { userId: ctx.user.id })
+      return { updated, lock }
+    })
+    if (!r) return fail('calendar.errors.confirmFirst')
+    const { updated, lock } = r
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: `booking.${status}`,
+      entity: 'booking',
+      entityId: bookingId,
+      data:
+        reason || lock?.closed
+          ? { ...(reason ? { reason } : {}), ...(lock?.closed ? { closedDay: true } : {}) }
+          : undefined,
+    })
+    if (lock) await afterDayChange(ctx, lock)
+    revalidate(slug)
+    return ok({
+      key: 'calendar.results.status',
+      params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },
+    })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/**
+ * R39: delete a booking with no money history (same people as cancel: `calendar.manage`). The booking's day lock
+ * applies (a closed day needs `pos.correct`, is marked amended and its sheet regenerated); the audit row keeps a
+ * snapshot of what was deleted.
+ */
+export async function deleteBookingAction(slug: string, bookingId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const id = z.uuid().safeParse(bookingId)
+  if (!id.success) return fromZod(id.error)
+  try {
+    const { b, items, lock } = await withTenant(ctx.tenant.id, async (tx) => {
+      const [row] = await tx
+        .select({ branchId: bookings.branchId, date: bookings.businessDate })
+        .from(bookings)
+        .where(eq(bookings.id, id.data))
+      if (!row) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, row.branchId)
+      const lock = await editDay(tx, ctx, row.branchId, row.date)
+      const items = await tx
+        .select({
+          service: bookingItems.serviceName,
+          staffIds: bookingItems.staffIds,
+          startsAt: bookingItems.startsAt,
+        })
+        .from(bookingItems)
+        .where(eq(bookingItems.bookingId, id.data))
+      const b = await deleteBooking(tx, id.data)
+      return { b, items, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.deleted',
+      entity: 'booking',
+      entityId: b.id,
+      data: {
+        ref: b.refCode,
+        status: b.status,
+        clientId: b.clientId,
+        branchId: b.branchId,
+        businessDate: b.businessDate,
+        startsAt: b.startsAt.toISOString(),
+        items,
+        ...(lock.closed ? { closedDay: true } : {}),
+      },
+    })
+    await afterDayChange(ctx, lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`)
+    return ok({ key: 'calendar.results.deleted', params: { ref: b.refCode } })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+const ownStatusSchema = z.object({
+  bookingId: z.uuid(),
+  status: z.enum(OWN_STATUS_TARGETS),
+})
+
+/**
+ * Therapist (G14, `calendar.ownStatus`): check in / start / complete a booking they are assigned to. Ownership is
+ * checked in the service (their linked staff profile must be on the booking); others' bookings read as not found.
+ */
+export async function setOwnStatusAction(
+  slug: string,
+  input: z.input<typeof ownStatusSchema>,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.ownStatus')
+  if (error) return fail(error)
+  const parsed = ownStatusSchema.safeParse(input)
+  if (!parsed.success) return fromZod(parsed.error)
+  const { bookingId, status } = parsed.data
+  try {
+    const updated = await withTenant(ctx.tenant.id, async (tx) => {
+      const myStaff = await ownStaffId(tx, ctx)
+      const [b] = await tx
+        .select({ branchId: bookings.branchId })
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+      if (!b || !myStaff) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, b.branchId)
+      return setOwnBookingStatus(tx, { bookingId, staffId: myStaff, to: status, userId: ctx.user.id })
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: `booking.${status}`,
+      entity: 'booking',
+      entityId: bookingId,
+      data: { own: true },
+    })
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}`)
+    return ok({
+      key: 'calendar.results.status',
+      params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },
+    })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reschedule (drag or form)
+// ---------------------------------------------------------------------------
+
+const rescheduleSchema = z.object({
+  itemId: z.uuid(),
+  date,
+  time,
+  staffIds: z.array(z.uuid()).max(4).optional(),
+  roomId: optionalId,
+})
+
+export async function rescheduleAction(
+  slug: string,
+  input: z.input<typeof rescheduleSchema>,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const parsed = rescheduleSchema.safeParse(input)
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  try {
+    const ref = await withTenant(ctx.tenant.id, async (tx) => {
+      const [row] = await tx
+        .select({
+          branchId: bookings.branchId,
+          ref: bookings.refCode,
+          roomId: bookingItems.roomId,
+          roomTypes: services.roomTypes,
+        })
+        .from(bookingItems)
+        .innerJoin(bookings, eq(bookings.id, bookingItems.bookingId))
+        .leftJoin(serviceVariants, eq(serviceVariants.id, bookingItems.serviceVariantId))
+        .leftJoin(services, eq(services.id, serviceVariants.serviceId))
+        .where(eq(bookingItems.id, v.itemId))
+      if (!row) throw new DomainError('Booking not found', 'not_found')
+      const branch = await branchFor(tx, ctx, row.branchId)
+      await assertStaffAndRoom(tx, v.staffIds ?? [], v.roomId)
+      const start = startFrom(v.date, v.time, branch.businessDayCutoff.slice(0, 5))
+      try {
+        await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: v.roomId })
+      } catch (e) {
+        // Room is "automatic" when not chosen: if the current room clashes, try the branch's other rooms.
+        if (!(e instanceof DomainError) || e.code !== 'slot_taken' || v.roomId) throw e
+        const types = row.roomTypes ?? []
+        const others = (
+          await tx
+            .select({ id: rooms.id, type: rooms.type })
+            .from(rooms)
+            .where(and(eq(rooms.branchId, row.branchId), eq(rooms.active, true)))
+            .orderBy(asc(rooms.sort), asc(rooms.name))
+        ).filter((r) => r.id !== row.roomId && (types.length === 0 || types.includes(r.type)))
+        let moved = false
+        for (const room of others) {
+          try {
+            await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: room.id })
+            moved = true
+            break
+          } catch (retry) {
+            if (!(retry instanceof DomainError) || retry.code !== 'slot_taken') throw retry
+          }
+        }
+        if (!moved) throw e
+      }
+      return row.ref
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.rescheduled',
+      entity: 'booking_item',
+      entityId: v.itemId,
+      data: { date: v.date, time: v.time, staffIds: v.staffIds, roomId: v.roomId },
+    })
+    revalidate(slug)
+    return ok({ key: 'calendar.results.moved', params: { ref, time: v.time } })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+export async function rescheduleFormAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const o = formObject(formData)
+  const staffId = typeof o.staffId === 'string' && o.staffId ? o.staffId : undefined
+  const keep = typeof o.keepStaff === 'string' && o.keepStaff ? o.keepStaff.split(',') : []
+  return rescheduleAction(slug, {
+    itemId: String(o.itemId ?? ''),
+    date: String(o.date ?? ''),
+    time: String(o.time ?? ''),
+    staffIds: staffId ? [staffId, ...keep.filter((id) => id !== staffId)] : undefined,
+    roomId: typeof o.roomId === 'string' ? o.roomId : undefined,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Walk-in: starts now, next free therapist in the rotation, room automatic
+// ---------------------------------------------------------------------------
+
+const walkInSchema = z.object({
+  branchId: z.uuid(),
+  variantId: z.uuid('calendar.errors.chooseService'),
+  staffId: optionalId,
+  clientName: z.string().trim().max(120).optional(),
+  clientPhone: z.string().trim().max(30).optional(),
+  ...orderFields,
+})
+
+export async function walkInAction(
+  slug: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const parsed = walkInSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  // R32: an own client is hand-picked (a rotation pick is never her own client) and doesn't use her turn.
+  const terms = orderTerms(ctx, v, { source: 'walk_in', staffId: v.staffId })
+  if (!terms.ok) return terms.error
+  try {
+    const result = await withTenant(ctx.tenant.id, async (tx) => {
+      const branch = await branchFor(tx, ctx, v.branchId)
+      const cutoff = branch.businessDayCutoff.slice(0, 5)
+      const start = new Date(Math.round(Date.now() / 300_000) * 300_000)
+      const businessDate = businessDateOf(start, cutoff)
+      const [svc] = await tx
+        .select({ variant: serviceVariants, service: services })
+        .from(serviceVariants)
+        .innerJoin(services, eq(services.id, serviceVariants.serviceId))
+        .where(eq(serviceVariants.id, v.variantId))
+      if (!svc) throw new DomainError('Service not found', 'not_found')
+      const hold = holdInterval(
+        start,
+        svc.variant.durationMin,
+        svc.service.bufferBeforeMin,
+        svc.service.bufferAfterMin,
+      )
+      const day = await loadDay(tx, branch.id, businessDate)
+      const free = (s: (typeof day.staff)[number]) =>
+        s.skills.includes(svc.service.id) && !s.busy.some((b) => overlaps(b, hold)) && !onLeave(s, hold)
+      const onShift = (s: (typeof day.staff)[number]) =>
+        s.shifts.some((sh) => sh.start <= start && start < sh.end)
+      const rotation = await rotationFor(tx, ctx.tenant.id, branch.id, businessDate)
+      let therapist: (typeof day.staff)[number] | undefined
+      if (v.staffId) {
+        therapist = day.staff.find((s) => s.id === v.staffId)
+        if (!therapist) throw new DomainError('Therapist not found', 'not_found')
+        if (!free(therapist))
+          throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
+            key: 'calendar.errors.notFree',
+            params: { name: therapist.name },
+          })
+      } else {
+        therapist =
+          rotation
+            .filter((e) => e.status !== 'break' && e.status !== 'off')
+            .map((e) => day.staff.find((s) => s.id === e.staffId))
+            .find((s) => s !== undefined && free(s)) ??
+          day.staff.find((s) => onShift(s) && free(s)) ??
+          day.staff.find(free)
+      }
+      if (!therapist)
+        throw new DomainError('No therapist is free for this service right now', 'no_staff', {
+          key: 'calendar.errors.noneFree',
+        })
+      const client =
+        v.clientPhone && v.clientPhone.length > 0
+          ? await findOrCreateClient(tx, ctx.tenant.id, {
+              name: v.clientName || 'Walk-in client',
+              phone: v.clientPhone,
+              source: 'walk_in',
+            })
+          : null
+      const booking = await createBooking(tx, {
+        tenantId: ctx.tenant.id,
+        branchId: branch.id,
+        clientId: client?.id ?? null,
+        source: 'walk_in',
+        status: 'checked_in',
+        notes: !client && v.clientName ? `Walk-in: ${v.clientName}` : null,
+        createdBy: ctx.user.id,
+        allowOffShift: true,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        items: [
+          {
+            serviceVariantId: v.variantId,
+            start,
+            staffIds: [therapist.id],
+            feeAed: terms.feeAed,
+            commissionAed: terms.commissionAed,
+          },
+        ],
+      })
+      if (!terms.ownLead) await takeTurn(tx, branch.id, businessDate, therapist.id)
+      return { booking, therapist: therapist.name }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.walk_in',
+      entity: 'booking',
+      entityId: result.booking.id,
+      data: {
+        ref: result.booking.refCode,
+        therapist: result.therapist,
+        fee: terms.feeAed,
+        commission: terms.commissionAed,
+        clientType: terms.clientType,
+        ownLead: terms.ownLead,
+        turn: !terms.ownLead,
+      },
+    })
+    revalidate(slug)
+    return ok(
+      { key: 'calendar.walkIns.started', params: { name: result.therapist } },
+      { ref: result.booking.refCode },
+    )
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R32 Confirm (fee + commission), Fee & commission, Order details — day lock (D6) applies
+// ---------------------------------------------------------------------------
+
+/** `fee:<itemId>` / `commission:<itemId>` fields → item terms (commission ignored without calendar.commission). */
+function termsFromForm(ctx: MemberContext, formData: FormData) {
+  const mayCommission = can(ctx, 'calendar.commission')
+  const items = new Map<string, { bookingItemId: string; feeAed: number; commissionAed?: number | null }>()
+  const fieldErrors: Record<string, string> = {}
+  for (const [key, raw] of formData.entries()) {
+    const m = /^(fee|commission):([0-9a-f-]{36})$/.exec(key)
+    if (!m || typeof raw !== 'string') continue
+    const kind = m[1] as 'fee' | 'commission'
+    const itemId = m[2]!
+    const row = items.get(itemId) ?? { bookingItemId: itemId, feeAed: Number.NaN }
+    const amount = parseAmount(raw)
+    if (kind === 'fee') {
+      if (amount === null) fieldErrors[key] = 'calendar.errors.fee'
+      else row.feeAed = amount
+    } else if (mayCommission) {
+      if (amount === null) fieldErrors[key] = 'calendar.errors.commission'
+      else row.commissionAed = amount
+    }
+    items.set(itemId, row)
+  }
+  for (const row of items.values())
+    if (Number.isNaN(row.feeAed) && !fieldErrors[`fee:${row.bookingItemId}`])
+      fieldErrors[`fee:${row.bookingItemId}`] = 'calendar.errors.fee'
+  return { items: [...items.values()], fieldErrors }
+}
+
+/** Shared by Confirm and Fee & commission: the booking (branch access), its business day locked, then the terms. */
+async function saveTerms(slug: string, bookingId: string, formData: FormData, confirm: boolean) {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(bookingId).success) return fail('errors.generic')
+  const { items, fieldErrors } = termsFromForm(ctx, formData)
+  if (Object.keys(fieldErrors).length) return fail('errors.checkFields', fieldErrors)
+  if (!items.length) return fail('errors.generic')
+  try {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
+      const day = await orderDay(tx, bookingId)
+      await branchFor(tx, ctx, day.branchId)
+      // The fee and planned commission belong to the booking's day (its sheet row); a live sale refuses below.
+      const lock = await editDay(tx, ctx, day.branchId, day.booking.businessDate)
+      const saved = await setBookingTerms(tx, { bookingId, items })
+      const booking = confirm
+        ? await setBookingStatus(tx, bookingId, 'confirmed', undefined, { userId: ctx.user.id })
+        : saved.booking
+      return { ...saved, booking, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: confirm ? 'booking.confirmed' : 'booking.terms',
+      entity: 'booking',
+      entityId: bookingId,
+      data: { ref: r.booking.refCode, before: r.before, after: r.after, closedDay: r.lock.closed },
+    })
+    await afterDayChange(ctx, r.lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
+    return ok(
+      confirm
+        ? { key: 'calendar.results.confirmed', params: { ref: r.booking.refCode } }
+        : 'calendar.results.termsSaved',
+    )
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/** R32 Confirm: reception types the fee + the therapist's commission (prefilled), then the booking is confirmed. */
+export async function confirmBookingAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  return saveTerms(slug, bookingId, formData, true)
+}
+
+/** R32 Fee & commission before Finish (booking sheet + booking page). */
+export async function saveBookingTermsAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  return saveTerms(slug, bookingId, formData, false)
+}
+
+const detailsSchema = z.object({
+  phoneLine: orderFields.phoneLine,
+  clientType: orderFields.clientType,
+  ownLead: orderFields.ownLead,
+})
+
+/** R32 Order details: phone line (phone bookings), client type, own client. */
+export async function saveBookingDetailsAction(
+  slug: string,
+  bookingId: string,
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(bookingId).success) return fail('errors.generic')
+  const parsed = detailsSchema.safeParse(formObject(formData))
+  if (!parsed.success) return fromZod(parsed.error)
+  const v = parsed.data
+  const line = Number(v.phoneLine)
+  const phoneLine = line >= 1 && line <= 4 ? line : null
+  try {
+    const r = await withTenant(ctx.tenant.id, async (tx) => {
+      const day = await orderDay(tx, bookingId)
+      await branchFor(tx, ctx, day.branchId)
+      if (day.booking.source === 'phone' && !phoneLine && phoneLinesConfigured(ctx.tenant.settings))
+        return null
+      // Code, own client and Q are on the booking's day sheet, whatever day it was paid.
+      const lock = await editDay(tx, ctx, day.branchId, day.booking.businessDate)
+      const saved = await setBookingDetails(tx, {
+        bookingId,
+        phoneLine,
+        clientType: (v.clientType || null) as BookingClientType | null,
+        ownLead: v.ownLead === 'on',
+      })
+      return { ...saved, lock }
+    })
+    if (!r) return fail('errors.checkFields', { phoneLine: 'calendar.errors.phoneLine' })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.details',
+      entity: 'booking',
+      entityId: bookingId,
+      data: { ref: r.booking.refCode, before: r.before, after: r.after, closedDay: r.lock.closed },
+    })
+    await afterDayChange(ctx, r.lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`, 'layout')
+    return ok('calendar.results.detailsSaved')
+  } catch (e) {
+    return handle(e)
+  }
+}

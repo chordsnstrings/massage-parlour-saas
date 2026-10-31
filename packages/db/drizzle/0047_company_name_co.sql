@@ -1,0 +1,2 @@
+ALTER TABLE "platform_settings" ALTER COLUMN "company_name" SET DEFAULT 'spamanagement.co';--> statement-breakpoint
+UPDATE "platform_settings" SET "company_name" = 'spamanagement.co' WHERE "company_name" = 'spamanagement.ae';

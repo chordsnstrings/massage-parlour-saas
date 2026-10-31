@@ -1,0 +1,2090 @@
+/* Marketing site: "C · Bold product-led" look (owner, 2026-10-08), light ground with near-black bands.
+   Everything is scoped to .mkt (or html/body that contain it) so the app, admin and spa sites stay untouched.
+   In the components layer so Tailwind utilities on the same element still win. Motion: components/marketing/motion.tsx. */
+@layer components {
+  .mkt {
+    color-scheme: light;
+    /* C tokens */
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --text: #0b0b0f;
+    --muted: #3a3a44;
+    --mute: #5a5a66;
+    --grey: #f1f1f4;
+    --accent: #0f6b4b;
+    --accent-ink: #0f6b4b;
+    --accent-hover: #0a4f37;
+    --on-accent: #ffffff;
+    --lime: #d9f26a;
+    --dark: #0b0b0f;
+    --dark-card: #17171d;
+    --dark-text: #c2c2cc;
+    --line: #e6e6ec;
+    --line2: rgba(11, 11, 15, 0.14);
+    --danger: #b42318;
+    /* Noto Sans Thai after the Latin faces: it only supplies Thai glyphs (ภาษาไทย labels, the /crm demo), so typed
+       Latin names keep the same typeface in EN and TH, and only its Thai subset is fetched (mirrors crm.css). */
+    --head: "Space Grotesk Variable", "Space Grotesk", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+    --font: "DM Sans Variable", "DM Sans", "Noto Sans Thai Variable", ui-sans-serif, sans-serif;
+    --shadow: 0 30px 60px rgba(11, 11, 15, 0.18);
+    --nav-h: 73px;
+    /* names the marketing markup uses, mapped onto the C palette */
+    --ink: var(--text);
+    --ink-2: var(--muted);
+    --sage: var(--accent);
+    --sage-deep: var(--accent);
+    --sage-soft: #e3f1ea;
+    --clay: #e07b4f;
+    --clay-soft: #fbeadf;
+    --mist: #3b7dd8;
+    --mist-soft: #e4eefb;
+    --sand: #e0b23a;
+    --sand-soft: #fff4d6;
+    --plum: #7b5cd6;
+    --plum-soft: #efe9fb;
+    /* app tokens used by shared components (LogoMark), pinned to the marketing palette */
+    --subtle: var(--grey);
+    --border: var(--line);
+    --fg: var(--text);
+    --accent-fg: var(--on-accent);
+    --accent-soft: var(--sage-soft);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-feature-settings: normal;
+    font-size: 16px;
+    line-height: 1.55;
+  }
+  @media (max-width: 767px) {
+    .mkt {
+      --nav-h: 117px; /* bar + mobile link row */
+    }
+  }
+  html:has(.mkt) {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    background: #fff;
+  }
+  html:has(.mkt),
+  body:has(.mkt) {
+    overflow-x: clip;
+  }
+  body:has(.mkt) {
+    background: #fff;
+  }
+  .mkt :is(h1, h2, h3) {
+    font-family: var(--head);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+  }
+  .mkt h3 {
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+  }
+  /* keyboard focus: the marketing accent (globals.css would use the app's :root accent, which also flips in OS
+     dark mode); lime on the dark grounds — 6.5:1 on white, 5.2:1+ on the dark green / near-black */
+  .mkt :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .mkt-dark :focus-visible,
+  .mkt-demo :focus-visible,
+  .mkt-pc-spot :focus-visible {
+    outline-color: var(--lime);
+  }
+  .mkt-head {
+    font-family: var(--head);
+    letter-spacing: -0.03em;
+  }
+  .mkt-wrap {
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 24px;
+  }
+
+  /* dark band / panel: near-black ground, #17171D cards, #C2C2CC text, lime accents */
+  .mkt-dark,
+  .mkt-demo {
+    --text: #ffffff;
+    --muted: var(--dark-text);
+    --mute: #8e8e9a;
+    --surface: var(--dark-card);
+    --line: rgba(255, 255, 255, 0.08);
+    --line2: rgba(255, 255, 255, 0.18);
+    --accent-ink: var(--lime);
+    background: var(--dark);
+    color: #fff;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  /* calmer glow drifting inside dark bands (transform-only, long cycles) */
+  .mkt-dark::before,
+  .mkt-dark::after,
+  .mkt-demo::before,
+  .mkt-demo::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 70vmax;
+    height: 70vmax;
+    max-width: 1100px;
+    max-height: 1100px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(circle, rgba(15, 107, 75, 0.42), rgba(15, 107, 75, 0) 62%);
+    top: -30%;
+    left: -20%;
+    animation: mkt-glow 34s ease-in-out infinite alternate;
+    will-change: transform;
+    backface-visibility: hidden;
+  }
+  .mkt-dark::after,
+  .mkt-demo::after {
+    background: radial-gradient(
+      circle,
+      rgba(64, 196, 170, 0.2),
+      rgba(217, 242, 106, 0.06) 40%,
+      transparent 64%
+    );
+    top: auto;
+    left: auto;
+    bottom: -40%;
+    right: -25%;
+    animation-duration: 27s;
+    animation-direction: alternate-reverse;
+  }
+  @keyframes mkt-glow {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(14%, 10%, 0) scale(1.12);
+    }
+    100% {
+      transform: translate3d(28%, -6%, 0) scale(0.94);
+    }
+  }
+  /* light grey band (translucent so the drifting background still breathes through) */
+  .mkt-band {
+    background: color-mix(in srgb, var(--grey) 72%, transparent);
+  }
+
+  /* drifting aurora behind the page (drawn by MarketingMotion) */
+  .mkt-calm {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100lvh;
+    z-index: 0;
+    pointer-events: none;
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: strict;
+  }
+  /* fine grain over the aurora: dithers the soft gradients so they don't band */
+  .mkt::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.05;
+    transform: translateZ(0);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .mkt main,
+  .mkt footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* top bar: hides on scroll down, returns on scroll up (fades away by scroll where JS is blocked) */
+  .mkt-nav {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: rgba(255, 255, 255, 0.92);
+    transform: translateZ(0);
+    border-bottom: 1px solid transparent;
+    transition:
+      transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),
+      opacity 0.4s,
+      border-color 0.3s;
+  }
+  .mkt-nav.scrolled {
+    border-color: var(--line);
+  }
+  .mkt-nav.hide {
+    transform: translateY(-105%);
+    opacity: 0;
+  }
+  @supports (animation-timeline: scroll()) {
+    .mkt:not(.mkt-js) .mkt-nav {
+      animation: mkt-navaway linear both;
+      animation-timeline: scroll(root);
+      animation-range: 40px 260px;
+    }
+  }
+  @keyframes mkt-navaway {
+    to {
+      transform: translateY(-105%);
+      opacity: 0;
+    }
+  }
+  .mkt-bar {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    height: 72px;
+  }
+  .mkt-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--head);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+  .mkt-links {
+    gap: 22px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .mkt-links a {
+    transition: color 0.2s;
+  }
+  .mkt-links a:hover,
+  .mkt-links a[aria-current="page"],
+  .mkt-subnav a[aria-current="page"] {
+    color: var(--text);
+  }
+  .mkt-links a[aria-current="page"] {
+    box-shadow: inset 0 -3px 0 var(--lime);
+  }
+  .mkt-subnav {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 44px;
+    padding-inline: 24px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .mkt-subnav::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* buttons: 12px radii, bold fills */
+  .mkt-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 54px;
+    padding: 0 26px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 16px;
+    white-space: nowrap;
+    transition:
+      transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+      box-shadow 0.25s,
+      background-color 0.25s,
+      color 0.25s;
+  }
+  .mkt-btn svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    transition: transform 0.25s;
+  }
+  .mkt-btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 12px 28px -12px rgba(15, 107, 75, 0.7);
+  }
+  .mkt-btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-2px);
+  }
+  .mkt-btn-ghost {
+    background: var(--grey);
+    color: var(--text);
+  }
+  .mkt-btn-ghost:hover {
+    background: #e6e6ec;
+    transform: translateY(-2px);
+  }
+  .mkt-btn-dark {
+    background: var(--dark);
+    color: #fff;
+  }
+  .mkt-btn-dark:hover {
+    background: #26262e;
+  }
+  .mkt-btn-sm {
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-size: 15px;
+  }
+  .mkt-link {
+    transition: color 0.25s;
+  }
+  .mkt-link:hover {
+    color: var(--accent-hover);
+  }
+
+  /* sections and headings */
+  .mkt-sec {
+    padding-block: 104px;
+    position: relative;
+  }
+  /* kicker: lime highlight chip */
+  .mkt-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--lime);
+    color: #0b0b0f;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .mkt-h1 {
+    font-size: clamp(44px, 7vw, 92px);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+  }
+  .mkt-h2 {
+    text-wrap: balance;
+    font-size: clamp(32px, 4.6vw, 54px);
+    margin-top: 18px;
+  }
+  .mkt-lead {
+    color: var(--muted);
+    font-size: 18px;
+    max-width: 620px;
+    margin-top: 16px;
+  }
+  .mkt-shead {
+    text-align: center;
+  }
+  .mkt-shead .mkt-lead,
+  .mkt-shead .mkt-h2 {
+    margin-inline: auto;
+  }
+
+  /* hero */
+  .mkt-hero {
+    min-height: min(calc(100svh - var(--nav-h)), 820px);
+    display: flex;
+    align-items: center;
+    padding: 56px 0 72px;
+    position: relative;
+  }
+  .mkt-hero > * {
+    width: 100%;
+  }
+  .mkt-hero .mkt-wrap {
+    position: relative;
+    z-index: 1;
+  }
+  .mkt-hsub {
+    font-size: clamp(17px, 1.6vw, 19px);
+    color: var(--muted);
+    max-width: 640px;
+    margin-top: 22px;
+  }
+  .mkt-ctas {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 30px;
+  }
+  .mkt-hnotes {
+    margin-top: 24px;
+    font-size: 14px;
+    color: var(--mute);
+  }
+  /* hero depth layers: abstract product fragments floating around the headline (parallax in MarketingMotion) */
+  .mkt-deco {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  /* product visuals: framed in a dark device bezel; tilted in 3D, straightening as they scroll in (MarketingMotion) */
+  .mkt-stage {
+    position: relative;
+  }
+  .mkt-tilt {
+    transform-origin: 50% 35%;
+    will-change: transform;
+  }
+  .mkt-device {
+    border-radius: 20px;
+    background: var(--dark);
+    padding: 14px;
+    box-shadow:
+      var(--shadow),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+  .mkt-screen {
+    border-radius: 12px;
+    background: #fff;
+    color: #0b0b0f;
+    overflow: hidden;
+  }
+  .mkt-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 12px;
+  }
+  .mkt-dots > span:not(.mkt-url) {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3a3a44;
+  }
+  .mkt-url {
+    margin-inline-start: 10px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--dark-card);
+    color: var(--dark-text);
+    font-size: 12px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .mkt-device {
+      padding: 8px;
+      border-radius: 16px;
+    }
+    .mkt-screen {
+      border-radius: 10px;
+    }
+    .mkt-dots {
+      padding: 2px 4px 8px;
+    }
+  }
+
+  /* cards */
+  .mkt-tile,
+  .mkt-card {
+    position: relative;
+    padding: 26px;
+    border-radius: 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    transition:
+      border-color 0.3s,
+      box-shadow 0.3s,
+      background-color 0.3s;
+  }
+  .mkt-card:hover {
+    border-color: var(--text);
+    box-shadow: 0 24px 48px -24px rgba(11, 11, 15, 0.35);
+  }
+  .mkt-dark :is(.mkt-tile, .mkt-card) {
+    border-color: transparent;
+  }
+  .mkt-dark .mkt-card:hover {
+    border-color: rgba(217, 242, 106, 0.45);
+    background: #1d1d25;
+  }
+  .mkt-tile h3,
+  .mkt-card h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+  .mkt-tile p,
+  .mkt-card p {
+    color: var(--muted);
+    font-size: 15px;
+  }
+  /* lime bar on top of a card */
+  .mkt-lbar {
+    display: block;
+    width: 36px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--lime);
+    margin-bottom: 18px;
+  }
+  .mkt-num {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--lime);
+    color: #0b0b0f;
+    font-family: var(--head);
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .mkt-mi {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: var(--lime);
+    color: #0b0b0f;
+    margin-bottom: 20px;
+  }
+  .mkt-mi svg {
+    width: 26px;
+    height: 26px;
+  }
+  .mkt-ben {
+    padding: 22px 24px;
+    border-radius: 16px;
+    border: 1px solid var(--line);
+    border-inline-start: 6px solid var(--lime);
+    background: var(--surface);
+  }
+  .mkt-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--grey);
+    font-size: 14px;
+    font-weight: 500;
+    transition:
+      background-color 0.25s,
+      color 0.25s;
+  }
+  .mkt-band .mkt-chip {
+    background: #fff;
+  }
+  a.mkt-chip:hover {
+    background: var(--dark);
+    color: #fff;
+  }
+  .mkt-check {
+    color: var(--accent-ink);
+  }
+
+  /* FAQ */
+  .mkt-faq {
+    display: grid;
+    gap: 12px;
+  }
+  .mkt-faq details {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    padding: 0 24px;
+    transition: border-color 0.3s;
+  }
+  .mkt-faq details[open] {
+    border-color: var(--text);
+  }
+  .mkt-faq summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 0;
+    font-family: var(--head);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .mkt-faq summary::-webkit-details-marker {
+    display: none;
+  }
+  .mkt-faq summary > span {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--grey);
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1;
+    transition:
+      transform 0.3s,
+      background-color 0.3s;
+  }
+  .mkt-faq details[open] summary > span {
+    transform: rotate(45deg);
+    background: var(--lime);
+  }
+  .mkt-faq details p {
+    color: var(--muted);
+    padding-bottom: 20px;
+  }
+
+  /* closing call to action: near-black panel */
+  .mkt-demo {
+    padding: clamp(32px, 6vw, 72px);
+    border-radius: 24px;
+  }
+  .mkt-demo .mkt-btn-ghost {
+    background: var(--dark-card);
+    color: #fff;
+  }
+  .mkt-demo .mkt-btn-ghost:hover {
+    background: #26262e;
+  }
+
+  /* footer: brand block + five link columns (nav "Footer"), divider, bottom line */
+  .mkt-foot {
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.82);
+    padding: 64px 0 28px;
+    color: var(--mute);
+    font-size: 14px;
+  }
+  .mkt-fgrid {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 56px;
+  }
+  .mkt-ftag {
+    margin-top: 18px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .mkt-fdesc {
+    margin-top: 6px;
+    line-height: 1.6;
+  }
+  .mkt-fnav {
+    display: grid;
+    grid-template-columns: repeat(5, max-content);
+    justify-content: space-between;
+    gap: 32px 28px;
+  }
+  .mkt-foot .mkt-fhead {
+    margin-bottom: 14px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .mkt-fnav ul {
+    display: grid;
+    gap: 2px;
+  }
+  .mkt-fnav a {
+    display: inline-block;
+    padding-block: 4px;
+    font-size: 14px;
+    line-height: 1.4;
+    transition: color 0.2s;
+  }
+  .mkt-fnav a:hover {
+    color: var(--accent);
+  }
+  .mkt-fnav a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+  .mkt-fbot {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px 24px;
+    flex-wrap: wrap;
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+  /* footer lines never wrap (owner 2026-10-09): columns size to their longest label */
+  .mkt-fline,
+  .mkt-ftag,
+  .mkt-fnav a {
+    display: block;
+    white-space: nowrap;
+  }
+
+  /* soft tints for small accents inside cards and mocks */
+  .tint-sage {
+    background: var(--sage-soft);
+  }
+  .tint-clay {
+    background: var(--clay-soft);
+  }
+  .tint-mist {
+    background: var(--mist-soft);
+  }
+  .tint-sand {
+    background: var(--sand-soft);
+  }
+  .tint-plum {
+    background: var(--plum-soft);
+  }
+  .mkt-dark :is(.tint-sage, .tint-clay, .tint-mist, .tint-sand, .tint-plum) {
+    color: #0b0b0f;
+  }
+  .dot-sage {
+    background: var(--sage);
+  }
+  .dot-clay {
+    background: var(--clay);
+  }
+  .dot-mist {
+    background: var(--mist);
+  }
+  .dot-sand {
+    background: var(--sand);
+  }
+  .dot-plum {
+    background: var(--plum);
+  }
+
+  /* load-in for hero copy (not scroll-driven) */
+  @keyframes mkt-fin {
+    from {
+      opacity: 0;
+      transform: translateY(26px);
+    }
+  }
+  .mkt-rise {
+    animation: mkt-fin 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--d, 0) * 0.1s);
+  }
+  [data-depth] {
+    will-change: translate;
+  }
+  .mkt-r3 {
+    transform-origin: 50% 100%;
+    will-change: transform, opacity;
+  }
+  @keyframes mkt-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  .mkt-pulse {
+    animation: mkt-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* in-page anchors land below the top bar */
+  .mkt [id] {
+    scroll-margin-top: 84px;
+  }
+
+  @media (max-width: 1099px) {
+    .mkt-fgrid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 36px;
+    }
+    .mkt-fnav {
+      grid-template-columns: repeat(3, max-content);
+      justify-content: start;
+      column-gap: 56px;
+    }
+  }
+  @media (max-width: 640px) {
+    .mkt-foot {
+      padding-top: 48px;
+    }
+    .mkt-fnav {
+      grid-template-columns: repeat(2, max-content);
+      gap: 28px 32px;
+    }
+  }
+  @media (max-width: 640px) {
+    .mkt-wrap {
+      padding-inline: 16px;
+    }
+    .mkt-subnav {
+      padding-inline: 16px;
+    }
+    .mkt-sec {
+      padding-block: 80px;
+    }
+    .mkt-ctas .mkt-btn {
+      width: 100%;
+    }
+    .mkt-tile,
+    .mkt-card {
+      padding: 22px;
+    }
+  }
+
+  /* ---- plans (home + /pricing): components/marketing/plan-cards.tsx ---------------------------------------- */
+  /* One column on phones (Premium first); from 768px two columns whose rows are shared (subgrid), so name,
+     description, price, setup line, CTA and list line up across both cards whatever the DB text length.
+     --rows = rows per card (set by the component). */
+  .mkt-plans {
+    display: grid;
+    gap: 20px;
+  }
+  @media (min-width: 768px) {
+    .mkt-plans {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 18px;
+      row-gap: 0;
+    }
+    .mkt-plans > .mkt-pc {
+      display: grid;
+      grid-template-rows: subgrid;
+      grid-row: span var(--rows, 6);
+      align-content: start;
+    }
+    /* the spotlight: Premium stands 16px proud of Standard at top and bottom — margins plus matching padding,
+       never a transform ([data-rise] owns transform and opacity) */
+    .mkt-plans > .mkt-pc:not(.mkt-pc-spot) {
+      margin-block: 16px;
+    }
+    .mkt-plans > .mkt-pc-spot {
+      padding-block: calc(var(--pc-pad) + 16px);
+    }
+  }
+  .mkt-pc {
+    --pc-pad: 30px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding: var(--pc-pad);
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow:
+      0 1px 2px rgba(11, 11, 15, 0.04),
+      0 22px 44px -30px rgba(11, 11, 15, 0.28);
+  }
+  .mkt-pc > * {
+    min-width: 0;
+  }
+  /* Premium: dark-green feature card (accent into accent mixed with --dark), lime top edge + corner glow.
+     Text tones keep 4.5:1+ on the lightest green (the glow stays in the corner, away from the price). */
+  .mkt-pc-spot {
+    --text: var(--on-accent);
+    --muted: color-mix(in srgb, var(--on-accent) 90%, transparent);
+    --mute: color-mix(in srgb, var(--on-accent) 84%, transparent);
+    --line: color-mix(in srgb, var(--on-accent) 16%, transparent);
+    --accent-ink: var(--lime);
+    color: var(--text);
+    border-color: transparent;
+    isolation: isolate;
+    overflow: hidden;
+    background: linear-gradient(
+      165deg,
+      var(--accent) 0%,
+      color-mix(in srgb, var(--accent) 50%, var(--dark)) 80%
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--lime) 34%, transparent),
+      0 40px 70px -34px color-mix(in srgb, var(--accent-hover) 75%, transparent),
+      0 14px 28px -18px rgba(11, 11, 15, 0.35);
+  }
+  .mkt-pc-spot::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 320px;
+    height: 320px;
+    top: -160px;
+    inset-inline-end: -160px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(circle, color-mix(in srgb, var(--lime) 26%, transparent), transparent 62%);
+  }
+  .mkt-pc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mkt .mkt-pc-name {
+    font-size: 24px;
+    letter-spacing: -0.02em;
+  }
+  .mkt-pc-tag {
+    flex-shrink: 0;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--grey);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .mkt-pc-spot .mkt-pc-tag {
+    background: var(--lime);
+    color: var(--dark);
+  }
+  .mkt-pc-desc {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  /* price: small top-aligned "AED", a large tabular amount sized to the card width (cqi of the price row
+     itself: a containment on the card would stop it being a subgrid), then "/ month" */
+  .mkt-price {
+    --pn: clamp(40px, 16cqi, 64px);
+    container-type: inline-size;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin-top: 22px;
+    color: var(--text);
+    font-family: var(--head);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+  .mkt-price-cur {
+    align-self: flex-start;
+    margin-top: calc(var(--pn) * 0.1);
+    font-size: 17px;
+    letter-spacing: 0;
+  }
+  .mkt-price-num {
+    font-size: var(--pn);
+  }
+  .mkt-price-per {
+    margin-inline-start: 6px;
+    color: var(--mute);
+    font-family: var(--font);
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  /* setup line: its parts wrap as whole pieces, and the "·" before a piece that starts a line is clipped */
+  .mkt-psub {
+    margin-top: 12px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .mkt-psub-in {
+    display: flex;
+    flex-wrap: wrap;
+    margin-inline-start: -1.1em;
+  }
+  .mkt-psub-in > *::before {
+    /* fallback first: engines without alt text (Safari < 17.4, Firefox < 128) drop the second declaration */
+    content: "·";
+    /* biome-ignore lint/suspicious/noDuplicateProperties: deliberate fallback for the alt-text syntax */
+    content: "·" / "";
+    display: inline-block;
+    width: 1.1em;
+    text-align: center;
+  }
+  .mkt-psub strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  /* the CTA carries the DB plan name: it wraps (balanced) instead of overflowing the card; full width, so a
+     16px side padding is enough and keeps "Apply for Standard" on one line in the 1024px home split */
+  .mkt-pc .mkt-btn {
+    width: 100%;
+    min-height: 52px;
+    margin-top: 24px;
+    padding: 12px 16px;
+    white-space: normal;
+    text-align: center;
+    text-wrap: balance;
+  }
+  .mkt-btn-lime {
+    background: var(--lime);
+    color: var(--dark);
+    box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--lime) 65%, transparent);
+  }
+  .mkt-btn-lime:hover {
+    background: color-mix(in srgb, var(--lime) 82%, var(--bg));
+    transform: translateY(-2px);
+  }
+  /* "what you get" list (rows from PLAN_FEATURES, groups from FEATURE_LABELS) */
+  .mkt-pl-box {
+    display: flex;
+    flex-direction: column;
+    margin-top: 26px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+  .mkt-pl-h {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .mkt .mkt-pl-g {
+    margin-top: 18px;
+    color: var(--accent-ink);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+  .mkt-pl {
+    display: grid;
+    gap: 9px;
+    margin-top: 14px;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .mkt-pl-g + .mkt-pl {
+    margin-top: 9px;
+  }
+  .mkt-pl li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .mkt-pl-box .mkt-ic {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--sage-soft);
+    color: var(--accent);
+  }
+  .mkt-ic svg {
+    width: 12px;
+    height: 12px;
+  }
+  .mkt-pc-spot .mkt-pl-box .mkt-ic {
+    background: color-mix(in srgb, var(--lime) 16%, transparent);
+    color: var(--lime);
+  }
+  /* link row: 44px tap target, the negative margin keeps the 9px list rhythm */
+  .mkt-pl-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    margin-block: -12px;
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .mkt-pl-box .mkt-pl-more .mkt-ic {
+    background: transparent;
+    border: 1.5px dashed currentColor;
+    color: inherit;
+  }
+  /* on the dark-green card the generic --accent-hover (#0a4f37) would sink the lime link to ~1.3:1; white keeps
+     6.5:1+ (don't override --accent-hover there: the card's shadow uses it) */
+  .mkt-pc-spot .mkt-link:hover {
+    color: var(--on-accent);
+  }
+  /* closing link row ("9 more spa tools"): at the foot of the shared list row, so both cards end level */
+  .mkt-pl-end {
+    display: flex;
+    margin-top: auto;
+    padding-top: 9px;
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .mkt-plans:not(.mkt-plans-compact) .mkt-pl-end {
+    padding-top: 18px;
+  }
+  .mkt-pl li.is-strong {
+    font-weight: 600;
+  }
+  .mkt-pl li.is-off {
+    color: var(--mute);
+  }
+  .mkt-pl li.is-off .mkt-ic {
+    background: var(--grey);
+    color: var(--mute);
+  }
+  /* home: compact cards */
+  .mkt-plans-compact .mkt-pc {
+    --pc-pad: 26px;
+  }
+  .mkt-plans-compact .mkt-price {
+    --pn: clamp(36px, 15cqi, 48px);
+    margin-top: 20px;
+  }
+  .mkt-plans-compact .mkt-psub {
+    font-size: 14.5px;
+  }
+  .mkt-plans-compact .mkt-pl-box {
+    margin-top: 22px;
+    padding-top: 20px;
+  }
+  .mkt-plans-compact .mkt-pl {
+    margin-top: 0;
+  }
+  .mkt-plans-compact .mkt-pc .mkt-btn {
+    margin-top: 22px;
+  }
+  /* home: split section (copy left, cards right from 1024px) */
+  .mkt-plx {
+    display: grid;
+    gap: 44px;
+  }
+  .mkt-plx-copy {
+    max-width: 40rem;
+  }
+  .mkt-plx .mkt-lead {
+    font-size: 17px;
+    text-wrap: pretty;
+  }
+  .mkt-plx-2 {
+    color: var(--accent);
+  }
+  @media (min-width: 1024px) {
+    .mkt-plx {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 8fr);
+      gap: 48px;
+      align-items: center;
+    }
+    .mkt-plx .mkt-h2 {
+      font-size: clamp(34px, 3.2vw, 40px);
+    }
+  }
+  .mkt-pnotes {
+    display: grid;
+    gap: 10px;
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .mkt-pnotes li,
+  .mkt-assure li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mkt-pnotes svg,
+  .mkt-assure svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+  }
+  .mkt-plink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin-top: 12px;
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .mkt-plink svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* /pricing: jump pills under the lead, assurance line under the cards */
+  .mkt-jump {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line2);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    font-size: 15px;
+    font-weight: 600;
+    transition:
+      border-color 0.25s,
+      background-color 0.25s;
+  }
+  .mkt-jump:hover {
+    border-color: var(--text);
+    background: var(--bg);
+  }
+  .mkt-assure {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 28px;
+    margin-top: 34px;
+    color: var(--muted);
+    font-size: 14.5px;
+  }
+  /* /pricing: comparison table — grouped rows, Premium column tinted */
+  .mkt-cmp {
+    overflow-x: auto;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .mkt-cmp table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .mkt-cmp :is(th, td) {
+    padding: 13px 24px;
+    border-bottom: 1px solid var(--line);
+    text-align: start;
+  }
+  .mkt-cmp tbody:last-child tr:last-child > * {
+    border-bottom: 0;
+  }
+  .mkt-cmp thead th {
+    padding-block: 18px;
+    vertical-align: bottom;
+  }
+  .mkt-cmp thead th:not(:first-child),
+  .mkt-cmp td {
+    width: 9rem;
+    text-align: center;
+  }
+  .mkt-cmp tbody th {
+    font-weight: 400;
+  }
+  .mkt-cmp-plan {
+    display: block;
+    font-family: var(--head);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .mkt-cmp-price {
+    display: block;
+    margin-top: 3px;
+    color: var(--mute);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .mkt-cmp .is-spot {
+    background: color-mix(in srgb, var(--sage-soft) 70%, transparent);
+  }
+  .mkt-cmp thead .is-spot {
+    box-shadow: inset 0 3px 0 var(--accent);
+  }
+  .mkt-cmp .mkt-grp th {
+    padding-block: 12px 10px;
+    background: color-mix(in srgb, var(--grey) 80%, transparent);
+    color: var(--mute);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+  .mkt-cmp td svg {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+  }
+  .mkt-cmp .is-no {
+    color: var(--mute);
+  }
+  @media (max-width: 640px) {
+    .mkt-pc {
+      padding: 24px 22px;
+    }
+    .mkt-assure {
+      flex-direction: column;
+      align-items: flex-start;
+      width: fit-content;
+      margin-inline: auto;
+    }
+    .mkt-cmp table {
+      font-size: 14px;
+    }
+    .mkt-cmp :is(th, td) {
+      padding: 12px 8px;
+    }
+    .mkt-cmp :is(tbody th, thead th:first-child) {
+      padding-inline-start: 16px;
+    }
+    .mkt-cmp thead th:not(:first-child),
+    .mkt-cmp td {
+      width: 4.75rem;
+    }
+    .mkt-cmp-plan {
+      font-size: 15px;
+    }
+    .mkt-cmp-price {
+      display: none;
+    }
+  }
+
+  /* (kept last: more specific than the generic element rules above) */
+  .mkt-btn:hover svg {
+    transform: translateX(3px);
+  }
+  .mkt-frag {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 16px;
+    will-change: translate;
+  }
+  .mkt-frag i {
+    display: block;
+    height: 7px;
+    border-radius: 4px;
+  }
+  .mkt-frag.f1 {
+    left: 4%;
+    top: 16%;
+    padding: 16px 18px;
+    background: var(--dark);
+    box-shadow: var(--shadow);
+    rotate: -7deg;
+  }
+  .mkt-frag.f1 b {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--lime);
+  }
+  .mkt-lines {
+    display: grid;
+    gap: 8px;
+  }
+  .mkt-frag.f2 {
+    right: 9%;
+    top: 12%;
+    width: 64px;
+    height: 64px;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--lime);
+    color: #0b0b0f;
+    rotate: 10deg;
+  }
+  .mkt-frag.f2 svg {
+    width: 28px;
+    height: 28px;
+  }
+  .mkt-frag.f3 {
+    right: 3%;
+    bottom: 16%;
+    padding: 14px;
+    background: #fff;
+    border: 1px solid var(--line);
+    box-shadow: 0 24px 50px -18px rgba(11, 11, 15, 0.25);
+    rotate: 6deg;
+  }
+  .mkt-frag.f3 b {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--sage-soft);
+    border-inline-start: 4px solid var(--accent);
+  }
+  .mkt-frag.f4 {
+    left: 10%;
+    bottom: 14%;
+    width: 52px;
+    height: 52px;
+    justify-content: center;
+    border-radius: 14px;
+    background: var(--accent);
+    rotate: -12deg;
+  }
+  .mkt-frag.f4 i {
+    width: 22px;
+    background: #fff;
+  }
+  @media (max-width: 1023px) {
+    .mkt-frag.f1,
+    .mkt-frag.f3 {
+      display: none;
+    }
+    .mkt-frag.f2 {
+      top: 4%;
+      right: 4%;
+      width: 44px;
+      height: 44px;
+    }
+    .mkt-frag.f4 {
+      bottom: 4%;
+      left: 5%;
+      width: 38px;
+      height: 38px;
+    }
+  }
+
+  /* legal pages (components/marketing/legal.tsx) */
+  .mkt-prose {
+    max-width: 720px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.65;
+  }
+  .mkt-prose h2 {
+    color: var(--text);
+    font-size: 22px;
+    margin-top: 44px;
+    margin-bottom: 10px;
+  }
+  .mkt-prose ul {
+    list-style: disc;
+    padding-inline-start: 22px;
+  }
+  .mkt-prose p + p,
+  .mkt-prose p + ul,
+  .mkt-prose ul + p {
+    margin-top: 12px;
+  }
+  .mkt-prose li + li {
+    margin-top: 6px;
+  }
+  .mkt-prose strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .mkt-prose-meta {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    color: var(--mute);
+  }
+
+  /* /crm: EN/TH dashboard demo (components/marketing/crm-demo.tsx) */
+  .crm-demo-seg {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .crm-demo-seg button {
+    min-height: 44px;
+    padding: 8px 22px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    transition:
+      background-color 0.2s,
+      color 0.2s;
+  }
+  .crm-demo-seg button:hover {
+    background: var(--grey);
+  }
+  .crm-demo-seg button[aria-pressed="true"] {
+    background: var(--text);
+    color: #fff;
+  }
+  /* the real CRM look (crm.css): mint/cream surfaces, dark-green primary, lime highlights */
+  .crm-demo {
+    --line: rgb(17 40 28 / 0.08);
+    --muted: #59645d;
+    --mute: #59645d;
+    --text: #111a15;
+    color: var(--text);
+    animation: crm-demo-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes crm-demo-in {
+    from {
+      opacity: 0.35;
+      transform: translateY(6px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .crm-demo {
+      animation: none;
+    }
+    .crm-demo-seg button {
+      transition: none;
+    }
+  }
+  .crm-demo-side {
+    padding: 14px 10px;
+    border-inline-end: 1px solid var(--line);
+    background: #f5f8f1;
+  }
+  .crm-demo-main {
+    background: #f8faf5;
+  }
+  .crm-demo-title {
+    font-family: var(--head);
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+  .crm-demo-num {
+    font-family: var(--head);
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  @media (max-width: 639px) {
+    .crm-demo-side {
+      border-inline-end: 0;
+      border-bottom: 1px solid var(--line);
+    }
+  }
+  .crm-demo-group {
+    padding: 8px 8px 4px;
+    font-size: 10.5px;
+    line-height: 18px; /* fits the 12px Thai label too, so the demo keeps its height on every toggle */
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mute);
+  }
+  .crm-demo:lang(th) .crm-demo-group {
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+  .crm-demo-strip > li + li {
+    margin-top: 2px;
+  }
+  /* phones: the menu is one row that fades out at the edge, so EN and TH keep the same height */
+  @media (max-width: 639px) {
+    .crm-demo-strip {
+      display: flex;
+      gap: 4px;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, #000 82%, transparent);
+    }
+    .crm-demo-strip > li {
+      flex: none;
+    }
+    .crm-demo-strip > li + li {
+      margin-top: 0;
+    }
+  }
+  .crm-demo-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .crm-demo-ico {
+    flex: none;
+    width: 15px;
+    height: 15px;
+  }
+  /* active item: lime wash + a short green bar at the start edge */
+  .crm-demo-item[data-active] {
+    background: color-mix(in srgb, var(--lime) 46%, #fff);
+    color: #0a4f37;
+    font-weight: 600;
+  }
+  .crm-demo-item[data-active]::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block: 7px;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .crm-demo-item[data-active] .crm-demo-ico {
+    color: var(--accent);
+  }
+  .crm-demo-badge {
+    flex-shrink: 0;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--lime);
+    box-shadow: inset 0 0 0 1px rgb(17 40 28 / 0.08);
+    color: #1d2a06;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+  }
+  .crm-demo-mini {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--line);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .crm-demo-opt {
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: var(--mute);
+  }
+  .crm-demo-opt[data-on] {
+    background: var(--text);
+    color: #fff;
+  }
+  .crm-demo-card {
+    min-width: 0;
+    padding: 14px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    box-shadow:
+      0 1px 2px rgb(17 40 28 / 0.04),
+      0 6px 20px rgb(17 40 28 / 0.05);
+  }
+  .crm-demo-kpi {
+    padding: 10px 12px;
+  }
+  .crm-demo-h {
+    font-family: var(--head);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  /* booking status pills (crm.css info / ok / warn) */
+  .crm-demo-st {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+  .crm-demo-st[data-tone="checked_in"] {
+    background: rgb(27 102 132 / 0.1);
+    color: #1b6684;
+  }
+  .crm-demo-st[data-tone="confirmed"] {
+    background: rgb(32 160 92 / 0.12);
+    color: #13773f;
+  }
+  .crm-demo-st[data-tone="pending"] {
+    background: rgb(245 184 46 / 0.2);
+    color: #8a5a00;
+  }
+  .crm-demo-typed {
+    text-decoration: underline dotted var(--accent);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+  }
+  .crm-demo-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .crm-demo-pill[data-on] {
+    background: var(--sage-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .crm-demo-cta {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #17825b, #0b5539);
+    color: #fff;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* Home "Spa CRM" showcase (components/marketing/crm-showcase.tsx, PLAN §18.8). The stage owns the scroll timeline
+     (--mkt-show) and is never transformed itself; the dashboard lies back in 3D and is flat once the stage centre
+     reaches the viewport centre; the cards drift at their own depth (layered parallax) and are at rest at that same
+     moment. Amounts are unitless custom properties so the JS fallback reads the same numbers. Transform/opacity only,
+     so the layout (and CLS) never changes. prefers-reduced-motion: no animation at all → flat, static layout. */
+  .mkt-show {
+    overflow-x: clip;
+  }
+  .mkt-show-ben {
+    display: grid;
+    gap: 12px;
+    max-width: 960px;
+    margin: 30px auto 0;
+    text-align: start;
+  }
+  @media (min-width: 768px) {
+    .mkt-show-ben {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+    }
+  }
+  .mkt-show-head {
+    view-timeline: --mkt-show-head block;
+  }
+  .mkt-show-stage {
+    position: relative;
+    display: grid;
+    gap: 14px;
+    margin-top: 36px;
+    perspective: 1400px;
+    perspective-origin: 50% 20%;
+    view-timeline: --mkt-show block;
+  }
+  /* soft mint/lime glow behind the dashboard (static) */
+  .mkt-show-stage::before {
+    content: "";
+    position: absolute;
+    inset: -8% -4% 10%;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side,
+      rgb(217 242 106 / 0.42),
+      rgb(156 207 179 / 0.22) 55%,
+      rgb(156 207 179 / 0) 100%
+    );
+  }
+  /* the dashboard's own timeline (--mkt-dash): its wrapper, never transformed */
+  .mkt-show-dwrap {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    view-timeline: --mkt-dash block;
+  }
+  .mkt-show-dash {
+    --show-rx: 24;
+    --show-rz: -4;
+    --show-sc: 0.9;
+    --show-ty: 70;
+    --show-end: 50; /* flat from this cover % on (its centre at the viewport centre) */
+    margin: 0;
+    transform-origin: 50% 0%;
+  }
+  .mkt-show-slot {
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+    view-timeline: --mkt-slot block;
+  }
+  .mkt-show-card {
+    --show-rx: 8;
+    --show-y0: 28;
+    --show-y1: -12;
+    --show-z: 0;
+    padding: 12px 14px 14px;
+    border-radius: 16px;
+    background: #fff;
+    border: 1px solid rgb(17 40 28 / 0.08);
+    box-shadow:
+      0 2px 4px rgb(17 40 28 / 0.05),
+      0 24px 48px -16px rgb(17 40 28 / 0.3);
+    color: #111a15;
+  }
+  .mkt-show-cap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 9px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .mkt-show-ui {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .mkt-show-slotrow {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--mute);
+  }
+  .mkt-show-booked {
+    padding: 6px 9px;
+    border-radius: 9px;
+    border-inline-start: 3px solid var(--accent);
+    background: #dfefe5;
+    color: #111a15;
+    font-size: 12px;
+  }
+  .mkt-show-clash {
+    padding: 6px 9px;
+    border-radius: 9px;
+    border: 1.5px dashed #b93b1b;
+    background: rgb(226 84 48 / 0.08);
+    color: #b93b1b;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .mkt-show-wa {
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: #25d366;
+    color: #06361b;
+    font-weight: 700;
+    text-align: center;
+  }
+  @media (min-width: 560px) and (max-width: 1023px) {
+    .mkt-show-stage {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .mkt-show-dwrap {
+      grid-column: 1 / -1;
+    }
+  }
+  /* phones: a third of the 3D */
+  @media (max-width: 767px) {
+    .mkt-show-stage {
+      perspective: 900px;
+    }
+    .mkt-show-dash {
+      --show-rx: 12;
+      --show-rz: -2;
+      --show-sc: 0.95;
+      --show-ty: 24;
+      --show-end: 36; /* taller than the screen: flat once its top is in the upper third */
+    }
+  }
+  /* wide: the cards float over the dashboard's edges at four depths */
+  @media (min-width: 1024px) {
+    .mkt-show-stage {
+      display: block;
+      padding-inline: 100px;
+      margin-block: 44px 96px; /* the earnings card hangs ~70px below the device */
+    }
+    .mkt-show-slot {
+      position: absolute;
+      width: 236px;
+    }
+    .mkt-show-card {
+      --show-rx: 16;
+    }
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: 0;
+      top: 26%;
+    }
+    .mkt-show-slot[data-slot="cal"] .mkt-show-card {
+      --show-y0: 150;
+      --show-y1: -100;
+      --show-z: 70;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: 0;
+      top: 5%;
+    }
+    .mkt-show-slot[data-slot="pos"] .mkt-show-card {
+      --show-y0: 90;
+      --show-y1: -60;
+      --show-z: 30;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: 2%;
+      bottom: 2%;
+    }
+    .mkt-show-slot[data-slot="wa"] .mkt-show-card {
+      --show-y0: 210;
+      --show-y1: -140;
+      --show-z: 100;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: 1%;
+      bottom: -12%; /* below the till's total, over the device's corner */
+    }
+    .mkt-show-slot[data-slot="earn"] .mkt-show-card {
+      --show-y0: 120;
+      --show-y1: -80;
+      --show-z: 50;
+    }
+  }
+  @media (min-width: 1200px) {
+    .mkt-show-stage {
+      padding-inline: 128px;
+    }
+    .mkt-show-slot {
+      width: 240px;
+    }
+  }
+  /* room beside the page column: the cards stick further out and cover less of the dashboard */
+  @media (min-width: 1280px) {
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: -40px;
+      top: 30%;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: -20px;
+      bottom: -4%;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: -40px;
+      top: 2%;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: -28px;
+    }
+  }
+  @media (min-width: 1440px) {
+    .mkt-show-slot[data-slot="cal"] {
+      inset-inline-start: -96px;
+    }
+    .mkt-show-slot[data-slot="wa"] {
+      inset-inline-start: -72px;
+    }
+    .mkt-show-slot[data-slot="pos"] {
+      inset-inline-end: -96px;
+    }
+    .mkt-show-slot[data-slot="earn"] {
+      inset-inline-end: -84px;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+      .mkt-show-in {
+        animation: mkt-show-rise linear both;
+        animation-timeline: --mkt-show-head;
+        animation-range: entry 10% entry 100%;
+      }
+      .mkt-show-dash {
+        will-change: transform;
+        animation: mkt-show-dash cubic-bezier(0.45, 0, 0.55, 1) both;
+        animation-timeline: --mkt-dash;
+        animation-range: cover 0% cover calc(var(--show-end) * 1%);
+      }
+      /* stacked (< 1024px): each card on its own slot's timeline; floating: all on the stage's */
+      .mkt-show-card {
+        will-change: transform, opacity;
+        animation: mkt-show-float linear both;
+        animation-timeline: --mkt-slot;
+        animation-range: cover 0% cover 100%;
+      }
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+    @supports (animation-timeline: view()) {
+      .mkt-show-card {
+        animation-timeline: --mkt-show;
+      }
+    }
+  }
+  @keyframes mkt-show-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 40px, 0);
+    }
+  }
+  @keyframes mkt-show-dash {
+    from {
+      transform: translate3d(0, calc(var(--show-ty) * 1px), 0) rotateX(calc(var(--show-rx) * 1deg))
+        rotateZ(calc(var(--show-rz) * 1deg)) scale(var(--show-sc));
+    }
+    to {
+      transform: none;
+    }
+  }
+  @keyframes mkt-show-float {
+    0% {
+      opacity: 0;
+      transform: translate3d(0, calc(var(--show-y0) * 1px), calc(var(--show-z) * 1px))
+        rotateX(calc(var(--show-rx) * 1deg));
+    }
+    22% {
+      opacity: 1;
+    }
+    50% {
+      transform: none;
+    }
+    100% {
+      transform: translate3d(0, calc(var(--show-y1) * 1px), 0);
+    }
+  }
+
+  /* contact enquiry form (PLAN §18.4) */
+  .mkt-enq {
+    padding: 30px;
+  }
+  .mkt-enq:hover {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  @media (max-width: 639px) {
+    .mkt-enq {
+      padding: 22px 18px;
+    }
+  }
+  .mkt-enq label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .mkt-input {
+    display: block;
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 14px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 16px; /* no zoom on iOS */
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
+  }
+  textarea.mkt-input {
+    min-height: 150px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .mkt-input::placeholder {
+    color: var(--mute);
+    opacity: 0.8;
+  }
+  .mkt-input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(15, 107, 75, 0.18);
+  }
+  .mkt-input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .mkt-enq .mkt-enq-hint {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--mute);
+  }
+  .mkt-enq .mkt-enq-err {
+    margin-top: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--danger);
+  }
+  .mkt-enq .mkt-enq-alert {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: #fdecea;
+    color: var(--danger);
+    font-size: 14px;
+  }
+  .mkt-enq-hp {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+}

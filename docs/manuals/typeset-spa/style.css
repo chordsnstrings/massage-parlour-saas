@@ -1,0 +1,312 @@
+/* Spa Owner's Manual print styles (A4; English + Thai editions). Brand: DM Sans body, Space Grotesk headings,
+   dark green #0F6B4B, lime #D9F26A for small highlights, mint/cream surfaces. */
+
+/* Static instances (variable fonts would be embedded as Type 3 by Chromium). */
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: block; src: url(fonts/dm-sans-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: block; src: url(fonts/dm-sans-latin-ext-400-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 400; font-display: block; src: url(fonts/space-grotesk-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 400; font-display: block; src: url(fonts/space-grotesk-latin-ext-400-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: block; src: url(fonts/dm-sans-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: block; src: url(fonts/dm-sans-latin-ext-500-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 500; font-display: block; src: url(fonts/space-grotesk-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 500; font-display: block; src: url(fonts/space-grotesk-latin-ext-500-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 600; font-display: block; src: url(fonts/dm-sans-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 600; font-display: block; src: url(fonts/dm-sans-latin-ext-600-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 600; font-display: block; src: url(fonts/space-grotesk-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 600; font-display: block; src: url(fonts/space-grotesk-latin-ext-600-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 700; font-display: block; src: url(fonts/dm-sans-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 700; font-display: block; src: url(fonts/dm-sans-latin-ext-700-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 700; font-display: block; src: url(fonts/space-grotesk-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 700; font-display: block; src: url(fonts/space-grotesk-latin-ext-700-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'DM Sans'; font-style: italic; font-weight: 400; font-display: block; src: url(fonts/dm-sans-latin-400-italic.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'DM Sans'; font-style: italic; font-weight: 400; font-display: block; src: url(fonts/dm-sans-latin-ext-400-italic.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+
+
+/* Noto Sans Thai, Thai subset only: Latin text and digits stay in DM Sans / Space Grotesk (as in the CRM). */
+@font-face { font-family: 'Noto Sans Thai'; font-style: normal; font-weight: 400; font-display: block; src: url(fonts/noto-sans-thai-thai-400-normal.woff2) format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Noto Sans Thai'; font-style: normal; font-weight: 500; font-display: block; src: url(fonts/noto-sans-thai-thai-500-normal.woff2) format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Noto Sans Thai'; font-style: normal; font-weight: 600; font-display: block; src: url(fonts/noto-sans-thai-thai-600-normal.woff2) format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Noto Sans Thai'; font-style: normal; font-weight: 700; font-display: block; src: url(fonts/noto-sans-thai-thai-700-normal.woff2) format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+
+/* IBM Plex Sans Arabic for the few Arabic words quoted from the screens (the guest-language switch). */
+@font-face { font-family: 'Plex Arabic'; font-weight: 400; font-display: block; src: url(fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2) format('woff2'); unicode-range: U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFC; }
+@font-face { font-family: 'Plex Arabic'; font-weight: 500; font-display: block; src: url(fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2) format('woff2'); unicode-range: U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFC; }
+@font-face { font-family: 'Plex Arabic'; font-weight: 600; font-display: block; src: url(fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2) format('woff2'); unicode-range: U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFC; }
+@font-face { font-family: 'Plex Arabic'; font-weight: 700; font-display: block; src: url(fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2) format('woff2'); unicode-range: U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFC; }
+
+:root {
+  --green: #0F6B4B;
+  --green-dk: #0A4A34;
+  --ink: #15211B;
+  --text: #2B3430;
+  --muted: #5F6D66;
+  --mint: #E8F3EC;
+  --mint-2: #F3F8F4;
+  --cream: #F7F3EA;
+  --lime: #D9F26A;
+  --line: #D6E3DA;
+  --warn: #B86A06;
+  --warn-bg: #FFF4DF;
+  --body: 'DM Sans', 'Noto Sans Thai', 'Plex Arabic', 'DejaVu Sans', sans-serif;
+  --head: 'Space Grotesk', 'Noto Sans Thai', 'DM Sans', 'Plex Arabic', 'DejaVu Sans', sans-serif;
+  --mono: 'Liberation Mono', 'DejaVu Sans Mono', monospace;
+  --step-indent: 8.5mm;
+  --bullet-indent: 6mm;
+}
+
+/* ---------- Pages ---------- */
+@page {
+  size: A4;
+  margin: 21mm 16mm 18mm 16mm;
+}
+/* margin boxes (running header/footer) are generated per edition by build.mjs */
+@page cover { margin: 0;
+  @top-left { content: none; } @top-right { content: none; }
+  @bottom-left { content: none; } @bottom-right { content: none; } }
+
+* { box-sizing: border-box; }
+html {
+  font-family: var(--body); font-size: 9.8pt; line-height: 1.52; color: var(--text);
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  font-variant-numeric: lining-nums; text-rendering: optimizeLegibility;
+}
+html[lang='th'] { font-size: 10pt; line-height: 1.78; }
+body { margin: 0; background: #fff; }
+
+/* ---------- Cover ---------- */
+.cover {
+  page: cover; position: relative; overflow: hidden;
+  width: 210mm; height: 296.6mm; background: var(--cream);
+  break-after: page;
+}
+.cover .deco { position: absolute; border-radius: 22mm; transform: rotate(-7deg); }
+.cover .deco.a { width: 122mm; height: 122mm; background: #E2EEE5; inset-inline-end: -44mm; top: -34mm; }
+.cover .deco.b { width: 24mm; height: 24mm; border-radius: 6mm; background: var(--lime); inset-inline-end: 58mm; top: 62mm; }
+.cover .logo { position: absolute; inset-inline-start: 20mm; top: 20mm; width: 66mm; height: auto; }
+.cover .titles { position: absolute; inset-inline: 20mm 20mm; top: 100mm; }
+.cover .kicker {
+  display: inline-block; font: 700 8pt/1 var(--head); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--green-dk); background: var(--lime); padding: 2.2mm 3.4mm; border-radius: 1.6mm;
+}
+html[lang='th'] .cover .kicker { letter-spacing: 0; font-size: 9.5pt; padding: 1.6mm 3.4mm 2mm; }
+.cover .cover-title {
+  margin: 7mm 0 0; font: 700 44pt/1.02 var(--head); letter-spacing: -.025em; color: var(--green);
+  max-width: 150mm;
+}
+html[lang='th'] .cover .cover-title { font-size: 40pt; line-height: 1.32; letter-spacing: 0; }
+.cover .alt-title { margin-top: 3mm; font: 600 13pt/1.3 'Space Grotesk', 'Noto Sans Thai', sans-serif; color: var(--green-dk); opacity: .8; }
+.cover .subtitle { margin: 7mm 0 0; font-size: 12.5pt; line-height: 1.5; color: var(--text); max-width: 132mm; text-wrap: balance; }
+.cover .audience { margin-top: 4mm; font-size: 10pt; color: var(--muted); }
+.cover .panel {
+  position: absolute; inset-inline: 0; bottom: 0; height: 82mm; background: var(--green); color: #fff;
+  padding: 16mm 20mm 0;
+}
+.cover .panel .ed { font: 700 18pt/1.2 var(--head); }
+.cover .panel .date { margin-top: 2mm; font: 500 12pt/1.3 var(--body); color: #CFE6DA; }
+.cover .panel .rule { width: 14mm; height: 1.4mm; background: var(--lime); border-radius: 1mm; margin: 9mm 0 6mm; }
+.cover .panel .site { font: 700 15pt/1.2 'Space Grotesk', 'Noto Sans Thai', sans-serif; color: var(--lime); }
+.cover .panel .mail { margin-top: 1.5mm; font: 500 10.5pt/1.3 'DM Sans', 'Noto Sans Thai', sans-serif; color: #E6F2EB; }
+.cover .panel .ring {
+  position: absolute; inset-inline-end: 22mm; bottom: 20mm; width: 40mm; height: 40mm; border-radius: 10mm;
+  border: .8mm solid rgba(217, 242, 106, .55); transform: rotate(-7deg);
+}
+
+/* ---------- Contents ---------- */
+.toc { page: toc; break-after: page; }
+.toc h1 { font: 700 26pt/1.1 var(--head); color: var(--green); margin: 0 0 2mm; }
+.toc .toc-rule { width: 12mm; height: 1.3mm; border-radius: 1mm; background: var(--lime); margin: 0 0 6mm; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { break-inside: avoid; }
+.toc a {
+  display: flex; align-items: baseline; gap: 3mm; padding: .95mm 0; color: inherit; text-decoration: none;
+  border-bottom: .4pt solid var(--line); font-size: 9.8pt; line-height: 1.3;
+}
+html[lang='th'] .toc a { padding: .7mm 0; line-height: 1.5; }
+.toc .toc-num { flex: none; width: 7.5mm; font: 700 9.4pt/1 'Space Grotesk', 'Noto Sans Thai', sans-serif; color: var(--green); }
+.toc .toc-t { flex: 0 1 auto; color: var(--ink); font-weight: 500; }
+.toc .toc-dots { flex: 1 1 auto; min-width: 6mm; border-bottom: 1.1pt dotted #B8C9BF; transform: translateY(-1mm); }
+.toc .toc-pg { flex: none; min-width: 7mm; text-align: end; font: 700 9.4pt/1 'Space Grotesk', 'Noto Sans Thai', sans-serif; color: var(--green); }
+.toc li.front .toc-t, .toc li.back .toc-t { color: var(--green-dk); font-weight: 600; }
+
+/* ---------- Chapters ---------- */
+.chapter { break-before: page; }
+.ch-head { margin: 0 0 6mm; padding: 0 0 5mm; border-bottom: 1.6pt solid var(--green); break-after: avoid; }
+.ch-eyebrow { display: flex; align-items: center; gap: 2.6mm; margin: 0 0 3.6mm; }
+.ch-label { font: 700 8pt/1 var(--head); letter-spacing: .16em; text-transform: uppercase; color: var(--green); }
+html[lang='th'] .ch-label { letter-spacing: 0; font-size: 10pt; }
+.ch-n {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 9.5mm; height: 9.5mm; padding: 0 1.6mm;
+  border-radius: 2.6mm; background: var(--lime); color: var(--green-dk); transform: rotate(-7deg);
+  font: 700 13.5pt/1 'Space Grotesk', 'Noto Sans Thai', sans-serif;
+}
+.ch-head h1 { margin: 0; font: 700 25pt/1.12 var(--head); letter-spacing: -.015em; color: var(--green); }
+html[lang='th'] .ch-head h1 { font-size: 23pt; line-height: 1.45; letter-spacing: 0; text-wrap: balance; }
+
+.purpose {
+  margin: 0 0 6mm; padding: 4mm 5mm 4.2mm; background: var(--mint); border-radius: 2.6mm;
+  border-inline-start: 1.3mm solid var(--green); break-inside: avoid;
+}
+.purpose > h2 {
+  margin: 0 0 1.6mm; padding: 0; border: 0; font: 700 7.8pt/1.2 var(--head); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--green);
+}
+html[lang='th'] .purpose > h2 { letter-spacing: 0; font-size: 9.5pt; }
+.purpose > h2::before { display: none; }
+.purpose p { margin: 0 0 1.4mm; font-size: 10.6pt; line-height: 1.5; color: var(--ink); }
+html[lang='th'] .purpose p { line-height: 1.75; }
+.purpose p:last-child { margin-bottom: 0; }
+
+h2, h3, h4 { break-after: avoid; break-inside: avoid; }
+h2 { margin: 8mm 0 3mm; font: 700 14.5pt/1.25 var(--head); letter-spacing: -.01em; color: var(--green); }
+h2::before { content: ''; display: block; width: 9mm; height: 1.2mm; margin: 0 0 2.4mm; border-radius: 1mm; background: var(--lime); }
+h3 { margin: 6mm 0 2mm; font: 700 11.6pt/1.3 var(--head); color: var(--ink); }
+h4 { margin: 5mm 0 1.6mm; font: 700 10.2pt/1.3 var(--head); color: var(--green-dk); }
+html[lang='th'] h2 { font-size: 14pt; line-height: 1.5; letter-spacing: 0; }
+html[lang='th'] h3 { font-size: 11.6pt; line-height: 1.55; }
+.ch-head + h2, .purpose + h2, .purpose + .keep > h2:first-child { margin-top: 2mm; }
+
+p { margin: 0 0 2.6mm; orphans: 3; widows: 3; }
+/* list items too: never one line (or one word) of a step alone at the top or foot of a page */
+li { orphans: 2; widows: 2; }
+/* Chrome does not apply widows/orphans to a step's paragraph that sits beside the floated step disc (a 2-line step
+   still split 1 + 1 before its screenshot), so a step's text paragraphs (short) never split at all. */
+li > p { break-inside: avoid; }
+ul > li:not(:has(figure, .legend, table, ul, ol, blockquote)) { break-inside: avoid; }
+/* words the build keeps on one line (Thai loanwords, heading phrases, table glosses, cover subtitle) */
+.nobr { white-space: nowrap; }
+strong { font-weight: 600; color: var(--ink); }
+html[lang='th'] strong { font-weight: 600; }
+em { font-style: italic; }
+html[lang='th'] em { font-style: normal; }
+a { color: var(--green); text-decoration: none; }
+code {
+  font-family: var(--mono); font-size: .86em; color: var(--green-dk); background: var(--mint);
+  padding: .2mm 1mm; border-radius: .8mm; overflow-wrap: anywhere;
+}
+
+/* Lists: steps get green numbered discs, bullets get small green squares. */
+ul, ol { margin: 0 0 3mm; padding: 0; }
+ol.steps { list-style: none; counter-reset: step; padding-inline-start: var(--step-indent); }
+ol.steps > li { counter-increment: step; position: relative; margin: 0 0 2mm; display: flow-root; }
+/* The disc floats beside the first line (not absolutely positioned): a float travels with its line at a page
+   break, so a step on the last line of a page never shows a cut-off half disc. */
+ol.steps > li::before {
+  content: counter(step); float: inline-start; margin-inline: calc(-1 * var(--step-indent)) calc(var(--step-indent) - 5.4mm);
+  margin-top: .35mm;
+  width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--green); color: #fff;
+  font: 700 7.6pt/5.4mm 'Space Grotesk', 'Noto Sans Thai', sans-serif; text-align: center;
+}
+html[lang='th'] ol.steps > li::before { margin-top: 1mm; }
+ol.steps > li:not(:has(figure, .legend, table, ul, ol, blockquote)) { break-inside: avoid; }
+ul { list-style: none; padding-inline-start: var(--bullet-indent); }
+ul > li { position: relative; margin: 0 0 1.4mm; }
+ul > li::before {
+  content: ''; position: absolute; inset-inline-start: calc(-1 * var(--bullet-indent) + 1.2mm); top: 1.75mm;
+  width: 1.6mm; height: 1.6mm; border-radius: .4mm; background: var(--green); transform: rotate(-7deg);
+}
+html[lang='th'] ul > li::before { top: 2.3mm; }
+li > p { margin-bottom: 1.6mm; }
+li > ul, li > ol { margin-top: 1.4mm; margin-bottom: 1.4mm; }
+
+/* Screenshots */
+figure.shot { position: relative; margin: 0; break-inside: avoid; page-break-inside: avoid; }
+.figmark { position: absolute; top: 0; left: 0; z-index: -1; font: 3pt/1 'DM Sans', sans-serif; color: #fff; white-space: nowrap; }
+figure.shot img {
+  display: block; margin: 0 auto; max-width: 100%; height: auto;
+  border: .6pt solid #C3D2C9; border-radius: 1.6mm; background: #fff;
+}
+figure.shot.phone img { border-radius: 3mm; }
+.fig-row { margin: 3.2mm 0 3.4mm; break-inside: avoid; page-break-inside: avoid; }
+.pair { display: flex; align-items: center; gap: 6mm; margin: 3.2mm 0 4mm; break-inside: avoid; page-break-inside: avoid; }
+.pair > figure.shot { flex: none; }
+.pair > .legend { flex: 1 1 auto; margin: 0; }
+.pair figure.shot figcaption { max-width: none; }
+p.lead-in { margin: 4mm 0 2mm; break-after: avoid; }
+p.lead-in strong { font: 700 10.2pt/1.3 var(--head); color: var(--green-dk); }
+html[lang='th'] p.lead-in strong { font-size: 10.4pt; }
+figure.shot figcaption {
+  margin: 2mm auto 0; max-width: 150mm; text-align: center; font-size: 8.4pt; line-height: 1.4; color: var(--muted);
+}
+figure.shot figcaption .fig-no { font: 700 7.6pt/1 'Space Grotesk', 'Noto Sans Thai', sans-serif; color: var(--green); margin-inline-end: 1.6mm; letter-spacing: .04em; }
+html[lang='th'] figure.shot figcaption { line-height: 1.65; }
+
+/* Legend under a screenshot: discs match the lime markers on the screenshots. */
+.legend {
+  margin: 0 0 4mm; padding: 3mm 4mm 2.2mm; background: var(--mint-2); border: .4pt solid var(--line);
+  border-radius: 2.4mm; break-inside: avoid; break-before: avoid;
+}
+.legend-title {
+  margin: 0 0 1.8mm; font: 700 7.4pt/1.2 var(--head); letter-spacing: .12em; text-transform: uppercase; color: var(--green);
+}
+.legend-title em { font-style: normal; }
+html[lang='th'] .legend-title { letter-spacing: 0; font-size: 9pt; }
+ol.legend-list { list-style: none; counter-reset: lg; padding-inline-start: 7mm; margin: 0; }
+ol.legend-list > li { counter-increment: lg; position: relative; margin: 0 0 1.2mm; font-size: 9pt; line-height: 1.45; }
+html[lang='th'] ol.legend-list > li { line-height: 1.7; }
+ol.legend-list > li::before {
+  content: counter(lg); position: absolute; inset-inline-start: -7mm; top: .25mm; width: 4.8mm; height: 4.8mm;
+  border-radius: 50%; background: var(--lime); border: .45mm solid var(--green); color: var(--green-dk);
+  font: 700 6.8pt/3.9mm 'Space Grotesk', 'Noto Sans Thai', sans-serif; text-align: center;
+}
+html[lang='th'] ol.legend-list > li::before { top: .9mm; }
+
+/* Tip / Important / plain notes */
+blockquote { margin: 3.6mm 0 4mm; padding: 3.2mm 4.4mm 3mm; border-radius: 2.4mm; break-inside: avoid; background: var(--mint-2); }
+blockquote.tip { background: var(--mint); border-inline-start: 1.1mm solid var(--green); }
+blockquote.important { background: var(--warn-bg); border-inline-start: 1.1mm solid var(--warn); }
+blockquote p:last-child, blockquote ul:last-child { margin-bottom: 0; }
+blockquote ul { margin-top: 1.4mm; }
+.callout-label {
+  display: inline-block; margin-inline-end: 1.8mm; padding: .9mm 2mm .7mm; border-radius: 1.1mm;
+  font: 700 7pt/1 var(--head); letter-spacing: .1em; text-transform: uppercase; vertical-align: .35mm;
+}
+html[lang='th'] .callout-label { letter-spacing: 0; font-size: 8.4pt; padding: .7mm 2mm 1mm; vertical-align: .2mm; }
+.tip .callout-label { background: var(--lime); color: var(--green-dk); }
+.important .callout-label { background: var(--warn); color: #fff; }
+
+/* Tables */
+table { width: 100%; margin: 3mm 0 5mm; border-collapse: collapse; font-size: 9pt; line-height: 1.42; }
+html[lang='th'] table { line-height: 1.65; }
+thead { display: table-header-group; }
+th {
+  padding: 2.1mm 2.6mm; text-align: start; vertical-align: bottom; background: var(--green); color: #fff;
+  font: 700 8.2pt/1.3 var(--body);
+}
+td { padding: 2mm 2.6mm; vertical-align: top; border-bottom: .4pt solid var(--line); }
+tbody tr:nth-child(even) td { background: var(--mint-2); }
+tr { break-inside: avoid; }
+td strong { color: var(--ink); }
+.glossary td:first-child { width: 34%; }
+/* Automations table: room for the label + gloss, and a "when" column that never breaks mid-word. */
+#c-27-c27 table th:first-child { width: 31%; }
+#c-27-c27 table :is(th, td):last-child { white-space: nowrap; }
+/* Roles table (ch 9): a first column wide enough for a role + its Thai gloss (the build also keeps short table
+   glosses whole, so the left-menu table in ch 1 sizes its columns by itself). */
+#c-09-c09 table :is(th, td):first-child { width: 30%; }
+/* Thai left-menu table (ch 1): slightly tighter rows so all eleven rows stay on one page. */
+html[lang='th'] #c-01-c01 td { padding-top: 1.5mm; padding-bottom: 1.5mm; }
+
+/* chapters whose last page would hold only a few lines */
+.tight p { margin-bottom: 2mm; }
+.tight h2 { margin-top: 6mm; }
+.tight h3 { margin-top: 4.5mm; }
+.tight .fig-row, .tight .pair { margin: 2.4mm 0 2.8mm; }
+.tight ol.steps > li { margin-bottom: 1.3mm; }
+.tight blockquote { margin: 2.8mm 0 3mm; padding: 2.6mm 4mm 2.4mm; }
+.tight .legend { padding: 2.4mm 3.6mm 1.8mm; }
+/* keep-together helper inserted by the build (heading + first block) */
+.keep { break-inside: avoid; }
+/* a heading + its intro go along when the screenshot they introduce moves to the next page */
+.keep:has(> h2 + p:last-child):has(+ .fig-row, + .pair) { break-after: avoid; }
+.cover .panel .alt-ed { margin-top: 1.6mm; font: 500 9.6pt/1.35 'DM Sans', sans-serif; color: #CFE6DA; }
+.cover .panel .alt-ed + .date { margin-top: 3mm; }
+.cover .panel .alt-date { font-family: 'DM Sans', sans-serif; }
+.tighter { line-height: 1.44; }
+html[lang='th'] .tighter { line-height: 1.68; }
+.tighter p { margin-bottom: 1.6mm; }
+.tighter h2 { margin-top: 5mm; }
+.tighter .legend { margin-bottom: 3mm; }
+.tighter ol.steps > li { margin-bottom: 1mm; }
+/* a legend with short items set in two columns by the build, so it stays on the page with its screenshot */
+.legend.cols2 ol.legend-list { columns: 2; column-gap: 6mm; }
+.legend.cols2 ol.legend-list > li { break-inside: avoid; }

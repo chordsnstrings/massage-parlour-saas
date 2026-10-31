@@ -1,0 +1,689 @@
+/*
+ * Design templates (R5, docs/PLAN.md §14.8): heading faces, headline emphasis, CSS-drawn hero backdrops and the
+ * hero emblems built from the spa name. Everything reads the theme variables, so a template switch restyles it.
+ * Font files download only when a face is actually used (@font-face is lazy); the CSS itself is a few KB.
+ */
+@import "@fontsource-variable/cormorant-garamond";
+@import "@fontsource-variable/cormorant-garamond/wght-italic.css";
+@import "@fontsource-variable/playfair-display";
+@import "@fontsource-variable/playfair-display/wght-italic.css";
+@import "@fontsource-variable/bodoni-moda";
+@import "@fontsource-variable/bodoni-moda/wght-italic.css";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/fraunces/wght-italic.css";
+@import "@fontsource/marcellus/400.css";
+@import "@fontsource/dm-serif-display/400.css";
+@import "@fontsource/dm-serif-display/400-italic.css";
+@import "@fontsource/libre-baskerville/400.css";
+@import "@fontsource/libre-baskerville/400-italic.css";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/sora";
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/nunito";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource/amiri/400.css";
+@import "@fontsource/amiri/700.css";
+@import "@fontsource/ibm-plex-sans-arabic/400.css";
+@import "@fontsource/ibm-plex-sans-arabic/500.css";
+@import "@fontsource/ibm-plex-sans-arabic/600.css";
+@import "@fontsource-variable/noto-kufi-arabic";
+@import "@fontsource-variable/noto-naskh-arabic";
+
+/* ---------------------------------------------------------------- headline emphasis: "More *calm*." */
+.sb-em {
+  font-style: italic;
+  color: var(--accent);
+}
+.site-root[data-emphasis="muted"] .sb-em {
+  font-style: normal;
+  color: var(--muted);
+}
+.site-root[data-emphasis="underline"] .sb-em {
+  font-style: normal;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 0.07em;
+  text-underline-offset: 0.14em;
+}
+.site-root[dir="rtl"] .sb-em {
+  font-style: normal; /* Arabic has no italic: accent colour only */
+}
+.sb-bg-inverse .sb-em,
+.sb-bg-accent .sb-em {
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- hero backdrops */
+.sb-bd {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  --line: color-mix(in srgb, var(--fg) 9%, transparent);
+  --glow: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.sb-bd > i {
+  position: absolute;
+  display: block;
+}
+.sb-bd-giant {
+  position: absolute;
+  inset-inline-start: 4%;
+  bottom: -0.18em;
+  font-family: var(--font-heading);
+  font-weight: 200;
+  font-size: clamp(9rem, 30vw, 26rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: transparent;
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--fg) 10%, transparent);
+  white-space: nowrap;
+}
+
+/* Platinum / Final: hairline columns with travelling dots. */
+[data-bd="hairlines"] {
+  background-image:
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    linear-gradient(0deg, var(--line) 1px, transparent 1px);
+  background-size:
+    25% 100%,
+    100% 33.33%;
+  background-position:
+    12.5% 0,
+    0 16.66%;
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+[data-bd="hairlines"] > i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  top: -2%;
+  animation: sb-travel 9s linear infinite;
+}
+[data-bd="hairlines"] > i:nth-child(1) {
+  left: calc(12.5% - 2px);
+}
+[data-bd="hairlines"] > i:nth-child(2) {
+  left: calc(62.5% - 2px);
+  animation-delay: -4s;
+  animation-duration: 12s;
+}
+[data-bd="hairlines"] > i:nth-child(3) {
+  left: calc(87.5% - 2px);
+  animation-delay: -7s;
+}
+
+/* Noir Gold: thin gold orbits. */
+[data-bd="rings"] > i {
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  translate: -50% -50%;
+}
+[data-bd="rings"] > i:nth-child(1) {
+  width: min(78vw, 820px);
+  aspect-ratio: 1;
+  border-top-color: transparent;
+  animation: sb-spin 60s linear infinite;
+}
+[data-bd="rings"] > i:nth-child(2) {
+  width: min(58vw, 600px);
+  aspect-ratio: 1;
+  border-style: dashed;
+  opacity: 0.6;
+  animation: sb-spin 90s linear infinite reverse;
+}
+[data-bd="rings"] > i:nth-child(3) {
+  width: min(98vw, 1040px);
+  aspect-ratio: 1;
+  opacity: 0.35;
+}
+
+/* Ivory Marble: slow-moving veins. */
+[data-bd="marble"] {
+  background:
+    radial-gradient(120% 60% at 20% 30%, color-mix(in srgb, var(--fg) 5%, transparent), transparent 60%),
+    radial-gradient(80% 50% at 85% 70%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 65%);
+}
+[data-bd="marble"] > i {
+  inset: -20%;
+  background: repeating-linear-gradient(
+    115deg,
+    transparent 0 46px,
+    color-mix(in srgb, var(--fg) 6%, transparent) 47px,
+    transparent 49px 130px
+  );
+  filter: blur(1.5px);
+  animation: sb-drift 40s ease-in-out infinite alternate;
+}
+[data-bd="marble"] > i:nth-child(2) {
+  background: repeating-linear-gradient(
+    62deg,
+    transparent 0 90px,
+    color-mix(in srgb, var(--accent) 16%, transparent) 91px,
+    transparent 92px 210px
+  );
+  animation-duration: 55s;
+  animation-direction: alternate-reverse;
+}
+[data-bd="marble"] > i:nth-child(3) {
+  display: none;
+}
+
+/* Navy Official: a soft light sweep across deep blue. */
+[data-bd="sheen"] {
+  background: radial-gradient(90% 70% at 80% 10%, var(--glow), transparent 60%);
+}
+[data-bd="sheen"] > i:nth-child(1) {
+  inset: -30% auto -30% -40%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--fg) 6%, transparent), transparent);
+  rotate: 18deg;
+  animation: sb-sweep 14s ease-in-out infinite;
+}
+
+/* Emerald Prestige: Art Deco sunburst. */
+[data-bd="rays"] > i:nth-child(1) {
+  left: 50%;
+  top: 38%;
+  width: 260vmax;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--accent) 22%, transparent) 0deg 0.35deg,
+    transparent 0.35deg 7.5deg
+  );
+  mask-image: radial-gradient(closest-side, #000 8%, transparent 42%);
+  animation: sb-spin 240s linear infinite;
+}
+
+/* Desert Night: a night skyline with blinking windows. */
+[data-bd="skyline"] {
+  background: radial-gradient(70% 50% at 50% 100%, var(--glow), transparent 70%);
+}
+[data-bd="skyline"] > i:nth-child(1) {
+  inset: auto 0 0 0;
+  height: 32%;
+  background: color-mix(in srgb, var(--fg) 7%, var(--bg));
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 200' preserveAspectRatio='none'%3E%3Cpath d='M0 200V150h40v-30h30v50h30V110h50v60h20V90h40v80h30v-40h40v70h30V60h20V20h10v40h20v110h40v-50h40v60h30V100h50v70h20V130h40v40h30V80h40v90h30v-30h40v60h30V120h40v50h30V90h50v80h30v-40h40v70Z'/%3E%3C/svg%3E")
+    center bottom / 100% 100% no-repeat;
+}
+[data-bd="skyline"] > i:nth-child(2) {
+  inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 10% 20%, var(--fg), transparent),
+    radial-gradient(1px 1px at 30% 8%, var(--fg), transparent),
+    radial-gradient(1.5px 1.5px at 62% 18%, var(--fg), transparent),
+    radial-gradient(1px 1px at 80% 6%, var(--fg), transparent),
+    radial-gradient(1px 1px at 92% 30%, var(--fg), transparent);
+  opacity: 0.5;
+  animation: sb-twinkle 5s ease-in-out infinite alternate;
+}
+
+/* Monogram Atelier: a faint repeating monogram motif. */
+[data-bd="monogram"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='.06'%3E%3Ccircle cx='45' cy='45' r='14'/%3E%3Cpath d='M45 23l22 22-22 22-22-22z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Obsidian Glass: a dark spotlight. */
+[data-bd="glow"] {
+  background:
+    radial-gradient(60% 55% at 72% 45%, color-mix(in srgb, var(--fg) 9%, transparent), transparent 70%),
+    radial-gradient(40% 40% at 15% 90%, var(--glow), transparent 70%);
+}
+
+/* Sandstone Bronze: wavy stone strata. */
+[data-bd="strata"] > i:nth-child(1) {
+  inset: -10% -20%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='.08'%3E%3Cpath d='M0 30 C150 0 300 60 600 30'/%3E%3Cpath d='M0 70 C200 40 380 100 600 70'/%3E%3Cpath d='M0 105 C160 85 420 125 600 105'/%3E%3C/g%3E%3C/svg%3E");
+  animation: sb-drift 50s ease-in-out infinite alternate;
+}
+
+/* Aurora Glass / Clay: soft drifting colour blobs. */
+[data-bd="aurora"] > i,
+[data-bd="blobs"] > i {
+  width: 46vmax;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.5;
+  animation: sb-float 18s ease-in-out infinite alternate;
+}
+[data-bd="aurora"] > i:nth-child(1),
+[data-bd="blobs"] > i:nth-child(1) {
+  background: var(--accent);
+  left: -12%;
+  top: -20%;
+}
+[data-bd="aurora"] > i:nth-child(2),
+[data-bd="blobs"] > i:nth-child(2) {
+  background: var(--accent-soft);
+  right: -10%;
+  top: 10%;
+  animation-delay: -6s;
+}
+[data-bd="aurora"] > i:nth-child(3) {
+  background: #f4b98e;
+  left: 35%;
+  bottom: -35%;
+  opacity: 0.3;
+  animation-delay: -11s;
+}
+[data-bd="blobs"] > i {
+  filter: none;
+  width: 9rem;
+  opacity: 1;
+  background: radial-gradient(
+    circle at 32% 28%,
+    #fff 0 6%,
+    var(--accent-soft) 40%,
+    var(--accent) 100%
+  ) !important;
+  box-shadow: 0 30px 50px -24px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+[data-bd="blobs"] > i:nth-child(1) {
+  left: auto;
+  inset-inline-end: 6%;
+  top: 12%;
+}
+[data-bd="blobs"] > i:nth-child(2) {
+  width: 5rem;
+  right: auto;
+  inset-inline-start: 4%;
+  top: 70%;
+}
+[data-bd="blobs"] > i:nth-child(3) {
+  width: 3.5rem;
+  inset-inline-end: 38%;
+  bottom: 8%;
+  animation-delay: -9s;
+}
+
+/* Blueprint: drafting grid. */
+[data-bd="grid"] {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--fg) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--fg) 4%, transparent) 1px, transparent 1px);
+  background-size:
+    120px 120px,
+    120px 120px,
+    24px 24px,
+    24px 24px;
+  mask-image: radial-gradient(80% 70% at 60% 40%, #000, transparent);
+}
+
+/* Sahara: dune layers. */
+[data-bd="dunes"] > i {
+  inset: auto -5% 0 -5%;
+  height: 34%;
+  background: var(--accent-soft);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 200' preserveAspectRatio='none'%3E%3Cpath d='M0 120 C200 40 420 40 620 110 S1000 160 1200 70 V200 H0Z'/%3E%3C/svg%3E")
+    center bottom / 100% 100% no-repeat;
+}
+[data-bd="dunes"] > i:nth-child(2) {
+  height: 22%;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+  scale: -1 1;
+  opacity: 0.6;
+}
+[data-bd="dunes"] > i:nth-child(3) {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- hero emblems */
+.sb-emblem {
+  display: grid;
+  place-items: center;
+  perspective: 1000px;
+}
+.sb-emb-name {
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.site-root[dir="rtl"] .sb-emb-name {
+  font-family: var(--font-heading-ar, var(--font-heading));
+  letter-spacing: 0;
+}
+.sb-emb-cap,
+.sb-emb-est {
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.site-root[dir="rtl"] .sb-emb-cap {
+  letter-spacing: 0;
+}
+.sb-emb-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+.sb-emb-frame .sb-emb-name {
+  font-size: clamp(3.4rem, 9vw, 6.5rem);
+}
+
+/* numeral: the full name, large, with a hairline caption (Noir Gold, Desert Night). */
+[data-emblem="numeral"] .sb-emb-name {
+  font-size: clamp(2.8rem, 8vw, 5.5rem);
+  font-weight: 400;
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--fg)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* tile / glass: a floating square card (Ivory Marble, Sandstone Bronze, Obsidian Glass). */
+[data-emblem="tile"] .sb-emb-frame,
+[data-emblem="glass"] .sb-emb-frame {
+  width: min(78vw, 22rem);
+  aspect-ratio: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: -14px;
+  box-shadow: 0 40px 80px -40px rgb(0 0 0 / 0.45);
+  animation: sb-hover 7s ease-in-out infinite;
+}
+[data-emblem="tile"] .sb-emb-name {
+  font-style: italic;
+}
+[data-emblem="glass"] .sb-emb-frame {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--fg) 12%, transparent),
+    color-mix(in srgb, var(--fg) 3%, transparent)
+  );
+  backdrop-filter: blur(14px);
+  outline: none;
+  border-color: color-mix(in srgb, var(--fg) 16%, transparent);
+  border-radius: 28px;
+}
+[data-emblem="glass"] .sb-emb-name {
+  color: var(--fg);
+  font-weight: 200;
+}
+/* arch: Deco arch outline (Emerald Prestige). */
+[data-emblem="arch"] .sb-emb-frame {
+  width: 12rem;
+  height: 9.5rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-bottom: 0;
+  border-radius: 999px 999px 0 0;
+  padding-top: 1.5rem;
+  box-shadow:
+    inset 0 0 0 6px var(--bg),
+    inset 0 0 0 7px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+[data-emblem="arch"] .sb-emb-name {
+  font-size: 3.2rem;
+}
+/* monogram: an engraved ring (Monogram Atelier). */
+[data-emblem="monogram"] .sb-emb-frame {
+  width: 10.5rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow:
+    inset 0 0 0 7px var(--bg),
+    inset 0 0 0 8px color-mix(in srgb, var(--accent) 30%, transparent);
+  gap: 0.35rem;
+}
+[data-emblem="monogram"] .sb-emb-name {
+  font-size: 3rem;
+  font-style: italic;
+}
+[data-emblem="monogram"] .sb-emb-cap {
+  font-size: 9px;
+}
+
+/* seal: turning text ring around the monogram (Navy Official, Final). */
+.sb-seal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(72vw, 20rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent);
+  box-shadow:
+    inset 0 0 0 10px var(--bg),
+    inset 0 0 0 11px color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.sb-seal-ring {
+  position: absolute;
+  inset: 4%;
+  fill: var(--muted);
+  font: 500 11px / 1 var(--font-body);
+  letter-spacing: 0.18em;
+  animation: sb-spin 40s linear infinite;
+}
+.sb-seal .sb-emb-name {
+  font-size: clamp(2.6rem, 8vw, 4.5rem);
+  color: var(--fg);
+}
+.sb-seal-sm {
+  width: 100%;
+  border-color: color-mix(in srgb, var(--inverse-fg) 18%, transparent);
+  box-shadow: none;
+}
+.sb-seal-sm .sb-seal-ring {
+  fill: color-mix(in srgb, var(--inverse-fg) 70%, transparent);
+}
+.sb-seal-sm .sb-emb-name {
+  font-size: 2.2rem;
+  color: var(--inverse-fg);
+}
+
+/* bento: live tiles (Final, Bento). */
+.sb-bento {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+}
+.sb-bento-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 7.5rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 6px);
+  box-shadow: 0 18px 40px -30px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+.sb-bento-brand {
+  grid-row: span 2;
+  background: var(--inverse-bg);
+  border-color: transparent;
+  padding: 0.75rem;
+  justify-content: center;
+}
+.sb-bento-wide {
+  justify-content: center;
+}
+.sb-bento-k {
+  font-size: 12px;
+  color: var(--muted);
+}
+.sb-bento-v {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+.sb-bento-num {
+  font-size: 2.1rem;
+  color: var(--accent);
+}
+.sb-bento-lang {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+.sb-bento-lang > span:nth-child(2) {
+  color: var(--accent);
+}
+.sb-bento-dots {
+  display: flex;
+  gap: 4px;
+}
+.sb-bento-dots > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: sb-blink 1.4s ease-in-out infinite;
+}
+.sb-bento-dots > i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.sb-bento-dots > i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.sb-bento-spark {
+  width: 100%;
+  height: 1.8rem;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 160;
+  animation: sb-draw 3.5s var(--ease) infinite alternate;
+}
+@media (max-width: 480px) {
+  .sb-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sb-bento-brand {
+    grid-row: auto;
+    grid-column: span 2;
+  }
+  .sb-bento-brand .sb-seal {
+    width: 9rem;
+    margin-inline: auto;
+  }
+}
+
+/* flap: the spa name on a split-flap board (Split Flap). */
+[data-emblem="flap"] {
+  gap: 1rem;
+}
+.sb-flap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+}
+.sb-flap-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(1.9rem, 6vw, 3rem);
+  aspect-ratio: 0.72;
+  background: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  color: var(--accent);
+  border-radius: 4px;
+  font: 600 clamp(1.1rem, 3.6vw, 1.8rem) / 1 var(--font-body);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.4);
+  animation: sb-flapin 0.7s calc(var(--i) * 70ms + 0.2s) var(--ease) both;
+}
+.sb-flap-cell::after {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 1px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+}
+
+/* ---------------------------------------------------------------- ambient loops */
+@keyframes sb-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes sb-travel {
+  to {
+    translate: 0 110vh;
+  }
+}
+@keyframes sb-drift {
+  to {
+    translate: 6% 3%;
+  }
+}
+@keyframes sb-sweep {
+  0%,
+  20% {
+    translate: 0 0;
+  }
+  80%,
+  100% {
+    translate: 380% 0;
+  }
+}
+@keyframes sb-twinkle {
+  to {
+    opacity: 0.15;
+  }
+}
+@keyframes sb-float {
+  to {
+    translate: 4% 6%;
+  }
+}
+@keyframes sb-hover {
+  50% {
+    transform: translateY(-10px) rotateX(4deg) rotateY(-6deg);
+  }
+}
+@keyframes sb-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes sb-draw {
+  from {
+    stroke-dashoffset: 160;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes sb-flapin {
+  from {
+    transform: rotateX(-90deg);
+    opacity: 0;
+  }
+}
+/* Editor canvas (data-motion=none) and OS reduced motion: the art stays, the loops stop. */
+.site-root[data-motion="none"] :is(.sb-bd, .sb-emblem) *,
+.site-root[data-motion="none"] :is(.sb-bd, .sb-emblem) {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.sb-bd, .sb-emblem) *,
+  :is(.sb-bd, .sb-emblem) {
+    animation: none !important;
+  }
+}
