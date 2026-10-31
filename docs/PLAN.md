@@ -1579,7 +1579,8 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
-- **R39 Delete booking (owner 2026-10-31: "yes i need a delete button for the bookings"; answers: owners, managers
+- **R39 Delete booking ✅ live 2026-10-31 (PR #65, 11f09a4; the same PR moved Next 16.3.8 → 16.4.3, zod 4.6.7 and
+  overrides happy-dom ^21.0.4 / body-parser ^2.4.0 for new high/critical advisories) (owner 2026-10-31: "yes i need a delete button for the bookings"; answers: owners, managers
   and reception; only bookings without payment; simple confirm, no reason):** services `deleteBooking` (locks the row;
   refused (catalogued `errors.domain.bookingDeleteHasMoney`) while a non-void sale, a package redemption or any `booking_commissions`
   row points at it — commission rows are append-only, so a finished-then-voided booking can only be cancelled); the
