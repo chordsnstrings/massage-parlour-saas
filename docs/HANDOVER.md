@@ -42,11 +42,6 @@ the existing flow.
   - status changes on a closed day are locked only when they reverse commission.
 - **R31 Sales & Marketing + AI sales agent** (PLAN §14.8): planned; building starts only when the owner approves the plan.
 - **Optional "AI key" card** in Console → Settings, so the AI key (`ARK_API_KEY`) is set like the Google/Meta keys (~1.5 h).
-- **Text fix:** the spa dashboard's Settings → Instagram & Google cards name server variables. They should say the
-  platform admin adds the keys in Console → Settings. This needs three changes:
-  - the Google text, EN + TH i18n `settings` (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`);
-  - the Instagram text "Once the keys below are set on the server" and `META_WEBHOOK_VERIFY_TOKEN`;
-  - the key chips in `components/integrations/instagram-card.tsx`, which come from services `missingMetaEnv`.
 
 **Owner setup (no code):**
 - **Google and Meta keys:** enter the platform keys in Console → Settings, on the Google card and the Meta card
@@ -62,7 +57,8 @@ the existing flow.
     in the Profile links card, and import the Search Console 404 list in Redirects (R33);
   - in the spa's Settings → Profile → Daily sales sheet, enter the 4 phone lines;
   - rename the 11 staff currently called "Therapist".
-- **Native review:** the new Thai strings (list in PLAN §14.8, R32 and R36 entries).
+- **Native review:** the new Thai strings (list in PLAN §14.8, R32 and R36 entries), plus four in `th/settings.ts`
+  `integrations` (2026-10-16 Settings text fix: `gbp.notConfigured`, `ig.notConfigured`, `ig.metaHelp`, `fb.notConfigured`).
 
 ## Access a new developer needs (the owner gives these privately, never in git or chat)
 

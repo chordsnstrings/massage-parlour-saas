@@ -235,8 +235,7 @@ export const settings: Messages['settings'] = {
     gbp: {
       title: 'Google Business Profile',
       sub: 'ซิงก์รีวิว Google โพสต์คำตอบที่อนุมัติแล้ว และแชร์โปรโมชันพร้อมปุ่มจอง',
-      notConfigured:
-        'เซิร์ฟเวอร์นี้ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google ผู้ดูแลแพลตฟอร์มจะเพิ่ม GOOGLE_CLIENT_ID และ GOOGLE_CLIENT_SECRET เมื่อ Google อนุมัติการใช้ API',
+      notConfigured: 'ยังไม่ได้ตั้งค่าการเข้าสู่ระบบด้วย Google ผู้ดูแลแพลตฟอร์มจะเพิ่มคีย์ใน Console → Settings',
       untilThen: 'ระหว่างนี้ วางรีวิวใหม่ในหน้าตอบรีวิว — AI จะร่างคำตอบให้คุณคัดลอกไปใส่ใน Google',
       features: {
         reviews: 'รีวิวเข้ามาทุกสองชั่วโมง พร้อมร่างคำตอบจาก AI เมื่อเปิดใช้เอเจนต์รีวิว',
@@ -284,7 +283,7 @@ export const settings: Messages['settings'] = {
       },
       notConfiguredTitle: 'ยังไม่ได้ตั้งค่า',
       notConfigured:
-        'Instagram ต้องใช้ Meta app ของแพลตฟอร์มก่อนสปาจะเชื่อมต่อได้ เมื่อกำหนดคีย์ด้านล่างบนเซิร์ฟเวอร์แล้ว ปุ่มเชื่อมต่อจะปรากฏที่นี่',
+        'Instagram ต้องใช้ Meta app ของแพลตฟอร์มก่อนสปาจะเชื่อมต่อได้ ผู้ดูแลแพลตฟอร์มจะเพิ่มคีย์ใน Console → Settings จากนั้นปุ่มเชื่อมต่อจะปรากฏที่นี่',
       account: 'บัญชี Instagram',
       connectedOn: 'เชื่อมต่อเมื่อ {date}',
       expired: 'สิทธิ์เข้าถึง Instagram หมดอายุหรือถูกเพิกถอน เชื่อมต่อใหม่เพื่อตอบ DM และโพสต์ต่อ',
@@ -300,7 +299,7 @@ export const settings: Messages['settings'] = {
       askManager: 'ขอให้เจ้าของหรือผู้จัดการเชื่อมต่อ Instagram',
       metaSettings: 'การตั้งค่า Meta app',
       metaHelp:
-        'สำหรับ Meta app ของแพลตฟอร์ม (Instagram API with Instagram Login) สมัครรับ webhook สำหรับ messages และ comments โดย verify token คือ META_WEBHOOK_VERIFY_TOKEN ของเซิร์ฟเวอร์',
+        'สำหรับ Meta app ของแพลตฟอร์ม (Instagram API with Instagram Login) สมัครรับ webhook สำหรับ messages และ comments ผู้ดูแลแพลตฟอร์มจะเพิ่ม verify token ใน Console → Settings',
       webhookUrl: 'Webhook callback URL',
       // R29 (shortened: old platform domains redirect to the canonical one; flagged for native TH review)
       redirectUri: 'OAuth redirect URI',
@@ -420,7 +419,8 @@ export const settings: Messages['settings'] = {
     fb: {
       title: 'เพจ Facebook',
       sub: 'เชื่อมต่อเพจ Facebook ที่ลิงก์กับบัญชี Instagram ของคุณ สำหรับโพสต์บนเพจและการโพสต์ลง Instagram',
-      notConfigured: 'การเข้าสู่ระบบด้วย Facebook ต้องใช้แอป Meta ของแพลตฟอร์มก่อน ทีมแพลตฟอร์มตั้งค่าเพียงครั้งเดียว',
+      notConfigured:
+        'การเข้าสู่ระบบด้วย Facebook ต้องใช้แอป Meta ของแพลตฟอร์มก่อน ผู้ดูแลแพลตฟอร์มจะเพิ่มคีย์ใน Console → Settings',
       intro:
         'ลงชื่อเข้าใช้ด้วย Facebook แล้วเลือกเพจที่ลิงก์กับบัญชี Instagram แบบมืออาชีพของคุณ จากนั้นเครื่องมือ AI จะอ่านความคิดเห็นบนเพจและโพสต์ที่อนุมัติแล้วได้',
       premium: 'การเชื่อมต่อเพจ Facebook อยู่ในแพ็กเกจ Premium',
