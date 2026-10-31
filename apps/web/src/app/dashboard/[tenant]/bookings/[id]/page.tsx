@@ -17,7 +17,7 @@ import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
-import { BookingMarks, CommissionForm } from '../booking-client'
+import { BookingMarks, CommissionForm, DeleteBooking } from '../booking-client'
 import { MarkPill } from '../mark-pill'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -308,6 +308,11 @@ export default async function BookingPage({ params }: { params: Promise<{ tenant
               canReopen={canCommission && !locked}
             />
           </Card>
+        )}
+        {canManage && !locked && !order && (
+          <div>
+            <DeleteBooking slug={slug} bookingId={data.id} listHref={appPath(`/${slug}/bookings`)} />
+          </div>
         )}
         <div>
           <Button variant="ghost" asChild>

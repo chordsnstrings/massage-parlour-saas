@@ -1335,6 +1335,8 @@ integrations note,
     cutoff); `findSlots` and the walk-in picker skip people on leave; explicit `staffIds` on leave → `DomainError
     ('no_staff')` (create + reschedule; also with `allowOffShift`). Existing bookings keep their reservations:
     `decideLeave` returns the clash count for the toast.
+  - Delete (R39): `deleteBooking` only without money history (no non-void sale, package redemption or commission
+    row); cascades items/reservations/outbox, unlinks the rest; web action keeps the day lock + audit snapshot.
   - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
     internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
     cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.

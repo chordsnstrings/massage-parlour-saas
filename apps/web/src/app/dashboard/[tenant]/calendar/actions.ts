@@ -23,6 +23,7 @@ import {
 import {
   createBooking,
   DomainError,
+  deleteBooking,
   findOrCreateClient,
   linkSiteEnquiryBooking,
   loadDay,
@@ -391,6 +392,62 @@ export async function setStatusAction(
       key: 'calendar.results.status',
       params: { ref: updated.refCode, status: { key: `enums.bookingStatus.${status}` } },
     })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/**
+ * R39: delete a booking with no money history (same people as cancel: `calendar.manage`). The booking's day lock
+ * applies (a closed day needs `pos.correct`, is marked amended and its sheet regenerated); the audit row keeps a
+ * snapshot of what was deleted.
+ */
+export async function deleteBookingAction(slug: string, bookingId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const id = z.uuid().safeParse(bookingId)
+  if (!id.success) return fromZod(id.error)
+  try {
+    const { b, items, lock } = await withTenant(ctx.tenant.id, async (tx) => {
+      const [row] = await tx
+        .select({ branchId: bookings.branchId, date: bookings.businessDate })
+        .from(bookings)
+        .where(eq(bookings.id, id.data))
+      if (!row) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, row.branchId)
+      const lock = await editDay(tx, ctx, row.branchId, row.date)
+      const items = await tx
+        .select({
+          service: bookingItems.serviceName,
+          staffIds: bookingItems.staffIds,
+          startsAt: bookingItems.startsAt,
+        })
+        .from(bookingItems)
+        .where(eq(bookingItems.bookingId, id.data))
+      const b = await deleteBooking(tx, id.data)
+      return { b, items, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.deleted',
+      entity: 'booking',
+      entityId: b.id,
+      data: {
+        ref: b.refCode,
+        status: b.status,
+        clientId: b.clientId,
+        branchId: b.branchId,
+        businessDate: b.businessDate,
+        startsAt: b.startsAt.toISOString(),
+        items,
+        ...(lock.closed ? { closedDay: true } : {}),
+      },
+    })
+    await afterDayChange(ctx, lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`)
+    return ok({ key: 'calendar.results.deleted', params: { ref: b.refCode } })
   } catch (e) {
     return handle(e)
   }

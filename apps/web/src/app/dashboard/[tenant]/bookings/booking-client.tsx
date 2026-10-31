@@ -1,7 +1,8 @@
 'use client'
-import { CheckCircle2, RotateCcw, XCircle } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { deleteBookingAction } from '@/app/dashboard/[tenant]/calendar/actions'
 import { useConfirmAction } from '@/app/dashboard/[tenant]/services/services-client'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -67,6 +68,36 @@ export function BookingMarks({
         </>
       )}
     </div>
+  )
+}
+
+/** R39: delete a booking with no payment or commission (the server re-checks), then back to the list. */
+export function DeleteBooking({
+  slug,
+  bookingId,
+  listHref,
+}: {
+  slug: string
+  bookingId: string
+  listHref: string
+}) {
+  const t = useT()
+  const router = useRouter()
+  const { pending, run } = useConfirmAction()
+  return (
+    <Button
+      variant="danger"
+      pending={pending}
+      onClick={() =>
+        run(
+          t('calendar.details.deleteConfirm'),
+          () => deleteBookingAction(slug, bookingId),
+          () => router.replace(listHref),
+        )
+      }
+    >
+      <Trash2 /> {t('calendar.details.delete')}
+    </Button>
   )
 }
 

@@ -19,6 +19,8 @@ export const domain: Messages['errors']['domain'] = {
   bookingRequestNotFound: 'ไม่พบคำขอจองนี้',
   bookingRequestBooked: 'คำขอจองนี้จองแล้ว',
   bookingCheckedOutReopen: 'การจองนี้ชำระเงินแล้ว — ยกเลิกหรือคืนเงินรายการขายก่อน',
+  // R39 (2026-10-31): needs native review.
+  bookingDeleteHasMoney: 'การจองนี้มีการชำระเงินหรือค่าคอมมิชชัน จึงลบไม่ได้ — ให้ยกเลิกการจองแทน',
   completeFirst: 'ทำเครื่องหมายการจองว่าเสร็จสิ้นก่อน',
   commissionRange: 'กรอกค่าคอมมิชชันระหว่าง 0 ถึง 100,000 AED',
   commissionEveryone: 'กรอกค่าคอมมิชชันให้นักบำบัดทุกคน',
