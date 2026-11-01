@@ -42,6 +42,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenant_slug_history` (F23: old slug PK → `renamed_tenant_id`, `reserved_until`; services `tenant-slug.ts`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
+- **Reset spa data (R40)**: services `tenant-reset.ts` `resetTenantData(platformDb, tenantId, confirmName)` — one
+  transaction: lock the tenant row, gzip JSON snapshot of every deleted row (+ kept rows it changes) into
+  `tenant_resets.snapshot` (platform table, migration 0061), then `delete … where tenant_id` over `RESET_DELETE_TABLES`
+  (children first: no SET NULL updates, no NO ACTION FK in the way; ledger + booking-commission triggers block
+  `spa_app` only), stock levels → 0, promo `uses` → 0, queued campaigns → draft, sent ones archived (stats cleared).
+  Stored files of deleted rows (intake / day-sheet PDFs, expense + purchase receipts by `/files/<id>`) go after the
+  commit via `deleteFile` (failures → `tenant_resets.errors`). `RESET_KEEP_TABLES` + test: every tenant table must be in
+  one list (add new tables there). Console: spa page card "Reset spa data" (type the spa name, `resetConfirm` field),
+  action `resetTenantDataAction`, audit `platform.tenant.reset`; e2e `console-ops.spec.ts` "reset spa data".
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
   tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
   delete `deleteTenantObjects` (storage.ts), `autoPurgeDeletedTenants` (worker `tenant-auto-purge`, off unless
