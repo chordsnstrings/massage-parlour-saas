@@ -10,10 +10,10 @@ the existing flow.
   https://spamanagement.co:
   - phases P1–P3;
   - the spa dashboard redesign;
-  - owner requests R1–R39, except R22 (paused), R27 (not building), R31 (planned), R34 (on hold) and the held Google fixes below;
+  - owner requests R1–R40, except R22 (paused), R27 (not building), R31 (planned), R34 (on hold) and the held Google fixes below;
   - fix backlog F1–F32.
-- The last release is PR #65 (R39: delete booking + Next 16.4.3 / zod / happy-dom / body-parser security updates), live
-  2026-10-31; before it PR #63 (R38 international client phones) and PR #62 (R37 worker outage fix).
+- The last release is PR #67 (R40: console "Reset spa data" + an AI test date fix), live 2026-11-01; before it PR #65
+  (R39 delete booking + Next 16.4.3 security updates) and PR #63 (R38 international client phones).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
 - All older feature branches were squash-merged and released. The only unmerged work is the branches below, plus
@@ -51,6 +51,7 @@ the existing flow.
   - the key chips in `components/integrations/instagram-card.tsx`, which come from services `missingMetaEnv`.
 
 **Owner setup (no code):**
+- **Be Relax data reset (R40):** only when the owner says so (warn Be Relax first): Console → Spas → BE RELAX → "Reset spa data".
 - **Google and Meta keys:** enter the platform keys in Console → Settings, on the Google card and the Meta card
   (`docs/INTEGRATIONS.md`). Until then spas see "Not configured yet" instead of the Connect buttons.
 - **AI key:** add `ARK_API_KEY` to the server secrets (`deploy/droplet/README.md` → "Secrets without SSH"). This needs the
