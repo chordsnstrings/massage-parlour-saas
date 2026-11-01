@@ -174,6 +174,7 @@ const monthly = doc([
       inc('Website', ' (English + Arabic) and CRM system (English + Thai): secure cloud hosting, SSL certificate'),
       inc('SEO care:', ' page titles and descriptions, Google sitemap and structured data, Google Search Console, redirects from old links, weekly SEO health check'),
       inc('Google Business Profile care:', ' keeping your Google profile up to date (opening hours, phone, services, photos, website link) and maintained'),
+      inc('Google Ads care and advice:', ' checking your ads, keywords and budget, and advising how to get more bookings for the money spent'),
       inc('Support 7 days a week', ' by WhatsApp and email; website text and price changes on request'),
       inc('Daily backups and security updates,', ' so your data is safe'),
       inc('New features and system updates', ' at no extra cost'),

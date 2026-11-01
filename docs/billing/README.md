@@ -29,6 +29,7 @@ Owner 2026-11-01: the setup invoice (013) is **PAID** in green (stamp, status, a
   - support 7 days a week;
   - daily backups and security updates;
   - new features and updates.
+  - Google Ads care and advice (owner 2026-11-01).
 - **File names:** "{Spa name} - Setup Invoice.pdf" and "{Spa name} - Nov Invoice.pdf" (use the month of the invoice).
 
 ## Files
