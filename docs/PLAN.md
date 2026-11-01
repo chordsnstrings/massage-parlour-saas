@@ -1579,6 +1579,22 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; building):** super-admin
+  console button on the spa page ("Danger zone"), any spa; confirm by typing the spa name (no extra 2FA prompt, owner
+  "no"); full backup right before; audited. Wipes the spa's operational data: clients, bookings (+ items, reservations,
+  notes, intake forms, waitlist, walk-in turns), sales, payments, tips, refunds, day closes / sheets, commissions,
+  accounting entries (journal) + period locks, numbering counters, website enquiries, chats, pulled-in reviews,
+  expenses, payroll, salary advances, time clock, leave, sold packages / gift cards / memberships, stock history
+  (purchases, movements; stock levels → 0), notifications, outbox. Keeps: staff, logins, roles, services, prices,
+  rooms, equipment, branches, shifts, website + content + settings, products, suppliers, package / membership types,
+  promo codes, ledger accounts, Spa Management's platform invoices to the spa, audit log. First use: Be Relax, only
+  after the owner's OK at that moment.
+- **R41 Pause card payments (Stripe) (owner 2026-11-01; ON HOLD: "don't start strip till taking approval from me"):**
+  Console → Settings global PAUSE switch + per-spa switch on the spa page; hides "Pay by card" and the server refuses;
+  Checkouts already started still settle; audited. Facts found 2026-11-01: Stripe Checkout added 2026-10-06 (a0c4e2f),
+  `STRIPE_SECRET_KEY` read from env; that commit also grew the encrypted overlay `secrets.env.enc` 272 → 384 bytes, so a
+  key was most likely stored then (unverifiable without the droplet's secrets.key); money goes to the Stripe account
+  owning that key.
 - **R39 Delete booking ✅ live 2026-10-31 (PR #65, 11f09a4; the same PR moved Next 16.3.8 → 16.4.3, zod 4.6.7 and
   overrides happy-dom ^21.0.4 / body-parser ^2.4.0 for new high/critical advisories) (owner 2026-10-31: "yes i need a delete button for the bookings"; answers: owners, managers
   and reception; only bookings without payment; simple confirm, no reason):** services `deleteBooking` (locks the row;
