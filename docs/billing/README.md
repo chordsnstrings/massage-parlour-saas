@@ -11,11 +11,9 @@ Platform invoices that the owner sends by hand, outside the app's console billin
 
 The next invoice number is **SM-INV-2026-003**.
 
-Be Relax mobiles on both invoices (owner 2026-11-01): +971 50 315 3267 · +971 50 192 4021.
-
 ## Owner's rules for these invoices
 
-- **Seller:** "Spa Management", legal name **1997labs Tech Solutions**, ask@spamanagement.co · 1997labs.com.
+- **Seller:** "Spa Management", legal name **1997labs Tech Solutions**, ask@spamanagement.co · 1997labs.com, and our phone numbers +971 50 315 3267 · +971 50 192 4021 (owner 2026-11-01).
   - Don't put a city or country under the seller.
   - Don't add bank details or the client's domain.
 - **Logos:** the SM logo, with "Powered by" and the 1997 Labs logo under it on the left; the company block goes on the right.

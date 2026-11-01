@@ -35,6 +35,7 @@ function header() {
   const right = [
     p(t('Spa Management', { bold: true }), { align: AlignmentType.RIGHT }),
     p(t('1997labs Tech Solutions', { bold: true }), { align: AlignmentType.RIGHT }),
+    p(t('+971 50 315 3267 · +971 50 192 4021', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
     p(t('ask@spamanagement.co · 1997labs.com', { size: 17, color: MUTED }), { align: AlignmentType.RIGHT }),
   ]
   return [
