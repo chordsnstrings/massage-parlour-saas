@@ -7,9 +7,9 @@ Platform invoices that the owner sends by hand, outside the app's console billin
 | No. | Client | What | Amount |
 | --- | --- | --- | --- |
 | SM-INV-2026-013 (dated 9 Oct 2026; was 001) | Be Relax Massage Center and Spa LLC | Premium setup at the Standard price: 14,000 − 5,000 special offer = 9,000; **paid in full**, balance 0 | AED 9,000 |
-| SM-INV-2026-014 (dated 9 Oct 2026; was 002) | Be Relax Massage Center and Spa LLC | November monthly fee (period 1–30 Nov 2026, one month): Premium at the Standard price, 3,000 − 1,000 = 2,000; **paid in full**, balance 0. From December due by the 10th of every month | AED 2,000 |
+| SM-INV-2026-014 (dated 1 Nov 2026; was 002) | Be Relax Massage Center and Spa LLC | November monthly fee (period 1–30 Nov 2026, one month): Premium at the Standard price, 3,000 − 1,000 = 2,000; **NOT PAID**, must be paid by 10 Nov 2026, then by the 10th of every month | AED 2,000 |
 
-Both are marked **PAID** in green (stamp, status, amount paid, balance 0; owner 2026-11-01, after briefly showing NOT PAID in red). Invoice numbers continue from 013 (owner 2026-11-01): the next is **SM-INV-2026-015**.
+Owner 2026-11-01: the setup invoice (013) is **PAID** in green (stamp, status, amount paid, balance 0); the November invoice (014) is **NOT PAID** in red (stamp, status, due, total row, payment line). Invoice numbers continue from 013 (owner 2026-11-01): the next is **SM-INV-2026-015**.
 
 ## Owner's rules for these invoices
 
