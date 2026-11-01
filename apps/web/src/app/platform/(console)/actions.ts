@@ -31,6 +31,7 @@ import {
   recordPlatformPayment,
   removePlan,
   renameTenantSlug,
+  resetTenantData,
   restorePlan,
   resumeTenant,
   saveEmailSettings,
@@ -972,6 +973,36 @@ export async function deleteTenantAction(
     return ok(`${row.name} deleted (data kept — Resume restores it)`)
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message, { confirm: e.message })
+    throw e
+  }
+}
+
+/**
+ * R40: reset a live spa's data (clients, bookings, sales, ledger, payroll, …; setup kept). The admin types the spa's
+ * name; a snapshot of the deleted rows is stored on the `tenant_resets` record before anything is removed.
+ */
+export async function resetTenantDataAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const confirm = String(fd.get('resetConfirm') ?? '')
+  try {
+    const rec = await resetTenantData(platformDb(), tenantId, confirm, { actorUserId: user.id })
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.tenant.reset',
+      entity: 'tenant',
+      entityId: tenantId,
+      data: { resetId: rec.id, counts: rec.counts, filesDeleted: rec.filesDeleted, errors: rec.errors },
+    })
+    refresh(tenantId)
+    const rows = Object.values(rec.counts).reduce((a, b) => a + b, 0)
+    return ok(`${rec.name} reset: ${rows} records removed; the spa starts from today`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { resetConfirm: e.message })
     throw e
   }
 }

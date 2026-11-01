@@ -9,6 +9,7 @@ import {
   platformPayments,
   roles,
   subscriptions,
+  tenantResets,
   tenants,
   user,
 } from '@spa/db'
@@ -46,6 +47,7 @@ import {
   purgeTenantAction,
   recordPaymentAction,
   renameSlugAction,
+  resetTenantDataAction,
   setInvoicePaidAction,
   setTenantStatusAction,
   updateSubscriptionAction,
@@ -120,6 +122,14 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
   const paused = tenant.status === 'read_only'
   const deleted = Boolean(tenant.deletedAt)
   const site = await publicSiteUrl(tenant)
+  // R40: the last data reset (who / when / how many rows), shown in its card.
+  const [lastReset] = await db
+    .select({ at: tenantResets.createdAt, counts: tenantResets.counts, by: user.email })
+    .from(tenantResets)
+    .leftJoin(user, eq(user.id, tenantResets.resetBy))
+    .where(eq(tenantResets.resetTenantId, id))
+    .orderBy(desc(tenantResets.createdAt))
+    .limit(1)
   const exportUrl = await appUrl(`/${tenant.slug}/settings/data/export?type=full`)
   const openInvoices = invoices.filter((i) => i.status === 'issued')
   // Partly paid invoices (e.g. a setup-fee deposit, PLAN §18.3) stay issued with a balance due.
@@ -640,6 +650,37 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                   <Input id="confirm" name="confirm" autoComplete="off" required />
                 </Field>
                 <SubmitButton variant="danger">Permanently delete</SubmitButton>
+              </ActionForm>
+            </CardBody>
+          </Card>
+        )}
+        {!deleted && (
+          <Card>
+            <CardHeader
+              title="Reset spa data"
+              description="Fresh start from today. Deletes clients, bookings, sales, payments, tips, refunds, daily sheets, commissions, accounting entries, website enquiries, chats and reviews, expenses, payroll, time clock and leave, sold packages, gift cards and memberships, and stock history (stock levels go to 0). Keeps staff and logins, services and prices, rooms, branches, the website and settings, products and suppliers, package and membership types, and Spa Management invoices. A snapshot of everything deleted is stored with the reset record."
+            />
+            <CardBody className="space-y-4">
+              {lastReset && (
+                <p className="text-sm text-muted">
+                  Last reset {formatDateTime(lastReset.at)}
+                  {lastReset.by ? ` by ${lastReset.by}` : ''} ·{' '}
+                  {Object.values(lastReset.counts).reduce((a, b) => a + b, 0)} records removed
+                </p>
+              )}
+              <Button variant="secondary" asChild>
+                <a href={exportUrl} target="_blank" rel="noreferrer">
+                  <Download /> Download full export
+                </a>
+              </Button>
+              <ActionForm
+                action={resetTenantDataAction.bind(null, id)}
+                className="flex flex-wrap items-end gap-3"
+              >
+                <Field label={`Type ${tenant.name} to reset its data`} name="resetConfirm">
+                  <Input id="resetConfirm" name="resetConfirm" autoComplete="off" required />
+                </Field>
+                <SubmitButton variant="danger">Reset spa data</SubmitButton>
               </ActionForm>
             </CardBody>
           </Card>

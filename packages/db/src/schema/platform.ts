@@ -559,6 +559,34 @@ export const tenantPurges = pgTable(
 )
 
 /**
+ * R40: one row per "Reset spa data" (super-admin console). The spa's operational data (clients, bookings, sales, ledger,
+ * …) was deleted; its setup stayed. `snapshot` = gzip of the deleted rows as JSON ({ table: rows[] }) taken in the
+ * same transaction, so a reset can be undone by hand. No FK (`reset_tenant_id` is not `tenant_id`: that name marks
+ * RLS tenant tables).
+ */
+const snapshotBytes = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
+
+export const tenantResets = pgTable(
+  'tenant_resets',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    resetTenantId: uuid('reset_tenant_id').notNull(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    resetBy: text('reset_by'),
+    /** Rows removed per table (table name → count). */
+    counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
+    snapshot: snapshotBytes('snapshot').notNull(),
+    snapshotSize: integer('snapshot_size').notNull(),
+    filesDeleted: integer('files_deleted').notNull().default(0),
+    /** Stored-object deletions that failed after the reset (never undo it). */
+    errors: jsonb('errors').$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [index('tenant_resets_tenant').on(t.resetTenantId, t.createdAt), ...platformPolicies()],
+)
+
+/**
  * Fixed-window request counters for public server actions (no Redis): e.g. `signup:ip:<ip>` for "Apply for your
  * spa", which creates the login server-side, past Better Auth's HTTP rate limiter. Platform-only; no tenant data.
  */

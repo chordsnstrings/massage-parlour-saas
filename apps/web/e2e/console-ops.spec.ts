@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { announcementDismissals, platformInvoices, tenants } from '@spa/db'
+import { announcementDismissals, clients, platformInvoices, tenantResets, tenants } from '@spa/db'
 import { createPlatformInvoice } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { admin, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
@@ -175,4 +175,35 @@ test('console: tenant usage columns and automatic billing transitions', async ({
 
   await ownerCtx.close()
   await adminCtx.close()
+})
+
+// R40: Reset spa data — typed spa name, clients gone, staff/settings kept, a reset record with a snapshot.
+test('console: reset spa data', async ({ browser }) => {
+  test.setTimeout(120_000)
+  const ownerCtx = await browser.newContext()
+  const adminCtx = await browser.newContext()
+  const owner = await ownerCtx.newPage()
+  const ops = await adminCtx.newPage()
+  const { slug } = await signUpOwner(owner, { spa: 'Fresh Start Spa' })
+  await signInPlatformAdmin(ops)
+  const db = testDb()
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
+  const id = tenant!.id
+  await db.insert(clients).values({ tenantId: id, name: 'Old Client', phoneE164: '971501112233' })
+
+  await ops.goto(`${admin}/tenants/${id}`)
+  const field = ops.getByLabel('Type Fresh Start Spa to reset its data')
+  await field.fill('Fresh Start')
+  await ops.getByRole('button', { name: 'Reset spa data' }).click()
+  await expect(ops.getByText('Type Fresh Start Spa to confirm').first()).toBeVisible()
+  expect(await db.select().from(clients).where(eq(clients.tenantId, id))).toHaveLength(1)
+
+  await field.fill('fresh start spa')
+  await ops.getByRole('button', { name: 'Reset spa data' }).click()
+  await expect(ops.getByText(/Fresh Start Spa reset: \d+ records removed/)).toBeVisible()
+  expect(await db.select().from(clients).where(eq(clients.tenantId, id))).toHaveLength(0)
+  const [rec] = await db.select().from(tenantResets).where(eq(tenantResets.resetTenantId, id))
+  expect(rec!.counts).toMatchObject({ clients: 1 })
+  await ops.reload()
+  await expect(ops.getByText(/Last reset .* records removed/)).toBeVisible()
 })

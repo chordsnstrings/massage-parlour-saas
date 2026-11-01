@@ -1579,7 +1579,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
-- **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; building):** super-admin
+- **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; built, PR pending):** super-admin
   console button on the spa page ("Danger zone"), any spa; confirm by typing the spa name (no extra 2FA prompt, owner
   "no"); full backup right before; audited. Wipes the spa's operational data: clients, bookings (+ items, reservations,
   notes, intake forms, waitlist, walk-in turns), sales, payments, tips, refunds, day closes / sheets, commissions,
