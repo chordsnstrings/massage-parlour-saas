@@ -17,6 +17,8 @@
   .title { display:flex; justify-content:space-between; align-items:flex-end; margin:14px 0 10px; }
   .title h1 { margin:0; font-size:20pt; color:var(--green); }
   .meta { font-size:9pt; text-align:right; }
+  .red { color:#C62828 !important; }
+  .stamp { display:inline-block; margin-left:10px; padding:2px 10px; border:2px solid #C62828; border-radius:6px; color:#C62828; font-size:12pt; font-weight:700; letter-spacing:.08em; vertical-align:middle; }
   .meta td { padding:1px 0 1px 12px; }
   .meta td:first-child { color:var(--muted); }
   .billto { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
@@ -70,11 +72,12 @@
     ask@spamanagement.co · 1997labs.com
   </div>
 </div><div class="title">
-  <h1>Invoice</h1>
+  <h1>Invoice <span class="stamp">NOT PAID</span></h1>
   <table class="meta">
     <tr><td>Invoice no.</td><td><b>SM-INV-2026-001</b></td></tr>
     <tr><td>Date</td><td>28 Oct 2026</td></tr>
-    <tr><td>Balance due</td><td><b>AED 9,000 on receipt</b></td></tr>
+    <tr><td>Status</td><td class="red"><b>NOT PAID</b></td></tr>
+    <tr><td>Balance due</td><td class="red"><b>AED 9,000 on receipt</b></td></tr>
     <tr><td>Currency</td><td>AED</td></tr>
   </table>
 </div><div class="billto">
@@ -95,13 +98,13 @@
   <tr><td><b>Premium plan: setup (one time)</b><br><span class="notes">Website design in 2 languages (English + Arabic), fully SEO and AI-search (LLM) optimized, built as a conversion funnel using proven psychology to turn visitors into bookings; CRM system in 2 languages (English + Thai); onboarding, data import, menu, rooms and team set-up</span></td><td class="r">1</td><td class="r">14,000.00</td><td class="r">14,000.00</td></tr>
   <tr class="offer"><td><span class="pill">SPECIAL OFFER</span> <b>Premium at the Standard price</b></td><td class="r">1</td><td class="r">−5,000.00</td><td class="r">−5,000.00</td></tr>
   <tr><td colspan="3" class="r"><b>Total setup (AED)</b></td><td class="r"><b>9,000.00</b></td></tr>
-  <tr class="tot"><td colspan="3" class="r">Balance due (AED)</td><td class="r">9,000.00</td></tr>
+  <tr class="tot"><td colspan="3" class="r red">Balance due, not paid (AED)</td><td class="r red">9,000.00</td></tr>
 </table>
 <p class="notes">You save AED 5,000 on setup compared with the Premium list price. The monthly subscription (AED 2,000 instead of AED 3,000) is invoiced separately each month and is due by the 10th of the month.</p>
 <h2>Payment</h2>
 <ul class="notes" style="font-size:9pt;color:var(--ink)">
   <li>Payment by bank transfer, cash or card payment link.</li>
-  <li>No advance payment has been received. The full amount of <b>AED 9,000</b> is due on receipt of this invoice.</li>
+  <li class="red"><b>Not paid:</b> no advance payment has been received. The full amount of <b>AED 9,000</b> is due on receipt of this invoice.</li>
 </ul><p style="margin-top:14px;text-align:center;font-size:7.5pt;color:#59645d">This is an official invoice issued by 1997labs Tech Solutions (Spa Management); no stamp or signature is needed.</p>
 <div class="break"></div>
 <div class="feat">
