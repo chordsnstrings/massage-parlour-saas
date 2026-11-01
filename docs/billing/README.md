@@ -6,10 +6,10 @@ Platform invoices that the owner sends by hand, outside the app's console billin
 
 | No. | Client | What | Amount |
 | --- | --- | --- | --- |
-| SM-INV-2026-001 (28 Oct 2026) | Be Relax Massage Center and Spa LLC | Premium setup at the Standard price: 14,000 − 5,000 special offer = 9,000; **no advance paid, full 9,000 due on receipt** (corrected 2026-11-01: the earlier 2,000 down payment was not received) | AED 9,000 |
-| SM-INV-2026-002 | Be Relax Massage Center and Spa LLC | November monthly fee: Premium at the Standard price, 3,000 − 1,000 = 2,000. **Must be paid by 10 Nov 2026**, then by the 10th of every month | AED 2,000 |
+| SM-INV-2026-013 (28 Oct 2026; was 001) | Be Relax Massage Center and Spa LLC | Premium setup at the Standard price: 14,000 − 5,000 special offer = 9,000; **no advance paid, full 9,000 due on receipt** (corrected 2026-11-01: the earlier 2,000 down payment was not received) | AED 9,000 |
+| SM-INV-2026-014 (was 002) | Be Relax Massage Center and Spa LLC | November monthly fee (period 1–30 Nov 2026, one month): Premium at the Standard price, 3,000 − 1,000 = 2,000. **Must be paid by 10 Nov 2026**, then by the 10th of every month | AED 2,000 |
 
-The next invoice number is **SM-INV-2026-003**.
+Both are marked **NOT PAID** in red (owner 2026-11-01). Invoice numbers continue from 013 (owner 2026-11-01): the next is **SM-INV-2026-015**.
 
 ## Owner's rules for these invoices
 
@@ -36,5 +36,5 @@ The next invoice number is **SM-INV-2026-003**.
 - **`word/`:** editable Word templates for the owner, with [bracketed] fields. Word doesn't add up the amounts, so totals are typed by hand.
   - To rebuild them: `cd docs/billing/word && NODE_PATH=$(npm root -g) node make.cjs`. It uses `docx`, which the docx skill preinstalls.
   - To check the layout: convert to PDF with LibreOffice, then `pdftoppm`.
-- **`pdf-html/`:** the HTML sources of the PDFs that were sent: the two Be Relax invoices and the general proforma (`proforma.html`).
+- **`pdf-html/`:** the HTML sources of the PDFs that were sent: the two Be Relax invoices (`be-relax-setup-SM-INV-2026-013.html`, `be-relax-nov-SM-INV-2026-014.html`) and the general proforma (`proforma.html`).
   - To render one: `node render.mjs "$PWD/<file>.html" out.pdf out.png`. It uses Playwright Chromium and adds the page footer ("Page x of y").
