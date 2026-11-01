@@ -30,7 +30,7 @@ Owner 2026-11-01: the setup invoice (013) is **PAID** in green (stamp, status, a
   - daily backups and security updates;
   - new features and updates.
   - Google Ads care and advice (owner 2026-11-01).
-- **File names:** "{Spa name} - Setup Invoice.pdf" and "{Spa name} - Nov Invoice.pdf" (use the month of the invoice).
+- **File names (owner 2026-11-01):** "{Invoice no.} - {Spa legal name} - {contact}.pdf", e.g. "SM-INV-2026-013 - Be Relax Massage Center and Spa - Madam Mina.pdf" (Be Relax contact: Madam Mina).
 
 ## Files
 
