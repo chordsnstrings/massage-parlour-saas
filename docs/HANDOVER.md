@@ -121,7 +121,7 @@ never with force. Anything else, config included, goes through a PR. CI runs and
 
 ## What is in the repo besides the code
 
-- `docs/billing/`: client invoices issued by hand (Be Relax SM-INV-2026-013/014, both paid, dated 9 Oct 2026; next no. SM-INV-2026-015), the
+- `docs/billing/`: client invoices issued by hand (Be Relax SM-INV-2026-013 setup paid, dated 9 Oct 2026; 014 November not paid, dated 1 Nov 2026; next no. SM-INV-2026-015), the
   owner's invoice rules, the editable Word templates and the HTML/PDF sources (README there).
 
 - `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.7 live, v2.8 next) and the 2026-10-14 QA report.
