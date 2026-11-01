@@ -119,7 +119,7 @@ const planLines = [
 
 // ---------- Setup invoice ----------
 const FEATURES = [
-  ['A. Website', ['Website in 2 languages: English + Arabic (Arabic right-to-left); professionally designed and fast on phones', 'Your own website address with free SSL certificate', 'Services and prices, team and opening hours shown live from the system (prices can be hidden)', 'Home, Services, About, Contact and other pages; map link, phones, WhatsApp buttons and social links', 'Online booking with live free times, 24/7', 'Website enquiry and booking-request forms straight into the system (no email needed)', 'SEO basics: page titles and descriptions, sitemap, Google structured data, Search Console, redirects from old links', 'Google Ads / analytics tags and a moving offer bar', 'Website changes by our team ("Request a change" from your dashboard)']],
+  ['A. Website', ['Website in 2 languages: English + Arabic (Arabic right-to-left); professionally designed and fast on phones', 'Your own website address with free SSL certificate', 'Services and prices, team and opening hours shown live from the system (prices can be hidden)', 'Home, Services, About, Contact and other pages; map link, phones, WhatsApp buttons and social links', 'Online booking with live free times, 24/7', 'Website enquiry and booking-request forms straight into the system (no email needed)', 'Full SEO + AI-search (LLM) optimization: page titles and descriptions, sitemap, Google structured data, Search Console, redirects from old links', 'High-converting booking funnel: proven psychology (clear offers, trust signals, urgency, one-tap WhatsApp and booking) for the most bookings', 'Google Ads / analytics tags and a moving offer bar', 'Website changes by our team ("Request a change" from your dashboard)']],
   ['B. Bookings and calendar', ['Calendar by therapist and room; no double bookings', 'Walk-ins with a fair turn list, waitlist, confirm / check-in / finish flow', 'WhatsApp confirmations, reminders and thank-you messages (ready to send in one tap)', "Dashboard: today's bookings and sales together, website alerts with pop-up and sound"]],
   ['C. Sales and point of sale', ['Sales and checkout; payments recorded by cash, card terminal or bank transfer; tips', 'Daily close and daily sales sheet (PDF)', 'Gift vouchers, packages and memberships', 'Products and stock, purchases, low-stock alerts']],
   ['D. Clients', ['Client records with visit history, notes, UAE and international phone numbers', 'Intake and waiver forms (PDF), duplicate merge, import and export']],
@@ -148,7 +148,7 @@ const setup = doc([
   ...header(), titleBlock('Balance due', '[AED 0,000 on receipt]'), p('', { after: 120 }), ...boxes(planLines),
   h2('Invoice details'),
   itemsTable([
-    itemRow('[Premium] plan: setup (one time)', 'Website design in 2 languages (English + Arabic); CRM system in 2 languages (English + Thai); onboarding, data import, menu, rooms and team set-up', '1', '[14,000.00]', '[14,000.00]'),
+    itemRow('[Premium] plan: setup (one time)', 'Website design in 2 languages (English + Arabic), fully SEO and AI-search (LLM) optimized, built as a conversion funnel using proven psychology to turn visitors into bookings; CRM system in 2 languages (English + Thai); onboarding, data import, menu, rooms and team set-up', '1', '[14,000.00]', '[14,000.00]'),
     offerRow('[Premium at the Standard price]', '1', '[−5,000.00]', '[−5,000.00]'),
     totalRow('Total setup (AED)', '[9,000.00]', { bold: true }),
     totalRow('Less: down payment received', '[−0,000.00]'),
