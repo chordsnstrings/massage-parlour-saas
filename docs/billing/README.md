@@ -6,10 +6,12 @@ Platform invoices that the owner sends by hand, outside the app's console billin
 
 | No. | Client | What | Amount |
 | --- | --- | --- | --- |
-| SM-INV-2026-001 (28 Oct 2026) | Be Relax Massage Center and Spa LLC | Premium setup at the Standard price: 14,000 − 5,000 special offer = 9,000; down payment 2,000 received; **balance 7,000 on receipt** | AED 9,000 |
+| SM-INV-2026-001 (28 Oct 2026) | Be Relax Massage Center and Spa LLC | Premium setup at the Standard price: 14,000 − 5,000 special offer = 9,000; **no advance paid, full 9,000 due on receipt** (corrected 2026-11-01: the earlier 2,000 down payment was not received) | AED 9,000 |
 | SM-INV-2026-002 | Be Relax Massage Center and Spa LLC | November monthly fee: Premium at the Standard price, 3,000 − 1,000 = 2,000. **Must be paid by 10 Nov 2026**, then by the 10th of every month | AED 2,000 |
 
 The next invoice number is **SM-INV-2026-003**.
+
+Be Relax mobiles on both invoices (owner 2026-11-01): +971 50 315 3267 · +971 50 192 4021.
 
 ## Owner's rules for these invoices
 
