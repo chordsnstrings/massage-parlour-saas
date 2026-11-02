@@ -22,6 +22,7 @@ import {
 } from '@spa/db'
 import {
   createBooking,
+  createNameOnlyClient,
   DomainError,
   deleteBooking,
   findOrCreateClient,
@@ -217,9 +218,6 @@ const bookingSchema = z
     if (v.clientId) return
     if (!v.clientName)
       c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
-    // A request's phone stays on the server for members without phone access.
-    if (!v.clientPhone && !v.enquiryId)
-      c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'calendar.errors.clientPhone' })
   })
 
 export async function createBookingAction(
@@ -249,13 +247,22 @@ export async function createBookingAction(
         if (!c)
           throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
       } else {
+        // R43: the phone is optional; a request's phone stays on the server for members without phone access.
+        const phone = v.clientPhone || enquiry?.phone
+        const lang = enquiry ? { language: enquiry.locale } : {}
         clientId = (
-          await findOrCreateClient(tx, ctx.tenant.id, {
-            name: v.clientName!,
-            phone: v.clientPhone || enquiry!.phone,
-            source: v.source,
-            ...(enquiry ? { language: enquiry.locale } : {}),
-          })
+          phone
+            ? await findOrCreateClient(tx, ctx.tenant.id, {
+                name: v.clientName!,
+                phone,
+                source: v.source,
+                ...lang,
+              })
+            : await createNameOnlyClient(tx, ctx.tenant.id, {
+                name: v.clientName!,
+                source: v.source,
+                ...lang,
+              })
         ).id
       }
       const booking = await createBooking(tx, {

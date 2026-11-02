@@ -125,7 +125,11 @@ test('therapist: own booking status and "My earnings"', async ({ page, browser }
   await test.step('reception finishes her completed booking with the payment (D7) → the booking shows its sale', async () => {
     await page.goto(`${app}/${slug}/bookings/${mine.id}`)
     await expect(page.getByText('Not paid yet. Finish to take the payment.')).toBeVisible()
-    await page.getByRole('link', { name: 'Finish & pay' }).click()
+    await page.getByRole('button', { name: 'Finish & pay' }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('link', { name: 'More options (tips, discount, products)' })
+      .click()
     await expect(page.getByRole('heading', { name: 'Check out', level: 1 })).toBeVisible()
     // The commission already recorded on the booking is the prefill (nothing is posted twice).
     await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('45')

@@ -6,7 +6,7 @@ export const sales: Messages['sales'] = {
   description: 'บันทึกเงินที่รับหน้าเคาน์เตอร์ — เงินสด เครื่องรูดบัตรของร้าน หรือโอนเงิน',
   newSale: 'ขายใหม่',
   dailyClose: 'ปิดยอดประจำวัน',
-  back: 'การขาย',
+  back: 'การจองและการขาย',
   walkIn: 'ลูกค้า walk-in',
   today: 'วันนี้',
   prevDay: 'วันก่อนหน้า',

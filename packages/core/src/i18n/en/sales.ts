@@ -5,7 +5,7 @@ export const sales = {
   description: 'Record payments taken at the till — cash, your own card terminal or bank transfer.',
   newSale: 'New sale',
   dailyClose: 'Daily close',
-  back: 'Sales',
+  back: 'Bookings & sales',
   walkIn: 'Walk-in',
   today: 'Today',
   prevDay: 'Previous day',

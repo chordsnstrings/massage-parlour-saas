@@ -20,6 +20,7 @@ import {
   setStatusAction,
 } from '@/app/dashboard/[tenant]/calendar/actions'
 import { DetailsForm, TermsForm, type TermsItem } from '@/components/bookings/order-forms'
+import { PayBookingButton } from '@/components/bookings/pay-booking'
 import { Note, Pill, statusTone } from '@/components/crm'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
@@ -418,16 +419,17 @@ function Details({
       )}
 
       {data.canCheckout && live && !paid && status !== 'pending' && !data.editLocked && (
-        <Button
-          asChild
+        // R45: Complete & pay in a pop-up (the full checkout stays one link away inside it).
+        <PayBookingButton
+          slug={data.slug}
+          bookingId={first.bookingId}
+          refCode={first.refCode}
+          checkoutHref={`${data.checkoutBase}?booking=${first.bookingId}`}
+          label={t('calendar.sheet.finish')}
           variant={status === 'completed' ? 'primary' : 'secondary'}
           size="lg"
           className="w-full"
-        >
-          <Link href={`${data.checkoutBase}?booking=${first.bookingId}`}>
-            <Receipt /> {t('calendar.sheet.finish')}
-          </Link>
-        </Button>
+        />
       )}
 
       {removable &&

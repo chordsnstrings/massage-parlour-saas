@@ -6,7 +6,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import { Banknote, Coins, Lock, Plus, Receipt, ReceiptText, Store, Wallet } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Card, Grid, Hairline, Pill, Seg, Stack, Stat } from '@/components/crm'
 import { DayNav } from '@/components/pos/day-nav'
 import { SaleStatusPill } from '@/components/pos/status'
@@ -35,6 +35,18 @@ export default async function SalesPage({
   const { t, fmt } = await getI18n()
   const slug = ctx.tenant.slug
   const sp = await searchParams
+  // R45: sales live on "Bookings & sales" (one day = from + to); this page stays for roles without the calendar.
+  if (can(ctx, 'calendar.view')) {
+    const q = new URLSearchParams()
+    const d = one(sp.date)
+    if (d && DATE.test(d)) {
+      q.set('from', d)
+      q.set('to', d)
+    }
+    const b = one(sp.branch)
+    if (b) q.set('branch', b)
+    redirect(appPath(`/${slug}/bookings${q.size ? `?${q}` : ''}`))
+  }
   const data = await withTenant(ctx.tenant.id, async (tx) => {
     const picked = await pickBranch(tx, ctx, one(sp.branch))
     if (!picked) return null

@@ -96,10 +96,12 @@ test('reception checks out a booking with split payment + tip, then closes the d
     ).toHaveLength(2)
   })
 
-  await test.step('sales list shows today’s totals', async () => {
+  await test.step('sales list shows today’s totals (R45: on Bookings & sales)', async () => {
     await page.goto(`${app}/${slug}/sales`)
-    await expect(page.getByRole('heading', { name: 'Sales', level: 1 })).toBeVisible()
-    await expect(page.getByRole('link', { name: /#1 Fatima Al Mansoori/ }).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Bookings & sales', level: 1 })).toBeVisible()
+    await expect(
+      page.getByRole('row').filter({ hasText: 'Fatima Al Mansoori' }).filter({ hasText: '#1' }).first(),
+    ).toBeVisible()
     await screenshotAt(page, 'pos')
   })
 

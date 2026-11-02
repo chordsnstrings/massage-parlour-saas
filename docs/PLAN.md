@@ -1579,6 +1579,34 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R43 Phone optional on new bookings (owner 2026-11-02: "make the phone number optional"; answers: a name-only
+  client card; every booking type made from the calendar):** calendar `createBookingAction` no longer requires a
+  phone for a new client; with a phone it still finds/creates by number (`findOrCreateClient`, unchanged for other
+  callers: POS, waitlist, public booking, Instagram/DM keep their own rules); without one, services
+  `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
+  "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
+  (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
+- **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
+  bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
+  Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and
+  shows Not paid for reception; built 2026-11-02, deploy only on the owner's word):** services `bookings-list.ts`
+  `listBookingsAndSales` (bookings with their live sale + counter sales without a booking, newest first, counter rows
+  only without a status/source/therapist/missing filter) and `rangeMoney` (paid sales by business date = the dashboard
+  rule, by method, tips, completed bookings with no live sale). Web: `/bookings` = "Bookings & sales" (money tiles,
+  Payment column, Daily close / Counter sale / New booking); the sidebar drops Sales (kept only for a custom role with
+  pos.use but no calendar.view; `/sales` redirects to `/bookings?from=to=date`; receipts, `/sales/new`, `/sales/close`
+  unchanged and highlight the item via `match`); Complete & pay pop-up `components/bookings/pay-booking.tsx` (prefill
+  = `sales/booking-prefill.ts`, shared with `/sales/new`; save = `createSaleAction` → `finishBooking`) on the list, the
+  booking page and the calendar sheet ("More options" = the full checkout). New TH strings need native review.
+  Tests: services booking-pay (R45 case), e2e bookings (pop-up), shell/pos/calendar/order-flow/therapist updated.
+- **R42 Delete a team member (owner 2026-11-02: "option to delete member of team"; answers: console only; remove from
+  this spa and delete the login when unused elsewhere; no last-owner limit):** console spa page → Team card → "Delete"
+  per member (browser confirm). Services `removeTenantMember(platformDb, tenantId, memberId)` (`member-remove.ts`):
+  deletes the membership (branch links cascade); then the login: kept if it belongs to another spa (`kept_other_spa`)
+  or is a super-admin (`kept_admin`); else deleted (`deleted`, the email can be invited fresh); a login that already
+  wrote records (user FKs without ON DELETE: bookings, sales, …) can't be deleted, so its sessions are ended and it
+  stays without any spa (`kept_has_records`). Action `removeMemberAction`, audit `platform.member.removed`. Tests:
+  services `member-remove.test.ts` (4), e2e `console-ops.spec.ts` "delete a team member".
 - **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; ✅ live 2026-11-01, PR #67, 8da1a27):** super-admin
   console button on the spa page ("Danger zone"), any spa; confirm by typing the spa name (no extra 2FA prompt, owner
   "no"); full backup right before; audited. Wipes the spa's operational data: clients, bookings (+ items, reservations,

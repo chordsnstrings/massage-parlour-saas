@@ -15,6 +15,8 @@ export const domain: Messages['errors']['domain'] = {
     saleStatus: { open: 'ค้างชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิกแล้ว', refunded: 'คืนเงินแล้ว' },
   },
   bookingNotFound: 'ไม่พบการจอง',
+  // R42 (2026-11-02): needs native review.
+  teamMemberNotFound: 'ไม่พบสมาชิกทีมนี้',
   // 2026-10-13: needs native review.
   bookingRequestNotFound: 'ไม่พบคำขอจองนี้',
   bookingRequestBooked: 'คำขอจองนี้จองแล้ว',
