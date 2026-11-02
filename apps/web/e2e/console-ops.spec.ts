@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test'
-import { announcementDismissals, clients, members, platformInvoices, tenantResets, tenants } from '@spa/db'
+import {
+  announcementDismissals,
+  clients,
+  members,
+  platformInvoices,
+  tenantResets,
+  tenants,
+  user,
+} from '@spa/db'
 import { createPlatformInvoice } from '@spa/services'
 import { eq } from 'drizzle-orm'
 import { admin, signInPlatformAdmin, signUpOwner, testDb } from './helpers'
@@ -220,10 +228,15 @@ test('console: delete a team member', async ({ browser }) => {
   const db = testDb()
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug))
   const id = tenant!.id
-  expect(await db.select().from(members).where(eq(members.tenantId, id))).toHaveLength(1)
+  const team = await db
+    .select({ name: user.name })
+    .from(members)
+    .innerJoin(user, eq(user.id, members.userId))
+    .where(eq(members.tenantId, id))
+  expect(team).toHaveLength(1)
 
   await ops.goto(`${admin}/tenants/${id}`)
-  const del = ops.getByRole('button', { name: /^Delete / })
+  const del = ops.getByRole('button', { name: `Delete ${team[0]!.name}`, exact: true })
   await expect(del).toHaveCount(1)
   ops.once('dialog', (d) => d.accept())
   await del.click()
