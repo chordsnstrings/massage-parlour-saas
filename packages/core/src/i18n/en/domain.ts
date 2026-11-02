@@ -17,6 +17,7 @@ export const domain = {
   },
   // Not found
   bookingNotFound: 'Booking not found',
+  teamMemberNotFound: 'Team member not found',
   // Enquiries → Make booking (2026-10-13)
   bookingRequestNotFound: 'Booking request not found',
   bookingRequestBooked: 'Booking request already booked',
