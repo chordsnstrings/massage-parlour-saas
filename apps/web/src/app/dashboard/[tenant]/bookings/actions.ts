@@ -1,6 +1,6 @@
 'use server'
 import type { Tx } from '@spa/db'
-import { bookings, withTenant } from '@spa/db'
+import { bookings, staff, withTenant } from '@spa/db'
 import {
   commissionTotals,
   correctBookingOrder,
@@ -11,10 +11,11 @@ import {
   recordOrderCommissions,
   setBookingStatus,
 } from '@spa/services'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { allowedBranches } from '@/app/dashboard/[tenant]/calendar/data'
+import { bookingPrefill } from '@/app/dashboard/[tenant]/sales/booking-prefill'
 import { type ActionResult, fail, failDomain, fromZod, ok } from '@/lib/action'
 import { can, guard, type MemberContext } from '@/server/access'
 import { audit } from '@/server/audit'
@@ -238,6 +239,38 @@ export async function correctOrderAction(
     revalidate(slug)
     revalidatePath(`/dashboard/${slug}/sales`, 'layout')
     return ok({ key: 'bookings.results.corrected', params: { number: r.sale.number } }, { saleId: r.sale.id })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
+/**
+ * R45 Complete & pay pop-up: the booking's checkout prefill (same rules and checks as /sales/new: one line per item ×
+ * therapist with the agreed fee, the commission fields), the therapists' names, and whether it can be paid here.
+ * Saving goes through createSaleAction (Finish = sale + commission in one transaction).
+ */
+export async function payPrefillAction(slug: string, bookingId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'pos.use')
+  if (error) return fail(error)
+  if (!z.uuid().safeParse(bookingId).success) return fail('errors.generic')
+  try {
+    const data = await withTenant(ctx.tenant.id, async (tx) => {
+      const b = await ownBooking(tx, ctx, bookingId)
+      const prefill = await bookingPrefill(tx, ctx, b)
+      const ids = [...new Set(prefill.lines.flatMap((l) => (l.staffId ? [l.staffId] : [])))]
+      const people = ids.length
+        ? await tx.select({ id: staff.id, name: staff.displayName }).from(staff).where(inArray(staff.id, ids))
+        : []
+      return {
+        branchId: b.branchId,
+        prefill: {
+          ...prefill,
+          commissions: can(ctx, 'calendar.commission') ? prefill.commissions : [],
+        },
+        names: Object.fromEntries(people.map((p) => [p.id, p.name])),
+      }
+    })
+    return ok(undefined, data)
   } catch (e) {
     return handle(e)
   }

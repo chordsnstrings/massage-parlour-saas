@@ -20,8 +20,8 @@ test('bookings: list, fee + commission, finish & pay, re-open blocked', async ({
     )
 
   await page.goto(`${app}/${slug}`)
-  await page.getByRole('link', { name: 'Bookings', exact: true }).first().click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Bookings', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'Bookings & sales', exact: true }).first().click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Bookings & sales', exact: true })).toBeVisible()
   await expect(page.getByText('Pending').first()).toBeVisible()
   await page.getByRole('link', { name: booking.refCode }).click()
 
@@ -36,7 +36,12 @@ test('bookings: list, fee + commission, finish & pay, re-open blocked', async ({
   })
 
   await test.step('Finish & pay = the checkout with the commission prefilled', async () => {
-    await page.getByRole('link', { name: 'Finish & pay' }).click()
+    // R45: Finish & pay opens the pop-up; the full checkout is one link away in it.
+    await page.getByRole('button', { name: 'Finish & pay' }).click()
+    await page
+      .getByRole('dialog')
+      .getByRole('link', { name: 'More options (tips, discount, products)' })
+      .click()
     await expect(page.getByRole('heading', { name: 'Check out', level: 1 })).toBeVisible()
     await expect(page.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('40')
     await page.getByLabel('Payment 1 amount').fill('350')
@@ -51,7 +56,7 @@ test('bookings: list, fee + commission, finish & pay, re-open blocked', async ({
     await page.goto(`${app}/${slug}/bookings/${booking.id}`)
     await expect(page.getByRole('link', { name: 'Sale #1' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save commission' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Finish & pay' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Finish & pay' })).toHaveCount(0)
     await screenshotAt(page, 'booking-detail')
     page.once('dialog', (d) => d.accept())
     await page.getByRole('button', { name: 'Mark pending' }).click()

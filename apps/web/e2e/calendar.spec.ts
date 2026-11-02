@@ -27,10 +27,7 @@ test('reception works the day calendar: check in, then book a client into a free
     await expect(sheet.getByText('Confirmed', { exact: true })).toBeVisible()
     await sheet.getByRole('button', { name: 'Check in' }).click()
     await expect(sheet.getByText('Checked in', { exact: true })).toBeVisible()
-    await expect(sheet.getByRole('link', { name: 'Finish & pay' })).toHaveAttribute(
-      'href',
-      /sales\/new\?booking=/,
-    )
+    await expect(sheet.getByRole('button', { name: 'Finish & pay' })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(sheet).toBeHidden()
   })

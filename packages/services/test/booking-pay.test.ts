@@ -22,8 +22,11 @@ import {
   bookingDetail,
   buildPayroll,
   completeBooking,
+  createSale,
   finalisePayroll,
   listBookings,
+  listBookingsAndSales,
+  rangeMoney,
   recordBookingCommissions,
   setBookingStatus,
 } from '../src'
@@ -272,6 +275,60 @@ describe('bookings list', () => {
     )
     expect((await q({ commissionMissing: true })).total).toBe(0)
   })
+
+  it('R45: one list of bookings with their sale + counter sales, and the money of the range', async () => {
+    const day = '2026-10-08'
+    const now = dubaiInstant(day, 23 * 60)
+    const paid = await newBooking(day)
+    const unpaid = await newBooking(day)
+    await tx((db) => setBookingStatus(db, unpaid.id, 'completed'))
+    await tx((db) =>
+      createSale(db, {
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        bookingId: paid.id,
+        lines: [{ kind: 'other', description: 'Treatments', qty: 1, unitPriceAed: 800 }],
+        payments: [
+          { method: 'cash', amountAed: 500 },
+          { method: 'card_terminal', amountAed: 300 },
+        ],
+        now,
+      }),
+    )
+    const counter = await tx((db) =>
+      createSale(db, {
+        tenantId: ids.tenant!,
+        branchId: ids.branch!,
+        lines: [{ kind: 'other', description: 'Massage oil', qty: 1, unitPriceAed: 60 }],
+        payments: [{ method: 'cash', amountAed: 60 }],
+        now,
+      }),
+    )
+    const f = { from: day, to: day, branchIds: [ids.branch!] }
+    const all = await tx((db) => listBookingsAndSales(db, f))
+    expect(all.total).toBe(3)
+    // Newest first: the counter sale (made now) before the 14:00 bookings.
+    expect(all.rows[0]).toMatchObject({ kind: 'sale', id: counter.sale.id, items: ['Massage oil'] })
+    const row = (id: string) => all.rows.find((r) => r.kind === 'booking' && r.id === id)
+    expect(row(paid.id)).toMatchObject({ sale: { totalAed: '800.00', status: 'paid' } })
+    expect([...(row(paid.id) as { sale: { methods: string[] } }).sale.methods].sort()).toEqual([
+      'card_terminal',
+      'cash',
+    ])
+    expect(row(unpaid.id)).toMatchObject({ status: 'completed', sale: null })
+    // Paging across both lists; a booking filter leaves counter sales out.
+    const p2 = await tx((db) => listBookingsAndSales(db, { ...f, pageSize: 2, page: 2 }))
+    expect([p2.rows.length, p2.total]).toEqual([1, 3])
+    const done = await tx((db) => listBookingsAndSales(db, { ...f, statuses: ['completed'] }))
+    expect(done.rows.every((r) => r.kind === 'booking')).toBe(true)
+    expect(await tx((db) => rangeMoney(db, f))).toEqual({
+      revenueAed: 860,
+      salesCount: 2,
+      tipsAed: 0,
+      byMethod: { cash: 560, card_terminal: 300 },
+      notPaid: 1,
+    })
+  })
 })
 
 describe('pay types and payroll', () => {
@@ -283,7 +340,7 @@ describe('pay types and payroll', () => {
         .values({
           tenantId: ids.tenant!,
           branchId: ids.branch!,
-          number: 1,
+          number: 901,
           businessDate: D,
           subtotalAed: '420',
           totalAed: '420',

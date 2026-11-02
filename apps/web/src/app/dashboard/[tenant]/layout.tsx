@@ -156,12 +156,14 @@ export default async function TenantLayout({
     ...group(t('nav.group.workspace'), [
       { href: base, label: t('nav.dashboard'), icon: 'dashboard', exact: true },
       ...badge(single('calendar', 'calendar.view', '/calendar', t('nav.calendar')), counts.today, 'calendar'),
+      // R45: bookings and sales are one page ("Bookings & sales"); receipts, checkout and the daily close open under
+      // it. A custom role with payments but no calendar keeps the Sales page.
       ...badge(
         single('bookings', 'calendar.view', '/bookings', t('nav.bookings')),
         counts.pending,
         'bookings',
-      ),
-      ...single('sales', 'pos.use', '/sales', t('nav.sales')),
+      ).map((i) => ({ ...i, match: [`${base}/sales`] })),
+      ...(allowed('calendar.view') ? [] : single('sales', 'pos.use', '/sales', t('nav.sales'))),
       ...badge(
         item('inbox', t('nav.inbox'), [
           ...page('marketing.send', '/messages', t('nav.whatsapp')),
