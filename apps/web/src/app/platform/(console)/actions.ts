@@ -30,6 +30,7 @@ import {
   purgeTenant,
   recordPlatformPayment,
   removePlan,
+  removeTenantMember,
   renameTenantSlug,
   resetTenantData,
   restorePlan,
@@ -1003,6 +1004,34 @@ export async function resetTenantDataAction(
     return ok(`${rec.name} reset: ${rows} records removed; the spa starts from today`)
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message, { resetConfirm: e.message })
+    throw e
+  }
+}
+
+const LOGIN_NOTE = {
+  deleted: 'their login was deleted, so the email can be invited again',
+  kept_other_spa: 'their login stays (it belongs to another spa too)',
+  kept_admin: 'their login stays (it is a super-admin)',
+  kept_has_records: 'their login stays without any spa and was signed out (it already has records)',
+} as const
+
+/** R42: remove someone from a spa's team (console only; no last-owner limit by the owner's choice). */
+export async function removeMemberAction(tenantId: string, memberId: string): Promise<ActionResult> {
+  const user = await admin()
+  try {
+    const r = await removeTenantMember(platformDb(), tenantId, memberId)
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.member.removed',
+      entity: 'member',
+      entityId: memberId,
+      data: { email: r.email, name: r.name, login: r.login },
+    })
+    refresh(tenantId)
+    return ok(`${r.name} removed from the team; ${LOGIN_NOTE[r.login]}`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
     throw e
   }
 }

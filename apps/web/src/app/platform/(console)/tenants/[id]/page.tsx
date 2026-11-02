@@ -53,6 +53,7 @@ import {
   updateSubscriptionAction,
 } from '../../actions'
 import { checkBillingNowAction, setBillingPauseAction } from '../../billing-actions'
+import { RemoveMemberButton } from './member-actions'
 import { PlanCard } from './plan-card'
 import { PaymentReminder } from './reminder'
 
@@ -610,6 +611,12 @@ export default async function TenantDetail({ params }: { params: Promise<{ id: s
                     header: 'Status',
                     className: 'text-end',
                     cell: (r) => <Badge tone={statusTone(r.status)}>{r.status}</Badge>,
+                  },
+                  {
+                    key: 'x',
+                    header: '',
+                    className: 'text-end',
+                    cell: (r) => <RemoveMemberButton tenantId={id} memberId={r.id} name={r.name} />,
                   },
                 ]}
               />

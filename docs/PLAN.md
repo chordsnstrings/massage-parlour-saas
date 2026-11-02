@@ -1579,6 +1579,14 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R42 Delete a team member (owner 2026-11-02: "option to delete member of team"; answers: console only; remove from
+  this spa and delete the login when unused elsewhere; no last-owner limit):** console spa page → Team card → "Delete"
+  per member (browser confirm). Services `removeTenantMember(platformDb, tenantId, memberId)` (`member-remove.ts`):
+  deletes the membership (branch links cascade); then the login: kept if it belongs to another spa (`kept_other_spa`)
+  or is a super-admin (`kept_admin`); else deleted (`deleted`, the email can be invited fresh); a login that already
+  wrote records (user FKs without ON DELETE: bookings, sales, …) can't be deleted, so its sessions are ended and it
+  stays without any spa (`kept_has_records`). Action `removeMemberAction`, audit `platform.member.removed`. Tests:
+  services `member-remove.test.ts` (4), e2e `console-ops.spec.ts` "delete a team member".
 - **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; ✅ live 2026-11-01, PR #67, 8da1a27):** super-admin
   console button on the spa page ("Danger zone"), any spa; confirm by typing the spa name (no extra 2FA prompt, owner
   "no"); full backup right before; audited. Wipes the spa's operational data: clients, bookings (+ items, reservations,
