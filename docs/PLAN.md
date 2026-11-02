@@ -1589,7 +1589,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   rooms, equipment, branches, shifts, website + content + settings, products, suppliers, package / membership types,
   promo codes, ledger accounts, Spa Management's platform invoices to the spa, audit log. First use: Be Relax, only
   after the owner's OK at that moment.
-- **R41 Pause card payments (Stripe) (owner 2026-11-01; ON HOLD: "don't start strip till taking approval from me"):**
+- **R41 Pause card payments (Stripe) — DROPPED (owner 2026-11-02: "forget about strip"; not building):**
   Console → Settings global PAUSE switch + per-spa switch on the spa page; hides "Pay by card" and the server refuses;
   Checkouts already started still settle; audited. Facts found 2026-11-01: Stripe Checkout added 2026-10-06 (a0c4e2f),
   `STRIPE_SECRET_KEY` read from env; that commit also grew the encrypted overlay `secrets.env.enc` 272 → 384 bytes, so a

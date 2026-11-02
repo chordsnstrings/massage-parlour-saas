@@ -34,7 +34,6 @@ the existing flow.
 ## Open items
 
 **Waiting for an owner decision (don't build before the owner says "go"):**
-- **R41 Pause card payments (Stripe):** planned (global + per-spa switch); don't start before the owner approves.
 - **Google branch:** approve the privacy wording on the branch above, then release it.
 - **R32 cancelled bookings:** how cancelled bookings count on the daily sheet. The owner said "ask me later". Today they are
   not on the sheet and not sales.
