@@ -1589,7 +1589,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
 - **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
   bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
   Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and
-  shows Not paid for reception; built 2026-11-02, deploy only on the owner's word):** services `bookings-list.ts`
+  shows Not paid for reception; ✅ live 2026-11-02 ~20:00 UTC, PR #69, 4280da8):** services `bookings-list.ts`
   `listBookingsAndSales` (bookings with their live sale + counter sales without a booking, newest first, counter rows
   only without a status/source/therapist/missing filter) and `rangeMoney` (paid sales by business date = the dashboard
   rule, by method, tips, completed bookings with no live sale). Web: `/bookings` = "Bookings & sales" (money tiles,
