@@ -1586,6 +1586,19 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
   "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
   (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
+- **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
+  bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
+  Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and
+  shows Not paid for reception; built 2026-11-02, deploy only on the owner's word):** services `bookings-list.ts`
+  `listBookingsAndSales` (bookings with their live sale + counter sales without a booking, newest first, counter rows
+  only without a status/source/therapist/missing filter) and `rangeMoney` (paid sales by business date = the dashboard
+  rule, by method, tips, completed bookings with no live sale). Web: `/bookings` = "Bookings & sales" (money tiles,
+  Payment column, Daily close / Counter sale / New booking); the sidebar drops Sales (kept only for a custom role with
+  pos.use but no calendar.view; `/sales` redirects to `/bookings?from=to=date`; receipts, `/sales/new`, `/sales/close`
+  unchanged and highlight the item via `match`); Complete & pay pop-up `components/bookings/pay-booking.tsx` (prefill
+  = `sales/booking-prefill.ts`, shared with `/sales/new`; save = `createSaleAction` → `finishBooking`) on the list, the
+  booking page and the calendar sheet ("More options" = the full checkout). New TH strings need native review.
+  Tests: services booking-pay (R45 case), e2e bookings (pop-up), shell/pos/calendar/order-flow/therapist updated.
 - **R42 Delete a team member (owner 2026-11-02: "option to delete member of team"; answers: console only; remove from
   this spa and delete the login when unused elsewhere; no last-owner limit):** console spa page → Team card → "Delete"
   per member (browser confirm). Services `removeTenantMember(platformDb, tenantId, memberId)` (`member-remove.ts`):
