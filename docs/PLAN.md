@@ -1579,6 +1579,13 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R43 Phone optional on new bookings (owner 2026-11-02: "make the phone number optional"; answers: a name-only
+  client card; every booking type made from the calendar):** calendar `createBookingAction` no longer requires a
+  phone for a new client; with a phone it still finds/creates by number (`findOrCreateClient`, unchanged for other
+  callers: POS, waitlist, public booking, Instagram/DM keep their own rules); without one, services
+  `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
+  "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
+  (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
 - **R42 Delete a team member (owner 2026-11-02: "option to delete member of team"; answers: console only; remove from
   this spa and delete the login when unused elsewhere; no last-owner limit):** console spa page → Team card → "Delete"
   per member (browser confirm). Services `removeTenantMember(platformDb, tenantId, memberId)` (`member-remove.ts`):

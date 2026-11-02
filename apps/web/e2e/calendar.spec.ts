@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { bookings, rotationEntries } from '@spa/db'
+import { bookings, clients, rotationEntries } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
@@ -85,6 +85,19 @@ test('reception works the day calendar: check in, then book a client into a free
     await drag(0, 72)
     await expect(page.getByText(/moved to 16:00/)).toBeVisible()
     await expect(ploy.getByRole('button', { name: /16:00–17:00 Fatima Al Mansoori/ })).toBeVisible()
+  })
+
+  await test.step('R43: a new client can be booked without a phone (name-only client card)', async () => {
+    await page.getByRole('button', { name: 'New booking with Ploy at 19:00' }).click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByRole('button', { name: 'New client' }).click()
+    await sheet.getByLabel('Name').fill('Noura No Phone')
+    await sheet.getByLabel('Source').selectOption('phone')
+    await sheet.getByRole('button', { name: 'Create booking' }).click()
+    await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
+    await sheet.getByRole('button', { name: 'Done' }).click()
+    const [c] = await testDb().select().from(clients).where(eq(clients.name, 'Noura No Phone'))
+    expect(c).toMatchObject({ phoneE164: null })
   })
 
   await page.reload()
