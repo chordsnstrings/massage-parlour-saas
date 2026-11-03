@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aiUsage, auditLog } from '@spa/db'
+import { aiUsage, auditLog, bookingItems, bookings, staff } from '@spa/db'
 import { and, eq } from 'drizzle-orm'
 import {
   ADMIN,
@@ -170,4 +170,53 @@ test('Standard spa: Ask AI shows the Premium upsell, no question box', async ({ 
   await expect(upsell.getByRole('link', { name: 'Compare plans' })).toBeVisible()
   await expect(upsell.getByRole('link', { name: 'Your subscription' })).toHaveAttribute('href', /\/billing$/)
   await expect(page.getByTestId('ask-ai').getByLabel('Your question')).toHaveCount(0)
+})
+
+// R46 (owner 2026-11-03): the assistant prepares a move and an owner-only cancellation of an unpaid booking; nothing
+// changes until the owner presses Confirm on each card (signed token → the normal booking actions).
+test('R46: the owner confirms a move and a cancel prepared by Ask AI', async ({ page }) => {
+  test.setTimeout(180_000)
+  const { slug, dashboard } = await signUpOwner(page, { plan: 'premium' })
+  const seed = await seedCatalog(slug)
+  const first = await seedBooking(seed, 26)
+  const second = await seedBooking(seed, 30)
+  const db = testDb()
+  const [other] = await db
+    .select({ name: staff.displayName })
+    .from(staff)
+    .where(eq(staff.id, seed.staffIds[1]!))
+  await mockAiReply(slug, {
+    __steps: [
+      call('prepare_booking_move', { ref: first.refCode, therapist: other!.name }),
+      call('prepare_booking_cancel', { ref: second.refCode, reason: 'Client asked' }),
+      { role: 'assistant', content: 'Both are ready. Press Confirm.' },
+    ],
+  })
+  await page.goto(dashboard)
+  await page.getByTestId('ask-ai-open').click()
+  const drawer = page.getByTestId('ask-ai')
+  await drawer
+    .getByLabel('Your question')
+    .fill(`Move ${first.refCode} to ${other!.name}, cancel ${second.refCode}`)
+  await drawer.getByLabel('Your question').press('Enter')
+  const cards = drawer.getByTestId('ask-ai-action')
+  await expect(cards).toHaveCount(2)
+  await expect(cards.nth(0)).toContainText(`Move ${first.refCode}`)
+  await expect(cards.nth(1)).toContainText(`Cancel ${second.refCode}`)
+  const statusOf = async (id: string) =>
+    (await db.select().from(bookings).where(eq(bookings.id, id)))[0]!.status
+  expect(await statusOf(second.id)).toBe('confirmed')
+
+  await cards.nth(0).getByRole('button', { name: 'Confirm' }).click()
+  await expect(cards.nth(0)).toContainText(`Done: ${first.refCode} moved.`)
+  await cards.nth(1).getByRole('button', { name: 'Confirm' }).click()
+  await expect(cards.nth(1)).toContainText(`Done: ${second.refCode} cancelled.`)
+  const [item] = await db.select().from(bookingItems).where(eq(bookingItems.bookingId, first.id))
+  expect(item!.staffIds[0]).toBe(seed.staffIds[1])
+  expect(await statusOf(second.id)).toBe('cancelled')
+  const audits = await db
+    .select()
+    .from(auditLog)
+    .where(and(eq(auditLog.action, 'ai.assistant.confirmed'), eq(auditLog.entityId, second.id)))
+  expect(audits).toHaveLength(1)
 })

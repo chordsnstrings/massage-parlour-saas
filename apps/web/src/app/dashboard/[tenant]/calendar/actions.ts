@@ -29,11 +29,11 @@ import {
   linkSiteEnquiryBooking,
   loadDay,
   lockSiteEnquiryForBooking,
+  moveBookingItem,
   OWN_STATUS_TARGETS,
   orderDay,
   outboxLink,
   planBookingMessages,
-  rescheduleItem,
   rotationFor,
   setBookingDetails,
   setBookingStatus,
@@ -41,7 +41,7 @@ import {
   setOwnBookingStatus,
   takeTurn,
 } from '@spa/services'
-import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
+import { asc, eq, ilike, inArray, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
@@ -547,31 +547,8 @@ export async function rescheduleAction(
       const branch = await branchFor(tx, ctx, row.branchId)
       await assertStaffAndRoom(tx, v.staffIds ?? [], v.roomId)
       const start = startFrom(v.date, v.time, branch.businessDayCutoff.slice(0, 5))
-      try {
-        await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: v.roomId })
-      } catch (e) {
-        // Room is "automatic" when not chosen: if the current room clashes, try the branch's other rooms.
-        if (!(e instanceof DomainError) || e.code !== 'slot_taken' || v.roomId) throw e
-        const types = row.roomTypes ?? []
-        const others = (
-          await tx
-            .select({ id: rooms.id, type: rooms.type })
-            .from(rooms)
-            .where(and(eq(rooms.branchId, row.branchId), eq(rooms.active, true)))
-            .orderBy(asc(rooms.sort), asc(rooms.name))
-        ).filter((r) => r.id !== row.roomId && (types.length === 0 || types.includes(r.type)))
-        let moved = false
-        for (const room of others) {
-          try {
-            await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: room.id })
-            moved = true
-            break
-          } catch (retry) {
-            if (!(retry instanceof DomainError) || retry.code !== 'slot_taken') throw retry
-          }
-        }
-        if (!moved) throw e
-      }
+      // Room "automatic" when not chosen: a clash in the current room tries the branch's other rooms (services).
+      await moveBookingItem(tx, { itemId: v.itemId, start, staffIds: v.staffIds, roomId: v.roomId })
       return row.ref
     })
     await audit({
