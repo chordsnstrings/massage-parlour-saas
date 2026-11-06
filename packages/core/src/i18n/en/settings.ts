@@ -241,7 +241,7 @@ export const settings = {
       title: 'Google Business Profile',
       sub: 'Sync Google reviews, post approved replies and share offers with a Book button.',
       notConfigured:
-        'Google sign-in isn’t set up on this server yet. The platform administrator adds GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET once Google approves API access.',
+        'Google sign-in isn’t set up yet. The platform administrator adds the keys in Console → Settings.',
       untilThen:
         'Until then, paste new reviews into Review replies — the AI drafts a reply you can copy into Google.',
       features: {
@@ -291,7 +291,7 @@ export const settings = {
       },
       notConfiguredTitle: 'Not configured yet',
       notConfigured:
-        'Instagram needs the platform’s Meta app before spas can connect. Once the keys below are set on the server, a Connect button appears here.',
+        'Instagram needs the platform’s Meta app before spas can connect. The platform administrator adds the keys in Console → Settings. Then a Connect button appears here.',
       account: 'Instagram account',
       connectedOn: 'Connected {date}',
       expired: 'Instagram access expired or was revoked. Reconnect to keep answering DMs and publishing.',
@@ -307,7 +307,7 @@ export const settings = {
       askManager: 'Ask an owner or manager to connect Instagram.',
       metaSettings: 'Meta app settings',
       metaHelp:
-        'For the platform’s Meta app (Instagram API with Instagram Login). Subscribe the webhook to messages and comments; the verify token is the server’s META_WEBHOOK_VERIFY_TOKEN.',
+        'For the platform’s Meta app (Instagram API with Instagram Login). Subscribe the webhook to messages and comments; the platform administrator adds the verify token in Console → Settings.',
       webhookUrl: 'Webhook callback URL',
       redirectUri: 'OAuth redirect URI',
       deauthorizeUrl: 'Deauthorize callback URL',
@@ -433,7 +433,7 @@ export const settings = {
       title: 'Facebook Page',
       sub: 'Connect the Facebook Page linked to your Instagram account, for Page posts and Instagram publishing.',
       notConfigured:
-        'Facebook Login needs the platform’s Meta app before spas can connect. The platform team sets it up once.',
+        'Facebook Login needs the platform’s Meta app before spas can connect. The platform administrator adds the keys in Console → Settings.',
       intro:
         'Sign in with Facebook and choose the Page linked to your Instagram professional account. The AI tools can then read Page comments and publish approved Page posts.',
       premium: 'Connecting a Facebook Page is part of the Premium plan.',

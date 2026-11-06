@@ -1,5 +1,5 @@
 import { withTenant } from '@spa/db'
-import { instagramStatus, integrationEnv, metaConfig, metaUrls, missingMetaEnv } from '@spa/services'
+import { instagramStatus, integrationEnv, metaConfig, metaUrls } from '@spa/services'
 import { ChevronDown, ImageUp, MessageCircle, MessagesSquare, TriangleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { CONNECT_NOTICES } from '@/app/api/integrations/meta/oauth'
@@ -34,7 +34,6 @@ export async function InstagramCard({
   const { t, fmt } = await getI18n()
   const env = await integrationEnv()
   const configured = metaConfig(env) !== null
-  const missing = missingMetaEnv(env)
   const account = await withTenant(ctx.tenant.id, (tx) => instagramStatus(tx))
   // R29: old platform domains redirect to the canonical one, so Meta only needs the canonical URLs.
   const urls = metaUrls(canonicalUrls().api(''))
@@ -83,13 +82,6 @@ export async function InstagramCard({
           <div className="space-y-3 rounded-lg border border-dashed px-4 py-4">
             <p className="text-sm font-medium">{t('settings.integrations.ig.notConfiguredTitle')}</p>
             <p className="text-sm text-muted">{t('settings.integrations.ig.notConfigured')}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {missing.map((k) => (
-                <code key={k} className="rounded-md bg-subtle px-2 py-1 text-xs text-muted">
-                  {k}
-                </code>
-              ))}
-            </div>
           </div>
         ) : account ? (
           <div className="space-y-5">
