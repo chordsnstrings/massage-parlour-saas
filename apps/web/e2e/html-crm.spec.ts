@@ -1179,8 +1179,8 @@ test('R47: website WhatsApp rotation: visitors share the numbers, each keeps the
   await seedSpa(slug)
   await makeStudio(slug)
   await signInStudioOnAdmin(page, owner.email)
-  await upload(page, 'CRM Contract', fixture)
-  await applyAndPublish(page, slug, 'CRM Contract')
+  await upload(page, 'WA Rotation Contract', fixture)
+  await applyAndPublish(page, slug, 'WA Rotation Contract')
 
   await test.step('Settings: two numbers in "Website WhatsApp numbers"', async () => {
     await page.goto(`${app}/${slug}/settings`)
