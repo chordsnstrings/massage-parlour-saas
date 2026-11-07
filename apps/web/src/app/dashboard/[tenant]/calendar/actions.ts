@@ -3,6 +3,7 @@ import {
   type BookingClientType,
   businessDateOf,
   dubaiInstant,
+  dubaiParts,
   holdInterval,
   onLeave,
   overlaps,
@@ -637,11 +638,35 @@ export async function walkInAction(
       if (v.staffId) {
         therapist = day.staff.find((s) => s.id === v.staffId)
         if (!therapist) throw new DomainError('Therapist not found', 'not_found')
-        if (!free(therapist))
-          throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
-            key: 'calendar.errors.notFree',
-            params: { name: therapist.name },
-          })
+        if (!free(therapist)) {
+          // R47 (owner 2026-11-07): say WHY she can't take the walk-in (one message hid three reasons).
+          const name = therapist.name
+          if (!therapist.skills.includes(svc.service.id))
+            throw new DomainError(`${name} is not set up for this treatment`, 'no_staff', {
+              key: 'calendar.errors.notSkilled',
+              params: { name },
+            })
+          if (onLeave(therapist, hold))
+            throw new DomainError(`${name} is on leave now`, 'no_staff', {
+              key: 'calendar.errors.onLeaveNow',
+              params: { name },
+            })
+          const clash = therapist.busy.find((b) => overlaps(b, hold))
+          const hhmm = (d: Date) => {
+            const m = dubaiParts(d).minutes
+            return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+          }
+          throw new DomainError(
+            `${name} is not free right now`,
+            'slot_taken',
+            clash
+              ? {
+                  key: 'calendar.errors.busyAt',
+                  params: { name, from: hhmm(clash.start), to: hhmm(clash.end) },
+                }
+              : { key: 'calendar.errors.notFree', params: { name } },
+          )
+        }
       } else {
         therapist =
           rotation

@@ -159,6 +159,10 @@ export const calendar = {
     roomNotFound: 'Room not found',
     clientNotFound: 'Client not found',
     notFree: '{name} is not free right now',
+    // R47: the walk-in check says why.
+    notSkilled: '{name} is not set up for this treatment (Team → {name} → Treatments)',
+    onLeaveNow: '{name} is on leave right now',
+    busyAt: '{name} is not free right now: booked {from}–{to}',
     noneFree: 'No therapist is free for this service right now',
     ownLeadTherapist: 'Choose the therapist for her own client',
     phoneLine: 'Choose the phone line',

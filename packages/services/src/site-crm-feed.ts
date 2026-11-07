@@ -1,7 +1,9 @@
 // R26: the public CRM facts an HTML design's data contract is built from (docs/design/html-crm-contract.md). Callers
 // run these inside withTenant(); only public fields are read (never staff phones, pay or e-mail, private branch data).
+import { whatsappRotationOf } from '@spa/core'
 import { branches, pageVersions, staff, type Tx, tenants } from '@spa/db'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import { nextCounter } from './sales'
 
 export type WebsiteStaffMember = {
   id: string
@@ -90,3 +92,12 @@ export async function pageVersionsData(tx: Tx, ids: string[]) {
     .from(pageVersions)
     .where(inArray(pageVersions.id, ids))
 }
+
+/** R47: the spa's website WhatsApp rotation (core whatsappRotationOf over tenants.settings). */
+export async function websiteWhatsappRotation(tx: Tx, tenantId: string) {
+  const [t] = await tx.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, tenantId))
+  return whatsappRotationOf(t?.settings)
+}
+
+/** R47: the next new visitor's turn (1, 2, 3 …; shared out round robin by core rotatedWhatsapp). */
+export const nextWhatsappTurn = (tx: Tx, tenantId: string) => nextCounter(tx, tenantId, 'website_whatsapp')

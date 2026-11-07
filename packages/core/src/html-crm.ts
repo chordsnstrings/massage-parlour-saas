@@ -860,3 +860,43 @@ export function cyrb53(s: string, seed = 0): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
 }
+
+/** R47: the website's WhatsApp rotation (E.164 digits, deduplicated, at most 10); [] = no rotation. */
+export function whatsappRotationOf(s: { whatsappRotation?: unknown } | null | undefined): string[] {
+  const list = Array.isArray(s?.whatsappRotation) ? s.whatsappRotation : []
+  const out: string[] = []
+  for (const v of list)
+    if (typeof v === 'string' && /^[1-9]\d{7,14}$/.test(v) && !out.includes(v) && out.length < 10) out.push(v)
+  return out
+}
+
+/** R47: the number for a new visitor: turn n (a per-spa counter from 1) → the next number in the list. */
+export const rotatedWhatsapp = (list: string[], turn: number) =>
+  list.length ? list[(((turn - 1) % list.length) + list.length) % list.length]! : null
+
+/**
+ * R47: the contract with this visitor's WhatsApp number wherever the page builds a WhatsApp link: the main number
+ * and the WhatsApp-only phone row that showed the old one (a phone that also takes calls keeps calling there and gets
+ * a WhatsApp-only row for the new number). Calls numbers never change.
+ */
+export function withAssignedWhatsapp(crm: CrmContract, digits: string): CrmContract {
+  const number = `+${digits}`
+  const old = crm.contact.whatsapp_number
+  if (old === number) return crm
+  const phones: CrmPhone[] = []
+  let placed = false
+  for (const p of crm.contact.phones) {
+    if (!p.whatsapp || (old && p.number !== old)) {
+      phones.push(p)
+      continue
+    }
+    if (p.calls) phones.push({ ...p, whatsapp: false })
+    if (!placed) {
+      phones.push({ number, display: uaePhoneDisplay(digits), label: p.label, calls: false, whatsapp: true })
+      placed = true
+    }
+  }
+  if (!placed)
+    phones.push({ number, display: uaePhoneDisplay(digits), label: '', calls: false, whatsapp: true })
+  return { ...crm, contact: { ...crm.contact, whatsapp_number: number, phones } }
+}

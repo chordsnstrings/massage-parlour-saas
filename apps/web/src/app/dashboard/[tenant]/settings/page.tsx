@@ -1,4 +1,4 @@
-import { daySheetColumns, PHONE_LINES, requires2fa } from '@spa/core'
+import { daySheetColumns, PHONE_LINES, requires2fa, whatsappRotationOf } from '@spa/core'
 import { branches, withTenant } from '@spa/db'
 import { IMPORT_KINDS, listAuditLog, logoUrl } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -10,7 +10,7 @@ import { IMPORT_PERMISSION } from '@/components/data/kinds'
 import { canExportAll } from '@/components/data/server'
 import { Button } from '@/components/ui/button'
 import { ActionForm, Field, SubmitButton } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
@@ -128,6 +128,23 @@ export default async function SettingsPage({ params }: { params: Promise<{ tenan
                     type="tel"
                     defaultValue={branch?.whatsappE164 ? `+${branch.whatsappE164}` : ''}
                     placeholder={t('settings.profile.whatsappPlaceholder')}
+                  />
+                </Field>
+                <Field
+                  label={t('settings.profile.waRotation')}
+                  name="waRotation"
+                  hint={t('settings.profile.waRotationHint')}
+                  className="sm:col-span-2"
+                >
+                  <Textarea
+                    id="waRotation"
+                    name="waRotation"
+                    rows={4}
+                    dir="ltr"
+                    defaultValue={whatsappRotationOf(tenant.settings)
+                      .map((n) => `+${n}`)
+                      .join('\n')}
+                    placeholder={'+971 52 823 9069\n+971 56 187 5596'}
                   />
                 </Field>
               </div>
