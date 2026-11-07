@@ -58,7 +58,7 @@ test('owner signs up, gets a live site, configures and invites', async ({ page }
   await test.step('settings save a UAE WhatsApp number', async () => {
     await page.goto(`${app}/${slug}/settings`)
     await page.getByLabel('Address').fill('Marina Walk, Dubai')
-    await page.getByLabel('WhatsApp number').fill('050 123 4567')
+    await page.getByLabel('WhatsApp number', { exact: true }).fill('050 123 4567')
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page.getByText('Settings saved')).toBeVisible()
   })

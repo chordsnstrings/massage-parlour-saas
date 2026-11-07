@@ -1586,6 +1586,30 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
   "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
   (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
+- **R47 Website WhatsApp rotation + clearer walk-in refusal (owner 2026-11-07: ~90 Google Ads chats/day on one phone;
+  answers: 30 days via the server, numbers in the CRM, fix the walk-in message):** CRM Settings → "Website WhatsApp
+  numbers (share chats)" (`tenants.settings.whatsappRotation`, E.164 digits, ≤ 10; empty = the branch WhatsApp). Each
+  visitor gets the next number round robin (services `nextWhatsappTurn` = counter `website_whatsapp`) and keeps it in
+  the first-party cookie `spa_wa` (30 days, not HttpOnly): set by app/site-html on design pages (the sandboxed page
+  itself can't store anything), by `<WhatsappCookie>` on block pages (server components can't set cookies); the /book
+  confirmation uses an existing cookie. Core `whatsappRotationOf`, `rotatedWhatsapp`, `withAssignedWhatsapp` (the
+  contract's WhatsApp number + its WhatsApp-only phone row; calls numbers never change) — crawler text and every
+  CRM_DATA WhatsApp link follow. Google Ads: the Be Relax design's own gtag listener already matches every wa.me link
+  (one conversion per click); its v2.10 draft adds `whatsapp_number` to the click + conversion events (owner publishes).
+  Walk-in by hand: "not set up for this treatment" / "on leave now" / "booked HH:MM–HH:MM" instead of one message.
+  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar.
+- **R46 Ask AI: reports + booking changes (owner 2026-11-03: "chatbot … give reports and change booking or cancel booking
+  that has not been paid … the cancellation will be for the owner"; audit → plan → review → execute):** built on F30 Ask
+  AI (Seed via ModelArk, `staff_assistant`, the server's own key — no key in code). New tools: `sales_summary`
+  (dashboard.revenue; `rangeMoney`), `unpaid_bookings` (calendar.manage + dashboard.revenue), `booking_details` (by ref
+  code), `prepare_booking_move` (calendar.manage; one-treatment, unpaid, not finished/cancelled; date/time/therapist;
+  checked in a rolled-back savepoint with the calendar's room fallback) and `prepare_booking_cancel` (owner role only;
+  no live sale; `canTransition`; reason ≥ 3). **The AI never writes:** prepared changes come back as cards with
+  Confirm / Not now; the token is HMAC-signed (BETTER_AUTH_SECRET, spa + member, 10 min) and Confirm runs the normal
+  `rescheduleAction` / `markBookingAction` (same guards, clash checks, audit) + audit `ai.assistant.confirmed`.
+  Bookings with several treatments go to the calendar. Services `assistant-bookings.ts` (`bookingByRef`,
+  `businessStart`, `moveBookingItem` = the Move form's room fallback, now shared, `dryRun`). New TH strings need review.
+  Tests: ai assistant (3 R46 cases), e2e ask-ai (owner confirms a move + a cancel).
 - **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
   bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
   Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and

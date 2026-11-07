@@ -202,6 +202,11 @@ export type TenantSettings = {
   }
   /** R32: the spa's phone lines as typed, index 0 = P1 … 3 = P4 ('' or missing = not used). */
   phoneLines?: string[]
+  /**
+   * R47 (owner 2026-11-07): WhatsApp numbers (E.164 digits) the website shares out: each visitor gets one (round
+   * robin) and keeps it 30 days (cookie); empty = the default branch's WhatsApp. Read with core whatsappRotationOf().
+   */
+  whatsappRotation?: string[]
   /** R32 daily sales sheet optional columns (missing: tips on, commission off; read with core daySheetColumns()). */
   daySheet?: { tips?: boolean; commission?: boolean }
 }

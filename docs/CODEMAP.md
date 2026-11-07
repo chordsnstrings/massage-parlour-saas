@@ -1742,6 +1742,11 @@ i18n namespace `automations`.
 - **Services** `packages/services/src/assistant.ts`: `bookingStatusCounts`, `staffNames`, `lapsedClients`,
   `shiftsOnDate`, `assistantDraftTarget`, `staffIdForMember` (no permission checks inside, as everywhere).
 - **Tests**: `packages/ai/test/assistant.test.ts` (scripted ModelArk fetch), e2e `ask-ai.spec.ts` (`__steps` fixture).
+- **R46 prepared changes**: tools `prepare_booking_move` / `prepare_booking_cancel` (owner role via `scope.role`) only
+  push an `AssistantAction` (checked with `dryRun` in a rolled-back savepoint). `askAssistantAction` signs each into a
+  10-minute token (`server/assistant-token.ts`, HMAC of BETTER_AUTH_SECRET, bound to spa + user); the drawer shows a
+  card; `confirmAssistantAction` re-checks (calendar.manage, owner for cancel, no live sale) and calls
+  `rescheduleAction` / `markBookingAction`. Reports: `sales_summary`, `unpaid_bookings`, `booking_details`.
 
 ## Meta MCP (R7, AI tools)
 

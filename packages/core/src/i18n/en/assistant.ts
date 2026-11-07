@@ -5,7 +5,7 @@ export const assistant = {
   /** Accessible name of the top-bar button (keeps the visible "Ask AI"; distinct from the Studio's page editor AI). */
   openLabel: 'Ask AI about your spa',
   title: 'Ask AI',
-  subtitle: 'Questions about your spa, answered from your own data. Read-only.',
+  subtitle: 'Questions about your spa, answered from your own data. Nothing changes until you press Confirm.',
   close: 'Close Ask AI',
   newChat: 'New chat',
   you: 'You',
@@ -22,6 +22,7 @@ export const assistant = {
     lapsed: "Which clients haven't come back in 60 days?",
     revenue: 'Revenue last week vs the week before?',
     friday: 'Who is on shift on Friday?',
+    unpaid: 'Which finished bookings are not paid this week?',
   },
   links: 'Open',
   link: {
@@ -33,6 +34,20 @@ export const assistant = {
     client: '{name}',
     staff: 'Staff',
     whatsapp: 'WhatsApp draft · {name}',
+  },
+  // R46 (2026-11-03): changes the assistant prepared; nothing happens until the person presses Confirm.
+  action: {
+    move: 'Move {ref} · {service}{client} to {date} at {time}{therapist}',
+    therapist: ' with {name}',
+    client: ' · {name}',
+    cancel: 'Cancel {ref} · {service}{client} ({date} {time}). Reason: {reason}',
+    confirm: 'Confirm',
+    dismiss: 'Not now',
+    moved: 'Done: {ref} moved.',
+    cancelled: 'Done: {ref} cancelled.',
+    dismissed: 'Not changed.',
+    expired: 'This button has expired. Ask again.',
+    ownerOnly: 'Only the owner can cancel bookings.',
   },
   whatsappNote: 'Opens WhatsApp with the message ready. Nothing is sent until you press send.',
   incomplete: "I couldn't finish that one. Try a shorter or more specific question.",

@@ -128,6 +128,17 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
     await expect(panel.locator('[aria-current="true"]')).toContainText('Ploy')
   })
 
+  await test.step('R47: picking a busy therapist says when she is booked', async () => {
+    await page.getByRole('button', { name: 'Walk-in' }).first().click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByLabel('Therapist').selectOption({ label: 'Maya' })
+    await sheet.getByLabel('Name').fill('Busy test')
+    await sheet.getByRole('button', { name: 'Start walk-in' }).click()
+    await expect(page.getByText(/^Maya is not free right now: booked \d{2}:\d{2}–\d{2}:\d{2}$/)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(sheet).toBeHidden()
+  })
+
   await test.step('an own-client walk-in with a hand-picked therapist does not use her turn (R32)', async () => {
     await page.getByRole('button', { name: 'Walk-in' }).first().click()
     const sheet = page.getByRole('dialog')

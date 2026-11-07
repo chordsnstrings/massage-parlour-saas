@@ -85,6 +85,10 @@ export const settings = {
     showPricesHint:
       'Default for every service; a service can override it. Hidden prices show “Price on request”.',
     whatsappPlaceholder: '050 123 4567',
+    // R47 (2026-11-07): website chats shared across several WhatsApp numbers.
+    waRotation: 'Website WhatsApp numbers (share chats)',
+    waRotationHint:
+      'One number per line. Each website visitor gets one of these, in turn, and keeps it for 30 days. Empty = the WhatsApp number above.',
     save: 'Save changes',
     saved: 'Settings saved',
     errors: {
@@ -94,6 +98,8 @@ export const settings = {
       branchName: 'Enter a branch name',
       time: 'Use HH:MM',
       whatsapp: 'Enter a UAE mobile number.',
+      waRotation:
+        'Check the WhatsApp numbers: one per line, up to 10 (UAE 05X XXX XXXX, or + and the country code).',
     },
     data: {
       title: 'Import / export',

@@ -199,6 +199,8 @@ export const domain: Messages['errors']['domain'] = {
   globalSectionNotFound: 'ไม่พบส่วนกลาง',
   segmentGone: 'กลุ่มเป้าหมายนี้ไม่มีอยู่แล้ว',
   therapistNotFreeNow: '{name} ไม่ว่างในตอนนี้',
+  therapistNotSkilled: '{name} ยังไม่ได้ตั้งค่าให้ทำทรีตเมนต์นี้',
+  therapistOnLeaveNow: '{name} ลางานอยู่ในขณะนี้',
   noTherapistFreeNow: 'ไม่มีพนักงานนวดว่างสำหรับบริการนี้ในตอนนี้',
   onlyDraftsEditable: 'แก้ไขได้เฉพาะฉบับร่างเท่านั้น',
   segmentNobody: 'ตอนนี้ไม่มีใครในกลุ่มนี้ที่ส่งข้อความได้ (ยกเลิกรับข้อความ หรือได้รับข้อความแล้วในสัปดาห์นี้)',

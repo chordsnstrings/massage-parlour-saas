@@ -221,6 +221,8 @@ export const domain = {
   globalSectionNotFound: 'Global section not found',
   segmentGone: 'That segment no longer exists',
   therapistNotFreeNow: '{name} is not free right now',
+  therapistNotSkilled: '{name} is not set up for this treatment',
+  therapistOnLeaveNow: '{name} is on leave now',
   noTherapistFreeNow: 'No therapist is free for this service right now',
   onlyDraftsEditable: 'Only drafts can be edited',
   segmentNobody:
