@@ -1597,7 +1597,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   CRM_DATA WhatsApp link follow. Google Ads: the Be Relax design's own gtag listener already matches every wa.me link
   (one conversion per click); its v2.10 draft adds `whatsapp_number` to the click + conversion events (owner publishes).
   Walk-in by hand: "not set up for this treatment" / "on leave now" / "booked HH:MM–HH:MM" instead of one message.
-  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar. ✅ live 2026-11-07, PR #70.
+  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar. ✅ live 2026-11-07, PR #70. Live proof 2026-11-07: rotation + sticky cookie on berelaxmassage.com; owner confirmed "Spa Ads Agent — WhatsApp Click" = AW-18204116059/9PUCCPzt5p8dENuIs-hD, firing with whatsapp_number (design v2.10 published).
 - **R46 Ask AI: reports + booking changes (owner 2026-11-03: "chatbot … give reports and change booking or cancel booking
   that has not been paid … the cancellation will be for the owner"; audit → plan → review → execute):** built on F30 Ask
   AI (Seed via ModelArk, `staff_assistant`, the server's own key — no key in code). New tools: `sales_summary`
