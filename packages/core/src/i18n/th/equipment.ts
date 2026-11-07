@@ -1,0 +1,35 @@
+// `equipment` namespace (TH). Mirrors en/equipment.ts — a missing or extra key is a type error.
+import type { Messages } from '../types'
+
+export const equipment: Messages['equipment'] = {
+  title: 'อุปกรณ์',
+  sub: 'ชุดอุปกรณ์และเครื่องที่ทรีตเมนต์ต้องใช้ ทุกการจองจะจองอุปกรณ์ที่ว่างหนึ่งชิ้นของแต่ละประเภทที่ต้องใช้',
+  emptyTitle: 'ยังไม่มีอุปกรณ์',
+  emptyBody: 'เพิ่มชุดหินร้อน ตู้อบไอน้ำ หรืออุปกรณ์อื่นที่ใช้ได้ทีละหนึ่งการจอง',
+  add: 'เพิ่มอุปกรณ์',
+  new: 'อุปกรณ์ใหม่',
+  edit: 'แก้ไข {name}',
+  editAria: 'แก้ไข {name}',
+  sheetBody: 'อุปกรณ์แต่ละชิ้นใช้ได้ทีละหนึ่งการจอง',
+  branch: 'สาขา',
+  name: 'ชื่อ',
+  namePlaceholder: 'เช่น ชุดหิน 1',
+  type: 'ประเภท',
+  typePlaceholder: 'เช่น หินร้อน',
+  typeHint: 'อุปกรณ์ประเภทเดียวกันใช้แทนกันได้ บริการจะเลือกประเภทที่ต้องใช้',
+  activeHint: 'อุปกรณ์ที่ไม่ใช้งานจะไม่ถูกจอง',
+  save: 'บันทึกอุปกรณ์',
+  submitAdd: 'เพิ่มอุปกรณ์',
+  confirmDelete: 'ลบ {name} ใช่ไหม',
+  saved: 'บันทึกอุปกรณ์แล้ว',
+  added: 'เพิ่มอุปกรณ์แล้ว',
+  deleted: 'ลบอุปกรณ์แล้ว',
+  badge: 'ต้องใช้ {type}',
+  form: {
+    legend: 'อุปกรณ์ที่ต้องใช้',
+    hint: 'ทุกการจองจะจองอุปกรณ์ที่ว่างหนึ่งชิ้นของแต่ละประเภทที่เลือก',
+    none: 'เพิ่มอุปกรณ์ในหน้าบริการและห้องก่อน จึงจะกำหนดให้ใช้ที่นี่ได้',
+  },
+  calendar: { conflict: 'ขาดอุปกรณ์: {types}' },
+  v: { name: 'ใส่ชื่อ', type: 'ใส่ประเภท' },
+}

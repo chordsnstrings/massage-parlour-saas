@@ -1,0 +1,1 @@
+ALTER TYPE "public"."message_kind" ADD VALUE 'reminder_2h' BEFORE 'thank_you';

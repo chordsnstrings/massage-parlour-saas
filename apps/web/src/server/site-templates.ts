@@ -1,0 +1,50 @@
+import { platformDb } from '@spa/db'
+import {
+  isHtmlDesignTemplate,
+  listStudioTemplates,
+  type SiteTemplate,
+  studioToSiteTemplate,
+} from '@spa/services'
+import { cache } from 'react'
+import { isTemplateKey, TEMPLATE_KEYS, TEMPLATES } from '@/components/site/templates'
+
+export type CatalogTemplate = SiteTemplate & {
+  feel: string
+  source: 'builtin' | 'studio'
+  /** The template-studio row (console preview `/templates/{id}/preview`); built-ins preview by key. */
+  id?: string
+  /** R24: an uploaded HTML design: its look is its page(s), its theme is empty (`{}`). */
+  htmlDesign: boolean
+}
+
+/**
+ * The template catalogue spas choose from: the built-ins (`TEMPLATES`: 8 classic + 15 designs) plus active
+ * template-studio rows (PLAN §11.2).
+ * Studio rows override a built-in with the same key. `site_templates` is a platform table (invisible to the
+ * tenant role), so the catalogue is read with the platform connection — it holds no tenant data.
+ */
+export const templateCatalog = cache(async (): Promise<CatalogTemplate[]> => {
+  const rows = await listStudioTemplates(platformDb(), { activeOnly: true })
+  const studio = new Map(rows.map((r) => [r.key, r]))
+  const out: Omit<CatalogTemplate, 'htmlDesign'>[] = TEMPLATE_KEYS.map((key) => {
+    const row = studio.get(key)
+    return row
+      ? {
+          ...studioToSiteTemplate(row),
+          feel: row.description ?? TEMPLATES[key].feel,
+          source: 'studio',
+          id: row.id,
+        }
+      : { ...TEMPLATES[key], source: 'builtin' }
+  })
+  for (const row of rows) {
+    if (!isTemplateKey(row.key))
+      out.push({ ...studioToSiteTemplate(row), feel: row.description ?? '', source: 'studio', id: row.id })
+  }
+  return out.map((t) => ({ ...t, htmlDesign: isHtmlDesignTemplate(t) }))
+})
+
+export async function resolveTemplate(key: string | undefined | null) {
+  if (!key) return null
+  return (await templateCatalog()).find((t) => t.key === key) ?? null
+}
