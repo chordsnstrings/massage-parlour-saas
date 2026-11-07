@@ -1597,7 +1597,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   CRM_DATA WhatsApp link follow. Google Ads: the Be Relax design's own gtag listener already matches every wa.me link
   (one conversion per click); its v2.10 draft adds `whatsapp_number` to the click + conversion events (owner publishes).
   Walk-in by hand: "not set up for this treatment" / "on leave now" / "booked HH:MM–HH:MM" instead of one message.
-  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar.
+  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar. ✅ live 2026-11-07, PR #70.
 - **R46 Ask AI: reports + booking changes (owner 2026-11-03: "chatbot … give reports and change booking or cancel booking
   that has not been paid … the cancellation will be for the owner"; audit → plan → review → execute):** built on F30 Ask
   AI (Seed via ModelArk, `staff_assistant`, the server's own key — no key in code). New tools: `sales_summary`
@@ -1609,7 +1609,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `rescheduleAction` / `markBookingAction` (same guards, clash checks, audit) + audit `ai.assistant.confirmed`.
   Bookings with several treatments go to the calendar. Services `assistant-bookings.ts` (`bookingByRef`,
   `businessStart`, `moveBookingItem` = the Move form's room fallback, now shared, `dryRun`). New TH strings need review.
-  Tests: ai assistant (3 R46 cases), e2e ask-ai (owner confirms a move + a cancel).
+  Tests: ai assistant (3 R46 cases), e2e ask-ai (owner confirms a move + a cancel). ✅ live 2026-11-07, PR #70.
 - **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
   bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
   Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and

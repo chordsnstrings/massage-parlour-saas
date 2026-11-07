@@ -5,7 +5,7 @@ Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard r
 R30 weekly SEO check, Enquiries → Make booking, BE RELAX v2.2 lazy loading ✅ 2026-10-13; R32 booking ↔ sale order + daily sales
 sheet PDF ✅ live 2026-10-15, PR #55; R33 crawler text + profile links + per-spa redirects ✅ live 2026-10-18, PR #58;
 R36 dashboard bookings + sales + website pop-up ✅ live 2026-10-21, PR #60; R37 worker outage fix ✅ live 2026-10-22, PR #62; R38 international client phones ✅ live 2026-10-22, PR #63; R39 delete booking + Next 16.4.3 security bump ✅ live 2026-10-31, PR #65; R40 reset spa data (console) ✅ live 2026-11-01, PR #67; R41 Stripe pause dropped 2026-11-02; R42 delete team member + R43 phone optional + R45 Bookings & sales one page
-(Complete & pay pop-up) ✅ live 2026-11-02, PR #69; R44 full Edit booking paused by the owner);
+(Complete & pay pop-up) ✅ live 2026-11-02, PR #69; R44 full Edit booking paused by the owner; R46 Ask AI reports + prepared booking move/owner cancel + R47 website WhatsApp rotation + clearer walk-in refusal ✅ live 2026-11-07, PR #70);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 
