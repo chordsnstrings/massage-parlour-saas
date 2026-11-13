@@ -13,6 +13,7 @@ Owner 2026-11-01: the setup invoice (013) is **PAID** in green (stamp, status, a
 
 ## Owner's rules for these invoices
 
+- **Seller from 2026-11-14 (R48):** legal name **Lia97 FZC-LLC**, "RAKEZ, Ras Al Khaimah, UAE", no licence number; "Powered by" = the Lia97 logo (owner sends it); the official-invoice line names Lia97 FZC-LLC; 013 + 014 to be reissued under it. The 1997labs rule below applied before.
 - **Seller:** "Spa Management", legal name **1997labs Tech Solutions**, ask@spamanagement.co · 1997labs.com, and our phone numbers +971 50 315 3267 · +971 50 192 4021 (owner 2026-11-01).
   - Don't put a city or country under the seller.
   - Don't add bank details or the client's domain.

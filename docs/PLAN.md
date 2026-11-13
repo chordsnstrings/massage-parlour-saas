@@ -1586,6 +1586,13 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
   "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
   (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
+- **R48 Legal company = Lia97 FZC-LLC (owner 2026-11-14; decided, waiting for the owner's go + Lia97 logo):** the
+  platform (not spa websites) is owned and operated by **Lia97 FZC-LLC**, address "RAKEZ, Ras Al Khaimah, UAE", no
+  licence number shown. Changes: `components/marketing/legal-config.ts` companyName/address (footer "owned and operated
+  by", privacy/terms/data-deletion, Organization JSON-LD legalName + core seo test), spa CRM sidebar badge "Spa
+  Management · Powered by Lia97 FZC-LLC" (every spa), invoices (seller + legal line + "Powered by" Lia97 logo the owner
+  sends; replaces 1997labs). Reissue SM-INV-2026-013 and 014 under Lia97 FZC-LLC (same numbers, amounts, status).
+  Meta/Google verifications done under 1997labs may need updating by the owner.
 - **R47 Website WhatsApp rotation + clearer walk-in refusal (owner 2026-11-07: ~90 Google Ads chats/day on one phone;
   answers: 30 days via the server, numbers in the CRM, fix the walk-in message):** CRM Settings → "Website WhatsApp
   numbers (share chats)" (`tenants.settings.whatsappRotation`, E.164 digits, ≤ 10; empty = the branch WhatsApp). Each
