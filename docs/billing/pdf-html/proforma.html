@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proforma — Spa Management</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  :root { --green:#0F6B4B; --ink:#111a15; --muted:#59645d; --lime:#D9F26A; --mint:#eef5ee; --line:#dde5dd; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"DM Sans", Arial, sans-serif; color:var(--ink); font-size:10pt; line-height:1.4; }
+  h1,h2,h3,.num { font-family:"Space Grotesk", Arial, sans-serif; }
+  .top { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--green); padding-bottom:10px; }
+  .top img { height:46px; }
+  .seller { text-align:right; font-size:9pt; color:var(--muted); }
+  .seller b { color:var(--ink); }
+  .title { display:flex; justify-content:space-between; align-items:flex-end; margin:14px 0 10px; }
+  .title h1 { margin:0; font-size:20pt; color:var(--green); }
+  .meta { font-size:9pt; text-align:right; }
+  .meta td { padding:1px 0 1px 12px; }
+  .meta td:first-child { color:var(--muted); }
+  .billto { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .box { border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:9pt; }
+  .box h3 { margin:0 0 4px; font-size:9.5pt; color:var(--green); text-transform:uppercase; letter-spacing:.06em; }
+  .blank { color:#8a948d; }
+  h2 { font-size:12pt; margin:16px 0 6px; color:var(--green); }
+  table.t { width:100%; border-collapse:collapse; font-size:9pt; }
+  table.t th { background:var(--green); color:#fff; text-align:left; padding:6px 8px; font-weight:600; }
+  table.t td { border-bottom:1px solid var(--line); padding:5px 8px; vertical-align:top; }
+  table.t tr.grp td { background:var(--mint); font-weight:700; color:var(--green); border-bottom:1px solid #cfdccf; }
+  table.t td.c, table.t th.c { text-align:center; width:62px; }
+  table.t td.r, table.t th.r { text-align:right; white-space:nowrap; }
+  .yes { color:var(--green); font-weight:700; }
+  .no { color:#9aa39c; }
+  .plans td.r { font-family:"Space Grotesk", Arial, sans-serif; font-weight:600; }
+  .plans tr.tot td { font-weight:700; background:#f6faef; }
+  .pill { display:inline-block; background:var(--lime); color:#1d2a06; border-radius:10px; padding:0 7px; font-size:8pt; font-weight:700; }
+  .notes { font-size:8.5pt; color:var(--muted); }
+  .notes li { margin:2px 0; }
+  .sign { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:22px; font-size:9pt; }
+  .sign div { border-top:1px solid var(--ink); padding-top:4px; }
+  .break { page-break-before:always; }
+  .foot { margin-top:14px; border-top:1px solid var(--line); padding-top:6px; font-size:8pt; color:var(--muted); display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <img src="logo.svg" alt="Spa Management">
+  <div class="seller">
+    <b>Spa Management — spamanagement.co</b><br>
+    <span class="blank">[Company legal name]</span><br>
+    ask@spamanagement.co · spamanagement.co<br>
+    TRN: <span class="blank">[TRN]</span>
+  </div>
+</div>
+
+<div class="title">
+  <h1>Proforma Invoice</h1>
+  <table class="meta">
+    <tr><td>No.</td><td><b>SM-PF-2026-001</b></td></tr>
+    <tr><td>Date</td><td>28 Oct 2026</td></tr>
+    <tr><td>Valid until</td><td>27 Nov 2026</td></tr>
+    <tr><td>Currency</td><td>AED</td></tr>
+  </table>
+</div>
+
+<div class="billto">
+  <div class="box"><h3>Bill to</h3>
+    <span class="blank">[Spa name]</span><br>
+    <span class="blank">[Contact person]</span><br>
+    <span class="blank">[Phone] · [Email]</span><br>
+    <span class="blank">[Address, Emirate]</span><br>
+    TRN: <span class="blank">[Customer TRN, if any]</span>
+  </div>
+  <div class="box"><h3>Service</h3>
+    Spa Management platform: spa management system (CRM), bookings, point of sale,
+    team and finance, and a professionally designed website, connected as one system.
+    Hosting, security updates, new features and support are included.
+  </div>
+</div>
+
+<h2>1. Plans and prices</h2>
+<table class="t plans">
+  <tr><th>Plan</th><th>What it is for</th><th class="r">Setup (one time)</th><th class="r">Monthly</th><th class="r">First year</th></tr>
+  <tr><td><b>Standard</b></td><td>One branch. Everything in section 2 except the items marked Premium.</td><td class="r">9,000</td><td class="r">2,000</td><td class="r">33,000</td></tr>
+  <tr><td><b>Premium</b> <span class="pill">Recommended</span></td><td>Everything, including AI, Instagram automation, marketing tools and more than one branch.</td><td class="r">14,000</td><td class="r">3,000</td><td class="r">50,000</td></tr>
+</table>
+<p class="notes">All prices are in AED and exclude VAT. VAT at 5% is added where it applies. "First year" = setup + 12 months.</p>
+
+<h2>Selected plan: <span class="blank">[Standard / Premium]</span></h2>
+<table class="t plans">
+  <tr><th>Item</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr>
+  <tr><td>Setup: onboarding, data import, menu, rooms and team set up, website design and launch</td><td class="r">1</td><td class="r"><span class="blank">[9,000 / 14,000]</span></td><td class="r"><span class="blank">[ ]</span></td></tr>
+  <tr><td>Monthly subscription, billed monthly</td><td class="r"><span class="blank">[1]</span></td><td class="r"><span class="blank">[2,000 / 3,000]</span></td><td class="r"><span class="blank">[ ]</span></td></tr>
+  <tr><td colspan="3" class="r">Subtotal</td><td class="r"><span class="blank">[ ]</span></td></tr>
+  <tr><td colspan="3" class="r">VAT 5% (if applicable)</td><td class="r"><span class="blank">[ ]</span></td></tr>
+  <tr class="tot"><td colspan="3" class="r">Total due on signing</td><td class="r"><span class="blank">[ ]</span></td></tr>
+</table>
+
+
+<div class="break"></div>
+<h2>2. Features included</h2>
+<table class="t">
+  <tr><th>Feature</th><th class="c">Standard</th><th class="c">Premium</th></tr>
+
+  <tr class="grp"><td colspan="3">A. Website</td></tr>
+  <tr><td>Professionally designed website, fast on phones, in English and Arabic (right-to-left)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Your own domain (e.g. yourspa.com) with free SSL certificate</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Services and prices, team and opening hours shown live from the system (prices can be hidden)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Home, Services, About, Contact and other pages; map link, phones, WhatsApp buttons and social links</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Online booking with live free times, 24/7</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Website enquiry and booking-request forms straight into the system (no email needed)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>SEO basics: page titles and descriptions, sitemap, Google structured data, Search Console, redirects from old links</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Google Ads / analytics tags and a moving offer bar</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Website changes by our team ("Request a change" from your dashboard)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Weekly AI SEO check and AI-written page texts (English + Arabic)</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">B. Bookings and calendar</td></tr>
+  <tr><td>Calendar by therapist and room; no double bookings</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Walk-ins with a fair turn list, waitlist, confirm / check-in / finish flow</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>WhatsApp confirmations, reminders and thank-you messages (ready to send in one tap)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Dashboard: today's bookings and sales together, website alerts with pop-up and sound</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">C. Sales and point of sale</td></tr>
+  <tr><td>Sales and checkout; payments recorded by cash, card terminal or bank transfer; tips</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Daily close and daily sales sheet (PDF)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Gift vouchers, packages and memberships</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Products and stock, purchases, low-stock alerts</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">D. Clients</td></tr>
+  <tr><td>Client records with visit history, notes, UAE and international phone numbers</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Intake and waiver forms (PDF), duplicate merge, import and export</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">E. Team and payroll</td></tr>
+  <tr><td>Staff profiles, roles and permissions, time clock</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Commissions, payroll and WPS salary file</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Staff documents with expiry reminders (visa, licence)</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">F. Finance and reports</td></tr>
+  <tr><td>Reports and KPIs, profit and loss, VAT, expenses, accounting export</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>AI weekly insights and receipt scanning</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">G. Marketing and growth</td></tr>
+  <tr><td>Google Business Profile link and reviews</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Campaigns, win-back, birthday and review-request messages</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+  <tr><td>AI studio: posts, review replies and marketing drafts</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">H. AI and Instagram</td></tr>
+  <tr><td>Instagram inbox with AI replies and booking from messages</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">I. Branches</td></tr>
+  <tr><td>One branch</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>More than one branch, managed from one account</td><td class="c no">—</td><td class="c yes">✓</td></tr>
+
+  <tr class="grp"><td colspan="3">J. Included with every plan</td></tr>
+  <tr><td>Dashboard in English and Thai; installs as an app on phones and tablets</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Two-step login, activity log, daily backups, secure hosting in the cloud</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+  <tr><td>Updates and new features at no extra cost; support by WhatsApp and email</td><td class="c yes">✓</td><td class="c yes">✓</td></tr>
+</table>
+
+
+<div class="break"></div>
+<h2>3. Terms</h2>
+<ul class="notes" style="font-size:9pt;color:var(--ink)">
+  <li>Prices are in AED and exclude VAT; VAT at 5% is added where it applies.</li>
+  <li>The setup fee is paid on signing. The monthly fee is billed monthly in advance.</li>
+  <li>Payment by bank transfer, cash or card payment link.</li>
+  <li>Not included: domain registration (charged at cost), advertising spend (e.g. Google or Meta ads) and third-party subscriptions.</li>
+  <li>Customer messages are sent through WhatsApp by your staff (one-tap send); no SMS charges.</li>
+  <li>Website launch and onboarding: <span class="blank">[ ]</span> working days after we receive your content (logo, photos, services, team).</li>
+  <li>This proforma is valid for 30 days from its date.</li>
+</ul>
+
+<h2>Bank details</h2>
+<div class="box" style="font-size:9pt">
+  Account name: <span class="blank">[ ]</span><br>
+  Bank: <span class="blank">[ ]</span><br>
+  IBAN: <span class="blank">[ ]</span><br>
+  SWIFT: <span class="blank">[ ]</span>
+</div>
+
+<div class="sign">
+  <div>For Spa Management<br><span class="blank">Name, signature, date</span></div>
+  <div>For the customer<br><span class="blank">Name, signature, date</span></div>
+</div>
+
+</body>
+</html>

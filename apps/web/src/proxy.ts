@@ -1,0 +1,268 @@
+import {
+  apiSecurityHeaders,
+  canonicalAddressUrl,
+  canonicalScheme,
+  crmFeedPath,
+  extraRootAddress,
+  hostRoutedUrl,
+  htmlDesignPageHeaders,
+  newNonce,
+  pageSecurityHeaders,
+  parseRoots,
+  pathRoutedAddress,
+  platformOnlyPath,
+  resolveSurface,
+} from '@spa/core'
+import { type NextRequest, NextResponse } from 'next/server'
+import {
+  exactHtmlDesignAt,
+  HTML_ROUTE_FALLBACK,
+  HTML_ROUTE_HEADER,
+  htmlRouteKey,
+} from '@/server/html-design-route'
+import { ownDomainTarget, wwwTwinTarget } from '@/server/own-domain'
+import { siteRedirectPath, siteRedirectTarget, withSiteRedirect } from '@/server/site-redirect'
+import { currentSlugFor, movedSlugTarget } from '@/server/slug-redirect'
+
+const PATH_ROUTING = process.env.NEXT_PUBLIC_ROUTING === 'path'
+/**
+ * Platform domains: ROOT_DOMAIN (canonical) plus EXTRA_ROOT_DOMAINS — an extra one keeps answering (POSTs, platform-only
+ * paths) but its pages redirect to the canonical domain (R29).
+ */
+const ROOTS = parseRoots(process.env.ROOT_DOMAIN ?? 'localhost:3000', process.env.EXTRA_ROOT_DOMAINS)
+const BARE_ROOTS = ROOTS.map((r) => r.split(':')[0]!)
+
+/** A spa's custom domain (only ever serves that spa's public site): its bare hostname, else null (a platform host). */
+function customHost(host: string): string | null {
+  if (!PATH_ROUTING) {
+    const surface = resolveSurface(host, ROOTS)
+    return surface.kind === 'custom' ? surface.hostname : null
+  }
+  // Single-host mode: the platform lives on its domains (or a bare IP / localhost); any other host is a custom domain.
+  const bare = host.split(':')[0]!.toLowerCase().replace(/\.+$/, '')
+  return bare &&
+    !BARE_ROOTS.includes(bare) &&
+    bare !== 'localhost' &&
+    !/^[\d.]+$/.test(bare) &&
+    !bare.includes('[')
+    ? bare
+    : null
+}
+
+/** Maps a public request to an internal route prefix. See lib/paths.ts for the two routing modes. */
+function internalPath(host: string, pathname: string): string {
+  const tail = (p: string) => (p === '/' ? '' : p)
+  if (PATH_ROUTING) {
+    const custom = customHost(host)
+    if (custom) return `/domain/${custom}${tail(pathname)}`
+    const m = pathname.match(/^\/(app|admin|s)(?=\/|$)(\/[^/]+)?(.*)$/)
+    if (m?.[1] === 'app') return `/dashboard${tail(`${m[2] ?? ''}${m[3] ?? ''}` || '/')}`
+    if (m?.[1] === 'admin') return `/platform${tail(`${m[2] ?? ''}${m[3] ?? ''}` || '/')}`
+    if (m?.[1] === 's' && m[2]) return `/site${m[2]}${m[3] ?? ''}`
+    return `/marketing${tail(pathname)}`
+  }
+  const surface = resolveSurface(host, ROOTS)
+  const prefix =
+    surface.kind === 'marketing'
+      ? '/marketing'
+      : surface.kind === 'app'
+        ? '/dashboard'
+        : surface.kind === 'admin'
+          ? '/platform'
+          : surface.kind === 'site'
+            ? `/site/${surface.slug}`
+            : `/domain/${surface.hostname}`
+  return `${prefix}${tail(pathname)}`
+}
+
+const DEV = process.env.NODE_ENV === 'development'
+
+/**
+ * One Next.js app serves every surface; this rewrites paths and sets the page security headers (F10): a fresh CSP nonce
+ * per request, passed to the render in the request's own `Content-Security-Policy` (Next reads the nonce from it and
+ * stamps its scripts) and `x-nonce` (our inline scripts, server/nonce.ts). Pages re-check tenant and permissions.
+ */
+export async function proxy(req: NextRequest) {
+  const host = req.headers.get('host') ?? ''
+  // R20: the matcher's platform-only entries (sign-in API, OAuth discovery, MCP, integrations) — a 404 on a spa's custom
+  // domain, which serves only that spa's public site; passed through untouched (no rewrite, no page headers) elsewhere.
+  if (platformOnlyPath(req.nextUrl.pathname))
+    return customHost(host) ? new NextResponse('Not found', { status: 404 }) : NextResponse.next()
+  // `example.ae.` is the same host as `example.ae`: send it to the canonical spelling so sign-in, cookies and links all
+  // see one host (otherwise the dotted host would show pages it can't sign in on).
+  if (/\.(:\d+)?$/.test(host)) {
+    const proto =
+      req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
+    const fixed = host.replace(/\.+(?=:\d+$|$)/, '')
+    return NextResponse.redirect(`${proto}://${fixed}${req.nextUrl.pathname}${req.nextUrl.search}`, 308)
+  }
+  // Host routing only (null under path routing, which still serves them): an address from the path-routing days
+  // (`/app/…`, `/admin/…`, `/s/{slug}/…` on any platform domain or its www.: shared links, invites, QR posters, widget
+  // snippets, installed apps) → the same rest of the path + query on `app.` / `admin.` / `{slug}.` of the canonical
+  // domain, one hop (a renamed spa's slug resolves to the current one, F23). GET/HEAD 301 (like F23); any other method
+  // 308, which keeps the method and body (a 301 may turn a POST into a GET). Short browser cache: a later rename or a
+  // switch back to path routing takes effect within minutes.
+  const safe = req.method === 'GET' || req.method === 'HEAD'
+  const old = pathRoutedAddress(host, req.nextUrl.pathname, ROOTS, { pathRouting: PATH_ROUTING })
+  if (old) {
+    // R20: a spa site with its own domain primary goes straight there (one hop, R33 redirect applied), as below.
+    const own =
+      safe && old.surface === 'site'
+        ? await ownDomainTarget(`/site/${old.slug}${old.rest}`, req.nextUrl.search).then(withSiteRedirect)
+        : null
+    const current = old.slug ? await currentSlugFor(old.slug) : null
+    const target =
+      own ??
+      `${hostRoutedUrl(old, ROOTS[0]!, canonicalScheme(ROOTS[0]!, process.env.APP_URL), current)}${req.nextUrl.search}`
+    const res = NextResponse.redirect(target, safe ? 301 : 308)
+    res.headers.set('cache-control', 'private, max-age=300')
+    return res
+  }
+  // R29: a page on an old/extra platform domain (EXTRA_ROOT_DOMAINS: the old sslip.io address) → the same surface,
+  // path + query on the canonical domain, 308, one hop (a spa's free address → its own domain when primary, else its
+  // current slug), so sign-ins and Meta/Google connects only ever start on the canonical domain (the only redirect URIs
+  // registered). GET/HEAD only: forms, server actions and the platform-only paths above keep working there; /api,
+  // /files, /_next and Caddy's /_status never get here, and Caddy keeps issuing the old hosts' certificates
+  // (api/domains/allowed), so the redirect is served over HTTPS.
+  const extra = safe ? extraRootAddress(host, ROOTS, { pathRouting: PATH_ROUTING }) : null
+  if (extra) {
+    const site =
+      extra.surface === 'site'
+        ? `/site/${extra.slug}${req.nextUrl.pathname === '/' ? '' : req.nextUrl.pathname}`
+        : null
+    const own = site ? await ownDomainTarget(site, req.nextUrl.search).then(withSiteRedirect) : null
+    const current = extra.surface === 'site' ? await currentSlugFor(extra.slug) : null
+    const target =
+      own ??
+      canonicalAddressUrl(
+        extra,
+        ROOTS[0]!,
+        canonicalScheme(ROOTS[0]!, process.env.APP_URL),
+        `${req.nextUrl.pathname}${req.nextUrl.search}`,
+        current,
+      )
+    const res = NextResponse.redirect(target, 308)
+    // Short browser cache, like F23/R20: a config change (or a move back) applies within minutes.
+    res.headers.set('cache-control', 'private, max-age=300')
+    // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+    if (site && crmFeedPath(site)) res.headers.set('access-control-allow-origin', '*')
+    return res
+  }
+  // A connected custom domain's www twin (www.theirspa.ae ↔ theirspa.ae) → the connected hostname, path + query kept,
+  // one hop: GET/HEAD 301 (the spa's own redirect applied, R33), other methods 308. Short browser cache, like R20: a
+  // domain change applies within minutes.
+  const custom = customHost(host)
+  const twin = custom ? await wwwTwinTarget(custom, req.nextUrl.pathname, req.nextUrl.search) : null
+  if (twin) {
+    const res = NextResponse.redirect(safe ? await withSiteRedirect(twin) : twin, safe ? 301 : 308)
+    res.headers.set('cache-control', 'private, max-age=300')
+    // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+    if (crmFeedPath(internalPath(host, req.nextUrl.pathname)))
+      res.headers.set('access-control-allow-origin', '*')
+    return res
+  }
+  const url = req.nextUrl.clone()
+  const originalPath = url.pathname
+  url.pathname = internalPath(host, originalPath)
+  const proto =
+    req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || req.nextUrl.protocol.replace(':', '')
+  // R26: the HTML design data contract endpoints (`{site}/crm-data.json`, `{site}/crm-enquiry`): JSON, not pages.
+  const feed = crmFeedPath(url.pathname)
+  if (safe) {
+    // R20: the spa's own domain is active + primary → its temporary address ({slug}.{any platform root}, /s/{slug}) 301s
+    // there, path + query kept, one hop (a renamed slug too). Not: other methods (forms/server actions started here),
+    // the widget iframe /book/embed, robots.txt; /api and /.well-known (only the platform-only check above sees them),
+    // /files, _next and static files never get here. Short browser cache, like F23: a domain change applies in minutes.
+    // R33: an old address goes straight to its new page there (the own domain's redirect applied, one hop).
+    const own = await ownDomainTarget(url.pathname, req.nextUrl.search)
+    if (own) {
+      const res = NextResponse.redirect(await withSiteRedirect(own), 301)
+      res.headers.set('cache-control', 'private, max-age=300')
+      // A design's fetch of crm-data.json is a CORS request: the redirect hop must allow it too.
+      if (feed) res.headers.set('access-control-allow-origin', '*')
+      return res
+    }
+    // F23: a renamed spa's previous address (site or dashboard) → the same path + query under its new slug.
+    const moved = await movedSlugTarget(host, originalPath, url.pathname)
+    if (moved) {
+      const res = NextResponse.redirect(`${proto}://${moved.host}${moved.pathname}${req.nextUrl.search}`, 301)
+      // Short browser cache: the address may be taken back (or, after the cooling period, by another spa).
+      res.headers.set('cache-control', 'private, max-age=300')
+      if (feed) res.headers.set('access-control-allow-origin', '*')
+      return res
+    }
+    // R33: the spa's own redirects (console Websites → spa → Redirects): an old website address → a page of the site,
+    // 301 on the address the visitor used (path routing keeps /s/{slug}), the visitor's other params kept. Location =
+    // the request's host + a validated on-site path only. Never the design feed, the site's own routes or a live page
+    // / published post at the same address (the lookup leaves those out: the page wins); other methods fall through.
+    // Next's trailing-slash 308 runs before the proxy: `/old/` takes 308 → 301. Short browser cache, like F23.
+    const redirect = feed ? null : await siteRedirectTarget(url.pathname, req.nextUrl.search)
+    if (redirect) {
+      const res = NextResponse.redirect(`${proto}://${host}${siteRedirectPath(originalPath, redirect)}`, 301)
+      res.headers.set('cache-control', 'private, max-age=300')
+      return res
+    }
+  }
+  const https = proto === 'https'
+  // R24: a page whose live content is an exact HTML design is the design document itself (app/site-html: CSP sandbox,
+  // never allow-same-origin), so it scrolls and behaves exactly like the file opened directly. `__page` = its
+  // fallback to the normal page (no lookup, no loop). /site-html itself is never reachable from outside: every
+  // external path gets a surface prefix above.
+  const surface = url.pathname.startsWith('/site/')
+    ? 'site'
+    : url.pathname.startsWith('/domain/')
+      ? 'domain'
+      : null
+  // R26: the contract endpoints get the API headers (no nonce / page CSP / COOP), never the exact-design lookup;
+  // POST / OPTIONS never reach the redirects above (crm-enquiry works on the temporary address and the own domain).
+  if (feed && surface) {
+    const headers = new Headers(req.headers)
+    headers.set('x-original-path', `${originalPath}${url.search}`)
+    headers.set('x-internal-path', url.pathname)
+    const res = NextResponse.rewrite(url, { request: { headers } })
+    for (const [k, v] of Object.entries(apiSecurityHeaders({ https, surface }))) res.headers.set(k, v)
+    return res
+  }
+  if (
+    safe &&
+    surface &&
+    !url.searchParams.has(HTML_ROUTE_FALLBACK) &&
+    (await exactHtmlDesignAt(url.pathname))
+  ) {
+    const headers = new Headers(req.headers)
+    headers.set('x-original-path', `${originalPath}${url.search}`)
+    headers.set('x-internal-path', url.pathname)
+    headers.set(HTML_ROUTE_HEADER, htmlRouteKey())
+    const target = url.clone()
+    target.pathname = '/site-html'
+    const res = NextResponse.rewrite(target, { request: { headers } })
+    for (const [k, v] of Object.entries(htmlDesignPageHeaders({ https, surface }))) res.headers.set(k, v)
+    return res
+  }
+  const nonce = newNonce()
+  const security = pageSecurityHeaders({ nonce, internalPath: url.pathname, https, dev: DEV })
+  const headers = new Headers(req.headers)
+  headers.set('x-original-path', `${originalPath}${url.search}`)
+  // F24: the surface (route prefix) for <html lang/dir> and the surface-aware 404 (server/surface.ts).
+  headers.set('x-internal-path', url.pathname)
+  headers.set('x-nonce', nonce)
+  headers.set('content-security-policy', security['content-security-policy']!)
+  const res = NextResponse.rewrite(url, { request: { headers } })
+  for (const [k, v] of Object.entries(security)) res.headers.set(k, v)
+  return res
+}
+
+// /files/* (stored files + uploads) is served by app/files on every host and routing mode, never rewritten; so is
+// /.well-known/* (OAuth discovery for the Claude MCP connector, app/.well-known). /robots.txt and /sitemap.xml ARE
+// rewritten, so each surface answers its own (marketing, app/admin = disallow all, spa site, custom domain).
+// Paths left out here get their security headers from next.config.ts instead (keep the two lists in step).
+// The last entries (platformOnlyPath) only reach the custom-domain 404 above, never the rewrite or the page headers.
+export const config = {
+  matcher: [
+    '/((?!api/|_next/|files/|\\.well-known/|favicon\\.ico|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|woff2?)$).*)',
+    '/api/auth/:path*',
+    '/api/mcp/:path*',
+    '/api/integrations/:path*',
+    '/.well-known/:path*',
+  ],
+}

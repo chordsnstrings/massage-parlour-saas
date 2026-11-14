@@ -1,0 +1,28 @@
+{
+  "name": "@spa/db",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./migrate": "./src/migrate.ts",
+    "./seed": "./src/seed.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "check:drift": "bash scripts/check-drift.sh",
+    "migrate": "tsx --env-file-if-exists=../../.env src/bin/migrate.ts",
+    "seed": "tsx --env-file-if-exists=../../.env src/bin/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.3",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "drizzle-kit": "0.31.11"
+  }
+}
