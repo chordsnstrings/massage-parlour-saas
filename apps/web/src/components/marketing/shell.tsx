@@ -216,6 +216,12 @@ async function Footer() {
           <span className="mkt-fline">
             © {new Date().getFullYear()} {LEGAL.companyName} · {LEGAL.brand}
           </span>
+          {/* R48 (owner 2026-11-15): the platform is owned and operated by Lia97 FZC-LLC. */}
+          <span className="mkt-fline mkt-fowner">
+            Owned and operated by
+            {/* biome-ignore lint/performance/noImgElement: static brand SVG */}
+            <img src="/brand/lia97-logo.svg" alt={LEGAL.companyName} width={56} height={17} />
+          </span>
         </div>
       </div>
     </footer>

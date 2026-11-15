@@ -13,13 +13,13 @@ Owner 2026-11-01: the setup invoice (013) is **PAID** in green (stamp, status, a
 
 ## Owner's rules for these invoices
 
-- **Seller from 2026-11-14 (R48):** legal name **Lia97 FZC-LLC**, "RAKEZ, Ras Al Khaimah, UAE", no licence number; "Powered by" = the Lia97 logo (owner sends it); the official-invoice line names Lia97 FZC-LLC; 013 + 014 to be reissued under it. The 1997labs rule below applied before.
-- **Seller:** "Spa Management", legal name **1997labs Tech Solutions**, ask@spamanagement.co · 1997labs.com, and our phone numbers +971 50 315 3267 · +971 50 192 4021 (owner 2026-11-01).
-  - Don't put a city or country under the seller.
+- **Seller from 2026-11-15 (R48, done):** legal name **Lia97 FZC-LLC**, "RAKEZ, Ras Al Khaimah, UAE", no licence number; "Powered by" = the Lia97 logo (sent 2026-11-15); the official-invoice line names Lia97 FZC-LLC; 013 + 014 reissued under it (same numbers, amounts, status; PDFs sent to the owner 2026-11-15). The 1997labs rule below applied before.
+- **Seller:** "Spa Management", legal name **Lia97 FZC-LLC**, "RAKEZ, Ras Al Khaimah, UAE", ask@spamanagement.co · spamanagement.co, and our phone numbers +971 50 315 3267 · +971 50 192 4021 (owner 2026-11-01; Lia97 + its address from 2026-11-15, R48; 1997labs before).
+  - No other city or country under the seller.
   - Don't add bank details or the client's domain.
-- **Logos:** the SM logo, with "Powered by" and the 1997 Labs logo under it on the left; the company block goes on the right.
+- **Logos:** the SM logo, with "Powered by" and the Lia97 logo under it on the left (`pdf-html/lia97-logo.svg`, `word/lia97-logo.png`); the company block goes on the right.
 - **No VAT:** don't mention VAT anywhere, including on the features list.
-- **No signature or stamp:** instead, one small line: "This is an official invoice issued by 1997labs Tech Solutions (Spa Management); no stamp or signature is needed."
+- **No signature or stamp:** instead, one small line: "This is an official invoice issued by Lia97 FZC-LLC (Spa Management); no stamp or signature is needed."
 - **Special offer:** a highlighted row (lime background with a "SPECIAL OFFER" pill).
 - **Languages:** say that the website is in 2 languages (EN + AR) and the CRM in 2 languages (EN + TH).
 - **Setup invoice:** 2 pages. Page 2 is the features list, sections A–H. It leaves out AI and Instagram, campaigns, win-back, birthday and review-request messages, and branches.

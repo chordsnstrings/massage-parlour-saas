@@ -321,15 +321,21 @@ export function SpaShell({
                 {plan.renewal && <small>{plan.renewal}</small>}
               </div>
             )}
-            {/* Platform badge (owner 2026-10-09): brand name, never translated. */}
+            {/* Platform badge (owner 2026-10-09): brand names, never translated. */}
             <a
               href={platformHref}
               target="_blank"
               rel="noopener"
-              aria-label="Spa Management"
+              aria-label="Spa Management, powered by Lia97 FZC-LLC"
               className="crm-platform"
             >
               <Logo className="crm-platform-logo" />
+              {/* R48 (owner 2026-11-15): every spa's badge names the platform company. */}
+              <span className="crm-platform-by" aria-hidden>
+                Powered by
+                {/* biome-ignore lint/performance/noImgElement: static brand SVG */}
+                <img src="/brand/lia97-logo.svg" alt="" width={40} height={12} />
+              </span>
             </a>
           </div>
         </aside>
