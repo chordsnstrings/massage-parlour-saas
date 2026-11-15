@@ -1592,7 +1592,7 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
   by", privacy/terms/data-deletion, Organization JSON-LD legalName + core seo test), spa CRM sidebar badge "Spa
   Management · Powered by Lia97 FZC-LLC" (every spa), invoices (seller + legal line + "Powered by" Lia97 logo the owner
   sends; replaces 1997labs). Reissue SM-INV-2026-013 and 014 under Lia97 FZC-LLC (same numbers, amounts, status).
-  Meta/Google verifications done under 1997labs may need updating by the owner.
+  Meta/Google verifications: done under the owner's other business ads-wise.com (owner 2026-11-15), not 1997labs/Lia97.
   *Built (2026-11-15):* `legal-config.ts` (Lia97 FZC-LLC, "RAKEZ, Ras Al Khaimah, United Arab Emirates", updated
   15 Nov 2026) → footer "© … Lia97 FZC-LLC · spamanagement.co" + "Owned and operated by" Lia97 logo
   (`public/brand/lia97-logo.svg`, light-background version), legal pages, JSON-LD legalName; CRM sidebar badge adds

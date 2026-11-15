@@ -46,7 +46,8 @@ the existing flow.
 
 **Owner setup (no code):**
 - **Lia97 FZC-LLC (R48):** Console → Settings → Company shows the seller on app invoices: legal name Lia97 FZC-LLC,
-  address RAKEZ, Ras Al Khaimah, UAE. Meta/Google verifications made under 1997labs may need updating.
+  address RAKEZ, Ras Al Khaimah, UAE. Meta (Business Verification, both apps) and Google (Cloud project, OAuth
+  consent screen) are verified under the owner's other business **ads-wise.com** (owner 2026-11-15), not Lia97.
 - **Be Relax data reset (R40):** only when the owner says so (warn Be Relax first): Console → Spas → BE RELAX → "Reset spa data".
 - **Google and Meta keys:** enter the platform keys in Console → Settings, on the Google card and the Meta card
   (`docs/INTEGRATIONS.md`). Until then spas see "Not configured yet" instead of the Connect buttons.
