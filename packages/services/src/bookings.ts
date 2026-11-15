@@ -21,12 +21,14 @@ import {
   toRange,
 } from '@spa/core'
 import {
+  bookingCommissions,
   bookingItems,
   bookings,
   branches,
   clients,
   equipment,
   leaveRequests,
+  packageRedemptions,
   reservations,
   rooms,
   rotationEntries,
@@ -701,6 +703,66 @@ export async function setBookingStatus(
   // takes the unsent ones out of the outbox (G4).
   await planBookingMessages(tx, bookingId, { now: opts.now })
   return updated!
+}
+
+/**
+ * Deletes a booking that has no money history (R39): refused while a sale other than a void one, a package
+ * redemption or a commission row points at it (cancel it instead). Its items, reservations
+ * and unsent messages go with it (cascade); notes, intake forms, waitlist entries, chats and a void sale keep
+ * their rows unlinked; a website enquiry made into it reopens. Returns the deleted row (for the audit snapshot).
+ */
+export async function deleteBooking(
+  tx: Tx,
+  bookingId: string,
+  opts: { now?: Date; notifyWaitlist?: boolean } = {},
+) {
+  const [b] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).for('update')
+  if (!b) throw new DomainError('Booking not found', 'not_found')
+  const [sale] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(and(eq(sales.bookingId, bookingId), ne(sales.status, 'void')))
+    .limit(1)
+  const [redeemed] = await tx
+    .select({ id: packageRedemptions.id })
+    .from(packageRedemptions)
+    .where(eq(packageRedemptions.bookingId, bookingId))
+    .limit(1)
+  const [commission] = await tx
+    .select({ id: bookingCommissions.id })
+    .from(bookingCommissions)
+    .where(eq(bookingCommissions.bookingId, bookingId))
+    .limit(1)
+  if (sale || redeemed || commission)
+    throw new DomainError(
+      'This booking has a payment or commission, so it can’t be deleted — cancel it instead',
+    )
+  const items = await tx
+    .select({ serviceId: serviceVariants.serviceId })
+    .from(bookingItems)
+    .leftJoin(serviceVariants, eq(serviceVariants.id, bookingItems.serviceVariantId))
+    .where(eq(bookingItems.bookingId, bookingId))
+  await tx.delete(bookings).where(eq(bookings.id, bookingId))
+  // Its time is free now, unless a cancel / no-show had already released it (B5.1).
+  if (
+    opts.notifyWaitlist !== false &&
+    b.status !== 'cancelled' &&
+    b.status !== 'no_show' &&
+    b.status !== 'completed'
+  )
+    await notifyWaitlistForFreedSlot(
+      tx,
+      {
+        tenantId: b.tenantId,
+        branchId: b.branchId,
+        businessDate: b.businessDate,
+        startsAt: b.startsAt,
+        endsAt: b.endsAt,
+        serviceIds: [...new Set(items.map((i) => i.serviceId).filter((x): x is string => Boolean(x)))],
+      },
+      opts.now,
+    )
+  return b
 }
 
 /** What a therapist may do to their own booking (G14): check in, start, complete — never confirm, cancel or move. */

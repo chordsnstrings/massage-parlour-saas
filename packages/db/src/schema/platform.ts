@@ -202,6 +202,11 @@ export type TenantSettings = {
   }
   /** R32: the spa's phone lines as typed, index 0 = P1 … 3 = P4 ('' or missing = not used). */
   phoneLines?: string[]
+  /**
+   * R47 (owner 2026-11-07): WhatsApp numbers (E.164 digits) the website shares out: each visitor gets one (round
+   * robin) and keeps it 30 days (cookie); empty = the default branch's WhatsApp. Read with core whatsappRotationOf().
+   */
+  whatsappRotation?: string[]
   /** R32 daily sales sheet optional columns (missing: tips on, commission off; read with core daySheetColumns()). */
   daySheet?: { tips?: boolean; commission?: boolean }
 }
@@ -556,6 +561,34 @@ export const tenantPurges = pgTable(
     createdAt: createdAt(),
   },
   () => platformPolicies(),
+)
+
+/**
+ * R40: one row per "Reset spa data" (super-admin console). The spa's operational data (clients, bookings, sales, ledger,
+ * …) was deleted; its setup stayed. `snapshot` = gzip of the deleted rows as JSON ({ table: rows[] }) taken in the
+ * same transaction, so a reset can be undone by hand. No FK (`reset_tenant_id` is not `tenant_id`: that name marks
+ * RLS tenant tables).
+ */
+const snapshotBytes = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' })
+
+export const tenantResets = pgTable(
+  'tenant_resets',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    resetTenantId: uuid('reset_tenant_id').notNull(),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    resetBy: text('reset_by'),
+    /** Rows removed per table (table name → count). */
+    counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
+    snapshot: snapshotBytes('snapshot').notNull(),
+    snapshotSize: integer('snapshot_size').notNull(),
+    filesDeleted: integer('files_deleted').notNull().default(0),
+    /** Stored-object deletions that failed after the reset (never undo it). */
+    errors: jsonb('errors').$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+  },
+  (t) => [index('tenant_resets_tenant').on(t.resetTenantId, t.createdAt), ...platformPolicies()],
 )
 
 /**

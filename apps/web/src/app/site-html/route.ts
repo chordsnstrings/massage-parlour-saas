@@ -11,6 +11,7 @@ import {
   htmlPictureAdjustments,
   isSharePhoto,
   prefillCrmMarkup,
+  withAssignedWhatsapp,
 } from '@spa/core'
 import { crmFeedMeta } from '@/components/site/crm-feed'
 import { buildMeta, localeOf } from '@/components/site/data'
@@ -30,6 +31,7 @@ import {
 } from '@/server/html-design-route'
 import { absoluteImage, heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { resolveSiteTenant } from '@/server/sites'
+import { visitorWhatsapp, waCookieHeader, waCookieOf } from '@/server/whatsapp-rotation'
 
 /**
  * R24: the live page of an exact HTML design, served as the design document itself (proxy.ts rewrites here when
@@ -121,13 +123,25 @@ async function render(req: Request, head: boolean) {
   })
   // R26: a design with the CRM data contract: only its window.CRM_DATA JSON becomes the live CRM data (an
   // endpoint-only design fetches crm-data.json itself); its booking form posts to this host's crm-enquiry.
-  const { crm } = await crmFeedMeta(tenant, data, {
+  const feed = await crmFeedMeta(tenant, data, {
     locale,
     live: true,
     base,
     slug: p.page,
     services: loaded.data.services,
   })
+  // R47 (owner 2026-11-07): a spa with a WhatsApp rotation shares its website chats out: each visitor gets one number
+  // (round robin) and keeps it 30 days in a first-party cookie (the sandboxed page itself can't store anything), and
+  // every WhatsApp link the page builds from CRM_DATA uses it (also in the crawler text). Calls numbers never change.
+  let crm = feed.crm
+  let waCookie: string | null = null
+  if (crm) {
+    const picked = await visitorWhatsapp(tenant.id, waCookieOf(h.get('cookie')), { assign: true })
+    if (picked) {
+      crm = withAssignedWhatsapp(crm, picked.number)
+      if (picked.fresh) waCookie = picked.number
+    }
+  }
   // R28: the spa's website content (data values in the CRM splice; page texts + pictures in the render).
   const content = block.props.content as HtmlDesignContent | undefined
   const key = designKey(htmlDesignDocOf(block.props))
@@ -189,6 +203,11 @@ async function render(req: Request, head: boolean) {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'private, no-cache',
       ...(seo.indexable ? {} : { 'x-robots-tag': 'noindex, nofollow' }),
+      ...(waCookie
+        ? {
+            'set-cookie': waCookieHeader(waCookie, base, h.get('x-forwarded-proto') === 'https'),
+          }
+        : {}),
     },
   })
 }

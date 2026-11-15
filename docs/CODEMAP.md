@@ -42,6 +42,15 @@ PLAN §4 lists `packages/blocks`, `packages/ui` and `packages/config`; they don'
   `purged_tenant_id` because a `tenant_id` column marks an RLS tenant table — db rls test + `tenantTables()`).
   `tenant_slug_history` (F23: old slug PK → `renamed_tenant_id`, `reserved_until`; services `tenant-slug.ts`).
   `tenants` adds a `tenant_self` policy so a spa sees its own row.
+- **Reset spa data (R40)**: services `tenant-reset.ts` `resetTenantData(platformDb, tenantId, confirmName)` — one
+  transaction: lock the tenant row, gzip JSON snapshot of every deleted row (+ kept rows it changes) into
+  `tenant_resets.snapshot` (platform table, migration 0061), then `delete … where tenant_id` over `RESET_DELETE_TABLES`
+  (children first: no SET NULL updates, no NO ACTION FK in the way; ledger + booking-commission triggers block
+  `spa_app` only), stock levels → 0, promo `uses` → 0, queued campaigns → draft, sent ones archived (stats cleared).
+  Stored files of deleted rows (intake / day-sheet PDFs, expense + purchase receipts by `/files/<id>`) go after the
+  commit via `deleteFile` (failures → `tenant_resets.errors`). `RESET_KEEP_TABLES` + test: every tenant table must be in
+  one list (add new tables there). Console: spa page card "Reset spa data" (type the spa name, `resetConfirm` field),
+  action `resetTenantDataAction`, audit `platform.tenant.reset`; e2e `console-ops.spec.ts` "reset spa data".
 - **Data deletion (G12, PLAN §18.2)**: services `data-deletion.ts` — `purgeTenant` (soft-deleted spa only; DELETE
   tenants cascades every `tenant_id` FK — all are ON DELETE CASCADE, keep it that way for new tables), bucket prefix
   delete `deleteTenantObjects` (storage.ts), `autoPurgeDeletedTenants` (worker `tenant-auto-purge`, off unless
@@ -1335,6 +1344,8 @@ integrations note,
     cutoff); `findSlots` and the walk-in picker skip people on leave; explicit `staffIds` on leave → `DomainError
     ('no_staff')` (create + reschedule; also with `allowOffShift`). Existing bookings keep their reservations:
     `decideLeave` returns the clash count for the toast.
+  - Delete (R39): `deleteBooking` only without money history (no non-void sale, package redemption or commission
+    row); cascades items/reservations/outbox, unlinks the rest; web action keeps the day lock + audit snapshot.
   - Marks (R2): staff see Pending / Completed / Cancelled (`bookingMark`, `MARK_STATUSES` in core; no-show stays
     internal). `setBookingStatus` locks the row; pending/confirmed → completed allowed; completed → pending /
     cancelled reverses the booking commission, refused while a `paid` sale exists for the booking.
@@ -1731,6 +1742,11 @@ i18n namespace `automations`.
 - **Services** `packages/services/src/assistant.ts`: `bookingStatusCounts`, `staffNames`, `lapsedClients`,
   `shiftsOnDate`, `assistantDraftTarget`, `staffIdForMember` (no permission checks inside, as everywhere).
 - **Tests**: `packages/ai/test/assistant.test.ts` (scripted ModelArk fetch), e2e `ask-ai.spec.ts` (`__steps` fixture).
+- **R46 prepared changes**: tools `prepare_booking_move` / `prepare_booking_cancel` (owner role via `scope.role`) only
+  push an `AssistantAction` (checked with `dryRun` in a rolled-back savepoint). `askAssistantAction` signs each into a
+  10-minute token (`server/assistant-token.ts`, HMAC of BETTER_AUTH_SECRET, bound to spa + user); the drawer shows a
+  card; `confirmAssistantAction` re-checks (calendar.manage, owner for cancel, no live sale) and calls
+  `rescheduleAction` / `markBookingAction`. Reports: `sales_summary`, `unpaid_bookings`, `booking_details`.
 
 ## Meta MCP (R7, AI tools)
 

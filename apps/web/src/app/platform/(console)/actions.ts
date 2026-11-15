@@ -30,7 +30,9 @@ import {
   purgeTenant,
   recordPlatformPayment,
   removePlan,
+  removeTenantMember,
   renameTenantSlug,
+  resetTenantData,
   restorePlan,
   resumeTenant,
   saveEmailSettings,
@@ -972,6 +974,64 @@ export async function deleteTenantAction(
     return ok(`${row.name} deleted (data kept — Resume restores it)`)
   } catch (e) {
     if (e instanceof DomainError) return fail(e.message, { confirm: e.message })
+    throw e
+  }
+}
+
+/**
+ * R40: reset a live spa's data (clients, bookings, sales, ledger, payroll, …; setup kept). The admin types the spa's
+ * name; a snapshot of the deleted rows is stored on the `tenant_resets` record before anything is removed.
+ */
+export async function resetTenantDataAction(
+  tenantId: string,
+  _p: ActionResult,
+  fd: FormData,
+): Promise<ActionResult> {
+  const user = await admin()
+  const confirm = String(fd.get('resetConfirm') ?? '')
+  try {
+    const rec = await resetTenantData(platformDb(), tenantId, confirm, { actorUserId: user.id })
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.tenant.reset',
+      entity: 'tenant',
+      entityId: tenantId,
+      data: { resetId: rec.id, counts: rec.counts, filesDeleted: rec.filesDeleted, errors: rec.errors },
+    })
+    refresh(tenantId)
+    const rows = Object.values(rec.counts).reduce((a, b) => a + b, 0)
+    return ok(`${rec.name} reset: ${rows} records removed; the spa starts from today`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message, { resetConfirm: e.message })
+    throw e
+  }
+}
+
+const LOGIN_NOTE = {
+  deleted: 'their login was deleted, so the email can be invited again',
+  kept_other_spa: 'their login stays (it belongs to another spa too)',
+  kept_admin: 'their login stays (it is a super-admin)',
+  kept_has_records: 'their login stays without any spa and was signed out (it already has records)',
+} as const
+
+/** R42: remove someone from a spa's team (console only; no last-owner limit by the owner's choice). */
+export async function removeMemberAction(tenantId: string, memberId: string): Promise<ActionResult> {
+  const user = await admin()
+  try {
+    const r = await removeTenantMember(platformDb(), tenantId, memberId)
+    await audit({
+      tenantId,
+      actorUserId: user.id,
+      action: 'platform.member.removed',
+      entity: 'member',
+      entityId: memberId,
+      data: { email: r.email, name: r.name, login: r.login },
+    })
+    refresh(tenantId)
+    return ok(`${r.name} removed from the team; ${LOGIN_NOTE[r.login]}`)
+  } catch (e) {
+    if (e instanceof DomainError) return fail(e.message)
     throw e
   }
 }

@@ -9,3 +9,8 @@ onlyBuiltDependencies:
 # Remove the entry once a fixed version is in. Example:  - GHSA-xxxx-xxxx-xxxx # reason; review 2026-12-01
 auditConfig:
   ignoreGhsas: []
+# 2026-10-31 audit: transitive fixes. happy-dom is only a declared dependency of @puckeditor/core (its dist never
+# imports it), so the 21.x major is safe; body-parser comes via @modelcontextprotocol/sdk > express.
+overrides:
+  happy-dom: ^21.0.4
+  body-parser: ^2.4.0

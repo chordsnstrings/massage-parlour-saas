@@ -1,7 +1,7 @@
 import { closeAllDbs, tenants, withTenant } from '@spa/db'
 import { resetTestDatabase, testDbs } from '@spa/db/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { DomainError, findOrCreateClient } from '../src'
+import { createNameOnlyClient, DomainError, findOrCreateClient } from '../src'
 
 const { platform, app } = testDbs()
 let tenantId = ''
@@ -49,5 +49,20 @@ describe('findOrCreateClient phones (R38)', () => {
         'Enter a UAE mobile (05X XXX XXXX) or a number with + and its country code',
       )
     }
+  })
+})
+
+describe('createNameOnlyClient (R43)', () => {
+  it('creates a client card with a name and no phone, a new one each time', async () => {
+    const make = () =>
+      withTenant(
+        tenantId,
+        (tx) => createNameOnlyClient(tx, tenantId, { name: '  Mona  ', source: 'phone' }),
+        app,
+      )
+    const a = await make()
+    const b = await make()
+    expect(a).toMatchObject({ name: 'Mona', phoneE164: null, source: 'phone' })
+    expect(b.id).not.toBe(a.id)
   })
 })

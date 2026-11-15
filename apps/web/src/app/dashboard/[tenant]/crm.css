@@ -1454,6 +1454,54 @@
 .crm-ask-link[data-kind="whatsapp"] svg {
   color: var(--crm-wa);
 }
+/* R46: a change the assistant prepared — nothing happens until Confirm. */
+.crm-ask-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--crm-accent);
+  border-radius: 12px;
+  background: var(--crm-surface);
+  font-size: 13px;
+}
+.crm-ask-card[data-kind="cancel"] {
+  border-color: var(--crm-bad);
+}
+.crm-ask-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.crm-ask-card-actions button {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--crm-line2);
+  background: var(--crm-surface);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.crm-ask-card-actions button[data-primary] {
+  border-color: var(--crm-accent);
+  background: var(--crm-accent);
+  color: #fff;
+}
+.crm-ask-card[data-kind="cancel"] .crm-ask-card-actions button[data-primary] {
+  border-color: var(--crm-bad);
+  background: var(--crm-bad);
+}
+.crm-ask-card-actions button:disabled {
+  opacity: 0.6;
+}
+.crm-ask-card-result {
+  font-weight: 600;
+}
+.crm-ask-card-result[data-ok="true"] {
+  color: var(--crm-ok);
+}
+.crm-ask-card-result[data-ok="false"] {
+  color: var(--crm-bad);
+}
 .crm-ask-typing {
   color: var(--crm-muted);
   font-size: 12.5px;

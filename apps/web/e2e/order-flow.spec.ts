@@ -93,7 +93,11 @@ test('R32 order flow: phone lines, confirm, finish & pay, own client, drawer exp
   })
 
   await test.step('Finish & pay: commission 40 prefilled; card 150 + cash tip 10 → completed + linked sale', async () => {
-    await desk.getByRole('dialog').getByRole('link', { name: 'Finish & pay' }).click()
+    await desk.getByRole('dialog').getByRole('button', { name: 'Finish & pay' }).click()
+    await desk
+      .getByRole('dialog')
+      .getByRole('link', { name: 'More options (tips, discount, products)' })
+      .click()
     await expect(desk.getByRole('heading', { name: 'Check out', level: 1 })).toBeVisible()
     await expect(desk.getByLabel('Commission for Maya · Swedish massage')).toHaveValue('40')
     await expect(desk.getByTestId('sale-total')).toHaveText(/150/)

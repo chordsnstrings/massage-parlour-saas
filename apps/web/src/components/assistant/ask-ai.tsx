@@ -5,14 +5,17 @@
 // `.crm-ask*`. The conversation lives in this component only (short history, gone on reload).
 import { ExternalLink, MessageCircle, SendHorizontal, Sparkles, X } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Dialog } from 'radix-ui'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useI18n } from '@/i18n/client'
-import { type AskLink, askAssistantAction } from './actions'
+import { type AskAction, type AskLink, askAssistantAction, confirmAssistantAction } from './actions'
 
-type Turn = { role: 'user' | 'assistant'; text: string; links?: AskLink[]; error?: boolean }
+/** R46: a prepared change and what happened to it in this drawer. */
+type Card = AskAction & { state: 'open' | 'busy' | 'done'; result?: { ok: boolean; text: string } }
+type Turn = { role: 'user' | 'assistant'; text: string; links?: AskLink[]; cards?: Card[]; error?: boolean }
 
-const SUGGESTIONS = ['tomorrow', 'topMonth', 'lapsed', 'revenue', 'friday'] as const
+const SUGGESTIONS = ['tomorrow', 'unpaid', 'topMonth', 'lapsed', 'revenue', 'friday'] as const
 
 export function AskAi({
   slug,
@@ -30,6 +33,22 @@ export function AskAi({
   const [q, setQ] = useState('')
   const [pending, start] = useTransition()
   const bodyRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+  const setCard = (turn: number, token: string, patch: Partial<Card>) =>
+    setTurns((prev) =>
+      prev.map((x, i) =>
+        i === turn ? { ...x, cards: x.cards?.map((c) => (c.token === token ? { ...c, ...patch } : c)) } : x,
+      ),
+    )
+  const confirm = (turn: number, card: Card) => {
+    setCard(turn, card.token, { state: 'busy' })
+    confirmAssistantAction(slug, card.token)
+      .catch(() => ({ ok: false, text: t('assistant.errors.busy') }))
+      .then((result) => {
+        setCard(turn, card.token, { state: 'done', result })
+        if (result.ok) router.refresh()
+      })
+  }
 
   // Keep the newest answer in view.
   useEffect(() => {
@@ -47,7 +66,13 @@ export function AskAi({
       setTurns((prev) => [
         ...prev,
         res?.ok
-          ? { role: 'assistant', text: res.answer, links: res.links, error: res.incomplete }
+          ? {
+              role: 'assistant',
+              text: res.answer,
+              links: res.links,
+              cards: res.actions.map((a) => ({ ...a, state: 'open' as const })),
+              error: res.incomplete,
+            }
           : { role: 'assistant', text: res?.error ?? t('assistant.errors.busy'), error: true },
       ])
     })
@@ -141,7 +166,45 @@ export function AskAi({
                   <span className="sr-only">
                     {turn.role === 'user' ? t('assistant.you') : t('assistant.ai')}:{' '}
                   </span>
-                  <p>{turn.text}</p>
+                  {turn.text && <p>{turn.text}</p>}
+                  {turn.cards?.map((card) => (
+                    <div
+                      key={card.token}
+                      className="crm-ask-card"
+                      data-kind={card.kind}
+                      data-testid="ask-ai-action"
+                    >
+                      <p>{card.text}</p>
+                      {card.result ? (
+                        <p className="crm-ask-card-result" data-ok={card.result.ok} role="status">
+                          {card.result.text}
+                        </p>
+                      ) : (
+                        <div className="crm-ask-card-actions">
+                          <button
+                            type="button"
+                            data-primary
+                            disabled={card.state !== 'open'}
+                            onClick={() => confirm(i, card)}
+                          >
+                            {t('assistant.action.confirm')}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={card.state !== 'open'}
+                            onClick={() =>
+                              setCard(i, card.token, {
+                                state: 'done',
+                                result: { ok: false, text: t('assistant.action.dismissed') },
+                              })
+                            }
+                          >
+                            {t('assistant.action.dismiss')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                   {turn.links && turn.links.length > 0 && (
                     <nav className="crm-ask-links" aria-label={t('assistant.links')}>
                       {turn.links.map((l) =>

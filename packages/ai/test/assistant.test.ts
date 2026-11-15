@@ -10,6 +10,7 @@ import {
   memberBranches,
   members,
   roles,
+  rooms,
   saleLines,
   sales,
   shifts,
@@ -449,5 +450,122 @@ describe('Ask AI assistant', () => {
     await expect(ask(scope('owner', OWNER), client)).rejects.toBeInstanceOf(AiNotInPlanError)
     expect(fetchMock).not.toHaveBeenCalled()
     await platform.update(tenants).set({ featureTier: null }).where(eq(tenants.id, ids.tenant!))
+  })
+})
+
+// R46 (owner 2026-11-03): reports, and changes the assistant only PREPARES (checked in a rolled-back savepoint);
+// the web app runs them on the person's Confirm.
+describe('Ask AI: reports and prepared booking changes (R46)', () => {
+  const ownerScope = (): AssistantScope => ({ ...scope('owner', OWNER), role: 'owner' })
+  const itemOf = (ref: string) =>
+    withTenant(
+      ids.tenant!,
+      async (tx) =>
+        (
+          await tx
+            .select({ item: bookingItems, status: bookings.status, id: bookings.id })
+            .from(bookingItems)
+            .innerJoin(bookings, eq(bookings.id, bookingItems.bookingId))
+            .where(eq(bookings.refCode, ref))
+        )[0]!,
+      app,
+    )
+
+  beforeAll(async () => {
+    await withTenant(
+      ids.tenant!,
+      async (tx) => {
+        const [room] = await tx
+          .insert(rooms)
+          .values({ tenantId: ids.tenant!, branchId: ids.marina!, name: 'Room 1' })
+          .returning()
+        const { id } = await itemOf('R4AAA')
+        await tx.update(bookingItems).set({ roomId: room!.id }).where(eq(bookingItems.bookingId, id))
+        // R2AAA (completed) is paid.
+        const r2 = await itemOf('R2AAA')
+        await tx.insert(sales).values({
+          tenantId: ids.tenant!,
+          branchId: ids.marina!,
+          bookingId: r2.id,
+          number: 50,
+          businessDate: '2026-06-28',
+          subtotalAed: '350',
+          totalAed: '350',
+          status: 'paid',
+        })
+      },
+      app,
+    )
+  })
+
+  it('reads the money of a range and one booking by its code', async () => {
+    const { fetchMock, client } = scripted(
+      tools(
+        call('sales_summary', { from: '2026-09-29', to: '2026-10-05' }),
+        call('booking_details', { ref: 'r4aaa' }),
+      ),
+      reply({ content: 'Last week 800 AED.' }),
+    )
+    const res = await ask(ownerScope(), client)
+    const [money, one] = toolResults(fetchMock)
+    expect(money).toMatchObject({ revenueAed: 800, paidSales: 2, finishedButNotPaid: 0 })
+    expect(one).toMatchObject({ ref: 'R4AAA', status: 'confirmed', paid: false, client: 'Lina Haddad' })
+    expect(res.actions).toEqual([])
+  })
+
+  it('prepares a checked move without writing it; a role without calendar.manage is refused', async () => {
+    const before = await itemOf('R4AAA')
+    const { fetchMock, client } = scripted(
+      tools(call('prepare_booking_move', { ref: 'R4AAA', time: '16:00', therapist: 'noor' })),
+      reply({ content: 'Ready — press Confirm.' }),
+    )
+    const res = await ask(ownerScope(), client)
+    expect(toolResults(fetchMock)[0]).toMatchObject({ prepared: true, ref: 'R4AAA' })
+    expect(res.actions).toEqual([
+      expect.objectContaining({
+        kind: 'move',
+        ref: 'R4AAA',
+        date: tomorrow,
+        time: '16:00',
+        therapist: 'Noor',
+      }),
+    ])
+    const after = await itemOf('R4AAA')
+    expect(after.item.startsAt.getTime()).toBe(before.item.startsAt.getTime())
+    expect(after.item.staffIds).toEqual(before.item.staffIds)
+
+    const denied = scripted(
+      tools(call('prepare_booking_move', { ref: 'R4AAA', time: '17:00' })),
+      reply({ content: 'Your role cannot.' }),
+    )
+    const res2 = await ask(scope('acct', ACCOUNTANT), denied.client)
+    expect(toolResults(denied.fetchMock)[0].error).toBe('not_allowed')
+    expect(res2.actions).toEqual([])
+  })
+
+  it('cancelling: owner role only, and never a paid booking', async () => {
+    const owner = scripted(
+      tools(
+        call('prepare_booking_cancel', { ref: 'R4AAA', reason: 'client asked' }),
+        call('prepare_booking_cancel', { ref: 'R2AAA', reason: 'mistake' }),
+      ),
+      reply({ content: 'Ready.' }),
+    )
+    const res = await ask(ownerScope(), owner.client)
+    const [ok, paid] = toolResults(owner.fetchMock)
+    expect(ok).toMatchObject({ prepared: true })
+    expect(paid.error).toBe('paid')
+    expect(res.actions).toEqual([
+      expect.objectContaining({ kind: 'cancel', ref: 'R4AAA', reason: 'client asked' }),
+    ])
+    expect((await itemOf('R4AAA')).status).toBe('confirmed')
+
+    const desk = scripted(
+      tools(call('prepare_booking_cancel', { ref: 'R5AAA', reason: 'no show' })),
+      reply({ content: 'Only the owner.' }),
+    )
+    const res2 = await ask({ ...scope('desk', DESK), role: 'receptionist' }, desk.client)
+    expect(toolResults(desk.fetchMock)[0].error).toBe('owner_only')
+    expect(res2.actions).toEqual([])
   })
 })

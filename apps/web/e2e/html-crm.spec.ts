@@ -1165,3 +1165,51 @@ test('contract.inline: the first-screen pictures a design names come inside CRM_
     expect((await liveData()).inline_fonts).toBeUndefined()
   })
 })
+
+// R47 (owner 2026-11-07): the website shares WhatsApp chats across the CRM's "Website WhatsApp numbers": each new
+// visitor gets the next number and keeps it (30-day first-party cookie, set by the server: the page is sandboxed).
+test('R47: website WhatsApp rotation: visitors share the numbers, each keeps theirs', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(300_000)
+  const fixture = await readFile(FIXTURE, 'utf8')
+  const owner = await signUpOwner(page, { spa: 'WA Rotation Spa' })
+  const { slug } = owner
+  await seedSpa(slug)
+  await makeStudio(slug)
+  await signInStudioOnAdmin(page, owner.email)
+  await upload(page, 'WA Rotation Contract', fixture)
+  await applyAndPublish(page, slug, 'WA Rotation Contract')
+
+  await test.step('Settings: two numbers in "Website WhatsApp numbers"', async () => {
+    await page.goto(`${app}/${slug}/settings`)
+    await page.getByLabel('Website WhatsApp numbers (share chats)').fill('052 823 9069\n+971 56 187 5596')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.getByText('Settings saved')).toBeVisible()
+    const [t] = await testDb().select().from(tenants).where(eq(tenants.slug, slug))
+    expect(t!.settings.whatsappRotation).toEqual(['971528239069', '971561875596'])
+  })
+
+  await test.step('new visitors get the next number; one visitor keeps theirs on every reload', async () => {
+    const seen: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const ctx = await browser.newContext()
+      const visitor = await ctx.newPage()
+      await live(visitor, slug)
+      const href = await visitor.locator('#wa').getAttribute('href')
+      seen.push(href ?? '')
+      await visitor.reload()
+      await rendered(visitor)
+      await expect(visitor.locator('#wa')).toHaveAttribute('href', href!)
+      const cookie = (await ctx.cookies()).find((c) => c.name === 'spa_wa')
+      expect(href).toBe(`https://wa.me/${cookie?.value}`)
+      await ctx.close()
+    }
+    expect(seen).toEqual([
+      'https://wa.me/971528239069',
+      'https://wa.me/971561875596',
+      'https://wa.me/971528239069',
+    ])
+  })
+})

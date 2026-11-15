@@ -10,6 +10,7 @@ import {
   dayCloses,
   giftCards,
   journalEntries,
+  reservations,
   rooms,
   sales,
   services,
@@ -29,6 +30,7 @@ import {
   createBooking,
   createSale,
   DAY_CLOSED,
+  deleteBooking,
   finishBooking,
   lastBookingTerms,
   markDayAmended,
@@ -708,5 +710,38 @@ describe('R32 review: fee, references, details, closed booking day', () => {
     expect((await correct({ tip: 5, commission: 30 })).voidedSaleId).toBeTruthy()
     await correct({ commission: 35, allowClosedDay: true })
     expect(await commissionOf(b.id)).toBe(35)
+  })
+})
+
+describe('deleteBooking (R39)', () => {
+  it('deletes a booking with no money: items and reserved time go with it', async () => {
+    const b = await book({ fee: 150, commission: 40 })
+    const gone = await tx((db) => deleteBooking(db, b.id))
+    expect(gone.id).toBe(b.id)
+    expect(await tx((db) => db.select().from(bookings).where(eq(bookings.id, b.id)))).toHaveLength(0)
+    expect(
+      await tx((db) => db.select().from(bookingItems).where(eq(bookingItems.bookingId, b.id))),
+    ).toHaveLength(0)
+    expect(
+      await tx((db) => db.select().from(reservations).where(eq(reservations.bookingItemId, b.item.id))),
+    ).toHaveLength(0)
+    await expect(tx((db) => deleteBooking(db, b.id))).rejects.toThrow('Booking not found')
+  })
+
+  it('deletes a cancelled booking', async () => {
+    const b = await book()
+    await tx((db) => setBookingStatus(db, b.id, 'cancelled', 'test'))
+    await tx((db) => deleteBooking(db, b.id))
+    expect(await tx((db) => db.select().from(bookings).where(eq(bookings.id, b.id)))).toHaveLength(0)
+  })
+
+  it('refuses a booking with a sale or commission, also after the sale is voided', async () => {
+    const b = await book({ fee: 150, commission: 40 })
+    const r = await finish(b)
+    await expect(tx((db) => deleteBooking(db, b.id))).rejects.toThrow('cancel it instead')
+    await tx((db) => voidSale(db, { saleId: r.sale.id, reason: 'Wrong client' }))
+    // The commission rows are append-only history: the booking stays (cancel it instead).
+    await expect(tx((db) => deleteBooking(db, b.id))).rejects.toThrow('cancel it instead')
+    expect(await tx((db) => db.select().from(bookings).where(eq(bookings.id, b.id)))).toHaveLength(1)
   })
 })

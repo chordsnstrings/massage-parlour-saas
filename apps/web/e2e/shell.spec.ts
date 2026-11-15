@@ -52,7 +52,6 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
     for (const label of [
       'Dashboard',
       'Calendar',
-      'Sales',
       'Inbox & follow-ups',
       'Clients',
       'Services & menu',
@@ -67,6 +66,9 @@ test('spa shell: logo, menu, plan card, language and drawer', async ({ page }) =
       'Settings',
     ])
       await expect(menu.getByRole('link', { name: label, exact: true })).toBeVisible()
+    // R45: bookings and sales are one menu item.
+    await expect(menu.getByRole('link', { name: /^Bookings & sales/ })).toBeVisible()
+    await expect(menu.getByRole('link', { name: 'Sales', exact: true })).toHaveCount(0)
     // Pages Phase 3 builds stay out of the menu until they exist.
     await expect(menu.getByRole('link', { name: 'Coming next' })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')

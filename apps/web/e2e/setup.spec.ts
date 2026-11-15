@@ -87,6 +87,10 @@ test('owner sets up menu, rooms, a therapist with shifts and opening hours', asy
       .getByRole('button', { name: /Delete shift/ })
       .first()
       .click()
+    // Wait for the action's answer, then read the list fresh (a refresh still in flight from the refused generate
+    // above could otherwise paint the old list over the new one).
+    await expect(page.getByText('Shift removed')).toBeVisible()
+    await page.reload()
     await expect(list.getByRole('listitem')).toHaveCount(before - 1)
   })
 

@@ -4,7 +4,8 @@ Multi-tenant SaaS for UAE massage parlours. **Source of truth: `docs/PLAN.md`** 
 Status: P1, P2 and P3 complete (see docs/PLAN.md §14.1–14.2); spa dashboard redesign Phase 1 + 2 ✅ (§14.6), owner requests R1–R30 (§14.8; R28 dynamic HTML designs ✅ 2026-10-13, P0–P6; R29 console Google/Meta keys,
 R30 weekly SEO check, Enquiries → Make booking, BE RELAX v2.2 lazy loading ✅ 2026-10-13; R32 booking ↔ sale order + daily sales
 sheet PDF ✅ live 2026-10-15, PR #55; R33 crawler text + profile links + per-spa redirects ✅ live 2026-10-18, PR #58;
-R36 dashboard bookings + sales + website pop-up ✅ live 2026-10-21, PR #60; R37 worker outage fix ✅ live 2026-10-22, PR #62; R38 international client phones ✅ live 2026-10-22, PR #63);
+R36 dashboard bookings + sales + website pop-up ✅ live 2026-10-21, PR #60; R37 worker outage fix ✅ live 2026-10-22, PR #62; R38 international client phones ✅ live 2026-10-22, PR #63; R39 delete booking + Next 16.4.3 security bump ✅ live 2026-10-31, PR #65; R40 reset spa data (console) ✅ live 2026-11-01, PR #67; R41 Stripe pause dropped 2026-11-02; R42 delete team member + R43 phone optional + R45 Bookings & sales one page
+(Complete & pay pop-up) ✅ live 2026-11-02, PR #69; R44 full Edit booking paused by the owner; R46 Ask AI reports + prepared booking move/owner cancel + R47 website WhatsApp rotation + clearer walk-in refusal ✅ live 2026-11-07, PR #70);
 fix backlog F1–F32 ✅ released 2026-10-10 (PR #22; owner steps after release in §17); production runs on one DO droplet (deploy/droplet: Compose + Caddy, pull-based updates from the branch), live at
 https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redirect).
 
@@ -73,6 +74,7 @@ https://spamanagement.co since 2026-10-10 (PR #27 + #28; old sslip.io links redi
 - Price (owner 2026-10-09, PLAN §18.8): **Premium** AED 14,000 setup + 3,000/month; **Standard** AED 9,000 setup + 2,000/month
   (no AI/Instagram automation, no marketing tools, one branch); excl. VAT, VAT optional; existing spas keep AED 24,000/yr
   until renewal; super-admin per-spa discounts + feature-tier override. Manual cash/bank-transfer billing (+ Stripe Checkout).
+  Hand-made client invoices (Be Relax = Premium at the Standard price), owner's invoice rules + Word templates: `docs/billing/README.md`.
 - Site builder: Puck-based drag & drop, 23 templates (8 classic + 15 from the owner's designs, R5), granular per-device style overrides (PLAN.md §11);
   super-admins can also upload an HTML design shown exactly as built (sandboxed, R17; R24: ≤ 5 MB, stored byte for byte
   as a file, the page JSON only references it — CODEMAP "HTML designs"; PLAN §14.8).

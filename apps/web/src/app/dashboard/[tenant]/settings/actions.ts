@@ -1,5 +1,5 @@
 'use server'
-import { isGoogleMapsUrl, normalizeGoogleMapsUrl, requires2fa, toUaeE164 } from '@spa/core'
+import { isGoogleMapsUrl, normalizeGoogleMapsUrl, requires2fa, toClientE164, toUaeE164 } from '@spa/core'
 import { branches, platformDb, tenants, user, withTenant } from '@spa/db'
 import { cleanAreaLabel, clearTenantLogo, DomainError, processLogo, setTenantLogo } from '@spa/services'
 import { eq } from 'drizzle-orm'
@@ -34,6 +34,8 @@ const schema = z.object({
     .transform((v) => normalizeGoogleMapsUrl(v)), // store URL.href, never the raw paste
   phone: opt,
   whatsapp: z.string().trim().optional(),
+  // R47: website WhatsApp rotation, one number per line.
+  waRotation: z.string().max(400).optional(),
   cutoff: z.string().regex(/^\d{2}:\d{2}$/, 'settings.profile.errors.time'),
   areaLabel: z.string().trim().max(80).optional(),
   areaLabelAr: z.string().trim().max(80).optional(),
@@ -54,14 +56,22 @@ export async function saveSettingsAction(
   const whatsapp = d.whatsapp ? toUaeE164(d.whatsapp) : null
   if (d.whatsapp && !whatsapp)
     return fail('settings.profile.errors.whatsapp', { whatsapp: 'validation.uaeMobile' })
+  const rotationLines = (d.waRotation ?? '')
+    .split(/[\n,]+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const rotation = [...new Set(rotationLines.map((l) => toClientE164(l)))]
+  if (rotation.some((n) => !n) || rotation.length > 10)
+    return fail('settings.profile.errors.waRotation', { waRotation: 'settings.profile.errors.waRotation' })
   await withTenant(ctx.tenant.id, async (tx) => {
     const [cur] = await tx
       .select({ settings: tenants.settings })
       .from(tenants)
       .where(eq(tenants.id, ctx.tenant.id))
-    const settings = d.showPrices
+    const base = d.showPrices
       ? { ...(cur?.settings ?? {}), hidePrices: d.showPrices === 'off' }
       : (cur?.settings ?? {})
+    const settings = d.waRotation === undefined ? base : { ...base, whatsappRotation: rotation as string[] }
     await tx
       .update(tenants)
       .set({ name: d.name, legalName: d.legalName, trn: d.trn, settings })

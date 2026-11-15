@@ -88,7 +88,8 @@ const LANGS: { locale: Locale; label: string }[] = [
 
 const within = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`)
 const matches = (pathname: string, l: ShellLink) =>
-  l.exact ? pathname === l.href || (l.match ?? []).some((m) => within(pathname, m)) : within(pathname, l.href)
+  (l.exact ? pathname === l.href : within(pathname, l.href)) ||
+  (l.match ?? []).some((m) => within(pathname, m))
 
 /** Most specific match wins (e.g. /ai/content beats a generic /ai prefix). */
 function findActive(groups: ShellGroup[], pathname: string) {

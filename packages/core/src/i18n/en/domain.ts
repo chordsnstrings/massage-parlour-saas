@@ -17,10 +17,14 @@ export const domain = {
   },
   // Not found
   bookingNotFound: 'Booking not found',
+  teamMemberNotFound: 'Team member not found',
   // Enquiries → Make booking (2026-10-13)
   bookingRequestNotFound: 'Booking request not found',
   bookingRequestBooked: 'Booking request already booked',
   bookingCheckedOutReopen: 'This booking was checked out — void or refund the sale first',
+  // R39 (2026-10-31)
+  bookingDeleteHasMoney:
+    'This booking has a payment or commission, so it can’t be deleted — cancel it instead',
   completeFirst: 'Mark the booking completed first',
   commissionRange: 'Enter a commission between 0 and 100,000 AED',
   commissionEveryone: 'Enter the commission for every therapist',
@@ -217,6 +221,8 @@ export const domain = {
   globalSectionNotFound: 'Global section not found',
   segmentGone: 'That segment no longer exists',
   therapistNotFreeNow: '{name} is not free right now',
+  therapistNotSkilled: '{name} is not set up for this treatment',
+  therapistOnLeaveNow: '{name} is on leave now',
   noTherapistFreeNow: 'No therapist is free for this service right now',
   onlyDraftsEditable: 'Only drafts can be edited',
   segmentNobody:

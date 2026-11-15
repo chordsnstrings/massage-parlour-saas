@@ -14,6 +14,7 @@ import {
 } from '@spa/services'
 import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { cookies } from 'next/headers'
 import { after } from 'next/server'
 import { z } from 'zod'
 import { type ActionResult, fail, fromZod, ok } from '@/lib/action'
@@ -21,6 +22,7 @@ import { audit } from '@/server/audit'
 import { clientIp } from '@/server/rate-limit'
 import { resolveSiteTenant } from '@/server/sites'
 import { passesBotCheck } from '@/server/turnstile'
+import { visitorWhatsapp, WA_COOKIE } from '@/server/whatsapp-rotation'
 import { acceptsBookings, bookingBranch, bookingDates, LEAD_MIN } from './data'
 import { fmtDate, fmtTime, type Locale, t } from './i18n'
 import type { BookingDone, SiteKey, SlotOption } from './types'
@@ -212,6 +214,10 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
   const attribution = v.via === 'widget' && fromEntry === 'direct' ? 'widget' : fromEntry
 
   try {
+    // R47: the confirmation's WhatsApp link goes to this visitor's number when the spa rotates its chats.
+    const wa = await visitorWhatsapp(tenant.id, (await cookies()).get(WA_COOKIE)?.value ?? null, {
+      assign: false,
+    })
     const result = await withTenant(tenant.id, async (tx) => {
       const branch = await bookingBranch(tx, v.branchId)
       const row = await bookableVariant(tx, v.variantId)
@@ -274,12 +280,13 @@ export async function bookOnline(input: z.input<typeof bookingInput>): Promise<A
           return p == null ? null : Number(p)
         })(),
         therapist,
-        whatsappUrl: branch.whatsappE164
-          ? whatsappLink(
-              branch.whatsappE164,
-              confirmText(lang, { spa: tenant.name, ref: booking.refCode, service, start, name: v.name }),
-            )
-          : null,
+        whatsappUrl:
+          (wa?.number ?? branch.whatsappE164)
+            ? whatsappLink(
+                (wa?.number ?? branch.whatsappE164)!,
+                confirmText(lang, { spa: tenant.name, ref: booking.refCode, service, start, name: v.name }),
+              )
+            : null,
         spa: tenant.name,
         address: branch.address,
         confirmed: status === 'confirmed',

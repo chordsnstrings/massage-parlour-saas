@@ -7,6 +7,7 @@ import {
   jsonLdString,
   listHtmlDesignTexts,
   normalizeGoogleMapsUrl,
+  withAssignedWhatsapp,
 } from '@spa/core'
 import { withTenant } from '@spa/db'
 import {
@@ -19,6 +20,7 @@ import {
   POST_SLUG,
 } from '@spa/services'
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { ScrollScenes } from '@/components/scroll-scenes'
@@ -28,6 +30,7 @@ import { getNonce } from '@/server/nonce'
 import { absoluteImage, heroImageOf, hreflang, sitePageUrl, siteSeo } from '@/server/seo'
 import { siteData } from '@/server/sites'
 import { turnstileSiteKey } from '@/server/turnstile'
+import { visitorWhatsapp, WA_COOKIE } from '@/server/whatsapp-rotation'
 import { siteConfig } from './config'
 import { crmFeedMeta } from './crm-feed'
 import { buildMeta, loadSite, localeOf } from './data'
@@ -38,6 +41,7 @@ import { pageHref } from './links'
 import { loadPublished, siteJsonLd, type Tenant } from './published'
 import type { AdvancedProps } from './style'
 import type { Bi, Locale, SiteMeta, SitePostView } from './types'
+import { WhatsappCookie } from './whatsapp-cookie'
 
 /** Which public site is rendering (the enquiry form posts it back; custom domains follow the Turnstile switch). */
 export type SiteKey = { slug: string } | { hostname: string }
@@ -267,17 +271,26 @@ export async function PublicSite({
     notFound()
   }
   const locale = localeOf(lang)
+  // R47: this visitor's WhatsApp number when the spa rotates its website chats (cookie, else the next in turn).
+  const wa = await visitorWhatsapp(tenant.id, (await cookies()).get(WA_COOKIE)?.value ?? null, {
+    assign: true,
+  })
+  const live =
+    wa && loaded.data.branch
+      ? { ...loaded.data, branch: { ...loaded.data.branch, whatsappE164: wa.number } }
+      : loaded.data
   // R26: an HTML design with the CRM data contract (frame: Phone fixes on, legacy designs, fallback).
-  const feed = await crmFeedMeta(tenant, loaded.published.data, {
+  const feed0 = await crmFeedMeta(tenant, loaded.published.data, {
     locale,
     live: true,
     base,
     slug,
     services: loaded.data.services,
   })
+  const feed = wa && feed0.crm ? { ...feed0, crm: withAssignedWhatsapp(feed0.crm, wa.number) } : feed0
   const meta = {
     ...buildMeta({
-      data: loaded.data,
+      data: live,
       theme: loaded.published.site.theme,
       locale,
       base,
@@ -303,6 +316,7 @@ export async function PublicSite({
       />
       <Render config={trackedConfig(data)} data={data} metadata={meta} />
       <ScrollScenes key={slug} />
+      {wa?.fresh && <WhatsappCookie number={wa.number} path={base || '/'} />}
     </>
   )
 }

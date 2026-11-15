@@ -7,23 +7,29 @@ import {
   AiNotInPlanError,
   AiPausedError,
   ASSISTANT_LIMITS,
+  type AssistantAction,
   type AssistantLink,
   aiConfigured,
   runAssistant,
 } from '@spa/ai'
-import { platformDb } from '@spa/db'
-import { withinRateLimits } from '@spa/services'
+import { platformDb, withTenant } from '@spa/db'
+import { liveSale, withinRateLimits } from '@spa/services'
 import { z } from 'zod'
+import { markBookingAction } from '@/app/dashboard/[tenant]/bookings/actions'
+import { rescheduleAction } from '@/app/dashboard/[tenant]/calendar/actions'
 import { getI18n } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { guard } from '@/server/access'
 import { aiFixturesOn, fixtureClient } from '@/server/ai-fixture'
+import { readAssistantAction, signAssistantAction } from '@/server/assistant-token'
 import { audit } from '@/server/audit'
 
 export type AskTurn = { role: 'user' | 'assistant'; text: string }
 export type AskLink = { kind: 'screen' | 'whatsapp'; href: string; label: string }
+/** R46: a prepared change shown as a card with Confirm (the token is signed server-side, see assistant-token.ts). */
+export type AskAction = { token: string; kind: AssistantAction['kind']; text: string }
 export type AskResult =
-  | { ok: true; answer: string; links: AskLink[]; incomplete: boolean }
+  | { ok: true; answer: string; links: AskLink[]; actions: AskAction[]; incomplete: boolean }
   | { ok: false; error: string }
 
 /** Per member: questions per hour and per day (each question is up to maxSteps metered model calls). */
@@ -75,7 +81,7 @@ export async function askAssistantAction(
   try {
     res = await runAssistant({
       tenantId: ctx.tenant.id,
-      scope: { permissions: ctx.permissions, memberId: ctx.member?.id ?? null },
+      scope: { permissions: ctx.permissions, memberId: ctx.member?.id ?? null, role: ctx.member.roleKey },
       question: parsed.data.question,
       history: parsed.data.history,
       locale,
@@ -99,6 +105,7 @@ export async function askAssistantAction(
   await record({
     outcome: res.incomplete ? 'incomplete' : 'answered',
     tools: res.calls.map((c) => c.name),
+    prepared: res.actions.map((a) => `${a.kind}:${a.ref}`),
     denied: res.denied,
     costUsd: Number(res.costUsd.toFixed(6)),
   })
@@ -116,10 +123,73 @@ export async function askAssistantAction(
   const links = res.links
     .filter((l) => (l.kind === 'whatsapp' ? l.href.startsWith('https://wa.me/') : /^\/(?!\/)/.test(l.path)))
     .map((l) => ({ kind: l.kind, href: href(l), label: label(l) }))
+  const part = (key: 'client' | 'therapist', name: string | null | undefined) =>
+    name ? t(`assistant.action.${key}`, { name }) : ''
+  const actions: AskAction[] = res.actions.map((a) => ({
+    token: signAssistantAction(ctx.tenant.id, ctx.user.id, a),
+    kind: a.kind,
+    text:
+      a.kind === 'move'
+        ? t('assistant.action.move', {
+            ref: a.ref,
+            service: a.service,
+            client: part('client', a.client),
+            date: fmt.date(noon(a.date)),
+            time: a.time,
+            therapist: part('therapist', a.therapist),
+          })
+        : t('assistant.action.cancel', {
+            ref: a.ref,
+            service: a.service,
+            client: part('client', a.client),
+            date: fmt.date(noon(a.date)),
+            time: a.time,
+            reason: a.reason,
+          }),
+  }))
   return {
     ok: true,
     answer: res.incomplete ? t('assistant.incomplete') : res.answer,
     links,
+    actions,
     incomplete: res.incomplete,
+  }
+}
+
+/**
+ * R46: the person pressed Confirm on a prepared change. The signed token proves it was prepared for this member of
+ * this spa in the last 10 minutes; the change itself runs through the normal booking actions (calendar.manage,
+ * branch scope, clash checks, audit). Cancelling: owner role only, and never a booking with a payment.
+ */
+export async function confirmAssistantAction(
+  slug: string,
+  token: string,
+): Promise<{ ok: boolean; text: string }> {
+  const { ctx, error } = await guard(slug, 'calendar.manage', 'ai')
+  if (error) return { ok: false, text: error }
+  const { t } = await getI18n()
+  if (!ctx.member) return { ok: false, text: t('errors.forbidden') }
+  const a = typeof token === 'string' ? readAssistantAction(token, ctx.tenant.id, ctx.user.id) : null
+  if (!a) return { ok: false, text: t('assistant.action.expired') }
+  if (a.kind === 'cancel' && ctx.member.roleKey !== 'owner')
+    return { ok: false, text: t('assistant.action.ownerOnly') }
+  if (a.kind === 'cancel' && (await withTenant(ctx.tenant.id, (tx) => liveSale(tx, a.bookingId))))
+    return { ok: false, text: t('bookings.pay.paidAlready') }
+  const r =
+    a.kind === 'move'
+      ? await rescheduleAction(slug, { itemId: a.itemId, date: a.date, time: a.time, staffIds: a.staffIds })
+      : await markBookingAction(slug, { bookingId: a.bookingId, mark: 'cancelled', reason: a.reason })
+  await audit({
+    tenantId: ctx.tenant.id,
+    actorUserId: ctx.user.id,
+    action: 'ai.assistant.confirmed',
+    entity: 'booking',
+    entityId: a.bookingId,
+    data: { kind: a.kind, ref: a.ref, ok: Boolean(r?.ok) },
+  })
+  if (!r?.ok) return { ok: false, text: (r && (t.maybe(r.key, r.params) ?? r.error)) || t('errors.generic') }
+  return {
+    ok: true,
+    text: t(a.kind === 'move' ? 'assistant.action.moved' : 'assistant.action.cancelled', { ref: a.ref }),
   }
 }

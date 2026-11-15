@@ -158,7 +158,7 @@ export function NewBookingSheet({
                     <Field
                       label={t('calendar.fields.mobile')}
                       name="clientPhone"
-                      hint={t('validation.clientPhoneHint')}
+                      hint={`${t('common.optional')} · ${t('validation.clientPhoneHint')}`}
                     >
                       <Input
                         id="clientPhone"

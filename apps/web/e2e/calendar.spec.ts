@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { bookings, rotationEntries } from '@spa/db'
+import { bookings, clients, rotationEntries } from '@spa/db'
 import { eq } from 'drizzle-orm'
 import { app, hoursOnToday, screenshotAt, seedBooking, seedCatalog, signUpOwner, testDb } from './helpers'
 
@@ -27,10 +27,7 @@ test('reception works the day calendar: check in, then book a client into a free
     await expect(sheet.getByText('Confirmed', { exact: true })).toBeVisible()
     await sheet.getByRole('button', { name: 'Check in' }).click()
     await expect(sheet.getByText('Checked in', { exact: true })).toBeVisible()
-    await expect(sheet.getByRole('link', { name: 'Finish & pay' })).toHaveAttribute(
-      'href',
-      /sales\/new\?booking=/,
-    )
+    await expect(sheet.getByRole('button', { name: 'Finish & pay' })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(sheet).toBeHidden()
   })
@@ -87,6 +84,19 @@ test('reception works the day calendar: check in, then book a client into a free
     await expect(ploy.getByRole('button', { name: /16:00–17:00 Fatima Al Mansoori/ })).toBeVisible()
   })
 
+  await test.step('R43: a new client can be booked without a phone (name-only client card)', async () => {
+    await page.getByRole('button', { name: 'New booking with Ploy at 19:00' }).click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByRole('button', { name: 'New client' }).click()
+    await sheet.getByLabel('Name').fill('Noura No Phone')
+    await sheet.getByLabel('Source').selectOption('phone')
+    await sheet.getByRole('button', { name: 'Create booking' }).click()
+    await expect(sheet.getByRole('heading', { name: 'Booking confirmed' })).toBeVisible()
+    await sheet.getByRole('button', { name: 'Done' }).click()
+    const [c] = await testDb().select().from(clients).where(eq(clients.name, 'Noura No Phone'))
+    expect(c).toMatchObject({ phoneE164: null })
+  })
+
   await page.reload()
   await page.mouse.move(0, 0)
   await expect(page.getByRole('group', { name: 'Ploy' })).toBeVisible()
@@ -116,6 +126,17 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
       page.getByRole('group', { name: 'Maya' }).getByRole('button', { name: /Sara/ }),
     ).toBeVisible()
     await expect(panel.locator('[aria-current="true"]')).toContainText('Ploy')
+  })
+
+  await test.step('R47: picking a busy therapist says when she is booked', async () => {
+    await page.getByRole('button', { name: 'Walk-in' }).first().click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByLabel('Therapist').selectOption({ label: 'Maya' })
+    await sheet.getByLabel('Name').fill('Busy test')
+    await sheet.getByRole('button', { name: 'Start walk-in' }).click()
+    await expect(page.getByText(/^Maya is not free right now: booked \d{2}:\d{2}–\d{2}:\d{2}$/)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(sheet).toBeHidden()
   })
 
   await test.step('an own-client walk-in with a hand-picked therapist does not use her turn (R32)', async () => {
@@ -161,6 +182,22 @@ test('walk-ins follow the rotation; rooms view; cancelled bookings hide behind a
     await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toHaveCount(0)
     await page.getByLabel(/Show cancelled/).check()
     await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toBeVisible()
+  })
+
+  await test.step('R39: reception deletes the cancelled booking (no payment); it is gone for good', async () => {
+    const room1 = page.getByRole('group', { name: 'Room 1' })
+    const cancelled = () =>
+      testDb().select().from(bookings).where(eq(bookings.cancelReason, 'Client is travelling'))
+    expect(await cancelled()).toHaveLength(1)
+    await room1.getByRole('button', { name: /Fatima Al Mansoori/ }).click()
+    const sheet = page.getByRole('dialog')
+    await sheet.getByRole('button', { name: 'Delete' }).click()
+    await expect(sheet.getByText('Delete this booking?', { exact: false })).toBeVisible()
+    await sheet.getByRole('button', { name: 'Yes, delete' }).click()
+    await expect(page.getByText(/Booking .+ deleted/)).toBeVisible()
+    await expect(sheet).toBeHidden()
+    await expect(room1.getByRole('button', { name: /Fatima Al Mansoori/ })).toHaveCount(0)
+    expect(await cancelled()).toHaveLength(0)
   })
 })
 

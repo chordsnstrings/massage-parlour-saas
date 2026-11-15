@@ -171,8 +171,11 @@ describe('budget thresholds and kill switches (G18)', () => {
   })
 
   it('starts again at the Dubai month start', async () => {
-    // On 1 Nov (Dubai) none of October's spend counts, and November's warning gets its own key.
-    const nov = new Date('2026-11-01T00:30:00Z')
+    // At the next Dubai month start none of this month's spend counts, and that month's warning gets its own key.
+    // (Relative to today: a fixed date breaks once the real clock reaches its month.)
+    const next = dubaiMonthStart(new Date(dubaiMonthStart().getTime() + 40 * 86_400_000))
+    const nov = new Date(next.getTime() + 30 * 60_000)
+    const month = new Date(next.getTime() + 4 * 3600_000).toISOString().slice(0, 7)
     expect(
       await noteBudgetThreshold(platform, { tenantId: spaId, slug: 'cap-spa', budget: 10, now: nov }),
     ).toBeNull()
@@ -183,7 +186,7 @@ describe('budget thresholds and kill switches (G18)', () => {
       spend: 9,
       now: nov,
     })
-    expect(row?.dedupeKey).toBe('ai.budget.80.2026-11')
+    expect(row?.dedupeKey).toBe(`ai.budget.80.${month}`)
   })
 
   it('respects the per-spa and the global kill switch', async () => {

@@ -1,32 +1,28 @@
 import { enumLabel } from '@spa/core/i18n'
 import {
-  bookingItems,
   bookings,
-  clients,
   membershipPlans,
   packageDefinitions,
   products,
-  sales,
   services,
   serviceVariants,
   staff,
   stockLevels,
   withTenant,
 } from '@spa/db'
-import { commissionTotals, isDayClosed, lastBookingTerms } from '@spa/services'
-import { and, asc, eq, inArray, ne } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { ArrowLeft, Store } from 'lucide-react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { maskPhone } from '@/components/calendar/time'
 import { Card } from '@/components/crm'
-import { Checkout, type CheckoutCommission, type CheckoutLine } from '@/components/pos/checkout'
+import { Checkout } from '@/components/pos/checkout'
 import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader } from '@/components/ui/page'
 import { getI18n, getT } from '@/i18n/server'
 import { appPath } from '@/lib/paths'
 import { can, requireMember } from '@/server/access'
+import { bookingPrefill, CHECKOUT_OK } from '../booking-prefill'
 import { pickBranch } from '../data'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -35,8 +31,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-// R32 (D7): a booking the therapist completed (G14) or whose sale was voided is finished here too.
-const CHECKOUT_OK = ['confirmed', 'checked_in', 'in_service', 'completed']
 
 export default async function NewSalePage({
   params,
@@ -50,7 +44,6 @@ export default async function NewSalePage({
   const slug = ctx.tenant.slug
   const sp = await searchParams
   const bookingParam = one(sp.booking)
-  const seePhone = can(ctx, 'clients.phone')
   const canCommission = can(ctx, 'calendar.commission')
   const { t } = await getI18n()
 
@@ -112,113 +105,7 @@ export default async function NewSalePage({
       .from(staff)
       .where(eq(staff.active, true))
       .orderBy(asc(staff.sort), asc(staff.displayName))
-    let prefill: {
-      bookingId: string
-      ref: string
-      status: string
-      /** R32: already finished (a live sale is linked) — checkout is refused. */
-      paid: boolean
-      /** R32 (D6): the booking's business day is closed and this member may not change it. */
-      dayLocked: boolean
-      client: { id: string; name: string; phone: string | null } | null
-      lines: CheckoutLine[]
-      commissions: CheckoutCommission[]
-    } | null = null
-    if (booking) {
-      const items = await tx
-        .select()
-        .from(bookingItems)
-        .where(eq(bookingItems.bookingId, booking.id))
-        .orderBy(asc(bookingItems.startsAt))
-      const [client] = booking.clientId
-        ? await tx
-            .select({ id: clients.id, name: clients.name, phone: clients.phoneE164 })
-            .from(clients)
-            .where(eq(clients.id, booking.clientId))
-        : []
-      const [live] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(and(eq(sales.bookingId, booking.id), ne(sales.status, 'void')))
-      // Commission per item × therapist (same rules as finishBooking): only therapists paid per booking get a field
-      // (sales %, salary and booking-fee staff get none); prefilled with what is already recorded (a voided sale, a
-      // legacy completion), else the planned amount, else the last typed for the treatment, else blank.
-      const last = await lastBookingTerms(
-        tx,
-        items.flatMap((it) => (it.serviceVariantId ? [it.serviceVariantId] : [])),
-      )
-      const recorded = await commissionTotals(tx, booking.id)
-      const ids = [...new Set(items.flatMap((it) => it.staffIds))]
-      const people = new Map(
-        (ids.length
-          ? await tx
-              .select({ id: staff.id, name: staff.displayName, payType: staff.payType })
-              .from(staff)
-              .where(inArray(staff.id, ids))
-          : []
-        ).map((p) => [p.id, p]),
-      )
-      const commissions: CheckoutCommission[] = items.flatMap((it) =>
-        it.staffIds.flatMap((sid) => {
-          const person = people.get(sid)
-          if (person && person.payType !== 'booking_commission') return []
-          const had = recorded.get(`${it.id}:${sid}`)
-          const planned =
-            had !== undefined
-              ? had / 100
-              : it.commissionAed != null
-                ? Number(it.commissionAed)
-                : (last.get(it.serviceVariantId ?? '')?.commissionAed ?? null)
-          return [
-            {
-              bookingItemId: it.id,
-              staffId: sid,
-              name: person?.name ?? '—',
-              service: it.serviceName,
-              amountAed: planned ?? '',
-            },
-          ]
-        }),
-      )
-      const dayLocked =
-        !can(ctx, 'pos.correct') && (await isDayClosed(tx, booking.branchId, booking.businessDate))
-      prefill = {
-        bookingId: booking.id,
-        ref: booking.refCode,
-        status: booking.status,
-        paid: Boolean(live),
-        dayLocked,
-        commissions,
-        client: client
-          ? {
-              id: client.id,
-              name: client.name,
-              phone: client.phone ? (seePhone ? `+${client.phone}` : maskPhone(client.phone)) : null,
-            }
-          : null,
-        // One line per therapist so tips and commission land with the right person.
-        lines: items.flatMap((it) => {
-          const people = it.staffIds.length ? it.staffIds : [null]
-          // "Price on request" (R4): no list price — every therapist's line is typed at checkout.
-          const priceless = it.priceAed == null
-          const total = Math.round(Number(it.priceAed ?? 0) * 100)
-          const share = Math.floor(total / people.length)
-          return people.map((sid, i) => ({
-            key: `${it.id}-${i}`,
-            kind: 'service' as const,
-            refId: it.serviceVariantId,
-            description: `${it.serviceName} · ${it.durationMin} min`,
-            qty: 1,
-            unitPriceAed: priceless
-              ? ''
-              : (i === people.length - 1 ? total - share * (people.length - 1) : share) / 100,
-            priceRequired: priceless,
-            discountAed: 0,
-            staffId: sid,
-          }))
-        }),
-      }
-    }
+    const prefill = booking ? await bookingPrefill(tx, ctx, booking) : null
     return {
       branch: picked.branch,
       products: productRows.map((p) => ({

@@ -428,6 +428,13 @@
       "when": 1792270856899,
       "tag": "0060_r33_site_redirects",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793564533354,
+      "tag": "0061_r40_tenant_resets",
+      "breakpoints": true
     }
   ]
 }

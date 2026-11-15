@@ -15,10 +15,14 @@ export const domain: Messages['errors']['domain'] = {
     saleStatus: { open: 'ค้างชำระ', paid: 'ชำระแล้ว', void: 'ยกเลิกแล้ว', refunded: 'คืนเงินแล้ว' },
   },
   bookingNotFound: 'ไม่พบการจอง',
+  // R42 (2026-11-02): needs native review.
+  teamMemberNotFound: 'ไม่พบสมาชิกทีมนี้',
   // 2026-10-13: needs native review.
   bookingRequestNotFound: 'ไม่พบคำขอจองนี้',
   bookingRequestBooked: 'คำขอจองนี้จองแล้ว',
   bookingCheckedOutReopen: 'การจองนี้ชำระเงินแล้ว — ยกเลิกหรือคืนเงินรายการขายก่อน',
+  // R39 (2026-10-31): needs native review.
+  bookingDeleteHasMoney: 'การจองนี้มีการชำระเงินหรือค่าคอมมิชชัน จึงลบไม่ได้ — ให้ยกเลิกการจองแทน',
   completeFirst: 'ทำเครื่องหมายการจองว่าเสร็จสิ้นก่อน',
   commissionRange: 'กรอกค่าคอมมิชชันระหว่าง 0 ถึง 100,000 AED',
   commissionEveryone: 'กรอกค่าคอมมิชชันให้นักบำบัดทุกคน',
@@ -195,6 +199,8 @@ export const domain: Messages['errors']['domain'] = {
   globalSectionNotFound: 'ไม่พบส่วนกลาง',
   segmentGone: 'กลุ่มเป้าหมายนี้ไม่มีอยู่แล้ว',
   therapistNotFreeNow: '{name} ไม่ว่างในตอนนี้',
+  therapistNotSkilled: '{name} ยังไม่ได้ตั้งค่าให้ทำทรีตเมนต์นี้',
+  therapistOnLeaveNow: '{name} ลางานอยู่ในขณะนี้',
   noTherapistFreeNow: 'ไม่มีพนักงานนวดว่างสำหรับบริการนี้ในตอนนี้',
   onlyDraftsEditable: 'แก้ไขได้เฉพาะฉบับร่างเท่านั้น',
   segmentNobody: 'ตอนนี้ไม่มีใครในกลุ่มนี้ที่ส่งข้อความได้ (ยกเลิกรับข้อความ หรือได้รับข้อความแล้วในสัปดาห์นี้)',

@@ -3,6 +3,7 @@ import {
   type BookingClientType,
   businessDateOf,
   dubaiInstant,
+  dubaiParts,
   holdInterval,
   onLeave,
   overlaps,
@@ -22,16 +23,18 @@ import {
 } from '@spa/db'
 import {
   createBooking,
+  createNameOnlyClient,
   DomainError,
+  deleteBooking,
   findOrCreateClient,
   linkSiteEnquiryBooking,
   loadDay,
   lockSiteEnquiryForBooking,
+  moveBookingItem,
   OWN_STATUS_TARGETS,
   orderDay,
   outboxLink,
   planBookingMessages,
-  rescheduleItem,
   rotationFor,
   setBookingDetails,
   setBookingStatus,
@@ -39,7 +42,7 @@ import {
   setOwnBookingStatus,
   takeTurn,
 } from '@spa/services'
-import { and, asc, eq, ilike, inArray, or } from 'drizzle-orm'
+import { asc, eq, ilike, inArray, or } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { maskPhone, timeToGridMinute } from '@/components/calendar/time'
@@ -216,9 +219,6 @@ const bookingSchema = z
     if (v.clientId) return
     if (!v.clientName)
       c.addIssue({ code: 'custom', path: ['clientName'], message: 'calendar.errors.clientName' })
-    // A request's phone stays on the server for members without phone access.
-    if (!v.clientPhone && !v.enquiryId)
-      c.addIssue({ code: 'custom', path: ['clientPhone'], message: 'calendar.errors.clientPhone' })
   })
 
 export async function createBookingAction(
@@ -248,13 +248,22 @@ export async function createBookingAction(
         if (!c)
           throw new DomainError('Client not found', 'not_found', { key: 'calendar.errors.clientNotFound' })
       } else {
+        // R43: the phone is optional; a request's phone stays on the server for members without phone access.
+        const phone = v.clientPhone || enquiry?.phone
+        const lang = enquiry ? { language: enquiry.locale } : {}
         clientId = (
-          await findOrCreateClient(tx, ctx.tenant.id, {
-            name: v.clientName!,
-            phone: v.clientPhone || enquiry!.phone,
-            source: v.source,
-            ...(enquiry ? { language: enquiry.locale } : {}),
-          })
+          phone
+            ? await findOrCreateClient(tx, ctx.tenant.id, {
+                name: v.clientName!,
+                phone,
+                source: v.source,
+                ...lang,
+              })
+            : await createNameOnlyClient(tx, ctx.tenant.id, {
+                name: v.clientName!,
+                source: v.source,
+                ...lang,
+              })
         ).id
       }
       const booking = await createBooking(tx, {
@@ -396,6 +405,62 @@ export async function setStatusAction(
   }
 }
 
+/**
+ * R39: delete a booking with no money history (same people as cancel: `calendar.manage`). The booking's day lock
+ * applies (a closed day needs `pos.correct`, is marked amended and its sheet regenerated); the audit row keeps a
+ * snapshot of what was deleted.
+ */
+export async function deleteBookingAction(slug: string, bookingId: string): Promise<ActionResult> {
+  const { ctx, error } = await guard(slug, 'calendar.manage')
+  if (error) return fail(error)
+  const id = z.uuid().safeParse(bookingId)
+  if (!id.success) return fromZod(id.error)
+  try {
+    const { b, items, lock } = await withTenant(ctx.tenant.id, async (tx) => {
+      const [row] = await tx
+        .select({ branchId: bookings.branchId, date: bookings.businessDate })
+        .from(bookings)
+        .where(eq(bookings.id, id.data))
+      if (!row) throw new DomainError('Booking not found', 'not_found')
+      await branchFor(tx, ctx, row.branchId)
+      const lock = await editDay(tx, ctx, row.branchId, row.date)
+      const items = await tx
+        .select({
+          service: bookingItems.serviceName,
+          staffIds: bookingItems.staffIds,
+          startsAt: bookingItems.startsAt,
+        })
+        .from(bookingItems)
+        .where(eq(bookingItems.bookingId, id.data))
+      const b = await deleteBooking(tx, id.data)
+      return { b, items, lock }
+    })
+    await audit({
+      tenantId: ctx.tenant.id,
+      actorUserId: ctx.user.id,
+      action: 'booking.deleted',
+      entity: 'booking',
+      entityId: b.id,
+      data: {
+        ref: b.refCode,
+        status: b.status,
+        clientId: b.clientId,
+        branchId: b.branchId,
+        businessDate: b.businessDate,
+        startsAt: b.startsAt.toISOString(),
+        items,
+        ...(lock.closed ? { closedDay: true } : {}),
+      },
+    })
+    await afterDayChange(ctx, lock)
+    revalidate(slug)
+    revalidatePath(`/dashboard/${slug}/bookings`)
+    return ok({ key: 'calendar.results.deleted', params: { ref: b.refCode } })
+  } catch (e) {
+    return handle(e)
+  }
+}
+
 const ownStatusSchema = z.object({
   bookingId: z.uuid(),
   status: z.enum(OWN_STATUS_TARGETS),
@@ -483,31 +548,8 @@ export async function rescheduleAction(
       const branch = await branchFor(tx, ctx, row.branchId)
       await assertStaffAndRoom(tx, v.staffIds ?? [], v.roomId)
       const start = startFrom(v.date, v.time, branch.businessDayCutoff.slice(0, 5))
-      try {
-        await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: v.roomId })
-      } catch (e) {
-        // Room is "automatic" when not chosen: if the current room clashes, try the branch's other rooms.
-        if (!(e instanceof DomainError) || e.code !== 'slot_taken' || v.roomId) throw e
-        const types = row.roomTypes ?? []
-        const others = (
-          await tx
-            .select({ id: rooms.id, type: rooms.type })
-            .from(rooms)
-            .where(and(eq(rooms.branchId, row.branchId), eq(rooms.active, true)))
-            .orderBy(asc(rooms.sort), asc(rooms.name))
-        ).filter((r) => r.id !== row.roomId && (types.length === 0 || types.includes(r.type)))
-        let moved = false
-        for (const room of others) {
-          try {
-            await rescheduleItem(tx, v.itemId, { start, staffIds: v.staffIds, roomId: room.id })
-            moved = true
-            break
-          } catch (retry) {
-            if (!(retry instanceof DomainError) || retry.code !== 'slot_taken') throw retry
-          }
-        }
-        if (!moved) throw e
-      }
+      // Room "automatic" when not chosen: a clash in the current room tries the branch's other rooms (services).
+      await moveBookingItem(tx, { itemId: v.itemId, start, staffIds: v.staffIds, roomId: v.roomId })
       return row.ref
     })
     await audit({
@@ -596,11 +638,35 @@ export async function walkInAction(
       if (v.staffId) {
         therapist = day.staff.find((s) => s.id === v.staffId)
         if (!therapist) throw new DomainError('Therapist not found', 'not_found')
-        if (!free(therapist))
-          throw new DomainError(`${therapist.name} is not free right now`, 'slot_taken', {
-            key: 'calendar.errors.notFree',
-            params: { name: therapist.name },
-          })
+        if (!free(therapist)) {
+          // R47 (owner 2026-11-07): say WHY she can't take the walk-in (one message hid three reasons).
+          const name = therapist.name
+          if (!therapist.skills.includes(svc.service.id))
+            throw new DomainError(`${name} is not set up for this treatment`, 'no_staff', {
+              key: 'calendar.errors.notSkilled',
+              params: { name },
+            })
+          if (onLeave(therapist, hold))
+            throw new DomainError(`${name} is on leave now`, 'no_staff', {
+              key: 'calendar.errors.onLeaveNow',
+              params: { name },
+            })
+          const clash = therapist.busy.find((b) => overlaps(b, hold))
+          const hhmm = (d: Date) => {
+            const m = dubaiParts(d).minutes
+            return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+          }
+          throw new DomainError(
+            `${name} is not free right now`,
+            'slot_taken',
+            clash
+              ? {
+                  key: 'calendar.errors.busyAt',
+                  params: { name, from: hhmm(clash.start), to: hhmm(clash.end) },
+                }
+              : { key: 'calendar.errors.notFree', params: { name } },
+          )
+        }
       } else {
         therapist =
           rotation

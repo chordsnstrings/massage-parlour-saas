@@ -1579,6 +1579,94 @@ Owner stopped the Track B partner: Claude now owns every track (§14.7 split ret
     `crm.popup.sound` (on/off) and `crm.popup.shown` (newest 40 ids). Chime = WebAudio, unlocked on every press.
   - New Thai strings (`overview.today.*`, `overview.web.*`, `notifications.toast.*`, `body_confirmed`) need the
     owner team's native review.
+- **R43 Phone optional on new bookings (owner 2026-11-02: "make the phone number optional"; answers: a name-only
+  client card; every booking type made from the calendar):** calendar `createBookingAction` no longer requires a
+  phone for a new client; with a phone it still finds/creates by number (`findOrCreateClient`, unchanged for other
+  callers: POS, waitlist, public booking, Instagram/DM keep their own rules); without one, services
+  `createNameOnlyClient` makes a new card each time (no number to match on; merge duplicates). The form marks Mobile
+  "Optional". No WhatsApp messages can be prepared for such a client until a phone is added. Walk-ins unchanged
+  (name kept on the booking). Tests: services clients (R43 case), e2e calendar (no-phone booking).
+- **R48 Legal company = Lia97 FZC-LLC (owner 2026-11-14; decided, waiting for the owner's go + Lia97 logo):** the
+  platform (not spa websites) is owned and operated by **Lia97 FZC-LLC**, address "RAKEZ, Ras Al Khaimah, UAE", no
+  licence number shown. Changes: `components/marketing/legal-config.ts` companyName/address (footer "owned and operated
+  by", privacy/terms/data-deletion, Organization JSON-LD legalName + core seo test), spa CRM sidebar badge "Spa
+  Management · Powered by Lia97 FZC-LLC" (every spa), invoices (seller + legal line + "Powered by" Lia97 logo the owner
+  sends; replaces 1997labs). Reissue SM-INV-2026-013 and 014 under Lia97 FZC-LLC (same numbers, amounts, status).
+  Meta/Google verifications done under 1997labs may need updating by the owner.
+- **R47 Website WhatsApp rotation + clearer walk-in refusal (owner 2026-11-07: ~90 Google Ads chats/day on one phone;
+  answers: 30 days via the server, numbers in the CRM, fix the walk-in message):** CRM Settings → "Website WhatsApp
+  numbers (share chats)" (`tenants.settings.whatsappRotation`, E.164 digits, ≤ 10; empty = the branch WhatsApp). Each
+  visitor gets the next number round robin (services `nextWhatsappTurn` = counter `website_whatsapp`) and keeps it in
+  the first-party cookie `spa_wa` (30 days, not HttpOnly): set by app/site-html on design pages (the sandboxed page
+  itself can't store anything), by `<WhatsappCookie>` on block pages (server components can't set cookies); the /book
+  confirmation uses an existing cookie. Core `whatsappRotationOf`, `rotatedWhatsapp`, `withAssignedWhatsapp` (the
+  contract's WhatsApp number + its WhatsApp-only phone row; calls numbers never change) — crawler text and every
+  CRM_DATA WhatsApp link follow. Google Ads: the Be Relax design's own gtag listener already matches every wa.me link
+  (one conversion per click); its v2.10 draft adds `whatsapp_number` to the click + conversion events (owner publishes).
+  Walk-in by hand: "not set up for this treatment" / "on leave now" / "booked HH:MM–HH:MM" instead of one message.
+  Tests: core html-crm R47 cases, e2e html-crm "R47" (round robin across 3 visitors, sticky on reload), calendar. ✅ live 2026-11-07, PR #70. Live proof 2026-11-07: rotation + sticky cookie on berelaxmassage.com; owner confirmed "Spa Ads Agent — WhatsApp Click" = AW-18204116059/9PUCCPzt5p8dENuIs-hD, firing with whatsapp_number (design v2.10 published).
+- **R46 Ask AI: reports + booking changes (owner 2026-11-03: "chatbot … give reports and change booking or cancel booking
+  that has not been paid … the cancellation will be for the owner"; audit → plan → review → execute):** built on F30 Ask
+  AI (Seed via ModelArk, `staff_assistant`, the server's own key — no key in code). New tools: `sales_summary`
+  (dashboard.revenue; `rangeMoney`), `unpaid_bookings` (calendar.manage + dashboard.revenue), `booking_details` (by ref
+  code), `prepare_booking_move` (calendar.manage; one-treatment, unpaid, not finished/cancelled; date/time/therapist;
+  checked in a rolled-back savepoint with the calendar's room fallback) and `prepare_booking_cancel` (owner role only;
+  no live sale; `canTransition`; reason ≥ 3). **The AI never writes:** prepared changes come back as cards with
+  Confirm / Not now; the token is HMAC-signed (BETTER_AUTH_SECRET, spa + member, 10 min) and Confirm runs the normal
+  `rescheduleAction` / `markBookingAction` (same guards, clash checks, audit) + audit `ai.assistant.confirmed`.
+  Bookings with several treatments go to the calendar. Services `assistant-bookings.ts` (`bookingByRef`,
+  `businessStart`, `moveBookingItem` = the Move form's room fallback, now shared, `dryRun`). New TH strings need review.
+  Tests: ai assistant (3 R46 cases), e2e ask-ai (owner confirms a move + a cancel). ✅ live 2026-11-07, PR #70.
+- **R45 Bookings & sales = one page (owner 2026-11-02: "the sales and bookings become one thing cuz our sales is the
+  bookings"; answers: Complete = paid with Cash/Card picked each time; old completed-unpaid bookings stay "Not paid" with
+  Take payment (nothing auto-recorded); counter sales as rows in the same list; a therapist's own Completed stays and
+  shows Not paid for reception; ✅ live 2026-11-02 ~20:00 UTC, PR #69, 4280da8):** services `bookings-list.ts`
+  `listBookingsAndSales` (bookings with their live sale + counter sales without a booking, newest first, counter rows
+  only without a status/source/therapist/missing filter) and `rangeMoney` (paid sales by business date = the dashboard
+  rule, by method, tips, completed bookings with no live sale). Web: `/bookings` = "Bookings & sales" (money tiles,
+  Payment column, Daily close / Counter sale / New booking); the sidebar drops Sales (kept only for a custom role with
+  pos.use but no calendar.view; `/sales` redirects to `/bookings?from=to=date`; receipts, `/sales/new`, `/sales/close`
+  unchanged and highlight the item via `match`); Complete & pay pop-up `components/bookings/pay-booking.tsx` (prefill
+  = `sales/booking-prefill.ts`, shared with `/sales/new`; save = `createSaleAction` → `finishBooking`) on the list, the
+  booking page and the calendar sheet ("More options" = the full checkout). New TH strings need native review.
+  Tests: services booking-pay (R45 case), e2e bookings (pop-up), shell/pos/calendar/order-flow/therapist updated.
+- **R42 Delete a team member (owner 2026-11-02: "option to delete member of team"; answers: console only; remove from
+  this spa and delete the login when unused elsewhere; no last-owner limit):** console spa page → Team card → "Delete"
+  per member (browser confirm). Services `removeTenantMember(platformDb, tenantId, memberId)` (`member-remove.ts`):
+  deletes the membership (branch links cascade); then the login: kept if it belongs to another spa (`kept_other_spa`)
+  or is a super-admin (`kept_admin`); else deleted (`deleted`, the email can be invited fresh); a login that already
+  wrote records (user FKs without ON DELETE: bookings, sales, …) can't be deleted, so its sessions are ended and it
+  stays without any spa (`kept_has_records`). Action `removeMemberAction`, audit `platform.member.removed`. Tests:
+  services `member-remove.test.ts` (4), e2e `console-ops.spec.ts` "delete a team member".
+- **R40 Reset spa data (owner 2026-11-01: "reset everything … start from today"; go 2026-11-01; ✅ live 2026-11-01, PR #67, 8da1a27):** super-admin
+  console button on the spa page ("Danger zone"), any spa; confirm by typing the spa name (no extra 2FA prompt, owner
+  "no"); full backup right before; audited. Wipes the spa's operational data: clients, bookings (+ items, reservations,
+  notes, intake forms, waitlist, walk-in turns), sales, payments, tips, refunds, day closes / sheets, commissions,
+  accounting entries (journal) + period locks, numbering counters, website enquiries, chats, pulled-in reviews,
+  expenses, payroll, salary advances, time clock, leave, sold packages / gift cards / memberships, stock history
+  (purchases, movements; stock levels → 0), notifications, outbox. Keeps: staff, logins, roles, services, prices,
+  rooms, equipment, branches, shifts, website + content + settings, products, suppliers, package / membership types,
+  promo codes, ledger accounts, Spa Management's platform invoices to the spa, audit log. First use: Be Relax, only
+  after the owner's OK at that moment.
+- **R41 Pause card payments (Stripe) — DROPPED (owner 2026-11-02: "forget about strip"; not building):**
+  Console → Settings global PAUSE switch + per-spa switch on the spa page; hides "Pay by card" and the server refuses;
+  Checkouts already started still settle; audited. Facts found 2026-11-01: Stripe Checkout added 2026-10-06 (a0c4e2f),
+  `STRIPE_SECRET_KEY` read from env; that commit also grew the encrypted overlay `secrets.env.enc` 272 → 384 bytes, so a
+  key was most likely stored then (unverifiable without the droplet's secrets.key); money goes to the Stripe account
+  owning that key.
+- **R39 Delete booking ✅ live 2026-10-31 (PR #65, 11f09a4; the same PR moved Next 16.3.8 → 16.4.3, zod 4.6.7 and
+  overrides happy-dom ^21.0.4 / body-parser ^2.4.0 for new high/critical advisories) (owner 2026-10-31: "yes i need a delete button for the bookings"; answers: owners, managers
+  and reception; only bookings without payment; simple confirm, no reason):** services `deleteBooking` (locks the row;
+  refused (catalogued `errors.domain.bookingDeleteHasMoney`) while a non-void sale, a package redemption or any `booking_commissions`
+  row points at it — commission rows are append-only, so a finished-then-voided booking can only be cancelled); the
+  delete cascades items, reservations and unsent outbox messages; notes, intake forms, waitlist entries, chats and a void
+  sale keep their rows unlinked (`set null`); a website enquiry made into it reopens (its booking id no longer resolves);
+  stock already consumed stays. Web `deleteBookingAction` (calendar actions, `calendar.manage`, booking's day lock via
+  `editDay`: a closed day needs `pos.correct`, is marked amended and its sheet PDF regenerated; audit `booking.deleted`
+  with a snapshot: ref, status, client, branch, date, start, items). UI: "Delete" in the calendar booking panel
+  (hidden once paid or on a locked day; inline "Yes, delete / Keep it") and on the booking page (browser confirm, then
+  back to the list). Tests: services booking-order (3), e2e calendar (delete a cancelled booking). New EN + TH strings
+  (`calendar.details.delete*`, `calendar.results.deleted`, `errors.domain.bookingDeleteHasMoney`) need native review.
 - **R38 International client phones (owner 2026-10-22: "make it accept any phone number with the country code"):**
   owner answers: (1) **every customer phone** (CRM clients, online booking, calendar new booking / walk-in / Make
   booking, sales quick add, vouchers, waitlist, Instagram link + DM agent, imports, AI assistant); staff, spa, branch

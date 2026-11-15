@@ -6,6 +6,7 @@ import {
   afterMidnight,
   buildCrmContract,
   CRM_DEFAULTS_MAX,
+  type CrmContract,
   type CrmContractSource,
   contractField,
   crmAddress,
@@ -23,9 +24,12 @@ import {
   htmlCrmContractOf,
   isOwnDesign,
   mergeCrmContract,
+  rotatedWhatsapp,
   spliceCrmData,
   systemCopy,
   uaePhoneDisplay,
+  whatsappRotationOf,
+  withAssignedWhatsapp,
 } from '../src/html-crm'
 import { apiSecurityHeaders } from '../src/security-headers'
 
@@ -785,5 +789,58 @@ describe('contract v2 (R28 P5)', () => {
     )
     expect((mergeCrmContract({ ...v1, locale: 'xx' }, crm, { locale: 'ar' }) as Json).locale).toBe('xx') // v1: as before
     expect((mergeCrmContract(d, crm) as Json).locale).toBe('fr') // no platform locale given: the data's
+  })
+})
+
+// R47 (owner 2026-11-07): website WhatsApp chats shared across several numbers.
+describe('WhatsApp rotation (R47)', () => {
+  const base = () =>
+    ({
+      contact: {
+        whatsapp_number: '+971525108633',
+        phones: [
+          { number: '+97125576533', display: '02 557 6533', label: '', calls: true, whatsapp: false },
+          { number: '+971525108633', display: '052 510 8633', label: '', calls: false, whatsapp: true },
+        ],
+      },
+    }) as unknown as CrmContract
+
+  it('reads a clean, deduplicated list (max 10)', () => {
+    expect(
+      whatsappRotationOf({ whatsappRotation: ['971528239069', 'x', '971528239069', '971561875596'] }),
+    ).toEqual(['971528239069', '971561875596'])
+    expect(whatsappRotationOf(null)).toEqual([])
+    expect(
+      whatsappRotationOf({ whatsappRotation: Array.from({ length: 12 }, (_, i) => `9715000000${10 + i}`) }),
+    ).toHaveLength(10)
+  })
+
+  it('shares new visitors out round robin', () => {
+    const list = ['971528239069', '971561875596', '971525108633']
+    expect([1, 2, 3, 4].map((n) => rotatedWhatsapp(list, n))).toEqual([
+      '971528239069',
+      '971561875596',
+      '971525108633',
+      '971528239069',
+    ])
+    expect(rotatedWhatsapp([], 1)).toBeNull()
+  })
+
+  it('puts the visitor’s number on every WhatsApp link, never on the calls number', () => {
+    const out = withAssignedWhatsapp(base(), '971561875596')
+    expect(out.contact.whatsapp_number).toBe('+971561875596')
+    expect(out.contact.phones).toEqual([
+      { number: '+97125576533', display: '02 557 6533', label: '', calls: true, whatsapp: false },
+      { number: '+971561875596', display: '056 187 5596', label: '', calls: false, whatsapp: true },
+    ])
+    // A number that also takes calls keeps calling there; WhatsApp gets its own row.
+    const both = base()
+    both.contact.phones = [
+      { number: '+971525108633', display: '052 510 8633', label: '', calls: true, whatsapp: true },
+    ]
+    expect(withAssignedWhatsapp(both, '971561875596').contact.phones).toEqual([
+      { number: '+971525108633', display: '052 510 8633', label: '', calls: true, whatsapp: false },
+      { number: '+971561875596', display: '056 187 5596', label: '', calls: false, whatsapp: true },
+    ])
   })
 })

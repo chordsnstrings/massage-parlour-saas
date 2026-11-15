@@ -83,6 +83,9 @@ export const settings: Messages['settings'] = {
     showPrices: 'แสดงราคาบนเว็บไซต์',
     showPricesHint: 'ค่าเริ่มต้นของทุกบริการ แต่ละบริการตั้งค่าแยกได้ ราคาที่ซ่อนจะแสดงเป็น “ราคาตามตกลง”',
     whatsappPlaceholder: '050 123 4567',
+    waRotation: 'เบอร์ WhatsApp ของเว็บไซต์ (แบ่งแชท)',
+    waRotationHint:
+      'หนึ่งเบอร์ต่อหนึ่งบรรทัด ผู้เข้าชมเว็บไซต์แต่ละคนจะได้รับหนึ่งเบอร์ตามลำดับ และใช้เบอร์เดิมเป็นเวลา 30 วัน เว้นว่าง = ใช้เบอร์ WhatsApp ด้านบน',
     save: 'บันทึกการเปลี่ยนแปลง',
     saved: 'บันทึกการตั้งค่าแล้ว',
     errors: {
@@ -92,6 +95,7 @@ export const settings: Messages['settings'] = {
       branchName: 'กรอกชื่อสาขา',
       time: 'ใช้รูปแบบ HH:MM',
       whatsapp: 'กรอกเบอร์มือถือยูเออี',
+      waRotation: 'ตรวจสอบเบอร์ WhatsApp: หนึ่งเบอร์ต่อบรรทัด สูงสุด 10 เบอร์ (ยูเออี 05X XXX XXXX หรือ + และรหัสประเทศ)',
     },
     data: {
       title: 'นำเข้า / ส่งออก',

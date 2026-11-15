@@ -10,10 +10,10 @@ the existing flow.
   https://spamanagement.co:
   - phases P1–P3;
   - the spa dashboard redesign;
-  - owner requests R1–R33, except R22 (paused), R27 (not building), R31 (planned) and the held Google fixes below;
+  - owner requests R1–R40, except R22 (paused), R27 (not building), R31 (planned), R34 (on hold) and the held Google fixes below;
   - fix backlog F1–F32.
-- The last release is PR #58 (R33: crawler text for HTML designs, schema profile links, per-spa redirects), live
-  2026-10-18; before it PR #57 (custom domain go-live fix) and PR #55 (R32).
+- The last release is PR #67 (R40: console "Reset spa data" + an AI test date fix), live 2026-11-01; before it PR #65
+  (R39 delete booking + Next 16.4.3 security updates) and PR #63 (R38 international client phones).
 - Production runs `deploy/green`: the last commit of the default branch whose CI passed. It catches up with the default
   branch about half an hour after each merge (see "How a change reaches production").
 - All older feature branches were squash-merged and released. The only unmerged work is the branches below, plus
@@ -28,6 +28,7 @@ the existing flow.
 | `claude/laughing-faraday-fjgrsu` | R36 dashboard home: Today's bookings & sales (replaces Up next), From the website card, CRM pop-up with a chime for website bookings / enquiries (PLAN §14.8 R36 "as built"). | **Merged + live** 2026-10-21 (PR #60, 788e0c0); the branch restarts from the default branch. | The new Thai strings need native review. |
 | `claude/laughing-faraday-fjgrsu` | R37 worker outage fix (worker crash-looped 2026-10-11..21): bundle fix, CI worker start check, update.sh worker health + rollback, console "As of" rows, billing 1-day hold after an outage (PLAN §14.8 R37). | **Merged + live** 2026-10-22 (PR #62, 6401dc4). | Confirm the worker beats in console Server health; the first billing run after it is held (by design). |
 | `claude/laughing-faraday-fjgrsu` | R38 international client phones: core `toClientE164` + `phoneDisplay`, every customer phone input (incl. website enquiries), masks/prefill/merge/export fixes (PLAN §14.8 R38). | **Merged + live** 2026-10-22 (PR #63, db62c51). | New Thai/Arabic strings need native review. |
+| `claude/laughing-faraday-fjgrsu` | R39 delete booking: Delete in the calendar booking panel and on the booking page for owners, managers and reception; only bookings with no payment, package use or commission (PLAN §14.8 R39). | **Merged + live** 2026-10-31 (PR #65, 11f09a4). | New Thai strings need native review. |
 | `claude/paused-r22-console-arabic` | R22: super-admin console in Arabic. An unfinished foundation. | **Paused by the owner** 2026-10-10 ("console keep english for now"). | Don't merge. Restart from it only if the owner asks. |
 
 ## Open items
@@ -44,6 +45,7 @@ the existing flow.
 - **Optional "AI key" card** in Console → Settings, so the AI key (`ARK_API_KEY`) is set like the Google/Meta keys (~1.5 h).
 
 **Owner setup (no code):**
+- **Be Relax data reset (R40):** only when the owner says so (warn Be Relax first): Console → Spas → BE RELAX → "Reset spa data".
 - **Google and Meta keys:** enter the platform keys in Console → Settings, on the Google card and the Meta card
   (`docs/INTEGRATIONS.md`). Until then spas see "Not configured yet" instead of the Connect buttons.
 - **AI key:** add `ARK_API_KEY` to the server secrets (`deploy/droplet/README.md` → "Secrets without SSH"). This needs the
@@ -115,6 +117,9 @@ never with force. Anything else, config included, goes through a PR. CI runs and
   - uploaded HTML designs render exactly as built.
 
 ## What is in the repo besides the code
+
+- `docs/billing/`: client invoices issued by hand (Be Relax SM-INV-2026-013 setup paid, dated 9 Oct 2026; 014 November not paid, dated 1 Nov 2026; next no. SM-INV-2026-015), the
+  owner's invoice rules, the editable Word templates and the HTML/PDF sources (README there).
 
 - `docs/design/be-relax-site/`: the BE RELAX website design versions (v2.7 live, v2.8 next) and the 2026-10-14 QA report.
 - `docs/manuals/`: Markdown sources of the four owner's manuals (Platform EN/AR, Spa EN/TH) and the scripts that
